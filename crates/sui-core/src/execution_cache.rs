@@ -14,7 +14,7 @@ use itertools::Itertools;
 use sui_types::accumulator_event::AccumulatorEvent;
 use sui_types::bridge::Bridge;
 
-use futures::{FutureExt as _, future::BoxFuture};
+use futures::future::BoxFuture;
 use prometheus::Registry;
 use std::collections::HashSet;
 use std::path::Path;
