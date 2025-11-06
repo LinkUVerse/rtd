@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use consensus_config::AuthorityIndex;
+use consensus_types::block::{BlockDigest, BlockRef};
 use rstest::rstest;
 use tempfile::TempDir;
 
-use super::{mem_store::MemStore, rocksdb_store::RocksDBStore, Store, WriteBatch};
+use super::{Store, WriteBatch, mem_store::MemStore, rocksdb_store::RocksDBStore};
 use crate::{
-    block::{BlockDigest, BlockRef, TestBlock, VerifiedBlock},
+    block::{TestBlock, VerifiedBlock},
     commit::{CommitDigest, TrustedCommit},
 };
 
 /// Test fixture for store tests. Wraps around various store implementations.
+#[allow(clippy::large_enum_variant)]
 enum TestStore {
     RocksDB((RocksDBStore, TempDir)),
     Mem(MemStore),

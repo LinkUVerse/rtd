@@ -11,16 +11,17 @@ use std::{
 };
 
 use bytes::Bytes;
-use consensus_config::{AuthorityIndex, DefaultHashFunction, DIGEST_LENGTH};
+use consensus_config::{AuthorityIndex, DIGEST_LENGTH, DefaultHashFunction};
+use consensus_types::block::{BlockRef, BlockTimestampMs, Round, TransactionIndex};
 use enum_dispatch::enum_dispatch;
 use fastcrypto::hash::{Digest, HashFunction as _};
+use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    block::{BlockAPI, BlockRef, BlockTimestampMs, Round, Slot, VerifiedBlock},
+    block::{BlockAPI, Slot, VerifiedBlock},
     leader_scoring::ReputationScores,
     storage::Store,
-    TransactionIndex,
 };
 
 /// Index of a commit among all consensus commits.
@@ -56,7 +57,7 @@ pub(crate) type WaveNumber = u32;
 /// sequence of Commits.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[enum_dispatch(CommitAPI)]
-pub(crate) enum Commit {
+pub enum Commit {
     V1(CommitV1),
 }
 
@@ -86,7 +87,7 @@ impl Commit {
 
 /// Accessors to Commit info.
 #[enum_dispatch]
-pub(crate) trait CommitAPI {
+pub trait CommitAPI {
     fn round(&self) -> Round;
     fn index(&self) -> CommitIndex;
     fn previous_digest(&self) -> CommitDigest;
@@ -98,7 +99,7 @@ pub(crate) trait CommitAPI {
 /// Specifies one consensus commit.
 /// It is stored on disk, so it does not contain blocks which are stored individually.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-pub(crate) struct CommitV1 {
+pub struct CommitV1 {
     /// Index of the commit.
     /// First commit after genesis has an index of 1, then every next commit has an index incremented by 1.
     index: CommitIndex,
@@ -111,7 +112,6 @@ pub(crate) struct CommitV1 {
     leader: BlockRef,
     /// Refs to committed blocks, in the commit order.
     blocks: Vec<BlockRef>,
-    // TODO(fastpath): record rejected transactions.
 }
 
 impl CommitAPI for CommitV1 {
@@ -146,7 +146,7 @@ impl CommitAPI for CommitV1 {
 ///
 /// Note: clone() is relatively cheap with the underlying data refcounted.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct TrustedCommit {
+pub struct TrustedCommit {
     inner: Arc<Commit>,
 
     // Cached digest and serialized value, to avoid re-computing these values.
@@ -164,7 +164,6 @@ impl TrustedCommit {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn new_for_test(
         index: CommitIndex,
         previous_digest: CommitDigest,
@@ -357,9 +356,21 @@ pub struct CommittedSubDag {
 
     /// Set by CommitObserver.
     ///
-    /// Whether the commit is produced from local DAG, or received through commit sync.
-    /// In the 2nd case, this commit may not have blocks in the local DAG to finalize it.
-    pub local: bool,
+    /// Indicates whether the commit was decided locally based on the local DAG.
+    ///
+    /// If true, `CommitFinalizer` can then assume a quorum of certificates are available
+    /// for each transaction in the commit if there is no reject vote, and proceed with
+    /// optimistic finalization of transactions.
+    ///
+    /// If the commit was decided by `UniversalCommitter`, this must be true.
+    /// If the commit was received from a peer via `CommitSyncer`, this must be false.
+    /// There may not be enough blocks in local DAG to decide on the commit.
+    ///
+    /// For safety, a previously locally decided commit may be recovered after restarting as
+    /// non-local, if its finalization state was not persisted.
+    pub decided_with_local_blocks: bool,
+    /// Whether rejected transactions in this commit have been recovered from storage.
+    pub recovered_rejected_transactions: bool,
     /// Optional scores that are provided as part of the consensus output to Sui
     /// that can then be used by Sui for future submission to consensus.
     pub reputation_scores_desc: Vec<(AuthorityIndex, u64)>,
@@ -383,7 +394,8 @@ impl CommittedSubDag {
             blocks,
             timestamp_ms,
             commit_ref,
-            local: true,
+            decided_with_local_blocks: true,
+            recovered_rejected_transactions: false,
             reputation_scores_desc: vec![],
             rejected_transactions_by_block: BTreeMap::new(),
         }
@@ -404,35 +416,49 @@ impl Display for CommittedSubDag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "CommittedSubDag(leader={}, ref={}, blocks=[",
-            self.leader, self.commit_ref
-        )?;
-        for (idx, block) in self.blocks.iter().enumerate() {
-            if idx > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", block.digest())?;
-        }
-        write!(f, "])")
+            "{}@{} [{}])",
+            self.commit_ref,
+            self.leader,
+            self.blocks
+                .iter()
+                .map(|b| b.reference().to_string())
+                .join(", ")
+        )
     }
 }
 
 impl fmt::Debug for CommittedSubDag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{} ([", self.leader, self.commit_ref)?;
-        for block in &self.blocks {
-            write!(f, "{}, ", block.reference())?;
-        }
         write!(
             f,
-            "];{}ms;rs{:?})",
-            self.timestamp_ms, self.reputation_scores_desc
+            "{}@{} [{}])",
+            self.commit_ref,
+            self.leader,
+            self.blocks
+                .iter()
+                .map(|b| b.reference().to_string())
+                .join(", ")
+        )?;
+        write!(
+            f,
+            ";{}ms;rs{:?};{};{};[{}]",
+            self.timestamp_ms,
+            self.reputation_scores_desc,
+            self.decided_with_local_blocks,
+            self.recovered_rejected_transactions,
+            self.rejected_transactions_by_block
+                .iter()
+                .map(|(block_ref, transactions)| {
+                    format!("{}: {}, ", block_ref, transactions.len())
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
         )
     }
 }
 
 // Recovers the full CommittedSubDag from block store, based on Commit.
-pub fn load_committed_subdag_from_store(
+pub(crate) fn load_committed_subdag_from_store(
     store: &dyn Store,
     commit: TrustedCommit,
     reputation_scores_desc: Vec<(AuthorityIndex, u64)>,
@@ -455,13 +481,28 @@ pub fn load_committed_subdag_from_store(
         .collect::<Vec<_>>();
     let leader_block_idx = leader_block_idx.expect("Leader block must be in the sub-dag");
     let leader_block_ref = blocks[leader_block_idx].reference();
+
     let mut subdag = CommittedSubDag::new(
         leader_block_ref,
         blocks,
         commit.timestamp_ms(),
         commit.reference(),
     );
+
     subdag.reputation_scores_desc = reputation_scores_desc;
+
+    let reject_votes = store
+        .read_rejected_transactions(commit.reference())
+        .unwrap();
+    if let Some(reject_votes) = reject_votes {
+        subdag.decided_with_local_blocks = true;
+        subdag.recovered_rejected_transactions = true;
+        subdag.rejected_transactions_by_block = reject_votes;
+    } else {
+        subdag.decided_with_local_blocks = false;
+        subdag.recovered_rejected_transactions = false;
+    }
+
     subdag
 }
 
@@ -576,43 +617,43 @@ impl Display for DecidedLeader {
 /// and potentially restoring from an earlier state.
 // TODO: version this struct.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct CommitInfo {
+pub struct CommitInfo {
     pub(crate) committed_rounds: Vec<Round>,
     pub(crate) reputation_scores: ReputationScores,
 }
 
-/// CommitRange stores a range of CommitIndex. The range contains the start (inclusive)
+/// `CommitRange` stores a range of `CommitIndex`. The range contains the start (inclusive)
 /// and end (inclusive) commit indices and can be ordered for use as the key of a table.
 ///
-/// NOTE: using Range<CommitIndex> for internal representation for backward compatibility.
-/// The external semantics of CommitRange is closer to RangeInclusive<CommitIndex>.
+/// NOTE: using `Range<CommitIndex>` for internal representation for backward compatibility.
+/// The external semantics of `CommitRange` is closer to `RangeInclusive<CommitIndex>`.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct CommitRange(Range<CommitIndex>);
+pub struct CommitRange(Range<CommitIndex>);
 
 impl CommitRange {
-    pub(crate) fn new(range: RangeInclusive<CommitIndex>) -> Self {
+    pub fn new(range: RangeInclusive<CommitIndex>) -> Self {
         // When end is CommitIndex::MAX, the range can be considered as unbounded
         // so it is ok to saturate at the end.
         Self(*range.start()..(*range.end()).saturating_add(1))
     }
 
     // Inclusive
-    pub(crate) fn start(&self) -> CommitIndex {
+    pub fn start(&self) -> CommitIndex {
         self.0.start
     }
 
     // Inclusive
-    pub(crate) fn end(&self) -> CommitIndex {
+    pub fn end(&self) -> CommitIndex {
         self.0.end.saturating_sub(1)
     }
 
-    pub(crate) fn extend_to(&mut self, other: CommitIndex) {
+    pub fn extend_to(&mut self, other: CommitIndex) {
         let new_end = other.saturating_add(1);
         assert!(self.0.end <= new_end);
         self.0 = self.0.start..new_end;
     }
 
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.0
             .end
             .checked_sub(self.0.start)
@@ -620,12 +661,12 @@ impl CommitRange {
     }
 
     /// Check whether the two ranges have the same size.
-    pub(crate) fn is_equal_size(&self, other: &Self) -> bool {
+    pub fn is_equal_size(&self, other: &Self) -> bool {
         self.size() == other.size()
     }
 
     /// Check if the provided range is sequentially after this range.
-    pub(crate) fn is_next_range(&self, other: &Self) -> bool {
+    pub fn is_next_range(&self, other: &Self) -> bool {
         self.0.end == other.0.start
     }
 }
@@ -665,7 +706,7 @@ mod tests {
     use crate::{
         block::TestBlock,
         context::Context,
-        storage::{mem_store::MemStore, WriteBatch},
+        storage::{WriteBatch, mem_store::MemStore},
     };
 
     #[tokio::test]

@@ -3,19 +3,21 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    mem,
     time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
 use sui_default_config::DefaultConfig;
+use sui_name_service::NameServiceConfig;
 use sui_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
-use tracing::warn;
+use sui_types::base_types::{ObjectID, SuiAddress};
 
 use crate::{
     extensions::{query_limits::QueryLimitsConfig, timeout::TimeoutConfig},
     pagination::{PageLimits, PaginationConfig},
 };
+
+pub use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 
 #[derive(Default)]
 pub struct RpcConfig {
@@ -25,19 +27,25 @@ pub struct RpcConfig {
     /// Configuration for health checks.
     pub health: HealthConfig,
 
+    /// Configure for SuiNS related RPC methods.
+    pub name_service: NameServiceConfig,
+
     /// Configuration for the watermark task.
     pub watermark: WatermarkConfig,
+
+    /// Configuration for zkLogin verification.
+    pub zklogin: ZkLoginConfig,
 }
 
 #[DefaultConfig]
 #[derive(Clone, Default, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct RpcLayer {
     pub limits: LimitsLayer,
     pub health: HealthLayer,
+    pub name_service: NameServiceLayer,
     pub watermark: WatermarkLayer,
-
-    #[serde(flatten)]
-    pub extra: toml::Table,
+    pub zklogin: ZkLoginLayer,
 }
 
 #[derive(Clone)]
@@ -48,11 +56,9 @@ pub struct HealthConfig {
 
 #[DefaultConfig]
 #[derive(Default, Clone, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct HealthLayer {
     pub max_checkpoint_lag_ms: Option<u64>,
-
-    #[serde(flatten)]
-    pub extra: toml::Table,
 }
 
 /// Config for an indexer writing to a database used by this RPC service. It is simplified w.r.t.
@@ -110,6 +116,10 @@ pub struct Limits {
     /// `TransactionEffects.objectChanges`.
     pub page_size_override_fx_object_changes: u32,
 
+    /// Maximum (and default) number of packages that can be returned in a single page of
+    /// `Query.packages`.
+    pub page_size_override_packages: u32,
+
     /// Maximum amount of nesting among type arguments (type arguments nest when a type argument is
     /// itself generic and has arguments).
     pub max_type_argument_depth: usize,
@@ -123,10 +133,23 @@ pub struct Limits {
 
     /// Maximum nesting allowed in datatype fields when calculating the layout of a single type.
     pub max_move_value_depth: usize,
+
+    /// Maximum budget in bytes to spend when outputting a structured Move value.
+    pub max_move_value_bound: usize,
+
+    /// Maximum depth of nested field access supported in display outputs.
+    pub max_display_field_depth: usize,
+
+    /// Maximumm output size of a display output.
+    pub max_display_output_size: usize,
+
+    /// Maximum output size of a disassembled Move module, in bytes.
+    pub max_disassembled_module_size: usize,
 }
 
 #[DefaultConfig]
 #[derive(Default, Clone, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct LimitsLayer {
     pub mutation_timeout_ms: Option<u32>,
     pub query_timeout_ms: Option<u32>,
@@ -139,13 +162,24 @@ pub struct LimitsLayer {
     pub max_page_size: Option<u32>,
     pub max_multi_get_size: Option<u32>,
     pub page_size_override_fx_object_changes: Option<u32>,
+    pub page_size_override_packages: Option<u32>,
     pub max_type_argument_depth: Option<usize>,
     pub max_type_argument_width: Option<usize>,
     pub max_type_nodes: Option<usize>,
     pub max_move_value_depth: Option<usize>,
+    pub max_move_value_bound: Option<usize>,
+    pub max_display_field_depth: Option<usize>,
+    pub max_display_output_size: Option<usize>,
+    pub max_disassembled_module_size: Option<usize>,
+}
 
-    #[serde(flatten)]
-    pub extra: toml::Table,
+#[DefaultConfig]
+#[derive(Clone, Default, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct NameServiceLayer {
+    pub package_address: Option<SuiAddress>,
+    pub registry_id: Option<ObjectID>,
+    pub reverse_registry_id: Option<ObjectID>,
 }
 
 pub struct WatermarkConfig {
@@ -155,11 +189,22 @@ pub struct WatermarkConfig {
 
 #[DefaultConfig]
 #[derive(Default, Clone, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct WatermarkLayer {
     pub watermark_polling_interval_ms: Option<u64>,
+}
 
-    #[serde(flatten)]
-    pub extra: toml::Table,
+pub struct ZkLoginConfig {
+    pub env: ZkLoginEnv,
+    pub max_epoch_upper_bound_delta: Option<u64>,
+}
+
+#[DefaultConfig]
+#[derive(Default, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct ZkLoginLayer {
+    pub env: Option<ZkLoginEnv>,
+    pub max_epoch_upper_bound_delta: Option<Option<u64>>,
 }
 
 impl RpcLayer {
@@ -167,24 +212,25 @@ impl RpcLayer {
         Self {
             limits: Limits::default().into(),
             health: HealthConfig::default().into(),
+            name_service: NameServiceConfig::default().into(),
             watermark: WatermarkConfig::default().into(),
-            extra: Default::default(),
+            zklogin: ZkLoginConfig::default().into(),
         }
     }
 
-    pub fn finish(mut self) -> RpcConfig {
-        check_extra("top-level", mem::take(&mut self.extra));
+    pub fn finish(self) -> RpcConfig {
         RpcConfig {
             limits: self.limits.finish(Limits::default()),
             health: self.health.finish(HealthConfig::default()),
+            name_service: self.name_service.finish(NameServiceConfig::default()),
             watermark: self.watermark.finish(WatermarkConfig::default()),
+            zklogin: self.zklogin.finish(ZkLoginConfig::default()),
         }
     }
 }
 
 impl HealthLayer {
-    pub(crate) fn finish(mut self, base: HealthConfig) -> HealthConfig {
-        check_extra("health", mem::take(&mut self.extra));
+    pub(crate) fn finish(self, base: HealthConfig) -> HealthConfig {
         HealthConfig {
             max_checkpoint_lag: self
                 .max_checkpoint_lag_ms
@@ -216,7 +262,7 @@ impl Limits {
             max_query_depth: self.max_query_depth,
             max_query_payload_size: self.max_query_payload_size,
             max_tx_payload_size: self.max_tx_payload_size,
-            tx_payload_args: BTreeSet::from_iter([
+            tx_payload_args: BTreeSet::from([
                 ("Mutation", "executeTransaction", "txBytes"),
                 ("Mutation", "executeTransaction", "signatures"),
                 ("Query", "simulateTransaction", "txBytes"),
@@ -233,13 +279,22 @@ impl Limits {
                 default: self.default_page_size,
                 max: self.max_page_size,
             },
-            BTreeMap::from_iter([(
-                ("TransactionEffects", "objectChanges"),
-                PageLimits {
-                    default: self.page_size_override_fx_object_changes,
-                    max: self.page_size_override_fx_object_changes,
-                },
-            )]),
+            BTreeMap::from([
+                (
+                    ("TransactionEffects", "objectChanges"),
+                    PageLimits {
+                        default: self.page_size_override_fx_object_changes,
+                        max: self.page_size_override_fx_object_changes,
+                    },
+                ),
+                (
+                    ("Query", "packages"),
+                    PageLimits {
+                        default: self.page_size_override_packages,
+                        max: self.page_size_override_packages,
+                    },
+                ),
+            ]),
         )
     }
 
@@ -254,8 +309,7 @@ impl Limits {
 }
 
 impl LimitsLayer {
-    pub(crate) fn finish(mut self, base: Limits) -> Limits {
-        check_extra("limits", mem::take(&mut self.extra));
+    pub(crate) fn finish(self, base: Limits) -> Limits {
         Limits {
             mutation_timeout_ms: self.mutation_timeout_ms.unwrap_or(base.mutation_timeout_ms),
             query_timeout_ms: self.query_timeout_ms.unwrap_or(base.query_timeout_ms),
@@ -272,6 +326,9 @@ impl LimitsLayer {
             page_size_override_fx_object_changes: self
                 .page_size_override_fx_object_changes
                 .unwrap_or(base.page_size_override_fx_object_changes),
+            page_size_override_packages: self
+                .page_size_override_packages
+                .unwrap_or(base.page_size_override_packages),
             max_type_argument_depth: self
                 .max_type_argument_depth
                 .unwrap_or(base.max_type_argument_depth),
@@ -282,13 +339,34 @@ impl LimitsLayer {
             max_move_value_depth: self
                 .max_move_value_depth
                 .unwrap_or(base.max_move_value_depth),
+            max_move_value_bound: self
+                .max_move_value_bound
+                .unwrap_or(base.max_move_value_bound),
+            max_display_field_depth: self
+                .max_display_field_depth
+                .unwrap_or(base.max_display_field_depth),
+            max_display_output_size: self
+                .max_display_output_size
+                .unwrap_or(base.max_display_output_size),
+            max_disassembled_module_size: self
+                .max_disassembled_module_size
+                .unwrap_or(base.max_disassembled_module_size),
+        }
+    }
+}
+
+impl NameServiceLayer {
+    pub(crate) fn finish(self, base: NameServiceConfig) -> NameServiceConfig {
+        NameServiceConfig {
+            package_address: self.package_address.unwrap_or(base.package_address),
+            registry_id: self.registry_id.unwrap_or(base.registry_id),
+            reverse_registry_id: self.reverse_registry_id.unwrap_or(base.reverse_registry_id),
         }
     }
 }
 
 impl WatermarkLayer {
-    pub(crate) fn finish(mut self, base: WatermarkConfig) -> WatermarkConfig {
-        check_extra("watermark", mem::take(&mut self.extra));
+    pub(crate) fn finish(self, base: WatermarkConfig) -> WatermarkConfig {
         WatermarkConfig {
             watermark_polling_interval: self
                 .watermark_polling_interval_ms
@@ -298,11 +376,21 @@ impl WatermarkLayer {
     }
 }
 
+impl ZkLoginLayer {
+    pub(crate) fn finish(self, base: ZkLoginConfig) -> ZkLoginConfig {
+        ZkLoginConfig {
+            env: self.env.unwrap_or(base.env),
+            max_epoch_upper_bound_delta: self
+                .max_epoch_upper_bound_delta
+                .unwrap_or(base.max_epoch_upper_bound_delta),
+        }
+    }
+}
+
 impl From<HealthConfig> for HealthLayer {
     fn from(value: HealthConfig) -> Self {
         Self {
             max_checkpoint_lag_ms: Some(value.max_checkpoint_lag.as_millis() as u64),
-            extra: Default::default(),
         }
     }
 }
@@ -321,11 +409,25 @@ impl From<Limits> for LimitsLayer {
             max_page_size: Some(value.max_page_size),
             max_multi_get_size: Some(value.max_multi_get_size),
             page_size_override_fx_object_changes: Some(value.page_size_override_fx_object_changes),
+            page_size_override_packages: Some(value.page_size_override_packages),
             max_type_argument_depth: Some(value.max_type_argument_depth),
             max_type_argument_width: Some(value.max_type_argument_width),
             max_type_nodes: Some(value.max_type_nodes),
             max_move_value_depth: Some(value.max_move_value_depth),
-            extra: Default::default(),
+            max_move_value_bound: Some(value.max_move_value_bound),
+            max_display_field_depth: Some(value.max_display_field_depth),
+            max_display_output_size: Some(value.max_display_output_size),
+            max_disassembled_module_size: Some(value.max_disassembled_module_size),
+        }
+    }
+}
+
+impl From<NameServiceConfig> for NameServiceLayer {
+    fn from(config: NameServiceConfig) -> Self {
+        Self {
+            package_address: Some(config.package_address),
+            registry_id: Some(config.registry_id),
+            reverse_registry_id: Some(config.reverse_registry_id),
         }
     }
 }
@@ -334,7 +436,15 @@ impl From<WatermarkConfig> for WatermarkLayer {
     fn from(value: WatermarkConfig) -> Self {
         Self {
             watermark_polling_interval_ms: Some(value.watermark_polling_interval.as_millis() as u64),
-            extra: Default::default(),
+        }
+    }
+}
+
+impl From<ZkLoginConfig> for ZkLoginLayer {
+    fn from(value: ZkLoginConfig) -> Self {
+        Self {
+            env: Some(value.env),
+            max_epoch_upper_bound_delta: Some(value.max_epoch_upper_bound_delta),
         }
     }
 }
@@ -386,10 +496,15 @@ impl Default for Limits {
             // A much larger page size than the default, to make it unlikely that users need to
             // fetch a second page.
             page_size_override_fx_object_changes: 1024,
+            page_size_override_packages: 200,
             max_type_argument_depth,
             max_type_argument_width,
             max_type_nodes,
             max_move_value_depth,
+            max_move_value_bound: 1024 * 1024,
+            max_display_field_depth: 10,
+            max_display_output_size: 1024 * 1024,
+            max_disassembled_module_size: 1024 * 1024,
         }
     }
 }
@@ -402,15 +517,14 @@ impl Default for WatermarkConfig {
     }
 }
 
-/// Check whether there are any unrecognized extra fields and if so, warn about them.
-fn check_extra(pos: &str, extra: toml::Table) {
-    if !extra.is_empty() {
-        warn!(
-            "Found unrecognized {pos} field{} which will be ignored. This could be \
-             because of a typo, or because it was introduced in a newer version of the indexer:\n{}",
-            if extra.len() != 1 { "s" } else { "" },
-            extra,
-        )
+impl Default for ZkLoginConfig {
+    fn default() -> Self {
+        Self {
+            env: ZkLoginEnv::Prod,
+            max_epoch_upper_bound_delta: max_across_protocol(
+                ProtocolConfig::zklogin_max_epoch_upper_bound_delta,
+            ),
+        }
     }
 }
 

@@ -10,6 +10,7 @@ title: Module `sui_system::staking_pool`
 -  [Struct `FungibleStakedSui`](#sui_system_staking_pool_FungibleStakedSui)
 -  [Struct `FungibleStakedSuiData`](#sui_system_staking_pool_FungibleStakedSuiData)
 -  [Struct `FungibleStakedSuiDataKey`](#sui_system_staking_pool_FungibleStakedSuiDataKey)
+-  [Struct `UnderflowSuiBalance`](#sui_system_staking_pool_UnderflowSuiBalance)
 -  [Constants](#@Constants_0)
 -  [Function `new`](#sui_system_staking_pool_new)
 -  [Function `request_add_stake`](#sui_system_staking_pool_request_add_stake)
@@ -53,6 +54,7 @@ title: Module `sui_system::staking_pool`
 -  [Function `initial_exchange_rate`](#sui_system_staking_pool_initial_exchange_rate)
 -  [Function `check_balance_invariants`](#sui_system_staking_pool_check_balance_invariants)
 -  [Macro function `mul_div`](#sui_system_staking_pool_mul_div)
+-  [Function `calculate_rewards`](#sui_system_staking_pool_calculate_rewards)
 
 
 <pre><code><b>use</b> <a href="../std/address.md#std_address">std::address</a>;
@@ -63,15 +65,21 @@ title: Module `sui_system::staking_pool`
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
 <b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
+<b>use</b> <a href="../sui/accumulator.md#sui_accumulator">sui::accumulator</a>;
+<b>use</b> <a href="../sui/accumulator_metadata.md#sui_accumulator_metadata">sui::accumulator_metadata</a>;
+<b>use</b> <a href="../sui/accumulator_settlement.md#sui_accumulator_settlement">sui::accumulator_settlement</a>;
 <b>use</b> <a href="../sui/address.md#sui_address">sui::address</a>;
 <b>use</b> <a href="../sui/bag.md#sui_bag">sui::bag</a>;
 <b>use</b> <a href="../sui/balance.md#sui_balance">sui::balance</a>;
+<b>use</b> <a href="../sui/bcs.md#sui_bcs">sui::bcs</a>;
 <b>use</b> <a href="../sui/coin.md#sui_coin">sui::coin</a>;
 <b>use</b> <a href="../sui/config.md#sui_config">sui::config</a>;
 <b>use</b> <a href="../sui/deny_list.md#sui_deny_list">sui::deny_list</a>;
 <b>use</b> <a href="../sui/dynamic_field.md#sui_dynamic_field">sui::dynamic_field</a>;
 <b>use</b> <a href="../sui/dynamic_object_field.md#sui_dynamic_object_field">sui::dynamic_object_field</a>;
 <b>use</b> <a href="../sui/event.md#sui_event">sui::event</a>;
+<b>use</b> <a href="../sui/funds_accumulator.md#sui_funds_accumulator">sui::funds_accumulator</a>;
+<b>use</b> <a href="../sui/hash.md#sui_hash">sui::hash</a>;
 <b>use</b> <a href="../sui/hex.md#sui_hex">sui::hex</a>;
 <b>use</b> <a href="../sui/object.md#sui_object">sui::object</a>;
 <b>use</b> <a href="../sui/party.md#sui_party">sui::party</a>;
@@ -345,6 +353,29 @@ Holds useful information
 
 
 <pre><code><b>public</b> <b>struct</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_FungibleStakedSuiDataKey">FungibleStakedSuiDataKey</a> <b>has</b> <b>copy</b>, drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+</dl>
+
+
+</details>
+
+<a name="sui_system_staking_pool_UnderflowSuiBalance"></a>
+
+## Struct `UnderflowSuiBalance`
+
+Holds the amount of SUI that was underflowed when withdrawing from the pool
+post safe mode. Cleaned up in the same transaction.
+
+
+<pre><code><b>public</b> <b>struct</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_UnderflowSuiBalance">UnderflowSuiBalance</a> <b>has</b> <b>copy</b>, drop, store
 </code></pre>
 
 
@@ -1001,8 +1032,19 @@ Also called immediately upon withdrawal if the pool is inactive.
 
 
 <pre><code><b>fun</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_process_pending_stake_withdraw">process_pending_stake_withdraw</a>(pool: &<b>mut</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_StakingPool">StakingPool</a>) {
-    pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> = pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> - pool.pending_total_sui_withdraw;
-    pool.pool_token_balance = pool.pool_token_balance - pool.pending_pool_token_withdraw;
+    pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> = <b>if</b> (pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> &gt;= pool.pending_total_sui_withdraw) {
+        pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> - pool.pending_total_sui_withdraw
+    } <b>else</b> {
+        // the diff will be applied in the `<a href="../sui_system/staking_pool.md#sui_system_staking_pool_process_pending_stake">process_pending_stake</a>` function.
+        <b>let</b> diff = pool.pending_total_sui_withdraw - pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a>;
+        pool.extra_fields.add(<a href="../sui_system/staking_pool.md#sui_system_staking_pool_UnderflowSuiBalance">UnderflowSuiBalance</a> {}, diff);
+        0
+    };
+    pool.pool_token_balance = <b>if</b> (pool.pool_token_balance &gt;= pool.pending_pool_token_withdraw) {
+        pool.pool_token_balance - pool.pending_pool_token_withdraw
+    } <b>else</b> {
+        0
+    };
     pool.pending_total_sui_withdraw = 0;
     pool.pending_pool_token_withdraw = 0;
 }
@@ -1034,7 +1076,13 @@ Called at epoch boundaries to process the pending stake.
         <a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_amount">sui_amount</a>: pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a>,
         <a href="../sui_system/staking_pool.md#sui_system_staking_pool_pool_token_amount">pool_token_amount</a>: pool.pool_token_balance,
     };
-    pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> = pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> + pool.pending_stake;
+    // This key is only present <b>if</b> the `<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a>` underflowed, hence, the current value of `<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a>`
+    // is `0`. Pool token balance will be recalculated automatically <b>for</b> `0` value.
+    <b>let</b> sui_diff = {
+        <b>let</b> key = <a href="../sui_system/staking_pool.md#sui_system_staking_pool_UnderflowSuiBalance">UnderflowSuiBalance</a> {};
+        <b>if</b> (pool.extra_fields.contains(key)) pool.extra_fields.remove(key) <b>else</b> 0
+    };
+    pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> = pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a> + pool.pending_stake - sui_diff;
     pool.pool_token_balance = latest_exchange_rate.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_get_token_amount">get_token_amount</a>(pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_sui_balance">sui_balance</a>);
     pool.pending_stake = 0;
 }
@@ -1863,6 +1911,47 @@ Returns true if the provided staking pool is preactive at the provided epoch.
 
 <pre><code><b>macro</b> <b>fun</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_mul_div">mul_div</a>($a: u64, $b: u64, $c: u64): u64 {
     (($a <b>as</b> u128) * ($b <b>as</b> u128) / ($c <b>as</b> u128)) <b>as</b> u64
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="sui_system_staking_pool_calculate_rewards"></a>
+
+## Function `calculate_rewards`
+
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_calculate_rewards">calculate_rewards</a>(pool: &<a href="../sui_system/staking_pool.md#sui_system_staking_pool_StakingPool">sui_system::staking_pool::StakingPool</a>, staked_sui: &<a href="../sui_system/staking_pool.md#sui_system_staking_pool_StakedSui">sui_system::staking_pool::StakedSui</a>, current_epoch: u64): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../sui_system/staking_pool.md#sui_system_staking_pool_calculate_rewards">calculate_rewards</a>(
+    pool: &<a href="../sui_system/staking_pool.md#sui_system_staking_pool_StakingPool">StakingPool</a>,
+    staked_sui: &<a href="../sui_system/staking_pool.md#sui_system_staking_pool_StakedSui">StakedSui</a>,
+    current_epoch: u64,
+): u64 {
+    <b>let</b> staked_amount = staked_sui.amount();
+    <b>let</b> pool_token_withdraw_amount = {
+        <b>let</b> exchange_rate_at_staking_epoch = pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_pool_token_exchange_rate_at_epoch">pool_token_exchange_rate_at_epoch</a>(staked_sui.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_stake_activation_epoch">stake_activation_epoch</a>);
+        exchange_rate_at_staking_epoch.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_get_token_amount">get_token_amount</a>(staked_amount)
+    };
+    <b>let</b> new_epoch_exchange_rate = pool.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_pool_token_exchange_rate_at_epoch">pool_token_exchange_rate_at_epoch</a>(current_epoch);
+    <b>let</b> total_sui_withdraw_amount = new_epoch_exchange_rate.<a href="../sui_system/staking_pool.md#sui_system_staking_pool_get_sui_amount">get_sui_amount</a>(
+        pool_token_withdraw_amount,
+    );
+    <b>let</b> <b>mut</b> reward_withdraw_amount = <b>if</b> (total_sui_withdraw_amount &gt;= staked_amount) {
+        total_sui_withdraw_amount - staked_amount
+    } <b>else</b> 0;
+    reward_withdraw_amount = reward_withdraw_amount.min(pool.rewards_pool.value());
+    reward_withdraw_amount
 }
 </code></pre>
 

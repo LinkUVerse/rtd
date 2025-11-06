@@ -508,15 +508,15 @@ fn check_mutability(
                 (eloc, usage_msg),
                 (decl_loc, decl_msg),
             );
-            if let Some(prev) = prev_assignment {
-                if prev != decl_loc {
-                    let msg = if eloc == prev {
-                        "The variable is assigned multiple times here in a loop"
-                    } else {
-                        "The variable was initially assigned here"
-                    };
-                    diag.add_secondary_label((prev, msg));
-                }
+            if let Some(prev) = prev_assignment
+                && prev != decl_loc
+            {
+                let msg = if eloc == prev {
+                    "The variable is assigned multiple times here in a loop"
+                } else {
+                    "The variable was initially assigned here"
+                };
+                diag.add_secondary_label((prev, msg));
             }
             context.add_diag(diag)
         }
@@ -563,7 +563,7 @@ fn add_drop_ability_tip(context: &Context, diag: &mut Diagnostic, st: SingleType
             let abilities = match &ty_arg.value {
                 T::Unit => AbilitySet::collection(ty_arg.loc),
                 T::Ref(_, _) => AbilitySet::references(ty_arg.loc),
-                T::UnresolvedError | T::Anything => AbilitySet::all(ty_arg.loc),
+                T::UnresolvedError | T::Anything | T::Void => AbilitySet::all(ty_arg.loc),
                 T::Param(TParam { abilities, .. }) | T::Apply(Some(abilities), _, _) => {
                     abilities.clone()
                 }

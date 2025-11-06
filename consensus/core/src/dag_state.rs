@@ -7,28 +7,27 @@ use std::{
     ops::Bound::{Excluded, Included, Unbounded},
     panic,
     sync::Arc,
+    time::Duration,
     vec,
 };
 
 use consensus_config::AuthorityIndex;
+use consensus_types::block::{BlockDigest, BlockRef, BlockTimestampMs, Round, TransactionIndex};
 use itertools::Itertools as _;
 use tokio::time::Instant;
 use tracing::{debug, error, info, trace};
 
 use crate::{
-    block::{
-        genesis_blocks, BlockAPI, BlockDigest, BlockRef, BlockTimestampMs, Round, Slot,
-        VerifiedBlock, GENESIS_ROUND,
-    },
+    CommittedSubDag,
+    block::{BlockAPI, GENESIS_ROUND, Slot, VerifiedBlock, genesis_blocks},
     commit::{
-        load_committed_subdag_from_store, CommitAPI as _, CommitDigest, CommitIndex, CommitInfo,
-        CommitRef, CommitVote, TrustedCommit, GENESIS_COMMIT_INDEX,
+        CommitAPI as _, CommitDigest, CommitIndex, CommitInfo, CommitRef, CommitVote,
+        GENESIS_COMMIT_INDEX, TrustedCommit, load_committed_subdag_from_store,
     },
     context::Context,
     leader_scoring::{ReputationScores, ScoringSubdag},
     storage::{Store, WriteBatch},
     threshold_clock::ThresholdClock,
-    CommittedSubDag,
 };
 
 /// DagState provides the API to write and read accepted blocks from the DAG.
@@ -38,7 +37,7 @@ use crate::{
 ///
 /// Note: DagState should be wrapped with Arc<parking_lot::RwLock<_>>, to allow
 /// concurrent access from multiple components.
-pub(crate) struct DagState {
+pub struct DagState {
     context: Arc<Context>,
 
     // The genesis blocks
@@ -86,14 +85,18 @@ pub(crate) struct DagState {
     // TODO: recover unproposed pending commit votes at startup.
     pending_commit_votes: VecDeque<CommitVote>,
 
-    // Data to be flushed to storage.
+    // Blocks and commits must be buffered for persistence before they can be
+    // inserted into the local DAG or sent to output.
     blocks_to_write: Vec<VerifiedBlock>,
     commits_to_write: Vec<TrustedCommit>,
 
-    // Buffer the reputation scores & last_committed_rounds to be flushed with the
-    // next dag state flush. This is okay because we can recover reputation scores
+    // Buffers the reputation scores & last_committed_rounds to be flushed with the
+    // next dag state flush. Not writing eagerly is okay because we can recover reputation scores
     // & last_committed_rounds from the commits as needed.
     commit_info_to_write: Vec<(CommitRef, CommitInfo)>,
+
+    // Buffers finalized commits and their rejected transactions to be written to storage.
+    finalized_commits_to_write: Vec<(CommitRef, BTreeMap<BlockRef, Vec<TransactionIndex>>)>,
 
     // Persistent storage for blocks, commits and other consensus data.
     store: Arc<dyn Store>,
@@ -104,7 +107,7 @@ pub(crate) struct DagState {
 
 impl DagState {
     /// Initializes DagState from storage.
-    pub(crate) fn new(context: Arc<Context>, store: Arc<dyn Store>) -> Self {
+    pub fn new(context: Arc<Context>, store: Arc<dyn Store>) -> Self {
         let cached_rounds = context.parameters.dag_state_cached_rounds as Round;
         let num_authorities = context.committee.size();
 
@@ -173,6 +176,7 @@ impl DagState {
             blocks_to_write: vec![],
             commits_to_write: vec![],
             commit_info_to_write: vec![],
+            finalized_commits_to_write: vec![],
             scoring_subdag,
             store: store.clone(),
             cached_rounds,
@@ -222,7 +226,10 @@ impl DagState {
         if let Some(last_commit) = last_commit {
             let mut index = last_commit.index();
             let gc_round = state.gc_round();
-            info!("Recovering block commit statuses from commit index {} and backwards until leader of round <= gc_round {:?}", index, gc_round);
+            info!(
+                "Recovering block commit statuses from commit index {} and backwards until leader of round <= gc_round {:?}",
+                index, gc_round
+            );
 
             loop {
                 let commits = store
@@ -332,7 +339,24 @@ impl DagState {
         self.recent_blocks
             .insert(block_ref, BlockInfo::new(block.clone()));
         self.recent_refs_by_authority[block_ref.author].insert(block_ref);
-        self.threshold_clock.add_block(block_ref);
+
+        if self.threshold_clock.add_block(block_ref) {
+            // Do not measure quorum delay when no local block is proposed in the round.
+            let last_proposed_block = self.get_last_proposed_block();
+            if last_proposed_block.round() == block_ref.round {
+                let quorum_delay_ms = self
+                    .context
+                    .clock
+                    .timestamp_utc_ms()
+                    .saturating_sub(self.get_last_proposed_block().timestamp_ms());
+                self.context
+                    .metrics
+                    .node_metrics
+                    .quorum_receive_latency
+                    .observe(Duration::from_millis(quorum_delay_ms).as_secs_f64());
+            }
+        }
+
         self.highest_accepted_round = max(self.highest_accepted_round, block.round());
         self.context
             .metrics
@@ -627,7 +651,9 @@ impl DagState {
 
             let last_evicted_round = self.evicted_rounds[authority_index];
             if end_round.saturating_sub(1) <= last_evicted_round {
-                panic!("Attempted to request for blocks of rounds < {end_round}, when the last evicted round is {last_evicted_round} for authority {authority_index}", );
+                panic!(
+                    "Attempted to request for blocks of rounds < {end_round}, when the last evicted round is {last_evicted_round} for authority {authority_index}",
+                );
             }
 
             let block_ref_iter = block_refs
@@ -672,7 +698,12 @@ impl DagState {
 
         let eviction_round = self.evicted_rounds[slot.authority];
         if slot.round <= eviction_round {
-            panic!("{}", format!("Attempted to check for slot {slot} that is <= the last evicted round {eviction_round}"));
+            panic!(
+                "{}",
+                format!(
+                    "Attempted to check for slot {slot} that is <= the last evicted round {eviction_round}"
+                )
+            );
         }
 
         let mut result = self.recent_refs_by_authority[slot.authority].range((
@@ -822,7 +853,10 @@ impl DagState {
             assert_eq!(commit.index(), last_commit.index() + 1);
 
             if commit.timestamp_ms() < last_commit.timestamp_ms() {
-                panic!("Commit timestamps do not monotonically increment, prev commit {:?}, new commit {:?}", last_commit, commit);
+                panic!(
+                    "Commit timestamps do not monotonically increment, prev commit {:?}, new commit {:?}",
+                    last_commit, commit
+                );
             }
             commit
                 .timestamp_ms()
@@ -882,8 +916,15 @@ impl DagState {
 
     /// Recovers commits to write from storage, at startup.
     pub(crate) fn recover_commits_to_write(&mut self, commits: Vec<TrustedCommit>) {
-        assert!(self.commits_to_write.is_empty());
         self.commits_to_write.extend(commits);
+    }
+
+    pub(crate) fn ensure_commits_to_write_is_empty(&self) {
+        assert!(
+            self.commits_to_write.is_empty(),
+            "Commits to write should be empty. {:?}",
+            self.commits_to_write,
+        );
     }
 
     pub(crate) fn add_commit_info(&mut self, reputation_scores: ReputationScores) {
@@ -902,6 +943,15 @@ impl DagState {
             .expect("Last commit should already be set.");
         self.commit_info_to_write
             .push((last_commit.reference(), commit_info));
+    }
+
+    pub(crate) fn add_finalized_commit(
+        &mut self,
+        commit_ref: CommitRef,
+        rejected_transactions: BTreeMap<BlockRef, Vec<TransactionIndex>>,
+    ) {
+        self.finalized_commits_to_write
+            .push((commit_ref, rejected_transactions));
     }
 
     pub(crate) fn take_commit_votes(&mut self, limit: usize) -> Vec<CommitVote> {
@@ -976,19 +1026,16 @@ impl DagState {
         commit_round.saturating_sub(self.context.protocol_config.gc_depth())
     }
 
+    /// Flushes unpersisted blocks, commits and commit info to storage.
+    ///
+    /// REQUIRED: when buffering a block, all of its ancestors and the latest commit which sets the GC round
+    /// must also be buffered.
+    /// REQUIRED: when buffering a commit, all of its included blocks and the previous commits must also be buffered.
+    /// REQUIRED: when flushing, all of the buffered blocks and commits must be flushed together to ensure consistency.
+    ///
     /// After each flush, DagState becomes persisted in storage and it expected to recover
     /// all internal states from storage after restarts.
-    pub(crate) fn flush(&mut self, finalized_commit_index: CommitIndex) {
-        self.flush_internal(finalized_commit_index, /* ensure_exists */ true);
-    }
-
-    /// Flush all buffered commits to storage.
-    #[cfg(test)]
-    pub(crate) fn flush_all_in_test(&mut self) {
-        self.flush_internal(CommitIndex::MAX, /* ensure_exists */ false);
-    }
-
-    fn flush_internal(&mut self, finalized_commit_index: CommitIndex, ensure_exists: bool) {
+    pub(crate) fn flush(&mut self) {
         let _s = self
             .context
             .metrics
@@ -996,61 +1043,49 @@ impl DagState {
             .scope_processing_time
             .with_label_values(&["DagState::flush"])
             .start_timer();
+
         // Flush buffered data to storage.
-        let blocks = std::mem::take(&mut self.blocks_to_write);
-
-        let unfinalized_commits = self.commits_to_write.split_off(
-            self.commits_to_write
-                .iter()
-                .position(|c| c.index() > finalized_commit_index) // Find first element NOT satisfying condition
-                .unwrap_or(self.commits_to_write.len()), // If all satisfy, split_off at len
-        );
-        let finalized_commits = std::mem::replace(&mut self.commits_to_write, unfinalized_commits);
-        if ensure_exists && finalized_commit_index != GENESIS_COMMIT_INDEX {
-            assert!(
-                !finalized_commits.is_empty(),
-                "No commit is found (<= {}). Remaining buffered commits: {:?}",
-                finalized_commit_index,
-                self.commits_to_write
-            );
-            assert_eq!(
-                finalized_commits.last().unwrap().index(),
-                finalized_commit_index,
-                "Finalized commit not found. Finalized commits: {:?}, Buffered commits: {:?}",
-                finalized_commits,
-                self.commits_to_write
-            );
-        }
-
-        let unfinalized_commit_info = self.commit_info_to_write.split_off(
-            self.commit_info_to_write
-                .iter()
-                .position(|(c, _)| c.index > finalized_commit_index) // Find first element NOT satisfying condition
-                .unwrap_or(self.commit_info_to_write.len()), // If all satisfy, split_off at len
-        );
-        let finalized_commit_info =
-            std::mem::replace(&mut self.commit_info_to_write, unfinalized_commit_info);
-
-        if blocks.is_empty() && finalized_commits.is_empty() {
+        let pending_blocks = std::mem::take(&mut self.blocks_to_write);
+        let pending_commits = std::mem::take(&mut self.commits_to_write);
+        let pending_commit_info = std::mem::take(&mut self.commit_info_to_write);
+        let pending_finalized_commits = std::mem::take(&mut self.finalized_commits_to_write);
+        if pending_blocks.is_empty()
+            && pending_commits.is_empty()
+            && pending_commit_info.is_empty()
+            && pending_finalized_commits.is_empty()
+        {
             return;
         }
+
         debug!(
-            "Flushing {} blocks ({}), {} finalized commits ({}) and {} commit infos ({}) to storage.",
-            blocks.len(),
-            blocks.iter().map(|b| b.reference().to_string()).join(","),
-            finalized_commits.len(),
-            finalized_commits.iter().map(|c| c.reference().to_string()).join(","),
-            finalized_commit_info.len(),
-            finalized_commit_info
+            "Flushing {} blocks ({}), {} commits ({}), {} commit infos ({}), {} finalized commits ({}) to storage.",
+            pending_blocks.len(),
+            pending_blocks
+                .iter()
+                .map(|b| b.reference().to_string())
+                .join(","),
+            pending_commits.len(),
+            pending_commits
+                .iter()
+                .map(|c| c.reference().to_string())
+                .join(","),
+            pending_commit_info.len(),
+            pending_commit_info
+                .iter()
+                .map(|(commit_ref, _)| commit_ref.to_string())
+                .join(","),
+            pending_finalized_commits.len(),
+            pending_finalized_commits
                 .iter()
                 .map(|(commit_ref, _)| commit_ref.to_string())
                 .join(","),
         );
         self.store
             .write(WriteBatch::new(
-                blocks,
-                finalized_commits,
-                finalized_commit_info,
+                pending_blocks,
+                pending_commits,
+                pending_commit_info,
+                pending_finalized_commits,
             ))
             .unwrap_or_else(|e| panic!("Failed to write to storage: {:?}", e));
         self.context
@@ -1202,12 +1237,13 @@ impl BlockInfo {
 mod test {
     use std::vec;
 
+    use consensus_types::block::{BlockDigest, BlockRef, BlockTimestampMs};
     use parking_lot::RwLock;
 
     use super::*;
     use crate::{
-        block::{BlockDigest, BlockRef, BlockTimestampMs, TestBlock, VerifiedBlock},
-        storage::{mem_store::MemStore, WriteBatch},
+        block::{TestBlock, VerifiedBlock},
+        storage::{WriteBatch, mem_store::MemStore},
         test_dag_builder::DagBuilder,
         test_dag_parser::parse_dag,
     };
@@ -1254,13 +1290,15 @@ mod test {
 
         // Check uncommitted blocks that do not exist.
         let last_ref = blocks.keys().last().unwrap();
-        assert!(dag_state
-            .get_block(&BlockRef::new(
-                last_ref.round,
-                last_ref.author,
-                BlockDigest::MIN
-            ))
-            .is_none());
+        assert!(
+            dag_state
+                .get_block(&BlockRef::new(
+                    last_ref.round,
+                    last_ref.author,
+                    BlockDigest::MIN
+                ))
+                .is_none()
+        );
 
         // Check slots with uncommitted blocks.
         for round in 1..=num_rounds {
@@ -1313,9 +1351,11 @@ mod test {
         }
 
         // Check rounds without uncommitted blocks.
-        assert!(dag_state
-            .get_uncommitted_blocks_at_round(non_existent_round)
-            .is_empty());
+        assert!(
+            dag_state
+                .get_uncommitted_blocks_at_round(non_existent_round)
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -1754,7 +1794,7 @@ mod test {
             vec![],
         ));
         // Flush the DAG state to storage.
-        dag_state.flush(1);
+        dag_state.flush();
 
         // Ensure that gc round has been updated
         assert_eq!(dag_state.gc_round(), 3, "GC round should be 3");
@@ -1772,8 +1812,12 @@ mod test {
         }
 
         for round in 1..=3 {
-            assert!(dag_state
-                .contains_cached_block_at_slot(Slot::new(round, AuthorityIndex::new_for_test(0))));
+            assert!(
+                dag_state.contains_cached_block_at_slot(Slot::new(
+                    round,
+                    AuthorityIndex::new_for_test(0)
+                ))
+            );
         }
 
         // When trying to request for authority 1 at block slot 3 it should panic, as anything
@@ -1885,18 +1929,18 @@ mod test {
         // Note that the commit of round 8 is missing because where authority 0 is the leader but produced no block.
         // So commit 8 has leader round 9.
         const PERSISTED_BLOCK_ROUNDS: u32 = 12;
-        const NUM_FINALIZED_COMMITS: usize = 8;
-        const LAST_FINALIZED_COMMIT_ROUND: Round = 9;
-        const LAST_FINALIZED_COMMIT_INDEX: CommitIndex = 8;
+        const NUM_PERSISTED_COMMITS: usize = 8;
+        const LAST_PERSISTED_COMMIT_ROUND: Round = 9;
+        const LAST_PERSISTED_COMMIT_INDEX: CommitIndex = 8;
         dag_state.accept_blocks(dag_builder.blocks(1..=PERSISTED_BLOCK_ROUNDS));
         let mut finalized_commits = vec![];
-        for commit in commits.iter().take(NUM_FINALIZED_COMMITS).cloned() {
+        for commit in commits.iter().take(NUM_PERSISTED_COMMITS).cloned() {
             finalized_commits.push(commit.clone());
             dag_state.add_commit(commit);
         }
         let last_finalized_commit = finalized_commits.last().unwrap();
-        assert_eq!(last_finalized_commit.round(), LAST_FINALIZED_COMMIT_ROUND);
-        assert_eq!(last_finalized_commit.index(), LAST_FINALIZED_COMMIT_INDEX);
+        assert_eq!(last_finalized_commit.round(), LAST_PERSISTED_COMMIT_ROUND);
+        assert_eq!(last_finalized_commit.index(), LAST_PERSISTED_COMMIT_INDEX);
 
         // Collect finalized blocks.
         let finalized_blocks = finalized_commits
@@ -1904,33 +1948,28 @@ mod test {
             .flat_map(|commit| commit.blocks())
             .collect::<BTreeSet<_>>();
 
-        // Add one more commit to the dag state that will not be flushed.
-        assert_eq!(commits[NUM_FINALIZED_COMMITS].round(), 10);
-        dag_state.add_commit(commits[NUM_FINALIZED_COMMITS].clone());
+        // Flush commits from the dag state
+        dag_state.flush();
 
-        // Flush finalized commits from the dag state
-        dag_state.flush(LAST_FINALIZED_COMMIT_INDEX);
-
-        // Verify the store has blocks up to round 12, and commits up to index 7.
-        // The additional commit at round 10 should not be flushed.
+        // Verify the store has blocks up to round 12, and commits up to index 8.
         let store_blocks = store
             .scan_blocks_by_author(AuthorityIndex::new_for_test(1), 1)
             .unwrap();
         assert_eq!(store_blocks.last().unwrap().round(), PERSISTED_BLOCK_ROUNDS);
         let store_commits = store.scan_commits((0..=CommitIndex::MAX).into()).unwrap();
-        assert_eq!(store_commits.len(), NUM_FINALIZED_COMMITS);
+        assert_eq!(store_commits.len(), NUM_PERSISTED_COMMITS);
         assert_eq!(
             store_commits.last().unwrap().index(),
-            LAST_FINALIZED_COMMIT_INDEX
+            LAST_PERSISTED_COMMIT_INDEX
         );
         assert_eq!(
             store_commits.last().unwrap().round(),
-            LAST_FINALIZED_COMMIT_ROUND
+            LAST_PERSISTED_COMMIT_ROUND
         );
 
         // Add the rest of the blocks and commits to the dag state
         dag_state.accept_blocks(dag_builder.blocks(PERSISTED_BLOCK_ROUNDS + 1..=NUM_ROUNDS));
-        for commit in commits.iter().skip(NUM_FINALIZED_COMMITS + 1).cloned() {
+        for commit in commits.iter().skip(NUM_PERSISTED_COMMITS).cloned() {
             dag_state.add_commit(commit);
         }
 
@@ -1983,8 +2022,8 @@ mod test {
         assert!(retrieved_blocks.is_empty());
 
         // Recovered last commit index and round should be 8 and 9.
-        assert_eq!(dag_state.last_commit_index(), LAST_FINALIZED_COMMIT_INDEX);
-        assert_eq!(dag_state.last_commit_round(), LAST_FINALIZED_COMMIT_ROUND);
+        assert_eq!(dag_state.last_commit_index(), LAST_PERSISTED_COMMIT_INDEX);
+        assert_eq!(dag_state.last_commit_round(), LAST_PERSISTED_COMMIT_ROUND);
 
         // The last_commit_rounds of the finalized commits should have been recovered.
         let expected_last_committed_rounds = vec![5, 9, 8, 8];
@@ -1993,7 +2032,7 @@ mod test {
             expected_last_committed_rounds
         );
         // Unscored subdags will be recovered based on the flushed commits and no commit info.
-        assert_eq!(dag_state.scoring_subdags_count(), NUM_FINALIZED_COMMITS);
+        assert_eq!(dag_state.scoring_subdags_count(), NUM_PERSISTED_COMMITS);
 
         // Ensure that cached blocks exist only for specific rounds per authority
         for (authority_index, _) in context.committee.authorities() {
@@ -2005,15 +2044,19 @@ mod test {
             if authority_index == AuthorityIndex::new_for_test(0) {
                 assert_eq!(blocks.len(), 4);
                 assert_eq!(dag_state.evicted_rounds[authority_index.value()], 6);
-                assert!(blocks
-                    .into_iter()
-                    .all(|block| block.round() >= 7 && block.round() <= 12));
+                assert!(
+                    blocks
+                        .into_iter()
+                        .all(|block| block.round() >= 7 && block.round() <= 12)
+                );
             } else {
                 assert_eq!(blocks.len(), 6);
                 assert_eq!(dag_state.evicted_rounds[authority_index.value()], 6);
-                assert!(blocks
-                    .into_iter()
-                    .all(|block| block.round() >= 7 && block.round() <= 12));
+                assert!(
+                    blocks
+                        .into_iter()
+                        .all(|block| block.round() >= 7 && block.round() <= 12)
+                );
             }
         }
 
@@ -2322,7 +2365,7 @@ mod test {
         //
         // When GC is enabled then we'll keep all the blocks that are > gc_round (2) and for those who don't have blocks > gc_round, we'll keep
         // all their highest round blocks for CACHED_ROUNDS.
-        dag_state.flush(GENESIS_COMMIT_INDEX);
+        dag_state.flush();
 
         // AND we request before round 3
         let end_round = 3;
@@ -2409,7 +2452,7 @@ mod test {
         ));
 
         // Flush the store so we update the evict rounds
-        dag_state.flush(1);
+        dag_state.flush();
 
         // THEN the method should panic, as some authorities have already evicted rounds <= round 2
         dag_state.get_last_cached_block_per_authority(2);
@@ -2537,5 +2580,38 @@ mod test {
 
         // Try to accept the block - it should not panic
         dag_state.accept_block(block);
+    }
+
+    #[tokio::test]
+    async fn test_last_finalized_commit() {
+        // GIVEN
+        let (context, _) = Context::new_for_test(4);
+        let context = Arc::new(context);
+        let store = Arc::new(MemStore::new());
+        let mut dag_state = DagState::new(context.clone(), store.clone());
+
+        // WHEN adding a finalized commit
+        let commit_ref = CommitRef::new(1, CommitDigest::MIN);
+        let rejected_transactions = BTreeMap::new();
+        dag_state.add_finalized_commit(commit_ref, rejected_transactions.clone());
+
+        // THEN the commit should be added to the buffer
+        assert_eq!(dag_state.finalized_commits_to_write.len(), 1);
+        assert_eq!(
+            dag_state.finalized_commits_to_write[0],
+            (commit_ref, rejected_transactions.clone())
+        );
+
+        // WHEN flushing the DAG state
+        dag_state.flush();
+
+        // THEN the commit and rejected transactions should be written to storage
+        let last_finalized_commit = store.read_last_finalized_commit().unwrap();
+        assert_eq!(last_finalized_commit, Some(commit_ref));
+        let stored_rejected_transactions = store
+            .read_rejected_transactions(commit_ref)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored_rejected_transactions, rejected_transactions);
     }
 }

@@ -1,11 +1,11 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::ValidatorProxy;
 use crate::util::UpdatedAndNewlyMintedGasCoins;
 use crate::workloads::payload::Payload;
-use crate::workloads::workload::{Workload, WorkloadBuilder, MAX_BUDGET};
+use crate::workloads::workload::{MAX_BUDGET, Workload, WorkloadBuilder};
 use crate::workloads::{Gas, GasCoinConfig};
-use crate::ValidatorProxy;
 use anyhow::{Error, Result};
 use itertools::Itertools;
 use std::collections::{HashMap, VecDeque};
@@ -121,7 +121,8 @@ impl BenchmarkBank {
             MAX_BUDGET,
         );
 
-        let effects = self.proxy.execute_transaction_block(tx).await?;
+        let (_, execution_result) = self.proxy.execute_transaction_block(tx).await;
+        let effects = execution_result?;
 
         if !effects.is_ok() {
             effects.print_gas_summary();
@@ -131,7 +132,7 @@ impl BenchmarkBank {
         let updated_gas = effects
             .mutated()
             .into_iter()
-            .find(|(k, _)| k.0 == init_coin.0 .0)
+            .find(|(k, _)| k.0 == init_coin.0.0)
             .ok_or("Input gas missing in the effects")
             .map_err(Error::msg)?;
 
@@ -172,7 +173,8 @@ impl BenchmarkBank {
             gas_price,
         );
 
-        let effects = self.proxy.execute_transaction_block(tx).await?;
+        let (_, execution_result) = self.proxy.execute_transaction_block(tx).await;
+        let effects = execution_result?;
 
         if !effects.is_ok() {
             effects.print_gas_summary();
@@ -182,7 +184,7 @@ impl BenchmarkBank {
         let updated_gas = effects
             .mutated()
             .into_iter()
-            .find(|(k, _)| k.0 == self.primary_coin.0 .0)
+            .find(|(k, _)| k.0 == self.primary_coin.0.0)
             .ok_or("Input gas missing in the effects")
             .map_err(Error::msg)?;
 

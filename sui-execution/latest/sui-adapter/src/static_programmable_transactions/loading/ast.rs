@@ -21,6 +21,7 @@ use sui_types::{
 // AST Nodes
 //**************************************************************************************************
 
+#[derive(Debug)]
 pub struct Transaction {
     pub inputs: Inputs,
     pub commands: Commands,
@@ -30,23 +31,41 @@ pub type Inputs = Vec<(InputArg, InputType)>;
 
 pub type Commands = Vec<Command>;
 
+#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Clone))]
 pub enum InputArg {
     Pure(Vec<u8>),
     Receiving(ObjectRef),
     Object(ObjectArg),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SharedObjectKind {
+    Legacy,
+    Party,
+}
+
+#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Clone))]
 pub enum ObjectArg {
     ImmObject(ObjectRef),
     OwnedObject(ObjectRef),
     SharedObject {
         id: ObjectID,
         initial_shared_version: SequenceNumber,
-        mutable: bool,
+        mutability: ObjectMutability,
+        kind: SharedObjectKind,
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectMutability {
+    Mutable,
+    Immutable,
+    NonExclusiveWrite,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
     Bool,
     U8,
@@ -62,13 +81,13 @@ pub enum Type {
     Reference(/* is mut */ bool, Rc<Type>),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Vector {
     pub abilities: AbilitySet,
     pub element_type: Type,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Datatype {
     pub abilities: AbilitySet,
     pub module: ModuleId,
@@ -76,12 +95,13 @@ pub struct Datatype {
     pub type_arguments: Vec<Type>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum InputType {
     Bytes,
     Fixed(Type),
 }
 
+#[derive(Debug)]
 pub enum Command {
     MoveCall(Box<MoveCall>),
     TransferObjects(Vec<Argument>, Argument),
@@ -98,23 +118,25 @@ pub enum Command {
     ),
 }
 
+#[derive(Debug)]
 pub struct LoadedFunctionInstantiation {
     pub parameters: Vec<Type>,
     pub return_: Vec<Type>,
 }
 
+#[derive(Debug)]
 pub struct LoadedFunction {
     pub storage_id: ModuleId,
     pub runtime_id: ModuleId,
     pub name: Identifier,
     pub type_arguments: Vec<Type>,
     pub signature: LoadedFunctionInstantiation,
-    pub tx_context: TxContextKind,
     pub linkage: RootedLinkage,
     pub instruction_length: CodeOffset,
     pub definition_index: FunctionDefinitionIndex,
 }
 
+#[derive(Debug)]
 pub struct MoveCall {
     pub function: LoadedFunction,
     pub arguments: Vec<Argument>,
@@ -134,11 +156,11 @@ impl ObjectArg {
         }
     }
 
-    pub fn is_mutable(&self) -> bool {
+    pub fn mutability(&self) -> ObjectMutability {
         match self {
-            ObjectArg::ImmObject(_) => false,
-            ObjectArg::OwnedObject(_) => true,
-            ObjectArg::SharedObject { mutable, .. } => *mutable,
+            ObjectArg::ImmObject(_) => ObjectMutability::Immutable,
+            ObjectArg::OwnedObject(_) => ObjectMutability::Mutable,
+            ObjectArg::SharedObject { mutability, .. } => *mutability,
         }
     }
 }
@@ -193,6 +215,43 @@ impl Type {
             Type::Vector(v) => v.element_type.all_addresses(),
             Type::Reference(_, inner) => inner.all_addresses(),
             Type::Datatype(dt) => dt.all_addresses(),
+        }
+    }
+
+    pub fn node_count(&self) -> u64 {
+        use Type::*;
+        let mut total = 0u64;
+        let mut stack = vec![self];
+
+        while let Some(ty) = stack.pop() {
+            total = total.saturating_add(1);
+            match ty {
+                Bool | U8 | U16 | U32 | U64 | U128 | U256 | Address | Signer => {}
+                Vector(v) => stack.push(&v.element_type),
+                Reference(_, inner) => stack.push(inner),
+                Datatype(dt) => {
+                    stack.extend(&dt.type_arguments);
+                }
+            }
+        }
+
+        total
+    }
+
+    pub fn is_reference(&self) -> bool {
+        match self {
+            Type::Bool
+            | Type::U8
+            | Type::U16
+            | Type::U32
+            | Type::U64
+            | Type::U128
+            | Type::U256
+            | Type::Address
+            | Type::Signer
+            | Type::Vector(_)
+            | Type::Datatype(_) => false,
+            Type::Reference(_, _) => true,
         }
     }
 }

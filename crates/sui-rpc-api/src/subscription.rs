@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::metrics::SubscriptionMetrics;
-use crate::proto::rpc::v2beta::Checkpoint;
 use std::sync::Arc;
-use sui_types::full_checkpoint_content::CheckpointData;
+use sui_types::full_checkpoint_content::Checkpoint;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tracing::error;
 use tracing::info;
 use tracing::trace;
 
@@ -36,10 +34,10 @@ impl SubscriptionServiceHandle {
 }
 
 pub struct SubscriptionService {
-    // Mailbox for recieving `CheckpointData` from the Checkpoint Executor
+    // Mailbox for recieving `Checkpoint` from the Checkpoint Executor
     //
     // Expectation is that checkpoints are recieved in-order
-    checkpoint_mailbox: mpsc::Receiver<CheckpointData>,
+    checkpoint_mailbox: mpsc::Receiver<Checkpoint>,
     mailbox: mpsc::Receiver<SubscriptionRequest>,
     subscribers: Vec<mpsc::Sender<Arc<Checkpoint>>>,
 
@@ -49,7 +47,7 @@ pub struct SubscriptionService {
 impl SubscriptionService {
     pub fn build(
         registry: &prometheus::Registry,
-    ) -> (mpsc::Sender<CheckpointData>, SubscriptionServiceHandle) {
+    ) -> (mpsc::Sender<Checkpoint>, SubscriptionServiceHandle) {
         let metrics = SubscriptionMetrics::new(registry);
         let (checkpoint_sender, checkpoint_mailbox) = mpsc::channel(CHECKPOINT_MAILBOX_SIZE);
         let (subscription_request_sender, mailbox) = mpsc::channel(MAILBOX_SIZE);
@@ -100,11 +98,11 @@ impl SubscriptionService {
         info!("RPC Subscription Services ended");
     }
 
-    fn handle_checkpoint(&mut self, checkpoint: CheckpointData) {
+    fn handle_checkpoint(&mut self, checkpoint: Checkpoint) {
         // Check that we recieved checkpoints in-order
         {
             let last_sequence_number = self.metrics.last_recieved_checkpoint.get();
-            let sequence_number = *checkpoint.checkpoint_summary.sequence_number() as i64;
+            let sequence_number = *checkpoint.summary.sequence_number() as i64;
 
             if last_sequence_number != 0 && (last_sequence_number + 1) != sequence_number {
                 panic!(
@@ -118,17 +116,7 @@ impl SubscriptionService {
             self.metrics.last_recieved_checkpoint.set(sequence_number);
         }
 
-        let checkpoint =
-            match crate::grpc::v2beta::ledger_service::get_checkpoint::checkpoint_data_to_checkpoint_proto(
-                checkpoint,
-                &crate::field_mask::FieldMaskTree::new_wildcard(),
-            ) {
-                Ok(checkpoint) => Arc::new(checkpoint),
-                Err(e) => {
-                    error!("unable to convert checkpoint to proto: {e:?}");
-                    return;
-                }
-            };
+        let checkpoint = Arc::new(checkpoint);
 
         // Try to send the latest checkpoint to all subscribers. If a subscriber's channel is full
         // then they are likely too slow so we drop them.

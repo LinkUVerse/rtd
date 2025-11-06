@@ -3,10 +3,11 @@
 
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
+use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
 use sui_indexer_alt_framework::{
-    pipeline::{concurrent::Handler, Processor},
+    pipeline::{Processor, concurrent::Handler},
     postgres::{Connection, Db},
     types::full_checkpoint_content::CheckpointData,
 };
@@ -17,11 +18,12 @@ use sui_protocol_config::ProtocolConfig;
 
 pub(crate) struct KvProtocolConfigs(pub(crate) StoredGenesis);
 
+#[async_trait]
 impl Processor for KvProtocolConfigs {
     const NAME: &'static str = "kv_protocol_configs";
     type Value = StoredProtocolConfig;
 
-    fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
+    async fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
         let CheckpointData {
             checkpoint_summary, ..
         } = checkpoint.as_ref();
@@ -57,7 +59,7 @@ impl Processor for KvProtocolConfigs {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Handler for KvProtocolConfigs {
     type Store = Db;
 
@@ -75,7 +77,9 @@ impl Handler for KvProtocolConfigs {
 
 #[cfg(test)]
 mod tests {
-    use sui_indexer_alt_framework::types::test_checkpoint_data_builder::TestCheckpointDataBuilder;
+    use sui_indexer_alt_framework::types::test_checkpoint_data_builder::{
+        AdvanceEpochConfig, TestCheckpointDataBuilder,
+    };
     use sui_protocol_config::ProtocolVersion;
 
     use super::*;
@@ -84,8 +88,10 @@ mod tests {
     async fn test_protocol_version_processing() {
         let mut builder = TestCheckpointDataBuilder::new(0);
         let genesis = Arc::new(builder.build_checkpoint());
-        let checkpoint =
-            Arc::new(builder.advance_epoch_and_protocol_upgrade(false, ProtocolVersion::MIN));
+        let checkpoint = Arc::new(builder.advance_epoch(AdvanceEpochConfig {
+            protocol_version: ProtocolVersion::MIN,
+            ..Default::default()
+        }));
 
         let stored_genesis = StoredGenesis {
             genesis_digest: genesis.checkpoint_summary.digest().inner().to_vec(),
@@ -94,6 +100,7 @@ mod tests {
 
         let protocol_configs = KvProtocolConfigs(stored_genesis)
             .process(&checkpoint)
+            .await
             .unwrap();
 
         assert!(!protocol_configs.is_empty());
@@ -111,8 +118,10 @@ mod tests {
     async fn test_protocol_version_too_high() {
         let mut builder = TestCheckpointDataBuilder::new(0);
         let genesis = Arc::new(builder.build_checkpoint());
-        let checkpoint =
-            Arc::new(builder.advance_epoch_and_protocol_upgrade(false, ProtocolVersion::MAX + 1));
+        let checkpoint = Arc::new(builder.advance_epoch(AdvanceEpochConfig {
+            protocol_version: ProtocolVersion::MAX + 1,
+            ..Default::default()
+        }));
 
         let stored_genesis = StoredGenesis {
             genesis_digest: genesis.checkpoint_summary.digest().inner().to_vec(),
@@ -121,6 +130,7 @@ mod tests {
 
         KvProtocolConfigs(stored_genesis)
             .process(&checkpoint)
+            .await
             .unwrap_err();
     }
 }

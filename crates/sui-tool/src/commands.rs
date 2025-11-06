@@ -1,22 +1,26 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(not(tidehunter))]
+use crate::db_tool::{DbToolCommand, execute_db_tool_command, print_db_all_tables};
 use crate::{
-    check_completed_snapshot,
-    db_tool::{execute_db_tool_command, print_db_all_tables, DbToolCommand},
-    download_db_snapshot, download_formal_snapshot, get_latest_available_epoch, get_object,
-    get_transaction_block, make_clients, restore_from_db_checkpoint, ConciseObjectOutput,
-    GroupedObjectOutput, SnapshotVerifyMode, VerboseObjectOutput,
+    ConciseObjectOutput, GroupedObjectOutput, SnapshotVerifyMode, VerboseObjectOutput,
+    check_completed_snapshot, download_db_snapshot, download_formal_snapshot,
+    get_latest_available_epoch, get_object, get_transaction_block, make_clients,
+    restore_from_db_checkpoint,
 };
 use anyhow::Result;
-use futures::{future::join_all, StreamExt};
+use consensus_core::storage::{Store, rocksdb_store::RocksDBStore};
+use consensus_core::{BlockAPI, CommitAPI, CommitRange};
+use futures::{StreamExt, future::join_all};
 use std::path::PathBuf;
 use std::{collections::BTreeMap, env, sync::Arc};
 use sui_config::genesis::Genesis;
 use sui_core::authority_client::AuthorityAPI;
 use sui_protocol_config::Chain;
-use sui_replay::{execute_replay_command, ReplayToolCommand};
-use sui_sdk::{rpc_types::SuiTransactionBlockResponseOptions, SuiClient, SuiClientBuilder};
+use sui_replay::{ReplayToolCommand, execute_replay_command};
+use sui_sdk::{SuiClient, SuiClientBuilder, rpc_types::SuiTransactionBlockResponseOptions};
+use sui_types::messages_consensus::ConsensusTransaction;
 use telemetry_subscribers::TracingHandle;
 
 use sui_types::{
@@ -25,8 +29,8 @@ use sui_types::{
 
 use clap::*;
 use fastcrypto::encoding::Encoding;
-use sui_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use sui_config::Config;
+use sui_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use sui_core::authority_aggregator::AuthorityAggregatorBuilder;
 use sui_types::messages_checkpoint::{
     CheckpointRequest, CheckpointResponse, CheckpointSequenceNumber,
@@ -42,6 +46,16 @@ pub enum Verbosity {
 
 #[derive(Parser)]
 pub enum ToolCommand {
+    #[command(name = "scan-consensus-commits")]
+    ScanConsensusCommits {
+        #[arg(long = "db-path")]
+        db_path: String,
+        #[arg(long = "start-commit")]
+        start_commit: Option<u32>,
+        #[arg(long = "end-commit")]
+        end_commit: Option<u32>,
+    },
+
     /// Inspect if a specific object is or all gas objects owned by an address are locked by validators
     #[command(name = "locked-object")]
     LockedObject {
@@ -119,6 +133,7 @@ pub enum ToolCommand {
     },
 
     /// Tool to read validator & node db.
+    #[cfg(not(tidehunter))]
     #[command(name = "db-tool")]
     DbTool {
         /// Path of the DB to read
@@ -258,6 +273,10 @@ pub enum ToolCommand {
         /// and output will be reduced to necessary status information.
         #[clap(long = "verbose")]
         verbose: bool,
+        /// Number of retries for failed HTTP requests when downloading snapshot files.
+        /// Defaults to 3 retries. Set to 0 to disable retries.
+        #[clap(long = "max-retries", default_value = "3")]
+        max_retries: usize,
     },
 
     // Restore from formal (slim, DB agnostic) snapshot. Note that this is only supported
@@ -321,12 +340,10 @@ pub enum ToolCommand {
         #[clap(long = "verbose")]
         verbose: bool,
 
-        /// If provided, all checkpoint summaries from genesis to the end of the target epoch
-        /// will be downloaded and (if --verify is provided) full checkpoint chain verification
-        /// will be performed. If omitted, only end of epoch checkpoint summaries will be
-        /// downloaded, and (if --verify is provided) will be verified via committee signature.
-        #[clap(long = "all-checkpoints")]
-        all_checkpoints: bool,
+        /// Number of retries for failed HTTP requests when downloading snapshot files.
+        /// Defaults to 3 retries. Set to 0 to disable retries.
+        #[clap(long = "max-retries", default_value = "3")]
+        max_retries: usize,
     },
 
     #[clap(name = "replay")]
@@ -435,6 +452,42 @@ impl ToolCommand {
     #[allow(clippy::format_in_format_args)]
     pub async fn execute(self, tracing_handle: TracingHandle) -> Result<(), anyhow::Error> {
         match self {
+            ToolCommand::ScanConsensusCommits {
+                db_path,
+                start_commit,
+                end_commit,
+            } => {
+                let rocks_db_store = RocksDBStore::new(&db_path);
+
+                let start_commit = start_commit.unwrap_or(0);
+                let end_commit = end_commit.unwrap_or(u32::MAX);
+
+                let commits = rocks_db_store
+                    .scan_commits(CommitRange::new(start_commit..=end_commit))
+                    .unwrap();
+                println!("found {} consensus commits", commits.len());
+
+                for commit in commits {
+                    let inner = &*commit;
+                    let block_refs = inner.blocks();
+                    let blocks = rocks_db_store.read_blocks(block_refs).unwrap();
+
+                    for block in blocks.iter().flatten() {
+                        let data = block.transactions_data();
+                        println!(
+                            "\"index\": \"{}\", \"leader\": \"{}\", \"blocks\": \"{:#?}\", {} txs",
+                            inner.index(),
+                            inner.leader(),
+                            inner.blocks(),
+                            data.len()
+                        );
+                        for txns in &data {
+                            let tx: ConsensusTransaction = bcs::from_bytes(txns).unwrap();
+                            println!("\t{:?}", tx.key());
+                        }
+                    }
+                }
+            }
             ToolCommand::LockedObject {
                 id,
                 fullnode_rpc_url,
@@ -527,6 +580,7 @@ impl ToolCommand {
                     get_transaction_block(digest, show_input_tx, fullnode_rpc_url).await?
                 );
             }
+            #[cfg(not(tidehunter))]
             ToolCommand::DbTool { db_path, cmd } => {
                 let path = PathBuf::from(db_path);
                 match cmd {
@@ -590,6 +644,17 @@ impl ToolCommand {
                         checkpoint,
                         contents,
                     } = resp;
+
+                    let summary = checkpoint.clone().unwrap().data().clone();
+                    // write summary to file
+                    let mut file = std::fs::File::create("/tmp/ckpt_summary")
+                        .expect("Failed to create /tmp/summary");
+                    let bytes =
+                        bcs::to_bytes(&summary).expect("Failed to serialize summary to BCS");
+                    use std::io::Write;
+                    file.write_all(&bytes)
+                        .expect("Failed to write summary to /tmp/ckpt_summary");
+
                     println!("Validator: {:?}\n", name.concise());
                     println!("Checkpoint: {:?}\n", checkpoint);
                     println!("Content: {:?}\n", contents);
@@ -619,7 +684,7 @@ impl ToolCommand {
                 no_sign_request,
                 latest,
                 verbose,
-                all_checkpoints,
+                max_retries,
             } => {
                 if !verbose {
                     tracing_handle
@@ -751,7 +816,7 @@ impl ToolCommand {
                     num_parallel_downloads,
                     network,
                     verify,
-                    all_checkpoints,
+                    max_retries,
                 )
                 .await?;
             }
@@ -767,7 +832,15 @@ impl ToolCommand {
                 no_sign_request,
                 latest,
                 verbose,
+                max_retries,
             } => {
+                if no_sign_request {
+                    anyhow::bail!(
+                        "The --no-sign-request flag is no longer supported. \
+                        Please use S3 or GCS buckets with --snapshot-bucket-type and --snapshot-bucket instead. \
+                        For more information, see: https://docs.sui.io/guides/operator/snapshots#mysten-labs-managed-snapshots"
+                    );
+                }
                 if !verbose {
                     tracing_handle
                         .update_log("off")
@@ -876,8 +949,8 @@ impl ToolCommand {
                                 }
                             } else {
                                 panic!(
-                                "--snapshot-path must be specified for --snapshot-bucket-type=file"
-                            );
+                                    "--snapshot-path must be specified for --snapshot-bucket-type=file"
+                                );
                             }
                         }
                     }
@@ -903,6 +976,7 @@ impl ToolCommand {
                     snapshot_store_config,
                     skip_indexes,
                     num_parallel_downloads,
+                    max_retries,
                 )
                 .await?;
             }

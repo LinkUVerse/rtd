@@ -7,15 +7,16 @@ use serde::{Deserialize, Serialize};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use super::{processor::processor, CommitterConfig, Processor, PIPELINE_BUFFER};
+use super::{CommitterConfig, PIPELINE_BUFFER, Processor, processor::processor};
 
 use crate::{
     metrics::IndexerMetrics,
-    store::{CommitterWatermark, Store, TransactionalStore},
+    store::{Store, TransactionalStore},
     types::full_checkpoint_content::CheckpointData,
 };
 
 use self::committer::committer;
+use async_trait::async_trait;
 
 mod committer;
 
@@ -36,7 +37,7 @@ mod committer;
 /// for, and in turn the ingestion service will only run ahead by its buffer size. This guarantees
 /// liveness and limits the amount of memory the pipeline can consume, by bounding the number of
 /// checkpoints that can be received before the next checkpoint.
-#[async_trait::async_trait]
+#[async_trait]
 pub trait Handler: Processor {
     type Store: TransactionalStore;
 
@@ -102,7 +103,7 @@ pub struct SequentialConfig {
 /// channels close, or any of its independent tasks fail.
 pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
     handler: H,
-    initial_watermark: Option<CommitterWatermark>,
+    next_checkpoint: u64,
     config: SequentialConfig,
     db: H::Store,
     checkpoint_rx: mpsc::Receiver<Arc<CheckpointData>>,
@@ -122,7 +123,7 @@ pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
 
     let committer = committer::<H>(
         config,
-        initial_watermark,
+        next_checkpoint,
         committer_rx,
         watermark_tx,
         db,

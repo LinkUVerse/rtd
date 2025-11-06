@@ -5,7 +5,7 @@ pub(crate) mod accumulator;
 mod fingerprint;
 pub(crate) mod object_store;
 
-use crate::object_runtime::object_store::ChildObjectEffectV1;
+use crate::object_runtime::object_store::{CacheMetadata, ChildObjectEffectV1};
 
 use self::object_store::{ChildObjectEffectV0, ChildObjectEffects, ObjectResult};
 use super::get_object_id;
@@ -23,17 +23,18 @@ use move_core_types::{
     vm_status::StatusCode,
 };
 use move_vm_runtime::native_extensions::NativeExtensionMarker;
-use move_vm_types::{
-    loaded_data::runtime_types::Type,
-    values::{GlobalValue, Value},
-};
+use move_vm_types::values::{GlobalValue, Value};
 use object_store::{ActiveChildObject, ChildObjectStore};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
-use sui_protocol_config::{check_limit_by_meter, LimitThresholdCrossed, ProtocolConfig};
+use sui_protocol_config::{LimitThresholdCrossed, ProtocolConfig, check_limit_by_meter};
 use sui_types::{
+    SUI_ACCUMULATOR_ROOT_OBJECT_ID, SUI_AUTHENTICATOR_STATE_OBJECT_ID, SUI_BRIDGE_OBJECT_ID,
+    SUI_CLOCK_OBJECT_ID, SUI_COIN_REGISTRY_OBJECT_ID, SUI_DENY_LIST_OBJECT_ID,
+    SUI_DISPLAY_REGISTRY_OBJECT_ID, SUI_RANDOMNESS_STATE_OBJECT_ID, SUI_SYSTEM_STATE_OBJECT_ID,
+    TypeTag,
     base_types::{MoveObjectType, ObjectID, SequenceNumber, SuiAddress},
     committee::EpochId,
     error::{ExecutionError, ExecutionErrorKind, VMMemoryLimitExceededSubStatusCode},
@@ -42,9 +43,6 @@ use sui_types::{
     metrics::LimitsMetrics,
     object::{MoveObject, Owner},
     storage::ChildObjectResolver,
-    SUI_ACCUMULATOR_ROOT_OBJECT_ID, SUI_AUTHENTICATOR_STATE_OBJECT_ID, SUI_BRIDGE_OBJECT_ID,
-    SUI_CLOCK_OBJECT_ID, SUI_DENY_LIST_OBJECT_ID, SUI_RANDOMNESS_STATE_OBJECT_ID,
-    SUI_SYSTEM_STATE_OBJECT_ID,
 };
 use tracing::error;
 
@@ -87,13 +85,17 @@ pub struct RuntimeResults {
     pub loaded_child_objects: BTreeMap<ObjectID, LoadedRuntimeObject>,
     pub created_object_ids: Set<ObjectID>,
     pub deleted_object_ids: Set<ObjectID>,
+    pub settlement_input_sui: u64,
+    pub settlement_output_sui: u64,
 }
 
 #[derive(Default)]
 pub(crate) struct ObjectRuntimeState {
     pub(crate) input_objects: BTreeMap<ObjectID, Owner>,
-    // new ids from object::new
+    // new ids from object::new. This does not contain any new-and-subsequently-deleted ids
     new_ids: Set<ObjectID>,
+    // contains all ids generated in the txn including any new-and-subsequently-deleted ids
+    generated_ids: Set<ObjectID>,
     // ids passed to object::delete
     deleted_ids: Set<ObjectID>,
     // transfers to a new owner (shared, immutable, object, or account address)
@@ -104,6 +106,13 @@ pub(crate) struct ObjectRuntimeState {
     // total size of events emitted so far
     total_events_size: u64,
     received: IndexMap<ObjectID, DynamicallyLoadedObjectMetadata>,
+    // Used to track SUI conservation in settlement transactions. Settlement transactions
+    // gather up withdraws and deposits from other transactions, and record them to accumulator
+    // fields. The settlement transaction records the total amount of SUI being disbursed here,
+    // so that we can verify that the amount stored in the fields at the end of the transaction
+    // is correct.
+    settlement_input_sui: u64,
+    settlement_output_sui: u64,
 }
 
 #[derive(Tid)]
@@ -182,12 +191,15 @@ impl<'a> ObjectRuntime<'a> {
             state: ObjectRuntimeState {
                 input_objects: input_object_owners,
                 new_ids: Set::new(),
+                generated_ids: Set::new(),
                 deleted_ids: Set::new(),
                 transfers: IndexMap::new(),
                 events: vec![],
                 accumulator_events: vec![],
                 total_events_size: 0,
                 received: IndexMap::new(),
+                settlement_input_sui: 0,
+                settlement_output_sui: 0,
             },
             is_metered,
             protocol_config,
@@ -218,6 +230,7 @@ impl<'a> ObjectRuntime<'a> {
         let was_present = self.state.deleted_ids.shift_remove(&id);
         if !was_present {
             // mark the id as new
+            self.state.generated_ids.insert(id);
             self.state.new_ids.insert(id);
         }
         Ok(())
@@ -250,11 +263,14 @@ impl<'a> ObjectRuntime<'a> {
         Ok(())
     }
 
+    /// In the new PTB adapter, this function is also used for persisting owners at the end
+    /// of the transaction. In which case, we don't check the transfer limits.
     pub fn transfer(
         &mut self,
         owner: Owner,
         ty: MoveObjectType,
         obj: Value,
+        end_of_transaction: bool,
     ) -> PartialVMResult<TransferResult> {
         let id: ObjectID = get_object_id(obj.copy_value()?)?
             .value_as::<AccountAddress>()?
@@ -272,14 +288,11 @@ impl<'a> ObjectRuntime<'a> {
             SUI_DENY_LIST_OBJECT_ID,
             SUI_BRIDGE_OBJECT_ID,
             SUI_ACCUMULATOR_ROOT_OBJECT_ID,
+            SUI_COIN_REGISTRY_OBJECT_ID,
+            SUI_DISPLAY_REGISTRY_OBJECT_ID,
         ]
         .contains(&id);
         let transfer_result = if self.state.new_ids.contains(&id) {
-            TransferResult::New
-        } else if is_framework_obj {
-            // framework objects are always created when they are transferred, but the id is
-            // hard-coded so it is not yet in new_ids
-            self.state.new_ids.insert(id);
             TransferResult::New
         } else if let Some(prev_owner) = self.state.input_objects.get(&id) {
             match (&owner, prev_owner) {
@@ -296,15 +309,31 @@ impl<'a> ObjectRuntime<'a> {
                 (new, old) if new == old => TransferResult::SameOwner,
                 _ => TransferResult::OwnerChanged,
             }
+        } else if is_framework_obj {
+            // framework objects are always created when they are transferred, but the id is
+            // hard-coded so it is not yet in new_ids or generated_ids
+            self.state.new_ids.insert(id);
+            self.state.generated_ids.insert(id);
+            TransferResult::New
         } else {
             TransferResult::OwnerChanged
         };
+        // assert!(end of transaction ==> same owner)
+        if end_of_transaction && !matches!(transfer_result, TransferResult::SameOwner) {
+            return Err(
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                    .with_message(format!("Untransferred object {} had its owner change", id)),
+            );
+        }
 
         // Metered transactions don't have limits for now
 
         if let LimitThresholdCrossed::Hard(_, lim) = check_limit_by_meter!(
             // TODO: is this not redundant? Metered TX implies framework obj cannot be transferred
-            self.is_metered && !is_framework_obj, // We have higher limits for unmetered transactions and framework obj
+            // We have higher limits for unmetered transactions and framework obj
+            // We don't check the limit for objects whose owner is persisted at the end of the
+            // transaction
+            self.is_metered && !is_framework_obj && !end_of_transaction,
             self.state.transfers.len(),
             self.protocol_config.max_num_transferred_move_object_ids(),
             self.protocol_config
@@ -339,7 +368,7 @@ impl<'a> ObjectRuntime<'a> {
         accumulator_id: ObjectID,
         action: MoveAccumulatorAction,
         target_addr: AccountAddress,
-        target_ty: Type,
+        target_ty: TypeTag,
         value: MoveAccumulatorValue,
     ) -> PartialVMResult<()> {
         let event = MoveAccumulatorEvent {
@@ -357,7 +386,7 @@ impl<'a> ObjectRuntime<'a> {
         &mut self,
         parent: ObjectID,
         child: ObjectID,
-    ) -> PartialVMResult<bool> {
+    ) -> PartialVMResult<CacheMetadata<bool>> {
         self.child_object_store.object_exists(parent, child)
     }
 
@@ -366,7 +395,7 @@ impl<'a> ObjectRuntime<'a> {
         parent: ObjectID,
         child: ObjectID,
         child_type: &MoveObjectType,
-    ) -> PartialVMResult<bool> {
+    ) -> PartialVMResult<CacheMetadata<bool>> {
         self.child_object_store
             .object_exists_and_has_type(parent, child, child_type)
     }
@@ -379,7 +408,7 @@ impl<'a> ObjectRuntime<'a> {
         child_layout: &R::MoveTypeLayout,
         child_fully_annotated_layout: &MoveTypeLayout,
         child_move_type: MoveObjectType,
-    ) -> PartialVMResult<Option<ObjectResult<Value>>> {
+    ) -> PartialVMResult<Option<ObjectResult<CacheMetadata<Value>>>> {
         let Some((value, obj_meta)) = self.child_object_store.receive_object(
             parent,
             child,
@@ -413,7 +442,7 @@ impl<'a> ObjectRuntime<'a> {
         child_layout: &R::MoveTypeLayout,
         child_fully_annotated_layout: &MoveTypeLayout,
         child_move_type: MoveObjectType,
-    ) -> PartialVMResult<ObjectResult<&mut GlobalValue>> {
+    ) -> PartialVMResult<ObjectResult<CacheMetadata<&mut GlobalValue>>> {
         let res = self.child_object_store.get_or_fetch_object(
             parent,
             child,
@@ -423,7 +452,9 @@ impl<'a> ObjectRuntime<'a> {
         )?;
         Ok(match res {
             ObjectResult::MismatchedType => ObjectResult::MismatchedType,
-            ObjectResult::Loaded(child_object) => ObjectResult::Loaded(&mut child_object.value),
+            ObjectResult::Loaded((cache_info, child_object)) => {
+                ObjectResult::Loaded((cache_info, &mut child_object.value))
+            }
         })
     }
 
@@ -486,6 +517,17 @@ impl<'a> ObjectRuntime<'a> {
         std::mem::take(&mut self.state)
     }
 
+    pub fn is_deleted(&self, id: &ObjectID) -> bool {
+        self.state.deleted_ids.contains(id)
+    }
+
+    pub fn is_transferred(&self, id: &ObjectID) -> Option<Owner> {
+        self.state
+            .transfers
+            .get(id)
+            .map(|(owner, _, _)| owner.clone())
+    }
+
     pub fn finish(mut self) -> Result<RuntimeResults, ExecutionError> {
         let loaded_child_objects = self.loaded_runtime_objects();
         let child_effects = self.child_object_store.take_effects().map_err(|e| {
@@ -501,11 +543,12 @@ impl<'a> ObjectRuntime<'a> {
     pub fn loaded_runtime_objects(&self) -> BTreeMap<ObjectID, DynamicallyLoadedObjectMetadata> {
         // The loaded child objects, and the received objects, should be disjoint. If they are not,
         // this is an error since it could lead to incorrect transaction dependency computations.
-        debug_assert!(self
-            .child_object_store
-            .cached_objects()
-            .keys()
-            .all(|id| !self.state.received.contains_key(id)));
+        debug_assert!(
+            self.child_object_store
+                .cached_objects()
+                .keys()
+                .all(|id| !self.state.received.contains_key(id))
+        );
         self.child_object_store
             .cached_objects()
             .iter()
@@ -538,8 +581,15 @@ impl<'a> ObjectRuntime<'a> {
         self.child_object_store.wrapped_object_containers().clone()
     }
 
-    pub fn accessed_configs(&self) -> BTreeSet<ObjectID> {
-        self.child_object_store.accessed_configs()
+    pub fn record_settlement_sui_conservation(&mut self, input_sui: u64, output_sui: u64) {
+        self.state.settlement_input_sui += input_sui;
+        self.state.settlement_output_sui += output_sui;
+    }
+
+    /// Return the set of all object IDs that were created during this transaction, including any
+    /// object IDs that were created and then deleted during the transaction.
+    pub fn generated_object_ids(&self) -> BTreeSet<ObjectID> {
+        self.state.generated_ids.iter().cloned().collect()
     }
 }
 
@@ -582,13 +632,19 @@ impl ObjectRuntimeState {
         let ObjectRuntimeState {
             input_objects: _,
             new_ids,
+            generated_ids,
             deleted_ids,
             transfers,
             events: user_events,
             total_events_size: _,
             received,
             accumulator_events,
+            settlement_input_sui,
+            settlement_output_sui,
         } = self;
+
+        // The set of new ids is a subset of the generated ids.
+        debug_assert!(new_ids.is_subset(&generated_ids));
 
         // Check new owners from transfers, reports an error on cycles.
         // TODO can we have cycles in the new system?
@@ -629,7 +685,7 @@ impl ObjectRuntimeState {
                 None => {
                     return Err(ExecutionError::invariant_violation(format!(
                         "Failed to find received UID {received_object} in loaded child objects."
-                    )))
+                    )));
                 }
             }
         }
@@ -641,6 +697,8 @@ impl ObjectRuntimeState {
             loaded_child_objects,
             created_object_ids: new_ids,
             deleted_object_ids: deleted_ids,
+            settlement_input_sui,
+            settlement_output_sui,
         })
     }
 
@@ -801,9 +859,11 @@ impl ObjectRuntimeState {
                             && !self.received.contains_key(&child))
                 );
                 // In any case, if it was not changed, it should not be marked as modified
-                debug_assert!(loaded_child_objects
-                    .get(&child)
-                    .is_none_or(|loaded_child| !loaded_child.is_modified));
+                debug_assert!(
+                    loaded_child_objects
+                        .get(&child)
+                        .is_none_or(|loaded_child| !loaded_child.is_modified)
+                );
             }
         }
     }
@@ -888,6 +948,6 @@ pub fn get_all_uids(
         fully_annotated_layout,
         &mut UIDTraversal(&mut ids),
     )
-    .map_err(|e| format!("Failed to deserialize. {e:?}"))?;
+    .map_err(|e| format!("Failed to deserialize. {e}"))?;
     Ok(ids)
 }

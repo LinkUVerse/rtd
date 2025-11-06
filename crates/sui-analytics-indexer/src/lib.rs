@@ -7,10 +7,11 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow_array::{Array, Int32Array};
-use gcp_bigquery_client::model::query_request::QueryRequest;
 use gcp_bigquery_client::Client;
+use gcp_bigquery_client::model::query_request::QueryRequest;
+use handlers::package_bcs_handler::PackageBCSHandler;
 use handlers::transaction_bcs_handler::TransactionBCSHandler;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
@@ -35,6 +36,7 @@ use sui_types::messages_checkpoint::CheckpointSequenceNumber;
 
 use crate::analytics_metrics::AnalyticsMetrics;
 use crate::analytics_processor::AnalyticsProcessor;
+use crate::handlers::AnalyticsHandler;
 use crate::handlers::checkpoint_handler::CheckpointHandler;
 use crate::handlers::df_handler::DynamicFieldHandler;
 use crate::handlers::event_handler::EventHandler;
@@ -44,11 +46,10 @@ use crate::handlers::package_handler::PackageHandler;
 use crate::handlers::transaction_handler::TransactionHandler;
 use crate::handlers::transaction_objects_handler::TransactionObjectsHandler;
 use crate::handlers::wrapped_object_handler::WrappedObjectHandler;
-use crate::handlers::AnalyticsHandler;
 use crate::tables::{InputObjectKind, ObjectStatus, OwnerType};
+use crate::writers::AnalyticsWriter;
 use crate::writers::csv_writer::CSVWriter;
 use crate::writers::parquet_writer::ParquetWriter;
-use crate::writers::AnalyticsWriter;
 use gcp_bigquery_client::model::query_response::ResultSet;
 
 pub mod analytics_metrics;
@@ -68,6 +69,7 @@ const EVENT_DIR_PREFIX: &str = "events";
 const TRANSACTION_OBJECT_DIR_PREFIX: &str = "transaction_objects";
 const MOVE_CALL_PREFIX: &str = "move_call";
 const MOVE_PACKAGE_PREFIX: &str = "move_package";
+const PACKAGE_BCS_DIR_PREFIX: &str = "move_package_bcs";
 const DYNAMIC_FIELD_PREFIX: &str = "dynamic_field";
 
 const WRAPPED_OBJECT_PREFIX: &str = "wrapped_object";
@@ -359,6 +361,10 @@ impl TaskContext {
             }
             FileType::MovePackage => {
                 self.create_processor_for_handler(Box::new(PackageHandler::new()))
+                    .await
+            }
+            FileType::MovePackageBCS => {
+                self.create_processor_for_handler(Box::new(PackageBCSHandler::new()))
                     .await
             }
             FileType::DynamicField => {
@@ -679,6 +685,7 @@ pub enum FileType {
     Event,
     MoveCall,
     MovePackage,
+    MovePackageBCS,
     DynamicField,
     WrappedObject,
 }
@@ -694,6 +701,7 @@ impl FileType {
             FileType::Event => Path::from(EVENT_DIR_PREFIX),
             FileType::MoveCall => Path::from(MOVE_CALL_PREFIX),
             FileType::MovePackage => Path::from(MOVE_PACKAGE_PREFIX),
+            FileType::MovePackageBCS => Path::from(PACKAGE_BCS_DIR_PREFIX),
             FileType::DynamicField => Path::from(DYNAMIC_FIELD_PREFIX),
             FileType::WrappedObject => Path::from(WRAPPED_OBJECT_PREFIX),
         }

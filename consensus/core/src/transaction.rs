@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::{collections::BTreeMap, sync::Arc};
 
+use consensus_config::Epoch;
+use consensus_types::block::{
+    BlockRef, NUM_RESERVED_TRANSACTION_INDICES, PING_TRANSACTION_INDEX, Round, TransactionIndex,
+};
 use mysten_common::debug_fatal;
-use mysten_metrics::monitored_mpsc::{channel, Receiver, Sender};
+use mysten_metrics::monitored_mpsc::{Receiver, Sender, channel};
 use parking_lot::Mutex;
 use tap::TapFallible;
 use thiserror::Error;
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
-use crate::{
-    block::{BlockRef, Transaction, TransactionIndex},
-    context::Context,
-    Round,
-};
+use crate::{block::Transaction, context::Context};
 
 /// The maximum number of transactions pending to the queue to be pulled for block proposal
 const MAX_PENDING_TRANSACTIONS: usize = 2_000;
@@ -74,6 +74,20 @@ pub enum LimitReached {
 
 impl TransactionConsumer {
     pub(crate) fn new(tx_receiver: Receiver<TransactionsGuard>, context: Arc<Context>) -> Self {
+        // max_num_transactions_in_block - 1 is the max possible transaction index in a block.
+        // TransactionIndex::MAX is reserved for the ping transaction.
+        // Indexes down to TransactionIndex::MAX - 8 are also reserved for future use.
+        // This check makes sure they do not overlap.
+        assert!(
+            context
+                .protocol_config
+                .max_num_transactions_in_block()
+                .saturating_sub(1)
+                < TransactionIndex::MAX.saturating_sub(NUM_RESERVED_TRANSACTION_INDICES) as u64,
+            "Unsupported max_num_transactions_in_block: {}",
+            context.protocol_config.max_num_transactions_in_block()
+        );
+
         Self {
             tx_receiver,
             max_transactions_in_block_bytes: context
@@ -99,10 +113,17 @@ impl TransactionConsumer {
         // The method will return `None` if all the transactions can be included in the block. Otherwise none of the transactions will be
         // included in the block and the method will return the TransactionGuard.
         let mut handle_txs = |t: TransactionsGuard| -> Option<TransactionsGuard> {
+            // If no transactions are submitted, it means that the transaction guard represents a ping transaction.
+            // In this case, we need to push the `PING_TRANSACTION_INDEX` to the indices vector.
+            let transactions_num = t.transactions.len() as u64;
+            if transactions_num == 0 {
+                acks.push((t.included_in_block_ack, vec![PING_TRANSACTION_INDEX]));
+                return None;
+            }
+
+            // Check if the total bytes of the transactions exceed the max transactions in block bytes.
             let transactions_bytes =
                 t.transactions.iter().map(|t| t.data().len()).sum::<usize>() as u64;
-            let transactions_num = t.transactions.len() as u64;
-
             if total_bytes + transactions_bytes > self.max_transactions_in_block_bytes {
                 limit_reached = LimitReached::MaxBytes;
                 return Some(t);
@@ -126,10 +147,13 @@ impl TransactionConsumer {
             None
         };
 
-        if let Some(t) = self.pending_transactions.take() {
-            if let Some(pending_transactions) = handle_txs(t) {
-                debug_fatal!("Previously pending transaction(s) should fit into an empty block! Dropping: {:?}", pending_transactions.transactions);
-            }
+        if let Some(t) = self.pending_transactions.take()
+            && let Some(pending_transactions) = handle_txs(t)
+        {
+            debug_fatal!(
+                "Previously pending transaction(s) should fit into an empty block! Dropping: {:?}",
+                pending_transactions.transactions
+            );
         }
 
         // Until we have reached the limit for the pull.
@@ -223,6 +247,7 @@ impl TransactionConsumer {
 
 #[derive(Clone)]
 pub struct TransactionClient {
+    context: Arc<Context>,
     sender: Sender<TransactionsGuard>,
     max_transaction_size: u64,
     max_transactions_in_block_bytes: u64,
@@ -246,25 +271,42 @@ pub enum ClientError {
 
 impl TransactionClient {
     pub(crate) fn new(context: Arc<Context>) -> (Self, Receiver<TransactionsGuard>) {
-        let (sender, receiver) = channel("consensus_input", MAX_PENDING_TRANSACTIONS);
+        Self::new_with_max_pending_transactions(context, MAX_PENDING_TRANSACTIONS)
+    }
 
+    fn new_with_max_pending_transactions(
+        context: Arc<Context>,
+        max_pending_transactions: usize,
+    ) -> (Self, Receiver<TransactionsGuard>) {
+        let (sender, receiver) = channel("consensus_input", max_pending_transactions);
         (
             Self {
                 sender,
                 max_transaction_size: context.protocol_config.max_transaction_size_bytes(),
+
                 max_transactions_in_block_bytes: context
                     .protocol_config
                     .max_transactions_in_block_bytes(),
                 max_transactions_in_block_count: context
                     .protocol_config
                     .max_num_transactions_in_block(),
+                context: context.clone(),
             },
             receiver,
         )
     }
 
+    /// Returns the current epoch of this client.
+    pub fn epoch(&self) -> Epoch {
+        self.context.committee.epoch()
+    }
+
     /// Submits a list of transactions to be sequenced. The method returns when all the transactions have been successfully included
     /// to next proposed blocks.
+    ///
+    /// If `transactions` is empty, then this will be interpreted as a "ping" signal from the client in order to get information about the next
+    /// block and simulate a transaction inclusion to the next block. In this an empty vector of the transaction index will be returned as response
+    /// and the block status receiver.
     pub async fn submit(
         &self,
         transactions: Vec<Vec<u8>>,
@@ -361,6 +403,7 @@ pub trait TransactionVerifier: Send + Sync + 'static {
     /// transactions. So if a batch from a peer fails validation, the peer is equivocating.
     fn verify_and_vote_batch(
         &self,
+        block_ref: &BlockRef,
         batch: &[&[u8]],
     ) -> Result<Vec<TransactionIndex>, ValidationError>;
 }
@@ -383,6 +426,7 @@ impl TransactionVerifier for NoopTransactionVerifier {
 
     fn verify_and_vote_batch(
         &self,
+        _block_ref: &BlockRef,
         _batch: &[&[u8]],
     ) -> Result<Vec<TransactionIndex>, ValidationError> {
         Ok(vec![])
@@ -394,13 +438,16 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use consensus_config::AuthorityIndex;
-    use futures::{stream::FuturesUnordered, StreamExt};
+    use consensus_types::block::{
+        BlockDigest, BlockRef, NUM_RESERVED_TRANSACTION_INDICES, PING_TRANSACTION_INDEX,
+        TransactionIndex,
+    };
+    use futures::{StreamExt, stream::FuturesUnordered};
     use sui_protocol_config::ProtocolConfig;
     use tokio::time::timeout;
 
     use crate::transaction::NoopTransactionVerifier;
     use crate::{
-        block::{BlockDigest, BlockRef},
         block_verifier::SignedBlockVerifier,
         context::Context,
         transaction::{BlockStatus, LimitReached, TransactionClient, TransactionConsumer},
@@ -818,5 +865,101 @@ mod tests {
                 "Total size of transactions limit verification failed"
             );
         }
+    }
+
+    // This is the case where the client submits a "ping" signal to the consensus to get information about the next block and simulate a transaction inclusion to the next block.
+    #[tokio::test]
+    async fn submit_with_no_transactions() {
+        let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+            config.set_consensus_max_transaction_size_bytes_for_testing(15);
+            config.set_consensus_max_transactions_in_block_bytes_for_testing(200);
+            config
+        });
+
+        let context = Arc::new(Context::new_for_test(4).0);
+        let (client, tx_receiver) = TransactionClient::new(context.clone());
+        let mut consumer = TransactionConsumer::new(tx_receiver, context.clone());
+
+        let w_no_transactions = client
+            .submit_no_wait(vec![])
+            .await
+            .expect("Should submit successfully empty array of transactions");
+
+        let transaction =
+            bcs::to_bytes(&"transaction".to_string()).expect("Serialization should not fail.");
+        let w_with_transactions = client
+            .submit_no_wait(vec![transaction])
+            .await
+            .expect("Should submit successfully transaction");
+
+        let (transactions, ack_transactions, _limit_reached) = consumer.next();
+        assert_eq!(transactions.len(), 1);
+
+        // Acknowledge the inclusion of the transactions
+        ack_transactions(BlockRef::MIN);
+
+        {
+            let r = w_no_transactions.await;
+            let (block_ref, indices, _status) = r.unwrap();
+            assert_eq!(block_ref, BlockRef::MIN);
+            assert_eq!(indices, vec![PING_TRANSACTION_INDEX]);
+        }
+
+        {
+            let r = w_with_transactions.await;
+            let (block_ref, indices, _status) = r.unwrap();
+            assert_eq!(block_ref, BlockRef::MIN);
+            assert_eq!(indices, vec![0]);
+        }
+    }
+
+    #[tokio::test]
+    async fn ping_transaction_index_never_reached() {
+        // Set the max number of transactions in a block to the max value of u16.
+        static MAX_NUM_TRANSACTIONS_IN_BLOCK: u64 =
+            (TransactionIndex::MAX - NUM_RESERVED_TRANSACTION_INDICES) as u64;
+
+        // Ensure that enough space is allocated in the channel for the pending transactions, so we don't end up consuming the transactions in chunks.
+        static MAX_PENDING_TRANSACTIONS: usize = 2 * MAX_NUM_TRANSACTIONS_IN_BLOCK as usize;
+
+        let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+            config.set_consensus_max_transaction_size_bytes_for_testing(200_000);
+            config.set_consensus_max_transactions_in_block_bytes_for_testing(1_000_000);
+            config.set_consensus_max_num_transactions_in_block_for_testing(
+                MAX_NUM_TRANSACTIONS_IN_BLOCK,
+            );
+            config
+        });
+
+        let context = Arc::new(Context::new_for_test(4).0);
+        let (client, tx_receiver) = TransactionClient::new_with_max_pending_transactions(
+            context.clone(),
+            MAX_PENDING_TRANSACTIONS,
+        );
+        let mut consumer = TransactionConsumer::new(tx_receiver, context.clone());
+
+        // Add 10 more transactions than the max number of transactions in a block.
+        for i in 0..MAX_NUM_TRANSACTIONS_IN_BLOCK + 10 {
+            println!("Submitting transaction {i}");
+            let transaction =
+                bcs::to_bytes(&format!("t {i}")).expect("Serialization should not fail.");
+            let _w = client
+                .submit_no_wait(vec![transaction])
+                .await
+                .expect("Shouldn't submit successfully transaction");
+        }
+
+        // now pull the transactions from the consumer
+        let (transactions, _ack_transactions, _limit_reached) = consumer.next();
+        assert_eq!(transactions.len() as u64, MAX_NUM_TRANSACTIONS_IN_BLOCK);
+
+        let t: String = bcs::from_bytes(transactions.last().unwrap().data()).unwrap();
+        assert_eq!(
+            t,
+            format!(
+                "t {}",
+                PING_TRANSACTION_INDEX - NUM_RESERVED_TRANSACTION_INDICES - 1
+            )
+        );
     }
 }

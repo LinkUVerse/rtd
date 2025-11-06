@@ -17,6 +17,8 @@ use sui_json_rpc_types::{Balance, Coin, Page as PageResponse, SuiCoinMetadata};
 use sui_open_rpc::Module;
 use sui_open_rpc_macros::open_rpc;
 use sui_sql_macro::sql;
+use sui_types::coin::CoinMetadata;
+use sui_types::coin_registry::Currency;
 use sui_types::object::Object;
 use sui_types::{
     base_types::{ObjectID, SuiAddress},
@@ -27,7 +29,7 @@ use crate::{
     config::NodeConfig,
     context::Context,
     data::load_live,
-    error::{client_error_to_error_object, invalid_params, InternalContext, RpcError},
+    error::{InternalContext, RpcError, client_error_to_error_object, invalid_params},
     paginate::{BcsCursor, Cursor as _, Page},
 };
 
@@ -73,6 +75,17 @@ trait DelegationCoinsApi {
         /// the owner's Sui address
         owner: SuiAddress,
     ) -> RpcResult<Vec<Balance>>;
+
+    /// Return the total coin balance for one coin type, owned by the address.
+    /// If no coin type is specified, SUI coin balance is returned.
+    #[method(name = "getBalance")]
+    async fn get_balance(
+        &self,
+        /// the owner's Sui address
+        owner: SuiAddress,
+        /// optional type names for the coin (e.g., 0x168da5bf1f48dafc111b0a488fa454aca95e0b5e::usdc::USDC), default to 0x2::sui::SUI if not specified.
+        coin_type: Option<String>,
+    ) -> RpcResult<Balance>;
 }
 
 pub(crate) struct Coins(pub Context);
@@ -153,9 +166,21 @@ impl CoinsApiServer for Coins {
     async fn get_coin_metadata(&self, coin_type: String) -> RpcResult<Option<SuiCoinMetadata>> {
         let Self(ctx) = self;
 
-        Ok(coin_metadata_response(ctx, &coin_type)
+        if let Some(currency) = coin_registry_response(ctx, &coin_type)
             .await
-            .with_internal_context(|| format!("Failed to fetch CoinMetadata for {coin_type:?}"))?)
+            .with_internal_context(|| format!("Failed to fetch Currency for {coin_type:?}"))?
+        {
+            return Ok(Some(currency));
+        }
+
+        if let Some(metadata) = coin_metadata_response(ctx, &coin_type)
+            .await
+            .with_internal_context(|| format!("Failed to fetch CoinMetadata for {coin_type:?}"))?
+        {
+            return Ok(Some(metadata));
+        }
+
+        Ok(None)
     }
 }
 
@@ -166,6 +191,19 @@ impl DelegationCoinsApiServer for DelegationCoins {
 
         client
             .get_all_balances(owner)
+            .await
+            .map_err(client_error_to_error_object)
+    }
+
+    async fn get_balance(
+        &self,
+        owner: SuiAddress,
+        coin_type: Option<String>,
+    ) -> RpcResult<Balance> {
+        let Self(client) = self;
+
+        client
+            .get_balance(owner, coin_type)
             .await
             .map_err(client_error_to_error_object)
     }
@@ -326,6 +364,33 @@ async fn coin_response(ctx: &Context, id: ObjectID) -> Result<Coin, RpcError<Err
     })
 }
 
+async fn coin_registry_response(
+    ctx: &Context,
+    coin_type: &str,
+) -> Result<Option<SuiCoinMetadata>, RpcError<Error>> {
+    let coin_type = TypeTag::from_str(coin_type)
+        .map_err(|e| invalid_params(Error::BadType(coin_type.to_owned(), e)))?;
+
+    let currency_id = Currency::derive_object_id(coin_type)
+        .context("Failed to derive object id for coin registry Currency")?;
+
+    let Some(object) = load_live(ctx, currency_id)
+        .await
+        .context("Failed to load Currency object")?
+    else {
+        return Ok(None);
+    };
+
+    let Some(move_object) = object.data.try_as_move() else {
+        return Ok(None);
+    };
+
+    let currency: Currency =
+        bcs::from_bytes(move_object.contents()).context("Failed to parse Currency object")?;
+
+    Ok(Some(currency.into()))
+}
+
 async fn coin_metadata_response(
     ctx: &Context,
     coin_type: &str,
@@ -351,11 +416,14 @@ async fn coin_metadata_response(
         return Ok(None);
     };
 
-    let coin_metadata = object
-        .try_into()
-        .context("Failed to parse object as CoinMetadata")?;
+    let Some(move_object) = object.data.try_as_move() else {
+        return Ok(None);
+    };
 
-    Ok(Some(coin_metadata))
+    let coin_metadata: CoinMetadata =
+        bcs::from_bytes(move_object.contents()).context("Failed to parse Currency object")?;
+
+    Ok(Some(coin_metadata.into()))
 }
 
 async fn object_with_coin_data(

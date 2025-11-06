@@ -11,12 +11,14 @@ mod checked {
     use move_binary_format::CompiledModule;
     use move_trace_format::format::MoveTraceBuilder;
     use move_vm_runtime::move_vm::MoveVM;
+    use mysten_common::debug_fatal;
     use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
     use sui_types::accumulator_root::{ACCUMULATOR_ROOT_CREATE_FUNC, ACCUMULATOR_ROOT_MODULE};
     use sui_types::balance::{
         BALANCE_CREATE_REWARDS_FUNCTION_NAME, BALANCE_DESTROY_REBATES_FUNCTION_NAME,
         BALANCE_MODULE_NAME,
     };
+    use sui_types::execution_params::ExecutionOrEarlyError;
     use sui_types::gas_coin::GAS;
     use sui_types::messages_checkpoint::CheckpointTimestamp;
     use sui_types::metrics::LimitsMetrics;
@@ -31,6 +33,7 @@ mod checked {
 
     use crate::adapter::new_move_vm;
     use crate::programmable_transactions;
+    use crate::sui_types::gas::SuiGasStatusAPI;
     use crate::type_layout_resolver::TypeLayoutResolver;
     use crate::{gas_charger::GasCharger, temporary_store::TemporaryStore};
     use move_core_types::ident_str;
@@ -56,9 +59,8 @@ mod checked {
     };
     use sui_types::effects::TransactionEffects;
     use sui_types::error::{ExecutionError, ExecutionErrorKind};
-    use sui_types::execution::{ExecutionTiming, ResultWithTimings, is_certificate_denied};
-    use sui_types::execution_config_utils::to_binary_config;
-    use sui_types::execution_status::{CongestedObjects, ExecutionStatus};
+    use sui_types::execution::{ExecutionTiming, ResultWithTimings};
+    use sui_types::execution_status::ExecutionStatus;
     use sui_types::gas::GasCostSummary;
     use sui_types::gas::SuiGasStatus;
     use sui_types::id::UID;
@@ -71,12 +73,13 @@ mod checked {
         Argument, AuthenticatorStateExpire, AuthenticatorStateUpdate, CallArg, ChangeEpoch,
         Command, EndOfEpochTransactionKind, GasData, GenesisTransaction, ObjectArg,
         ProgrammableTransaction, StoredExecutionTimeObservations, TransactionKind,
+        is_gas_paid_from_address_balance,
     };
     use sui_types::transaction::{CheckedInputObjects, RandomnessStateUpdate};
     use sui_types::{
         SUI_AUTHENTICATOR_STATE_OBJECT_ID, SUI_FRAMEWORK_ADDRESS, SUI_FRAMEWORK_PACKAGE_ID,
         SUI_SYSTEM_PACKAGE_ID,
-        base_types::{ObjectID, SuiAddress, TransactionDigest, TxContext},
+        base_types::{SuiAddress, TransactionDigest, TxContext},
         object::{Object, ObjectInner},
         sui_system_state::{ADVANCE_EPOCH_FUNCTION_NAME, SUI_SYSTEM_MODULE_NAME},
     };
@@ -96,7 +99,7 @@ mod checked {
         protocol_config: &ProtocolConfig,
         metrics: Arc<LimitsMetrics>,
         enable_expensive_checks: bool,
-        certificate_deny_set: &HashSet<TransactionDigest>,
+        execution_params: ExecutionOrEarlyError,
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
@@ -107,15 +110,13 @@ mod checked {
     ) {
         let input_objects = input_objects.into_inner();
         let mutable_inputs = if enable_expensive_checks {
-            input_objects.mutable_inputs().keys().copied().collect()
+            input_objects.all_mutable_inputs().keys().copied().collect()
         } else {
             HashSet::new()
         };
         let shared_object_refs = input_objects.filter_shared_objects();
         let receiving_objects = transaction_kind.receiving_objects();
         let mut transaction_dependencies = input_objects.transaction_dependencies();
-        let contains_stream_ended_input = input_objects.contains_consensus_stream_ended_objects();
-        let cancelled_objects = input_objects.get_cancelled_objects();
 
         let mut temporary_store = TemporaryStore::new(
             store,
@@ -135,11 +136,19 @@ mod checked {
             }
         };
         let gas_price = gas_status.gas_price();
+        let rgp = gas_status.reference_gas_price();
+        let address_balance_gas_payer =
+            if is_gas_paid_from_address_balance(&gas_data, &transaction_kind) {
+                Some(gas_data.owner)
+            } else {
+                None
+            };
         let mut gas_charger = GasCharger::new(
             transaction_digest,
             gas_data.payment,
             gas_status,
             protocol_config,
+            address_balance_gas_payer,
         );
 
         let tx_ctx = TxContext::new_from_components(
@@ -147,6 +156,7 @@ mod checked {
             &transaction_digest,
             epoch_id,
             epoch_timestamp_ms,
+            rgp,
             gas_price,
             gas_data.budget,
             sponsor,
@@ -156,7 +166,6 @@ mod checked {
 
         let is_epoch_change = transaction_kind.is_end_of_epoch_tx();
 
-        let deny_cert = is_certificate_denied(&transaction_digest, certificate_deny_set);
         let (gas_cost_summary, execution_result, timings) = execute_transaction::<Mode>(
             store,
             &mut temporary_store,
@@ -167,9 +176,7 @@ mod checked {
             protocol_config,
             metrics,
             enable_expensive_checks,
-            deny_cert,
-            contains_stream_ended_input,
-            cancelled_objects,
+            execution_params,
             trace_builder_opt,
         );
 
@@ -178,13 +185,21 @@ mod checked {
             use ExecutionErrorKind as K;
             match error.kind() {
                 K::InvariantViolation | K::VMInvariantViolation => {
-                    #[skip_checked_arithmetic]
-                    tracing::error!(
-                        kind = ?error.kind(),
-                        tx_digest = ?transaction_digest,
-                        "INVARIANT VIOLATION! Source: {:?}",
-                        error.source(),
-                    );
+                    if protocol_config.debug_fatal_on_move_invariant_violation() {
+                        debug_fatal!(
+                            "INVARIANT VIOLATION! Txn Digest: {}, Source: {:?}",
+                            transaction_digest,
+                            error.source(),
+                        );
+                    } else {
+                        #[skip_checked_arithmetic]
+                        tracing::error!(
+                            kind = ?error.kind(),
+                            tx_digest = ?transaction_digest,
+                            "INVARIANT VIOLATION! Source: {:?}",
+                            error.source(),
+                        );
+                    }
                 }
 
                 K::SuiMoveVerificationError | K::VMVerificationOrDeserializationError => {
@@ -235,6 +250,7 @@ mod checked {
             temporary_store
                 .check_ownership_invariants(
                     &transaction_signer,
+                    &sponsor,
                     &mut gas_charger,
                     &mutable_inputs,
                     is_epoch_change,
@@ -307,9 +323,7 @@ mod checked {
         protocol_config: &ProtocolConfig,
         metrics: Arc<LimitsMetrics>,
         enable_expensive_checks: bool,
-        deny_cert: bool,
-        contains_stream_ended_input: bool,
-        cancelled_objects: Option<(Vec<ObjectID>, SequenceNumber)>,
+        execution_params: ExecutionOrEarlyError,
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         GasCostSummary,
@@ -338,32 +352,11 @@ mod checked {
                     let mut execution_result: ResultWithTimings<
                         Mode::ExecutionResults,
                         ExecutionError,
-                    > = if deny_cert {
-                        Err((
-                            ExecutionError::new(ExecutionErrorKind::CertificateDenied, None),
-                            vec![],
-                        ))
-                    } else if contains_stream_ended_input {
-                        Err((
-                            ExecutionError::new(ExecutionErrorKind::InputObjectDeleted, None),
-                            vec![],
-                        ))
-                    } else if let Some((cancelled_objects, reason)) = cancelled_objects {
-                        match reason {
-                            SequenceNumber::CONGESTED => Err((ExecutionError::new(
-                                ExecutionErrorKind::ExecutionCancelledDueToSharedObjectCongestion {
-                                    congested_objects: CongestedObjects(cancelled_objects),
-                                },
-                                None,
-                            ), vec![])),
-                            SequenceNumber::RANDOMNESS_UNAVAILABLE => Err((ExecutionError::new(
-                                ExecutionErrorKind::ExecutionCancelledDueToRandomnessUnavailable,
-                                None,
-                            ), vec![])),
-                            _ => panic!("invalid cancellation reason SequenceNumber: {reason}"),
+                    > = match execution_params {
+                        ExecutionOrEarlyError::Err(early_execution_error) => {
+                            Err((ExecutionError::new(early_execution_error, None), vec![]))
                         }
-                    } else {
-                        execution_loop::<Mode>(
+                        ExecutionOrEarlyError::Ok(()) => execution_loop::<Mode>(
                             store,
                             temporary_store,
                             transaction_kind,
@@ -373,7 +366,7 @@ mod checked {
                             protocol_config,
                             metrics.clone(),
                             trace_builder_opt,
-                        )
+                        ),
                     };
 
                     let meter_check = check_meter_limit(
@@ -474,7 +467,7 @@ mod checked {
                 result = Err(conservation_err);
                 gas_charger.reset(temporary_store);
                 gas_charger.charge_gas(temporary_store, &mut result);
-                // check conservation once more more
+                // check conservation once more
                 if let Err(recovery_err) = {
                     temporary_store
                         .check_sui_conserved(simple_conservation_checks, cost_summary)
@@ -700,8 +693,7 @@ mod checked {
                 .expect("ConsensusCommitPrologue cannot fail");
                 Ok((Mode::empty_results(), vec![]))
             }
-            TransactionKind::ProgrammableTransaction(pt)
-            | TransactionKind::ProgrammableSystemTransaction(pt) => {
+            TransactionKind::ProgrammableTransaction(pt) => {
                 programmable_transactions::execution::execute::<Mode>(
                     protocol_config,
                     metrics,
@@ -713,6 +705,20 @@ mod checked {
                     pt,
                     trace_builder_opt,
                 )
+            }
+            TransactionKind::ProgrammableSystemTransaction(pt) => {
+                programmable_transactions::execution::execute::<execution_mode::System>(
+                    protocol_config,
+                    metrics,
+                    move_vm,
+                    temporary_store,
+                    store.as_backing_package_store(),
+                    tx_ctx,
+                    gas_charger,
+                    pt,
+                    trace_builder_opt,
+                )?;
+                Ok((Mode::empty_results(), vec![]))
             }
             TransactionKind::EndOfEpochTransaction(txns) => {
                 let mut builder = ProgrammableTransactionBuilder::new();
@@ -765,15 +771,32 @@ mod checked {
                             builder = setup_bridge_committee_update(builder, bridge_shared_version)
                         }
                         EndOfEpochTransactionKind::StoreExecutionTimeObservations(estimates) => {
-                            assert!(matches!(
-                                protocol_config.per_object_congestion_control_mode(),
-                                PerObjectCongestionControlMode::ExecutionTimeEstimate(_)
-                            ));
-                            builder = setup_store_execution_time_estimates(builder, estimates);
+                            if let PerObjectCongestionControlMode::ExecutionTimeEstimate(params) =
+                                protocol_config.per_object_congestion_control_mode()
+                            {
+                                if let Some(chunk_size) = params.observations_chunk_size {
+                                    builder = setup_store_execution_time_estimates_v2(
+                                        builder,
+                                        estimates,
+                                        chunk_size as usize,
+                                    );
+                                } else {
+                                    builder =
+                                        setup_store_execution_time_estimates(builder, estimates);
+                                }
+                            }
                         }
                         EndOfEpochTransactionKind::AccumulatorRootCreate => {
-                            assert!(protocol_config.enable_accumulators());
+                            assert!(protocol_config.create_root_accumulator_object());
                             builder = setup_accumulator_root_create(builder);
+                        }
+                        EndOfEpochTransactionKind::CoinRegistryCreate => {
+                            assert!(protocol_config.enable_coin_registry());
+                            builder = setup_coin_registry_create(builder);
+                        }
+                        EndOfEpochTransactionKind::DisplayRegistryCreate => {
+                            assert!(protocol_config.enable_display_registry());
+                            builder = setup_display_registry_create(builder);
                         }
                     }
                 }
@@ -1028,7 +1051,6 @@ mod checked {
             let new_vm = new_move_vm(
                 all_natives(/* silent */ true, protocol_config),
                 protocol_config,
-                /* enable_profiler */ None,
             )
             .expect("Failed to create new MoveVM");
             process_system_packages(
@@ -1070,7 +1092,7 @@ mod checked {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) {
         let digest = tx_ctx.borrow().digest();
-        let binary_config = to_binary_config(protocol_config);
+        let binary_config = protocol_config.binary_config(None);
         for (version, modules, dependencies) in change_epoch.system_packages.into_iter() {
             let deserialized_modules: Vec<_> = modules
                 .iter()
@@ -1241,7 +1263,7 @@ mod checked {
             .obj(ObjectArg::SharedObject {
                 id: SUI_BRIDGE_OBJECT_ID,
                 initial_shared_version: bridge_shared_version,
-                mutable: true,
+                mutability: sui_types::transaction::SharedObjectMutability::Mutable,
             })
             .expect("Unable to create Bridge object arg!");
         let system_state = builder
@@ -1296,7 +1318,7 @@ mod checked {
                     CallArg::Object(ObjectArg::SharedObject {
                         id: SUI_AUTHENTICATOR_STATE_OBJECT_ID,
                         initial_shared_version: update.authenticator_obj_initial_shared_version,
-                        mutable: true,
+                        mutability: sui_types::transaction::SharedObjectMutability::Mutable,
                     }),
                     CallArg::Pure(bcs::to_bytes(&update.new_active_jwks).unwrap()),
                 ],
@@ -1336,7 +1358,7 @@ mod checked {
                     CallArg::Object(ObjectArg::SharedObject {
                         id: SUI_AUTHENTICATOR_STATE_OBJECT_ID,
                         initial_shared_version: expire.authenticator_obj_initial_shared_version,
-                        mutable: true,
+                        mutability: sui_types::transaction::SharedObjectMutability::Mutable,
                     }),
                     CallArg::Pure(bcs::to_bytes(&expire.min_epoch).unwrap()),
                 ],
@@ -1367,7 +1389,7 @@ mod checked {
                     CallArg::Object(ObjectArg::SharedObject {
                         id: SUI_RANDOMNESS_STATE_OBJECT_ID,
                         initial_shared_version: update.randomness_obj_initial_shared_version,
-                        mutable: true,
+                        mutability: sui_types::transaction::SharedObjectMutability::Mutable,
                     }),
                     CallArg::Pure(bcs::to_bytes(&update.randomness_round).unwrap()),
                     CallArg::Pure(bcs::to_bytes(&update.random_bytes).unwrap()),
@@ -1428,6 +1450,32 @@ mod checked {
         builder
     }
 
+    fn setup_store_execution_time_estimates_v2(
+        mut builder: ProgrammableTransactionBuilder,
+        estimates: StoredExecutionTimeObservations,
+        chunk_size: usize,
+    ) -> ProgrammableTransactionBuilder {
+        let system_state = builder.obj(ObjectArg::SUI_SYSTEM_MUT).unwrap();
+
+        let estimate_chunks = estimates.chunk_observations(chunk_size);
+
+        let chunk_bytes: Vec<Vec<u8>> = estimate_chunks
+            .into_iter()
+            .map(|chunk| bcs::to_bytes(&chunk).unwrap())
+            .collect();
+
+        let chunks_arg = builder.pure(chunk_bytes).unwrap();
+
+        builder.programmable_move_call(
+            SUI_SYSTEM_PACKAGE_ID,
+            SUI_SYSTEM_MODULE_NAME.to_owned(),
+            ident_str!("store_execution_time_estimates_v2").to_owned(),
+            vec![],
+            vec![system_state, chunks_arg],
+        );
+        builder
+    }
+
     fn setup_accumulator_root_create(
         mut builder: ProgrammableTransactionBuilder,
     ) -> ProgrammableTransactionBuilder {
@@ -1440,6 +1488,36 @@ mod checked {
                 vec![],
             )
             .expect("Unable to generate accumulator_root_create transaction!");
+        builder
+    }
+
+    fn setup_coin_registry_create(
+        mut builder: ProgrammableTransactionBuilder,
+    ) -> ProgrammableTransactionBuilder {
+        builder
+            .move_call(
+                SUI_FRAMEWORK_ADDRESS.into(),
+                ident_str!("coin_registry").to_owned(),
+                ident_str!("create").to_owned(),
+                vec![],
+                vec![],
+            )
+            .expect("Unable to generate coin_registry_create transaction!");
+        builder
+    }
+
+    fn setup_display_registry_create(
+        mut builder: ProgrammableTransactionBuilder,
+    ) -> ProgrammableTransactionBuilder {
+        builder
+            .move_call(
+                SUI_FRAMEWORK_ADDRESS.into(),
+                ident_str!("display_registry").to_owned(),
+                ident_str!("create").to_owned(),
+                vec![],
+                vec![],
+            )
+            .expect("Unable to generate display_registry_create transaction!");
         builder
     }
 }

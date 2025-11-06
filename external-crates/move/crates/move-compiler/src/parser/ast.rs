@@ -90,10 +90,10 @@ pub enum TargetKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct PackageDefinition {
+pub struct PackageDefinition<Def = Definition> {
     pub package: Option<Symbol>,
     pub named_address_map: NamedAddressMapIndex,
-    pub def: Definition,
+    pub def: Def,
     pub target_kind: TargetKind,
 }
 
@@ -275,6 +275,7 @@ pub struct ModuleDefinition {
     pub address: Option<LeadingNameAccess>,
     pub name: ModuleName,
     pub is_spec_module: bool,
+    pub is_extension: bool,
     pub definition_mode: ModuleDefinitionMode,
     pub members: Vec<ModuleMember>,
 }
@@ -371,6 +372,7 @@ new_name!(FunctionName);
 
 pub const NATIVE_MODIFIER: &str = "native";
 pub const ENTRY_MODIFIER: &str = "entry";
+pub const EXTEND_MODIFIER: &str = "extend";
 pub const MACRO_MODIFIER: &str = "macro";
 
 #[derive(PartialEq, Clone, Debug)]
@@ -548,6 +550,8 @@ pub enum Value_ {
     HexString(Symbol),
     // b"(<ascii> | \n | \r | \t | \\ | \0 | \" | \x[0..9A..F][0..9A..F])+"
     ByteString(Symbol),
+    // "(<ascii> | \n | \r | \t | \\ | \0 | \" | \x[0..9A..F][0..9A..F])+"
+    String(Symbol),
 }
 pub type Value = Spanned<Value_>;
 
@@ -838,6 +842,16 @@ impl fmt::Debug for LeadingNameAccess_ {
 //**************************************************************************************************
 // Impl
 //**************************************************************************************************
+
+impl ModuleDefinition {
+    pub fn modes(&self) -> UniqueSet<Name> {
+        let mut result = UniqueSet::new();
+        for attr in self.attributes.iter().map(|attr| attr.value.modes()) {
+            result = result.union(&attr);
+        }
+        result
+    }
+}
 
 impl ParsedAttribute_ {
     pub fn loc_str(&self) -> Spanned<&str> {
@@ -1478,6 +1492,7 @@ impl fmt::Display for Value_ {
             Value_::Bool(value) => write!(f, "{value}"),
             Value_::HexString(symbol) => write!(f, "{}", symbol.as_ref()),
             Value_::ByteString(symbol) => write!(f, "{}", symbol.as_ref()),
+            Value_::String(symbol) => write!(f, "{}", symbol.as_ref()),
         }
     }
 }
@@ -1782,18 +1797,19 @@ impl AstDebug for ModuleDefinition {
             address,
             name,
             is_spec_module,
+            is_extension,
             members,
             definition_mode: _,
         } = self;
         doc.ast_debug(w);
         attributes.ast_debug(w);
+        let keyword = if *is_extension { "extend " } else { "module " };
         match address {
             None => w.write(format!(
-                "module {}{}",
+                "{keyword} {}{name}",
                 if *is_spec_module { "spec " } else { "" },
-                name
             )),
-            Some(addr) => w.write(format!("module {}::{}", addr, name)),
+            Some(addr) => w.write(format!("{keyword} {addr}::{name}")),
         };
         w.block(|w| {
             for mem in members {
@@ -2661,6 +2677,7 @@ impl AstDebug for Value_ {
             V::Bool(b) => format!("{}", b),
             V::HexString(s) => format!("x\"{}\"", s),
             V::ByteString(s) => format!("b\"{}\"", s),
+            V::String(s) => format!("\"{}\"", s),
         })
     }
 }

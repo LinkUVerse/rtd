@@ -32,7 +32,8 @@ use std::{
 
 use bytes::Bytes;
 use consensus_config::AuthorityIndex;
-use futures::{stream::FuturesOrdered, StreamExt as _};
+use consensus_types::block::BlockRef;
+use futures::{StreamExt as _, stream::FuturesOrdered};
 use itertools::Itertools as _;
 use mysten_metrics::spawn_logged_monitored_task;
 use parking_lot::RwLock;
@@ -41,12 +42,13 @@ use tokio::{
     runtime::Handle,
     sync::oneshot,
     task::{JoinHandle, JoinSet},
-    time::{sleep, MissedTickBehavior},
+    time::{MissedTickBehavior, sleep},
 };
 use tracing::{debug, info, warn};
 
 use crate::{
-    block::{BlockAPI, BlockRef, SignedBlock, VerifiedBlock},
+    CommitConsumerMonitor, CommitIndex,
+    block::{BlockAPI, SignedBlock, VerifiedBlock},
     block_verifier::BlockVerifier,
     commit::{
         CertifiedCommit, CertifiedCommits, Commit, CommitAPI as _, CommitDigest, CommitRange,
@@ -60,7 +62,6 @@ use crate::{
     network::NetworkClient,
     stake_aggregator::{QuorumThreshold, StakeAggregator},
     transaction_certifier::TransactionCertifier,
-    CommitConsumerMonitor, CommitIndex,
 };
 
 // Handle to stop the CommitSyncer loop.
@@ -73,10 +74,10 @@ impl CommitSyncerHandle {
     pub(crate) async fn stop(self) {
         let _ = self.tx_shutdown.send(());
         // Do not abort schedule task, which waits for fetches to shut down.
-        if let Err(e) = self.schedule_task.await {
-            if e.is_panic() {
-                std::panic::resume_unwind(e.into_panic());
-            }
+        if let Err(e) = self.schedule_task.await
+            && e.is_panic()
+        {
+            std::panic::resume_unwind(e.into_panic());
         }
     }
 }
@@ -202,7 +203,11 @@ impl<C: NetworkClient> CommitSyncer<C> {
         let unhandled_commits_threshold = self.unhandled_commits_threshold();
         info!(
             "Checking to schedule fetches: synced_commit_index={}, highest_handled_index={}, highest_scheduled_index={}, quorum_commit_index={}, unhandled_commits_threshold={}",
-            self.synced_commit_index, highest_handled_index, highest_scheduled_index, quorum_commit_index, unhandled_commits_threshold,
+            self.synced_commit_index,
+            highest_handled_index,
+            highest_scheduled_index,
+            quorum_commit_index,
+            unhandled_commits_threshold,
         );
 
         // TODO: cleanup inflight fetches that are no longer needed.
@@ -224,7 +229,10 @@ impl<C: NetworkClient> CommitSyncer<C> {
             }
             // Pause scheduling new fetches when handling of commits is lagging.
             if highest_handled_index + unhandled_commits_threshold < range_end {
-                warn!("Skip scheduling new commit fetches: consensus handler is lagging. highest_handled_index={}, highest_scheduled_index={}", highest_handled_index, highest_scheduled_index);
+                warn!(
+                    "Skip scheduling new commit fetches: consensus handler is lagging. highest_handled_index={}, highest_scheduled_index={}",
+                    highest_handled_index, highest_scheduled_index
+                );
                 break;
             }
             self.pending_fetches
@@ -785,8 +793,8 @@ impl<C: NetworkClient> Inner<C> {
                 bcs::from_bytes(&serialized).map_err(ConsensusError::MalformedBlock)?;
             // Only block signatures need to be verified, to verify commit votes.
             // But the blocks will be sent to Core, so they need to be fully verified.
-            let reject_transaction_votes = self.block_verifier.verify_and_vote(&block)?;
-            let block = VerifiedBlock::new_verified(block, serialized);
+            let (block, reject_transaction_votes) =
+                self.block_verifier.verify_and_vote(block, serialized)?;
             if self.context.protocol_config.mysticeti_fastpath() {
                 self.transaction_certifier
                     .add_voted_blocks(vec![(block.clone(), reject_transaction_votes)]);
@@ -823,11 +831,13 @@ mod tests {
 
     use bytes::Bytes;
     use consensus_config::{AuthorityIndex, Parameters};
+    use consensus_types::block::{BlockRef, Round};
     use mysten_metrics::monitored_mpsc;
     use parking_lot::RwLock;
 
     use crate::{
-        block::{BlockRef, TestBlock, VerifiedBlock},
+        CommitConsumerMonitor, CommitDigest, CommitRef,
+        block::{TestBlock, VerifiedBlock},
         block_verifier::NoopBlockVerifier,
         commit::CommitRange,
         commit_syncer::CommitSyncer,
@@ -839,7 +849,6 @@ mod tests {
         network::{BlockStream, NetworkClient},
         storage::mem_store::MemStore,
         transaction_certifier::TransactionCertifier,
-        CommitConsumerMonitor, CommitDigest, CommitRef, Round,
     };
 
     #[derive(Default)]
@@ -929,10 +938,14 @@ mod tests {
         let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store)));
         let (blocks_sender, _blocks_receiver) =
             monitored_mpsc::unbounded_channel("consensus_block_output");
-        let transaction_certifier =
-            TransactionCertifier::new(context.clone(), dag_state.clone(), blocks_sender);
+        let transaction_certifier = TransactionCertifier::new(
+            context.clone(),
+            block_verifier.clone(),
+            dag_state.clone(),
+            blocks_sender,
+        );
         let commit_vote_monitor = Arc::new(CommitVoteMonitor::new(context.clone()));
-        let commit_consumer_monitor = Arc::new(CommitConsumerMonitor::new(0));
+        let commit_consumer_monitor = Arc::new(CommitConsumerMonitor::new(0, 0));
         let mut commit_syncer = CommitSyncer::new(
             context,
             core_thread_dispatcher,

@@ -12,18 +12,13 @@ use tap::Pipe;
 pub mod client;
 mod config;
 mod error;
-pub mod field_mask;
-mod grpc;
-pub mod message;
+pub mod grpc;
 mod metrics;
-pub mod proto;
 mod reader;
 mod response;
 mod service;
 pub mod subscription;
-pub mod types;
 
-pub use crate::grpc::v2beta::ledger_service;
 pub use client::Client;
 pub use config::Config;
 pub use error::{
@@ -31,7 +26,7 @@ pub use error::{
 };
 pub use metrics::{RpcMetrics, RpcMetricsMakeCallbackHandler};
 pub use reader::TransactionNotFoundError;
-pub use service::protocol_config::config_to_proto;
+pub use sui_rpc::proto;
 
 #[derive(Clone)]
 pub struct ServerVersion {
@@ -115,15 +110,35 @@ impl RpcService {
 
         let router = {
             let ledger_service =
-                crate::proto::rpc::v2beta::ledger_service_server::LedgerServiceServer::new(
+                sui_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let transaction_execution_service = sui_rpc::proto::sui::rpc::v2::transaction_execution_service_server::TransactionExecutionServiceServer::new(self.clone())
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let state_service =
+                sui_rpc::proto::sui::rpc::v2::state_service_server::StateServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let signature_verification_service = sui_rpc::proto::sui::rpc::v2::signature_verification_service_server::SignatureVerificationServiceServer::new(self.clone())
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let move_package_service = sui_rpc::proto::sui::rpc::v2::move_package_service_server::MovePackageServiceServer::new(self.clone())
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let name_service =
+                sui_rpc::proto::sui::rpc::v2::name_service_server::NameServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+
+            let event_service_alpha =
+                crate::grpc::alpha::event_service_proto::event_service_server::EventServiceServer::new(
                     self.clone(),
                 );
-            let transaction_execution_service = crate::proto::rpc::v2beta::transaction_execution_service_server::TransactionExecutionServiceServer::new(self.clone());
-            let live_data_service =
-                crate::proto::rpc::v2alpha::live_data_service_server::LiveDataServiceServer::new(
-                    self.clone(),
+            let proof_service_alpha =
+                crate::grpc::alpha::proof_service_proto::proof_service_server::ProofServiceServer::new(
+                    crate::grpc::alpha::proof_service::ProofServiceImpl::new(self.clone()),
                 );
-            let signature_verification_service = crate::proto::rpc::v2alpha::signature_verification_service_server::SignatureVerificationServiceServer::new(self.clone());
 
             let (health_reporter, health_service) = tonic_health::server::health_reporter();
 
@@ -135,10 +150,7 @@ impl RpcService {
                     crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
                 )
                 .register_encoded_file_descriptor_set(
-                    crate::proto::rpc::v2beta::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(
-                    crate::proto::rpc::v2alpha::FILE_DESCRIPTOR_SET,
+                    sui_rpc::proto::sui::rpc::v2::FILE_DESCRIPTOR_SET,
                 )
                 .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
                 .build_v1()
@@ -152,10 +164,7 @@ impl RpcService {
                     crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
                 )
                 .register_encoded_file_descriptor_set(
-                    crate::proto::rpc::v2beta::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(
-                    crate::proto::rpc::v2alpha::FILE_DESCRIPTOR_SET,
+                    sui_rpc::proto::sui::rpc::v2::FILE_DESCRIPTOR_SET,
                 )
                 .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
                 .build_v1alpha()
@@ -168,8 +177,12 @@ impl RpcService {
             for service_name in [
                 service_name(&ledger_service),
                 service_name(&transaction_execution_service),
-                service_name(&live_data_service),
+                service_name(&state_service),
                 service_name(&signature_verification_service),
+                service_name(&move_package_service),
+                service_name(&name_service),
+                service_name(&event_service_alpha),
+                service_name(&proof_service_alpha),
                 service_name(&reflection_v1),
                 service_name(&reflection_v1alpha),
             ] {
@@ -179,22 +192,30 @@ impl RpcService {
             }
 
             let mut services = grpc::Services::new()
-                .add_service(reflection_v1)
-                .add_service(reflection_v1alpha)
+                // V2
                 .add_service(ledger_service)
                 .add_service(transaction_execution_service)
-                .add_service(live_data_service)
-                .add_service(signature_verification_service);
+                .add_service(state_service)
+                .add_service(signature_verification_service)
+                .add_service(move_package_service)
+                .add_service(name_service)
+                // alpha
+                .add_service(event_service_alpha)
+                .add_service(proof_service_alpha)
+                // Reflection
+                .add_service(reflection_v1)
+                .add_service(reflection_v1alpha);
 
-            if let Some(subscription_service_handle) = self.subscription_service_handle.clone() {
+            if self.subscription_service_handle.is_some() {
                 let subscription_service =
-crate::proto::rpc::v2alpha::subscription_service_server::SubscriptionServiceServer::new(subscription_service_handle);
+sui_rpc::proto::sui::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone());
                 health_reporter
                     .set_service_status(
                         service_name(&subscription_service),
                         tonic_health::ServingStatus::Serving,
                     )
                     .await;
+
                 services = services.add_service(subscription_service);
             }
 

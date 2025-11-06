@@ -4,10 +4,10 @@
 use std::sync::Arc;
 
 use prometheus::{
+    Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Registry,
     exponential_buckets, register_histogram_vec_with_registry, register_histogram_with_registry,
     register_int_counter_vec_with_registry, register_int_counter_with_registry,
-    register_int_gauge_vec_with_registry, register_int_gauge_with_registry, Histogram,
-    HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Registry,
+    register_int_gauge_vec_with_registry, register_int_gauge_with_registry,
 };
 
 use crate::network::metrics::NetworkMetrics;
@@ -79,7 +79,7 @@ const SIZE_BUCKETS: &[f64] = &[
 // Because of indirect finalization, the round delay should be at most 3 rounds.
 const ROUND_DELAY_BUCKETS: &[f64] = &[0.0, 0.5, 1.0, 2.0, 3.0, 4.0];
 
-pub(crate) struct Metrics {
+pub struct Metrics {
     pub(crate) node_metrics: NodeMetrics,
     pub(crate) network_metrics: NetworkMetrics,
 }
@@ -94,7 +94,6 @@ pub(crate) fn initialise_metrics(registry: Registry) -> Arc<Metrics> {
     })
 }
 
-#[cfg(test)]
 pub(crate) fn test_metrics() -> Arc<Metrics> {
     initialise_metrics(Registry::new())
 }
@@ -118,6 +117,7 @@ pub(crate) struct NodeMetrics {
     pub(crate) blocks_per_commit_count: Histogram,
     pub(crate) blocks_pruned_on_commit: IntCounterVec,
     pub(crate) broadcaster_rtt_estimate_ms: IntGaugeVec,
+    pub(crate) commit_observer_last_recovered_commit_index: IntGauge,
     pub(crate) core_add_blocks_batch_size: Histogram,
     pub(crate) core_check_block_refs_batch_size: Histogram,
     pub(crate) core_lock_dequeued: IntCounter,
@@ -165,6 +165,7 @@ pub(crate) struct NodeMetrics {
     pub(crate) missing_blocks_after_fetch_total: IntCounter,
     pub(crate) num_of_bad_nodes: IntGauge,
     pub(crate) quorum_receive_latency: Histogram,
+    pub(crate) block_receive_delay: IntCounterVec,
     pub(crate) reputation_scores: IntGaugeVec,
     pub(crate) scope_processing_time: HistogramVec,
     pub(crate) sub_dags_per_commit_count: Histogram,
@@ -208,11 +209,16 @@ pub(crate) struct NodeMetrics {
     pub(crate) round_tracker_last_propagation_delay: IntGauge,
     pub(crate) round_prober_request_errors: IntCounterVec,
     pub(crate) certifier_gc_round: IntGauge,
+    pub(crate) certifier_block_latency: HistogramVec,
     pub(crate) certifier_own_reject_votes: IntCounterVec,
     pub(crate) certifier_output_blocks: IntCounterVec,
+    pub(crate) certifier_rejected_transactions: IntCounterVec,
+    pub(crate) certifier_accepted_transactions: IntCounterVec,
+    pub(crate) certifier_missing_ancestor_during_certification: IntCounterVec,
     pub(crate) finalizer_buffered_commits: IntGauge,
     pub(crate) finalizer_round_delay: Histogram,
     pub(crate) finalizer_transaction_status: IntCounterVec,
+    pub(crate) finalizer_reject_votes: IntCounterVec,
     pub(crate) finalizer_output_commits: IntCounterVec,
     pub(crate) uptime: Histogram,
 }
@@ -326,6 +332,11 @@ impl NodeMetrics {
                 "broadcaster_rtt_estimate_ms",
                 "Estimated RTT latency per peer authority, for block sending in Broadcaster",
                 &["peer"],
+                registry,
+            ).unwrap(),
+            commit_observer_last_recovered_commit_index: register_int_gauge_with_registry!(
+                "commit_observer_last_recovered_commit_index",
+                "The last commit index recovered by the commit observer",
                 registry,
             ).unwrap(),
             core_add_blocks_batch_size: register_histogram_with_registry!(
@@ -487,6 +498,31 @@ impl NodeMetrics {
                 &["authority", "source", "error"],
                 registry,
             ).unwrap(),
+            certifier_block_latency: register_histogram_vec_with_registry!(
+                "certifier_block_latency",
+                "The latency of a block being certified by the transaction certifier. The block's authority is the label",
+                &["authority"],
+                FINE_GRAINED_LATENCY_SEC_BUCKETS.to_vec(),
+                registry,
+            ).unwrap(),
+            certifier_rejected_transactions: register_int_counter_vec_with_registry!(
+                "certifier_rejected_transactions",
+                "Number of transactions rejected by authority in transaction certifier",
+                &["authority"],
+                registry,
+            ).unwrap(),
+            certifier_accepted_transactions: register_int_counter_vec_with_registry!(
+                "certifier_accepted_transactions",
+                "Number of transactions accepted by authority in transaction certifier",
+                &["authority"],
+                registry,
+            ).unwrap(),
+            certifier_missing_ancestor_during_certification: register_int_counter_vec_with_registry!(
+                "certifier_missing_ancestor_during_certification",
+                "Number of missing ancestors during certification",
+                &["reason"],
+                registry,
+            ).unwrap(),
             rejected_blocks: register_int_counter_vec_with_registry!(
                 "rejected_blocks",
                 "Number of blocks rejected before verifications",
@@ -592,6 +628,12 @@ impl NodeMetrics {
                 "quorum_receive_latency",
                 "The time it took to receive a new round quorum of blocks",
                 registry
+            ).unwrap(),
+            block_receive_delay: register_int_counter_vec_with_registry!(
+                "block_receive_delay",
+                "Total delay from the start of the round to receiving the block, in milliseconds per authority",
+                &["authority"],
+                registry,
             ).unwrap(),
             reputation_scores: register_int_gauge_vec_with_registry!(
                 "reputation_scores",
@@ -861,6 +903,12 @@ impl NodeMetrics {
                 "finalizer_transaction_status",
                 "Number of transactions finalized by the finalizer, grouped by status.",
                 &["status"],
+                registry
+            ).unwrap(),
+            finalizer_reject_votes: register_int_counter_vec_with_registry!(
+                "finalizer_reject_votes",
+                "Number of reject votes casted by each authority observed by the finalizer.",
+                &["authority"],
                 registry
             ).unwrap(),
             finalizer_output_commits: register_int_counter_vec_with_registry!(

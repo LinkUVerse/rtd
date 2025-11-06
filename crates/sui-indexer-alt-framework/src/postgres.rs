@@ -11,8 +11,8 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::{
-    ingestion::{ClientArgs, IngestionConfig},
     Indexer, IndexerArgs,
+    ingestion::{ClientArgs, IngestionConfig},
 };
 
 pub use sui_pg_db::*;
@@ -42,6 +42,7 @@ impl Indexer<Db> {
         client_args: ClientArgs,
         ingestion_config: IngestionConfig,
         migrations: Option<&'static EmbeddedMigrations>,
+        metrics_prefix: Option<&str>,
         registry: &Registry,
         cancel: CancellationToken,
     ) -> Result<Self> {
@@ -65,6 +66,7 @@ impl Indexer<Db> {
             indexer_args,
             client_args,
             ingestion_config,
+            metrics_prefix,
             registry,
             cancel,
         )
@@ -92,6 +94,7 @@ impl Indexer<Db> {
                 rpc_password: None,
             },
             IngestionConfig::default(),
+            None,
             &Registry::new(),
             CancellationToken::new(),
         )
@@ -112,7 +115,7 @@ pub mod tests {
     use super::*;
 
     use crate::pipeline::concurrent;
-    use crate::{pipeline::Processor, store::Connection, ConcurrentConfig, FieldCount};
+    use crate::{ConcurrentConfig, FieldCount, pipeline::Processor, store::Connection};
 
     #[derive(FieldCount)]
     struct V {
@@ -121,14 +124,12 @@ pub mod tests {
 
     macro_rules! define_test_concurrent_pipeline {
         ($name:ident) => {
-            define_test_concurrent_pipeline!($name, false);
-        };
-        ($name:ident, $pruning_requires_processed_values:expr) => {
             struct $name;
+            #[async_trait]
             impl Processor for $name {
                 const NAME: &'static str = stringify!($name);
                 type Value = V;
-                fn process(
+                async fn process(
                     &self,
                     _checkpoint: &Arc<CheckpointData>,
                 ) -> anyhow::Result<Vec<Self::Value>> {
@@ -140,7 +141,6 @@ pub mod tests {
             impl concurrent::Handler for $name {
                 type Store = Db;
 
-                const PRUNING_REQUIRES_PROCESSED_VALUES: bool = $pruning_requires_processed_values;
                 async fn commit<'a>(
                     _values: &[Self::Value],
                     _conn: &mut <Self::Store as Store>::Connection<'a>,
@@ -153,7 +153,6 @@ pub mod tests {
 
     define_test_concurrent_pipeline!(ConcurrentPipeline1);
     define_test_concurrent_pipeline!(ConcurrentPipeline2);
-    define_test_concurrent_pipeline!(ConcurrentPipeline3, true);
 
     #[tokio::test]
     async fn test_add_new_pipeline() {
@@ -171,10 +170,11 @@ pub mod tests {
         {
             let watermark = CommitterWatermark::new_for_testing(10);
             let mut conn = indexer.store().connect().await.unwrap();
-            assert!(conn
-                .set_committer_watermark(ConcurrentPipeline1::NAME, watermark)
-                .await
-                .unwrap());
+            assert!(
+                conn.set_committer_watermark(ConcurrentPipeline1::NAME, watermark)
+                    .await
+                    .unwrap()
+            );
         }
         indexer
             .concurrent_pipeline(ConcurrentPipeline1, ConcurrentConfig::default())
@@ -189,15 +189,17 @@ pub mod tests {
         {
             let watermark1 = CommitterWatermark::new_for_testing(10);
             let mut conn = indexer.store().connect().await.unwrap();
-            assert!(conn
-                .set_committer_watermark(ConcurrentPipeline1::NAME, watermark1)
-                .await
-                .unwrap());
+            assert!(
+                conn.set_committer_watermark(ConcurrentPipeline1::NAME, watermark1)
+                    .await
+                    .unwrap()
+            );
             let watermark2 = CommitterWatermark::new_for_testing(20);
-            assert!(conn
-                .set_committer_watermark(ConcurrentPipeline2::NAME, watermark2)
-                .await
-                .unwrap());
+            assert!(
+                conn.set_committer_watermark(ConcurrentPipeline2::NAME, watermark2)
+                    .await
+                    .unwrap()
+            );
         }
 
         indexer
@@ -210,42 +212,5 @@ pub mod tests {
             .await
             .unwrap();
         assert_eq!(indexer.first_checkpoint_from_watermark, 11);
-    }
-
-    #[tokio::test]
-    async fn test_add_multiple_pipelines_pruning_requires_processed_values() {
-        let (mut indexer, _temp_db) = Indexer::new_for_testing(&MIGRATIONS).await;
-        {
-            let watermark1 = CommitterWatermark::new_for_testing(10);
-            let mut conn = indexer.store().connect().await.unwrap();
-            assert!(conn
-                .set_committer_watermark(ConcurrentPipeline1::NAME, watermark1)
-                .await
-                .unwrap());
-        }
-        indexer
-            .concurrent_pipeline(ConcurrentPipeline1, ConcurrentConfig::default())
-            .await
-            .unwrap();
-        assert_eq!(indexer.first_checkpoint_from_watermark, 11);
-
-        {
-            let watermark3 = CommitterWatermark::new_for_testing(20);
-            let mut conn = indexer.store().connect().await.unwrap();
-            assert!(conn
-                .set_committer_watermark(ConcurrentPipeline3::NAME, watermark3)
-                .await
-                .unwrap());
-            assert!(conn
-                .set_pruner_watermark(ConcurrentPipeline3::NAME, 5)
-                .await
-                .unwrap());
-        }
-        indexer
-            .concurrent_pipeline(ConcurrentPipeline3, ConcurrentConfig::default())
-            .await
-            .unwrap();
-
-        assert_eq!(indexer.first_checkpoint_from_watermark, 5);
     }
 }

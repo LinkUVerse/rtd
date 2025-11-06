@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rocksdb::{BlockBasedOptions, Cache, MergeOperands, ReadOptions};
+use rocksdb::{BlockBasedOptions, Cache, MergeOperands, ReadOptions, compaction_filter::Decision};
 use std::collections::BTreeMap;
 use std::env;
 use tap::TapFallible;
@@ -265,6 +265,8 @@ impl DBOptions {
     pub fn disable_write_throttling(mut self) -> DBOptions {
         self.options.set_soft_pending_compaction_bytes_limit(0);
         self.options.set_hard_pending_compaction_bytes_limit(0);
+        self.options.set_level_zero_slowdown_writes_trigger(512);
+        self.options.set_level_zero_stop_writes_trigger(1024);
         self
     }
 
@@ -277,6 +279,14 @@ impl DBOptions {
             + 'static,
     {
         self.options.set_merge_operator_associative(name, merge_fn);
+        self
+    }
+
+    pub fn set_compaction_filter<F>(mut self, name: &str, filter_fn: F) -> DBOptions
+    where
+        F: FnMut(u32, &[u8], &[u8]) -> Decision + Send + 'static,
+    {
+        self.options.set_compaction_filter(name, filter_fn);
         self
     }
 }

@@ -7,8 +7,8 @@ use diesel_async::RunQueryDsl;
 use std::sync::Arc;
 use sui_bridge_schema::models::SuiErrorTransactions;
 use sui_bridge_schema::schema::sui_error_transactions;
-use sui_indexer_alt_framework::pipeline::concurrent::Handler;
 use sui_indexer_alt_framework::pipeline::Processor;
+use sui_indexer_alt_framework::pipeline::concurrent::Handler;
 use sui_indexer_alt_framework::postgres::Db;
 use sui_indexer_alt_framework::store::Store;
 use sui_indexer_alt_framework::types::effects::TransactionEffectsAPI;
@@ -17,11 +17,12 @@ use sui_indexer_alt_framework::types::full_checkpoint_content::CheckpointData;
 
 pub struct ErrorTransactionHandler;
 
+#[async_trait]
 impl Processor for ErrorTransactionHandler {
     const NAME: &'static str = "error_transactions";
     type Value = SuiErrorTransactions;
 
-    fn process(&self, checkpoint: &Arc<CheckpointData>) -> anyhow::Result<Vec<Self::Value>> {
+    async fn process(&self, checkpoint: &Arc<CheckpointData>) -> anyhow::Result<Vec<Self::Value>> {
         let timestamp_ms = checkpoint.checkpoint_summary.timestamp_ms as i64;
         let mut results = vec![];
 

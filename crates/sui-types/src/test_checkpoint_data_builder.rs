@@ -1,20 +1,21 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-
 use move_core_types::{
     ident_str,
     language_storage::{StructTag, TypeTag},
 };
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use sui_protocol_config::{ProtocolConfig, ProtocolVersion};
 use sui_sdk_types::CheckpointTimestamp;
 use tap::Pipe;
 
+use crate::messages_checkpoint::CheckpointCommitment;
 use crate::{
+    SUI_SYSTEM_ADDRESS,
     base_types::{
-        dbg_addr, random_object_ref, ExecutionDigests, ObjectID, ObjectRef, SequenceNumber,
-        SuiAddress,
+        ExecutionDigests, ObjectID, ObjectRef, SequenceNumber, SuiAddress, dbg_addr,
+        random_object_ref,
     },
     committee::Committee,
     digests::TransactionDigest,
@@ -26,13 +27,12 @@ use crate::{
     messages_checkpoint::{
         CertifiedCheckpointSummary, CheckpointContents, CheckpointSummary, EndOfEpochData,
     },
-    object::{MoveObject, Object, Owner, GAS_VALUE_FOR_TESTING},
+    object::{GAS_VALUE_FOR_TESTING, MoveObject, Object, Owner},
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     transaction::{
-        EndOfEpochTransactionKind, ObjectArg, SenderSignedData, Transaction, TransactionData,
-        TransactionKind,
+        EndOfEpochTransactionKind, ObjectArg, SenderSignedData, SharedObjectMutability,
+        Transaction, TransactionData, TransactionKind,
     },
-    SUI_SYSTEM_ADDRESS,
 };
 
 /// A builder for creating test checkpoint data.
@@ -109,6 +109,24 @@ impl TransactionBuilder {
             frozen_objects: BTreeSet::new(),
             shared_inputs: BTreeMap::new(),
             events: None,
+        }
+    }
+}
+
+pub struct AdvanceEpochConfig {
+    pub safe_mode: bool,
+    pub protocol_version: ProtocolVersion,
+    pub output_objects: Vec<Object>,
+    pub epoch_commitments: Vec<CheckpointCommitment>,
+}
+
+impl Default for AdvanceEpochConfig {
+    fn default() -> Self {
+        Self {
+            safe_mode: false,
+            protocol_version: ProtocolVersion::MAX,
+            output_objects: vec![],
+            epoch_commitments: vec![],
         }
     }
 }
@@ -458,7 +476,11 @@ impl TestCheckpointDataBuilder {
                 .obj(ObjectArg::SharedObject {
                     id: *id,
                     initial_shared_version,
-                    mutable: input.mutable,
+                    mutability: if input.mutable {
+                        SharedObjectMutability::Mutable
+                    } else {
+                        SharedObjectMutability::Immutable
+                    },
                 })
                 .expect("Failed to add shared object input");
         }
@@ -595,6 +617,7 @@ impl TestCheckpointDataBuilder {
             None,
             self.checkpoint_builder.timestamp_ms,
             vec![],
+            Vec::new(),
         );
         let (committee, keys) = Committee::new_simple_test_committee();
         let checkpoint_cert = CertifiedCheckpointSummary::new_from_keypairs_for_testing(
@@ -610,20 +633,19 @@ impl TestCheckpointDataBuilder {
         }
     }
 
-    /// Like `advance_epoch_and_protocol_upgrade`, but default the protocol version to the maximum.
-    pub fn advance_epoch(&mut self, safe_mode: bool) -> CheckpointData {
-        self.advance_epoch_and_protocol_upgrade(safe_mode, ProtocolVersion::MAX)
-    }
-
     /// Creates a transaction that advances the epoch, adds it to the checkpoint, and then builds
     /// the checkpoint. This increments the stored checkpoint sequence number and epoch. If
     /// `safe_mode` is true, the epoch end transaction will not include the `SystemEpochInfoEvent`.
     /// The `protocol_version` is used to set the protocol that we are going to follow in the
     /// subsequent epoch.
-    pub fn advance_epoch_and_protocol_upgrade(
+    pub fn advance_epoch(
         &mut self,
-        safe_mode: bool,
-        protocol_version: ProtocolVersion,
+        AdvanceEpochConfig {
+            safe_mode,
+            protocol_version,
+            output_objects,
+            epoch_commitments,
+        }: AdvanceEpochConfig,
     ) -> CheckpointData {
         let (committee, _) = Committee::new_simple_test_committee();
         let tx_kind = EndOfEpochTransactionKind::new_change_epoch(
@@ -682,7 +704,7 @@ impl TestCheckpointDataBuilder {
                 effects: Default::default(),
                 events: transaction_events,
                 input_objects: vec![],
-                output_objects: vec![],
+                output_objects,
             });
 
         // Call build_checkpoint() to finalize the checkpoint and then populate the checkpoint with
@@ -691,7 +713,7 @@ impl TestCheckpointDataBuilder {
         let end_of_epoch_data = EndOfEpochData {
             next_epoch_committee: committee.voting_rights.clone(),
             next_epoch_protocol_version: protocol_version,
-            epoch_commitments: vec![],
+            epoch_commitments,
         };
         checkpoint.checkpoint_summary.end_of_epoch_data = Some(end_of_epoch_data);
         self.checkpoint_builder.epoch += 1;
@@ -714,7 +736,7 @@ impl TestCheckpointDataBuilder {
 
     /// Add a shared input to the transaction, being accessed from the currently recorded live
     /// version.
-    fn access_shared_object(mut self, object_idx: u64, mutable: bool) -> Self {
+    fn access_shared_object(mut self, object_idx: u64, mutability: bool) -> Self {
         let tx_builder = self.checkpoint_builder.next_transaction.as_mut().unwrap();
         let object_id = Self::derive_object_id(object_idx);
         let object = self
@@ -722,9 +744,13 @@ impl TestCheckpointDataBuilder {
             .get(&object_id)
             .cloned()
             .expect("Accessing a shared object that doesn't exist");
-        tx_builder
-            .shared_inputs
-            .insert(object_id, Shared { mutable, object });
+        tx_builder.shared_inputs.insert(
+            object_id,
+            Shared {
+                mutable: mutability,
+                object,
+            },
+        );
         self
     }
 }
@@ -803,19 +829,21 @@ mod tests {
         let created_obj_id = TestCheckpointDataBuilder::derive_object_id(0);
 
         // Verify the newly created object appears in output objects
-        assert!(tx
-            .output_objects
-            .iter()
-            .any(|obj| obj.id() == created_obj_id));
+        assert!(
+            tx.output_objects
+                .iter()
+                .any(|obj| obj.id() == created_obj_id)
+        );
 
         // Verify effects show object creation
-        assert!(tx
-            .effects
-            .created()
-            .iter()
-            .any(|((id, ..), owner)| *id == created_obj_id
-                && owner.get_owner_address().unwrap()
-                    == TestCheckpointDataBuilder::derive_address(0)));
+        assert!(
+            tx.effects
+                .created()
+                .iter()
+                .any(|((id, ..), owner)| *id == created_obj_id
+                    && owner.get_owner_address().unwrap()
+                        == TestCheckpointDataBuilder::derive_address(0))
+        );
     }
 
     #[test]
@@ -837,11 +865,12 @@ mod tests {
         assert!(tx.output_objects.iter().any(|obj| obj.id() == obj_id));
 
         // Verify effects show object mutation
-        assert!(tx
-            .effects
-            .mutated()
-            .iter()
-            .any(|((id, ..), _)| *id == obj_id));
+        assert!(
+            tx.effects
+                .mutated()
+                .iter()
+                .any(|((id, ..), _)| *id == obj_id)
+        );
     }
 
     #[test]
@@ -897,11 +926,12 @@ mod tests {
         assert!(tx.output_objects.iter().any(|obj| obj.id() == obj_id));
 
         // Verify effects show object unwrapping
-        assert!(tx
-            .effects
-            .unwrapped()
-            .iter()
-            .any(|((id, ..), _)| *id == obj_id));
+        assert!(
+            tx.effects
+                .unwrapped()
+                .iter()
+                .any(|((id, ..), _)| *id == obj_id)
+        );
     }
 
     #[test]
@@ -923,13 +953,14 @@ mod tests {
         assert!(tx.output_objects.iter().any(|obj| obj.id() == obj_id));
 
         // Verify effects show object transfer
-        assert!(tx
-            .effects
-            .mutated()
-            .iter()
-            .any(|((id, ..), owner)| *id == obj_id
-                && owner.get_owner_address().unwrap()
-                    == TestCheckpointDataBuilder::derive_address(1)));
+        assert!(
+            tx.effects
+                .mutated()
+                .iter()
+                .any(|((id, ..), owner)| *id == obj_id
+                    && owner.get_owner_address().unwrap()
+                        == TestCheckpointDataBuilder::derive_address(1))
+        );
     }
 
     #[test]
@@ -944,10 +975,11 @@ mod tests {
         let obj_id = TestCheckpointDataBuilder::derive_object_id(0);
 
         // Verify object appears in output objects and is shared
-        assert!(tx
-            .output_objects
-            .iter()
-            .any(|obj| obj.id() == obj_id && obj.owner().is_shared()));
+        assert!(
+            tx.output_objects
+                .iter()
+                .any(|obj| obj.id() == obj_id && obj.owner().is_shared())
+        );
     }
 
     #[test]
@@ -965,10 +997,11 @@ mod tests {
         let obj_id = TestCheckpointDataBuilder::derive_object_id(0);
 
         // Verify object appears in output objects and is immutable
-        assert!(tx
-            .output_objects
-            .iter()
-            .any(|obj| obj.id() == obj_id && obj.owner().is_immutable()));
+        assert!(
+            tx.output_objects
+                .iter()
+                .any(|obj| obj.id() == obj_id && obj.owner().is_immutable())
+        );
     }
 
     #[test]
@@ -1063,20 +1096,21 @@ mod tests {
         let tx = &checkpoint.transactions[0];
 
         // Verify the transaction has a move call matching the arguments provided.
-        assert!(tx
-            .transaction
-            .transaction_data()
-            .kind()
-            .iter_commands()
-            .any(|cmd| {
-                cmd == &Command::MoveCall(Box::new(ProgrammableMoveCall {
-                    package: ObjectID::ZERO,
-                    module: "test".to_string(),
-                    function: "test".to_string(),
-                    type_arguments: vec![],
-                    arguments: vec![],
-                }))
-            }));
+        assert!(
+            tx.transaction
+                .transaction_data()
+                .kind()
+                .iter_commands()
+                .any(|cmd| {
+                    cmd == &Command::MoveCall(Box::new(ProgrammableMoveCall {
+                        package: ObjectID::ZERO,
+                        module: "test".to_string(),
+                        function: "test".to_string(),
+                        type_arguments: vec![],
+                        arguments: vec![],
+                    }))
+                })
+        );
     }
 
     #[test]

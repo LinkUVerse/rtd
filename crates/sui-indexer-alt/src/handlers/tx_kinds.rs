@@ -8,7 +8,7 @@ use anyhow::Result;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
 use sui_indexer_alt_framework::{
-    pipeline::{concurrent::Handler, Processor},
+    pipeline::{Processor, concurrent::Handler},
     postgres::{Connection, Db},
     types::full_checkpoint_content::CheckpointData,
 };
@@ -18,15 +18,17 @@ use sui_indexer_alt_schema::{
 };
 
 use crate::handlers::cp_sequence_numbers::tx_interval;
+use async_trait::async_trait;
 
 pub(crate) struct TxKinds;
 
+#[async_trait]
 impl Processor for TxKinds {
     const NAME: &'static str = "tx_kinds";
 
     type Value = StoredTxKind;
 
-    fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
+    async fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
         let CheckpointData {
             transactions,
             checkpoint_summary,
@@ -54,7 +56,7 @@ impl Processor for TxKinds {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Handler for TxKinds {
     type Store = Db;
 
@@ -91,7 +93,7 @@ mod tests {
     use super::*;
     use diesel_async::RunQueryDsl;
     use sui_indexer_alt_framework::{
-        types::test_checkpoint_data_builder::TestCheckpointDataBuilder, Indexer,
+        Indexer, types::test_checkpoint_data_builder::TestCheckpointDataBuilder,
     };
     use sui_indexer_alt_schema::MIGRATIONS;
 
@@ -128,17 +130,17 @@ mod tests {
         let mut builder = TestCheckpointDataBuilder::new(0);
         builder = builder.start_transaction(0).finish_transaction();
         let checkpoint = Arc::new(builder.build_checkpoint());
-        let values = TxKinds.process(&checkpoint).unwrap();
+        let values = TxKinds.process(&checkpoint).await.unwrap();
         TxKinds::commit(&values, &mut conn).await.unwrap();
-        let values = CpSequenceNumbers.process(&checkpoint).unwrap();
+        let values = CpSequenceNumbers.process(&checkpoint).await.unwrap();
         CpSequenceNumbers::commit(&values, &mut conn).await.unwrap();
 
         builder = builder.start_transaction(0).finish_transaction();
         builder = builder.start_transaction(1).finish_transaction();
         let checkpoint = Arc::new(builder.build_checkpoint());
-        let values = TxKinds.process(&checkpoint).unwrap();
+        let values = TxKinds.process(&checkpoint).await.unwrap();
         TxKinds::commit(&values, &mut conn).await.unwrap();
-        let values = CpSequenceNumbers.process(&checkpoint).unwrap();
+        let values = CpSequenceNumbers.process(&checkpoint).await.unwrap();
         CpSequenceNumbers::commit(&values, &mut conn).await.unwrap();
 
         builder = builder.start_transaction(0).finish_transaction();
@@ -146,9 +148,9 @@ mod tests {
         builder = builder.start_transaction(2).finish_transaction();
         builder = builder.start_transaction(3).finish_transaction();
         let checkpoint = Arc::new(builder.build_checkpoint());
-        let values = TxKinds.process(&checkpoint).unwrap();
+        let values = TxKinds.process(&checkpoint).await.unwrap();
         TxKinds::commit(&values, &mut conn).await.unwrap();
-        let values = CpSequenceNumbers.process(&checkpoint).unwrap();
+        let values = CpSequenceNumbers.process(&checkpoint).await.unwrap();
         CpSequenceNumbers::commit(&values, &mut conn).await.unwrap();
 
         let fetched_results = get_all_tx_kinds(&mut conn).await.unwrap();

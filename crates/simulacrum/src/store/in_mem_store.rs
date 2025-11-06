@@ -6,10 +6,8 @@ use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
 use std::collections::{BTreeMap, HashMap};
 use sui_config::genesis;
-use sui_types::base_types::VersionNumber;
-use sui_types::storage::{
-    get_module, load_package_object_from_object_store, ConfigStore, PackageObject,
-};
+use sui_types::error::SuiErrorKind;
+use sui_types::storage::{PackageObject, get_module, load_package_object_from_object_store};
 use sui_types::{
     base_types::{AuthorityName, ObjectID, SequenceNumber, SuiAddress},
     committee::{Committee, EpochId},
@@ -242,18 +240,20 @@ impl ChildObjectResolver for InMemoryStore {
 
         let parent = *parent;
         if child_object.owner != Owner::ObjectOwner(parent.into()) {
-            return Err(SuiError::InvalidChildObjectAccess {
+            return Err(SuiErrorKind::InvalidChildObjectAccess {
                 object: *child,
                 given_parent: parent,
                 actual_owner: child_object.owner.clone(),
-            });
+            }
+            .into());
         }
 
         if child_object.version() > child_version_upper_bound {
-            return Err(SuiError::UnsupportedFeatureError {
+            return Err(SuiErrorKind::UnsupportedFeatureError {
                 error: "TODO InMemoryStorage::read_child_object does not yet support bounded reads"
                     .to_owned(),
-            });
+            }
+            .into());
         }
 
         Ok(Some(child_object))
@@ -279,18 +279,6 @@ impl ChildObjectResolver for InMemoryStore {
             return Ok(None);
         }
         Ok(Some(recv_object))
-    }
-}
-
-impl ConfigStore for InMemoryStore {
-    fn get_current_epoch_stable_sequence_number(
-        &self,
-        _object_id: &ObjectID,
-        _epoch_id: EpochId,
-    ) -> Option<VersionNumber> {
-        unimplemented!(
-            "TODO InMemoryStorage::get_current_epoch_stable_sequence_number is not yet supported",
-        )
     }
 }
 

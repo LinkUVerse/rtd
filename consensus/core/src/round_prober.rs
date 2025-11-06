@@ -18,6 +18,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use consensus_types::block::Round;
 use futures::stream::{FuturesUnordered, StreamExt as _};
 use mysten_common::sync::notify_once::NotifyOnce;
 use mysten_metrics::monitored_scope;
@@ -25,8 +26,8 @@ use parking_lot::RwLock;
 use tokio::{task::JoinHandle, time::MissedTickBehavior};
 
 use crate::{
-    context::Context, core_thread::CoreThreadDispatcher, dag_state::DagState,
-    network::NetworkClient, round_tracker::PeerRoundTracker, BlockAPI as _, Round,
+    BlockAPI as _, context::Context, core_thread::CoreThreadDispatcher, dag_state::DagState,
+    network::NetworkClient, round_tracker::PeerRoundTracker,
 };
 
 // Handle to control the RoundProber loop and read latest round gaps.
@@ -39,10 +40,10 @@ impl RoundProberHandle {
     pub(crate) async fn stop(self) {
         let _ = self.shutdown_notify.notify();
         // Do not abort prober task, which waits for requests to be cancelled.
-        if let Err(e) = self.prober_task.await {
-            if e.is_panic() {
-                std::panic::resume_unwind(e.into_panic());
-            }
+        if let Err(e) = self.prober_task.await
+            && e.is_panic()
+        {
+            std::panic::resume_unwind(e.into_panic());
         }
     }
 }
@@ -219,10 +220,11 @@ mod test {
     use async_trait::async_trait;
     use bytes::Bytes;
     use consensus_config::AuthorityIndex;
+    use consensus_types::block::{BlockRef, Round};
     use parking_lot::RwLock;
 
     use crate::{
-        block::BlockRef,
+        TestBlock, VerifiedBlock,
         commit::{CertifiedCommits, CommitRange},
         context::Context,
         core_thread::{CoreError, CoreThreadDispatcher},
@@ -232,7 +234,6 @@ mod test {
         round_prober::RoundProber,
         round_tracker::PeerRoundTracker,
         storage::mem_store::MemStore,
-        Round, TestBlock, VerifiedBlock,
     };
 
     struct FakeThreadDispatcher {

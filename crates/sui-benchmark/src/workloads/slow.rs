@@ -2,28 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{
-    workload::{Workload, WorkloadBuilder, MAX_GAS_FOR_TESTING},
     WorkloadBuilderInfo, WorkloadParams,
+    workload::{MAX_GAS_FOR_TESTING, Workload, WorkloadBuilder},
 };
+use crate::ProgrammableTransactionBuilder;
 use crate::drivers::Interval;
 use crate::in_memory_wallet::InMemoryWallet;
 use crate::system_state_observer::{SystemState, SystemStateObserver};
 use crate::workloads::benchmark_move_base_dir;
 use crate::workloads::payload::Payload;
-use crate::workloads::{workload::ExpectedFailureType, Gas, GasCoinConfig};
-use crate::ProgrammableTransactionBuilder;
+use crate::workloads::{Gas, GasCoinConfig, workload::ExpectedFailureType};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use move_core_types::identifier::Identifier;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use sui_test_transaction_builder::TestTransactionBuilder;
-use sui_types::transaction::ObjectArg;
+use sui_types::transaction::{ObjectArg, SharedObjectMutability};
+use sui_types::{
+    SUI_CLOCK_OBJECT_ID, SUI_CLOCK_OBJECT_SHARED_VERSION,
+    base_types::{ObjectRef, random_object_ref},
+};
 use sui_types::{base_types::ObjectID, object::Owner};
 use sui_types::{base_types::SuiAddress, crypto::get_key_pair, transaction::Transaction};
-use sui_types::{
-    base_types::{random_object_ref, ObjectRef},
-    SUI_CLOCK_OBJECT_ID, SUI_CLOCK_OBJECT_SHARED_VERSION,
-};
 
 #[derive(Debug)]
 pub struct SlowTestPayload {
@@ -71,13 +71,15 @@ impl SlowTestPayload {
             .reference_gas_price;
 
         let mut builder = ProgrammableTransactionBuilder::new();
-        let args = vec![builder
-            .obj(ObjectArg::SharedObject {
-                id: SUI_CLOCK_OBJECT_ID,
-                initial_shared_version: SUI_CLOCK_OBJECT_SHARED_VERSION,
-                mutable: false,
-            })
-            .unwrap()];
+        let args = vec![
+            builder
+                .obj(ObjectArg::SharedObject {
+                    id: SUI_CLOCK_OBJECT_ID,
+                    initial_shared_version: SUI_CLOCK_OBJECT_SHARED_VERSION,
+                    mutability: SharedObjectMutability::Immutable,
+                })
+                .unwrap(),
+        ];
         builder.programmable_move_call(
             self.package_id,
             Identifier::new("slow").unwrap(),
@@ -91,7 +93,7 @@ impl SlowTestPayload {
             .obj(ObjectArg::SharedObject {
                 id: self.shared_object_ref.0,
                 initial_shared_version: self.shared_object_ref.1,
-                mutable: true,
+                mutability: SharedObjectMutability::Mutable,
             })
             .unwrap();
 
@@ -214,7 +216,8 @@ impl Workload<dyn Payload> for SlowWorkload {
         let transaction = TestTransactionBuilder::new(gas.1, gas.0, reference_gas_price)
             .publish(path)
             .build_and_sign(gas.2.as_ref());
-        let effects = proxy.execute_transaction_block(transaction).await.unwrap();
+        let (_, execution_result) = proxy.execute_transaction_block(transaction).await;
+        let effects = execution_result.unwrap();
         let created = effects.created();
         // should only create the package object, upgrade cap, shared obj.
         assert_eq!(created.len() as u64, 3);
@@ -224,19 +227,27 @@ impl Workload<dyn Payload> for SlowWorkload {
             .unwrap();
 
         for o in &created {
-            let obj = proxy.get_object(o.0 .0).await.unwrap();
-            if let Some(tag) = obj.data.struct_tag() {
-                if tag.to_string().contains("::slow::Obj") {
-                    self.shared_obj_ref = o.0;
-                    break;
+            let obj = loop {
+                match proxy.get_object(o.0.0).await {
+                    Ok(obj) => break obj,
+                    Err(e) => {
+                        tracing::debug!("Failed to get object {}: {}", o.0.0, e);
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
                 }
+            };
+            if let Some(tag) = obj.data.struct_tag()
+                && tag.to_string().contains("::slow::Obj")
+            {
+                self.shared_obj_ref = o.0;
+                break;
             }
         }
         assert!(
             self.shared_obj_ref.0 != ObjectID::ZERO,
             "Dynamic field parent must be created"
         );
-        self.package_id = package_obj.0 .0;
+        self.package_id = package_obj.0.0;
     }
 
     async fn make_test_payloads(
@@ -259,5 +270,9 @@ impl Workload<dyn Payload> for SlowWorkload {
             .into_iter()
             .map(|b| Box::<dyn Payload>::from(Box::new(b)))
             .collect()
+    }
+
+    fn name(&self) -> &str {
+        "Slow"
     }
 }

@@ -22,16 +22,19 @@ use futures::StreamExt;
 use mysten_common::{debug_fatal, fatal};
 use parking_lot::Mutex;
 use std::{sync::Arc, time::Instant};
+use sui_types::SUI_ACCUMULATOR_ROOT_OBJECT_ID;
+use sui_types::base_types::SequenceNumber;
 use sui_types::crypto::RandomnessRound;
 use sui_types::inner_temporary_store::PackageStoreWithFallback;
 use sui_types::messages_checkpoint::{CheckpointContents, CheckpointSequenceNumber};
-use sui_types::transaction::{TransactionDataAPI, TransactionKey, TransactionKind};
+use sui_types::transaction::{TransactionDataAPI, TransactionKind};
 
 use sui_config::node::{CheckpointExecutorConfig, RunWithRange};
 use sui_macros::fail_point;
 use sui_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use sui_types::executable_transaction::VerifiedExecutableTransaction;
-use sui_types::full_checkpoint_content::CheckpointData;
+use sui_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use sui_types::full_checkpoint_content::Checkpoint;
 use sui_types::global_state_hash::GlobalStateHash;
 use sui_types::message_envelope::Message;
 use sui_types::{
@@ -44,8 +47,9 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::backpressure::BackpressureManager;
-use crate::authority::AuthorityState;
-use crate::execution_scheduler::{ExecutionSchedulerAPI, ExecutionSchedulerWrapper};
+use crate::authority::{AuthorityState, ExecutionEnv};
+use crate::execution_scheduler::ExecutionScheduler;
+use crate::execution_scheduler::execution_scheduler_impl::BarrierDependencyBuilder;
 use crate::global_state_hasher::GlobalStateHasher;
 use crate::{
     checkpoints::CheckpointStore,
@@ -56,7 +60,7 @@ mod data_ingestion_handler;
 pub mod metrics;
 pub(crate) mod utils;
 
-use data_ingestion_handler::{load_checkpoint_data, store_checkpoint_locally};
+use data_ingestion_handler::{load_checkpoint, store_checkpoint_locally};
 use metrics::CheckpointExecutorMetrics;
 use utils::*;
 
@@ -79,13 +83,73 @@ pub(crate) struct CheckpointTransactionData {
     pub transactions: Vec<VerifiedExecutableTransaction>,
     pub effects: Vec<TransactionEffects>,
     pub executed_fx_digests: Vec<Option<TransactionEffectsDigest>>,
+    /// The accumulator versions for the transactions in the checkpoint.
+    /// None only if accumulator is not enabled (either all Some, or all None).
+    /// This information is needed for object balance withdraw processing.
+    /// The vector should be 1:1 with the transactions in the checkpoint.
+    pub accumulator_versions: Vec<Option<SequenceNumber>>,
 }
 
+impl CheckpointTransactionData {
+    pub fn new(
+        transactions: Vec<VerifiedExecutableTransaction>,
+        effects: Vec<TransactionEffects>,
+        executed_fx_digests: Vec<Option<TransactionEffectsDigest>>,
+    ) -> Self {
+        assert_eq!(transactions.len(), effects.len());
+        assert_eq!(transactions.len(), executed_fx_digests.len());
+        let mut accumulator_versions = vec![None; transactions.len()];
+        let mut next_update_index = 0;
+        for (idx, efx) in effects.iter().enumerate() {
+            // Only barrier settlement transactions mutate the accumulator root object.
+            // This filtering detects whether this transaction is a barrier settlement transaction.
+            // And if so we get the old version of the accumulator root object.
+            // Transactions prior to the barrier settlement transaction reads this accumulator version.
+            let acc_version = efx.object_changes().into_iter().find_map(|change| {
+                if change.id == SUI_ACCUMULATOR_ROOT_OBJECT_ID {
+                    change.input_version
+                } else {
+                    None
+                }
+            });
+            if let Some(acc_version) = acc_version {
+                // Set version for transactions between [next_update_index, idx] inclusive.
+                for slot in accumulator_versions
+                    .iter_mut()
+                    .take(idx + 1)
+                    .skip(next_update_index)
+                {
+                    *slot = Some(acc_version);
+                }
+                next_update_index = idx + 1;
+            }
+        }
+        // Either accumulator is not enabled, then next_update_index == 0;
+        // or the last transaction is the barrier settlement transaction, and next_update_index == transactions.len();
+        // or the last transaction is the end of epoch transaction, and next_update_index == transactions.len() - 1.
+        assert!(
+            next_update_index == 0
+                || next_update_index == transactions.len()
+                || (next_update_index == transactions.len() - 1
+                    && transactions
+                        .last()
+                        .unwrap()
+                        .transaction_data()
+                        .is_end_of_epoch_tx())
+        );
+        Self {
+            transactions,
+            effects,
+            executed_fx_digests,
+            accumulator_versions,
+        }
+    }
+}
 pub(crate) struct CheckpointExecutionState {
     pub data: CheckpointExecutionData,
 
     state_hasher: Option<GlobalStateHash>,
-    full_data: Option<CheckpointData>,
+    full_data: Option<Checkpoint>,
 }
 
 impl CheckpointExecutionState {
@@ -123,13 +187,13 @@ pub struct CheckpointExecutor {
     checkpoint_store: Arc<CheckpointStore>,
     object_cache_reader: Arc<dyn ObjectCacheRead>,
     transaction_cache_reader: Arc<dyn TransactionCacheRead>,
-    execution_scheduler: Arc<ExecutionSchedulerWrapper>,
+    execution_scheduler: Arc<ExecutionScheduler>,
     global_state_hasher: Arc<GlobalStateHasher>,
     backpressure_manager: Arc<BackpressureManager>,
     config: CheckpointExecutorConfig,
     metrics: Arc<CheckpointExecutorMetrics>,
     tps_estimator: Mutex<TPSEstimator>,
-    subscription_service_checkpoint_sender: Option<tokio::sync::mpsc::Sender<CheckpointData>>,
+    subscription_service_checkpoint_sender: Option<tokio::sync::mpsc::Sender<Checkpoint>>,
 }
 
 impl CheckpointExecutor {
@@ -141,7 +205,7 @@ impl CheckpointExecutor {
         backpressure_manager: Arc<BackpressureManager>,
         config: CheckpointExecutorConfig,
         metrics: Arc<CheckpointExecutorMetrics>,
-        subscription_service_checkpoint_sender: Option<tokio::sync::mpsc::Sender<CheckpointData>>,
+        subscription_service_checkpoint_sender: Option<tokio::sync::mpsc::Sender<Checkpoint>>,
     ) -> Self {
         Self {
             epoch_store,
@@ -188,15 +252,14 @@ impl CheckpointExecutor {
             .get_highest_executed_checkpoint()
             .unwrap();
 
-        if let Some(highest_executed) = &highest_executed {
-            if self.epoch_store.epoch() == highest_executed.epoch()
-                && highest_executed.is_last_checkpoint_of_epoch()
-            {
-                // We can arrive at this point if we bump the highest_executed_checkpoint watermark, and then
-                // crash before completing reconfiguration.
-                info!(seq = ?highest_executed.sequence_number, "final checkpoint of epoch has already been executed");
-                return None;
-            }
+        if let Some(highest_executed) = &highest_executed
+            && self.epoch_store.epoch() == highest_executed.epoch()
+            && highest_executed.is_last_checkpoint_of_epoch()
+        {
+            // We can arrive at this point if we bump the highest_executed_checkpoint watermark, and then
+            // crash before completing reconfiguration.
+            info!(seq = ?highest_executed.sequence_number, "final checkpoint of epoch has already been executed");
+            return None;
         }
 
         Some(
@@ -307,7 +370,9 @@ impl CheckpointExecutor {
                 "CheckpointExecutor::wait_for_previous_checkpoints",
             );
 
-            info!("Reached end of epoch checkpoint, waiting for all previous checkpoints to be executed");
+            info!(
+                "Reached end of epoch checkpoint, waiting for all previous checkpoints to be executed"
+            );
             self.checkpoint_store
                 .notify_read_executed_checkpoint(sequence_number - 1)
                 .await;
@@ -375,34 +440,15 @@ impl CheckpointExecutor {
             &ckpt_state.data.checkpoint_contents,
         );
 
-        if self.state.is_fullnode(&self.epoch_store) {
-            let epoch = ckpt_state.data.checkpoint.epoch;
-            // Remove version assignments on fullnodes after checkpoint execution.
-            // On validators, version assignments are removed when consensus output is committed.
-            // We cannot remove here on validators because checkpoint execution can run ahead of
-            // consensus, which would then re-insert version assignments.
-            self.epoch_store.remove_shared_version_assignments(
-                randomness_rounds
-                    .iter()
-                    .map(|round| TransactionKey::RandomnessRound(epoch, *round)),
-            );
-
-            self.epoch_store.remove_shared_version_assignments(
-                ckpt_state
-                    .data
-                    .tx_digests
-                    .iter()
-                    .copied()
-                    .map(TransactionKey::Digest),
-            );
-        }
-
         // Once the checkpoint is finalized, we know that any randomness contained in this checkpoint has
         // been successfully included in a checkpoint certified by quorum of validators.
         // (RandomnessManager/RandomnessReporter is only present on validators.)
         if let Some(randomness_reporter) = self.epoch_store.randomness_reporter() {
             for round in randomness_rounds {
-                debug!(?round, "notifying RandomnessReporter that randomness update was executed in checkpoint");
+                debug!(
+                    ?round,
+                    "notifying RandomnessReporter that randomness update was executed in checkpoint"
+                );
                 randomness_reporter
                     .notify_randomness_in_checkpoint(round)
                     .expect("epoch cannot have ended");
@@ -545,11 +591,11 @@ impl CheckpointExecutor {
         finish_stage!(pipeline_handle, ExecuteTransactions);
 
         {
-            let _metrics_scope = mysten_metrics::monitored_scope(
-                "CheckpointExecutor::notify_read_executed_effects_digests",
-            );
             self.transaction_cache_reader
-                .notify_read_executed_effects_digests(&unexecuted_tx_digests)
+                .notify_read_executed_effects_digests(
+                    "CheckpointExecutor::notify_read_executed_effects_digests",
+                    &unexecuted_tx_digests,
+                )
                 .await;
         }
 
@@ -621,12 +667,12 @@ impl CheckpointExecutor {
         &self,
         ckpt_data: &CheckpointExecutionData,
         tx_data: &CheckpointTransactionData,
-    ) -> Option<CheckpointData> {
+    ) -> Option<Checkpoint> {
         if !self.checkpoint_data_enabled() {
             return None;
         }
 
-        let checkpoint_data = load_checkpoint_data(
+        let checkpoint = load_checkpoint(
             ckpt_data,
             tx_data,
             self.state.get_object_store(),
@@ -635,6 +681,7 @@ impl CheckpointExecutor {
         .expect("failed to load checkpoint data");
 
         if self.state.rpc_index.is_some() || self.config.data_ingestion_dir.is_some() {
+            let checkpoint_data = checkpoint.clone().into();
             // Index the checkpoint. this is done out of order and is not written and committed to the
             // DB until later (committing must be done in-order)
             if let Some(rpc_index) = &self.state.rpc_index {
@@ -654,7 +701,7 @@ impl CheckpointExecutor {
             }
         }
 
-        Some(checkpoint_data)
+        Some(checkpoint)
     }
 
     // Load all required transaction and effects data for the checkpoint.
@@ -719,11 +766,7 @@ impl CheckpointExecutor {
                     tx_digests,
                     fx_digests,
                 }),
-                CheckpointTransactionData {
-                    transactions,
-                    effects,
-                    executed_fx_digests,
-                },
+                CheckpointTransactionData::new(transactions, effects, executed_fx_digests),
             )
         } else {
             // load items one-by-one
@@ -769,11 +812,7 @@ impl CheckpointExecutor {
                     tx_digests,
                     fx_digests,
                 }),
-                CheckpointTransactionData {
-                    transactions,
-                    effects,
-                    executed_fx_digests,
-                },
+                CheckpointTransactionData::new(transactions, effects, executed_fx_digests),
             )
         }
     }
@@ -785,51 +824,75 @@ impl CheckpointExecutor {
         ckpt_state: &CheckpointExecutionState,
         tx_data: &CheckpointTransactionData,
     ) -> Vec<TransactionDigest> {
-        // Find unexecuted transactions and their expected effects digests
-        let (unexecuted_tx_digests, unexecuted_txns, unexecuted_effects): (Vec<_>, Vec<_>, Vec<_>) =
-            itertools::multiunzip(
-                itertools::izip!(
-                    tx_data.transactions.iter(),
-                    ckpt_state.data.tx_digests.iter(),
-                    ckpt_state.data.fx_digests.iter(),
-                    tx_data.effects.iter(),
-                    tx_data.executed_fx_digests.iter()
-                )
-                .filter_map(
-                    |(txn, tx_digest, expected_fx_digest, effects, executed_fx_digest)| {
-                        if let Some(executed_fx_digest) = executed_fx_digest {
-                            assert_not_forked(
-                                &ckpt_state.data.checkpoint,
-                                tx_digest,
-                                expected_fx_digest,
-                                executed_fx_digest,
-                                &*self.transaction_cache_reader,
-                            );
-                            None
-                        } else if txn.transaction_data().is_end_of_epoch_tx() {
-                            None
-                        } else {
-                            Some((tx_digest, (txn.clone(), *expected_fx_digest), effects))
-                        }
-                    },
-                ),
-            );
+        let mut barrier_deps_builder = BarrierDependencyBuilder::new();
 
-        for ((tx, _), effects) in itertools::izip!(unexecuted_txns.iter(), unexecuted_effects) {
-            if tx.contains_shared_object() {
-                self.epoch_store
-                    .acquire_shared_version_assignments_from_effects(
-                        tx,
-                        effects,
-                        &*self.object_cache_reader,
-                    )
-                    .expect("failed to acquire shared version assignments");
-            }
-        }
+        // Find unexecuted transactions and their expected effects digests
+        let (unexecuted_tx_digests, unexecuted_txns): (Vec<_>, Vec<_>) = itertools::multiunzip(
+            itertools::izip!(
+                tx_data.transactions.iter(),
+                ckpt_state.data.tx_digests.iter(),
+                ckpt_state.data.fx_digests.iter(),
+                tx_data.effects.iter(),
+                tx_data.executed_fx_digests.iter(),
+                tx_data.accumulator_versions.iter()
+            )
+            .filter_map(
+                |(
+                    txn,
+                    tx_digest,
+                    expected_fx_digest,
+                    effects,
+                    executed_fx_digest,
+                    accumulator_version,
+                )| {
+                    let barrier_deps =
+                        barrier_deps_builder.process_tx(*tx_digest, txn.transaction_data());
+
+                    if let Some(executed_fx_digest) = executed_fx_digest {
+                        assert_not_forked(
+                            &ckpt_state.data.checkpoint,
+                            tx_digest,
+                            expected_fx_digest,
+                            executed_fx_digest,
+                            &*self.transaction_cache_reader,
+                        );
+                        None
+                    } else if txn.transaction_data().is_end_of_epoch_tx() {
+                        None
+                    } else {
+                        let assigned_versions = self
+                            .epoch_store
+                            .acquire_shared_version_assignments_from_effects(
+                                txn,
+                                effects,
+                                *accumulator_version,
+                                &*self.object_cache_reader,
+                            )
+                            .expect("failed to acquire shared version assignments");
+
+                        let mut env = ExecutionEnv::new()
+                            .with_assigned_versions(assigned_versions)
+                            .with_expected_effects_digest(*expected_fx_digest)
+                            .with_barrier_dependencies(barrier_deps);
+
+                        // Check if the expected effects indicate insufficient balance
+                        if let ExecutionStatus::Failure {
+                            error: ExecutionFailureStatus::InsufficientBalanceForWithdraw,
+                            ..
+                        } = effects.status()
+                        {
+                            env = env.with_insufficient_balance();
+                        }
+
+                        Some((tx_digest, (txn.clone(), env)))
+                    }
+                },
+            ),
+        );
 
         // Enqueue unexecuted transactions with their expected effects digests
         self.execution_scheduler
-            .enqueue_with_expected_effects_digest(unexecuted_txns, &self.epoch_store);
+            .enqueue_transactions(unexecuted_txns, &self.epoch_store);
 
         unexecuted_tx_digests
     }
@@ -865,27 +928,37 @@ impl CheckpointExecutor {
         //         );
         //     }
 
-        self.epoch_store
+        let assigned_versions = self
+            .epoch_store
             .acquire_shared_version_assignments_from_effects(
                 change_epoch_tx,
                 change_epoch_fx,
+                None,
                 self.object_cache_reader.as_ref(),
             )
             .expect("Acquiring shared version assignments for change_epoch tx cannot fail");
 
         info!(
-            "scheduling change epoch txn with digest: {:?}, expected effects digest: {:?}",
+            "scheduling change epoch txn with digest: {:?}, expected effects digest: {:?}, assigned versions: {:?}",
             change_epoch_tx.digest(),
-            change_epoch_fx.digest()
+            change_epoch_fx.digest(),
+            assigned_versions
         );
-        self.execution_scheduler
-            .enqueue_with_expected_effects_digest(
-                vec![(change_epoch_tx.clone(), change_epoch_fx.digest())],
-                &self.epoch_store,
-            );
+        self.execution_scheduler.enqueue_transactions(
+            vec![(
+                change_epoch_tx.clone(),
+                ExecutionEnv::new()
+                    .with_assigned_versions(assigned_versions)
+                    .with_expected_effects_digest(change_epoch_fx.digest()),
+            )],
+            &self.epoch_store,
+        );
 
         self.transaction_cache_reader
-            .notify_read_executed_effects_digests(&[*change_epoch_tx.digest()])
+            .notify_read_executed_effects_digests(
+                "CheckpointExecutor::notify_read_advance_epoch_tx",
+                &[*change_epoch_tx.digest()],
+            )
             .await;
     }
 
@@ -904,7 +977,7 @@ impl CheckpointExecutor {
         } else {
             assert_eq!(seq, 0);
         }
-        if seq % CHECKPOINT_PROGRESS_LOG_COUNT_INTERVAL == 0 {
+        if seq.is_multiple_of(CHECKPOINT_PROGRESS_LOG_COUNT_INTERVAL) {
             info!("Finished syncing and executing checkpoint {}", seq);
         }
 
@@ -958,18 +1031,18 @@ impl CheckpointExecutor {
     #[instrument(level = "info", skip_all)]
     async fn commit_index_updates_and_enqueue_to_subscription_service(
         &self,
-        checkpoint: CheckpointData,
+        checkpoint: Checkpoint,
     ) {
         if let Some(rpc_index) = &self.state.rpc_index {
             rpc_index
-                .commit_update_for_checkpoint(checkpoint.checkpoint_summary.sequence_number)
+                .commit_update_for_checkpoint(checkpoint.summary.sequence_number)
                 .expect("failed to update rpc_indexes");
         }
 
-        if let Some(sender) = &self.subscription_service_checkpoint_sender {
-            if let Err(e) = sender.send(checkpoint).await {
-                warn!("unable to send checkpoint to subscription service: {e}");
-            }
+        if let Some(sender) = &self.subscription_service_checkpoint_sender
+            && let Err(e) = sender.send(checkpoint).await
+        {
+            warn!("unable to send checkpoint to subscription service: {e}");
         }
     }
 

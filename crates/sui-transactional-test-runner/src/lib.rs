@@ -4,23 +4,27 @@
 //! This module contains the transactional test runner instantiation for the Sui adapter
 
 pub mod args;
+pub mod cursor;
 pub mod offchain_state;
 pub mod programmable_transaction_test_parser;
 mod simulator_persisted_store;
 pub mod test_adapter;
 
+use move_command_line_common::testing::InstaOptions;
 pub use move_transactional_test_runner::framework::{
     create_adapter, run_tasks_with_adapter, run_test_impl,
 };
 use rand::rngs::StdRng;
+use simulacrum::AdvanceEpochConfig;
 use simulacrum::Simulacrum;
 use simulacrum::SimulatorStore;
 use simulator_persisted_store::PersistedStore;
 use std::path::Path;
 use std::sync::Arc;
+use sui_core::authority::AuthorityState;
 use sui_core::authority::authority_per_epoch_store::CertLockGuard;
 use sui_core::authority::authority_test_utils::send_and_confirm_transaction_with_execution_error;
-use sui_core::authority::AuthorityState;
+use sui_core::authority::shared_object_version_manager::AssignedVersions;
 use sui_json_rpc::authority_state::StateRead;
 use sui_json_rpc_types::EventFilter;
 use sui_json_rpc_types::{DevInspectResults, DryRunTransactionBlockResponse};
@@ -33,7 +37,7 @@ use sui_types::digests::TransactionDigest;
 use sui_types::effects::TransactionEffects;
 use sui_types::effects::TransactionEvents;
 use sui_types::error::ExecutionError;
-use sui_types::error::SuiError;
+use sui_types::error::SuiErrorKind;
 use sui_types::error::SuiResult;
 use sui_types::event::Event;
 use sui_types::executable_transaction::{ExecutableTransaction, VerifiedExecutableTransaction};
@@ -42,21 +46,42 @@ use sui_types::messages_checkpoint::VerifiedCheckpoint;
 use sui_types::object::Object;
 use sui_types::storage::ObjectStore;
 use sui_types::storage::ReadStore;
-use sui_types::sui_system_state::epoch_start_sui_system_state::EpochStartSystemStateTrait;
 use sui_types::sui_system_state::SuiSystemStateTrait;
+use sui_types::sui_system_state::epoch_start_sui_system_state::EpochStartSystemStateTrait;
 use sui_types::transaction::Transaction;
-use sui_types::transaction::TransactionDataAPI;
 use sui_types::transaction::TransactionKind;
 use sui_types::transaction::{InputObjects, TransactionData};
-use test_adapter::{SuiTestAdapter, PRE_COMPILED};
+use test_adapter::{PRE_COMPILED, SuiTestAdapter};
+
+use crate::test_adapter::ENABLE_PTB_V2;
 
 #[cfg_attr(not(msim), tokio::main)]
 #[cfg_attr(msim, msim::main)]
 pub async fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    ENABLE_PTB_V2.set(false).unwrap();
     let (_guard, _filter_handle) = telemetry_subscribers::TelemetryConfig::new()
         .with_env()
         .init();
-    run_test_impl::<SuiTestAdapter>(path, Some(std::sync::Arc::new(PRE_COMPILED.clone()))).await?;
+    run_test_impl::<SuiTestAdapter>(path, Some(std::sync::Arc::new(PRE_COMPILED.clone())), None)
+        .await?;
+    Ok(())
+}
+
+#[cfg_attr(not(msim), tokio::main)]
+#[cfg_attr(msim, msim::main)]
+pub async fn run_ptb_v2_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    ENABLE_PTB_V2.set(true).unwrap();
+    let (_guard, _filter_handle) = telemetry_subscribers::TelemetryConfig::new()
+        .with_env()
+        .init();
+    let mut options = InstaOptions::new();
+    options.suffix("v2");
+    run_test_impl::<SuiTestAdapter>(
+        path,
+        Some(std::sync::Arc::new(PRE_COMPILED.clone())),
+        Some(options),
+    )
+    .await?;
     Ok(())
 }
 
@@ -75,7 +100,11 @@ pub trait TransactionalAdapter: Send + Sync + ReadStore {
         transaction: Transaction,
     ) -> anyhow::Result<(TransactionEffects, Option<ExecutionError>)>;
 
-    async fn read_input_objects(&self, transaction: Transaction) -> SuiResult<InputObjects>;
+    async fn read_input_objects(
+        &self,
+        transaction: Transaction,
+        assigned_versions: AssignedVersions,
+    ) -> SuiResult<InputObjects>;
 
     fn prepare_txn(
         &self,
@@ -90,7 +119,7 @@ pub trait TransactionalAdapter: Send + Sync + ReadStore {
         duration: std::time::Duration,
     ) -> anyhow::Result<TransactionEffects>;
 
-    async fn advance_epoch(&mut self, create_random_state: bool) -> anyhow::Result<()>;
+    async fn advance_epoch(&mut self, config: AdvanceEpochConfig) -> anyhow::Result<()>;
 
     async fn request_gas(
         &mut self,
@@ -118,6 +147,8 @@ pub trait TransactionalAdapter: Send + Sync + ReadStore {
     ) -> SuiResult<Vec<Event>>;
 
     async fn get_active_validator_addresses(&self) -> SuiResult<Vec<SuiAddress>>;
+
+    fn get_object(&self, object_id: &ObjectID) -> Option<Object>;
 }
 
 #[async_trait::async_trait]
@@ -126,23 +157,23 @@ impl TransactionalAdapter for ValidatorWithFullnode {
         &mut self,
         transaction: Transaction,
     ) -> anyhow::Result<(TransactionEffects, Option<ExecutionError>)> {
-        let with_shared = transaction
-            .data()
-            .intent_message()
-            .value
-            .contains_shared_object();
+        let is_consensus_tx = transaction.is_consensus_tx();
         let (_, effects, execution_error) = send_and_confirm_transaction_with_execution_error(
             &self.validator,
             Some(&self.fullnode),
             transaction,
-            with_shared,
+            is_consensus_tx,
             false,
         )
         .await?;
         Ok((effects.into_data(), execution_error))
     }
 
-    async fn read_input_objects(&self, transaction: Transaction) -> SuiResult<InputObjects> {
+    async fn read_input_objects(
+        &self,
+        transaction: Transaction,
+        assigned_versions: AssignedVersions,
+    ) -> SuiResult<InputObjects> {
         let tx = VerifiedExecutableTransaction::new_unchecked(
             ExecutableTransaction::new_from_data_and_sig(
                 transaction.data().clone(),
@@ -154,6 +185,7 @@ impl TransactionalAdapter for ValidatorWithFullnode {
         self.validator.read_objects_for_execution(
             &CertLockGuard::dummy_for_tests(),
             &tx,
+            assigned_versions,
             &epoch_store,
         )
     }
@@ -240,7 +272,7 @@ impl TransactionalAdapter for ValidatorWithFullnode {
         unimplemented!("advance_clock not supported")
     }
 
-    async fn advance_epoch(&mut self, _create_random_state: bool) -> anyhow::Result<()> {
+    async fn advance_epoch(&mut self, _config: AdvanceEpochConfig) -> anyhow::Result<()> {
         self.validator.reconfigure_for_testing().await;
         self.fullnode.reconfigure_for_testing().await;
         Ok(())
@@ -259,7 +291,7 @@ impl TransactionalAdapter for ValidatorWithFullnode {
             .fullnode
             .get_system_state()
             .map_err(|e| {
-                SuiError::SuiSystemStateReadError(format!(
+                SuiErrorKind::SuiSystemStateReadError(format!(
                     "Failed to get system state from fullnode: {}",
                     e
                 ))
@@ -269,6 +301,10 @@ impl TransactionalAdapter for ValidatorWithFullnode {
             .iter()
             .map(|x| x.sui_address)
             .collect::<Vec<_>>())
+    }
+
+    fn get_object(&self, object_id: &ObjectID) -> Option<Object> {
+        self.validator.get_object_store().get_object(object_id)
     }
 }
 
@@ -375,6 +411,13 @@ impl ReadStore for ValidatorWithFullnode {
     ) -> Option<sui_types::messages_checkpoint::FullCheckpointContents> {
         todo!()
     }
+
+    fn get_unchanged_loaded_runtime_objects(
+        &self,
+        _digest: &TransactionDigest,
+    ) -> Option<Vec<sui_types::storage::ObjectKey>> {
+        None
+    }
 }
 
 impl ObjectStore for ValidatorWithFullnode {
@@ -398,7 +441,11 @@ impl TransactionalAdapter for Simulacrum<StdRng, PersistedStore> {
         Ok(self.execute_transaction(transaction)?)
     }
 
-    async fn read_input_objects(&self, _transaction: Transaction) -> SuiResult<InputObjects> {
+    async fn read_input_objects(
+        &self,
+        _transaction: Transaction,
+        _assigned_versions: AssignedVersions,
+    ) -> SuiResult<InputObjects> {
         unimplemented!("read_input_objects not supported in simulator mode")
     }
 
@@ -450,8 +497,8 @@ impl TransactionalAdapter for Simulacrum<StdRng, PersistedStore> {
         Ok(self.advance_clock(duration))
     }
 
-    async fn advance_epoch(&mut self, create_random_state: bool) -> anyhow::Result<()> {
-        self.advance_epoch(create_random_state);
+    async fn advance_epoch(&mut self, config: AdvanceEpochConfig) -> anyhow::Result<()> {
+        self.advance_epoch(config);
         Ok(())
     }
 
@@ -467,5 +514,9 @@ impl TransactionalAdapter for Simulacrum<StdRng, PersistedStore> {
         // TODO: this is a hack to get the validator addresses. Currently using start state
         //       but we should have a better way to get this information after reconfig
         Ok(self.epoch_start_state().get_validator_addresses())
+    }
+
+    fn get_object(&self, object_id: &ObjectID) -> Option<Object> {
+        ObjectStore::get_object(&self.store(), object_id)
     }
 }

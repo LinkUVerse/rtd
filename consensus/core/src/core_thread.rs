@@ -5,14 +5,15 @@ use std::{
     collections::BTreeSet,
     fmt::Debug,
     sync::{
-        atomic::{AtomicU32, Ordering},
         Arc,
+        atomic::{AtomicU32, Ordering},
     },
 };
 
 use async_trait::async_trait;
+use consensus_types::block::{BlockRef, Round};
 use mysten_metrics::{
-    monitored_mpsc::{channel, Receiver, Sender, WeakSender},
+    monitored_mpsc::{Receiver, Sender, WeakSender, channel},
     monitored_scope, spawn_logged_monitored_task,
 };
 use parking_lot::RwLock;
@@ -21,14 +22,14 @@ use tokio::sync::{oneshot, watch};
 use tracing::warn;
 
 use crate::{
-    block::{BlockRef, Round, VerifiedBlock},
+    BlockAPI as _,
+    block::VerifiedBlock,
     commit::CertifiedCommits,
     context::Context,
     core::Core,
     core_thread::CoreError::Shutdown,
     dag_state::DagState,
     error::{ConsensusError, ConsensusResult},
-    BlockAPI as _,
 };
 
 const CORE_THREAD_COMMANDS_CHANNEL_SIZE: usize = 2000;
@@ -61,7 +62,7 @@ pub enum CoreError {
 #[async_trait]
 pub trait CoreThreadDispatcher: Sync + Send + 'static {
     async fn add_blocks(&self, blocks: Vec<VerifiedBlock>)
-        -> Result<BTreeSet<BlockRef>, CoreError>;
+    -> Result<BTreeSet<BlockRef>, CoreError>;
 
     async fn check_block_refs(
         &self,
@@ -208,15 +209,14 @@ impl ChannelCoreThreadDispatcher {
         // Initialize highest received rounds.
         let highest_received_rounds = {
             let dag_state = dag_state.read();
-            let highest_received_rounds = context
+
+            context
                 .committee
                 .authorities()
                 .map(|(index, _)| {
                     AtomicU32::new(dag_state.get_last_block_for_authority(index).round())
                 })
-                .collect();
-
-            highest_received_rounds
+                .collect()
         };
 
         let (sender, receiver) =
@@ -238,10 +238,10 @@ impl ChannelCoreThreadDispatcher {
 
         let join_handle = spawn_logged_monitored_task!(
             async move {
-                if let Err(err) = core_thread.run().await {
-                    if !matches!(err, ConsensusError::Shutdown) {
-                        panic!("Fatal error occurred: {err}");
-                    }
+                if let Err(err) = core_thread.run().await
+                    && !matches!(err, ConsensusError::Shutdown)
+                {
+                    panic!("Fatal error occurred: {err}");
                 }
             },
             "ConsensusCoreThread"
@@ -266,13 +266,13 @@ impl ChannelCoreThreadDispatcher {
 
     async fn send(&self, command: CoreThreadCommand) {
         self.context.metrics.node_metrics.core_lock_enqueued.inc();
-        if let Some(sender) = self.sender.upgrade() {
-            if let Err(err) = sender.send(command).await {
-                warn!(
-                    "Couldn't send command to core thread, probably is shutting down: {}",
-                    err
-                );
-            }
+        if let Some(sender) = self.sender.upgrade()
+            && let Err(err) = sender.send(command).await
+        {
+            warn!(
+                "Couldn't send command to core thread, probably is shutting down: {}",
+                err
+            );
         }
     }
 }
@@ -458,7 +458,9 @@ mod test {
 
     use super::*;
     use crate::{
+        CommitConsumerArgs,
         block_manager::BlockManager,
+        block_verifier::NoopBlockVerifier,
         commit_observer::CommitObserver,
         context::Context,
         core::CoreSignals,
@@ -468,7 +470,6 @@ mod test {
         storage::mem_store::MemStore,
         transaction::{TransactionClient, TransactionConsumer},
         transaction_certifier::TransactionCertifier,
-        CommitConsumer,
     };
 
     #[tokio::test]
@@ -483,11 +484,16 @@ mod test {
         let transaction_consumer = TransactionConsumer::new(tx_receiver, context.clone());
         let (blocks_sender, _blocks_receiver) =
             monitored_mpsc::unbounded_channel("consensus_block_output");
-        let transaction_certifier =
-            TransactionCertifier::new(context.clone(), dag_state.clone(), blocks_sender);
+        let transaction_certifier = TransactionCertifier::new(
+            context.clone(),
+            Arc::new(NoopBlockVerifier {}),
+            dag_state.clone(),
+            blocks_sender,
+        );
         let (signals, signal_receivers) = CoreSignals::new(context.clone());
         let _block_receiver = signal_receivers.block_broadcast_receiver();
-        let (commit_consumer, _commit_receiver, _transaction_receiver) = CommitConsumer::new(0);
+        let (commit_consumer, _commit_receiver, _transaction_receiver) =
+            CommitConsumerArgs::new(0, 0);
         let leader_schedule = Arc::new(LeaderSchedule::from_store(
             context.clone(),
             dag_state.clone(),
@@ -498,7 +504,8 @@ mod test {
             dag_state.clone(),
             transaction_certifier.clone(),
             leader_schedule.clone(),
-        );
+        )
+        .await;
         let leader_schedule = Arc::new(LeaderSchedule::from_store(
             context.clone(),
             dag_state.clone(),

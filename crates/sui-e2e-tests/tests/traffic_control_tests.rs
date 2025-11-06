@@ -10,10 +10,10 @@ use jsonrpsee::{core::client::ClientT, rpc_params};
 use std::fs::File;
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use sui_core::authority_client::make_network_authority_clients_with_network_config;
 use sui_core::authority_client::AuthorityAPI;
+use sui_core::authority_client::make_network_authority_clients_with_network_config;
 use sui_core::traffic_controller::{
-    nodefw_test_server::NodeFwTestServer, TrafficController, TrafficSim,
+    TrafficController, TrafficSim, nodefw_test_server::NodeFwTestServer,
 };
 use sui_json_rpc_types::{
     SuiTransactionBlockEffectsAPI, SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions,
@@ -253,18 +253,18 @@ async fn test_validator_traffic_control_error_blocked() -> Result<(), anyhow::Er
     // it should take no more than 4 requests to be added to the blocklist
     for _ in 0..n {
         let response = auth_client.handle_transaction(tx.clone(), None).await;
-        if let Err(err) = response {
-            if err.to_string().contains("Too many requests") {
-                return Ok(());
-            }
+        if let Err(err) = response
+            && err.to_string().contains("Too many requests")
+        {
+            return Ok(());
         }
     }
     panic!("Expected error policy to trigger within {n} requests");
 }
 
 #[tokio::test]
-async fn test_validator_traffic_control_error_blocked_with_policy_reconfig(
-) -> Result<(), anyhow::Error> {
+async fn test_validator_traffic_control_error_blocked_with_policy_reconfig()
+-> Result<(), anyhow::Error> {
     telemetry_subscribers::init_for_testing();
     let n = 5;
     let policy_config = PolicyConfig {
@@ -322,10 +322,10 @@ async fn test_validator_traffic_control_error_blocked_with_policy_reconfig(
     // If Node and TrafficController has not crashed, blocklist and policy freq state should still
     // be intact. A single additional erroneous request from the client should trigger enforcement.
     let response = auth_client.handle_transaction(tx.clone(), None).await;
-    if let Err(err) = response {
-        if err.to_string().contains("Too many requests") {
-            return Ok(());
-        }
+    if let Err(err) = response
+        && err.to_string().contains("Too many requests")
+    {
+        return Ok(());
     }
     panic!("Expected error policy to trigger on next requests after reconfiguration");
 }
@@ -512,10 +512,10 @@ async fn test_validator_traffic_control_error_delegated() -> Result<(), anyhow::
     // it should take no more than 4 requests to be added to the blocklist
     for _ in 0..n {
         let response = auth_client.handle_transaction(tx.clone(), None).await;
-        if let Err(err) = response {
-            if err.to_string().contains("Too many requests") {
-                return Ok(());
-            }
+        if let Err(err) = response
+            && err.to_string().contains("Too many requests")
+        {
+            return Ok(());
         }
     }
     let fw_blocklist = server.list_addresses_rpc().await;
@@ -866,6 +866,32 @@ async fn assert_traffic_control_ok(mut test_cluster: TestCluster) -> Result<(), 
         .unwrap();
 
     // Test request with ExecuteTransactionRequestType::WaitForEffectsCert
+    // Use the same txn which should return local finalized effects
+    let (tx_bytes, signatures) = txn.to_tx_bytes_and_signatures();
+    let params = rpc_params![
+        tx_bytes,
+        signatures,
+        SuiTransactionBlockResponseOptions::new().with_effects(),
+        ExecuteTransactionRequestType::WaitForEffectsCert
+    ];
+    let response: SuiTransactionBlockResponse = jsonrpc_client
+        .request("sui_executeTransactionBlock", params)
+        .await
+        .unwrap();
+
+    let SuiTransactionBlockResponse {
+        effects,
+        confirmed_local_execution,
+        ..
+    } = response;
+    assert_eq!(effects.unwrap().transaction_digest(), tx_digest);
+    assert!(confirmed_local_execution.unwrap());
+
+    // Test request with ExecuteTransactionRequestType::WaitForEffectsCert
+    // Use a different txn to avoid the case where the txn effects are already cached locally
+    let txn = txns.swap_remove(0);
+    let tx_digest = txn.digest();
+
     let (tx_bytes, signatures) = txn.to_tx_bytes_and_signatures();
     let params = rpc_params![
         tx_bytes,

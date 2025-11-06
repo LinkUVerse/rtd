@@ -1,22 +1,21 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use consensus_config::{Committee, Stake};
-use mysten_common::debug_fatal;
+use consensus_config::Stake;
+use consensus_types::block::{BlockRef, Round, TransactionIndex};
 use mysten_metrics::monitored_mpsc::UnboundedSender;
 use parking_lot::RwLock;
+use tracing::{debug, info};
 
 use crate::{
+    BlockAPI as _, CertifiedBlock, CertifiedBlocksOutput, VerifiedBlock,
     block::{BlockTransactionVotes, GENESIS_ROUND},
     block_verifier::BlockVerifier,
-    commit::CommitAPI,
     context::Context,
     dag_state::DagState,
     stake_aggregator::{QuorumThreshold, StakeAggregator},
-    BlockAPI as _, BlockRef, CertifiedBlock, CertifiedBlocksOutput, CommitIndex, Round,
-    TransactionIndex, VerifiedBlock,
 };
 
 /// TransactionCertifier has the following purposes:
@@ -46,9 +45,11 @@ use crate::{
 /// must also be finalized post consensus commit. The reverse is not true though, because
 /// fastpath execution is only a latency optimization, and not required for correctness.
 #[derive(Clone)]
-pub(crate) struct TransactionCertifier {
+pub struct TransactionCertifier {
     // The state of blocks being voted on and certified.
     certifier_state: Arc<RwLock<CertifierState>>,
+    // Verify transactions during recovery.
+    block_verifier: Arc<dyn BlockVerifier>,
     // The state of the DAG.
     dag_state: Arc<RwLock<DagState>>,
     // An unbounded channel to output certified blocks to Sui consensus block handler.
@@ -56,68 +57,40 @@ pub(crate) struct TransactionCertifier {
 }
 
 impl TransactionCertifier {
-    pub(crate) fn new(
+    pub fn new(
         context: Arc<Context>,
+        block_verifier: Arc<dyn BlockVerifier>,
         dag_state: Arc<RwLock<DagState>>,
         certified_blocks_sender: UnboundedSender<CertifiedBlocksOutput>,
     ) -> Self {
         Self {
             certifier_state: Arc::new(RwLock::new(CertifierState::new(context))),
+            block_verifier,
             dag_state,
             certified_blocks_sender,
         }
     }
 
-    /// Recovers from DB own votes on not-yet-included blocks and peers' reject votes on
-    /// un-finalized transactions.
+    /// Recovers all blocks from DB after the given round.
     ///
-    /// Own votes are not stored persistently, so blocks which have not been included in
-    /// proposed blocks are verified and voted again.
-    ///
-    /// Reject votes for un-finalized transactions need to be recovered from all blocks after
-    /// the GC round of last commit processed by the commit consumer. Without this, during
-    /// transaction finalization of recovered commits, reject votes will be missing for some blocks.
-    pub(crate) fn recover(
-        &self,
-        block_verifier: &impl BlockVerifier,
-        last_processed_commit_index: CommitIndex,
-    ) {
-        let mut certifier_state = self.certifier_state.write();
-        let dag_state = self.dag_state.read();
-        let store = dag_state.store().clone();
+    /// This is useful for initializing the certifier state
+    /// for future commits and block proposals.
+    pub(crate) fn recover_blocks_after_round(&self, after_round: Round) {
+        let context = self.certifier_state.read().context.clone();
+        if !context.protocol_config.mysticeti_fastpath() {
+            info!("Skipping certifier recovery in non-mysticeti fast path mode");
+            return;
+        }
 
-        // Reads the last processed commit to determine where recovery starts. It can be None when
-        // consensus starts in a new epoch.
-        let last_processed_commit = store
-            .scan_commits((last_processed_commit_index..=last_processed_commit_index).into())
-            .unwrap()
-            .pop();
+        let store = self.dag_state.read().store().clone();
 
-        // Recovers the GC round for certifier state.
-        let certifier_gc_round = if let Some(last_processed_commit) = last_processed_commit {
-            dag_state.calculate_gc_round(last_processed_commit.round())
-        } else {
-            GENESIS_ROUND
-        };
-        let dag_state_gc_round = dag_state.gc_round();
-        assert!(
-            certifier_gc_round <= dag_state_gc_round,
-            "Certifier should use an earlier GC round than DagState but {} > {}",
-            certifier_gc_round,
-            dag_state_gc_round
-        );
-        certifier_state.update_gc_round(certifier_gc_round);
-
-        // Starts recovery from the GC round computed from the last processed commit.
-        // All blocks from later commits must have rounds >= recovery_start_round.
-        let recovery_start_round = certifier_gc_round + 1;
-        tracing::info!(
+        let recovery_start_round = after_round + 1;
+        info!(
             "Recovering certifier state from round {}",
             recovery_start_round,
         );
 
-        let authorities = certifier_state
-            .context
+        let authorities = context
             .committee
             .authorities()
             .map(|(index, _)| index)
@@ -126,36 +99,51 @@ impl TransactionCertifier {
             let blocks = store
                 .scan_blocks_by_author(authority_index, recovery_start_round)
                 .unwrap();
-            let voted_blocks = blocks
-                .into_iter()
-                .map(|b| {
-                    if b.round() <= dag_state_gc_round || dag_state.is_hard_linked(&b.reference()) {
-                        // Own votes are unnecessary for blocks already included in own blocks,
-                        // or outside of local DAG GC bound.
-                        (b, vec![])
-                    } else {
-                        // Own votes are needed for blocks not yet included in own blocks. They will be
-                        // added to proposed blocks together.
-                        let reject_transaction_votes = block_verifier
-                            .verify_and_vote(b.signed_block())
-                            .unwrap_or_else(|e| {
-                                panic!("Failed to verify block during recovery: {}", e)
-                            });
-                        (b, reject_transaction_votes)
-                    }
-                })
-                .collect::<Vec<_>>();
-            let certified_blocks = certifier_state.add_voted_blocks(voted_blocks);
-            self.send_certified_blocks(certified_blocks);
+            info!(
+                "Recovering and voting on {} blocks for authority {} {}",
+                blocks.len(),
+                authority_index,
+                context.committee.authority(authority_index).hostname
+            );
+            self.recover_and_vote_on_blocks(blocks);
         }
+    }
+
+    /// Recovers and votes on the given blocks.
+    ///
+    /// Reject votes contained in the input blocks are processed.
+    ///
+    /// Because own votes on blocks are not stored, input blocks are voted on if they can be
+    /// included in a future proposed block.
+    pub(crate) fn recover_and_vote_on_blocks(&self, blocks: Vec<VerifiedBlock>) {
+        let dag_state = self.dag_state.read();
+        let voted_blocks = blocks
+            .into_iter()
+            .map(|b| {
+                if b.round() <= dag_state.gc_round() || dag_state.is_hard_linked(&b.reference()) {
+                    // Voting is unnecessary for blocks already included in own proposed blocks,
+                    // or outside of local DAG GC bound.
+                    (b, vec![])
+                } else {
+                    // Voting is needed for blocks not yet included in own proposed blocks.
+                    // When a block proposal includes the input block, votes on the input block will be added to the proposed block.
+                    let reject_transaction_votes =
+                        self.block_verifier.vote(&b).unwrap_or_else(|e| {
+                            panic!("Failed to vote on block during recovery: {}", e)
+                        });
+                    (b, reject_transaction_votes)
+                }
+            })
+            .collect::<Vec<_>>();
+        self.certifier_state.write().add_voted_blocks(voted_blocks);
+        // Do not send certified blocks to the fastpath output channel during recovery,
+        // because these transactions could have been executed and fastpath latency optimization is
+        // unnecessary for recovered transactions.
     }
 
     /// Stores own reject votes on input blocks, and aggregates reject votes from the input blocks.
     /// Newly certified blocks are sent to the fastpath output channel.
-    pub(crate) fn add_voted_blocks(
-        &self,
-        voted_blocks: Vec<(VerifiedBlock, Vec<TransactionIndex>)>,
-    ) {
+    pub fn add_voted_blocks(&self, voted_blocks: Vec<(VerifiedBlock, Vec<TransactionIndex>)>) {
         let certified_blocks = self.certifier_state.write().add_voted_blocks(voted_blocks);
         self.send_certified_blocks(certified_blocks);
     }
@@ -292,7 +280,7 @@ impl CertifierState {
         reject_txn_votes: Vec<TransactionIndex>,
     ) -> Vec<CertifiedBlock> {
         if voted_block.round() <= self.gc_round {
-            // Ignore the block and own votes, since they are outside of GC bound.
+            // Ignore the block and own votes, since they are outside of certifier GC bound.
             return vec![];
         }
 
@@ -320,6 +308,8 @@ impl CertifierState {
 
         let mut certified_blocks = vec![];
 
+        let now = self.context.clock.timestamp_utc_ms();
+
         // Update reject votes from the input block.
         for block_votes in voted_block.transaction_votes() {
             if block_votes.block_ref.round <= self.gc_round {
@@ -336,19 +326,26 @@ impl CertifierState {
             }
             // Check if the target block is now certified after including the reject votes.
             // NOTE: votes can already exist for the target block and its transactions.
-            if let Some(certified_block) = vote_info.take_certified_output(&self.context.committee)
-            {
+            if let Some(certified_block) = vote_info.take_certified_output(&self.context) {
+                let authority_name = self
+                    .context
+                    .committee
+                    .authority(certified_block.block.author())
+                    .hostname
+                    .clone();
+                self.context
+                    .metrics
+                    .node_metrics
+                    .certifier_block_latency
+                    .with_label_values(&[&authority_name])
+                    .observe(
+                        Duration::from_millis(
+                            now.saturating_sub(certified_block.block.timestamp_ms()),
+                        )
+                        .as_secs_f64(),
+                    );
                 certified_blocks.push(certified_block);
             }
-        }
-
-        if !certified_blocks.is_empty() {
-            self.context
-                .metrics
-                .node_metrics
-                .certifier_output_blocks
-                .with_label_values(&["proposed"])
-                .inc_by(certified_blocks.len() as u64);
         }
 
         certified_blocks
@@ -362,15 +359,32 @@ impl CertifierState {
             // commit finalization, which advances the GC round of the certifier.
             return vec![];
         }
-
-        // Vote entry for the proposed block must exist.
-        assert!(
-            self.votes.contains_key(&proposed_block.reference()),
-            "Proposed block {} not found in certifier state, likely failed to be recovered or gc round is incorrect.",
-            proposed_block.reference()
+        debug!(
+            "Adding proposed block {}; gc round: {}",
+            proposed_block.reference(),
+            self.gc_round
         );
 
+        if !self.votes.contains_key(&proposed_block.reference()) {
+            self.context
+                .metrics
+                .node_metrics
+                .certifier_missing_ancestor_during_certification
+                .with_label_values(&["proposed_block_not_found"])
+                .inc();
+            debug!(
+                "Proposed block {} not found in certifier state. GC round: {}",
+                proposed_block.reference(),
+                self.gc_round,
+            );
+            return vec![];
+        }
+
+        let now = self.context.clock.timestamp_utc_ms();
+
         // Certify transactions based on the accept votes from the proposed block's parents.
+        // Some ancestor blocks may not be found, because either they have been GC'ed due to timing
+        // issues or they were not recovered. It is ok to skip certifying blocks, which are best effort.
         let mut certified_blocks = vec![];
         for voting_ancestor in proposed_block.ancestors() {
             // Votes are limited to 1 round before the proposed block.
@@ -378,7 +392,13 @@ impl CertifierState {
                 continue;
             }
             let Some(voting_info) = self.votes.get(voting_ancestor) else {
-                debug_fatal!(
+                self.context
+                    .metrics
+                    .node_metrics
+                    .certifier_missing_ancestor_during_certification
+                    .with_label_values(&["voting_info_not_found"])
+                    .inc();
+                debug!(
                     "Proposed block {}: voting info not found for ancestor {}",
                     proposed_block.reference(),
                     voting_ancestor
@@ -386,7 +406,13 @@ impl CertifierState {
                 continue;
             };
             let Some(voting_block) = voting_info.block.clone() else {
-                debug_fatal!(
+                self.context
+                    .metrics
+                    .node_metrics
+                    .certifier_missing_ancestor_during_certification
+                    .with_label_values(&["voting_block_not_found"])
+                    .inc();
+                debug!(
                     "Proposed block {}: voting block not found for ancestor {}",
                     proposed_block.reference(),
                     voting_ancestor
@@ -399,19 +425,54 @@ impl CertifierState {
                     continue;
                 }
                 let Some(target_vote_info) = self.votes.get_mut(target_ancestor) else {
-                    debug_fatal!("voting info not found for ancestor {}", target_ancestor);
+                    self.context
+                        .metrics
+                        .node_metrics
+                        .certifier_missing_ancestor_during_certification
+                        .with_label_values(&["target_vote_info_not_found"])
+                        .inc();
+                    debug!(
+                        "Proposed block {}: target voting info not found for ancestor {}",
+                        proposed_block.reference(),
+                        target_ancestor
+                    );
                     continue;
                 };
                 target_vote_info
                     .accept_block_votes
                     .add_unique(voting_block.author(), &self.context.committee);
                 // Check if the target block is now certified after including the accept votes.
-                if let Some(certified_block) =
-                    target_vote_info.take_certified_output(&self.context.committee)
+                if let Some(certified_block) = target_vote_info.take_certified_output(&self.context)
                 {
+                    let authority_name = self
+                        .context
+                        .committee
+                        .authority(certified_block.block.author())
+                        .hostname
+                        .clone();
+                    self.context
+                        .metrics
+                        .node_metrics
+                        .certifier_block_latency
+                        .with_label_values(&[&authority_name])
+                        .observe(
+                            Duration::from_millis(
+                                now.saturating_sub(certified_block.block.timestamp_ms()),
+                            )
+                            .as_secs_f64(),
+                        );
                     certified_blocks.push(certified_block);
                 }
             }
+        }
+
+        if !certified_blocks.is_empty() {
+            self.context
+                .metrics
+                .node_metrics
+                .certifier_output_blocks
+                .with_label_values(&["proposed"])
+                .inc_by(certified_blocks.len() as u64);
         }
 
         certified_blocks
@@ -457,7 +518,8 @@ struct VoteInfo {
 impl VoteInfo {
     // If this block can now be certified, returns the output.
     // Otherwise, returns None.
-    fn take_certified_output(&mut self, committee: &Committee) -> Option<CertifiedBlock> {
+    fn take_certified_output(&mut self, context: &Context) -> Option<CertifiedBlock> {
+        let committee = &context.committee;
         if self.is_certified {
             // Skip if already certified.
             return None;
@@ -466,6 +528,9 @@ impl VoteInfo {
             // Skip if the content of the block has not been received.
             return None;
         };
+
+        let peer_hostname = &committee.authority(block.author()).hostname;
+
         if !self.accept_block_votes.reached_threshold(committee) {
             // Skip if the block is not certified.
             return None;
@@ -474,6 +539,12 @@ impl VoteInfo {
         for (idx, reject_txn_votes) in &self.reject_txn_votes {
             // The transaction is voted to be rejected.
             if reject_txn_votes.reached_threshold(committee) {
+                context
+                    .metrics
+                    .node_metrics
+                    .certifier_rejected_transactions
+                    .with_label_values(&[peer_hostname])
+                    .inc();
                 rejected.push(*idx);
                 continue;
             }
@@ -501,6 +572,18 @@ impl VoteInfo {
             }
         }
         // The block is certified.
+        let accepted_txn_count = block.transactions().len().saturating_sub(rejected.len());
+        tracing::trace!(
+            "Certified block {} accepted tx count: {accepted_txn_count} & rejected txn count: {}",
+            block.reference(),
+            rejected.len()
+        );
+        context
+            .metrics
+            .node_metrics
+            .certifier_accepted_transactions
+            .with_label_values(&[peer_hostname])
+            .inc_by(accepted_txn_count as u64);
         self.is_certified = true;
         Some(CertifiedBlock {
             block: block.clone(),
@@ -528,14 +611,15 @@ mod test {
     use rand::seq::SliceRandom as _;
 
     use crate::{
-        block::BlockTransactionVotes, context::Context, test_dag_builder::DagBuilder, TestBlock,
-        Transaction,
+        TestBlock, Transaction, block::BlockTransactionVotes, context::Context,
+        test_dag_builder::DagBuilder,
     };
 
     use super::*;
 
     #[tokio::test]
     async fn test_vote_info_basic() {
+        telemetry_subscribers::init_for_testing();
         let (context, _) = Context::new_for_test(7);
         let committee = &context.committee;
 
@@ -545,7 +629,7 @@ mod test {
             let block = VerifiedBlock::new_for_test(TestBlock::new(1, 1).build());
             vote_info.block = Some(block.clone());
 
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
         }
 
         // Accept votes but not enough.
@@ -559,7 +643,7 @@ mod test {
                     .add_unique(AuthorityIndex::new_for_test(i), committee);
             }
 
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
         }
 
         // Enough accept votes but no block.
@@ -571,7 +655,7 @@ mod test {
                     .add_unique(AuthorityIndex::new_for_test(i), committee);
             }
 
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
         }
 
         // A quorum of accept votes and block exists.
@@ -586,7 +670,7 @@ mod test {
             }
 
             // The block is not certified.
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
 
             // Add 1 more accept vote from a different authority.
             vote_info
@@ -594,17 +678,22 @@ mod test {
                 .add_unique(AuthorityIndex::new_for_test(4), committee);
 
             // The block is now certified.
-            let certified_block = vote_info.take_certified_output(committee).unwrap();
+            let certified_block = vote_info.take_certified_output(&context).unwrap();
             assert_eq!(certified_block.block.reference(), block.reference());
 
             // Certified block cannot be taken again.
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
         }
 
         // A quorum of accept and reject votes.
         {
             let mut vote_info = VoteInfo::default();
-            let block = VerifiedBlock::new_for_test(TestBlock::new(1, 1).build());
+            // Create a block with 7 transactions.
+            let block = VerifiedBlock::new_for_test(
+                TestBlock::new(1, 1)
+                    .set_transactions(vec![Transaction::new(vec![4; 8]); 7])
+                    .build(),
+            );
             vote_info.block = Some(block.clone());
             // Add 5 accept votes which form a quorum.
             for i in 0..5 {
@@ -628,17 +717,22 @@ mod test {
             }
 
             // The block is certified.
-            let certified_block = vote_info.take_certified_output(committee).unwrap();
+            let certified_block = vote_info.take_certified_output(&context).unwrap();
             assert_eq!(certified_block.block.reference(), block.reference());
 
             // Certified block cannot be taken again.
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
         }
 
         // A transaction in the block is neither rejected nor certified.
         {
             let mut vote_info = VoteInfo::default();
-            let block = VerifiedBlock::new_for_test(TestBlock::new(1, 1).build());
+            // Create a block with 6 transactions.
+            let block = VerifiedBlock::new_for_test(
+                TestBlock::new(1, 1)
+                    .set_transactions(vec![Transaction::new(vec![4; 8]); 6])
+                    .build(),
+            );
             vote_info.block = Some(block.clone());
             // Add 5 accept votes which form a quorum.
             for i in 0..5 {
@@ -661,31 +755,31 @@ mod test {
                 }
             }
             // For transaction 6, add 4 reject votes which do not form a quorum.
-            vote_info.reject_txn_votes.insert(6, StakeAggregator::new());
+            vote_info.reject_txn_votes.insert(5, StakeAggregator::new());
             for authority_idx in 0..4 {
                 vote_info
                     .reject_txn_votes
-                    .get_mut(&6)
+                    .get_mut(&5)
                     .unwrap()
                     .add_unique(AuthorityIndex::new_for_test(authority_idx), committee);
             }
 
             // The block is not certified.
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
 
             // Add 1 more accept vote from a different authority for transaction 6.
             vote_info
                 .reject_txn_votes
-                .get_mut(&6)
+                .get_mut(&5)
                 .unwrap()
                 .add_unique(AuthorityIndex::new_for_test(4), committee);
 
             // The block is now certified.
-            let certified_block = vote_info.take_certified_output(committee).unwrap();
+            let certified_block = vote_info.take_certified_output(&context).unwrap();
             assert_eq!(certified_block.block.reference(), block.reference());
 
             // Certified block cannot be taken again.
-            assert!(vote_info.take_certified_output(committee).is_none());
+            assert!(vote_info.take_certified_output(&context).is_none());
         }
     }
 

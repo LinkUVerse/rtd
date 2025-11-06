@@ -22,6 +22,7 @@ import {
     CompoundType,
     IRuntimeRefValue,
     ExecutionResult,
+    ExecutionResultKind,
     IMoveCallStack,
 } from './runtime';
 import { EXT_SUMMARY_FRAME_ID, EXT_EVENT_FRAME_ID } from './trace_utils';
@@ -261,7 +262,7 @@ export class MoveDebugSession extends LoggingDebugSession {
      */
     protected stackTraceRequest(
         response: CustomizedStackTraceResponse,
-        _args: DebugProtocol.StackTraceArguments
+        args: DebugProtocol.StackTraceArguments
     ): void {
         try {
             const stackFrames = [];
@@ -320,8 +321,16 @@ export class MoveDebugSession extends LoggingDebugSession {
                     stackFrames.push(extEventFrame);
                 }
             }
+            const stackFramesReversed = stackFrames.reverse();
+            const startFrame = args.startFrame ?? 0;
+            const levels = args.levels ?
+                args.levels === 0 ? stackFramesReversed.length : args.levels
+                : stackFramesReversed.length;
+            const endFrame = startFrame + levels;
+            const ideStackFrames = stackFrames.slice(startFrame, endFrame);
+
             response.body = {
-                stackFrames: stackFrames.reverse(),
+                stackFrames: ideStackFrames,
                 totalFrames: stackFrames.length,
                 optimizedLines
             };
@@ -413,7 +422,7 @@ export class MoveDebugSession extends LoggingDebugSession {
             const localScope = new Scope(`locals: ${frame.name}`, localScopeReference, false);
             scopes.push(localScope);
         } else if (frameID === EXT_EVENT_FRAME_ID) {
-            if ('locals' in eventFrame && 'camel_case_name' in eventFrame) {
+            if ('locals' in eventFrame && 'name' in eventFrame) {
                 const localScopeReference =
                     this.variableHandles.create({ locals: eventFrame.locals });
                 const name = eventFrame.name;
@@ -703,7 +712,7 @@ export class MoveDebugSession extends LoggingDebugSession {
         let terminate = false;
         try {
             const executionResult = this.runtime.step(/* next */ true, /* stopAtCloseFrame */ false);
-            terminate = executionResult === ExecutionResult.TraceEnd;
+            terminate = executionResult.kind === ExecutionResultKind.TraceEnd;
         } catch (err) {
             response.success = false;
             response.message = err instanceof Error ? err.message : String(err);
@@ -726,7 +735,7 @@ export class MoveDebugSession extends LoggingDebugSession {
         let terminate = false;
         try {
             const executionResult = this.runtime.step(/* next */ false, /* stopAtCloseFrame */ false);
-            terminate = executionResult === ExecutionResult.TraceEnd;
+            terminate = executionResult.kind === ExecutionResultKind.TraceEnd;
         } catch (err) {
             response.success = false;
             response.message = err instanceof Error ? err.message : String(err);
@@ -749,7 +758,7 @@ export class MoveDebugSession extends LoggingDebugSession {
         let terminate = false;
         try {
             const executionResult = this.runtime.stepOut(/* next */ false);
-            terminate = executionResult === ExecutionResult.TraceEnd;
+            terminate = executionResult.kind === ExecutionResultKind.TraceEnd;
         } catch (err) {
             response.success = false;
             response.message = err instanceof Error ? err.message : String(err);
@@ -772,7 +781,7 @@ export class MoveDebugSession extends LoggingDebugSession {
         let terminate = false;
         try {
             const executionResult = this.runtime.continue();
-            terminate = executionResult === ExecutionResult.TraceEnd;
+            terminate = executionResult.kind === ExecutionResultKind.TraceEnd;
         } catch (err) {
             response.success = false;
             response.message = err instanceof Error ? err.message : String(err);

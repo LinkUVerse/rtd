@@ -7,16 +7,16 @@ use std::{
     time::Instant,
 };
 
+use consensus_types::block::{BlockRef, Round};
 use itertools::Itertools as _;
 use mysten_metrics::monitored_scope;
 use parking_lot::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use crate::{
-    block::{BlockAPI, BlockRef, VerifiedBlock, GENESIS_ROUND},
+    block::{BlockAPI, GENESIS_ROUND, VerifiedBlock},
     context::Context,
     dag_state::DagState,
-    Round,
 };
 
 struct SuspendedBlock {
@@ -113,10 +113,12 @@ impl BlockManager {
         let _s = monitored_scope("BlockManager::try_accept_blocks_internal");
 
         blocks.sort_by_key(|b| b.round());
-        debug!(
-            "Trying to accept blocks: {}",
-            blocks.iter().map(|b| b.reference().to_string()).join(",")
-        );
+        if !blocks.is_empty() {
+            debug!(
+                "Trying to accept blocks: {}",
+                blocks.iter().map(|b| b.reference().to_string()).join(",")
+            );
+        }
 
         let mut accepted_blocks = vec![];
         let mut missing_blocks = BTreeSet::new();
@@ -224,7 +226,7 @@ impl BlockManager {
 
         block_refs.sort_by_key(|b| b.round);
 
-        debug!(
+        trace!(
             "Trying to find blocks: {}",
             block_refs.iter().map(|b| b.to_string()).join(",")
         );
@@ -481,7 +483,10 @@ impl BlockManager {
                 .with_label_values(&[hostname])
                 .inc();
 
-            assert!(!self.suspended_blocks.contains_key(block_ref), "Block should not be suspended, as we are causally GC'ing and no suspended block should exist for a missing ancestor.");
+            assert!(
+                !self.suspended_blocks.contains_key(block_ref),
+                "Block should not be suspended, as we are causally GC'ing and no suspended block should exist for a missing ancestor."
+            );
 
             // Also remove it from the missing list - we don't want to keep looking for it.
             self.missing_blocks.remove(block_ref);
@@ -600,12 +605,14 @@ mod tests {
     use std::{collections::BTreeSet, sync::Arc};
 
     use consensus_config::AuthorityIndex;
+    use consensus_types::block::{BlockDigest, BlockRef, Round};
     use parking_lot::RwLock;
-    use rand::{prelude::StdRng, seq::SliceRandom, SeedableRng};
+    use rand::{SeedableRng, prelude::StdRng, seq::SliceRandom};
     use rstest::rstest;
 
     use crate::{
-        block::{BlockAPI, BlockDigest, BlockRef, VerifiedBlock},
+        CommitDigest,
+        block::{BlockAPI, VerifiedBlock},
         block_manager::BlockManager,
         commit::TrustedCommit,
         context::Context,
@@ -613,7 +620,6 @@ mod tests {
         storage::mem_store::MemStore,
         test_dag_builder::DagBuilder,
         test_dag_parser::parse_dag,
-        CommitDigest, Round,
     };
 
     #[tokio::test]
@@ -1096,9 +1102,11 @@ mod tests {
         let missing_block_refs_from_find =
             block_manager.try_find_blocks(round_2_blocks.iter().map(|b| b.reference()).collect());
         assert_eq!(missing_block_refs_from_find.len(), 10);
-        assert!(missing_block_refs_from_find
-            .iter()
-            .all(|block_ref| block_ref.round == 2));
+        assert!(
+            missing_block_refs_from_find
+                .iter()
+                .all(|block_ref| block_ref.round == 2)
+        );
 
         // Try accept blocks which will cause blocks to be suspended and added to missing
         // in block manager.
@@ -1135,9 +1143,11 @@ mod tests {
         );
 
         assert_eq!(missing_block_refs_from_find.len(), 4);
-        assert!(missing_block_refs_from_find
-            .iter()
-            .all(|block_ref| block_ref.round == 3));
+        assert!(
+            missing_block_refs_from_find
+                .iter()
+                .all(|block_ref| block_ref.round == 3)
+        );
         assert_eq!(
             block_manager.missing_blocks(),
             missing_block_refs_from_accept

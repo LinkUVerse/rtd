@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use sui_bridge::eth_client::EthClient;
-use sui_bridge::metered_eth_provider::{new_metered_eth_provider, MeteredEthHttpProvier};
+use sui_bridge::metered_eth_provider::{MeteredEthHttpProvier, new_metered_eth_provider};
 use sui_bridge::sui_bridge_watchdog::Observable;
 use sui_bridge::sui_client::SuiBridgeClient;
 use sui_bridge::utils::get_eth_contract_addresses;
@@ -27,11 +27,11 @@ use mysten_metrics::start_prometheus_server;
 
 use sui_bridge::metrics::BridgeMetrics;
 use sui_bridge::sui_bridge_watchdog::{
+    BridgeWatchDog,
     eth_bridge_status::EthBridgeStatus,
     eth_vault_balance::{EthereumVaultBalance, VaultAsset},
     metrics::WatchdogMetrics,
     sui_bridge_status::SuiBridgeStatus,
-    BridgeWatchDog,
 };
 use sui_bridge_indexer::config::IndexerConfig;
 use sui_bridge_indexer::metrics::BridgeIndexerMetrics;
@@ -117,8 +117,11 @@ async fn main() -> Result<()> {
     .await?;
     tasks.push(spawn_logged_monitored_task!(eth_sync_indexer.start()));
 
-    let indexer = create_sui_indexer(pool, indexer_meterics, ingestion_metrics, &config).await?;
-    tasks.push(spawn_logged_monitored_task!(indexer.start()));
+    if !config.eth_only {
+        let indexer =
+            create_sui_indexer(pool, indexer_meterics, ingestion_metrics, &config).await?;
+        tasks.push(spawn_logged_monitored_task!(indexer.start()));
+    }
 
     let sui_bridge_client =
         Arc::new(SuiBridgeClient::new(&config.sui_rpc_url, bridge_metrics.clone()).await?);

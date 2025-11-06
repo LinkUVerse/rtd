@@ -697,6 +697,19 @@ public(package) fun pool_exchange_rates(
     validator.get_staking_pool_ref().exchange_rates()
 }
 
+public(package) fun validator_by_pool_id(self: &mut ValidatorSet, pool_id: &ID): &Validator {
+    // If the pool id is recorded in the mapping, then it must be either candidate or active.
+    let validator = if (self.staking_pool_mappings.contains(*pool_id)) {
+        let validator_address = self.staking_pool_mappings[*pool_id];
+        self.get_active_or_pending_or_candidate_validator_ref(validator_address, ANY_VALIDATOR)
+    } else {
+        // otherwise it's inactive
+        self.inactive_validators[*pool_id].load_validator_maybe_upgrade()
+    };
+
+    validator
+}
+
 /// Get the total number of validators in the next epoch.
 public(package) fun next_epoch_validator_count(self: &ValidatorSet): u64 {
     self.active_validators.length() - self.pending_removals.length() + self.pending_active_validators.length()
@@ -1192,7 +1205,7 @@ fun compute_adjusted_reward_distribution(
     let mut adjusted_storage_fund_reward_amounts = vector[];
 
     let length = validators.length();
-    let num_unslashed_validators = length - individual_staking_reward_adjustments.size();
+    let num_unslashed_validators = length - individual_staking_reward_adjustments.length();
 
     length.do!(|i| {
         let validator = &validators[i];
@@ -1371,6 +1384,11 @@ public(package) fun active_validator_addresses(self: &ValidatorSet): vector<addr
 
 macro fun mul_div($a: u64, $b: u64, $c: u64): u64 {
     (($a as u128) * ($b as u128) / ($c as u128)) as u64
+}
+
+#[test_only]
+public(package) fun inactive_validator_by_pool_id(self: &ValidatorSet, pool_id: ID): &Validator {
+    self.inactive_validators[pool_id].get_inner_validator_ref()
 }
 
 #[test_only]

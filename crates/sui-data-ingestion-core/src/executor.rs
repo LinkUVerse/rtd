@@ -1,12 +1,12 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::Worker;
 use crate::progress_store::{
     ExecutorProgress, ProgressStore, ProgressStoreWrapper, ShimProgressStore,
 };
 use crate::reader::CheckpointReader;
 use crate::worker_pool::WorkerPool;
-use crate::Worker;
 use crate::{DataIngestionMetrics, ReaderOptions};
 use anyhow::Result;
 use futures::Future;
@@ -126,11 +126,10 @@ impl<P: ProgressStore> IndexerExecutor<P> {
                         reader_checkpoint_number = seq_number;
                     }
                     self.metrics.data_ingestion_checkpoint.with_label_values(&[&task_name]).set(sequence_number as i64);
-                    if let Some(limit) = upper_limit {
-                        if sequence_number > limit && self.pool_senders.len() == 1 {
+                    if let Some(limit) = upper_limit
+                        && sequence_number > limit && self.pool_senders.len() == 1 {
                             break;
                         }
-                    }
                 }
                 Some(checkpoint) = checkpoint_recv.recv() => {
                     for sender in &self.pool_senders {
@@ -161,6 +160,28 @@ pub async fn setup_single_workflow<W: Worker + 'static>(
     impl Future<Output = Result<ExecutorProgress>>,
     oneshot::Sender<()>,
 )> {
+    setup_single_workflow_with_options(
+        worker,
+        remote_store_url,
+        vec![],
+        initial_checkpoint_number,
+        concurrency,
+        reader_options,
+    )
+    .await
+}
+
+pub async fn setup_single_workflow_with_options<W: Worker + 'static>(
+    worker: W,
+    remote_store_url: String,
+    remote_store_options: Vec<(String, String)>,
+    initial_checkpoint_number: CheckpointSequenceNumber,
+    concurrency: usize,
+    reader_options: Option<ReaderOptions>,
+) -> Result<(
+    impl Future<Output = Result<ExecutorProgress>>,
+    oneshot::Sender<()>,
+)> {
     let (exit_sender, exit_receiver) = oneshot::channel();
     let metrics = DataIngestionMetrics::new(&Registry::new());
     let progress_store = ShimProgressStore(initial_checkpoint_number);
@@ -171,7 +192,7 @@ pub async fn setup_single_workflow<W: Worker + 'static>(
         executor.run(
             tempfile::tempdir()?.keep(),
             Some(remote_store_url),
-            vec![],
+            remote_store_options,
             reader_options.unwrap_or_default(),
             exit_receiver,
         ),

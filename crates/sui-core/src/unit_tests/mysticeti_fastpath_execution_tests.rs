@@ -12,8 +12,9 @@ use sui_types::object::Object;
 use sui_types::transaction::VerifiedTransaction;
 use sui_types::utils::to_sender_signed_transaction;
 
+use crate::authority::ExecutionEnv;
 use crate::authority::test_authority_builder::TestAuthorityBuilder;
-use crate::execution_scheduler::{ExecutionSchedulerAPI, SchedulingSource};
+use crate::execution_scheduler::SchedulingSource;
 use crate::transaction_outputs::TransactionOutputs;
 
 #[tokio::test]
@@ -32,9 +33,12 @@ async fn test_notify_read_fastpath_transaction_outputs() {
 
     let tx_outputs = Arc::new(TransactionOutputs::new_for_testing(tx, effects));
 
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_none()
+    );
 
     // Write fastpath transaction outputs
     state
@@ -42,13 +46,18 @@ async fn test_notify_read_fastpath_transaction_outputs() {
         .write_fastpath_transaction_outputs(tx_outputs);
 
     // Verify that the transaction is marked as fastpath executed
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_some()
+    );
 
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(&tx_digest));
+    assert!(
+        !state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 
     // Test notification and reading of fastpath transaction outputs
     let outputs = state
@@ -62,12 +71,12 @@ async fn test_notify_read_fastpath_transaction_outputs() {
     let epoch_id = 0;
     state
         .get_cache_writer()
-        .flush_fastpath_transaction_outputs(tx_digest, epoch_id);
+        .write_transaction_outputs(epoch_id, outputs[0].clone());
 
     // Verify that the outputs are now available through regular transaction outputs
     let effects_digests = state
         .get_transaction_cache_reader()
-        .notify_read_executed_effects_digests(&[tx_digest])
+        .notify_read_executed_effects_digests("", &[tx_digest])
         .await;
     assert_eq!(effects_digests.len(), 1);
     assert_eq!(effects_digests[0], effects_digest);
@@ -99,33 +108,36 @@ async fn test_fast_path_execution() {
     let (effects, _) = state
         .try_execute_immediately(
             &cert,
-            None,
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::MysticetiFastPath),
             &state.epoch_store_for_testing(),
-            SchedulingSource::MysticetiFastPath,
         )
         .await
         .unwrap();
 
     let tx_digest = *cert.digest();
-    assert!(state
+    let outputs = state
         .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
+        .get_mysticeti_fastpath_outputs(&tx_digest)
+        .unwrap();
+    assert_eq!(outputs.effects.digest(), effects.digest());
 
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(&tx_digest));
+    assert!(
+        !state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 
     let state_clone = state.clone();
     let notify_read_task = tokio::spawn(async move {
         state_clone
             .get_transaction_cache_reader()
-            .notify_read_executed_effects_digests(&[tx_digest])
+            .notify_read_executed_effects_digests("", &[tx_digest])
             .await
     });
 
     state
         .get_cache_writer()
-        .flush_fastpath_transaction_outputs(tx_digest, 0);
+        .write_transaction_outputs(0, outputs);
 
     let effects_digests = notify_read_task.await.unwrap();
     assert_eq!(effects_digests.len(), 1);
@@ -157,31 +169,53 @@ async fn test_fast_path_then_consensus_execution() {
     let (effects1, _) = state
         .try_execute_immediately(
             &cert,
-            None,
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::MysticetiFastPath),
             &state.epoch_store_for_testing(),
-            SchedulingSource::MysticetiFastPath,
         )
         .await
         .unwrap();
+
+    let tx_digest = *cert.digest();
+    assert!(
+        !state
+            .epoch_store_for_testing()
+            .transactions_executed_in_cur_epoch(&[tx_digest])
+            .unwrap()
+            .pop()
+            .unwrap()
+    );
 
     let (effects2, _) = state
         .try_execute_immediately(
             &cert,
-            None,
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::NonFastPath),
             &state.epoch_store_for_testing(),
-            SchedulingSource::NonFastPath,
         )
         .await
         .unwrap();
 
+    // Verify that the transaction is marked as executed
+    assert!(
+        state
+            .epoch_store_for_testing()
+            .transactions_executed_in_cur_epoch(&[tx_digest])
+            .unwrap()
+            .pop()
+            .unwrap()
+    );
+
     assert_eq!(effects1.digest(), effects2.digest());
-    let tx_digest = cert.digest();
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(tx_digest));
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_none()
+    );
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 }
 
 #[tokio::test]
@@ -209,9 +243,8 @@ async fn test_consensus_then_fast_path_execution() {
     let (effects1, _) = state
         .try_execute_immediately(
             &cert,
-            None,
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::NonFastPath),
             &state.epoch_store_for_testing(),
-            SchedulingSource::NonFastPath,
         )
         .await
         .unwrap();
@@ -219,21 +252,25 @@ async fn test_consensus_then_fast_path_execution() {
     let (effects2, _) = state
         .try_execute_immediately(
             &cert,
-            None,
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::MysticetiFastPath),
             &state.epoch_store_for_testing(),
-            SchedulingSource::MysticetiFastPath,
         )
         .await
         .unwrap();
 
     assert_eq!(effects1.digest(), effects2.digest());
     let tx_digest = cert.digest();
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(tx_digest));
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(tx_digest)
+            .is_none()
+    );
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(tx_digest)
+    );
 }
 
 #[tokio::test]
@@ -261,10 +298,12 @@ async fn test_fast_path_then_consensus_execution_e2e() {
     );
 
     let tx_digest = *cert.digest();
-    state.execution_scheduler().enqueue(
-        vec![cert.clone()],
+    state.execution_scheduler().enqueue_transactions(
+        vec![(
+            cert.clone(),
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::MysticetiFastPath),
+        )],
         &state.epoch_store_for_testing(),
-        SchedulingSource::MysticetiFastPath,
     );
 
     let outputs = tokio::time::timeout(
@@ -279,24 +318,31 @@ async fn test_fast_path_then_consensus_execution_e2e() {
     .unwrap();
     assert_eq!(outputs.transaction.digest(), &tx_digest);
 
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(&tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_some()
+    );
+    assert!(
+        !state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 
-    state.execution_scheduler().enqueue(
-        vec![cert.clone()],
+    state.execution_scheduler().enqueue_transactions(
+        vec![(
+            cert.clone(),
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::NonFastPath),
+        )],
         &state.epoch_store_for_testing(),
-        SchedulingSource::NonFastPath,
     );
 
     let effects_digest = tokio::time::timeout(
         std::time::Duration::from_secs(5),
         state
             .get_transaction_cache_reader()
-            .notify_read_executed_effects_digests(&[tx_digest]),
+            .notify_read_executed_effects_digests("", &[tx_digest]),
     )
     .await
     .unwrap()
@@ -304,12 +350,17 @@ async fn test_fast_path_then_consensus_execution_e2e() {
     .unwrap();
 
     assert_eq!(effects_digest, outputs.effects.digest());
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(&tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_none()
+    );
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 }
 
 #[tokio::test]
@@ -335,34 +386,48 @@ async fn test_consensus_then_fast_path_execution_e2e() {
     );
 
     let tx_digest = *cert.digest();
-    state.execution_scheduler().enqueue(
-        vec![cert.clone()],
+    state.execution_scheduler().enqueue_transactions(
+        vec![(
+            cert.clone(),
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::NonFastPath),
+        )],
         &state.epoch_store_for_testing(),
-        SchedulingSource::NonFastPath,
     );
 
     state
         .get_transaction_cache_reader()
-        .notify_read_executed_effects_digests(&[tx_digest])
+        .notify_read_executed_effects_digests("", &[tx_digest])
         .await;
 
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(&tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_none()
+    );
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 
-    state.execution_scheduler().enqueue(
-        vec![cert.clone()],
+    state.execution_scheduler().enqueue_transactions(
+        vec![(
+            cert.clone(),
+            ExecutionEnv::new().with_scheduling_source(SchedulingSource::MysticetiFastPath),
+        )],
         &state.epoch_store_for_testing(),
-        SchedulingSource::MysticetiFastPath,
     );
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    assert!(!state
-        .get_transaction_cache_reader()
-        .is_tx_fastpath_executed(&tx_digest));
-    assert!(state
-        .get_transaction_cache_reader()
-        .is_tx_already_executed(&tx_digest));
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .get_mysticeti_fastpath_outputs(&tx_digest)
+            .is_none()
+    );
+    assert!(
+        state
+            .get_transaction_cache_reader()
+            .is_tx_already_executed(&tx_digest)
+    );
 }

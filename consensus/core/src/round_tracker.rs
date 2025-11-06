@@ -11,14 +11,13 @@
 use std::sync::Arc;
 
 use consensus_config::{AuthorityIndex, Committee};
+use consensus_types::block::Round;
 use itertools::Itertools;
-
 use tracing::{debug, trace};
 
 use crate::{
     block::{BlockAPI, ExtendedBlock},
     context::Context,
-    Round,
 };
 
 /// A [`QuorumRound`] is a round range [low, high]. It is computed from
@@ -274,12 +273,13 @@ mod test {
     use std::sync::Arc;
 
     use consensus_config::AuthorityIndex;
+    use consensus_types::block::{BlockDigest, BlockRef};
 
     use crate::{
-        block::{BlockDigest, ExtendedBlock},
+        TestBlock, VerifiedBlock,
+        block::ExtendedBlock,
         context::Context,
-        round_tracker::{compute_quorum_round, PeerRoundTracker},
-        BlockRef, TestBlock, VerifiedBlock,
+        round_tracker::{PeerRoundTracker, compute_quorum_round},
     };
 
     #[tokio::test]

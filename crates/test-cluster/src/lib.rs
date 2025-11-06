@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use futures::{future::join_all, StreamExt};
+use futures::{StreamExt, future::join_all};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use mysten_common::fatal;
 use rand::{distributions::*, rngs::OsRng, seq::SliceRandom};
@@ -30,7 +30,7 @@ use sui_sdk::wallet_context::WalletContext;
 use sui_sdk::{SuiClient, SuiClientBuilder};
 use sui_swarm::memory::{Swarm, SwarmBuilder};
 use sui_swarm_config::genesis_config::{
-    AccountConfig, GenesisConfig, ValidatorGenesisConfig, DEFAULT_GAS_AMOUNT,
+    AccountConfig, DEFAULT_GAS_AMOUNT, GenesisConfig, ValidatorGenesisConfig,
 };
 use sui_swarm_config::network_config::NetworkConfig;
 use sui_swarm_config::network_config_builder::{
@@ -45,19 +45,20 @@ use sui_types::committee::CommitteeTrait;
 use sui_types::committee::{Committee, EpochId};
 use sui_types::crypto::KeypairTraits;
 use sui_types::crypto::SuiKeyPair;
+use sui_types::digests::ChainIdentifier;
 use sui_types::effects::{TransactionEffects, TransactionEvents};
 use sui_types::error::SuiResult;
 use sui_types::message_envelope::Message;
 use sui_types::object::Object;
-use sui_types::sui_system_state::epoch_start_sui_system_state::EpochStartSystemStateTrait;
 use sui_types::sui_system_state::SuiSystemState;
 use sui_types::sui_system_state::SuiSystemStateTrait;
+use sui_types::sui_system_state::epoch_start_sui_system_state::EpochStartSystemStateTrait;
 use sui_types::supported_protocol_versions::SupportedProtocolVersions;
 use sui_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 use sui_types::transaction::{
     CertifiedTransaction, Transaction, TransactionData, TransactionDataAPI, TransactionKind,
 };
-use tokio::time::{timeout, Instant};
+use tokio::time::{Instant, timeout};
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::{error, info};
 
@@ -243,6 +244,10 @@ impl TestCluster {
             .get_reference_gas_price()
             .await
             .expect("failed to get reference gas price")
+    }
+
+    pub fn get_chain_identifier(&self) -> ChainIdentifier {
+        ChainIdentifier::from(*self.swarm.config().genesis.checkpoint().digest())
     }
 
     pub async fn get_object_from_fullnode_store(&self, object_id: &ObjectID) -> Option<Object> {
@@ -579,15 +584,15 @@ impl TestCluster {
         TestTransactionBuilder::new(sender, gas, rgp)
     }
 
-    pub fn sign_transaction(&self, tx_data: &TransactionData) -> Transaction {
-        self.wallet.sign_transaction(tx_data)
+    pub async fn sign_transaction(&self, tx_data: &TransactionData) -> Transaction {
+        self.wallet.sign_transaction(tx_data).await
     }
 
     pub async fn sign_and_execute_transaction(
         &self,
         tx_data: &TransactionData,
     ) -> SuiTransactionBlockResponse {
-        let tx = self.wallet.sign_transaction(tx_data);
+        let tx = self.wallet.sign_transaction(tx_data).await;
         self.execute_transaction(tx).await
     }
 
@@ -710,11 +715,13 @@ impl TestCluster {
     ) -> ObjectRef {
         let context = &self.wallet;
         let (sender, gas) = context.get_one_gas_object().await.unwrap().unwrap();
-        let tx = context.sign_transaction(
-            &TestTransactionBuilder::new(sender, gas, rgp)
-                .transfer_sui(amount, funding_address)
-                .build(),
-        );
+        let tx = context
+            .sign_transaction(
+                &TestTransactionBuilder::new(sender, gas, rgp)
+                    .transfer_sui(amount, funding_address)
+                    .build(),
+            )
+            .await;
         context.execute_transaction_must_succeed(tx).await;
 
         context
@@ -848,8 +855,12 @@ pub struct TestClusterBuilder {
     validator_global_state_hash_v2_enabled_config: GlobalStateHashV2EnabledConfig,
 
     indexer_backed_rpc: bool,
+    rpc_config: Option<sui_config::RpcConfig>,
 
     chain_override: Option<Chain>,
+
+    #[cfg(msim)]
+    inject_synthetic_execution_time: bool,
 }
 
 impl TestClusterBuilder {
@@ -884,6 +895,9 @@ impl TestClusterBuilder {
                 true,
             ),
             indexer_backed_rpc: false,
+            rpc_config: None,
+            #[cfg(msim)]
+            inject_synthetic_execution_time: false,
         }
     }
 
@@ -1101,8 +1115,19 @@ impl TestClusterBuilder {
         self
     }
 
+    pub fn with_rpc_config(mut self, config: sui_config::RpcConfig) -> Self {
+        self.rpc_config = Some(config);
+        self
+    }
+
     pub fn with_chain_override(mut self, chain: Chain) -> Self {
         self.chain_override = Some(chain);
+        self
+    }
+
+    #[cfg(msim)]
+    pub fn with_synthetic_execution_time_injection(mut self) -> Self {
+        self.inject_synthetic_execution_time = true;
         self
     }
 
@@ -1113,7 +1138,7 @@ impl TestClusterBuilder {
         #[cfg(msim)]
         if !self.default_jwks {
             sui_node::set_jwk_injector(Arc::new(|_authority, provider| {
-                use fastcrypto_zkp::bn254::zk_login::{JwkId, JWK};
+                use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
                 use rand::Rng;
 
                 // generate random (and possibly conflicting) id/key pairings.
@@ -1182,6 +1207,7 @@ impl TestClusterBuilder {
             rpc: rpc_url,
             ws: None,
             basic_auth: None,
+            chain_id: None,
         });
         wallet_conf.active_env = Some("localnet".to_string());
 
@@ -1254,6 +1280,10 @@ impl TestClusterBuilder {
         if let Some(fullnode_rpc_port) = self.fullnode_rpc_port {
             builder = builder.with_fullnode_rpc_port(fullnode_rpc_port);
         }
+
+        if let Some(rpc_config) = &self.rpc_config {
+            builder = builder.with_fullnode_rpc_config(rpc_config.clone());
+        }
         if let Some(num_unpruned_validators) = self.num_unpruned_validators {
             builder = builder.with_num_unpruned_validators(num_unpruned_validators);
         }
@@ -1283,6 +1313,15 @@ impl TestClusterBuilder {
             builder = builder.with_disable_fullnode_pruning();
         }
 
+        #[cfg(msim)]
+        if self.inject_synthetic_execution_time {
+            use sui_config::node::ExecutionTimeObserverConfig;
+
+            let mut config = ExecutionTimeObserverConfig::default();
+            config.inject_synthetic_execution_time = Some(true);
+            builder = builder.with_execution_time_observer_config(config);
+        }
+
         let mut swarm = builder.build();
         swarm.launch().await?;
 
@@ -1293,16 +1332,19 @@ impl TestClusterBuilder {
         let keystore_path = dir.join(SUI_KEYSTORE_FILENAME);
 
         swarm.config().save(network_path)?;
-        let mut keystore = Keystore::from(FileBasedKeystore::new(&keystore_path)?);
+        let mut keystore = Keystore::from(FileBasedKeystore::load_or_create(&keystore_path)?);
         for key in &swarm.config().account_keys {
-            keystore.add_key(None, SuiKeyPair::Ed25519(key.copy()))?;
+            keystore
+                .import(None, SuiKeyPair::Ed25519(key.copy()))
+                .await?;
         }
 
         let active_address = keystore.addresses().first().cloned();
 
         // Create wallet config with stated authorities port
         SuiClientConfig {
-            keystore: Keystore::from(FileBasedKeystore::new(&keystore_path)?),
+            keystore: Keystore::from(FileBasedKeystore::load_or_create(&keystore_path)?),
+            external_keys: None,
             envs: Default::default(),
             active_address,
             active_env: Default::default(),

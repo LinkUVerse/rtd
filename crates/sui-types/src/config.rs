@@ -10,7 +10,7 @@ use move_core_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{id::UID, MoveTypeTagTrait, SUI_FRAMEWORK_ADDRESS};
+use crate::{MoveTypeTagTrait, SUI_FRAMEWORK_ADDRESS, id::UID};
 
 pub const CONFIG_MODULE_NAME: &IdentStr = ident_str!("config");
 pub const CONFIG_STRUCT_NAME: &IdentStr = ident_str!("Config");
@@ -84,20 +84,6 @@ pub fn is_setting(tag: &StructTag) -> bool {
     *address == SUI_FRAMEWORK_ADDRESS
         && module.as_ident_str() == CONFIG_MODULE_NAME
         && name.as_ident_str() == SETTING_STRUCT_NAME
-        && type_params.len() == 1
-}
-
-/// Returns true if the given `tag` is a `Config` struct.
-pub fn is_config(tag: &StructTag) -> bool {
-    let StructTag {
-        address,
-        module,
-        name,
-        type_params,
-    } = tag;
-    *address == SUI_FRAMEWORK_ADDRESS
-        && module.as_ident_str() == CONFIG_MODULE_NAME
-        && name.as_ident_str() == CONFIG_STRUCT_NAME
         && type_params.len() == 1
 }
 

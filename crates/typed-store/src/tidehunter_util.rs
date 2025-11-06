@@ -3,8 +3,9 @@
 
 use crate::DBMetrics;
 use bincode::Options;
-use prometheus::Registry;
+use prometheus::{HistogramTimer, Registry};
 use serde::de::DeserializeOwned;
+use std::env;
 use std::path::Path;
 use std::sync::Arc;
 use tidehunter::config::Config;
@@ -13,9 +14,9 @@ use tidehunter::iterators::db_iterator::DbIterator;
 use tidehunter::key_shape::{KeyShape, KeySpace};
 use tidehunter::metrics::Metrics;
 pub use tidehunter::{
+    Decision, IndexWalPosition, WalPosition,
     key_shape::{KeyIndexing, KeyShapeBuilder, KeySpaceConfig, KeyType},
     minibytes::Bytes,
-    WalPosition,
 };
 use typed_store_error::TypedStoreError;
 
@@ -55,8 +56,20 @@ pub fn add_key_space(builder: &mut KeyShapeBuilder, name: &str, config: &ThConfi
     )
 }
 fn thdb_config() -> Config {
+    let frag_size = if let Ok(frag_size) = env::var("TH_FRAG_SIZE") {
+        let frag_size = frag_size.parse().expect("Failed to parse TH_FRAG_SIZE");
+        assert!(frag_size > 0, "TH_FRAG_SIZE must be more then 0");
+        assert!(
+            frag_size % (4 * 1024) == 0,
+            "TH_FRAG_SIZE must be page aligned({frag_size} given)"
+        );
+        println!("Using frag size from env variable {frag_size}");
+        frag_size
+    } else {
+        1024 * 1024 * 1024
+    };
     Config {
-        frag_size: 1024 * 1024 * 1024,
+        frag_size,
         // run snapshot every 64 Gb written to wal
         snapshot_written_bytes: 64 * 1024 * 1024 * 1024,
         // force unloading dirty index entries if behind 128 Gb of wal
@@ -66,6 +79,14 @@ fn thdb_config() -> Config {
         max_maps: 8, // 8Gb of mapped space
         ..Config::default()
     }
+}
+
+pub fn default_mutex_count() -> usize {
+    1024
+}
+
+pub fn default_value_cache_size() -> usize {
+    2000
 }
 
 pub(crate) fn apply_range_bounds(
@@ -83,12 +104,13 @@ pub(crate) fn apply_range_bounds(
 
 pub(crate) fn transform_th_iterator<'a, K, V>(
     iterator: impl Iterator<
-            Item = Result<
-                (tidehunter::minibytes::Bytes, tidehunter::minibytes::Bytes),
-                tidehunter::db::DbError,
-            >,
-        > + 'a,
+        Item = Result<
+            (tidehunter::minibytes::Bytes, tidehunter::minibytes::Bytes),
+            tidehunter::db::DbError,
+        >,
+    > + 'a,
     prefix: &'a Option<Vec<u8>>,
+    timer: HistogramTimer,
 ) -> impl Iterator<Item = Result<(K, V), TypedStoreError>> + 'a
 where
     K: DeserializeOwned,
@@ -100,6 +122,7 @@ where
     iterator.map(move |item| {
         item.map_err(|e| TypedStoreError::RocksDBError(format!("tidehunter error {:?}", e)))
             .and_then(|(raw_key, raw_value)| {
+                let _timer = &timer;
                 let key = match prefix {
                     Some(prefix) => {
                         let mut buffer = Vec::with_capacity(raw_key.len() + prefix.len());
@@ -133,7 +156,7 @@ pub(crate) fn typed_store_error_from_th_error(err: tidehunter::db::DbError) -> T
 impl ThConfig {
     pub fn new(key_size: usize, mutexes: usize, key_type: KeyType) -> Self {
         Self {
-            key_indexing: KeyIndexing::none(key_size),
+            key_indexing: KeyIndexing::fixed(key_size),
             mutexes,
             key_type,
             config: KeySpaceConfig::default(),
@@ -171,7 +194,7 @@ impl ThConfig {
         key_type: KeyType,
         config: KeySpaceConfig,
     ) -> Self {
-        Self::new_with_config_indexing(KeyIndexing::none(key_size), mutexes, key_type, config)
+        Self::new_with_config_indexing(KeyIndexing::fixed(key_size), mutexes, key_type, config)
     }
 
     pub fn new_with_rm_prefix(
@@ -182,7 +205,7 @@ impl ThConfig {
         prefix: Vec<u8>,
     ) -> Self {
         Self::new_with_rm_prefix_indexing(
-            KeyIndexing::none(key_size),
+            KeyIndexing::fixed(key_size),
             mutexes,
             key_type,
             config,
@@ -205,8 +228,13 @@ impl ThConfig {
             prefix: Some(prefix),
         }
     }
+
+    pub fn with_config(mut self, config: KeySpaceConfig) -> Self {
+        self.config = config;
+        self
+    }
 }
 
 pub fn default_cells_per_mutex() -> usize {
-    8
+    2
 }

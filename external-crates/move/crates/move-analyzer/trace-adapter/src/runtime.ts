@@ -4,13 +4,14 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
-import toml from 'toml';
+import toml from '@iarna/toml';
 import {
     createFileInfo,
     IFileInfo,
     ILocalInfo,
     IDebugInfo,
-    readAllDebugInfos
+    readAllDebugInfos,
+    computeOptimizedLines,
 } from './debug_info_utils';
 import {
     INLINED_FRAME_ID_SAME_FILE,
@@ -80,7 +81,20 @@ export interface IRuntimeGlobalLoc {
  * Location where a runtime value is stored.
  */
 export interface IRuntimeLoc {
+    /**
+     * Location of a variable of a global location that
+     * contains a potentially compound value.
+     */
     loc: IRuntimeVariableLoc | IRuntimeGlobalLoc;
+    /**
+     * Optional "path" that points to a specific element
+     * of a compound value. For example if value at 'loc'
+     * is a vector of structs, `indexPath` of [7][2] would
+     * mean 7th element of the vector, and second field
+     * of this (struct) element. In terms of trace format,
+     * this is used to represent 'Indexed' locations (hence
+     * the name).
+     */
     indexPath: number[];
 }
 
@@ -311,13 +325,23 @@ export enum RuntimeEvents {
     end = 'end',
 }
 /**
- * Describes result of the execution.
+ * Describes kind of execution result.
  */
-export enum ExecutionResult {
+export enum ExecutionResultKind {
     Ok,
     TraceEnd,
     Exception,
+    Breakpoint,
 }
+
+/**
+ * Describes result of the execution.
+ */
+export type ExecutionResult =
+    | { kind: ExecutionResultKind.Ok }
+    | { kind: ExecutionResultKind.TraceEnd }
+    | { kind: ExecutionResultKind.Breakpoint }
+    | { kind: ExecutionResultKind.Exception, msg: string };
 
 /**
  * The runtime for viewing traces.
@@ -387,33 +411,65 @@ export class Runtime extends EventEmitter {
         if (openedFilePath.endsWith(TRACE_FILE_EXT) && openedFileBaseName === EXT_EVENTS_TRACE_FILE_NAME) {
             // Trace containing external events. Reading all data required for debugging
             // assumes a certain directory structure rooted in `extRoot`, where the trace
-            // file is located. The `bytecode` directory contains disassembled bytecode
-            // files and their debug infos. The `source` directory contains Move source files
-            // and their debug infos.
+            // file is located. All relevant data is stored in direcotories that represent
+            // Move packages and named after their package ID (hexadecimal string of 64 characters).
+            // In each package directory, we have two subdirectories: `bytecode` and `source`.
+            // The `bytecode` directory contains disassembled bytecode files and their debug infos.
+            // The `source` directory (optionally) contains Move source files and their debug infos.
             const extRoot = path.dirname(openedFilePath);
-            const bytecodeDir = path.join(extRoot, 'bytecode');
-            hashToFileMap(bytecodeDir, this.filesMap, BCODE_FILE_EXT);
-            bcodeDebugInfosModMap = readAllDebugInfos(bytecodeDir, this.filesMap, true);
-            const sourceDir = path.join(extRoot, 'source');
-            if (fs.existsSync(sourceDir)) {
-                const sourceFilesMap = new Map<string, IFileInfo>();
-                hashToFileMap(sourceDir, sourceFilesMap, MOVE_FILE_EXT);
-                // We are getting files and debug infos from the source directory
-                // which is populated by the user. One way to do it would be to copy
-                // `build` directory of package to the source directory, which would
-                // contain all the required sources and debug infos. However, this
-                // build directory may also contain disassembled bytecode files and
-                // their corresponding debug infos, which need to be filtered out.
-                // This is accomplished by passing `mustHaveSourceFile` as `false`.
-                // and sourceFilesMap that contain only Move source files - this way,
-                // since disassembled bytecode files are not present in sourceFilesMap,
-                // debug infos for disassembled bytecode will be excluded.
-                srcDebugInfosModMap =
-                    readAllDebugInfos(sourceDir, sourceFilesMap, /* mustHaveSourceFile */ false);
-                sourceFilesMap.forEach((fileInfo, fileHash) => {
-                    this.filesMap.set(fileHash, fileInfo);
-                });
+
+            // find all directories that represent Move packages (0x followed by hex characters)
+            const pkgDirPattern = /^0x[0-9a-fA-F]+$/;
+            const extRootContents = fs.readdirSync(extRoot);
+            const pkgDirs = extRootContents.filter(dirOrFile => {
+                const fullPath = path.join(extRoot, dirOrFile);
+                return fs.statSync(fullPath).isDirectory() && pkgDirPattern.test(dirOrFile);
+            });
+
+            if (pkgDirs.length === 0) {
+                throw new Error(`No package directories found in ${extRoot}`);
             }
+
+            // iterate over each package directory
+            for (const pkgDir of pkgDirs) {
+                const pkgDirPath = path.join(extRoot, pkgDir);
+                const pkgVersionID = pkgDir.slice(2); // remove 0x prefix
+
+                const bytecodeDir = path.join(pkgDirPath, 'bytecode');
+                hashToFileMap(bytecodeDir, this.filesMap, BCODE_FILE_EXT);
+                const bcodeAllDebugInfoLinesMap = new Map<string, Set<number>>();
+                readAllDebugInfos(bytecodeDir, bcodeDebugInfosModMap, bcodeAllDebugInfoLinesMap, this.filesMap, true);
+                computeOptimizedLines(bcodeDebugInfosModMap, bcodeAllDebugInfoLinesMap, this.filesMap);
+                const sourceDir = path.join(pkgDirPath, 'source');
+                if (fs.existsSync(sourceDir)) {
+                    const sourceFilesMap = new Map<string, IFileInfo>();
+                    hashToFileMap(sourceDir, sourceFilesMap, MOVE_FILE_EXT);
+                    // We are getting files and debug infos from the source directory
+                    // which is populated by the user. One way to do it would be to copy
+                    // `build` directory of package to the source directory, which would
+                    // contain all the required sources and debug infos. However, this
+                    // build directory may also contain disassembled bytecode files and
+                    // their corresponding debug infos, which need to be filtered out.
+                    // This is accomplished by passing `mustHaveSourceFile` as `false`.
+                    // and sourceFilesMap that contain only Move source files - this way,
+                    // since disassembled bytecode files are not present in sourceFilesMap,
+                    // debug infos for disassembled bytecode will be excluded.
+                    const srcAllDebugInfoLinesMap = new Map<string, Set<number>>();
+                    readAllDebugInfos(
+                        sourceDir,
+                        srcDebugInfosModMap,
+                        srcAllDebugInfoLinesMap,
+                        sourceFilesMap,
+                        /* mustHaveSourceFile */ false,
+                        pkgVersionID
+                    );
+                    computeOptimizedLines(srcDebugInfosModMap, srcAllDebugInfoLinesMap, sourceFilesMap);
+                    sourceFilesMap.forEach((fileInfo, fileHash) => {
+                        this.filesMap.set(fileHash, fileInfo);
+                    });
+                }
+            }
+
             traceFilePath = openedFilePath;
         } else {
             // Trace containing only a single top-level Move function call,
@@ -450,7 +506,9 @@ export class Runtime extends EventEmitter {
                 ? srcSourceMapDir
                 : path.join(pkgRoot, 'build', pkg_name, 'debug_info');
 
-            srcDebugInfosModMap = readAllDebugInfos(srcDbgInfoDir, this.filesMap, true);
+            const srcAllDebugInfoLinesMap = new Map<string, Set<number>>();
+            readAllDebugInfos(srcDbgInfoDir, srcDebugInfosModMap, srcAllDebugInfoLinesMap, this.filesMap, true);
+            computeOptimizedLines(srcDebugInfosModMap, srcAllDebugInfoLinesMap, this.filesMap);
 
             // reconstruct trace file path from trace info
             traceFilePath = path.join(pkgRoot, 'traces', traceInfo.replace(/:/g, '_') + TRACE_FILE_EXT);
@@ -460,7 +518,9 @@ export class Runtime extends EventEmitter {
                 // create file maps for all bytecode files in the `disassembly` directory
                 hashToFileMap(disassemblyDir, this.filesMap, BCODE_FILE_EXT);
                 // created bytecode maps for disassembled bytecode files
-                bcodeDebugInfosModMap = readAllDebugInfos(disassemblyDir, this.filesMap, true);
+                const bcodeAllDebugInfoLinesMap = new Map<string, Set<number>>();
+                readAllDebugInfos(disassemblyDir, bcodeDebugInfosModMap, bcodeAllDebugInfoLinesMap, this.filesMap, true);
+                computeOptimizedLines(bcodeDebugInfosModMap, bcodeAllDebugInfoLinesMap, this.filesMap);
             }
         }
         Array.from(srcDebugInfosModMap.entries()).forEach((entry) => {
@@ -538,7 +598,7 @@ export class Runtime extends EventEmitter {
                 globals: new Map<number, RuntimeValueType>()
             };
             this.eventsStack.eventFrame = frameStack;
-            this.step(/* next */ false, /* stopAtCloseFrame */ false);
+            this.stepInternal(/* next */ false, /* stopAtCloseFrame */ false);
         }
     }
 
@@ -552,6 +612,29 @@ export class Runtime extends EventEmitter {
     }
 
     /**
+     * Processes the result of an action returnd from an internal
+     * function responsible for handling a given event.
+     *
+     * @param result the result of the action.
+     * @returns processed (potentially different) result of the action.
+     */
+    private handleActionResult(result: ExecutionResult): ExecutionResult {
+        switch (result.kind) {
+            case ExecutionResultKind.Ok:
+            case ExecutionResultKind.TraceEnd:
+                this.sendEvent(RuntimeEvents.stopOnStep);
+                break;
+            case ExecutionResultKind.Exception:
+                this.sendEvent(RuntimeEvents.stopOnException, result.msg);
+                break;
+            case ExecutionResultKind.Breakpoint:
+                this.sendEvent(RuntimeEvents.stopOnLineBreakpoint);
+                return { kind: ExecutionResultKind.Ok };
+        }
+        return result;
+    }
+
+    /**
      * Handles step/next adapter action.
      *
      * @param next determines if it's `next` (or otherwise `step`) action.
@@ -562,14 +645,32 @@ export class Runtime extends EventEmitter {
      * @throws Error with a descriptive error message if the step event cannot be handled.
      */
     public step(next: boolean, stopAtCloseFrame: boolean): ExecutionResult {
+        const result = this.stepInternal(next, stopAtCloseFrame);
+        return this.handleActionResult(result);
+    }
+
+    /**
+     * Implements step/next action.
+     *
+     * @param next determines if it's `next` (or otherwise `step`) action.
+     * @param stopAtCloseFrame determines if the action should stop at `CloseFrame` event
+     * (rather then proceed to the following instruction).
+     * @returns ExecutionResult.Ok if the step action was successful, ExecutionResult.TraceEnd if we
+     * reached the end of the trace, and ExecutionResult.Exception if an exception was encountered.
+     * @throws Error with a descriptive error message if the step event cannot be handled.
+     */
+    private stepInternal(next: boolean, stopAtCloseFrame: boolean): ExecutionResult {
         this.eventIndex++;
         if (this.eventIndex >= this.trace.events.length) {
-            this.sendEvent(RuntimeEvents.stopOnStep);
-            return ExecutionResult.TraceEnd;
+            return { kind: ExecutionResultKind.TraceEnd };
         }
         let currentEvent = this.trace.events[this.eventIndex];
 
-        if (currentEvent.type === TraceEventKind.Instruction ||
+        if (currentEvent.type === TraceEventKind.Effect &&
+            // error effects may happen inside or outside of Move calls
+            currentEvent.effect.type === TraceEffectKind.ExecutionError) {
+            return { kind: ExecutionResultKind.Exception, msg: currentEvent.effect.msg };
+        } else if (currentEvent.type === TraceEventKind.Instruction ||
             currentEvent.type === TraceEventKind.ReplaceInlinedFrame ||
             currentEvent.type === TraceEventKind.OpenFrame ||
             currentEvent.type === TraceEventKind.CloseFrame ||
@@ -669,14 +770,12 @@ export class Runtime extends EventEmitter {
                         // the last call instruction in a give frame happened, and
                         // also we need to make `stepOut` aware of whether it is executed
                         // as part of `next` (which is how `next` is implemented) or not.
-                        this.sendEvent(RuntimeEvents.stopOnStep);
-                        return ExecutionResult.Ok;
+                        return { kind: ExecutionResultKind.Ok };
                     } else {
-                        return this.step(next, stopAtCloseFrame);
+                        return this.stepInternal(next, stopAtCloseFrame);
                     }
                 }
-                this.sendEvent(RuntimeEvents.stopOnStep);
-                return ExecutionResult.Ok;
+                return { kind: ExecutionResultKind.Ok };
             } else if (currentEvent.type === TraceEventKind.ReplaceInlinedFrame) {
                 let currentFrame = moveCallStack.frames.pop();
                 if (!currentFrame) {
@@ -692,7 +791,7 @@ export class Runtime extends EventEmitter {
                 }
                 currentFrame.srcFilePath = currentFile.path;
                 moveCallStack.frames.push(currentFrame);
-                return this.step(next, stopAtCloseFrame);
+                return this.stepInternal(next, stopAtCloseFrame);
             } else if (currentEvent.type === TraceEventKind.OpenFrame) {
                 // if function is native then the next event will be CloseFrame
                 if (currentEvent.isNative) {
@@ -701,17 +800,16 @@ export class Runtime extends EventEmitter {
                         const nextEvent = this.trace.events[this.eventIndex + 1];
                         if (nextEvent.type === TraceEventKind.Effect &&
                             nextEvent.effect.type === TraceEffectKind.ExecutionError) {
-                            this.sendEvent(RuntimeEvents.stopOnException, nextEvent.effect.msg);
-                            return ExecutionResult.Exception;
+                            return { kind: ExecutionResultKind.Exception, msg: nextEvent.effect.msg };
                         }
                     }
                     // process optional effects until reaching CloseFrame for the native function
                     while (true) {
-                        const executionResult = this.step(/* next */ false, /* stopAtCloseFrame */ true);
-                        if (executionResult === ExecutionResult.Exception) {
+                        const executionResult = this.stepInternal(/* next */ false, /* stopAtCloseFrame */ true);
+                        if (executionResult.kind === ExecutionResultKind.Exception) {
                             return executionResult;
                         }
-                        if (executionResult === ExecutionResult.TraceEnd) {
+                        if (executionResult.kind === ExecutionResultKind.TraceEnd) {
                             throw new Error('Cannot find CloseFrame event for native function');
                         }
                         const currentEvent = this.trace.events[this.eventIndex];
@@ -721,7 +819,7 @@ export class Runtime extends EventEmitter {
                     }
                     // skip over CloseFrame as there is no frame to pop
                     this.eventIndex++;
-                    return this.step(next, stopAtCloseFrame);
+                    return this.stepInternal(next, stopAtCloseFrame);
                 }
 
                 // create a new frame and push it onto the stack
@@ -767,15 +865,15 @@ export class Runtime extends EventEmitter {
                     // step out of the frame right away unless this frame is inlined
                     // and it's showing disassembly (otherwise we will see instructions
                     // skipped in the disassembly view for apparently no reason)
-                    return this.stepOut(next);
+                    return this.stepOutInternal(next);
                 } else {
-                    return this.step(next, stopAtCloseFrame);
+                    return this.stepInternal(next, stopAtCloseFrame);
                 }
             } else if (currentEvent.type === TraceEventKind.CloseFrame) {
                 if (stopAtCloseFrame) {
                     // don't do anything as the caller needs to inspect
                     // the event before proceeding
-                    return ExecutionResult.Ok;
+                    return { kind: ExecutionResultKind.Ok };
                 } else {
                     // pop the top frame from the stack
                     const framesLength = moveCallStack.frames.length;
@@ -792,14 +890,10 @@ export class Runtime extends EventEmitter {
                             + ')');
                     }
                     moveCallStack.frames.pop();
-                    return this.step(next, stopAtCloseFrame);
+                    return this.stepInternal(next, stopAtCloseFrame);
                 }
             } else if (currentEvent.type === TraceEventKind.Effect) {
                 const effect = currentEvent.effect;
-                if (effect.type === TraceEffectKind.ExecutionError) {
-                    this.sendEvent(RuntimeEvents.stopOnException, effect.msg);
-                    return ExecutionResult.Exception;
-                }
                 if (effect.type === TraceEffectKind.Write) {
                     const traceLocation = effect.indexedLoc.loc;
                     if ('globalIndex' in traceLocation) {
@@ -825,7 +919,7 @@ export class Runtime extends EventEmitter {
                         localWrite(frame, frameIdx, traceLocation.localIndex, traceValue);
                     }
                 }
-                return this.step(next, stopAtCloseFrame);
+                return this.stepInternal(next, stopAtCloseFrame);
             }
             throw new Error('Unknown Move call event: ' + currentEvent);
         } else {
@@ -837,13 +931,13 @@ export class Runtime extends EventEmitter {
                             globals: new Map<number, RuntimeValueType>()
                         };
                         this.eventsStack.eventFrame = frameStack;
-                        return this.step(next, stopAtCloseFrame);
+                        return this.stepInternal(next, stopAtCloseFrame);
                     case ExtEventKind.ExtEventStart:
                         if (next) {
                             // simply skip over external event as its
                             // "execution" has no bearing on execution
                             // of subsequent events
-                            return this.step(next, stopAtCloseFrame);
+                            return this.stepInternal(next, stopAtCloseFrame);
                         }
                         const frameIdx = currentEvent.event.id;
                         const names = currentEvent.event.localsNames;
@@ -870,8 +964,7 @@ export class Runtime extends EventEmitter {
                             locals,
                         };
                         this.eventsStack.eventFrame = eventFrame;
-                        this.sendEvent(RuntimeEvents.stopOnStep);
-                        return ExecutionResult.Ok;
+                        return { kind: ExecutionResultKind.Ok };
                     case ExtEventKind.MoveCallEnd:
                     case ExtEventKind.ExtEventEnd:
                         // go back to summary frame
@@ -879,13 +972,13 @@ export class Runtime extends EventEmitter {
                         if (this.eventsStack.summaryFrame) {
                             this.eventsStack.summaryFrame.line += 1;
                         }
-                        this.sendEvent(RuntimeEvents.stopOnStep);
-                        return ExecutionResult.Ok;
+                        return { kind: ExecutionResultKind.Ok };
                 }
             }
             throw new Error('Unknown external event: ' + currentEvent);
         }
     }
+
 
     /**
      * Handles "step out" adapter action.
@@ -896,12 +989,25 @@ export class Runtime extends EventEmitter {
      * @throws Error with a descriptive error message if the step out event cannot be handled.
      */
     public stepOut(next: boolean): ExecutionResult {
+        const result = this.stepOutInternal(next);
+        return this.handleActionResult(result);
+    }
+
+    /**
+     * Implements "step out" action.
+     *
+     * @param next determines if it's  part of `next` (or otherwise `step`) action.
+     * @returns ExecutionResult.Ok if the step action was successful, ExecutionResult.TraceEnd if we
+     * reached the end of the trace, and ExecutionResult.Exception if an exception was encountered.
+     * @throws Error with a descriptive error message if the step out event cannot be handled.
+     */
+    private stepOutInternal(next: boolean): ExecutionResult {
         const summaryFrame = this.eventsStack.summaryFrame;
         const eventFrame = this.eventsStack.eventFrame;
         if (summaryFrame && !eventFrame) {
             // stepping out of (top) active summary frame
             // finishes debugging session
-            return ExecutionResult.TraceEnd;
+            return { kind: ExecutionResultKind.TraceEnd };
         }
 
         // summary frame is not active here which means that
@@ -917,8 +1023,7 @@ export class Runtime extends EventEmitter {
             const stackHeight = moveCallStack.frames.length;
             if (stackHeight === 0 || (stackHeight === 1 && !summaryFrame)) {
                 // do nothing as there is no frame to step out to
-                this.sendEvent(RuntimeEvents.stopOnStep);
-                return ExecutionResult.Ok;
+                return { kind: ExecutionResultKind.Ok };
             }
             // newest frame is at the top of the stack
             const currentFrame = moveCallStack.frames[stackHeight - 1];
@@ -930,15 +1035,18 @@ export class Runtime extends EventEmitter {
                 // skipping over calls next-style otherwise we can miss seeing
                 // the actual close frame event that we are looking for
                 // and have the loop execute too far
-                const executionResult = this.step(/* next */ false, /* stopAtCloseFrame */ true);
-                if (executionResult === ExecutionResult.Exception) {
+                const executionResult = this.stepInternal(/* next */ false, /* stopAtCloseFrame */ true);
+                if (executionResult.kind === ExecutionResultKind.Exception) {
                     return executionResult;
                 }
-                if (executionResult === ExecutionResult.TraceEnd) {
+                if (executionResult.kind === ExecutionResultKind.TraceEnd) {
                     throw new Error('Cannot find corresponding CloseFrame event for function: ' +
                         currentFrame.name);
                 }
                 currentEvent = this.trace.events[this.eventIndex];
+                if (this.is_event_at_breakpoint(currentEvent)) {
+                    return { kind: ExecutionResultKind.Breakpoint };
+                }
                 if (currentEvent.type === TraceEventKind.CloseFrame) {
                     const currentFrameID = currentFrame.id;
                     // `step` call finished at the CloseFrame event
@@ -949,10 +1057,10 @@ export class Runtime extends EventEmitter {
                     }
                 }
             }
-            return this.step(next, /* stopAtCloseFrame */ false);
+            return this.stepInternal(next, /* stopAtCloseFrame */ false);
         } else {
             // external event frame
-            return this.step(next, /* stopAtCloseFrame */ false);
+            return this.stepInternal(next, /* stopAtCloseFrame */ false);
         }
     }
 
@@ -963,43 +1071,65 @@ export class Runtime extends EventEmitter {
      * @throws Error with a descriptive error message if the continue event cannot be handled.
      */
     public continue(): ExecutionResult {
+        const result = this.continueInternal();
+        return this.handleActionResult(result);
+    }
+
+    /**
+     * Implements "continue" action.
+     * @returns ExecutionResult.Ok if the step action was successful, ExecutionResult.TraceEnd if we
+     * reached the end of the trace, and ExecutionResult.Exception if an exception was encountered.
+     * @throws Error with a descriptive error message if the continue event cannot be handled.
+     */
+    private continueInternal(): ExecutionResult {
         while (true) {
-            const executionResult = this.step(/* next */ false, /* stopAtCloseFrame */ false);
-            if (executionResult === ExecutionResult.TraceEnd ||
-                executionResult === ExecutionResult.Exception) {
+            const executionResult = this.stepInternal(/* next */ false, /* stopAtCloseFrame */ false);
+            if (executionResult.kind === ExecutionResultKind.TraceEnd ||
+                executionResult.kind === ExecutionResultKind.Exception) {
                 return executionResult;
             }
-            let currentEvent = this.trace.events[this.eventIndex];
-            if (currentEvent.type === TraceEventKind.Instruction) {
-                const eventFrame = this.eventsStack.eventFrame;
-                if (eventFrame && 'frames' in eventFrame && 'globals' in eventFrame) {
-                    const moveCallStack = eventFrame as IMoveCallStack;
-                    const stackHeight = moveCallStack.frames.length;
-                    if (stackHeight <= 0) {
-                        // this should never happen
-                        throw new Error('No frame on the stack when processing Instruction event when continuing');
-                    }
-                    const currentFrame = moveCallStack.frames[stackHeight - 1];
-                    const filePath = currentFrame.disassemblyModeTriggered
-                        ? currentFrame.bcodeFilePath!
-                        : currentFrame.srcFilePath;
-                    const breakpoints = this.lineBreakpoints.get(filePath);
-                    if (!breakpoints) {
-                        continue;
-                    }
-                    const instLine = currentFrame.disassemblyModeTriggered
-                        ? currentEvent.bcodeLoc!.line
-                        : currentEvent.srcLoc.line;
-                    if (breakpoints.has(instLine)) {
-                        this.sendEvent(RuntimeEvents.stopOnLineBreakpoint);
-                        return ExecutionResult.Ok;
-                    }
-                } else {
-                    throw new Error('No active Move call when processing Instruction event');
-                }
-
+            const currentEvent = this.trace.events[this.eventIndex];
+            if (this.is_event_at_breakpoint(currentEvent)) {
+                return { kind: ExecutionResultKind.Breakpoint };
             }
         }
+    }
+
+    /**
+     *  Checks if an event is an instruction at a breakpoint.
+     *
+     *  @returns true if the current event is an instruction at a breakpoint, false otherwise.
+     *  @throws Error with a descriptive error message if the instruction event cannot be handled.
+    */
+    private is_event_at_breakpoint(event: TraceEvent): boolean {
+        if (event.type === TraceEventKind.Instruction) {
+            const eventFrame = this.eventsStack.eventFrame;
+            if (eventFrame && 'frames' in eventFrame && 'globals' in eventFrame) {
+                const moveCallStack = eventFrame as IMoveCallStack;
+                const stackHeight = moveCallStack.frames.length;
+                if (stackHeight <= 0) {
+                    // this should never happen
+                    throw new Error('No frame on the stack when processing Instruction event when continuing');
+                }
+                const currentFrame = moveCallStack.frames[stackHeight - 1];
+                const filePath = currentFrame.disassemblyModeTriggered
+                    ? currentFrame.bcodeFilePath!
+                    : currentFrame.srcFilePath;
+                const breakpoints = this.lineBreakpoints.get(filePath);
+                if (!breakpoints) {
+                    return false;
+                }
+                const instLine = currentFrame.disassemblyModeTriggered
+                    ? event.bcodeLoc!.line
+                    : event.srcLoc.line;
+                if (breakpoints.has(instLine)) {
+                    return true;
+                }
+            } else {
+                throw new Error('No active Move call when processing Instruction event');
+            }
+        }
+        return false;
     }
 
     /**
@@ -1693,7 +1823,7 @@ async function findPkgRoot(active_file_path: string): Promise<string | undefined
  */
 function getPkgNameFromManifest(pkgRoot: string): string | undefined {
     const manifest = fs.readFileSync(pkgRoot, 'utf8');
-    const parsedManifest = toml.parse(manifest);
+    const parsedManifest = toml.parse(manifest) as any;
     const packageName = parsedManifest.package.name;
     return packageName;
 }

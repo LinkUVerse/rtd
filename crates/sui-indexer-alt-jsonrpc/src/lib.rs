@@ -17,8 +17,8 @@ use api::transactions::{QueryTransactions, Transactions};
 use api::write::Write;
 use config::RpcConfig;
 use jsonrpsee::server::{BatchRequestConfig, RpcServiceBuilder, ServerBuilder};
-use metrics::middleware::MetricsLayer;
 use metrics::RpcMetrics;
+use metrics::middleware::MetricsLayer;
 use prometheus::Registry;
 use serde_json::json;
 use sui_indexer_alt_reader::bigtable_reader::BigtableArgs;
@@ -32,7 +32,7 @@ use tower_layer::Identity;
 use tracing::{info, warn};
 use url::Url;
 
-use crate::api::governance::Governance;
+use crate::api::governance::{DelegationGovernance, Governance};
 use crate::context::Context;
 
 pub mod api;
@@ -60,6 +60,11 @@ pub struct RpcArgs {
     /// the query itself will be logged as a warning.
     #[clap(long, default_value_t = Self::default().request_timeout_ms)]
     pub request_timeout_ms: u64,
+
+    /// Requests that take longer than this (in milliseconds) will be logged even if they succeed.
+    /// This should be shorter than `request_timeout_ms`.
+    #[clap(long, default_value_t = Self::default().slow_request_threshold_ms)]
+    pub slow_request_threshold_ms: u64,
 }
 
 pub struct RpcService {
@@ -75,6 +80,9 @@ pub struct RpcService {
     /// Maximum time a request can take to complete.
     request_timeout: Duration,
 
+    /// Threshold for logging slow requests.
+    slow_request_threshold: Duration,
+
     /// All the methods added to the server so far.
     modules: jsonrpsee::RpcModule<()>,
 
@@ -86,9 +94,15 @@ pub struct RpcService {
 }
 
 impl RpcArgs {
-    /// Requests that take longer than this should be logged for debugging.
+    /// Requests that take longer than this are terminated and logged for debugging.
     fn request_timeout(&self) -> Duration {
         Duration::from_millis(self.request_timeout_ms)
+    }
+
+    /// Requests that take longer than this are logged for debugging even if they succeed.
+    /// This threshold should be lower than the request timeout threshold.
+    fn slow_request_threshold(&self) -> Duration {
+        Duration::from_millis(self.slow_request_threshold_ms)
     }
 }
 
@@ -126,6 +140,7 @@ impl RpcService {
             server,
             metrics,
             request_timeout: rpc_args.request_timeout(),
+            slow_request_threshold: rpc_args.slow_request_threshold(),
             modules: jsonrpsee::RpcModule::new(()),
             schema,
             cancel,
@@ -154,6 +169,7 @@ impl RpcService {
             server,
             metrics,
             request_timeout,
+            slow_request_threshold,
             mut modules,
             schema,
             cancel,
@@ -172,6 +188,7 @@ impl RpcService {
             .layer(MetricsLayer::new(
                 metrics,
                 modules.method_names().map(|n| n.to_owned()).collect(),
+                slow_request_threshold,
             ));
 
         let handle = server
@@ -212,6 +229,7 @@ impl Default for RpcArgs {
             rpc_listen_address: "0.0.0.0:6000".parse().unwrap(),
             max_in_flight_requests: 2000,
             request_timeout_ms: 60_000,
+            slow_request_threshold_ms: 15_000,
         }
     }
 }
@@ -229,8 +247,8 @@ pub struct NodeArgs {
 /// will signal cancellation on the token when it is shutting down.
 ///
 /// Access to most reads is controlled by the `database_url` -- if it is `None`, reads will not work.
-/// The only exception is the `DelegationCoins` module, which is controlled by `node_args.fullnode_rpc_url`,
-/// which can be omitted to disable reads from this RPC.
+/// The only exceptions are the `DelegationCoins` and `DelegationGovernance` modules, which are controlled
+/// by `node_args.fullnode_rpc_url`, which can be omitted to disable reads from this RPC.
 ///
 /// KV queries can optionally be served by a Bigtable instance, if `bigtable_instance` is provided.
 /// Otherwise these requests are served by the database. If a `bigtable_instance` is provided, the
@@ -271,7 +289,7 @@ pub async fn start_rpc(
     let system_package_task = SystemPackageTask::new(
         system_package_task_args,
         context.pg_reader().clone(),
-        context.package_resolver().clone(),
+        context.package_resolver().package_store().clone(),
         cancel.child_token(),
     );
 
@@ -291,9 +309,15 @@ pub async fn start_rpc(
             fullnode_rpc_url.clone(),
             context.config().node.clone(),
         )?)?;
+        rpc.add_module(DelegationGovernance::new(
+            fullnode_rpc_url.clone(),
+            context.config().node.clone(),
+        )?)?;
         rpc.add_module(Write::new(fullnode_rpc_url, context.config().node.clone())?)?;
     } else {
-        warn!("No fullnode rpc url provided, DelegationCoins and Write modules will not be added.");
+        warn!(
+            "No fullnode rpc url provided, DelegationCoins, DelegationGovernance, and Write modules will not be added."
+        );
     }
 
     let h_rpc = rpc.run().await.context("Failed to start RPC service")?;
@@ -316,7 +340,7 @@ mod tests {
 
     use jsonrpsee::{core::RpcResult, proc_macros::rpc, types::error::METHOD_NOT_FOUND_CODE};
     use reqwest::Client;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use sui_open_rpc::Module;
     use sui_open_rpc_macros::open_rpc;
     use sui_pg_db::temp::get_available_port;

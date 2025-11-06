@@ -7,10 +7,10 @@ description: tests/shell_tests/summaries/summarize_yaml.sh
 # SPDX-License-Identifier: Apache-2.0
 
 sui move summary --path data/move_package -o yaml
-ls -1 data/move_package/package_summaries
-ls -1 data/move_package/package_summaries/move_package
-ls -1 data/move_package/package_summaries/sui
-ls -1 data/move_package/package_summaries/std
+ls -1 data/move_package/package_summaries | LC_ALL=C sort -f
+ls -1 data/move_package/package_summaries/move_package | LC_ALL=C sort -f
+ls -1 data/move_package/package_summaries/sui | LC_ALL=C sort -f
+ls -1 data/move_package/package_summaries/std | LC_ALL=C sort -d
 # NB: No root_package_metadata for source packages as these are not generated w.r.t. a specific network.
 cat data/move_package/package_summaries/root_package_metadata.yaml
 # This will contain the address mapping for the package from the literal value
@@ -22,21 +22,20 @@ cat data/move_package/package_summaries/address_mapping.yaml
 success: true
 exit_code: 0
 ----- stdout -----
-INCLUDING DEPENDENCY Bridge
-INCLUDING DEPENDENCY SuiSystem
 INCLUDING DEPENDENCY Sui
 INCLUDING DEPENDENCY MoveStdlib
 BUILDING move_package
 
 Summary generation successful. Summaries stored in 'package_summaries'
 address_mapping.yaml
-bridge
 move_package
 root_package_metadata.yaml
 std
 sui
-sui_system
 move_package.yaml
+accumulator.yaml
+accumulator_metadata.yaml
+accumulator_settlement.yaml
 address.yaml
 authenticator_state.yaml
 bag.yaml
@@ -46,8 +45,10 @@ bls12381.yaml
 borrow.yaml
 clock.yaml
 coin.yaml
+coin_registry.yaml
 config.yaml
 deny_list.yaml
+derived_object.yaml
 display.yaml
 dynamic_field.yaml
 dynamic_object_field.yaml
@@ -56,6 +57,7 @@ ecdsa_r1.yaml
 ecvrf.yaml
 ed25519.yaml
 event.yaml
+funds_accumulator.yaml
 groth16.yaml
 group_ops.yaml
 hash.yaml
@@ -115,10 +117,9 @@ vector.yaml
 ---
 {}
 ---
-bridge: "0x000000000000000000000000000000000000000000000000000000000000000b"
 move_package: "0x0000000000000000000000000000000000000000000000000000000000000000"
 std: "0x0000000000000000000000000000000000000000000000000000000000000001"
 sui: "0x0000000000000000000000000000000000000000000000000000000000000002"
-sui_system: "0x0000000000000000000000000000000000000000000000000000000000000003"
 
 ----- stderr -----
+[note] Dependencies on Bridge, MoveStdlib, Sui, and SuiSystem are automatically added, but this feature is disabled for your package because you have explicitly included dependencies on Sui. Consider removing these dependencies from Move.toml.

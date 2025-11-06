@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::{
     sync::mpsc,
     task::JoinHandle,
-    time::{interval, MissedTickBehavior},
+    time::{MissedTickBehavior, interval},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
@@ -171,6 +171,7 @@ pub(super) fn collector<H: Handler + 'static>(
                     }
                 }
 
+                // docs::#collector (see docs/content/guides/developer/advanced/custom-indexer.mdx)
                 Some(indexed) = rx.recv(), if pending_rows < H::MAX_PENDING_ROWS => {
                     metrics
                         .total_collector_rows_received
@@ -188,6 +189,7 @@ pub(super) fn collector<H: Handler + 'static>(
                         poll.reset_immediately()
                     }
                 }
+                // docs::/#collector
             }
         }
     })
@@ -197,14 +199,15 @@ pub(super) fn collector<H: Handler + 'static>(
 mod tests {
     use std::time::Duration;
 
+    use async_trait::async_trait;
     use sui_pg_db::{Connection, Db};
     use tokio::sync::mpsc;
 
     use crate::{
-        metrics::tests::test_metrics,
-        pipeline::{concurrent::max_chunk_rows, Processor},
-        types::full_checkpoint_content::CheckpointData,
         FieldCount,
+        metrics::tests::test_metrics,
+        pipeline::{Processor, concurrent::max_chunk_rows},
+        types::full_checkpoint_content::CheckpointData,
     };
 
     use super::*;
@@ -218,17 +221,22 @@ mod tests {
     }
 
     struct TestHandler;
+
+    #[async_trait]
     impl Processor for TestHandler {
         type Value = Entry;
         const NAME: &'static str = "test_handler";
         const FANOUT: usize = 1;
 
-        fn process(&self, _checkpoint: &Arc<CheckpointData>) -> anyhow::Result<Vec<Self::Value>> {
+        async fn process(
+            &self,
+            _checkpoint: &Arc<CheckpointData>,
+        ) -> anyhow::Result<Vec<Self::Value>> {
             Ok(vec![])
         }
     }
 
-    #[async_trait::async_trait]
+    #[async_trait]
     impl Handler for TestHandler {
         type Store = Db;
 
@@ -248,6 +256,19 @@ mod tests {
         match tokio::time::timeout(duration, rx.recv()).await {
             Err(_) => (), // Expected timeout - test passes
             Ok(_) => panic!("Expected timeout but received data instead"),
+        }
+    }
+
+    /// Receive from the channel with a given timeout, panicking if the timeout is reached or the
+    /// channel is closed.
+    async fn recv_with_timeout(
+        rx: &mut mpsc::Receiver<BatchedRows<TestHandler>>,
+        timeout: Duration,
+    ) -> BatchedRows<TestHandler> {
+        match tokio::time::timeout(timeout, rx.recv()).await {
+            Ok(Some(batch)) => batch,
+            Ok(None) => panic!("Collector channel was closed unexpectedly"),
+            Err(_) => panic!("Test timed out waiting for batch from collector"),
         }
     }
 
@@ -280,13 +301,13 @@ mod tests {
             processor_tx.send(data).await.unwrap();
         }
 
-        let batch1 = collector_rx.recv().await.unwrap();
+        let batch1 = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(batch1.len(), max_chunk_rows);
 
-        let batch2 = collector_rx.recv().await.unwrap();
+        let batch2 = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(batch2.len(), 1);
 
-        let batch3 = collector_rx.recv().await.unwrap();
+        let batch3 = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(batch3.len(), 0);
 
         cancel.cancel();
@@ -313,7 +334,7 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(200)).await;
 
-        let batch = collector_rx.recv().await.unwrap();
+        let batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(batch.len(), 2);
 
         // Drop processor sender to simulate shutdown
@@ -402,7 +423,7 @@ mod tests {
         let start_time = std::time::Instant::now();
 
         // The collector starts with an immediate poll tick, creating an empty batch
-        let initial_batch = collector_rx.recv().await.unwrap();
+        let initial_batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(initial_batch.len(), 0);
 
         // Send data that's just below MIN_EAGER_ROWS threshold.
@@ -424,7 +445,7 @@ mod tests {
         processor_tx.send(threshold_trigger).await.unwrap();
 
         // Should immediately get a batch without waiting for the long interval
-        let eager_batch = collector_rx.recv().await.unwrap();
+        let eager_batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(eager_batch.len(), TestHandler::MIN_EAGER_ROWS);
 
         // Verify batch was created quickly (much less than 60 seconds)
@@ -454,7 +475,7 @@ mod tests {
         );
 
         // The collector starts with an immediate poll tick, creating an empty batch
-        let initial_batch = collector_rx.recv().await.unwrap();
+        let initial_batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(initial_batch.len(), 0);
         // The collector will then just wait for the next poll as there is no new data yet.
         expect_timeout(&mut collector_rx, Duration::from_secs(1)).await;
@@ -467,7 +488,7 @@ mod tests {
         processor_tx.send(exact_threshold).await.unwrap();
 
         // Should trigger immediately since pending_rows >= MIN_EAGER_ROWS.
-        let batch = collector_rx.recv().await.unwrap();
+        let batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(batch.len(), TestHandler::MIN_EAGER_ROWS);
 
         // Verify batch was created quickly (much less than 60 seconds)
@@ -497,7 +518,7 @@ mod tests {
         );
 
         // Consume initial empty batch
-        let initial_batch = collector_rx.recv().await.unwrap();
+        let initial_batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(1)).await;
         assert_eq!(initial_batch.len(), 0);
 
         // Send MIN_EAGER_ROWS - 1 entries (below threshold)
@@ -509,7 +530,7 @@ mod tests {
         expect_timeout(&mut collector_rx, Duration::from_secs(1)).await;
 
         // Should eventually get batch when timer triggers
-        let timer_batch = collector_rx.recv().await.unwrap();
+        let timer_batch = recv_with_timeout(&mut collector_rx, Duration::from_secs(4)).await;
         assert_eq!(timer_batch.len(), TestHandler::MIN_EAGER_ROWS - 1);
 
         cancel.cancel();

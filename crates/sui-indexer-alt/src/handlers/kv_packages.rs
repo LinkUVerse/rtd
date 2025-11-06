@@ -4,9 +4,10 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
 use sui_indexer_alt_framework::{
-    pipeline::{concurrent::Handler, Processor},
+    pipeline::{Processor, concurrent::Handler},
     postgres::{Connection, Db},
     types::{base_types::SuiAddress, full_checkpoint_content::CheckpointData},
 };
@@ -14,12 +15,13 @@ use sui_indexer_alt_schema::{packages::StoredPackage, schema::kv_packages};
 
 pub(crate) struct KvPackages;
 
+#[async_trait]
 impl Processor for KvPackages {
     const NAME: &'static str = "kv_packages";
 
     type Value = StoredPackage;
 
-    fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
+    async fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
         let CheckpointData {
             checkpoint_summary,
             transactions,
@@ -51,7 +53,7 @@ impl Processor for KvPackages {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Handler for KvPackages {
     type Store = Db;
 

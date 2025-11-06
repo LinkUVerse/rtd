@@ -1,10 +1,11 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::checkpoint::{read_checkpoint, read_checkpoint_list, CheckpointsList};
+use crate::checkpoint::{CheckpointsList, read_checkpoint, read_checkpoint_list};
+use crate::committee::extract_new_committee_info;
 use crate::config::Config;
 use crate::object_store::SuiObjectStore;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::sync::Arc;
 use sui_config::genesis::Genesis;
 use sui_json_rpc_types::{SuiObjectDataOptions, SuiTransactionBlockResponseOptions};
@@ -126,7 +127,7 @@ pub async fn get_verified_effects_and_events(
         .checkpoints
         .iter()
         .filter(|ckp_id| **ckp_id < seq)
-        .last();
+        .next_back();
 
     let committee = if let Some(prev_ckp_id) = prev_ckp_id {
         // Read it from the store
@@ -139,19 +140,7 @@ pub async fn get_verified_effects_and_events(
         );
 
         // Get the committee from the previous checkpoint
-        let current_committee = prev_ckp
-            .end_of_epoch_data
-            .as_ref()
-            .ok_or(anyhow!(
-                "Expected all checkpoints to be end-of-epoch checkpoints"
-            ))?
-            .next_epoch_committee
-            .iter()
-            .cloned()
-            .collect();
-
-        // Make a committee object using this
-        Committee::new(prev_ckp.epoch().checked_add(1).unwrap(), current_committee)
+        extract_new_committee_info(&prev_ckp)?
     } else {
         // Since we did not find a small committee checkpoint we use the genesis
         let mut genesis_path = config.checkpoint_summary_dir.clone();
@@ -229,7 +218,7 @@ pub async fn get_verified_checkpoint(
         .checkpoints
         .iter()
         .filter(|ckp_id| **ckp_id < seq)
-        .last();
+        .next_back();
 
     let committee = if let Some(prev_ckp_id) = prev_ckp_id {
         // Read it from the store
@@ -242,19 +231,7 @@ pub async fn get_verified_checkpoint(
         );
 
         // Get the committee from the previous checkpoint
-        let current_committee = prev_ckp
-            .end_of_epoch_data
-            .as_ref()
-            .ok_or(anyhow!(
-                "Expected all checkpoints to be end-of-epoch checkpoints"
-            ))?
-            .next_epoch_committee
-            .iter()
-            .cloned()
-            .collect();
-
-        // Make a committee object using this
-        Committee::new(prev_ckp.epoch().checked_add(1).unwrap(), current_committee)
+        extract_new_committee_info(&prev_ckp)?
     } else {
         // Since we did not find a small committee checkpoint we use the genesis
         let mut genesis_path = config.checkpoint_summary_dir.clone();
@@ -327,20 +304,7 @@ mod tests {
                 .map_err(|_| anyhow!("Unable to parse checkpoint file"))
                 .unwrap();
 
-        let prev_committee = checkpoint
-            .end_of_epoch_data
-            .as_ref()
-            .ok_or(anyhow!(
-                "Expected all checkpoints to be end-of-epoch checkpoints"
-            ))
-            .unwrap()
-            .next_epoch_committee
-            .iter()
-            .cloned()
-            .collect();
-
-        // Make a committee object using this
-        let committee = Committee::new(checkpoint.epoch().checked_add(1).unwrap(), prev_committee);
+        let committee = extract_new_committee_info(&checkpoint).unwrap();
 
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("test_files/20958462.bcs");
@@ -369,24 +333,30 @@ mod tests {
         // Change committee
         committee.epoch += 10;
 
-        assert!(extract_verified_effects_and_events(
-            &full_checkpoint,
-            &committee,
-            TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zi6cMVA9t4WhWk").unwrap(),
-        )
-        .is_err());
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zi6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
     }
 
     #[tokio::test]
     async fn test_checkpoint_no_transaction() {
         let (committee, full_checkpoint) = read_data().await;
 
-        assert!(extract_verified_effects_and_events(
-            &full_checkpoint,
-            &committee,
-            TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk").unwrap(),
-        )
-        .is_err());
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
     }
 
     #[tokio::test]
@@ -397,12 +367,15 @@ mod tests {
         let random_contents = FullCheckpointContents::random_for_testing();
         full_checkpoint.checkpoint_contents = random_contents.checkpoint_contents();
 
-        assert!(extract_verified_effects_and_events(
-            &full_checkpoint,
-            &committee,
-            TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk").unwrap(),
-        )
-        .is_err());
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
     }
 
     #[tokio::test]
@@ -422,11 +395,14 @@ mod tests {
             }
         }
 
-        assert!(extract_verified_effects_and_events(
-            &full_checkpoint,
-            &committee,
-            TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk").unwrap(),
-        )
-        .is_err());
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
     }
 }

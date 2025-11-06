@@ -11,7 +11,8 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use consensus_config::AuthorityIndex;
-use futures::{ready, stream, task, Stream, StreamExt};
+use consensus_types::block::{BlockRef, Round};
+use futures::{Stream, StreamExt, ready, stream, task};
 use mysten_metrics::spawn_monitored_task;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom as _;
@@ -22,7 +23,8 @@ use tokio_util::sync::ReusableBoxFuture;
 use tracing::{debug, info, warn};
 
 use crate::{
-    block::{BlockAPI as _, BlockRef, ExtendedBlock, SignedBlock, VerifiedBlock, GENESIS_ROUND},
+    CommitIndex,
+    block::{BlockAPI as _, ExtendedBlock, GENESIS_ROUND, SignedBlock, VerifiedBlock},
     block_verifier::BlockVerifier,
     commit::{CommitAPI as _, CommitRange, TrustedCommit},
     commit_vote_monitor::CommitVoteMonitor,
@@ -36,7 +38,6 @@ use crate::{
     storage::Store,
     synchronizer::SynchronizerHandle,
     transaction_certifier::TransactionCertifier,
-    CommitIndex, Round,
 };
 
 pub(crate) const COMMIT_LAG_MULTIPLIER: u32 = 5;
@@ -87,68 +88,6 @@ impl<C: CoreThreadDispatcher> AuthorityService<C> {
             round_tracker,
         }
     }
-
-    async fn handle_fetch_blocks_old(
-        &self,
-        _peer: AuthorityIndex,
-        mut block_refs: Vec<BlockRef>,
-        highest_accepted_rounds: Vec<Round>,
-    ) -> ConsensusResult<Vec<Bytes>> {
-        const MAX_ADDITIONAL_BLOCKS: usize = 10;
-        block_refs.truncate(self.context.parameters.max_blocks_per_fetch);
-
-        if !highest_accepted_rounds.is_empty()
-            && highest_accepted_rounds.len() != self.context.committee.size()
-        {
-            return Err(ConsensusError::InvalidSizeOfHighestAcceptedRounds(
-                highest_accepted_rounds.len(),
-                self.context.committee.size(),
-            ));
-        }
-
-        // Some quick validation of the requested block refs
-        for block in &block_refs {
-            if !self.context.committee.is_valid_index(block.author) {
-                return Err(ConsensusError::InvalidAuthorityIndex {
-                    index: block.author,
-                    max: self.context.committee.size(),
-                });
-            }
-            if block.round == GENESIS_ROUND {
-                return Err(ConsensusError::UnexpectedGenesisBlockRequested);
-            }
-        }
-
-        // For now ask dag state directly
-        let blocks = self.dag_state.read().get_blocks(&block_refs);
-
-        // Now check if an ancestor's round is higher than the one that the peer has. If yes, then serve
-        // that ancestor blocks up to `MAX_ADDITIONAL_BLOCKS`.
-        let mut ancestor_blocks = vec![];
-        if !highest_accepted_rounds.is_empty() {
-            let all_ancestors = blocks
-                .iter()
-                .flatten()
-                .flat_map(|block| block.ancestors().to_vec())
-                .filter(|block_ref| highest_accepted_rounds[block_ref.author] < block_ref.round)
-                .take(MAX_ADDITIONAL_BLOCKS)
-                .collect::<Vec<_>>();
-
-            if !all_ancestors.is_empty() {
-                ancestor_blocks = self.dag_state.read().get_blocks(&all_ancestors);
-            }
-        }
-
-        // Return the serialised blocks & the ancestor blocks
-        let result = blocks
-            .into_iter()
-            .chain(ancestor_blocks)
-            .flatten()
-            .map(|block| block.serialized().clone())
-            .collect::<Vec<_>>();
-
-        Ok(result)
-    }
 }
 
 #[async_trait]
@@ -181,9 +120,9 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
         let peer_hostname = &self.context.committee.authority(peer).hostname;
 
         // Reject blocks failing validations.
-        let reject_txn_votes = self
+        let (verified_block, reject_txn_votes) = self
             .block_verifier
-            .verify_and_vote(&signed_block)
+            .verify_and_vote(signed_block, serialized_block.block)
             .tap_err(|e| {
                 self.context
                     .metrics
@@ -193,7 +132,6 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
                     .inc();
                 info!("Invalid block from {}: {}", peer, e);
             })?;
-        let verified_block = VerifiedBlock::new_verified(signed_block, serialized_block.block);
         let block_ref = verified_block.reference();
         debug!("Received block {} via send block.", block_ref);
 
@@ -236,9 +174,7 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
                 .inc();
             debug!(
                 "Block {:?} is rejected because last commit index is lagging quorum commit index too much ({} < {})",
-                block_ref,
-                last_commit_index,
-                quorum_commit_index,
+                block_ref, last_commit_index, quorum_commit_index,
             );
             return Err(ConsensusError::BlockRejected {
                 block_ref,
@@ -408,18 +344,12 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
     //    - max_blocks_per_fetch blocks should be returned.
     async fn handle_fetch_blocks(
         &self,
-        peer: AuthorityIndex,
+        _peer: AuthorityIndex,
         mut block_refs: Vec<BlockRef>,
         highest_accepted_rounds: Vec<Round>,
         breadth_first: bool,
     ) -> ConsensusResult<Vec<Bytes>> {
         fail_point_async!("consensus-rpc-response");
-
-        if !self.context.protocol_config.consensus_batched_block_sync() {
-            return self
-                .handle_fetch_blocks_old(peer, block_refs, highest_accepted_rounds)
-                .await;
-        }
 
         if !highest_accepted_rounds.is_empty()
             && highest_accepted_rounds.len() != self.context.committee.size()
@@ -849,13 +779,14 @@ mod tests {
     use async_trait::async_trait;
     use bytes::Bytes;
     use consensus_config::AuthorityIndex;
+    use consensus_types::block::{BlockRef, Round};
     use mysten_metrics::monitored_mpsc;
     use parking_lot::{Mutex, RwLock};
     use tokio::{sync::broadcast, time::sleep};
 
     use crate::{
         authority_service::AuthorityService,
-        block::{BlockAPI, BlockRef, SignedBlock, TestBlock, VerifiedBlock},
+        block::{BlockAPI, SignedBlock, TestBlock, VerifiedBlock},
         commit::{CertifiedCommits, CommitRange},
         commit_vote_monitor::CommitVoteMonitor,
         context::Context,
@@ -868,7 +799,6 @@ mod tests {
         synchronizer::Synchronizer,
         test_dag_builder::DagBuilder,
         transaction_certifier::TransactionCertifier,
-        Round,
     };
     struct FakeCoreThreadDispatcher {
         blocks: Mutex<Vec<VerifiedBlock>>,
@@ -1012,8 +942,12 @@ mod tests {
             monitored_mpsc::unbounded_channel("consensus_block_output");
         let store = Arc::new(MemStore::new());
         let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store.clone())));
-        let transaction_certifier =
-            TransactionCertifier::new(context.clone(), dag_state.clone(), blocks_sender);
+        let transaction_certifier = TransactionCertifier::new(
+            context.clone(),
+            block_verifier.clone(),
+            dag_state.clone(),
+            blocks_sender,
+        );
         let synchronizer = Synchronizer::start(
             network_client,
             context.clone(),
@@ -1073,10 +1007,7 @@ mod tests {
         // Use NUM_AUTHORITIES and NUM_ROUNDS higher than max_blocks_per_sync to test limits.
         const NUM_AUTHORITIES: usize = 40;
         const NUM_ROUNDS: usize = 40;
-        let (mut context, _keys) = Context::new_for_test(NUM_AUTHORITIES);
-        context
-            .protocol_config
-            .set_consensus_batched_block_sync_for_testing(true);
+        let (context, _keys) = Context::new_for_test(NUM_AUTHORITIES);
         let context = Arc::new(context);
         let block_verifier = Arc::new(crate::block_verifier::NoopBlockVerifier {});
         let commit_vote_monitor = Arc::new(CommitVoteMonitor::new(context.clone()));
@@ -1087,8 +1018,12 @@ mod tests {
             monitored_mpsc::unbounded_channel("consensus_block_output");
         let store = Arc::new(MemStore::new());
         let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store.clone())));
-        let transaction_certifier =
-            TransactionCertifier::new(context.clone(), dag_state.clone(), blocks_sender);
+        let transaction_certifier = TransactionCertifier::new(
+            context.clone(),
+            block_verifier.clone(),
+            dag_state.clone(),
+            blocks_sender,
+        );
         let synchronizer = Synchronizer::start(
             network_client,
             context.clone(),
@@ -1250,8 +1185,12 @@ mod tests {
             monitored_mpsc::unbounded_channel("consensus_block_output");
         let store = Arc::new(MemStore::new());
         let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store.clone())));
-        let transaction_certifier =
-            TransactionCertifier::new(context.clone(), dag_state.clone(), blocks_sender);
+        let transaction_certifier = TransactionCertifier::new(
+            context.clone(),
+            block_verifier.clone(),
+            dag_state.clone(),
+            blocks_sender,
+        );
         let synchronizer = Synchronizer::start(
             network_client,
             context.clone(),

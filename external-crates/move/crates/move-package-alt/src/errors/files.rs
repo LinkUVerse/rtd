@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     fmt::{Debug, Display},
     fs, io,
     path::{Path, PathBuf},
@@ -7,8 +6,7 @@ use std::{
 
 use append_only_vec::AppendOnlyVec;
 use codespan_reporting::files::SimpleFile;
-
-use super::PackageResult;
+use serde::de::DeserializeOwned;
 
 /// A wrapper around [PathBuf] that implements [Display]
 #[derive(Clone)]
@@ -64,11 +62,13 @@ impl<'a> codespan_reporting::files::Files<'a> for Files {
 
 impl FileHandle {
     /// Reads the file located at [path] into the file cache and returns its ID
-    pub fn new(path: PathBuf) -> io::Result<Self> {
-        let name = path.to_string_lossy().to_string();
+    pub fn new(path: impl AsRef<Path>) -> io::Result<Self> {
         let source = fs::read_to_string(&path)?;
 
-        let id = FILES.push(SimpleFile::new(DisplayPath(path), source));
+        let id = FILES.push(SimpleFile::new(
+            DisplayPath(path.as_ref().to_path_buf()),
+            source,
+        ));
         Ok(Self { id })
     }
 
@@ -80,6 +80,21 @@ impl FileHandle {
     /// Return the source code for the file at [id]
     pub fn source(&self) -> &'static String {
         FILES[self.id].source()
+    }
+
+    /// Parse `self` as a toml value of type T
+    pub fn parse_toml<T: DeserializeOwned>(&self) -> Result<T, toml_edit::de::Error> {
+        toml_edit::de::from_str(self.source())
+    }
+
+    /// Return a dummy file for test scaffolding
+    #[cfg(test)]
+    pub fn dummy(path: impl AsRef<Path>, contents: impl AsRef<str>) -> Self {
+        let id = FILES.push(SimpleFile::new(
+            DisplayPath(path.as_ref().to_path_buf()),
+            contents.as_ref().to_string(),
+        ));
+        Self { id }
     }
 
     fn simple_file(&self) -> &'static SimpleFile<DisplayPath, String> {
@@ -96,5 +111,11 @@ impl Debug for FileHandle {
 impl Display for DisplayPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl AsRef<Path> for FileHandle {
+    fn as_ref(&self) -> &Path {
+        self.path()
     }
 }
