@@ -3,7 +3,9 @@
  * - move doesn't have binary literals
  */
 
-/* Module */
+/*
+ * Module
+ */
 
 /* A module is a sequence of module members enclosed in braces or terminated by a semicolon. */
 module ::= module_header module_body
@@ -11,13 +13,33 @@ module ::= module_header module_body
 /* A module header is a module keyword followed by an address literal or identifier followed by a double colon and an identifier. */
 module_header ::= "module" (hex_numeric_literal | identifier) "::" module_identifier
 
-/* A module body is a sequence of module members enclosed in braces or terminated by a semicolon. */
-module_body ::= ("{" (module_member)* "}") | ";" (module_member)*
+/* A module body is a sequence of module members enclosed in braces or following semicolon in case of module label. */
+module_body ::= ("{" (module_member)* "}") | (";" (module_member)*)
 
-/* Module Members */
+/*
+ * Module Members
+ */
 
 /* A module member is a struct definition, enum definition, const definition, fun definition, or friend declaration. */
-module_member ::= struct_definition | enum_definition | const_definition | fun_definition | friend_declaration
+module_member ::= struct_definition | enum_definition | const_definition | function_definition | friend_declaration | use_declaration
+
+/* Use external module or member */
+use_declaration ::= "use" (hex_numeric_literal | identifier) "::" module_or_member_import | ("{" module_or_member_import ("," module_or_member_import)* "}") ";"
+
+/*
+ * use pkg::module;
+ * use pkg::module::member;
+ * use pkg::module::{member, member}
+ * use pkg::{module, module};
+ * use pkg::{module::{member, member}}
+ */
+module_or_member_import ::=
+    | module_identifier
+    | module_identifier "::" module_member_import
+    | module_identifier "::" "{" module_member_import ("," module_member_import)* "}"
+
+/* Possible module member imports */
+module_member_import ::= "Self" | struct_or_enum_identifier | function_identifier
 
 /* A const definition is a const keyword followed by a const identifier, a colon, a built-in type, an equals sign, and a literal. */
 const_definition ::= "const" const_identifier ":" built_in_type "=" (literal | const_expression ) ";"
@@ -30,7 +52,9 @@ const_definition ::= "const" const_identifier ":" built_in_type "=" (literal | c
  */
 friend_declaration ::= "friend" (hex_numeric_literal | identifier) "::" identifier ";"
 
-/* Module: struct and enum */
+/*
+ * Module: struct and enum
+ */
 
 /* A struct definition is a public keyword followed by a struct keyword followed by a struct identifier followed by a struct or enum type parameters followed by an optional abilities followed by a struct body. */
 struct_definition ::= "public" "struct" struct_or_enum_identifier struct_or_enum_type_parameters? ("has" abilities)? named_fields | positional_fields ("has" abilities ";")?
@@ -53,7 +77,9 @@ enum_variants ::= "{" enum_variant ("," enum_variant)* "}"
 /* An enum variant is an identifier followed by an optional positional fields or optional named fields. */
 enum_variant ::= struct_or_enum_identifier positional_fields | struct_or_enum_identifier named_fields
 
-/* Module: function */
+/*
+ * Module: function
+ */
 
 /* A function definition consists of the function signature followed by the function body for non-native functions. */
 /* A native definition does not feature a body and ends with a semicolon. */
@@ -74,7 +100,9 @@ return_type ::= ":" ("(" type ("," type)* ")") | type
 /* A function body is an expression block. */
 function_body ::= block_expression
 
-/* Expressions */
+/*
+ * Expressions
+ */
 
 /* Expression aggregates all possible expressions. */
 expression ::=
@@ -132,7 +160,9 @@ assign_expression ::= expression "=" expression
 /* Field access is an expression followed by a dot and a field identifier. */
 field_access_expression ::= expression "." field_identifier
 
-/* Expression: Control Flow */
+/*
+ * Expression: Control Flow
+ */
 
 /* A control flow expression is a control flow expression. */
 control_flow_expression ::=
@@ -194,12 +224,16 @@ struct_constructor_pattern ::= struct_or_enum_identifier "{" (field_identifier (
 /* A guard is an if keyword followed by a condition in parentheses. */
 guard ::= "if" "(" expression ")"
 
-/* Let Statement */
+/*
+ * Let Statement
+ */
 
 /* A let statement is a let keyword followed by a mutability, a local identifier, an optional type, and an optional equals sign and an expression. */
 let_statement ::= "let" mut? local_identifier (":" type)? "=" expression
 
-/* Identifiers */
+/*
+ * Identifiers
+ */
 
 /*
  * Address identifiers start with any allowed symbol but not a digit.
@@ -233,7 +267,9 @@ function_identifier ::= field_identifier
 /* TODO: Label identifiers must start with a lowercase letter. */
 label_identifier ::= (lowercase_letter | underscore) (lowercase_letter | digit | underscore)*
 
-/* Generics and Type Parameters */
+/*
+ * Generics and Type Parameters
+ */
 
 /* An expression type parameters is a sequence of types separated by commas. */
 expression_type_parameters ::= "<" type ("," type)* ">"
@@ -254,7 +290,9 @@ struct_or_enum_type_parameters ::= "<" (struct_or_enum_type_parameter ("," struc
 /* A type parameter list is a sequence of type parameters separated by commas. */
 function_type_parameters ::= "<" (type_parameter ("," type_parameter)*)? ">"
 
-/* Types */
+/*
+ * Types
+ */
 
 /* Currently, only unsigned integers are supported. */
 integer_type ::= "u8" | "u16" | "u32" | "u64" | "u128" | "u256"
