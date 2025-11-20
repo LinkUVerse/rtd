@@ -23,7 +23,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 102;
+const MAX_PROTOCOL_VERSION: u64 = 103;
 
 // Record history of protocol version allocations here:
 //
@@ -275,6 +275,7 @@ const MAX_PROTOCOL_VERSION: u64 = 102;
 // Version 100: Framework update
 // Version 101: Framework update
 //              Set max updates per settlement txn to 100.
+// Version 103: Framework update: internal Coin methods
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -879,6 +880,10 @@ struct FeatureFlags {
     // DO NOT ENABLE outside of the transaction test runner.
     #[serde(skip_serializing_if = "is_false")]
     enable_non_exclusive_writes: bool,
+
+    // If true, deprecate global storage ops everywhere.
+    #[serde(skip_serializing_if = "is_false")]
+    deprecate_global_storage_ops: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -2400,6 +2405,10 @@ impl ProtocolConfig {
             PerObjectCongestionControlMode::ExecutionTimeEstimate(ref params)
                 if params.observations_chunk_size.is_some()
         )
+    }
+
+    pub fn deprecate_global_storage_ops(&self) -> bool {
+        self.feature_flags.deprecate_global_storage_ops
     }
 }
 
@@ -4255,7 +4264,9 @@ impl ProtocolConfig {
                                 observations_chunk_size: Some(18),
                             },
                         );
+                    cfg.feature_flags.deprecate_global_storage_ops = true;
                 }
+                103 => {}
                 // Use this template when making changes:
                 //
                 //     // modify an existing constant.
@@ -4284,20 +4295,29 @@ impl ProtocolConfig {
         cfg
     }
 
-    // Extract the bytecode verifier config from this protocol config. `for_signing` indicates
-    // whether this config is used for verification during signing or execution.
-    pub fn verifier_config(&self, signing_limits: Option<(usize, usize)>) -> VerifierConfig {
-        let (max_back_edges_per_function, max_back_edges_per_module) = if let Some((
+    // Extract the bytecode verifier config from this protocol config.
+    // If used during signing, `signing_limits` should be set.
+    // The third limit configures`sanity_check_with_regex_reference_safety`,
+    // which runs the new regex-based reference safety check to check that it is strictly more
+    // permissive than the current implementation.
+    pub fn verifier_config(&self, signing_limits: Option<(usize, usize, usize)>) -> VerifierConfig {
+        let (
             max_back_edges_per_function,
             max_back_edges_per_module,
+            sanity_check_with_regex_reference_safety,
+        ) = if let Some((
+            max_back_edges_per_function,
+            max_back_edges_per_module,
+            sanity_check_with_regex_reference_safety,
         )) = signing_limits
         {
             (
                 Some(max_back_edges_per_function),
                 Some(max_back_edges_per_module),
+                Some(sanity_check_with_regex_reference_safety),
             )
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         let additional_borrow_checks = if signing_limits.is_some() {
@@ -4305,6 +4325,12 @@ impl ProtocolConfig {
             true
         } else {
             self.additional_borrow_checks()
+        };
+        let deprecate_global_storage_ops = if signing_limits.is_some() {
+            // always turn on additional vector borrow checks during signing
+            true
+        } else {
+            self.deprecate_global_storage_ops()
         };
 
         VerifierConfig {
@@ -4333,6 +4359,9 @@ impl ProtocolConfig {
             additional_borrow_checks,
             better_loader_errors: self.better_loader_errors(),
             private_generics_verifier_v2: self.private_generics_verifier_v2(),
+            sanity_check_with_regex_reference_safety: sanity_check_with_regex_reference_safety
+                .map(|limit| limit as u128),
+            deprecate_global_storage_ops,
         }
     }
 
@@ -4340,15 +4369,15 @@ impl ProtocolConfig {
         &self,
         override_deprecate_global_storage_ops_during_deserialization: Option<bool>,
     ) -> BinaryConfig {
-        let deprecate_global_storage_ops_during_deserialization =
+        let deprecate_global_storage_ops =
             override_deprecate_global_storage_ops_during_deserialization
-                .unwrap_or_else(|| self.deprecate_global_storage_ops_during_deserialization());
+                .unwrap_or_else(|| self.deprecate_global_storage_ops());
         BinaryConfig::new(
             self.move_binary_format_version(),
             self.min_move_binary_format_version_as_option()
                 .unwrap_or(VERSION_1),
             self.no_extraneous_module_bytes(),
-            deprecate_global_storage_ops_during_deserialization,
+            deprecate_global_storage_ops,
             TableConfig {
                 module_handles: self.binary_module_handles_as_option().unwrap_or(u16::MAX),
                 datatype_handles: self.binary_struct_handles_as_option().unwrap_or(u16::MAX),

@@ -382,10 +382,10 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
         let mut written_objects = BTreeMap::new();
 
         for (id, (recipient, ty, value)) in writes {
-            let ty: Type = env.load_type_from_struct(&ty.clone().into())?;
+            let (ty, layout) = env.load_type_and_layout_from_struct(&ty.clone().into())?;
             let abilities = ty.abilities();
             let has_public_transfer = abilities.has_store();
-            let Some(bytes) = value.serialize() else {
+            let Some(bytes) = value.typed_serialize(&layout) else {
                 invariant_violation!("Failed to serialize already deserialized Move value");
             };
             // safe because has_public_transfer has been determined by the abilities
@@ -442,7 +442,9 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
         linkage: &RootedLinkage,
     ) -> Result<(), ExecutionError> {
         let events = object_runtime_mut!(self)?.take_user_events();
-        let num_events = self.user_events.len() + events.len();
+        let Some(num_events) = self.user_events.len().checked_add(events.len()) else {
+            invariant_violation!("usize overflow, too many events emitted")
+        };
         let max_events = self.env.protocol_config.max_num_event_emit();
         if num_events as u64 > max_events {
             let err = max_event_error(max_events)
@@ -453,7 +455,8 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
         let new_events = events
             .into_iter()
             .map(|(tag, value)| {
-                let Some(bytes) = value.serialize() else {
+                let layout = self.env.type_layout_for_struct(&tag)?;
+                let Some(bytes) = value.typed_serialize(&layout) else {
                     invariant_violation!("Failed to serialize Move event");
                 };
                 Ok((storage_id.clone(), tag, bytes))
@@ -705,7 +708,10 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
         let mut fetched = vec![];
         let mut missing = vec![];
 
-        for id in dependency_ids {
+        // Collect into a set to avoid duplicate fetches and preserve existing behavior
+        let dependency_ids: BTreeSet<_> = dependency_ids.iter().collect();
+
+        for id in &dependency_ids {
             match self.env.linkable_store.get_package(id) {
                 Err(e) => {
                     return Err(ExecutionError::new_with_source(
@@ -1070,7 +1076,8 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
                 invariant_violation!("read should not return a reference")
             }
         };
-        let Some(bytes) = value.serialize() else {
+        let layout = self.env.runtime_layout(&ty)?;
+        let Some(bytes) = value.typed_serialize(&layout) else {
             invariant_violation!("Failed to serialize Move value");
         };
         let arg = match location {
@@ -1123,7 +1130,8 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
             }
             _ => (result, ty),
         };
-        let Some(bytes) = v.serialize() else {
+        let layout = self.env.runtime_layout(&ty)?;
+        let Some(bytes) = v.typed_serialize(&layout) else {
             invariant_violation!("Failed to serialize Move value");
         };
         let Ok(tag): Result<TypeTag, _> = ty.try_into() else {

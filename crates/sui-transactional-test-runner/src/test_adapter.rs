@@ -2665,7 +2665,7 @@ async fn init_sim_executor(
         PersistedStore::new_sim_replica_with_protocol_version_and_accounts(
             rng,
             DEFAULT_CHAIN_START_TIMESTAMP,
-            protocol_config.version,
+            protocol_config,
             acc_cfgs,
             addr_keys
                 .iter()
@@ -2673,8 +2673,6 @@ async fn init_sim_executor(
                 .collect(),
             reference_gas_price,
             None,
-            protocol_config.enable_accumulators(),
-            protocol_config.enable_authenticated_event_streams(),
         );
 
     sim.set_data_ingestion_path(data_ingestion_path.clone());
@@ -2891,5 +2889,12 @@ impl ReadStore for SuiTestAdapter {
         digest: &TransactionDigest,
     ) -> Option<Vec<sui_types::storage::ObjectKey>> {
         self.executor.get_unchanged_loaded_runtime_objects(digest)
+    }
+
+    fn get_transaction_checkpoint(
+        &self,
+        digest: &TransactionDigest,
+    ) -> Option<CheckpointSequenceNumber> {
+        self.executor.get_transaction_checkpoint(digest)
     }
 }
