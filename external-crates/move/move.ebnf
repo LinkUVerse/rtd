@@ -107,7 +107,7 @@ function_parameters ::= "(" (function_parameter ("," function_parameter)*)? ")"
 function_parameter ::= mut? local_identifier ":" type
 
 /* A return type is a single type or a tuple of types with at least one element. */
-return_type ::= ":" ("(" type ("," type)* ")") | type
+return_type ::= ":" (type | type_list)
 
 /* A function body is an expression block. */
 function_body ::= block_expression
@@ -131,6 +131,7 @@ expression ::=
     | labeled_expression
     | field_access_expression
     | enum_pack_expression
+    | type_annotation_expression
 
 /* Block expression is a sequence of expressions separated by semicolons. */
 block_expression ::= "{" ((let_statement | expression) (";" (let_statement | expression))* ";"? )? "}"
@@ -143,20 +144,26 @@ literal_expression ::= literal
 /* A cast expression is an expression followed by an as keyword and an integer type. */
 cast_expression ::= expression "as" integer_type
 
+/* Function call expression, eg: function<u8, _>(arg1, arg2); */
+call_expression ::= function_identifier expression_type_parameters? expression_list
+
 /* Arithmetic expression is a binary operator followed by two expressions. */
 arithmetic_binop_logical_expression ::= expression operator expression
 
 /* Struct pack expression is a struct identifier followed by either positional values or named field instantiations. */
-pack_expression ::= struct_or_enum_identifier expression_type_parameters? (expression_list | named_fields_instantiation)
+pack_expression ::= struct_or_enum_identifier expression_type_parameters? (positional_fields_instantiation | named_fields_instantiation)
 
 /* An enum pack expression is an enum identifier followed by a double colon and an enum identifier, optionally followed by an expression list or named fields instantiation. */
-enum_pack_expression ::= struct_or_enum_identifier "::" struct_or_enum_identifier (expression_list | named_fields_instantiation)?
+enum_pack_expression ::= struct_or_enum_identifier "::" struct_or_enum_identifier (positional_fields_instantiation | named_fields_instantiation)?
 
 /* An expression list is a sequence of expressions separated by commas. */
 expression_list ::= "(" (expression ("," expression)*)? ")"
 
 /* A named fields instantiation is a sequence of field identifiers followed by a colon and an expression separated by commas. */
 named_fields_instantiation ::= "{" (field_identifier (":" expression)? ("," field_identifier (":" expression)?)*)? "}"
+
+/* Positional structs are instantiated like an expression list */
+positional_fields_instantiation ::= expression_list
 
 /* A named field instantiation is a field identifier followed by a colon and an expression. */
 /* In case where the field identifier is the same as the local identifier, expression can be omitted. */
@@ -170,6 +177,8 @@ assign_expression ::= expression "=" expression
 
 /* Field access is an expression followed by a dot and a field identifier. */
 field_access_expression ::= expression "." field_identifier
+
+type_annotation_expression ::= expression ":" type
 
 /*
  * Expression: Control Flow
@@ -240,7 +249,35 @@ guard ::= "if" "(" expression ")"
  */
 
 /* A let statement is a let keyword followed by a mutability, a local identifier, an optional type, and an optional equals sign and an expression. */
-let_statement ::= "let" mut? local_identifier (":" type)? "=" expression
+let_statement ::= "let" (let_bind | let_bind_list | let_bind_unpack)
+
+/* mut field: T = call(); */
+let_bind ::= mut? local_identifier (":" type)? "=" expression
+
+/*
+ * (mut field, name, _) = (1, 0, 10)
+ * (_, name, field) = call();
+ * (name, field) = macro_call!();
+ */
+let_bind_list ::= "(" mut? local_identifier ("," mut? local_identifier)* ")" (":" type_list)? "=" (("(" expression ("," expression)* ")") | call_expression | macro_call_expression)
+
+/*
+ * let Positional(..) = value;
+ * let NamedFields { field, .. } = value;
+ */
+let_bind_unpack ::= struct_or_enum_identifier expression_type_parameters? bind_fields (":" type)? "=" expression
+
+/* (field, field) | { field, .. } */
+bind_fields ::= bind_positional_fields | bind_named_fields
+
+/* (field, name, ..) */
+bind_positional_fields ::= "(" (field_identifier_or_rest ("," field_identifier_or_rest)*)? ")"
+
+/* { field, name, .. } */
+bind_named_fields ::= "{" (field_identifier_or_rest ("," field_identifier_or_rest)) "}"
+
+/* field_name | ".." */
+field_identifier_or_rest ::= field_identifier | ".."
 
 /*
  * Identifiers
@@ -283,7 +320,10 @@ label_identifier ::= (lowercase_letter | underscore) (lowercase_letter | digit |
  */
 
 /* An expression type parameters is a sequence of types separated by commas. */
-expression_type_parameters ::= "<" type ("," type)* ">"
+expression_type_parameters ::= "<" type_or_omit ("," type_or_omit)* ">"
+
+/* Either specify type or let type inference do the job */
+type_or_omit ::= type | "_"
 
 /* A type parameter is a sequence of type parameters with optional ability constraints. */
 type_parameter ::= identifier (":" ability_constraint)?
@@ -300,6 +340,9 @@ struct_or_enum_type_parameters ::= "<" (struct_or_enum_type_parameter ("," struc
 
 /* A type parameter list is a sequence of type parameters separated by commas. */
 function_type_parameters ::= "<" (type_parameter ("," type_parameter)*)? ">"
+
+/* (Type, u8) */
+type_list ::= "(" type? ("," type)* ")"
 
 /*
  * Types
@@ -327,7 +370,15 @@ built_in_vector_type ::= "vector" "<" built_in_type ">"
 vector_type ::= "vector" "<" element_type ">"
 
 /* A generalization of types: includes all built-in types, vector types, and struct or enum identifiers. */
-type ::= built_in_type | vector_type | struct_or_enum_identifier
+type ::= built_in_type | vector_type | struct_or_enum_identifier | module_access_type
+
+/*
+ * Foreign type access + conflict resolution by prefixing with ::
+ * coin::Coin
+ * sui::coin::Coin
+ * ::sui::coin::Coin
+ */
+module_access_type ::= ("::"? (hex_numeric_literal | address_identifier) "::")? module_identifier "::" struct_or_enum_identifier
 
 /* Literals */
 
