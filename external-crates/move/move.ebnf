@@ -1,6 +1,9 @@
 /*
  * Notes:
  * - move doesn't have binary literals
+ * - last expression in a block is a return value
+ * - automatically insert unit () after last semicolon if no expression follows
+ * - prefer module label with a semicolon, unless there're multiple modules in a file
  */
 
 /*
@@ -11,7 +14,7 @@
 module ::= module_header module_body
 
 /* A module header is a module keyword followed by an address literal or identifier followed by a double colon and an identifier. */
-module_header ::= "module" (hex_numeric_literal | identifier) "::" module_identifier
+module_header ::= "module" (hex_numeric_literal | address_identifier) "::" module_identifier
 
 /* A module body is a sequence of module members enclosed in braces or following semicolon in case of module label. */
 module_body ::= ("{" (module_member)* "}") | (";" (module_member)*)
@@ -24,7 +27,7 @@ module_body ::= ("{" (module_member)* "}") | (";" (module_member)*)
 module_member ::= struct_definition | enum_definition | const_definition | function_definition | friend_declaration | use_declaration
 
 /* Use external module or member */
-use_declaration ::= "use" (hex_numeric_literal | identifier) "::" module_or_member_import | ("{" module_or_member_import ("," module_or_member_import)* "}") ";"
+use_declaration ::= "use" (hex_numeric_literal | address_identifier) "::" (module_or_member_import | ("{" module_or_member_import ("," module_or_member_import)* "}")) ";"
 
 /*
  * use pkg::module;
@@ -34,7 +37,7 @@ use_declaration ::= "use" (hex_numeric_literal | identifier) "::" module_or_memb
  * use pkg::{module::{member, member}}
  */
 module_or_member_import ::=
-    | module_identifier
+    module_identifier
     | module_identifier "::" module_member_import
     | module_identifier "::" "{" module_member_import ("," module_member_import)* "}"
 
@@ -57,7 +60,16 @@ friend_declaration ::= "friend" (hex_numeric_literal | identifier) "::" identifi
  */
 
 /* A struct definition is a public keyword followed by a struct keyword followed by a struct identifier followed by a struct or enum type parameters followed by an optional abilities followed by a struct body. */
-struct_definition ::= "public" "struct" struct_or_enum_identifier struct_or_enum_type_parameters? ("has" abilities)? named_fields | positional_fields ("has" abilities ";")?
+struct_definition ::= "public" "struct" struct_or_enum_identifier struct_or_enum_type_parameters?
+    struct_with_no_abilities
+    | struct_with_postfix_abilities
+    | struct_with_prefix_abilities
+
+struct_with_no_abilities ::= named_fields | positional_fields
+
+struct_with_prefix_abilities ::= "has" abilities (named_fields | positional_fields)
+
+struct_with_postfix_abilities ::= (named_fields | positional_fields) "has" abilities ";"
 
 /* Regular struct body is enclosed in braces and consists of a sequence of struct members separated by commas. */
 named_fields ::= "{" (struct_field ("," struct_field)*)? "}"
@@ -106,7 +118,7 @@ function_body ::= block_expression
 
 /* Expression aggregates all possible expressions. */
 expression ::=
-    | literal_expression
+    literal_expression
     | pack_expression
     | unit_expression
     | block_expression
@@ -126,8 +138,7 @@ block_expression ::= "{" ((let_statement | expression) (";" (let_statement | exp
 /* A literal expression is a type literal. */
 literal_expression ::= literal
 
-/* A const expression is a constant identifier. */
-const_expression ::= constant_identifier
+// name_expression ::=
 
 /* A cast expression is an expression followed by an as keyword and an integer type. */
 cast_expression ::= expression "as" integer_type
@@ -145,7 +156,7 @@ enum_pack_expression ::= struct_or_enum_identifier "::" struct_or_enum_identifie
 expression_list ::= "(" (expression ("," expression)*)? ")"
 
 /* A named fields instantiation is a sequence of field identifiers followed by a colon and an expression separated by commas. */
-named_fields_instantiation ::= "{" (field_identifier ":" expression ("," field_identifier ":" expression)*)? "}"
+named_fields_instantiation ::= "{" (field_identifier (":" expression)? ("," field_identifier (":" expression)?)*)? "}"
 
 /* A named field instantiation is a field identifier followed by a colon and an expression. */
 /* In case where the field identifier is the same as the local identifier, expression can be omitted. */
@@ -164,9 +175,8 @@ field_access_expression ::= expression "." field_identifier
  * Expression: Control Flow
  */
 
-/* A control flow expression is a control flow expression. */
 control_flow_expression ::=
-    | if_expression
+    if_expression
     | while_expression
     | loop_expression
     | labeled_expression
@@ -191,11 +201,12 @@ labeled_expression ::= "labeled" label_identifier ":" (block_expression | if_exp
 continue_expression ::= "continue" ("'" label_identifier)?
 
 /* A break expression is a break keyword optionally followed by a label identifier and an optional expression. */
-break_expression ::= "break" ("'" label_identifier)? expression?
+break_expression ::= "break" ("'" label_identifier expression?)?
 
 /* A return expression is a return keyword followed by an optional label identifier and an expression. */
-return_expression ::= "return" ("'" label_identifier)? expression
+return_expression ::= "return" ("'" label_identifier)? expression?
 
+/* A match on value expression */
 match_expression ::= "match" "(" expression ")" "{" (match_arm ("," match_arm)*)? "}"
 
 /* A match arm is a match pattern, an optional guard, an arrow, and an expression. */
@@ -209,7 +220,7 @@ wildcard ::= "_"
 
 /* A match pattern is a literal, a constant, an enum variant or a struct constructor. */
 match_pattern ::=
-    | boolean_literal
+    boolean_literal
     | numeric_literal
     | hex_numeric_literal
     | address_literal
@@ -303,6 +314,9 @@ element_type ::= built_in_type | struct_or_enum_identifier
 /* An address type */
 address_type ::= "address"
 
+/* Boolean type */
+boolean_type ::= "bool"
+
 /* A built-in type is a vector type, integer type, or boolean type. */
 built_in_type ::= integer_type | boolean_type | built_in_vector_type | address_type
 
@@ -374,4 +388,4 @@ non_zero_digit ::= "1".."9"
 
 underscore ::= "_"
 uppercase_letter ::= "A".."Z"
-lowercase_letter ::= "a".."Z"
+lowercase_letter ::= "a".."z"
