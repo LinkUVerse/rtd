@@ -276,7 +276,7 @@ impl ConsistentReader {
     #[instrument(skip(self), level = "debug")]
     pub async fn list_owned_objects(
         &self,
-        checkpoint: u64,
+        checkpoint: Option<u64>,
         kind: OwnerKind,
         address: Option<String>,
         object_type: Option<String>,
@@ -288,7 +288,7 @@ impl ConsistentReader {
         let response = self
             .request(
                 "list_owned_objects",
-                Some(checkpoint),
+                checkpoint,
                 |mut client, request| async move { client.list_owned_objects(request).await },
                 ListOwnedObjectsRequest {
                     owner: Some(Owner {
