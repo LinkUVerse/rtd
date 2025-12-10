@@ -498,6 +498,26 @@ impl ValidatorService {
         self.transaction(request).await
     }
 
+    /// Test method that performs transaction validation without going through gRPC.
+    /// This is used for testing transaction validation errors.
+    pub async fn handle_transaction_for_testing(
+        &self,
+        transaction: Transaction,
+    ) -> SuiResult<HandleTransactionResponse> {
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
+
+        // Validity check (basic structural validation)
+        transaction.validity_check(&epoch_store.tx_validity_check_context())?;
+
+        // Signature verification
+        let transaction = epoch_store
+            .verify_transaction_require_no_aliases(transaction)?
+            .into_tx();
+
+        // Handle the transaction
+        self.state.handle_transaction(&epoch_store, transaction).await
+    }
+
     // When making changes to this function, see if the changes should be applied to
     // `Self::handle_submit_transaction()` and `SuiTxValidator::vote_transaction()` as well.
     async fn handle_transaction(
@@ -2229,50 +2249,42 @@ impl Validator for ValidatorService {
 
     async fn transaction(
         &self,
-        request: tonic::Request<Transaction>,
+        _request: tonic::Request<Transaction>,
     ) -> Result<tonic::Response<HandleTransactionResponse>, tonic::Status> {
-        let validator_service = self.clone();
-
-        // Spawns a task which handles the transaction. The task will unconditionally continue
-        // processing in the event that the client connection is dropped.
-        spawn_monitored_task!(async move {
-            // NB: traffic tally wrapping handled within the task rather than on task exit
-            // to prevent an attacker from subverting traffic control by severing the connection
-            handle_with_decoration!(validator_service, transaction_impl, request)
-        })
-        .await
-        .unwrap()
+        // QD handler deprecated - use submit_transaction() instead
+        Err(tonic::Status::unimplemented(
+            "transaction() is deprecated. Use submit_transaction() instead.",
+        ))
     }
 
     async fn submit_certificate(
         &self,
-        request: tonic::Request<CertifiedTransaction>,
+        _request: tonic::Request<CertifiedTransaction>,
     ) -> Result<tonic::Response<SubmitCertificateResponse>, tonic::Status> {
-        let validator_service = self.clone();
-
-        // Spawns a task which handles the certificate. The task will unconditionally continue
-        // processing in the event that the client connection is dropped.
-        spawn_monitored_task!(async move {
-            // NB: traffic tally wrapping handled within the task rather than on task exit
-            // to prevent an attacker from subverting traffic control by severing the connection.
-            handle_with_decoration!(validator_service, submit_certificate_impl, request)
-        })
-        .await
-        .unwrap()
+        // QD handler deprecated - use submit_transaction() instead
+        Err(tonic::Status::unimplemented(
+            "submit_certificate() is deprecated. Use submit_transaction() instead.",
+        ))
     }
 
     async fn handle_certificate_v2(
         &self,
-        request: tonic::Request<CertifiedTransaction>,
+        _request: tonic::Request<CertifiedTransaction>,
     ) -> Result<tonic::Response<HandleCertificateResponseV2>, tonic::Status> {
-        handle_with_decoration!(self, handle_certificate_v2_impl, request)
+        // QD handler deprecated - use submit_transaction() instead
+        Err(tonic::Status::unimplemented(
+            "handle_certificate_v2() is deprecated. Use submit_transaction() instead.",
+        ))
     }
 
     async fn handle_certificate_v3(
         &self,
-        request: tonic::Request<HandleCertificateRequestV3>,
+        _request: tonic::Request<HandleCertificateRequestV3>,
     ) -> Result<tonic::Response<HandleCertificateResponseV3>, tonic::Status> {
-        handle_with_decoration!(self, handle_certificate_v3_impl, request)
+        // QD handler deprecated - use submit_transaction() instead
+        Err(tonic::Status::unimplemented(
+            "handle_certificate_v3() is deprecated. Use submit_transaction() instead.",
+        ))
     }
 
     async fn wait_for_effects(
@@ -2284,9 +2296,12 @@ impl Validator for ValidatorService {
 
     async fn handle_soft_bundle_certificates_v3(
         &self,
-        request: tonic::Request<HandleSoftBundleCertificatesRequestV3>,
+        _request: tonic::Request<HandleSoftBundleCertificatesRequestV3>,
     ) -> Result<tonic::Response<HandleSoftBundleCertificatesResponseV3>, tonic::Status> {
-        handle_with_decoration!(self, handle_soft_bundle_certificates_v3_impl, request)
+        // QD handler deprecated - use submit_transaction() instead
+        Err(tonic::Status::unimplemented(
+            "handle_soft_bundle_certificates_v3() is deprecated. Use submit_transaction() instead.",
+        ))
     }
 
     async fn object_info(
