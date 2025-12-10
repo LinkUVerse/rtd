@@ -140,6 +140,15 @@ impl BalanceWithdrawSchedulerTrait for EagerBalanceWithdrawScheduler {
     async fn settle_balances(&self, settlement: BalanceSettlement) {
         let next_accumulator_version = settlement.next_accumulator_version;
         let mut inner_state = self.inner_state.lock();
+        if next_accumulator_version <= inner_state.accumulator_version {
+            // This accumulator version is already settled.
+            // There is no need to settle the balances.
+            debug!(
+                next_accumulator_version =? next_accumulator_version.value(),
+                "Skipping settlement since it is already settled",
+            );
+            return;
+        }
         assert_eq!(
             next_accumulator_version,
             inner_state.accumulator_version.next()
@@ -196,8 +205,8 @@ impl BalanceWithdrawSchedulerTrait for EagerBalanceWithdrawScheduler {
                 .get(&object_id)
                 .copied()
                 .unwrap_or_default();
-            // Withdraw amounts must be bounded by reservations.
-            let net = u128::try_from(reserved.checked_add(settled).unwrap()).unwrap();
+            let net = u128::try_from(reserved.checked_add(settled).unwrap())
+                .expect("Withdraw amounts must be bounded by reservations");
             account_state.balance_lower_bound += net;
             debug!(
                 account_id = ?object_id,
