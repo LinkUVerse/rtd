@@ -32,7 +32,8 @@ public struct NitroAttestationDocument has drop {
     timestamp: u64,
     /// The digest function used for calculating the register values.
     digest: vector<u8>,
-    /// A list of PCREntry containing the index and the PCR bytes.
+    /// A list of PCREntry containing the index and the PCR bytes. In devnet and testnet, all-zero 
+    /// PCRs are excluded.
     /// <https://docs.aws.amazon.com/enclaves/latest/user/set-up-attestation.html#where>.
     pcrs: vector<PCREntry>,
     /// An optional DER-encoded key the attestation, consumer can use to encrypt data with.
@@ -66,7 +67,7 @@ public fun digest(attestation: &NitroAttestationDocument): &vector<u8> {
 }
 
 /// Returns a list of mapping PCREntry containg the index and the PCR bytes.
-/// AWS supports PCR0-31. All-zero PCR values are excluded.
+/// AWS supports PCR0-31. In devnet and testnet, all-zero PCR values are excluded.
 public fun pcrs(attestation: &NitroAttestationDocument): &vector<PCREntry> {
     &attestation.pcrs
 }
