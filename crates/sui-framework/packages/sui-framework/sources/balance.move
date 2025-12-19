@@ -116,7 +116,7 @@ public fun withdraw_funds_from_object<T>(obj: &mut UID, value: u64): Withdrawal<
 
 /// Read the balance of an address as of the beginning of the current consensus commit.
 /// Can read either address-owned or object-owned balances.
-public fun read_address_balance<T>(
+public fun read_settled_address_balance<T>(
     root: &sui::accumulator::AccumulatorRoot,
     address: address,
 ): u64 {

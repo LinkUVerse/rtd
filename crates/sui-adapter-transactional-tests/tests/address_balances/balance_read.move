@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-// Test read_address_balance from sui::balance
+// Test read_settled_address_balance from sui::balance
 
 //# init --addresses test=0x0 --accounts A B C D --enable-accumulators --simulator
 
@@ -9,7 +9,7 @@
 module test::balance_read;
 
 public fun balance_check(acc: &sui::accumulator::AccumulatorRoot, addr: address, expected: u64) {
-  let balance = sui::balance::read_address_balance<sui::sui::SUI>(acc, addr);
+  let balance = sui::balance::read_settled_address_balance<sui::sui::SUI>(acc, addr);
 
   assert!(balance == expected, 100);
 }
@@ -19,7 +19,7 @@ public fun balance_check_fake(
   addr: address,
   expected: u64,
 ) {
-  let balance = sui::balance::read_address_balance<u64>(acc, addr);
+  let balance = sui::balance::read_settled_address_balance<u64>(acc, addr);
 
   assert!(balance == expected, 100);
 }

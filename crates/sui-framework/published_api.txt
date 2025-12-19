@@ -1975,7 +1975,7 @@ redeem_funds
 withdraw_funds_from_object
 	public fun
 	0x2::balance
-read_address_balance
+read_settled_address_balance
 	public fun
 	0x2::balance
 create_supply_internal

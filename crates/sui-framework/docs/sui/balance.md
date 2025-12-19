@@ -23,7 +23,7 @@ custom coins with <code><a href="../sui/balance.md#sui_balance_Supply">Supply</a
 -  [Function `send_funds`](#sui_balance_send_funds)
 -  [Function `redeem_funds`](#sui_balance_redeem_funds)
 -  [Function `withdraw_funds_from_object`](#sui_balance_withdraw_funds_from_object)
--  [Function `read_address_balance`](#sui_balance_read_address_balance)
+-  [Function `read_settled_address_balance`](#sui_balance_read_settled_address_balance)
 -  [Function `create_supply_internal`](#sui_balance_create_supply_internal)
 -  [Function `create_staking_rewards`](#sui_balance_create_staking_rewards)
 -  [Function `destroy_storage_rebates`](#sui_balance_destroy_storage_rebates)
@@ -511,15 +511,15 @@ Create a <code>Withdrawal&lt;<a href="../sui/balance.md#sui_balance_Balance">Bal
 
 </details>
 
-<a name="sui_balance_read_address_balance"></a>
+<a name="sui_balance_read_settled_address_balance"></a>
 
-## Function `read_address_balance`
+## Function `read_settled_address_balance`
 
 Read the balance of an address as of the beginning of the current consensus commit.
 Can read either address-owned or object-owned balances.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../sui/balance.md#sui_balance_read_address_balance">read_address_balance</a>&lt;T&gt;(root: &<a href="../sui/accumulator.md#sui_accumulator_AccumulatorRoot">sui::accumulator::AccumulatorRoot</a>, <b>address</b>: <b>address</b>): u64
+<pre><code><b>public</b> <b>fun</b> <a href="../sui/balance.md#sui_balance_read_settled_address_balance">read_settled_address_balance</a>&lt;T&gt;(root: &<a href="../sui/accumulator.md#sui_accumulator_AccumulatorRoot">sui::accumulator::AccumulatorRoot</a>, <b>address</b>: <b>address</b>): u64
 </code></pre>
 
 
@@ -528,7 +528,7 @@ Can read either address-owned or object-owned balances.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../sui/balance.md#sui_balance_read_address_balance">read_address_balance</a>&lt;T&gt;(
+<pre><code><b>public</b> <b>fun</b> <a href="../sui/balance.md#sui_balance_read_settled_address_balance">read_settled_address_balance</a>&lt;T&gt;(
     root: &<a href="../sui/accumulator.md#sui_accumulator_AccumulatorRoot">sui::accumulator::AccumulatorRoot</a>,
     <b>address</b>: <b>address</b>,
 ): u64 {
