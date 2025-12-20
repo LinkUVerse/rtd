@@ -25,12 +25,7 @@ title: Module `rtd::accumulator`
 -  [Function `emit_withdraw_event`](#rtd_accumulator_emit_withdraw_event)
 
 
-<pre><code><b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
+<pre><code><b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/dynamic_field.md#rtd_dynamic_field">rtd::dynamic_field</a>;
 <b>use</b> <a href="../rtd/hex.md#rtd_hex">rtd::hex</a>;
 <b>use</b> <a href="../rtd/object.md#rtd_object">rtd::object</a>;
@@ -38,6 +33,11 @@ title: Module `rtd::accumulator`
 <b>use</b> <a href="../rtd/transfer.md#rtd_transfer">rtd::transfer</a>;
 <b>use</b> <a href="../rtd/tx_context.md#rtd_tx_context">rtd::tx_context</a>;
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 

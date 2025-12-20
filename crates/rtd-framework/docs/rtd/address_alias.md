@@ -15,12 +15,7 @@ title: Module `rtd::address_alias`
 -  [Function `remove`](#rtd_address_alias_remove)
 
 
-<pre><code><b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
+<pre><code><b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/derived_object.md#rtd_derived_object">rtd::derived_object</a>;
 <b>use</b> <a href="../rtd/dynamic_field.md#rtd_dynamic_field">rtd::dynamic_field</a>;
 <b>use</b> <a href="../rtd/hex.md#rtd_hex">rtd::hex</a>;
@@ -30,6 +25,11 @@ title: Module `rtd::address_alias`
 <b>use</b> <a href="../rtd/tx_context.md#rtd_tx_context">rtd::tx_context</a>;
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 <b>use</b> <a href="../rtd/vec_set.md#rtd_vec_set">rtd::vec_set</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 

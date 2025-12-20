@@ -11,15 +11,7 @@ title: Module `rtd_system::storage_fund`
 -  [Function `total_balance`](#rtd_system_storage_fund_total_balance)
 
 
-<pre><code><b>use</b> <a href="../std/address.md#std_address">std::address</a>;
-<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
+<pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
 <b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
@@ -46,6 +38,14 @@ title: Module `rtd_system::storage_fund`
 <b>use</b> <a href="../rtd/url.md#rtd_url">rtd::url</a>;
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 <b>use</b> <a href="../rtd/vec_set.md#rtd_vec_set">rtd::vec_set</a>;
+<b>use</b> <a href="../std/address.md#std_address">std::address</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 
@@ -93,7 +93,7 @@ be taken out of the fund.
 
 ## Function `new`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> at genesis time.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> at genesis time.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_new">new</a>(initial_fund: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;): <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_StorageFund">rtd_system::storage_fund::StorageFund</a>
@@ -122,7 +122,7 @@ Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_
 
 ## Function `advance_epoch`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> at epoch change times to process the inflows and outflows of storage fund.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> at epoch change times to process the inflows and outflows of storage fund.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_advance_epoch">advance_epoch</a>(self: &<b>mut</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_StorageFund">rtd_system::storage_fund::StorageFund</a>, storage_charges: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, storage_fund_reinvestment: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, leftover_staking_rewards: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, storage_rebate_amount: u64, non_refundable_storage_fee_amount: u64): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;

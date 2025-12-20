@@ -81,16 +81,7 @@ title: Module `rtd_system::validator_set`
 -  [Macro function `mul_div`](#rtd_system_validator_set_mul_div)
 
 
-<pre><code><b>use</b> <a href="../std/address.md#std_address">std::address</a>;
-<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
-<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
+<pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
 <b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
@@ -125,6 +116,15 @@ title: Module `rtd_system::validator_set`
 <b>use</b> <a href="../rtd_system/validator_cap.md#rtd_system_validator_cap">rtd_system::validator_cap</a>;
 <b>use</b> <a href="../rtd_system/validator_wrapper.md#rtd_system_validator_wrapper">rtd_system::validator_wrapper</a>;
 <b>use</b> <a href="../rtd_system/voting_power.md#rtd_system_voting_power">rtd_system::voting_power</a>;
+<b>use</b> <a href="../std/address.md#std_address">std::address</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 
@@ -709,7 +709,7 @@ of new validators based on a minimum voting power rather than a minimum stake.
 
 ## Function `request_add_validator_candidate`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator candidate.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator candidate.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_add_validator_candidate">request_add_validator_candidate</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
@@ -750,7 +750,7 @@ Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_
 
 ## Function `request_remove_validator_candidate`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to remove a validator candidate, and move them to <code>inactive_validators</code>.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to remove a validator candidate, and move them to <code>inactive_validators</code>.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_remove_validator_candidate">request_remove_validator_candidate</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
@@ -788,7 +788,7 @@ Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_
 
 ## Function `request_add_validator`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator to <code>pending_active_validators</code>, which will be
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator to <code>pending_active_validators</code>, which will be
 processed at the end of epoch.
 
 
@@ -923,7 +923,7 @@ return (min, low, very low voting power) thresholds
 
 ## Function `request_remove_validator`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code>, to remove a validator.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code>, to remove a validator.
 The index of the validator is added to <code>pending_removals</code> and
 will be processed at the end of epoch.
 Only an active validator can request to be removed.
@@ -957,7 +957,7 @@ Only an active validator can request to be removed.
 
 ## Function `request_add_stake`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code>, to add a new stake to the validator.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code>, to add a new stake to the validator.
 This request is added to the validator's staking pool's pending stake entries, processed at the end
 of the epoch.
 Aborts in case the staking amount is smaller than MIN_STAKING_THRESHOLD
@@ -994,7 +994,7 @@ Aborts in case the staking amount is smaller than MIN_STAKING_THRESHOLD
 
 ## Function `request_withdraw_stake`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code>, to withdraw some share of a stake from the validator. The share to withdraw
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code>, to withdraw some share of a stake from the validator. The share to withdraw
 is denoted by <code>principal_withdraw_amount</code>. One of two things occurs in this function:
 1. If the <code>staked_rtd</code> is staked with an active validator, the request is added to the validator's
 staking pool's pending stake withdraw entries, processed at the end of the epoch.
@@ -1431,7 +1431,7 @@ Effectuate pending next epoch metadata if they are staged.
 
 ## Function `derive_reference_gas_price`
 
-Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to derive reference gas price for the new epoch.
+Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to derive reference gas price for the new epoch.
 Derive the reference gas price based on the gas price quote submitted by each validator.
 The returned gas price should be greater than or equal to 2/3 of the validators submitted
 gas price, weighted by stake.

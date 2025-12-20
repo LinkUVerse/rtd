@@ -13,16 +13,7 @@ title: Module `rtd_system::genesis`
 -  [Function `allocate_tokens`](#rtd_system_genesis_allocate_tokens)
 
 
-<pre><code><b>use</b> <a href="../std/address.md#std_address">std::address</a>;
-<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
-<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
+<pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
 <b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
@@ -52,16 +43,25 @@ title: Module `rtd_system::genesis`
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 <b>use</b> <a href="../rtd/vec_set.md#rtd_vec_set">rtd::vec_set</a>;
 <b>use</b> <a href="../rtd/versioned.md#rtd_versioned">rtd::versioned</a>;
+<b>use</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system::rtd_system</a>;
+<b>use</b> <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">rtd_system::stake_subsidy</a>;
 <b>use</b> <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool">rtd_system::staking_pool</a>;
 <b>use</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">rtd_system::storage_fund</a>;
-<b>use</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system::rtd_system</a>;
-<b>use</b> <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/validator.md#rtd_system_validator">rtd_system::validator</a>;
 <b>use</b> <a href="../rtd_system/validator_cap.md#rtd_system_validator_cap">rtd_system::validator_cap</a>;
 <b>use</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set">rtd_system::validator_set</a>;
 <b>use</b> <a href="../rtd_system/validator_wrapper.md#rtd_system_validator_wrapper">rtd_system::validator_wrapper</a>;
 <b>use</b> <a href="../rtd_system/voting_power.md#rtd_system_voting_power">rtd_system::voting_power</a>;
+<b>use</b> <a href="../std/address.md#std_address">std::address</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 
@@ -421,7 +421,7 @@ all the information we need in the system.
     <a href="../rtd_system/genesis.md#rtd_system_genesis_allocate_tokens">allocate_tokens</a>(rtd_supply, allocations, &<b>mut</b> validators, ctx);
     // Activate all validators
     validators.do_mut!(|<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>| <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.activate(0));
-    <b>let</b> system_parameters = <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_create_system_parameters">rtd_system_state_inner::create_system_parameters</a>(
+    <b>let</b> system_parameters = <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_create_system_parameters">rtd_system_state_inner::create_system_parameters</a>(
         genesis_chain_parameters.epoch_duration_ms,
         genesis_chain_parameters.stake_subsidy_start_epoch,
         // Validator committee parameters

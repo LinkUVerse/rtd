@@ -3,8 +3,8 @@ title: Module `rtd_system::rtd_system`
 ---
 
 Rtd System State Type Upgrade Guide
-<code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a></code> is a thin wrapper around <code>RtdSystemStateInner</code> that provides a versioned interface.
-The <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a></code> object has a fixed ID 0x5, and the <code>RtdSystemStateInner</code> object is stored as a dynamic field.
+<code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a></code> is a thin wrapper around <code>RtdSystemStateInner</code> that provides a versioned interface.
+The <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a></code> object has a fixed ID 0x5, and the <code>RtdSystemStateInner</code> object is stored as a dynamic field.
 There are a few different ways to upgrade the <code>RtdSystemStateInner</code> type:
 
 The simplest and one that doesn't involve a real upgrade is to just add dynamic fields to the <code>extra_fields</code> field
@@ -15,13 +15,13 @@ To properly upgrade the <code>RtdSystemStateInner</code> type, we need to ship a
 1. Define a new <code>RtdSystemStateInner</code>type (e.g. <code>RtdSystemStateInnerV2</code>).
 2. Define a data migration function that migrates the old <code>RtdSystemStateInner</code> to the new one (i.e. RtdSystemStateInnerV2).
 3. Replace all uses of <code>RtdSystemStateInner</code> with <code>RtdSystemStateInnerV2</code> in both rtd_system.move and rtd_system_state_inner.move,
-with the exception of the <code><a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_create">rtd_system_state_inner::create</a></code> function, which should always return the genesis type.
-4. Inside <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a></code> function, check the current version in the wrapper, and if it's not the latest version,
+with the exception of the <code><a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_create">rtd_system_state_inner::create</a></code> function, which should always return the genesis type.
+4. Inside <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a></code> function, check the current version in the wrapper, and if it's not the latest version,
 call the data migration function to upgrade the inner object. Make sure to also update the version in the wrapper.
 A detailed example can be found in rtd/tests/framework_upgrades/mock_rtd_systems/shallow_upgrade.
 Along with the Move change, we also need to update the Rust code to support the new type. This includes:
 1. Define a new <code>RtdSystemStateInner</code> struct type that matches the new Move type, and implement the RtdSystemStateTrait.
-2. Update the <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a></code> struct to include the new version as a new enum variant.
+2. Update the <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a></code> struct to include the new version as a new enum variant.
 3. Update the <code>get_rtd_system_state</code> function to handle the new version.
 To test that the upgrade will be successful, we need to modify <code>rtd_system_state_production_upgrade_test</code> test in
 protocol_version_tests and trigger a real upgrade using the new framework. We will need to keep this directory as old version,
@@ -95,16 +95,7 @@ the RtdSystemStateInner version, or vice versa.
 -  [Function `store_execution_time_estimates_v2`](#rtd_system_rtd_system_store_execution_time_estimates_v2)
 
 
-<pre><code><b>use</b> <a href="../std/address.md#std_address">std::address</a>;
-<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
-<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
+<pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
 <b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
@@ -134,15 +125,24 @@ the RtdSystemStateInner version, or vice versa.
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 <b>use</b> <a href="../rtd/vec_set.md#rtd_vec_set">rtd::vec_set</a>;
 <b>use</b> <a href="../rtd/versioned.md#rtd_versioned">rtd::versioned</a>;
+<b>use</b> <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">rtd_system::stake_subsidy</a>;
 <b>use</b> <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool">rtd_system::staking_pool</a>;
 <b>use</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">rtd_system::storage_fund</a>;
-<b>use</b> <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/validator.md#rtd_system_validator">rtd_system::validator</a>;
 <b>use</b> <a href="../rtd_system/validator_cap.md#rtd_system_validator_cap">rtd_system::validator_cap</a>;
 <b>use</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set">rtd_system::validator_set</a>;
 <b>use</b> <a href="../rtd_system/validator_wrapper.md#rtd_system_validator_wrapper">rtd_system::validator_wrapper</a>;
 <b>use</b> <a href="../rtd_system/voting_power.md#rtd_system_voting_power">rtd_system::voting_power</a>;
+<b>use</b> <a href="../std/address.md#std_address">std::address</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 
@@ -153,7 +153,7 @@ the RtdSystemStateInner version, or vice versa.
 
 
 
-<pre><code><b>public</b> <b>struct</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a> <b>has</b> key
+<pre><code><b>public</b> <b>struct</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a> <b>has</b> key
 </code></pre>
 
 
@@ -187,7 +187,7 @@ the RtdSystemStateInner version, or vice versa.
 
 
 
-<pre><code><b>const</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_ENotSystemAddress">ENotSystemAddress</a>: u64 = 0;
+<pre><code><b>const</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_ENotSystemAddress">ENotSystemAddress</a>: u64 = 0;
 </code></pre>
 
 
@@ -196,7 +196,7 @@ the RtdSystemStateInner version, or vice versa.
 
 
 
-<pre><code><b>const</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_EWrongInnerVersion">EWrongInnerVersion</a>: u64 = 1;
+<pre><code><b>const</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_EWrongInnerVersion">EWrongInnerVersion</a>: u64 = 1;
 </code></pre>
 
 
@@ -209,7 +209,7 @@ Create a new RtdSystemState object and make it shared.
 This function will be called only once in genesis.
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_create">create</a>(id: <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>, validators: vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">storage_fund</a>: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, protocol_version: u64, epoch_start_timestamp_ms: u64, parameters: <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_SystemParameters">rtd_system::rtd_system_state_inner::SystemParameters</a>, <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">stake_subsidy</a>: <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy_StakeSubsidy">rtd_system::stake_subsidy::StakeSubsidy</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_create">create</a>(id: <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>, validators: vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">storage_fund</a>: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, protocol_version: u64, epoch_start_timestamp_ms: u64, parameters: <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_SystemParameters">rtd_system::rtd_system_state_inner::SystemParameters</a>, <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">stake_subsidy</a>: <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy_StakeSubsidy">rtd_system::stake_subsidy::StakeSubsidy</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -218,7 +218,7 @@ This function will be called only once in genesis.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_create">create</a>(
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_create">create</a>(
     id: UID,
     validators: vector&lt;Validator&gt;,
     <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">storage_fund</a>: Balance&lt;RTD&gt;,
@@ -228,7 +228,7 @@ This function will be called only once in genesis.
     <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">stake_subsidy</a>: StakeSubsidy,
     ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> system_state = <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_create">rtd_system_state_inner::create</a>(
+    <b>let</b> system_state = <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_create">rtd_system_state_inner::create</a>(
         validators,
         <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">storage_fund</a>,
         protocol_version,
@@ -237,8 +237,8 @@ This function will be called only once in genesis.
         <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">stake_subsidy</a>,
         ctx,
     );
-    <b>let</b> version = <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_genesis_system_state_version">rtd_system_state_inner::genesis_system_state_version</a>();
-    <b>let</b> <b>mut</b> self = <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a> {
+    <b>let</b> version = <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_genesis_system_state_version">rtd_system_state_inner::genesis_system_state_version</a>();
+    <b>let</b> <b>mut</b> self = <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a> {
         id,
         version,
     };
@@ -257,13 +257,13 @@ This function will be called only once in genesis.
 
 Can be called by anyone who wishes to become a validator candidate and starts accruing delegated
 stakes in their staking pool. Once they have at least <code>MIN_VALIDATOR_JOINING_STAKE</code> amount of stake they
-can call <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a></code> to officially become an active validator at the next epoch.
+can call <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a></code> to officially become an active validator at the next epoch.
 Aborts if the caller is already a pending or active validator, or a validator candidate.
 Note: <code>proof_of_possession</code> MUST be a valid signature using rtd_address and protocol_pubkey_bytes.
 To produce a valid PoP, run [fn test_proof_of_possession].
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator_candidate">request_add_validator_candidate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, pubkey_bytes: vector&lt;u8&gt;, network_pubkey_bytes: vector&lt;u8&gt;, worker_pubkey_bytes: vector&lt;u8&gt;, proof_of_possession: vector&lt;u8&gt;, name: vector&lt;u8&gt;, description: vector&lt;u8&gt;, image_url: vector&lt;u8&gt;, project_url: vector&lt;u8&gt;, net_address: vector&lt;u8&gt;, p2p_address: vector&lt;u8&gt;, primary_address: vector&lt;u8&gt;, worker_address: vector&lt;u8&gt;, gas_price: u64, commission_rate: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator_candidate">request_add_validator_candidate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, pubkey_bytes: vector&lt;u8&gt;, network_pubkey_bytes: vector&lt;u8&gt;, worker_pubkey_bytes: vector&lt;u8&gt;, proof_of_possession: vector&lt;u8&gt;, name: vector&lt;u8&gt;, description: vector&lt;u8&gt;, image_url: vector&lt;u8&gt;, project_url: vector&lt;u8&gt;, net_address: vector&lt;u8&gt;, p2p_address: vector&lt;u8&gt;, primary_address: vector&lt;u8&gt;, worker_address: vector&lt;u8&gt;, gas_price: u64, commission_rate: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -272,8 +272,8 @@ To produce a valid PoP, run [fn test_proof_of_possession].
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator_candidate">request_add_validator_candidate</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator_candidate">request_add_validator_candidate</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     pubkey_bytes: vector&lt;u8&gt;,
     network_pubkey_bytes: vector&lt;u8&gt;,
     worker_pubkey_bytes: vector&lt;u8&gt;,
@@ -291,8 +291,8 @@ To produce a valid PoP, run [fn test_proof_of_possession].
     ctx: &<b>mut</b> TxContext,
 ) {
     wrapper
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator_candidate">request_add_validator_candidate</a>(
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator_candidate">request_add_validator_candidate</a>(
             pubkey_bytes,
             network_pubkey_bytes,
             worker_pubkey_bytes,
@@ -324,7 +324,7 @@ Called by a validator candidate to remove themselves from the candidacy. After t
 their staking pool becomes deactivate.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_remove_validator_candidate">request_remove_validator_candidate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_remove_validator_candidate">request_remove_validator_candidate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -333,11 +333,11 @@ their staking pool becomes deactivate.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_remove_validator_candidate">request_remove_validator_candidate</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_remove_validator_candidate">request_remove_validator_candidate</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     ctx: &<b>mut</b> TxContext,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_remove_validator_candidate">request_remove_validator_candidate</a>(ctx)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_remove_validator_candidate">request_remove_validator_candidate</a>(ctx)
 }
 </code></pre>
 
@@ -355,7 +355,7 @@ stake the validator has doesn't meet the min threshold, or if the number of new 
 epoch has already reached the maximum.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -364,8 +364,8 @@ epoch has already reached the maximum.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, ctx: &<b>mut</b> TxContext) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a>(ctx)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, ctx: &<b>mut</b> TxContext) {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_validator">request_add_validator</a>(ctx)
 }
 </code></pre>
 
@@ -384,7 +384,7 @@ At the end of the epoch, the <code><a href="../rtd_system/validator.md#rtd_syste
 of the validator.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_remove_validator">request_remove_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_remove_validator">request_remove_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -393,8 +393,8 @@ of the validator.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_remove_validator">request_remove_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, ctx: &<b>mut</b> TxContext) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_remove_validator">request_remove_validator</a>(ctx)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_remove_validator">request_remove_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, ctx: &<b>mut</b> TxContext) {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_remove_validator">request_remove_validator</a>(ctx)
 }
 </code></pre>
 
@@ -410,7 +410,7 @@ A validator can call this entry function to submit a new gas price quote, to be
 used for the reference gas price calculation at the end of the epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_set_gas_price">request_set_gas_price</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, new_gas_price: u64)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_set_gas_price">request_set_gas_price</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, new_gas_price: u64)
 </code></pre>
 
 
@@ -419,12 +419,12 @@ used for the reference gas price calculation at the end of the epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_set_gas_price">request_set_gas_price</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_set_gas_price">request_set_gas_price</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     cap: &UnverifiedValidatorOperationCap,
     new_gas_price: u64,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_set_gas_price">request_set_gas_price</a>(cap, new_gas_price)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_set_gas_price">request_set_gas_price</a>(cap, new_gas_price)
 }
 </code></pre>
 
@@ -439,7 +439,7 @@ used for the reference gas price calculation at the end of the epoch.
 This entry function is used to set new gas price for candidate validators
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_set_candidate_validator_gas_price">set_candidate_validator_gas_price</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, new_gas_price: u64)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_set_candidate_validator_gas_price">set_candidate_validator_gas_price</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, new_gas_price: u64)
 </code></pre>
 
 
@@ -448,12 +448,12 @@ This entry function is used to set new gas price for candidate validators
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_set_candidate_validator_gas_price">set_candidate_validator_gas_price</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_set_candidate_validator_gas_price">set_candidate_validator_gas_price</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     cap: &UnverifiedValidatorOperationCap,
     new_gas_price: u64,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_set_candidate_validator_gas_price">set_candidate_validator_gas_price</a>(cap, new_gas_price)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_set_candidate_validator_gas_price">set_candidate_validator_gas_price</a>(cap, new_gas_price)
 }
 </code></pre>
 
@@ -469,7 +469,7 @@ A validator can call this entry function to set a new commission rate, updated a
 the epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_set_commission_rate">request_set_commission_rate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, new_commission_rate: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_set_commission_rate">request_set_commission_rate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, new_commission_rate: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -478,12 +478,12 @@ the epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_set_commission_rate">request_set_commission_rate</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_set_commission_rate">request_set_commission_rate</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     new_commission_rate: u64,
     ctx: &<b>mut</b> TxContext,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_set_commission_rate">request_set_commission_rate</a>(new_commission_rate, ctx)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_set_commission_rate">request_set_commission_rate</a>(new_commission_rate, ctx)
 }
 </code></pre>
 
@@ -498,7 +498,7 @@ the epoch.
 This entry function is used to set new commission rate for candidate validators
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_set_candidate_validator_commission_rate">set_candidate_validator_commission_rate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, new_commission_rate: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_set_candidate_validator_commission_rate">set_candidate_validator_commission_rate</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, new_commission_rate: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -507,14 +507,14 @@ This entry function is used to set new commission rate for candidate validators
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_set_candidate_validator_commission_rate">set_candidate_validator_commission_rate</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_set_candidate_validator_commission_rate">set_candidate_validator_commission_rate</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     new_commission_rate: u64,
     ctx: &<b>mut</b> TxContext,
 ) {
     wrapper
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_set_candidate_validator_commission_rate">set_candidate_validator_commission_rate</a>(new_commission_rate, ctx)
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_set_candidate_validator_commission_rate">set_candidate_validator_commission_rate</a>(new_commission_rate, ctx)
 }
 </code></pre>
 
@@ -529,7 +529,7 @@ This entry function is used to set new commission rate for candidate validators
 Add stake to a validator's staking pool.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, stake: <a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, validator_address: <b>address</b>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, stake: <a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, validator_address: <b>address</b>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -538,13 +538,13 @@ Add stake to a validator's staking pool.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     stake: Coin&lt;RTD&gt;,
     validator_address: <b>address</b>,
     ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> staked_rtd = <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake_non_entry">request_add_stake_non_entry</a>(wrapper, stake, validator_address, ctx);
+    <b>let</b> staked_rtd = <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake_non_entry">request_add_stake_non_entry</a>(wrapper, stake, validator_address, ctx);
     transfer::public_transfer(staked_rtd, ctx.sender());
 }
 </code></pre>
@@ -557,10 +557,10 @@ Add stake to a validator's staking pool.
 
 ## Function `request_add_stake_non_entry`
 
-The non-entry version of <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a></code>, which returns the staked RTD instead of transferring it to the sender.
+The non-entry version of <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a></code>, which returns the staked RTD instead of transferring it to the sender.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake_non_entry">request_add_stake_non_entry</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, stake: <a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, validator_address: <b>address</b>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake_non_entry">request_add_stake_non_entry</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, stake: <a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, validator_address: <b>address</b>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>
 </code></pre>
 
 
@@ -569,13 +569,13 @@ The non-entry version of <code><a href="../rtd_system/rtd_system.md#rtd_system_r
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake_non_entry">request_add_stake_non_entry</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake_non_entry">request_add_stake_non_entry</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     stake: Coin&lt;RTD&gt;,
     validator_address: <b>address</b>,
     ctx: &<b>mut</b> TxContext,
 ): StakedRtd {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a>(stake, validator_address, ctx)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake">request_add_stake</a>(stake, validator_address, ctx)
 }
 </code></pre>
 
@@ -590,7 +590,7 @@ The non-entry version of <code><a href="../rtd_system/rtd_system.md#rtd_system_r
 Add stake to a validator's staking pool using multiple coins.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake_mul_coin">request_add_stake_mul_coin</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, stakes: vector&lt;<a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;&gt;, stake_amount: <a href="../std/option.md#std_option_Option">std::option::Option</a>&lt;u64&gt;, validator_address: <b>address</b>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake_mul_coin">request_add_stake_mul_coin</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, stakes: vector&lt;<a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;&gt;, stake_amount: <a href="../std/option.md#std_option_Option">std::option::Option</a>&lt;u64&gt;, validator_address: <b>address</b>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -599,16 +599,16 @@ Add stake to a validator's staking pool using multiple coins.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake_mul_coin">request_add_stake_mul_coin</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake_mul_coin">request_add_stake_mul_coin</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     stakes: vector&lt;Coin&lt;RTD&gt;&gt;,
     stake_amount: option::Option&lt;u64&gt;,
     validator_address: <b>address</b>,
     ctx: &<b>mut</b> TxContext,
 ) {
     <b>let</b> staked_rtd = wrapper
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_add_stake_mul_coin">request_add_stake_mul_coin</a>(stakes, stake_amount, validator_address, ctx);
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_add_stake_mul_coin">request_add_stake_mul_coin</a>(stakes, stake_amount, validator_address, ctx);
     transfer::public_transfer(staked_rtd, ctx.sender());
 }
 </code></pre>
@@ -624,7 +624,7 @@ Add stake to a validator's staking pool using multiple coins.
 Withdraw stake from a validator's staking pool.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -633,12 +633,12 @@ Withdraw stake from a validator's staking pool.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     staked_rtd: StakedRtd,
     ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> withdrawn_stake = wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake_non_entry">request_withdraw_stake_non_entry</a>(staked_rtd, ctx);
+    <b>let</b> withdrawn_stake = wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake_non_entry">request_withdraw_stake_non_entry</a>(staked_rtd, ctx);
     transfer::public_transfer(withdrawn_stake.into_coin(ctx), ctx.sender());
 }
 </code></pre>
@@ -654,7 +654,7 @@ Withdraw stake from a validator's staking pool.
 Convert StakedRtd into a FungibleStakedRtd object.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_convert_to_fungible_staked_rtd">convert_to_fungible_staked_rtd</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_FungibleStakedRtd">rtd_system::staking_pool::FungibleStakedRtd</a>
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_convert_to_fungible_staked_rtd">convert_to_fungible_staked_rtd</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_FungibleStakedRtd">rtd_system::staking_pool::FungibleStakedRtd</a>
 </code></pre>
 
 
@@ -663,12 +663,12 @@ Convert StakedRtd into a FungibleStakedRtd object.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_convert_to_fungible_staked_rtd">convert_to_fungible_staked_rtd</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_convert_to_fungible_staked_rtd">convert_to_fungible_staked_rtd</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     staked_rtd: StakedRtd,
     ctx: &<b>mut</b> TxContext,
 ): FungibleStakedRtd {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_convert_to_fungible_staked_rtd">convert_to_fungible_staked_rtd</a>(staked_rtd, ctx)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_convert_to_fungible_staked_rtd">convert_to_fungible_staked_rtd</a>(staked_rtd, ctx)
 }
 </code></pre>
 
@@ -683,7 +683,7 @@ Convert StakedRtd into a FungibleStakedRtd object.
 Convert FungibleStakedRtd into a StakedRtd object.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_redeem_fungible_staked_rtd">redeem_fungible_staked_rtd</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, fungible_staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_FungibleStakedRtd">rtd_system::staking_pool::FungibleStakedRtd</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_redeem_fungible_staked_rtd">redeem_fungible_staked_rtd</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, fungible_staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_FungibleStakedRtd">rtd_system::staking_pool::FungibleStakedRtd</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
 </code></pre>
 
 
@@ -692,12 +692,12 @@ Convert FungibleStakedRtd into a StakedRtd object.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_redeem_fungible_staked_rtd">redeem_fungible_staked_rtd</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_redeem_fungible_staked_rtd">redeem_fungible_staked_rtd</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     fungible_staked_rtd: FungibleStakedRtd,
     ctx: &TxContext,
 ): Balance&lt;RTD&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_redeem_fungible_staked_rtd">redeem_fungible_staked_rtd</a>(fungible_staked_rtd, ctx)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_redeem_fungible_staked_rtd">redeem_fungible_staked_rtd</a>(fungible_staked_rtd, ctx)
 }
 </code></pre>
 
@@ -709,10 +709,10 @@ Convert FungibleStakedRtd into a StakedRtd object.
 
 ## Function `request_withdraw_stake_non_entry`
 
-Non-entry version of <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a></code> that returns the withdrawn RTD instead of transferring it to the sender.
+Non-entry version of <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a></code> that returns the withdrawn RTD instead of transferring it to the sender.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake_non_entry">request_withdraw_stake_non_entry</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake_non_entry">request_withdraw_stake_non_entry</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
 </code></pre>
 
 
@@ -721,12 +721,12 @@ Non-entry version of <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_s
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake_non_entry">request_withdraw_stake_non_entry</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake_non_entry">request_withdraw_stake_non_entry</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     staked_rtd: StakedRtd,
     ctx: &<b>mut</b> TxContext,
 ): Balance&lt;RTD&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a>(staked_rtd, ctx)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_request_withdraw_stake">request_withdraw_stake</a>(staked_rtd, ctx)
 }
 </code></pre>
 
@@ -746,7 +746,7 @@ Succeeds if all the following are satisfied:
 This function is idempotent.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_report_validator">report_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, reportee_addr: <b>address</b>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_report_validator">report_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, reportee_addr: <b>address</b>)
 </code></pre>
 
 
@@ -755,12 +755,12 @@ This function is idempotent.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_report_validator">report_validator</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_report_validator">report_validator</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     cap: &UnverifiedValidatorOperationCap,
     reportee_addr: <b>address</b>,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_report_validator">report_validator</a>(cap, reportee_addr)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_report_validator">report_validator</a>(cap, reportee_addr)
 }
 </code></pre>
 
@@ -772,13 +772,13 @@ This function is idempotent.
 
 ## Function `undo_report_validator`
 
-Undo a <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_report_validator">report_validator</a></code> action. Aborts if
+Undo a <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system_report_validator">report_validator</a></code> action. Aborts if
 1. the reportee is not a currently active validator or
 2. the sender has not previously reported the <code>reportee_addr</code>, or
 3. the cap is not valid
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_undo_report_validator">undo_report_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, reportee_addr: <b>address</b>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_undo_report_validator">undo_report_validator</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_UnverifiedValidatorOperationCap">rtd_system::validator_cap::UnverifiedValidatorOperationCap</a>, reportee_addr: <b>address</b>)
 </code></pre>
 
 
@@ -787,12 +787,12 @@ Undo a <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_report_v
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_undo_report_validator">undo_report_validator</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_undo_report_validator">undo_report_validator</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     cap: &UnverifiedValidatorOperationCap,
     reportee_addr: <b>address</b>,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_undo_report_validator">undo_report_validator</a>(cap, reportee_addr)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_undo_report_validator">undo_report_validator</a>(cap, reportee_addr)
 }
 </code></pre>
 
@@ -808,7 +808,7 @@ Create a new <code>UnverifiedValidatorOperationCap</code>, transfer it to the
 validator and registers it. The original object is thus revoked.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_rotate_operation_cap">rotate_operation_cap</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_rotate_operation_cap">rotate_operation_cap</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -817,8 +817,8 @@ validator and registers it. The original object is thus revoked.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_rotate_operation_cap">rotate_operation_cap</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, ctx: &<b>mut</b> TxContext) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_rotate_operation_cap">rotate_operation_cap</a>(ctx)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_rotate_operation_cap">rotate_operation_cap</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, ctx: &<b>mut</b> TxContext) {
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_rotate_operation_cap">rotate_operation_cap</a>(ctx)
 }
 </code></pre>
 
@@ -833,7 +833,7 @@ validator and registers it. The original object is thus revoked.
 Update a validator's name.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_name">update_validator_name</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, name: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_name">update_validator_name</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, name: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -842,12 +842,12 @@ Update a validator's name.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_name">update_validator_name</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_name">update_validator_name</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     name: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_name">update_validator_name</a>(name, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_name">update_validator_name</a>(name, ctx)
 }
 </code></pre>
 
@@ -862,7 +862,7 @@ Update a validator's name.
 Update a validator's description
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_description">update_validator_description</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, description: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_description">update_validator_description</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, description: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -871,12 +871,12 @@ Update a validator's description
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_description">update_validator_description</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_description">update_validator_description</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     description: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_description">update_validator_description</a>(description, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_description">update_validator_description</a>(description, ctx)
 }
 </code></pre>
 
@@ -891,7 +891,7 @@ Update a validator's description
 Update a validator's image url
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_image_url">update_validator_image_url</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, image_url: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_image_url">update_validator_image_url</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, image_url: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -900,12 +900,12 @@ Update a validator's image url
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_image_url">update_validator_image_url</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_image_url">update_validator_image_url</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     image_url: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_image_url">update_validator_image_url</a>(image_url, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_image_url">update_validator_image_url</a>(image_url, ctx)
 }
 </code></pre>
 
@@ -920,7 +920,7 @@ Update a validator's image url
 Update a validator's project url
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_project_url">update_validator_project_url</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, project_url: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_project_url">update_validator_project_url</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, project_url: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -929,12 +929,12 @@ Update a validator's project url
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_project_url">update_validator_project_url</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_project_url">update_validator_project_url</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     project_url: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_project_url">update_validator_project_url</a>(project_url, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_project_url">update_validator_project_url</a>(project_url, ctx)
 }
 </code></pre>
 
@@ -950,7 +950,7 @@ Update a validator's network address.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_address">update_validator_next_epoch_network_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_address">update_validator_next_epoch_network_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -959,12 +959,12 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_address">update_validator_next_epoch_network_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_address">update_validator_next_epoch_network_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     network_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_address">update_validator_next_epoch_network_address</a>(network_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_address">update_validator_next_epoch_network_address</a>(network_address, ctx)
 }
 </code></pre>
 
@@ -979,7 +979,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's network address.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_network_address">update_candidate_validator_network_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_network_address">update_candidate_validator_network_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -988,12 +988,12 @@ Update candidate validator's network address.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_network_address">update_candidate_validator_network_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_network_address">update_candidate_validator_network_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     network_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_network_address">update_candidate_validator_network_address</a>(network_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_network_address">update_candidate_validator_network_address</a>(network_address, ctx)
 }
 </code></pre>
 
@@ -1009,7 +1009,7 @@ Update a validator's p2p address.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_p2p_address">update_validator_next_epoch_p2p_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, p2p_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_p2p_address">update_validator_next_epoch_p2p_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, p2p_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1018,12 +1018,12 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_p2p_address">update_validator_next_epoch_p2p_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_p2p_address">update_validator_next_epoch_p2p_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     p2p_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_p2p_address">update_validator_next_epoch_p2p_address</a>(p2p_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_p2p_address">update_validator_next_epoch_p2p_address</a>(p2p_address, ctx)
 }
 </code></pre>
 
@@ -1038,7 +1038,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's p2p address.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_p2p_address">update_candidate_validator_p2p_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, p2p_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_p2p_address">update_candidate_validator_p2p_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, p2p_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1047,12 +1047,12 @@ Update candidate validator's p2p address.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_p2p_address">update_candidate_validator_p2p_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_p2p_address">update_candidate_validator_p2p_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     p2p_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_p2p_address">update_candidate_validator_p2p_address</a>(p2p_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_p2p_address">update_candidate_validator_p2p_address</a>(p2p_address, ctx)
 }
 </code></pre>
 
@@ -1068,7 +1068,7 @@ Update a validator's narwhal primary address.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_primary_address">update_validator_next_epoch_primary_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, primary_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_primary_address">update_validator_next_epoch_primary_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, primary_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1077,12 +1077,12 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_primary_address">update_validator_next_epoch_primary_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_primary_address">update_validator_next_epoch_primary_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     primary_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_primary_address">update_validator_next_epoch_primary_address</a>(primary_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_primary_address">update_validator_next_epoch_primary_address</a>(primary_address, ctx)
 }
 </code></pre>
 
@@ -1097,7 +1097,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's narwhal primary address.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_primary_address">update_candidate_validator_primary_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, primary_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_primary_address">update_candidate_validator_primary_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, primary_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1106,12 +1106,12 @@ Update candidate validator's narwhal primary address.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_primary_address">update_candidate_validator_primary_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_primary_address">update_candidate_validator_primary_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     primary_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_primary_address">update_candidate_validator_primary_address</a>(primary_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_primary_address">update_candidate_validator_primary_address</a>(primary_address, ctx)
 }
 </code></pre>
 
@@ -1127,7 +1127,7 @@ Update a validator's narwhal worker address.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_address">update_validator_next_epoch_worker_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_address">update_validator_next_epoch_worker_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1136,12 +1136,12 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_address">update_validator_next_epoch_worker_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_address">update_validator_next_epoch_worker_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     worker_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_address">update_validator_next_epoch_worker_address</a>(worker_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_address">update_validator_next_epoch_worker_address</a>(worker_address, ctx)
 }
 </code></pre>
 
@@ -1156,7 +1156,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's narwhal worker address.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_worker_address">update_candidate_validator_worker_address</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_worker_address">update_candidate_validator_worker_address</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_address: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1165,12 +1165,12 @@ Update candidate validator's narwhal worker address.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_worker_address">update_candidate_validator_worker_address</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_worker_address">update_candidate_validator_worker_address</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     worker_address: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_worker_address">update_candidate_validator_worker_address</a>(worker_address, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_worker_address">update_candidate_validator_worker_address</a>(worker_address, ctx)
 }
 </code></pre>
 
@@ -1186,7 +1186,7 @@ Update a validator's public key of protocol key and proof of possession.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_protocol_pubkey">update_validator_next_epoch_protocol_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, protocol_pubkey: vector&lt;u8&gt;, proof_of_possession: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_protocol_pubkey">update_validator_next_epoch_protocol_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, protocol_pubkey: vector&lt;u8&gt;, proof_of_possession: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1195,15 +1195,15 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_protocol_pubkey">update_validator_next_epoch_protocol_pubkey</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_protocol_pubkey">update_validator_next_epoch_protocol_pubkey</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     protocol_pubkey: vector&lt;u8&gt;,
     proof_of_possession: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
     self
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_protocol_pubkey">update_validator_next_epoch_protocol_pubkey</a>(protocol_pubkey, proof_of_possession, ctx)
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_protocol_pubkey">update_validator_next_epoch_protocol_pubkey</a>(protocol_pubkey, proof_of_possession, ctx)
 }
 </code></pre>
 
@@ -1218,7 +1218,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's public key of protocol key and proof of possession.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_protocol_pubkey">update_candidate_validator_protocol_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, protocol_pubkey: vector&lt;u8&gt;, proof_of_possession: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_protocol_pubkey">update_candidate_validator_protocol_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, protocol_pubkey: vector&lt;u8&gt;, proof_of_possession: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1227,15 +1227,15 @@ Update candidate validator's public key of protocol key and proof of possession.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_protocol_pubkey">update_candidate_validator_protocol_pubkey</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_protocol_pubkey">update_candidate_validator_protocol_pubkey</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     protocol_pubkey: vector&lt;u8&gt;,
     proof_of_possession: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
     self
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_protocol_pubkey">update_candidate_validator_protocol_pubkey</a>(protocol_pubkey, proof_of_possession, ctx)
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_protocol_pubkey">update_candidate_validator_protocol_pubkey</a>(protocol_pubkey, proof_of_possession, ctx)
 }
 </code></pre>
 
@@ -1251,7 +1251,7 @@ Update a validator's public key of worker key.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_pubkey">update_validator_next_epoch_worker_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_pubkey">update_validator_next_epoch_worker_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1260,12 +1260,12 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_pubkey">update_validator_next_epoch_worker_pubkey</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_pubkey">update_validator_next_epoch_worker_pubkey</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     worker_pubkey: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_pubkey">update_validator_next_epoch_worker_pubkey</a>(worker_pubkey, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_worker_pubkey">update_validator_next_epoch_worker_pubkey</a>(worker_pubkey, ctx)
 }
 </code></pre>
 
@@ -1280,7 +1280,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's public key of worker key.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_worker_pubkey">update_candidate_validator_worker_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_worker_pubkey">update_candidate_validator_worker_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, worker_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1289,12 +1289,12 @@ Update candidate validator's public key of worker key.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_worker_pubkey">update_candidate_validator_worker_pubkey</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_worker_pubkey">update_candidate_validator_worker_pubkey</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     worker_pubkey: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_worker_pubkey">update_candidate_validator_worker_pubkey</a>(worker_pubkey, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_worker_pubkey">update_candidate_validator_worker_pubkey</a>(worker_pubkey, ctx)
 }
 </code></pre>
 
@@ -1310,7 +1310,7 @@ Update a validator's public key of network key.
 The change will only take effects starting from the next epoch.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_pubkey">update_validator_next_epoch_network_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_pubkey">update_validator_next_epoch_network_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1319,12 +1319,12 @@ The change will only take effects starting from the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_pubkey">update_validator_next_epoch_network_pubkey</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_pubkey">update_validator_next_epoch_network_pubkey</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     network_pubkey: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_pubkey">update_validator_next_epoch_network_pubkey</a>(network_pubkey, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_validator_next_epoch_network_pubkey">update_validator_next_epoch_network_pubkey</a>(network_pubkey, ctx)
 }
 </code></pre>
 
@@ -1339,7 +1339,7 @@ The change will only take effects starting from the next epoch.
 Update candidate validator's public key of network key.
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_network_pubkey">update_candidate_validator_network_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_network_pubkey">update_candidate_validator_network_pubkey</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, network_pubkey: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -1348,12 +1348,12 @@ Update candidate validator's public key of network key.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_network_pubkey">update_candidate_validator_network_pubkey</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>entry</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_network_pubkey">update_candidate_validator_network_pubkey</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     network_pubkey: vector&lt;u8&gt;,
     ctx: &TxContext,
 ) {
-    self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_update_candidate_validator_network_pubkey">update_candidate_validator_network_pubkey</a>(network_pubkey, ctx)
+    self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_update_candidate_validator_network_pubkey">update_candidate_validator_network_pubkey</a>(network_pubkey, ctx)
 }
 </code></pre>
 
@@ -1367,7 +1367,7 @@ Update candidate validator's public key of network key.
 
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_validator_address_by_pool_id">validator_address_by_pool_id</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, pool_id: &<a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): <b>address</b>
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_validator_address_by_pool_id">validator_address_by_pool_id</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, pool_id: &<a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): <b>address</b>
 </code></pre>
 
 
@@ -1376,8 +1376,8 @@ Update candidate validator's public key of network key.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_validator_address_by_pool_id">validator_address_by_pool_id</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, pool_id: &ID): <b>address</b> {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_validator_address_by_pool_id">validator_address_by_pool_id</a>(pool_id)
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_validator_address_by_pool_id">validator_address_by_pool_id</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, pool_id: &ID): <b>address</b> {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_validator_address_by_pool_id">validator_address_by_pool_id</a>(pool_id)
 }
 </code></pre>
 
@@ -1392,7 +1392,7 @@ Update candidate validator's public key of network key.
 Getter of the pool token exchange rate of a staking pool. Works for both active and inactive pools.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_pool_exchange_rates">pool_exchange_rates</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, pool_id: &<a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): &<a href="../rtd/table.md#rtd_table_Table">rtd::table::Table</a>&lt;u64, <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_PoolTokenExchangeRate">rtd_system::staking_pool::PoolTokenExchangeRate</a>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_pool_exchange_rates">pool_exchange_rates</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, pool_id: &<a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): &<a href="../rtd/table.md#rtd_table_Table">rtd::table::Table</a>&lt;u64, <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_PoolTokenExchangeRate">rtd_system::staking_pool::PoolTokenExchangeRate</a>&gt;
 </code></pre>
 
 
@@ -1401,11 +1401,11 @@ Getter of the pool token exchange rate of a staking pool. Works for both active 
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_pool_exchange_rates">pool_exchange_rates</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_pool_exchange_rates">pool_exchange_rates</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     pool_id: &ID,
 ): &Table&lt;u64, PoolTokenExchangeRate&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_pool_exchange_rates">pool_exchange_rates</a>(pool_id)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_pool_exchange_rates">pool_exchange_rates</a>(pool_id)
 }
 </code></pre>
 
@@ -1420,7 +1420,7 @@ Getter of the pool token exchange rate of a staking pool. Works for both active 
 Getter returning addresses of the currently active validators.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): vector&lt;<b>address</b>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): vector&lt;<b>address</b>&gt;
 </code></pre>
 
 
@@ -1429,8 +1429,8 @@ Getter returning addresses of the currently active validators.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): vector&lt;<b>address</b>&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>()
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): vector&lt;<b>address</b>&gt; {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>()
 }
 </code></pre>
 
@@ -1445,7 +1445,7 @@ Getter returning addresses of the currently active validators.
 Getter returning addresses of the currently active validators by reference.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_addresses_ref">active_validator_addresses_ref</a>(wrapper: &<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): vector&lt;<b>address</b>&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_addresses_ref">active_validator_addresses_ref</a>(wrapper: &<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): vector&lt;<b>address</b>&gt;
 </code></pre>
 
 
@@ -1454,8 +1454,8 @@ Getter returning addresses of the currently active validators by reference.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_addresses_ref">active_validator_addresses_ref</a>(wrapper: &<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): vector&lt;<b>address</b>&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>()
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_addresses_ref">active_validator_addresses_ref</a>(wrapper: &<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): vector&lt;<b>address</b>&gt; {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_addresses">active_validator_addresses</a>()
 }
 </code></pre>
 
@@ -1470,7 +1470,7 @@ Getter returning addresses of the currently active validators by reference.
 Getter returns the voting power of the active validators, values are voting power in the scale of 10000.
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>(wrapper: &<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): <a href="../rtd/vec_map.md#rtd_vec_map_VecMap">rtd::vec_map::VecMap</a>&lt;<b>address</b>, u64&gt;
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>(wrapper: &<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): <a href="../rtd/vec_map.md#rtd_vec_map_VecMap">rtd::vec_map::VecMap</a>&lt;<b>address</b>, u64&gt;
 </code></pre>
 
 
@@ -1479,8 +1479,8 @@ Getter returns the voting power of the active validators, values are voting powe
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>(wrapper: &<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): VecMap&lt;<b>address</b>, u64&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>()
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>(wrapper: &<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): VecMap&lt;<b>address</b>, u64&gt; {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>()
 }
 </code></pre>
 
@@ -1496,7 +1496,7 @@ Calculate the rewards for a given staked RTD object.
 Used in the package, and can be dev-inspected.
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_calculate_rewards">calculate_rewards</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: &<a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): u64
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_calculate_rewards">calculate_rewards</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, staked_rtd: &<a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): u64
 </code></pre>
 
 
@@ -1505,17 +1505,17 @@ Used in the package, and can be dev-inspected.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_calculate_rewards">calculate_rewards</a>(
-    self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_calculate_rewards">calculate_rewards</a>(
+    self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     staked_rtd: &StakedRtd,
     ctx: &TxContext,
 ): u64 {
-    <b>let</b> system_state = self.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>();
+    <b>let</b> system_state = self.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>();
     system_state
         .validators_mut()
         .validator_by_pool_id(&staked_rtd.pool_id())
         .get_staking_pool_ref()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_calculate_rewards">calculate_rewards</a>(staked_rtd, ctx.epoch())
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_calculate_rewards">calculate_rewards</a>(staked_rtd, ctx.epoch())
 }
 </code></pre>
 
@@ -1536,7 +1536,7 @@ gas coins.
 4. Update all validators.
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_advance_epoch">advance_epoch</a>(storage_reward: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, computation_reward: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, new_epoch: u64, next_protocol_version: u64, storage_rebate: u64, non_refundable_storage_fee: u64, storage_fund_reinvest_rate: u64, reward_slashing_rate: u64, epoch_start_timestamp_ms: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_advance_epoch">advance_epoch</a>(storage_reward: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, computation_reward: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, new_epoch: u64, next_protocol_version: u64, storage_rebate: u64, non_refundable_storage_fee: u64, storage_fund_reinvest_rate: u64, reward_slashing_rate: u64, epoch_start_timestamp_ms: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
 </code></pre>
 
 
@@ -1545,10 +1545,10 @@ gas coins.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_advance_epoch">advance_epoch</a>(
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_advance_epoch">advance_epoch</a>(
     storage_reward: Balance&lt;RTD&gt;,
     computation_reward: Balance&lt;RTD&gt;,
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     new_epoch: u64,
     next_protocol_version: u64,
     storage_rebate: u64,
@@ -1560,10 +1560,10 @@ gas coins.
     ctx: &<b>mut</b> TxContext,
 ): Balance&lt;RTD&gt; {
     // Validator will make a special system call with sender set <b>as</b> 0x0.
-    <b>assert</b>!(ctx.sender() == @0x0, <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_ENotSystemAddress">ENotSystemAddress</a>);
+    <b>assert</b>!(ctx.sender() == @0x0, <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_ENotSystemAddress">ENotSystemAddress</a>);
     <b>let</b> storage_rebate = wrapper
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
-        .<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_advance_epoch">advance_epoch</a>(
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>()
+        .<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_advance_epoch">advance_epoch</a>(
             new_epoch,
             next_protocol_version,
             storage_reward,
@@ -1589,7 +1589,7 @@ gas coins.
 
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state">load_system_state</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state">load_system_state</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
 </code></pre>
 
 
@@ -1598,8 +1598,8 @@ gas coins.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state">load_system_state</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &RtdSystemStateInnerV2 {
-    <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self)
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state">load_system_state</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &RtdSystemStateInnerV2 {
+    <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self)
 }
 </code></pre>
 
@@ -1613,7 +1613,7 @@ gas coins.
 
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<b>mut</b> <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<b>mut</b> <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
 </code></pre>
 
 
@@ -1622,8 +1622,8 @@ gas coins.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &<b>mut</b> RtdSystemStateInnerV2 {
-    <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self)
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &<b>mut</b> RtdSystemStateInnerV2 {
+    <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self)
 }
 </code></pre>
 
@@ -1637,7 +1637,7 @@ gas coins.
 
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>(self: &<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>(self: &<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
 </code></pre>
 
 
@@ -1646,12 +1646,12 @@ gas coins.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>(self: &<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &RtdSystemStateInnerV2 {
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_ref">load_system_state_ref</a>(self: &<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &RtdSystemStateInnerV2 {
     <b>let</b> inner: &RtdSystemStateInnerV2 = dynamic_field::borrow(
         &self.id,
         self.version,
     );
-    <b>assert</b>!(inner.system_state_version() == self.version, <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_EWrongInnerVersion">EWrongInnerVersion</a>);
+    <b>assert</b>!(inner.system_state_version() == self.version, <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_EWrongInnerVersion">EWrongInnerVersion</a>);
     inner
 }
 </code></pre>
@@ -1666,7 +1666,7 @@ gas coins.
 
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<b>mut</b> <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): &<b>mut</b> <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_RtdSystemStateInnerV2">rtd_system::rtd_system_state_inner::RtdSystemStateInnerV2</a>
 </code></pre>
 
 
@@ -1675,7 +1675,7 @@ gas coins.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &<b>mut</b> RtdSystemStateInnerV2 {
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_inner_maybe_upgrade">load_inner_maybe_upgrade</a>(self: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): &<b>mut</b> RtdSystemStateInnerV2 {
     <b>if</b> (self.version == 1) {
         <b>let</b> v1: RtdSystemStateInner = dynamic_field::remove(&<b>mut</b> self.id, self.version);
         <b>let</b> v2 = v1.v1_to_v2();
@@ -1686,7 +1686,7 @@ gas coins.
         &<b>mut</b> self.id,
         self.version,
     );
-    <b>assert</b>!(inner.system_state_version() == self.version, <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_EWrongInnerVersion">EWrongInnerVersion</a>);
+    <b>assert</b>!(inner.system_state_version() == self.version, <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_EWrongInnerVersion">EWrongInnerVersion</a>);
     inner
 }
 </code></pre>
@@ -1702,7 +1702,7 @@ gas coins.
 Returns the voting power of the active validators, values are voting power in the scale of 10000.
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_validator_voting_powers">validator_voting_powers</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): <a href="../rtd/vec_map.md#rtd_vec_map_VecMap">rtd::vec_map::VecMap</a>&lt;<b>address</b>, u64&gt;
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_validator_voting_powers">validator_voting_powers</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>): <a href="../rtd/vec_map.md#rtd_vec_map_VecMap">rtd::vec_map::VecMap</a>&lt;<b>address</b>, u64&gt;
 </code></pre>
 
 
@@ -1711,8 +1711,8 @@ Returns the voting power of the active validators, values are voting power in th
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_validator_voting_powers">validator_voting_powers</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): VecMap&lt;<b>address</b>, u64&gt; {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state">load_system_state</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>()
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_validator_voting_powers">validator_voting_powers</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>): VecMap&lt;<b>address</b>, u64&gt; {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state">load_system_state</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_active_validator_voting_powers">active_validator_voting_powers</a>()
 }
 </code></pre>
 
@@ -1728,7 +1728,7 @@ Saves the given execution time estimate blob to the RtdSystemState object, for s
 at the start of the next epoch.
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_store_execution_time_estimates">store_execution_time_estimates</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, estimates_bytes: vector&lt;u8&gt;)
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_store_execution_time_estimates">store_execution_time_estimates</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, estimates_bytes: vector&lt;u8&gt;)
 </code></pre>
 
 
@@ -1737,8 +1737,8 @@ at the start of the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_store_execution_time_estimates">store_execution_time_estimates</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, estimates_bytes: vector&lt;u8&gt;) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_store_execution_time_estimates">store_execution_time_estimates</a>(estimates_bytes)
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_store_execution_time_estimates">store_execution_time_estimates</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>, estimates_bytes: vector&lt;u8&gt;) {
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_store_execution_time_estimates">store_execution_time_estimates</a>(estimates_bytes)
 }
 </code></pre>
 
@@ -1754,7 +1754,7 @@ Saves the given execution time estimate chunks to the RtdSystemState object, for
 at the start of the next epoch.
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_store_execution_time_estimates_v2">store_execution_time_estimates_v2</a>(wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, estimate_chunks: vector&lt;vector&lt;u8&gt;&gt;)
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_store_execution_time_estimates_v2">store_execution_time_estimates_v2</a>(wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, estimate_chunks: vector&lt;vector&lt;u8&gt;&gt;)
 </code></pre>
 
 
@@ -1763,11 +1763,11 @@ at the start of the next epoch.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_store_execution_time_estimates_v2">store_execution_time_estimates_v2</a>(
-    wrapper: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
+<pre><code><b>fun</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_store_execution_time_estimates_v2">store_execution_time_estimates_v2</a>(
+    wrapper: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">RtdSystemState</a>,
     estimate_chunks: vector&lt;vector&lt;u8&gt;&gt;,
 ) {
-    wrapper.<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_store_execution_time_estimates_v2">store_execution_time_estimates_v2</a>(estimate_chunks)
+    wrapper.<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_load_system_state_mut">load_system_state_mut</a>().<a href="../rtd_system/sui_system.md#rtd_system_rtd_system_store_execution_time_estimates_v2">store_execution_time_estimates_v2</a>(estimate_chunks)
 }
 </code></pre>
 

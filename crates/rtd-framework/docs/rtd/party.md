@@ -16,9 +16,9 @@ title: Module `rtd::party`
 -  [Function `into_native`](#rtd_party_into_native)
 
 
-<pre><code><b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<pre><code><b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
-<b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 </code></pre>
 
 

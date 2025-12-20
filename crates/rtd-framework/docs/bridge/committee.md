@@ -25,15 +25,6 @@ title: Module `bridge::committee`
 <b>use</b> <a href="../bridge/crypto.md#bridge_crypto">bridge::crypto</a>;
 <b>use</b> <a href="../bridge/message.md#bridge_message">bridge::message</a>;
 <b>use</b> <a href="../bridge/message_types.md#bridge_message_types">bridge::message_types</a>;
-<b>use</b> <a href="../std/address.md#std_address">std::address</a>;
-<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
-<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
-<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
-<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
-<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
-<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
-<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
-<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 <b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
 <b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
@@ -65,16 +56,25 @@ title: Module `bridge::committee`
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 <b>use</b> <a href="../rtd/vec_set.md#rtd_vec_set">rtd::vec_set</a>;
 <b>use</b> <a href="../rtd/versioned.md#rtd_versioned">rtd::versioned</a>;
+<b>use</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system::rtd_system</a>;
+<b>use</b> <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">rtd_system::stake_subsidy</a>;
 <b>use</b> <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool">rtd_system::staking_pool</a>;
 <b>use</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">rtd_system::storage_fund</a>;
-<b>use</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system::rtd_system</a>;
-<b>use</b> <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/validator.md#rtd_system_validator">rtd_system::validator</a>;
 <b>use</b> <a href="../rtd_system/validator_cap.md#rtd_system_validator_cap">rtd_system::validator_cap</a>;
 <b>use</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set">rtd_system::validator_set</a>;
 <b>use</b> <a href="../rtd_system/validator_wrapper.md#rtd_system_validator_wrapper">rtd_system::validator_wrapper</a>;
 <b>use</b> <a href="../rtd_system/voting_power.md#rtd_system_voting_power">rtd_system::voting_power</a>;
+<b>use</b> <a href="../std/address.md#std_address">std::address</a>;
+<b>use</b> <a href="../std/ascii.md#std_ascii">std::ascii</a>;
+<b>use</b> <a href="../std/bcs.md#std_bcs">std::bcs</a>;
+<b>use</b> <a href="../std/internal.md#std_internal">std::internal</a>;
+<b>use</b> <a href="../std/option.md#std_option">std::option</a>;
+<b>use</b> <a href="../std/string.md#std_string">std::string</a>;
+<b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
+<b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
 
@@ -399,7 +399,7 @@ title: Module `bridge::committee`
 
 
 
-<pre><code><b>const</b> <a href="../bridge/committee.md#bridge_committee_RTD_MESSAGE_PREFIX">RTD_MESSAGE_PREFIX</a>: vector&lt;u8&gt; = vector[83, 85, 73, 95, 66, 82, 73, 68, 71, 69, 95, 77, 69, 83, 83, 65, 71, 69];
+<pre><code><b>const</b> <a href="../bridge/committee.md#bridge_committee_RTD_MESSAGE_PREFIX">RTD_MESSAGE_PREFIX</a>: vector&lt;u8&gt; = vector[82, 84, 68, 95, 66, 82, 73, 68, 71, 69, 95, 77, 69, 83, 83, 65, 71, 69];
 </code></pre>
 
 
@@ -497,7 +497,7 @@ title: Module `bridge::committee`
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../bridge/committee.md#bridge_committee_register">register</a>(self: &<b>mut</b> <a href="../bridge/committee.md#bridge_committee_BridgeCommittee">bridge::committee::BridgeCommittee</a>, system_state: &<b>mut</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, bridge_pubkey_bytes: vector&lt;u8&gt;, http_rest_url: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../bridge/committee.md#bridge_committee_register">register</a>(self: &<b>mut</b> <a href="../bridge/committee.md#bridge_committee_BridgeCommittee">bridge::committee::BridgeCommittee</a>, system_state: &<b>mut</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system_RtdSystemState">rtd_system::rtd_system::RtdSystemState</a>, bridge_pubkey_bytes: vector&lt;u8&gt;, http_rest_url: vector&lt;u8&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
