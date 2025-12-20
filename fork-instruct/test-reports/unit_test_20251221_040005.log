@@ -1,0 +1,40 @@
+    Blocking waiting for file lock on build directory
+   Compiling rtd-config v0.0.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-config)
+   Compiling rtd-json-rpc-types v0.0.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-json-rpc-types)
+   Compiling rtd-framework v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-framework)
+   Compiling rtd-adapter-latest v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/latest/rtd-adapter)
+   Compiling rtd-adapter-v2 v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/v2/rtd-adapter)
+   Compiling rtd-adapter-v1 v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/v1/rtd-adapter)
+   Compiling rtd-adapter-v0 v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/v0/rtd-adapter)
+   Compiling rtd-package-dump v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-package-dump)
+   Compiling rtd-proxy v0.0.2 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-proxy)
+   Compiling rtd-indexer-alt-schema v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-indexer-alt-schema)
+   Compiling rtd-metrics-push-client v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-metrics-push-client)
+   Compiling rtd-move-natives-latest v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/latest/rtd-move-natives)
+   Compiling rtd-move-natives-v0 v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/v0/rtd-move-natives)
+   Compiling rtd-move-natives-v2 v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/v2/rtd-move-natives)
+error[E0412]: cannot find type `RTDAddress` in module `schema`
+  --> crates/rtd-package-dump/src/query.rs:10:10
+   |
+10 | #[derive(cynic::Scalar, Debug)]
+   |          ^^^^^^^^^^^^^
+   |
+  ::: /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/target/debug/build/rtd-package-dump-3002fedbe55fc7d5/out/cynic-schemas/rtd.rs:1:232
+   |
+ 1 | ...tion ; pub struct ActiveJwkEdge ; pub struct Address ; pub struct AddressAliasStateCreateTransaction ; pub struct AddressConnection ; ...
+   |                                      -------------------- similarly named struct `Address` defined here
+   |
+   = note: this error originates in the derive macro `cynic::Scalar` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider importing one of these structs
+   |
+ 4 + use crate::RTDAddress;
+   |
+ 4 + use rtd_types::base_types::RTDAddress;
+   |
+
+   Compiling rtd-framework-snapshot v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-framework-snapshot)
+   Compiling rtd-move-natives-v1 v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/rtd-execution/v1/rtd-move-natives)
+For more information about this error, try `rustc --explain E0412`.
+error: could not compile `rtd-package-dump` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `rtd-package-dump` (lib test) due to 1 previous error
