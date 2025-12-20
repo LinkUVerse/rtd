@@ -18,5 +18,5 @@ bcs = "0.1.4"
 tracing = "0.1.37"
 serde = { version = "1.0.144", features = ["derive", "rc"] }
 
-sui-indexer-alt-framework = { git = "https://github.com/MystenLabs/sui.git", branch = "testnet" }
-move-core-types = { git = "https://github.com/MystenLabs/sui", branch="testnet" }
+rtd-indexer-alt-framework = { git = "https://github.com/LinkUVerse/rtd.git", branch = "testnet" }
+move-core-types = { git = "https://github.com/LinkUVerse/rtd", branch="testnet" }

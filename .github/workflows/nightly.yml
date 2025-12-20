@@ -47,15 +47,15 @@ jobs:
     steps:
       - uses: technote-space/workflow-conclusion-action@45ce8e0eb155657ab8ccf346ade734257fd196a5 # Pin v4.1.1
 
-      - name: Checkout sui repo main branch
+      - name: Checkout rtd repo main branch
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
     
-      - name: Get sui commit
+      - name: Get rtd commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          export sui_sha=$(git rev-parse HEAD)
-          echo "sui_sha=${sui_sha}" >> $GITHUB_ENV
+          export rtd_sha=$(git rev-parse HEAD)
+          echo "rtd_sha=${rtd_sha}" >> $GITHUB_ENV
 
       - name: Get current oncall
         run: |
@@ -84,7 +84,7 @@ jobs:
 
       - name: Get slack id for the oncall
         run: |
-          export slack_id=$(aws s3 cp s3://mysten-employees-dir/employees.json - | jq --arg ONCALL "${{ env.current_oncall }}" '.[] | if .name == $ONCALL then .slack_id else empty end')
+          export slack_id=$(aws s3 cp s3://linku-employees-dir/employees.json - | jq --arg ONCALL "${{ env.current_oncall }}" '.[] | if .name == $ONCALL then .slack_id else empty end')
           echo "slack_id=$(echo ${slack_id} | tr -d '"')" >> $GITHUB_ENV 
 
       - name: Post to slack
@@ -93,9 +93,9 @@ jobs:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
-            channel: "build-failures-sui"
+            channel: "build-failures-rtd"
             text: |
-              :sui::error-cross: Workflow *${{ github.workflow }}* has `${{ env.WORKFLOW_CONCLUSION }}`.
-              Sui commit: <https://github.com/MystenLabs/sui/commit/${{ env.SUI_SHA }}|${{ env.SUI_SHA }}>
+              :rtd::error-cross: Workflow *${{ github.workflow }}* has `${{ env.WORKFLOW_CONCLUSION }}`.
+              Rtd commit: <https://github.com/LinkUVerse/rtd/commit/${{ env.RTD_SHA }}|${{ env.RTD_SHA }}>
               <@${{ env.SLACK_ID }}>, current `${{ env.ONCALL_NAME }}` oncall, please debug failures.
               Logs are here: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>

@@ -1,37 +1,37 @@
 ---
-title: Sui Weather Oracle
+title: Rtd Weather Oracle
 description: Write a module (smart contract) in Move that fetches the weather data from the OpenWeather API every 10 minutes and updates the weather conditions for over 1,000 locations around the world.
-keywords: [ weather app, weather forecast example, weather forecast dapp, sui weather oracle, openweather api, randomness, nfts, example app, example dapp, oracle, create an oracle ] 
+keywords: [ weather app, weather forecast example, weather forecast dapp, rtd weather oracle, openweather api, randomness, nfts, example app, example dapp, oracle, create an oracle ] 
 ---
 
-This guide demonstrates writing a module (smart contract) in Move, deploying it on Devnet, and adding a backend, which fetches the weather data from the OpenWeather API every 10 minutes and updates the weather conditions for each city. The dApp created in this guide is called Sui Weather Oracle and it provides real-time weather data for over 1,000 locations around the world.
+This guide demonstrates writing a module (smart contract) in Move, deploying it on Devnet, and adding a backend, which fetches the weather data from the OpenWeather API every 10 minutes and updates the weather conditions for each city. The dApp created in this guide is called Rtd Weather Oracle and it provides real-time weather data for over 1,000 locations around the world.
 
-You can access and use the weather data from the OpenWeather API for various applications, such as randomness, betting, gaming, insurance, travel, education, or research. You can also mint a weather NFT based on the weather data of a city, using the `mint` function of the Sui Weather Oracle smart contract.
+You can access and use the weather data from the OpenWeather API for various applications, such as randomness, betting, gaming, insurance, travel, education, or research. You can also mint a weather NFT based on the weather data of a city, using the `mint` function of the Rtd Weather Oracle smart contract.
 
 <ImportContent source="prerequisites.mdx" mode="snippet" />
 
 ## Move smart contract
 
-As with all Sui dApps, a Move package on chain powers the logic of Sui Weather Oracle. The following instruction walks you through creating and publishing the module.
+As with all Rtd dApps, a Move package on chain powers the logic of Rtd Weather Oracle. The following instruction walks you through creating and publishing the module.
 
 ### `weather_oracle` module
 
 Before you get started, you must initialize a Move package. Open a terminal or console in the directory you want to store the example and run the following command to create an empty package with the name `weather_oracle`:
 
 ```sh
-$ sui move new weather_oracle
+$ rtd move new weather_oracle
 ```
 
 With that done, it's time to jump into some code. Create a new file in the `sources` directory with the name `weather.move` and populate the file with the following code:
 
 ```rust title='weather.move'
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module oracle::weather {
     use std::string::String;
-    use sui::dynamic_object_field as dof;
-    use sui::package;
+    use rtd::dynamic_object_field as dof;
+    use rtd::package;
 }
 ```
 
@@ -88,7 +88,7 @@ fun init(otw: WEATHER, ctx: &mut TxContext) {
     transfer::share_object(WeatherOracle {
         id: object::new(ctx),
         address: ctx.sender(),
-        name: b"SuiMeteo".to_string(),
+        name: b"RtdMeteo".to_string(),
         description: b"A weather oracle.".to_string(),
     });
     transfer::public_transfer(cap, ctx.sender()); // Transfer the admin capability to the sender.
@@ -141,7 +141,7 @@ public fun add_city(
 }
 ```
 
-The `add_city` function lets the `AdminCap` holder add a new city to the Sui Weather Oracle. The caller must present their `AdminCap` and pass a mutable reference to the main `Oracle` object. The function accepts city metadata—geoname ID, name, country and coordinates (latitude, longitude, and their positive flags). It then creates a `CityWeatherOracle` sub-object, initializes its weather fields to empty/zero, and inserts it into the oracle’s dynamic fields keyed by the geoname ID. After this, the city is registered and ready to receive updates from the backend.
+The `add_city` function lets the `AdminCap` holder add a new city to the Rtd Weather Oracle. The caller must present their `AdminCap` and pass a mutable reference to the main `Oracle` object. The function accepts city metadata—geoname ID, name, country and coordinates (latitude, longitude, and their positive flags). It then creates a `CityWeatherOracle` sub-object, initializes its weather fields to empty/zero, and inserts it into the oracle’s dynamic fields keyed by the geoname ID. After this, the city is registered and ready to receive updates from the backend.
 
 To delete a city, call `remove_city`. The admin again provides the `AdminCap` and a **mutable** oracle reference, plus the city’s geoname ID. The function removes the corresponding `CityWeatherOracle` sub-object and deletes its dynamic field entry from the oracle. This cleanly unregisters the city and frees the associated on-chain storage.
 
@@ -209,7 +209,7 @@ public fun update(
 }
 ```
 
-You have defined the data structure of the Sui Weather Oracle smart contract, but you need some functions to access and manipulate the data. Now, add some helper functions that read and return the weather data for a `WeatherOracle` object. These functions allow you to get the weather data for a specific city in the oracle. These functions also allow you to format and display the weather data in a user-friendly way.
+You have defined the data structure of the Rtd Weather Oracle smart contract, but you need some functions to access and manipulate the data. Now, add some helper functions that read and return the weather data for a `WeatherOracle` object. These functions allow you to get the weather data for a specific city in the oracle. These functions also allow you to format and display the weather data in a user-friendly way.
 
 ```rust title='weather.move'
 // --------------- Read-only References ---------------
@@ -403,19 +403,19 @@ And with that, your `weather.move` code is complete.
 
 ## Deployment
 
-<ImportContent source="initialize-sui-client-cli.mdx" mode="snippet" />
+<ImportContent source="initialize-rtd-client-cli.mdx" mode="snippet" />
 
 <ImportContent source="publish-to-devnet-with-coins.mdx" mode="snippet" />
 
 ## Backend
 
-You have successfully deployed the Sui Weather Oracle smart contract on the blockchain. Now, it's time to create an Express backend that can interact with it. The Express backend performs the following tasks:
+You have successfully deployed the Rtd Weather Oracle smart contract on the blockchain. Now, it's time to create an Express backend that can interact with it. The Express backend performs the following tasks:
 
 - Initialize the smart contract with 1,000 cities using the `add_city` function of the smart contract. The backend passes the geoname ID, name, country, latitude, longitude, and positive latitude and longitude of each city as parameters to the function.
 - Fetch the weather data for each city from the OpenWeather API every 10 minutes, using the API key that you obtained from the website. The backend parses the JSON response and extracts the weather data for each city, such as the weather ID, temperature, pressure, humidity, visibility, wind speed, wind degree, wind gust, clouds, and timestamp.
 - Update the weather data for each city on the blockchain, using the `update` function of the smart contract. The backend passes the geoname ID and the new weather data of each city as parameters to the function.
 
-The Express backend uses the [Sui Typescript SDK](https://sdk.mystenlabs.com/typescript), a TypeScript library that enables you to interact with the Sui blockchain and smart contracts. With the Sui Typescript SDK, you can connect to the Sui network, sign and submit transactions, and query the state of the smart contract. You also use the OpenWeather API to fetch the weather data for each city and update the smart contract every 10 minutes. Additionally, you can mint weather NFTs, if you want to explore that feature of the smart contract.
+The Express backend uses the [Rtd Typescript SDK](https://sdk.linkulabs.com/typescript), a TypeScript library that enables you to interact with the Rtd blockchain and smart contracts. With the Rtd Typescript SDK, you can connect to the Rtd network, sign and submit transactions, and query the state of the smart contract. You also use the OpenWeather API to fetch the weather data for each city and update the smart contract every 10 minutes. Additionally, you can mint weather NFTs, if you want to explore that feature of the smart contract.
 
 ### Initialize the project
 
@@ -424,9 +424,9 @@ First, initialize your backend project. To do this, you need to follow these ste
 - Create a new folder named `weather-oracle-backend` and navigate to it in your terminal.
 - Run `npm init -y` to create a package.json file with default values.
 - Run `npm install express --save` to install Express as a dependency and save it to your package.json file.
-- Run `npm install @mysten/bcs @mysten/sui axios csv-parse csv-parser dotenv pino retry-axios --save` to install the other dependencies and save them to your package.json file. These dependencies are:
-  - **@mysten/bcs**: a library for blockchain services.
-  - **@mysten/sui**: a library for smart user interfaces.
+- Run `npm install @linku/bcs @linku/rtd axios csv-parse csv-parser dotenv pino retry-axios --save` to install the other dependencies and save them to your package.json file. These dependencies are:
+  - **@linku/bcs**: a library for blockchain services.
+  - **@linku/rtd**: a library for smart user interfaces.
   - **axios**: a library for making HTTP requests.
   - **csv-parse**: a library for parsing CSV data.
   - **csv-parser**: a library for transforming CSV data into JSON objects.
@@ -436,9 +436,9 @@ First, initialize your backend project. To do this, you need to follow these ste
 - Create a new file named `init.ts`
 
 ```typescript title='init.ts'
-import { SuiClient } from '@mysten/sui/client';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { RtdClient } from '@linku/rtd/client';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 import * as dotenv from 'dotenv';
 
 import { City } from './city';
@@ -452,7 +452,7 @@ dotenv.config({ path: '../.env' });
 const phrase = process.env.ADMIN_PHRASE;
 const fullnode = process.env.FULLNODE!;
 const keypair = Ed25519Keypair.deriveKeypair(phrase!);
-const client = new SuiClient({
+const client = new RtdClient({
 	url: fullnode,
 });
 
@@ -527,11 +527,11 @@ addCityWeather();
 
 The code of init.ts does the following:
 
-- Imports the necessary modules and classes from the library, such as `Ed25519Keypair`, `SuiClient`, and `Transaction`.
+- Imports the necessary modules and classes from the library, such as `Ed25519Keypair`, `RtdClient`, and `Transaction`.
 - Imports the `dotenv` module to load environment variables from a .env file.
 - Imports some custom modules and functions from the local files, such as `City`, `get1000Geonameids`, `getCities`, `getWeatherOracleDynamicFields`, and `logger`.
 - Derives a key pair from a phrase stored in the `ADMIN_PHRASE` environment variable.
-- Creates a sui client object that connects to a Full node specified by the `FULLNODE` environment variable.
+- Creates a rtd client object that connects to a Full node specified by the `FULLNODE` environment variable.
 - Reads some other environment variables, such as `PACKAGE_ID`, `ADMIN_CAP_ID`, `WEATHER_ORACLE_ID`, and `MODULE_NAME`, which are used to identify the weather oracle contract and its methods.
 - Defines a constant `NUMBER_OF_CITIES`, which is the number of cities to be added to the weather oracle in each batch.
 - Defines an async function `addCityWeather`, which does the following:
@@ -547,9 +547,9 @@ The code of init.ts does the following:
 You have now initialized the `WeatherOracle` shared object. The next step is to learn how to update them every 10 minutes with the latest weather data from the OpenWeatherMap API.
 
 ```typescript title='index.ts'
-import { SuiClient } from '@mysten/sui/client';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { RtdClient } from '@linku/rtd/client';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 import * as dotenv from 'dotenv';
 
 import { City } from './city';
@@ -563,7 +563,7 @@ dotenv.config({ path: '../.env' });
 const phrase = process.env.ADMIN_PHRASE;
 const fullnode = process.env.FULLNODE!;
 const keypair = Ed25519Keypair.deriveKeypair(phrase!);
-const client = new SuiClient({
+const client = new RtdClient({
 	url: fullnode,
 });
 
@@ -680,4 +680,4 @@ The code in `index.ts` does the following:
   - Calls another async function called `getWeatherOracleDynamicFields`, which takes the package id, the module name, and the client as arguments, and returns an array of weather oracle dynamic field objects that contain information such as name and object id.
   - Calls the `performUpdates` function with the cities and weather oracle dynamic fields arrays as arguments.
 
-Congratulations, you completed the Sui Weather Oracle tutorial. You can carry the lessons learned here forward when building your next Sui project.
+Congratulations, you completed the Rtd Weather Oracle tutorial. You can carry the lessons learned here forward when building your next Rtd project.

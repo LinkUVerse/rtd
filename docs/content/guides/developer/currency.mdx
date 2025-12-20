@@ -1,13 +1,13 @@
 ---
 title: Create Currencies and Tokens
-description: Learn how to create currencies and mint coins and tokens on the Sui network using the Coin Registry system.
-keywords: [ mint tokens, create tokens, use tokens, publish token, custom tokens, sui CLI, denylist, regulated coins, coin registry, currency registry ]
+description: Learn how to create currencies and mint coins and tokens on the Rtd network using the Coin Registry system.
+keywords: [ mint tokens, create tokens, use tokens, publish token, custom tokens, rtd CLI, denylist, regulated coins, coin registry, currency registry ]
 pagination_prev: null
 ---
 
-The Coin Registry system provides a centralized approach to currency management through the `sui::coin_registry` module. The registry is a shared object located at address `0xc` that stores metadata, supply information, and regulatory status for all registered coin types.
+The Coin Registry system provides a centralized approach to currency management through the `rtd::coin_registry` module. The registry is a shared object located at address `0xc` that stores metadata, supply information, and regulatory status for all registered coin types.
 
-The `sui::token` module handles token creation on the network. Refer to the [Closed-Loop Token](/standards/closed-loop-token.mdx) and [Currency](/standards/currency.mdx) Standards documentation for more information on these features.
+The `rtd::token` module handles token creation on the network. Refer to the [Closed-Loop Token](/standards/closed-loop-token.mdx) and [Currency](/standards/currency.mdx) Standards documentation for more information on these features.
 
 ### Currency creation process
 
@@ -49,7 +49,7 @@ After initialization of a currency using the OTW method, you **must** call [`coi
 
 ## `DenyList`
 
-The Sui framework provides a `DenyList` singleton, shared object that the bearer of a `DenyCapV2` can access to specify a list of addresses that are unable to use a Sui core type. The initial use case for `DenyList`, however, focuses on limiting access to coins of a specified type. This is useful, for example, when creating a regulated coin on Sui that requires the ability to block certain addresses from using it as inputs to transactions. Regulated coins on Sui satisfy any regulations that require the ability to prevent known bad actors from having access to those coins.
+The Rtd framework provides a `DenyList` singleton, shared object that the bearer of a `DenyCapV2` can access to specify a list of addresses that are unable to use a Rtd core type. The initial use case for `DenyList`, however, focuses on limiting access to coins of a specified type. This is useful, for example, when creating a regulated coin on Rtd that requires the ability to block certain addresses from using it as inputs to transactions. Regulated coins on Rtd satisfy any regulations that require the ability to prevent known bad actors from having access to those coins.
 
 :::info
 
@@ -70,7 +70,7 @@ Regulated currency creation
 
 ## Create tokens
 
-Tokens reuse the `TreasuryCap` defined in the `sui::coin` module and therefore have the same initialization process. The `coin::create_currency` function guarantees the uniqueness of the `TreasuryCap` and forces the creation of a `CoinMetadata` object.
+Tokens reuse the `TreasuryCap` defined in the `rtd::coin` module and therefore have the same initialization process. The `coin::create_currency` function guarantees the uniqueness of the `TreasuryCap` and forces the creation of a `CoinMetadata` object.
 
 Coin-like functions perform the minting and burning of tokens. Both require the `TreasuryCap`:
 
@@ -84,5 +84,5 @@ See [Closed-Loop Token](../../standards/closed-loop-token.mdx) standard for comp
 <RelatedLink to="/guides/developer/coin/regulated.mdx" />
 <RelatedLink to="/guides/developer/coin/loyalty.mdx" />
 <RelatedLink to="/guides/developer/coin/in-game-token.mdx" />
-<RelatedLink to="/concepts/sui-move-concepts/derived-objects.mdx" />
+<RelatedLink to="/concepts/rtd-move-concepts/derived-objects.mdx" />
 <RelatedLink href="https://move-book.com/programmability/one-time-witness.html" label="One Time Witness" desc="The Move Book documentation of the one time witness pattern. " />

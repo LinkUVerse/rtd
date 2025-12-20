@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const guides = [
@@ -18,18 +18,18 @@ const guides = [
     items: [
       {
         type: 'category',
-        label: 'Install Sui',
+        label: 'Install Rtd',
         collapsed: false,
         link: {
           type: 'doc',
-          id: 'guides/developer/getting-started/sui-install',
+          id: 'guides/developer/getting-started/rtd-install',
         },
         items: [
           'guides/developer/getting-started/install-source',
           'guides/developer/getting-started/install-binaries',
         ],
       },
-      'guides/developer/getting-started/configure-sui-client',
+      'guides/developer/getting-started/configure-rtd-client',
       'guides/developer/getting-started/get-address',
       'guides/developer/getting-started/get-coins',
       'guides/developer/getting-started/hello-world',
@@ -39,32 +39,32 @@ const guides = [
   },
   {
     type: 'category',
-    label: 'Sui Essentials',
+    label: 'Rtd Essentials',
     link: {
       type: 'doc',
-      id: 'guides/developer/sui-101',
+      id: 'guides/developer/rtd-101',
     },
     items: [
-      'guides/developer/sui-101/using-events',
-      'guides/developer/sui-101/local-network',
-      'guides/developer/sui-101/connect',
-      'guides/developer/sui-101/move-package-management',
-      'guides/developer/sui-101/access-time',
-      'guides/developer/sui-101/sign-and-send-txn',
-      'guides/developer/sui-101/sponsor-txn',
-      'guides/developer/sui-101/common-errors',
+      'guides/developer/rtd-101/using-events',
+      'guides/developer/rtd-101/local-network',
+      'guides/developer/rtd-101/connect',
+      'guides/developer/rtd-101/move-package-management',
+      'guides/developer/rtd-101/access-time',
+      'guides/developer/rtd-101/sign-and-send-txn',
+      'guides/developer/rtd-101/sponsor-txn',
+      'guides/developer/rtd-101/common-errors',
 
       {
         type: 'category',
         label: 'Working with PTBs',
         link: {
           type: 'doc',
-          id: 'guides/developer/sui-101/working-with-ptbs',
+          id: 'guides/developer/rtd-101/working-with-ptbs',
         },
         items: [
-          'guides/developer/sui-101/building-ptb',
-          'guides/developer/sui-101/coin-mgt',
-          'guides/developer/sui-101/simulating-refs',
+          'guides/developer/rtd-101/building-ptb',
+          'guides/developer/rtd-101/coin-mgt',
+          'guides/developer/rtd-101/simulating-refs',
         ],
       },
     ],
@@ -230,7 +230,7 @@ const guides = [
       id: 'guides/operator',
     },
     items: [
-      'guides/operator/sui-full-node',
+      'guides/operator/rtd-full-node',
       'guides/operator/genesis',
       'guides/operator/monitoring',
       'guides/operator/alerts',
@@ -243,7 +243,7 @@ const guides = [
       'guides/operator/indexer-stack-setup',
       {
         type: 'category',
-        label: 'Sui Validator Nodes',
+        label: 'Rtd Validator Nodes',
         link: {
           type: 'doc',
           id: 'guides/operator/validator-index',
@@ -259,17 +259,17 @@ const guides = [
   },
   {
     type: 'category',
-    label: 'SuiPlay0X1',
+    label: 'RtdPlay0X1',
     collapsed: true,
     link: {
       type: 'doc',
-      id: 'guides/suiplay0x1',
+      id: 'guides/rtdplay0x1',
     },
     items: [
-      'guides/suiplay0x1/integration',
-      'guides/suiplay0x1/migration-strategies',
-      'guides/suiplay0x1/wallet-integration',
-      'guides/suiplay0x1/best-practices',
+      'guides/rtdplay0x1/integration',
+      'guides/rtdplay0x1/migration-strategies',
+      'guides/rtdplay0x1/wallet-integration',
+      'guides/rtdplay0x1/best-practices',
     ],
   },
 ];

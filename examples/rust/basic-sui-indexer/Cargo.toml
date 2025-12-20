@@ -1,11 +1,11 @@
 [package]
-name = "basic-sui-indexer"
+name = "basic-rtd-indexer"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 # Core framework dependencies
-sui-indexer-alt-framework = { git = "https://github.com/MystenLabs/sui.git", branch = "testnet" }
+rtd-indexer-alt-framework = { git = "https://github.com/LinkUVerse/rtd.git", branch = "testnet" }
 
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }

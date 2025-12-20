@@ -11,7 +11,7 @@ on:
       - 'devnet'
       - 'testnet'
       - 'mainnet'
-      - 'releases/sui-*-release'
+      - 'releases/rtd-*-release'
 
 concurrency: ${{ github.workflow }}-${{ github.ref_name }}
 
@@ -21,24 +21,24 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Release binaries builds in MystenLabs/sui-operations
+      - name: Dispatch Release binaries builds in LinkUVerse/rtd-operations
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with:
-          repository: MystenLabs/sui-operations
+          repository: LinkUVerse/rtd-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: build-release-binaries
-          client-payload: '{"sui_commit": "${{ github.sha }}"}'
+          client-payload: '{"rtd_commit": "${{ github.sha }}"}'
 
-  # Tag all sui images with branch name, so that they can be easily found
+  # Tag all rtd images with branch name, so that they can be easily found
   tag-docker-hub-images:
-    name: Tag sui docker images in DockerHub
+    name: Tag rtd docker images in DockerHub
     if: github.event_name == 'push' && contains(fromJSON('["devnet", "testnet", "mainnet"]'), github.ref_name)
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Tagging of images in DockerHub, in MystenLabs/sui-operations
+      - name: Dispatch Tagging of images in DockerHub, in LinkUVerse/rtd-operations
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with:
-          repository: MystenLabs/sui-operations
+          repository: LinkUVerse/rtd-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: tag-docker-images
-          client-payload: '{"sui_commit": "${{ github.sha }}", "tag": "${{ github.ref_name }}"}'
+          client-payload: '{"rtd_commit": "${{ github.sha }}", "tag": "${{ github.ref_name }}"}'

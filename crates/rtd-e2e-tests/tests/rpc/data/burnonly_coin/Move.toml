@@ -1,0 +1,9 @@
+[package]
+name = "burnonly_coin"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../../../crates/rtd-framework/packages/rtd-framework" }
+
+[addresses]
+burnonly_coin = "0x0"

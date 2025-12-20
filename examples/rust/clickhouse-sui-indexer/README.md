@@ -1,6 +1,6 @@
-# ClickHouse Sui Indexer
+# ClickHouse Rtd Indexer
 
-A simple example of how to build a custom Sui indexer that writes transaction data to ClickHouse.
+A simple example of how to build a custom Rtd indexer that writes transaction data to ClickHouse.
 
 ## Quick Start
 
@@ -20,12 +20,12 @@ docker exec clickhouse-dev clickhouse-client --query "GRANT CREATE, INSERT, SELE
 ### 3. Run the indexer
 
 ```bash
-cargo run -- --remote-store-url https://checkpoints.testnet.sui.io --last-checkpoint=10
+cargo run -- --remote-store-url https://checkpoints.testnet.rtd.io --last-checkpoint=10
 ```
 
 That's it! The indexer will:
 - Create the necessary tables automatically
-- Fetch checkpoints from the Sui testnet
+- Fetch checkpoints from the Rtd testnet
 - Write transaction data to ClickHouse
 
 ## Verify Data
@@ -56,7 +56,7 @@ docker stop clickhouse-dev && docker rm clickhouse-dev
 ## Architecture
 
 ```
-Sui Network → Checkpoints → Concurrent Pipeline → ClickHouse Store → ClickHouse DB
+Rtd Network → Checkpoints → Concurrent Pipeline → ClickHouse Store → ClickHouse DB
 ```
 
 The indexer uses a concurrent pipeline that processes checkpoints out-of-order with separate reader, committer, and pruner components. This is ideal for testing watermark functionality and pruning behavior.

@@ -1,18 +1,18 @@
 {
   "name": "move",
   "displayName": "Move",
-  "description": "A Move language integrated development environment for Sui.",
-  "publisher": "mysten",
+  "description": "A Move language integrated development environment for Rtd.",
+  "publisher": "linku",
   "icon": "images/move.png",
   "license": "Apache-2.0",
   "version": "1.0.34",
   "preview": true,
   "repository": {
-    "url": "https://github.com/MystenLabs/sui.git",
+    "url": "https://github.com/LinkUVerse/rtd.git",
     "type": "git"
   },
   "bugs": {
-    "url": "https://github.com/MystenLabs/sui/issues"
+    "url": "https://github.com/LinkUVerse/rtd/issues"
   },
   "engines": {
     "vscode": "^1.61.0"
@@ -22,8 +22,8 @@
   ],
   "keywords": [
     "move",
-    "Sui",
-    "Mysten"
+    "Rtd",
+    "LinkU"
   ],
   "main": "./out/src/main.js",
   "activationEvents": [
@@ -65,7 +65,7 @@
         "move.force-bundled": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Prefer bundled version of move-analyzer binary over the one from on-path sui binary"
+          "markdownDescription": "Prefer bundled version of move-analyzer binary over the one from on-path rtd binary"
         },
         "move.inlay-hints.type": {
           "type": "boolean",
@@ -94,16 +94,16 @@
           ],
           "scope": "machine-overridable",
           "default": null,
-          "markdownDescription": "Path to rust-analyzer executable (points to `~/.sui/bin/move-analyzer` by default)."
+          "markdownDescription": "Path to rust-analyzer executable (points to `~/.rtd/bin/move-analyzer` by default)."
         },
-        "move.sui.path": {
+        "move.rtd.path": {
           "type": [
             "null",
             "string"
           ],
           "scope": "machine-overridable",
           "default": null,
-          "markdownDescription": "Path to Sui executable (by default assumes that `sui` is on the systems path)."
+          "markdownDescription": "Path to Rtd executable (by default assumes that `rtd` is on the systems path)."
         },
         "move.trace.server": {
           "type": "string",
@@ -168,7 +168,7 @@
   },
   "extensionDependencies": [
     "damirka.move-syntax",
-    "mysten.move-trace-debug"
+    "linku.move-trace-debug"
 ],
   "dependencies": {
     "command-exists": "^1.2.9",

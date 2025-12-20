@@ -1,0 +1,10 @@
+[package]
+name = "z"
+version = "0.0.1"
+implicit-dependencies = false
+
+[dependencies]
+Rtd = { local = "$REPO_ROOT/crates/rtd-framework/packages/rtd-framework" }
+
+[addresses]
+z = "$RUNTIME_ID"

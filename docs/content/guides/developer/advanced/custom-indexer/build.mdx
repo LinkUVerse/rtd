@@ -1,6 +1,6 @@
 ---
 title: Build Your First Custom Indexer
-description: Build a custom indexer using the `sui-indexer-alt-framework` module. The example indexer demonstrates a sequential pipeline that extracts transaction digests from Sui checkpoints and stores them in a local PostgreSQL.
+description: Build a custom indexer using the `rtd-indexer-alt-framework` module. The example indexer demonstrates a sequential pipeline that extracts transaction digests from Rtd checkpoints and stores them in a local PostgreSQL.
 keywords: [ indexer, custom indexer, indexer framework, indexer pipeline ]
 ---
 
@@ -12,11 +12,11 @@ Refer to [Custom Indexing Framework](/concepts/data-access/custom-indexing-frame
 
 :::
 
-To build a complete custom indexer, you use the `sui-indexer-alt-framework`. The steps that follow demonstrate how to create a sequential pipeline that extracts transaction digests from Sui checkpoints and stores them in a local PostgreSQL. You can find the [source code for the framework](https://github.com/MystenLabs/sui/tree/main/crates/sui-indexer-alt-framework) in the Sui repo on GitHub.
+To build a complete custom indexer, you use the `rtd-indexer-alt-framework`. The steps that follow demonstrate how to create a sequential pipeline that extracts transaction digests from Rtd checkpoints and stores them in a local PostgreSQL. You can find the [source code for the framework](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-indexer-alt-framework) in the Rtd repo on GitHub.
 
 :::tip
 
-While this example uses PostgreSQL with [Diesel](https://diesel.rs/guides/getting-started) (a popular Rust ORM and query builder) for minimalism and out-of-the-box support, the `sui-indexer-alt-framework` is designed for flexible storage. You can use different databases (such as [MongoDB](https://www.mongodb.com/), [CouchDB](https://couchdb.apache.org/), or similar) or utilize other database clients if you prefer not to use Diesel. To achieve this, implement the framework's `Store` and `Connection` traits and define your database write logic directly within your `Handler::commit()` method.
+While this example uses PostgreSQL with [Diesel](https://diesel.rs/guides/getting-started) (a popular Rust ORM and query builder) for minimalism and out-of-the-box support, the `rtd-indexer-alt-framework` is designed for flexible storage. You can use different databases (such as [MongoDB](https://www.mongodb.com/), [CouchDB](https://couchdb.apache.org/), or similar) or utilize other database clients if you prefer not to use Diesel. To achieve this, implement the framework's `Store` and `Connection` traits and define your database write logic directly within your `Handler::commit()` method.
 
 :::
 
@@ -53,7 +53,7 @@ $ diesel --version
 
 The following steps show how to create an indexer that:
 
-- Connects to Sui Testnet: Uses the remote checkpoint store at https://checkpoints.testnet.sui.io.
+- Connects to Rtd Testnet: Uses the remote checkpoint store at https://checkpoints.testnet.rtd.io.
 - Processes checkpoints: Streams checkpoint data continuously.
 - Extracts transaction data: Pulls transaction digests from each checkpoint.
 - Stores in local PostgreSQL: Commits data to a local PostgreSQL database.
@@ -63,10 +63,10 @@ In the end, you have a working indexer that demonstrates all core framework conc
 
 :::info
 
-Sui provides checkpoint stores for both Mainnet and Testnet.
+Rtd provides checkpoint stores for both Mainnet and Testnet.
 
-- Testnet: `https://checkpoints.testnet.sui.io`
-- Mainnet: `https://checkpoints.mainnet.sui.io`
+- Testnet: `https://checkpoints.testnet.rtd.io`
+- Mainnet: `https://checkpoints.mainnet.rtd.io`
 
 :::
 
@@ -75,19 +75,19 @@ Sui provides checkpoint stores for both Mainnet and Testnet.
 First, open your console to the directory you want to store your indexer project. Use the `cargo new` command to create a new Rust project and then navigate to its directory.
 
 ```sh
-$ cargo new simple-sui-indexer
-$ cd simple-sui-indexer
+$ cargo new simple-rtd-indexer
+$ cd simple-rtd-indexer
 ```
 
 ##step Configure dependencies
 
 Replace your `Cargo.toml` code with the following configuration and save.
 
-<ImportContent source="examples/rust/basic-sui-indexer/Cargo.toml" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/Cargo.toml" mode="code" />
 
 The manifest now includes the following dependencies:
 
-- `sui-indexer-alt-framework`: Core framework providing pipeline infrastructure.
+- `rtd-indexer-alt-framework`: Core framework providing pipeline infrastructure.
 - `diesel/diesel-async`: Type-safe database ORM with asynchronous support.
 - `tokio`: Async runtime required by the framework.
 - `clap`: Command-line argument parsing for configuration.
@@ -99,19 +99,19 @@ The manifest now includes the following dependencies:
 Before configuring migrations, create and verify your local PostgreSQL database:
 
 ```sh
-$ createdb sui_indexer
+$ createdb rtd_indexer
 ```
 
 Get your connection details:
 
 ```sh
-$ psql sui_indexer -c "\conninfo"
+$ psql rtd_indexer -c "\conninfo"
 ```
 
 If successful, your console should display a message similar to the following:
 
 ```sh
-You are connected to database "sui_indexer" as user "username" via socket in "/tmp" at port "5432".
+You are connected to database "rtd_indexer" as user "username" via socket in "/tmp" at port "5432".
 ```
 
 If you receive a `createdb` error similar to
@@ -131,7 +131,7 @@ Enter the password for your pgAdmin account when prompted, then try the `created
 You can now set a variable to your database URL as it's used in following commands. Make sure to change `username` to your actual username.
 
 ```sh
-$ PSQL_URL=postgres://username@localhost:5432/sui_indexer
+$ PSQL_URL=postgres://username@localhost:5432/rtd_indexer
 ```
 
 You can now test your connection with the following command:
@@ -169,7 +169,7 @@ $ touch diesel.toml
 
 Update and save the file with the following code:
 
-<ImportContent source="examples/rust/basic-sui-indexer/diesel.toml" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/diesel.toml" mode="code" />
 
 ###substep Create database table using Diesel migrations
 
@@ -194,13 +194,13 @@ You should now have a `migrations` folder in your project. There should be a sub
 
 Open `up.sql` and replace its contents with the following code (using the actual folder name):
 
-<ImportContent source="examples/rust/basic-sui-indexer/migrations/YYYY-MM-DD-HHMMSS_transaction_digests/up.sql" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/migrations/YYYY-MM-DD-HHMMSS_transaction_digests/up.sql" mode="code" />
 
 :::tip
 
 This example uses the `TEXT` data type for `tx_digest`, but best practice for a production indexer is to use the `BYTEA` data type.
 
-The `TEXT` type is used to make the transaction digest easily readable and directly usable with external tools. Digests are `Base58` encoded, and because PostgreSQL cannot natively display `BYTEA` data in this format, storing it as `TEXT` allows you to copy the digest from a query and paste it into an explorer like [SuiScan](https://suiscan.xyz/testnet/home).
+The `TEXT` type is used to make the transaction digest easily readable and directly usable with external tools. Digests are `Base58` encoded, and because PostgreSQL cannot natively display `BYTEA` data in this format, storing it as `TEXT` allows you to copy the digest from a query and paste it into an explorer like [RtdScan](https://rtdscan.xyz/testnet/home).
 
 For a production environment, however, `BYTEA` is strongly recommended. It offers superior storage and query efficiency by storing the raw byte representation, which is more compact and significantly faster for comparisons than a string. Refer to [Binary data performance in PostgreSQL](https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/) on the CYBERTEC website for more information.
 
@@ -208,7 +208,7 @@ For a production environment, however, `BYTEA` is strongly recommended. It offer
 
 Save `up.sql`, then open `down.sql` to edit. Replace the contents of the file with the following code and save it:
 
-<ImportContent source="examples/rust/basic-sui-indexer/migrations/YYYY-MM-DD-HHMMSS_transaction_digests/down.sql" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/migrations/YYYY-MM-DD-HHMMSS_transaction_digests/down.sql" mode="code" />
 
 ###substep Apply migration and generate Rust schema
 
@@ -226,7 +226,7 @@ $ diesel print-schema --database-url $PSQL_URL > src/schema.rs
 
 Your `src/schema.rs` file should now look like the following:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/schema.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/schema.rs" mode="code" />
 
 After running the previous commands, your project is set up for the next steps:
 
@@ -240,11 +240,11 @@ The Diesel's migration system evolves the database schema over time in a structu
 
 To simplify writes to Diesel, you can define a struct that represents a record on the `transaction_digests` table.
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/models.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/models.rs" mode="code" />
 
 Key annotations:
 
-- `FieldCount`: Required by `sui-indexer-alt-framework` for memory optimization and batch processing efficiency. It is used to limit the max size of a batch so that we don't exceed the postgres limit on the number of bind parameters a single SQL statement can have.
+- `FieldCount`: Required by `rtd-indexer-alt-framework` for memory optimization and batch processing efficiency. It is used to limit the max size of a batch so that we don't exceed the postgres limit on the number of bind parameters a single SQL statement can have.
 - `diesel(table_name = transaction_digests)`: Maps this Rust struct to the `transaction_digests` table, whose schema is generated in a previous step.
 - `Insertable`: Allows this struct to be inserted into the database using Diesel.
 
@@ -258,7 +258,7 @@ $ touch ./src/handlers.rs
 
 Open the file and define a concrete struct to implement the `Processor` and `Handler` traits:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" struct="TransactionDigestHandler" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" struct="TransactionDigestHandler" />
 
 Save the file but keep it open as the next steps add to its code.
 
@@ -268,11 +268,11 @@ The `Processor` trait defines how to extract and transform data from checkpoints
 
 Add the necessary dependencies at the top of the file.
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="processordeps" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="processordeps" />
 
 After the `TransactionDigestHandler` struct, add the `Processor` code:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="processor" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="processor" />
 
 Key concepts:
 
@@ -290,7 +290,7 @@ Processor trait definition
   
 </summary>
   
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/processor.rs" mode="code" trait="Processor" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/processor.rs" mode="code" trait="Processor" />
   
 </details>
 
@@ -298,11 +298,11 @@ Processor trait definition
 
 The `Handler` trait defines how to commit data to the database. Append the `Handler` dependencies to bottom of the dependency list you created in the previous step.
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="handlerdeps" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="handlerdeps" />
 
 Add the logic for `Handler` after the `Processor` code. The complete code is available at the end of this step.
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="handler" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="handler" />
 
 How sequential batching works:
 
@@ -310,7 +310,7 @@ How sequential batching works:
 1. `batch()` accumulates values from multiple checkpoints.
 1. `commit()` writes the batch when framework reaches limits (`H::MAX_BATCH_CHECKPOINTS`).
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/sequential/committer.rs" mode="code" tag="batch" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/sequential/committer.rs" mode="code" tag="batch" />
 
 :::tip
 
@@ -328,7 +328,7 @@ Complete `handler.rs` file
   
 </summary>
   
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" />
   
 </details>
 
@@ -340,7 +340,7 @@ Handler trait definition
   
 </summary>
   
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/sequential/committer.rs" mode="code" trait="Handler" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/sequential/committer.rs" mode="code" trait="Handler" />
   
 </details>
 
@@ -378,7 +378,7 @@ After running the command for your environment, make sure the `.env` file exists
 
 Now, to tie everything together in the main function, open your `main.rs` file. Replace the default code with the following and save the file:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/main.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/main.rs" mode="code" />
 
 Key components explained:
 
@@ -398,18 +398,18 @@ Use the `cargo run` command to run your indexer against Testnet. You can choose 
 **Using remote checkpoint storage:**
 
 ```sh
-$ cargo run -- --remote-store-url https://checkpoints.testnet.sui.io
+$ cargo run -- --remote-store-url https://checkpoints.testnet.rtd.io
 ```
 
 **Using gRPC streaming from a full node (with remote checkpoint store fallback):**
 
 ```sh
-$ cargo run -- --remote-store-url https://checkpoints.testnet.sui.io --streaming-url https://fullnode.testnet.sui.io:443
+$ cargo run -- --remote-store-url https://checkpoints.testnet.rtd.io --streaming-url https://fullnode.testnet.rtd.io:443
 ```
 
 :::info
 
-Allow incoming network requests if your operating system requests it for the `basic-sui-indexer` application.
+Allow incoming network requests if your operating system requests it for the `basic-rtd-indexer` application.
 
 :::
 
@@ -420,7 +420,7 @@ If successful, your console informs you that the indexer is running.
 Open a new terminal or console and connect to your database to check the results:
 
 ```bash
-$ psql sui_indexer
+$ psql rtd_indexer
 ```
 
 After connecting, run a few queries to verify your indexer is working:
@@ -437,7 +437,7 @@ View sample records:
 $ SELECT * FROM transaction_digests LIMIT 5;
 ```
 
-To confirm your data is accurate, copy any transaction digest from your database and verify it on SuiScan: [https://suiscan.xyz/testnet/home](https://suiscan.xyz/testnet/home)
+To confirm your data is accurate, copy any transaction digest from your database and verify it on RtdScan: [https://rtdscan.xyz/testnet/home](https://rtdscan.xyz/testnet/home)
 
 You've built a working custom indexer. 🎉 
 
@@ -445,8 +445,8 @@ The key concepts covered here apply to any custom indexer: define your data stru
 
 ## Related links
 
-<RelatedLink href="https://github.com/MystenLabs/sui/tree/main/crates/sui-indexer-alt" label="Sui Indexer Alt" desc="The `sui-indexer-alt` crate in the Sui repo." />
-<RelatedLink href="https://github.com/MystenLabs/mvr/tree/main/crates/mvr-indexer" label="Move Registry" desc="The indexer that the Move Registry (MVR) implements." />
-<RelatedLink href="https://github.com/MystenLabs/deepbookv3/tree/main/crates/indexer" label="DeepBook Indexer" desc="The indexer that DeepBook implements." />
+<RelatedLink href="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-indexer-alt" label="Rtd Indexer Alt" desc="The `rtd-indexer-alt` crate in the Rtd repo." />
+<RelatedLink href="https://github.com/LinkUVerse/mvr/tree/main/crates/mvr-indexer" label="Move Registry" desc="The indexer that the Move Registry (MVR) implements." />
+<RelatedLink href="https://github.com/LinkUVerse/deepbookv3/tree/main/crates/indexer" label="DeepBook Indexer" desc="The indexer that DeepBook implements." />
 <RelatedLink to="/concepts/data-access/custom-indexing-framework.mdx" />
 <RelatedLink to="/concepts/data-access/pipeline-architecture.mdx" />

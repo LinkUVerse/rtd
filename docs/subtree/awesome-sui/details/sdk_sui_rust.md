@@ -1,4 +1,4 @@
-# Sui Rust SDK (by Mysten Labs)
+# Rtd Rust SDK (by LinkU Labs)
 
 ## Tooling Category
 
@@ -11,10 +11,10 @@
 
 ## Description
 
-Sui Rust SDK contains APIs to interact with Sui blockchain.
+Rtd Rust SDK contains APIs to interact with Rtd blockchain.
 
 ## Features
 
 - [Supported operations](https://arc.net/l/quote/gmkrkhqg)
 - ⚠️ GraphQL is not supported yet
-- [Sui BCS types are supported](https://github.com/MystenLabs/sui/blob/main/crates/sui-types/src/base_types.rs)
+- [Rtd BCS types are supported](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-types/src/base_types.rs)

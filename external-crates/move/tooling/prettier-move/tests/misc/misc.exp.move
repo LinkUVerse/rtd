@@ -6,11 +6,11 @@
 module prettier::misc;
 
 use std::{string::String, type_name::{Self, TypeName}};
-use sui::{
+use rtd::{
     clock::Clock,
     coin::Coin,
     dynamic_field as df,
-    sui::SUI,
+    rtd::RTD,
     table::{Self, Table}
 };
 
@@ -27,7 +27,7 @@ fun calculate_pending_rewards<StakeCoin, RewardCoin>(
     )
 }
 
-// sui-system/validator_set.move
+// rtd-system/validator_set.move
 fun compute_reward_adjustments(
     mut slashed_validator_indices: vector<u64>,
     reward_slashing_rate: u64,

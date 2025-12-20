@@ -1,5 +1,5 @@
 ---
-source: crates/move-analyzer/tests/ide_testsuite.rs
+source: crates/move-analyzer/tests/ide_testrtdte.rs
 ---
 == param_hints.move ========================================================
 -- test 0 -------------------

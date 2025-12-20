@@ -1,6 +1,6 @@
 [package]
 name = "test-cluster"
-authors = ["Mysten Labs <build@mystenlabs.com>"]
+authors = ["LinkU Labs <build@linkulabs.com>"]
 version = "0.1.0"
 license = "Apache-2.0"
 publish = false
@@ -21,31 +21,31 @@ tokio-util.workspace = true
 tonic.workspace = true
 rand.workspace = true
 tempfile.workspace = true
-sui-config.workspace = true
-sui-core.workspace = true
-mysten-common.workspace = true
-sui-framework.workspace = true
-sui-swarm-config.workspace = true
-sui-indexer.workspace = true
-sui-json-rpc.workspace = true
-sui-json-rpc-types.workspace = true
-sui-json-rpc-api.workspace = true
-sui-node.workspace = true
-sui-pg-db.workspace = true
-sui-protocol-config.workspace = true
-sui-swarm.workspace = true
-sui-types.workspace = true
+rtd-config.workspace = true
+rtd-core.workspace = true
+linku-common.workspace = true
+rtd-framework.workspace = true
+rtd-swarm-config.workspace = true
+rtd-indexer.workspace = true
+rtd-json-rpc.workspace = true
+rtd-json-rpc-types.workspace = true
+rtd-json-rpc-api.workspace = true
+rtd-node.workspace = true
+rtd-pg-db.workspace = true
+rtd-protocol-config.workspace = true
+rtd-swarm.workspace = true
+rtd-types.workspace = true
 prometheus.workspace = true
-sui-keys.workspace = true
-sui-sdk.workspace = true
-sui-test-transaction-builder.workspace = true
+rtd-keys.workspace = true
+rtd-sdk.workspace = true
+rtd-test-transaction-builder.workspace = true
 
 move-binary-format.workspace = true
 
 [target.'cfg(msim)'.dependencies]
-sui-simulator.workspace = true
+rtd-simulator.workspace = true
 fastcrypto-zkp.workspace = true
 
 [dev-dependencies]
-sui-json-rpc-api.workspace = true
-sui-macros.workspace = true
+rtd-json-rpc-api.workspace = true
+rtd-macros.workspace = true

@@ -1,10 +1,10 @@
 # Walrus Attributes Indexer
 
-This is an extension of the [Custom Indexer guide](https://docs.sui.io/guides/developer/advanced/custom-indexer) to show how to index Walrus blobs and their associated `Metadata` dynamic fields.
+This is an extension of the [Custom Indexer guide](https://docs.rtd.io/guides/developer/advanced/custom-indexer) to show how to index Walrus blobs and their associated `Metadata` dynamic fields.
 
 ## Quickstart
 
-Given a service that allows users to upload blog posts to Walrus and creates an associated `Metadata` dynamic field with `view_count`, `title`, and `publisher` (Sui address that created the Walrus blob), you can write a corresponding indexer that commits these attributes to a store of your choice to emulate a blog post platform. Then, users can:
+Given a service that allows users to upload blog posts to Walrus and creates an associated `Metadata` dynamic field with `view_count`, `title`, and `publisher` (Rtd address that created the Walrus blob), you can write a corresponding indexer that commits these attributes to a store of your choice to emulate a blog post platform. Then, users can:
 - Upload blog posts with titles
 - View their own posts and metrics
 - Delete posts they created
@@ -16,7 +16,7 @@ To run the indexer:
 
 ```sh
 RUST_LOG=info cargo run --release -- \
-    --remote-store-url https://checkpoints.mainnet.sui.io
+    --remote-store-url https://checkpoints.mainnet.rtd.io
 ```
 
 Other useful commands:
@@ -25,8 +25,8 @@ Other useful commands:
 walrus blob-status --blob-id {BLOB_ID}
 # List all blobs for the current address, including expired ones.
 walrus list-blobs --include-expired
-# Set a path: value attribute pair on the Metadata dynamic field of a Blob object on Sui.
-walrus set-blob-attribute {Sui blob object id} --attr "title" {title} --attr "view_count" {view_count}
+# Set a path: value attribute pair on the Metadata dynamic field of a Blob object on Rtd.
+walrus set-blob-attribute {Rtd blob object id} --attr "title" {title} --attr "view_count" {view_count}
 ```
 
 ```sh
@@ -52,7 +52,7 @@ For the purpose of this guide, the StructTag of the `Metadata` dynamic field is 
 
 ## Defaults
 
-As of writing, the SequentialConfig is defined [here](https://github.com/MystenLabs/sui/blob/main/crates/sui-indexer-alt-framework/src/pipeline/sequential/mod.rs#L68) consisting of a committer config and a checkpoint lag. The default values set `checkpoint_lag` to 0, and the committer config as follows:
+As of writing, the SequentialConfig is defined [here](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-indexer-alt-framework/src/pipeline/sequential/mod.rs#L68) consisting of a committer config and a checkpoint lag. The default values set `checkpoint_lag` to 0, and the committer config as follows:
 ```
 /// Configuration for a sequential pipeline
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -76,7 +76,7 @@ impl Default for CommitterConfig {
 }
 ```
 
-The ingestion config is defined [here](https://github.com/MystenLabs/sui/blob/main/crates/sui-indexer-alt-framework/src/ingestion/mod.rs#L59) with defaults configured to:
+The ingestion config is defined [here](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-indexer-alt-framework/src/ingestion/mod.rs#L59) with defaults configured to:
 ```
 impl Default for IngestionConfig {
     fn default() -> Self {
@@ -98,7 +98,7 @@ The following uploads the `blog_post.rs` file to Walrus, and runs the indexer lo
 walrus store src/handlers/blog_post.rs
 
 # Blob ID: IPYp_WbBwnNRTqeiYtvA6VQ0XUkS6m3ActV-0PIQfjQ
-# Sui object ID: 0xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3
+# Rtd object ID: 0xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3
 
 # Checkpoint 178907908
 walrus set-blob-attribute 0xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3 --attr view_count 5 --attr title "Blog post module" --attr publisher "0xfe9c7a465f63388e5b95c8fd2db857fad4356fc873f96900f4d8b6e7fc1e760e"

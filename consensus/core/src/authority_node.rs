@@ -1,14 +1,14 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::Instant};
 
 use consensus_config::{AuthorityIndex, Committee, NetworkKeyPair, Parameters, ProtocolKeyPair};
 use itertools::Itertools;
-use mysten_metrics::spawn_logged_monitored_task;
+use linku_metrics::spawn_logged_monitored_task;
 use parking_lot::RwLock;
 use prometheus::Registry;
-use sui_protocol_config::ProtocolConfig;
+use rtd_protocol_config::ProtocolConfig;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
@@ -38,7 +38,7 @@ use crate::{
     transaction_certifier::TransactionCertifier,
 };
 
-/// ConsensusAuthority is used by Sui to manage the lifetime of AuthorityNode.
+/// ConsensusAuthority is used by Rtd to manage the lifetime of AuthorityNode.
 /// It hides the details of the implementation from the caller, MysticetiManager.
 #[allow(private_interfaces)]
 pub enum ConsensusAuthority {
@@ -411,11 +411,11 @@ mod tests {
     };
 
     use consensus_config::{Parameters, local_committee_and_keys};
-    use mysten_metrics::RegistryService;
-    use mysten_metrics::monitored_mpsc::UnboundedReceiver;
+    use linku_metrics::RegistryService;
+    use linku_metrics::monitored_mpsc::UnboundedReceiver;
     use prometheus::Registry;
     use rstest::rstest;
-    use sui_protocol_config::ProtocolConfig;
+    use rtd_protocol_config::ProtocolConfig;
     use tempfile::TempDir;
     use tokio::time::{sleep, timeout};
     use typed_store::DBMetrics;

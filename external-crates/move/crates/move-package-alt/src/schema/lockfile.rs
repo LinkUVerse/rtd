@@ -166,19 +166,19 @@ mod tests {
             [pinned.mainnet.Foo_0]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
             manifest_digest = "..."
-            deps = { std = "MoveStdlib", sui = "Sui" }
+            deps = { std = "MoveStdlib", rtd = "Rtd" }
 
             [pinned.mainnet.Foo_1]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
             manifest_digest = "..."
-            deps = { std = "MoveStdlib", sui = "Sui" }
+            deps = { std = "MoveStdlib", rtd = "Rtd" }
 
             [pinned.mainnet.MoveStdlib]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
             manifest_digest = "..."
             deps = {}
 
-            [pinned.mainnet.Sui]
+            [pinned.mainnet.Rtd]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
             manifest_digest = "..."
             deps = { std = "MoveStdlib" }
@@ -191,7 +191,7 @@ mod tests {
             [pinned.testnet.example]
             source = { local = "." }
             manifest_digest = "..."
-            deps = { bar = "bar", foo = "Foo_0", non = "Foo_1", std = "MoveStdlib", sui = "Sui" }
+            deps = { bar = "bar", foo = "Foo_0", non = "Foo_1", std = "MoveStdlib", rtd = "Rtd" }
             "###
         );
 

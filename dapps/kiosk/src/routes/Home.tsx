@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useCurrentAccount } from '@linku/dapp-kit';
 
 import { Loading } from '../components/Base/Loading';
 import { WalletNotConnected } from '../components/Base/WalletNotConnected';

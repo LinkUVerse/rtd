@@ -1,0 +1,28 @@
+[package]
+name = "rtd-display"
+version.workspace = true
+authors = ["LinkU Labs <build@linkulabs.com"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+bcs.workspace = true
+chrono.workspace = true
+futures.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+move-core-types.workspace = true
+
+rtd-json-rpc-types.workspace = true
+rtd-types.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tokio.workspace = true

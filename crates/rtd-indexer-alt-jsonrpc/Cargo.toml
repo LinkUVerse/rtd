@@ -1,0 +1,73 @@
+[package]
+name = "rtd-indexer-alt-jsonrpc"
+version.workspace = true
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[[bin]]
+name = "rtd-indexer-alt-jsonrpc"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-graphql = { workspace = true, features = ["dataloader"] }
+async-trait.workspace = true
+axum.workspace = true
+bcs.workspace = true
+bin-version.workspace = true
+clap.workspace = true
+const-str.workspace = true
+diesel = { workspace = true, features = ["chrono"] }
+diesel-async = { workspace = true, features = ["bb8", "postgres", "async-connection-wrapper"] }
+fastcrypto.workspace = true
+futures.workspace = true
+http.workspace = true
+jsonrpsee = { workspace = true, features = ["macros", "server"] }
+pin-project-lite.workspace = true
+pin-project.workspace = true
+prometheus.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+telemetry-subscribers.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tower-layer.workspace = true
+# tower.workspace = true
+tower = { version = "0.4", features = ["util"] }
+tower-http.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+move-binary-format.workspace = true
+move-core-types.workspace = true
+
+rtd-default-config.workspace = true
+rtd-display.workspace = true
+rtd-futures.workspace = true
+rtd-indexer-alt-metrics.workspace = true
+rtd-indexer-alt-reader.workspace = true
+rtd-indexer-alt-schema.workspace = true
+rtd-json.workspace = true
+rtd-json-rpc-api.workspace = true
+rtd-json-rpc-types.workspace = true
+rtd-name-service.workspace = true
+rtd-open-rpc.workspace = true
+rtd-open-rpc-macros.workspace = true
+rtd-package-resolver.workspace = true
+rtd-protocol-config.workspace = true
+rtd-sql-macro.workspace = true
+rtd-types.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+serde_json.workspace = true
+
+rtd-pg-db.workspace = true

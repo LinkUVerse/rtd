@@ -1,0 +1,11 @@
+[package]
+name = "rtd-axelar-cgp"
+version = "0.0.1"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local= "../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+axelar = "0x0"
+rtd = "0x2"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 NETWORK="$1"
@@ -22,13 +22,13 @@ if [ -z "$RELEASED_COMMIT" ]; then
 
   case "$NETWORK" in
     devnet)
-      URL="https://$API_USER:$API_KEY@gateway.mimir.sui.io/prometheus/api/v1/query"
+      URL="https://$API_USER:$API_KEY@gateway.mimir.rtd.io/prometheus/api/v1/query"
       ;;
     testnet)
-      URL="http://$API_USER:$API_KEY@metrics-gw-2.testnet.sui.io/prometheus/api/v1/query"
+      URL="http://$API_USER:$API_KEY@metrics-gw-2.testnet.rtd.io/prometheus/api/v1/query"
       ;;
     mainnet)
-      URL="https://$API_USER:$API_KEY@metrics-gw-2.mainnet.sui.io/prometheus/api/v1/query"
+      URL="https://$API_USER:$API_KEY@metrics-gw-2.mainnet.rtd.io/prometheus/api/v1/query"
       ;;
   esac
 
@@ -67,9 +67,9 @@ function check_git_clean {
 
 check_git_clean "Please commit or stash your changes before running this script" "*"
 
-# check out all files in crates/sui-protocol-config/src/snapshots at origin commit
+# check out all files in crates/rtd-protocol-config/src/snapshots at origin commit
 echo "Checking out $NETWORK snapshot files"
-git checkout $RELEASED_COMMIT -- crates/sui-protocol-config/src/snapshots || exit 1
+git checkout $RELEASED_COMMIT -- crates/rtd-protocol-config/src/snapshots || exit 1
 
 if [ "$NETWORK" != "testnet" ] && [ "$NETWORK" != "mainnet" ]; then
   NETWORK_PATTERN="*__version_*"
@@ -84,6 +84,6 @@ check_git_clean "Detected changes to snapshot files since $RELEASED_COMMIT - not
 git reset --hard HEAD
 
 echo "Running snapshot tests..."
-cargo test --package sui-protocol-config snapshot_tests || exit 1
+cargo test --package rtd-protocol-config snapshot_tests || exit 1
 
 exit 0

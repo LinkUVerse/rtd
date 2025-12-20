@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::anyhow;
@@ -15,7 +15,7 @@ use nexlint_lints::{
 };
 static EXTERNAL_CRATE_DIR: &str = "external-crates/";
 static CREATE_DAPP_TEMPLATE_DIR: &str = "sdk/create-dapp/templates";
-static LICENSE_HEADER: &str = "Copyright (c) Mysten Labs, Inc.\n\
+static LICENSE_HEADER: &str = "Copyright (c) LinkU Labs, Inc.\n\
                                SPDX-License-Identifier: Apache-2.0\n\
                                ";
 #[derive(Debug, Parser)]
@@ -92,7 +92,7 @@ pub fn run(args: Args) -> crate::Result<()> {
             "axum-extra".to_owned(),
             // consistent-store uses a newer version of bincode with breaking interface changes
             "bincode".to_owned(),
-            // TODO: remove once we've migrated ethers to alloy: https://linear.app/mysten-labs/issue/BR-191
+            // TODO: remove once we've migrated ethers to alloy: https://linear.app/linku-labs/issue/BR-191
             "reqwest".to_owned(),
         ],
     };

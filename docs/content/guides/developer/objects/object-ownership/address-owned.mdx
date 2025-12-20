@@ -1,6 +1,6 @@
 ---
 title: Address-Owned Objects
-description: Address-owned objects are owned by a Sui 32-byte address, which can either be an account address or an object ID. Learn how to create and access these objects.
+description: Address-owned objects are owned by a Rtd 32-byte address, which can either be an account address or an object ID. Learn how to create and access these objects.
 keywords: [ address-owned objects, address-owned, owned objects, objects owned by address, accessing objects, accessing owned objects, address ownership ]
 ---
 
@@ -8,11 +8,11 @@ Address-owned objects are owned by a 32-byte address. 32-byte addresses are eith
 
 ## Create address-owned objects
 
-Use these [`transfer` module](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/sui-framework/sources/transfer.move) functions to create address-owned objects:
+Use these [`transfer` module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/rtd-framework/sources/transfer.move) functions to create address-owned objects:
 
-- Use the [`sui::transfer::transfer`](/references/framework/sui_sui/transfer#sui_transfer_transfer) function if you are defining [custom transfer rules](/guides/developer/objects/transfers/custom-rules.mdx) for the object. 
+- Use the [`rtd::transfer::transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_transfer) function if you are defining [custom transfer rules](/guides/developer/objects/transfers/custom-rules.mdx) for the object. 
 
-- Use the [`sui::transfer::public_transfer`](/references/framework/sui_sui/transfer#sui_transfer_public_transfer) function to create an address-owned object if the object has the `store` capability.
+- Use the [`rtd::transfer::public_transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_transfer) function to create an address-owned object if the object has the `store` capability.
 
 ```
 public fun transfer<T: key>(obj: T, recipient: address)
@@ -44,38 +44,38 @@ If the address owner of the object corresponds to an object ID, then you must ac
 To interact with an address-owned object through the CLI, first view the objects you own:
 
 ```sh
-$ export ADDR=`sui client active-address`
+$ export ADDR=`rtd client active-address`
 ```
 ```sh
-$ sui client objects $ADDR
+$ rtd client objects $ADDR
 ```
 
-You can see [`sui::transfer::public_transfer`](/references/framework/sui_sui/transfer#sui_transfer_public_transfer) function used in the [`color_object` example module](https://github.com/MystenLabs/sui/blob/main/examples/move/color_object/sources/example.move) tests. The test creates a new address-owned `ColorObject` object, then calls `public_transfer` to transfer it to the owner's address. 
+You can see [`rtd::transfer::public_transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_transfer) function used in the [`color_object` example module](https://github.com/LinkUVerse/rtd/blob/main/examples/move/color_object/sources/example.move) tests. The test creates a new address-owned `ColorObject` object, then calls `public_transfer` to transfer it to the owner's address. 
 
-Save the [`color_object` example code](https://github.com/MystenLabs/sui/blob/main/examples/move/color_object/sources/example.move), then publish the `ColorObject` code on-chain using the Sui CLI:
+Save the [`color_object` example code](https://github.com/LinkUVerse/rtd/blob/main/examples/move/color_object/sources/example.move), then publish the `ColorObject` code on-chain using the Rtd CLI:
 
 <ImportContent source="info-gas-budget.mdx" mode="snippet" />
 
 ```sh
-$ sui client publish $ROOT/examples/move/color_object --gas-budget <GAS-AMOUNT>
+$ rtd client publish $ROOT/examples/move/color_object --gas-budget <GAS-AMOUNT>
 ```
 
 Set the package object ID to the `$PACKAGE` environment variable, if you have it set. Then create a new `ColorObject`:
 
 ```sh
-$ sui client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "create" --args 0 255 0
+$ rtd client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "create" --args 0 255 0
 ```
 
 Set the newly created object ID to `$OBJECT`. To view the objects in the current active address:
 
 ```sh
-$ sui client objects $ADDR
+$ rtd client objects $ADDR
 ```
 
 You can see that it is now owned by your address by querying the object information and viewing the `Owner` field in the output:
 
 ```sh
-$ sui client object $OBJECT
+$ rtd client object $OBJECT
 ```
 
 ## Test address-owned objects

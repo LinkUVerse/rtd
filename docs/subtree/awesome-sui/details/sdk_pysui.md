@@ -1,4 +1,4 @@
-# Pysui (by [FrankC01](https://github.com/FrankC01))
+# Pyrtd (by [FrankC01](https://github.com/FrankC01))
 
 ## Tooling Category
 
@@ -11,11 +11,11 @@
 
 ## Description
 
-Python Client SDK for Sui blockchain
+Python Client SDK for Rtd blockchain
 
 ## Features
 
-- [Supported features](https://pysui.readthedocs.io/en/latest/index.html)
+- [Supported features](https://pyrtd.readthedocs.io/en/latest/index.html)
 - GraphQL (beta) is supported.
-- [Sui BCS types are supported](https://github.com/FrankC01/pysui/blob/main/pysui/sui/sui_types/bcs.py)
-- [Pysui Gadgets](https://github.com/FrankC01/pysui_gadgets) - Sui utilities built on top of Pysui
+- [Rtd BCS types are supported](https://github.com/FrankC01/pyrtd/blob/main/pyrtd/rtd/rtd_types/bcs.py)
+- [Pyrtd Gadgets](https://github.com/FrankC01/pyrtd_gadgets) - Rtd utilities built on top of Pyrtd

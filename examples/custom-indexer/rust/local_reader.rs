@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use tokio::sync::oneshot;
 use anyhow::Result;
 use async_trait::async_trait;
-use sui_types::full_checkpoint_content::CheckpointData;
-use sui_data_ingestion_core as sdic;
+use rtd_types::full_checkpoint_content::CheckpointData;
+use rtd_data_ingestion_core as sdic;
 use sdic::{Worker, WorkerPool, ReaderOptions};
 use sdic::{DataIngestionMetrics, FileProgressStore, IndexerExecutor};
 use prometheus::Registry;

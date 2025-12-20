@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use bytes::Bytes;
@@ -243,7 +243,7 @@ impl BlockVerifier for NoopBlockVerifier {
 mod test {
     use consensus_config::AuthorityIndex;
     use consensus_types::block::{BlockDigest, BlockRef, TransactionIndex};
-    use sui_protocol_config::ProtocolConfig;
+    use rtd_protocol_config::ProtocolConfig;
 
     use super::*;
     use crate::{

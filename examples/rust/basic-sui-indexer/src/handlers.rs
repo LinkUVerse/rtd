@@ -1,18 +1,18 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-// docs::#processordeps (see sui/docs/content/guides/developer/advanced/custom-indexer.mdx)
+// docs::#processordeps (see rtd/docs/content/guides/developer/advanced/custom-indexer.mdx)
 use std::sync::Arc;
 use anyhow::Result;
-use sui_indexer_alt_framework::pipeline::Processor;
-use sui_types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_types::full_checkpoint_content::Checkpoint;
 
 use crate::models::StoredTransactionDigest;
 use crate::schema::transaction_digests::dsl::*;
 // docs::/#processordeps
 // docs::#handlerdeps
 use diesel_async::RunQueryDsl;
-use sui_indexer_alt_framework::{
+use rtd_indexer_alt_framework::{
     postgres::{Connection, Db},
     pipeline::sequential::Handler,
 };

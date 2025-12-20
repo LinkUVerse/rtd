@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const path = require("path");
 
 const injectCode = (context, opts) => {
   return {
-    name: "sui-inject-code-plugin",
+    name: "rtd-inject-code-plugin",
 
     configureWebpack(config, _isServer, _utils) {
       const pluginContentDocsPath = path.join(

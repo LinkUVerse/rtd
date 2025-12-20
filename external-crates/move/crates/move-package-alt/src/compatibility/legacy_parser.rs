@@ -60,7 +60,7 @@ const KNOWN_NAMES: &[&str] = &[
 const REQUIRED_FIELDS: &[&str] = &[PACKAGE_NAME];
 
 const LEGACY_SYSTEM_DEPS_NAMES: [&str; 5] =
-    ["Sui", "MoveStdlib", "Bridge", "DeepBook", "SuiSystem"];
+    ["Rtd", "MoveStdlib", "Bridge", "DeepBook", "RtdSystem"];
 
 pub struct LegacyPackageMetadata {
     pub legacy_name: String,
@@ -820,11 +820,11 @@ fn is_legacy_system_dep_name(name: &str, system_deps_names: &BTreeSet<&SystemDep
 /// The bool is true if the name is a system dependency (legacy)
 fn to_modern_system_dep_name(name: &str) -> SystemDepName {
     match name {
-        "Sui" => "sui".to_string(),
+        "Rtd" => "rtd".to_string(),
         "MoveStdlib" => "std".to_string(),
         "Bridge" => "bridge".to_string(),
         "DeepBook" => "deepbook".to_string(),
-        "SuiSystem" => "sui_system".to_string(),
+        "RtdSystem" => "rtd_system".to_string(),
         _ => name.to_string(),
     }
 }

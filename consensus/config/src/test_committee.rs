@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::net::{TcpListener, TcpStream};
 
-use mysten_network::Multiaddr;
+use linku_network::Multiaddr;
 use rand::{SeedableRng as _, rngs::StdRng};
 
 use crate::{

@@ -1,9 +1,9 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 echo "Start Rosetta online server"
-sui-rosetta start-online-server --data-path ./data &
+rtd-rosetta start-online-server --data-path ./data &
 
 echo "Start Rosetta offline server"
-sui-rosetta start-offline-server &
+rtd-rosetta start-offline-server &

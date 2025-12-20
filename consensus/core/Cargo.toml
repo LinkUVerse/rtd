@@ -2,7 +2,7 @@
 name = "consensus-core"
 version = "0.1.0"
 license = "Apache-2.0"
-authors = ["Mysten Labs <build@mystenlabs.com>"]
+authors = ["LinkU Labs <build@linkulabs.com>"]
 edition = "2024"
 publish = false
 
@@ -28,9 +28,9 @@ http.workspace = true
 itertools.workspace = true
 quinn-proto.workspace = true
 mockall.workspace = true
-mysten-common.workspace = true
-mysten-metrics.workspace = true
-mysten-network.workspace = true
+linku-common.workspace = true
+linku-metrics.workspace = true
+linku-network.workspace = true
 nom = "7.1.3"
 parking_lot.workspace = true
 prometheus.workspace = true
@@ -40,9 +40,9 @@ rustls.workspace = true
 serde.workspace = true
 shared-crypto.workspace = true
 strum_macros.workspace = true
-sui-macros.workspace = true
-sui-protocol-config.workspace = true
-sui-tls.workspace = true
+rtd-macros.workspace = true
+rtd-protocol-config.workspace = true
+rtd-tls.workspace = true
 tap.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
@@ -56,7 +56,7 @@ tower-http.workspace = true
 tracing.workspace = true
 typed-store.workspace = true
 tonic-rustls.workspace = true
-sui-http.workspace = true
+rtd-http.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

@@ -1,9 +1,9 @@
 ---
 title: Passkey
-description: Sui supports the passkey signature scheme that enables you to sign in to apps and sign transactions using a private key stored securely on a passkey authenticator. It uses the WebAuthn standard.
+description: Rtd supports the passkey signature scheme that enables you to sign in to apps and sign transactions using a private key stored securely on a passkey authenticator. It uses the WebAuthn standard.
 ---
 
-Passkey provides a secure and user-friendly alternative for submitting transactions to Sui. Built on the **WebAuthn standard**, passkey allows users to authenticate and sign transactions using:
+Passkey provides a secure and user-friendly alternative for submitting transactions to Rtd. Built on the **WebAuthn standard**, passkey allows users to authenticate and sign transactions using:
 
 - Hardware security keys, such as YubiKeys  
 - Mobile devices, such as smartphones and tablets  
@@ -11,18 +11,18 @@ Passkey provides a secure and user-friendly alternative for submitting transacti
 
 Passkey simplifies authentication by removing the need to manage seed phrases or private keys manually. Instead, it relies on device-based authentication and cloud synchronization, allowing seamless, phishing-resistant access across multiple devices. You can also use passkey in a [multisig setup](/concepts/transactions/transaction-auth/multisig.mdx), which provides more flexibility to build secure and recoverable wallet experiences.
 
-By supporting the passkey signature scheme, Sui improves security and accessibility, making it easier for users to manage their accounts with hardened security. Passkey-based wallets are tied to the origin, meaning they cannot be phished or used on a different site. This makes passkey a more secure authentication option.
+By supporting the passkey signature scheme, Rtd improves security and accessibility, making it easier for users to manage their accounts with hardened security. Passkey-based wallets are tied to the origin, meaning they cannot be phished or used on a different site. This makes passkey a more secure authentication option.
 
-See the [TypeScript SDK documentation](https://sdk.mystenlabs.com/typescript/cryptography/passkey) to learn how to add passkey support to your application. For the product specification, see [SIP-9](https://github.com/sui-foundation/sips/blob/main/sips/sip-9.md).
+See the [TypeScript SDK documentation](https://sdk.linkulabs.com/typescript/cryptography/passkey) to learn how to add passkey support to your application. For the product specification, see [SIP-9](https://github.com/rtd-foundation/sips/blob/main/sips/sip-9.md).
 
 :::info
-Passkey support is available in beta in Sui Devnet and Testnet. Mainnet release is not yet scheduled.  
+Passkey support is available in beta in Rtd Devnet and Testnet. Mainnet release is not yet scheduled.  
 :::
 
 ## Benefits of using passkey
 
 - **Sign transactions securely:**  
-  Users can sign transactions in Sui using passkey, while the private key stays securely stored within the authenticator. This reduces the risk of key extraction attacks.  
+  Users can sign transactions in Rtd using passkey, while the private key stays securely stored within the authenticator. This reduces the risk of key extraction attacks.  
 
 - **Authenticate across devices:**  
   Users can scan a QR code displayed on a desktop browser with a mobile device to approve transactions. Cloud-synchronized passkey (such as those stored in Apple iCloud or Google Password Manager) allows users to authenticate across multiple devices without manual key transfers.  

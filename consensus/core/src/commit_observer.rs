@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::Duration};
@@ -31,8 +31,8 @@ use crate::{
 /// at consensus input level, and on commit sync.
 ///
 /// Commit is persisted in store before the CommittedSubDag is sent to the commit handler.
-/// When Sui recovers, it blocks until the commits it knows about are recovered. So consensus
-/// must be able to quickly recover the commits it has sent to Sui.
+/// When Rtd recovers, it blocks until the commits it knows about are recovered. So consensus
+/// must be able to quickly recover the commits it has sent to Rtd.
 pub(crate) struct CommitObserver {
     context: Arc<Context>,
     dag_state: Arc<RwLock<DagState>>,
@@ -228,7 +228,7 @@ impl CommitObserver {
 
                 // On recovery leader schedule will be updated with the current scores
                 // and the scores will be passed along with the last commit of this recovered batch sent to
-                // Sui so that the current scores are available for submission.
+                // Rtd so that the current scores are available for submission.
                 let reputation_scores = if commit.index() == last_commit_index {
                     self.leader_schedule
                         .leader_swap_table
@@ -339,7 +339,7 @@ impl CommitObserver {
 mod tests {
     use consensus_config::AuthorityIndex;
     use consensus_types::block::BlockRef;
-    use mysten_metrics::monitored_mpsc::{UnboundedReceiver, unbounded_channel};
+    use linku_metrics::monitored_mpsc::{UnboundedReceiver, unbounded_channel};
     use parking_lot::RwLock;
     use rstest::rstest;
     use tokio::time::timeout;

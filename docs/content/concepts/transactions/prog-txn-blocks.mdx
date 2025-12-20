@@ -1,16 +1,16 @@
 ---
 title: Programmable Transaction Blocks
-description: Programmable transaction blocks are a group of commands that complete a transaction on Sui.
+description: Programmable transaction blocks are a group of commands that complete a transaction on Rtd.
 keywords: [ programmable transaction blocks, transaction blocks, program transaction blocks, PTB, PTBs, what are PTBs, what is PTB, transaction group, programmable group of transactions, program transaction block, block of transactions, group of transactions ]
 ---
 
-On Sui, a transaction is more than a basic record of the flow of assets. Transactions on Sui are composed of a number of commands that execute on inputs to define the result of the transaction. Termed programmable transaction blocks (PTBs), these groups of commands define all user transactions on Sui. PTBs allow a user to call multiple Move functions, manage their objects, and manage their coins in a single transaction without publishing a new Move package. Designed with automation and transaction builders in mind, PTBs are a lightweight and flexible way of generating transactions. More intricate programming patterns, such as loops, are not supported, however, and in those cases you must publish a new Move package.
+On Rtd, a transaction is more than a basic record of the flow of assets. Transactions on Rtd are composed of a number of commands that execute on inputs to define the result of the transaction. Termed programmable transaction blocks (PTBs), these groups of commands define all user transactions on Rtd. PTBs allow a user to call multiple Move functions, manage their objects, and manage their coins in a single transaction without publishing a new Move package. Designed with automation and transaction builders in mind, PTBs are a lightweight and flexible way of generating transactions. More intricate programming patterns, such as loops, are not supported, however, and in those cases you must publish a new Move package.
 
 Each PTB is comprised of individual transaction commands that execute in order. You can use the results from one transaction command in any subsequent transaction command. The effects, specifically object modifications or transfers, of all transaction commands in a block are applied atomically at the end of the transaction. If one transaction command fails, the entire block fails and no effects from the commands are applied.
 
 A PTB can perform up to 1,024 unique operations in a single execution, whereas transactions on traditional blockchains would require 1,024 individual executions to accomplish the same result. The structure also promotes cheaper gas fees. The cost of facilitating individual transactions is always more than the cost of those same transactions blocked together in a PTB.
 
-The remainder of this topic covers the semantics of the execution of the transaction commands. It assumes familiarity with the Sui object model and the [Move language](/concepts/sui-move-concepts.mdx). 
+The remainder of this topic covers the semantics of the execution of the transaction commands. It assumes familiarity with the Rtd object model and the [Move language](/concepts/rtd-move-concepts.mdx). 
 
 ## Transaction components
 
@@ -31,9 +31,9 @@ Looking closer at the two main components:
 
   - [`TransferObjects`](#transferobjects) sends one or more objects to a specified address.
 
-  - [`SplitCoins`](#splitcoins) splits off one or more coins from a single coin. It can be any `sui::coin::Coin<_>` object.
+  - [`SplitCoins`](#splitcoins) splits off one or more coins from a single coin. It can be any `rtd::coin::Coin<_>` object.
 
-  - [`MergeCoins`](#mergecoins) merges one or more coins into a single coin. Any `sui::coin::Coin<_>` objects can be merged, as long as they are all of the same type.
+  - [`MergeCoins`](#mergecoins) merges one or more coins into a single coin. Any `rtd::coin::Coin<_>` objects can be merged, as long as they are all of the same type.
 
   - [`MakeMoveVec`](#makemovevec) creates a vector (potentially empty) of Move values. This is used primarily to construct vectors of Move values to be used as arguments to `MoveCall`.
 
@@ -41,7 +41,7 @@ Looking closer at the two main components:
 
   - [`Publish`](#publish) creates a new package and calls the `init` function of each module within the package.
 
-  - [`Upgrade`](#upgrade) upgrades an existing package. The upgrade is gated by the `sui::package::UpgradeCap` for that package.
+  - [`Upgrade`](#upgrade) upgrades an existing package. The upgrade is gated by the `rtd::package::UpgradeCap` for that package.
 
 ## Inputs and results
 
@@ -59,15 +59,15 @@ For object inputs, the metadata needed differs depending on the type of [ownersh
 
 - If an object is shared, then use `ObjectArg::SharedObject { id: ObjectID, initial_shared_version: SequenceNumber, mutable: bool }`. Unlike `ImmOrOwnedObject`, a shared object's version and digest are determined by the network's consensus protocol. The `initial_shared_version` is the version of the object when it was first shared, which is used by consensus when it has not yet seen a transaction with that object. While all shared objects can be mutated, the `mutable` flag indicates whether the object is to be used mutably in this transaction. In the case where the `mutable` flag is set to `false`, the object is read-only and the system can schedule other read-only transactions in parallel.
 
-- If the object is owned by another object, as in it was sent to an object's ID through the `TransferObjects` command or the `sui::transfer::transfer` function, then use `ObjectArg::Receiving(ObjectID, SequenceNumber, ObjectDigest)`. The object data is the same as for the `ImmOrOwnedObject` case.
+- If the object is owned by another object, as in it was sent to an object's ID through the `TransferObjects` command or the `rtd::transfer::transfer` function, then use `ObjectArg::Receiving(ObjectID, SequenceNumber, ObjectDigest)`. The object data is the same as for the `ImmOrOwnedObject` case.
 
-For pure inputs, the only data provided is the [BCS](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/std/bcs.md) bytes, which are deserialized to construct Move values. Not all Move values can be constructed from BCS bytes. The following types are allowed to be used with pure values:
+For pure inputs, the only data provided is the [BCS](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/std/bcs.md) bytes, which are deserialized to construct Move values. Not all Move values can be constructed from BCS bytes. The following types are allowed to be used with pure values:
 
 - All primitive types: `u8`, `u16`, `u32`, `u64`, `u128`, `u256`, `bool`, `address`.
 
 - A string, either an ASCII string `std::ascii::String` or UTF8 string `std::string::String`. In either case, the bytes are verified to be a valid string with the respective encoding.
 
-- An object ID `sui::object::ID`.
+- An object ID `rtd::object::ID`.
 
 - A vector, `vector<T>`, where `T` is a valid type for a pure input, checked recursively.
 
@@ -81,11 +81,11 @@ Each transaction command produces an array of values. The array can be empty. Th
 
 - `MoveCall`: The number of results and their types are determined by the Move function being called. Move functions that return references are not supported at this time.
 
-- `SplitCoins`: Produces one or more coins from a single coin. The type of each coin is `sui::coin::Coin<T>` where the specific coin type `T` matches the coin being split.
+- `SplitCoins`: Produces one or more coins from a single coin. The type of each coin is `rtd::coin::Coin<T>` where the specific coin type `T` matches the coin being split.
 
-- `Publish`: Returns the upgrade capability `sui::package::UpgradeCap` for the newly published package.
+- `Publish`: Returns the upgrade capability `rtd::package::UpgradeCap` for the newly published package.
 
-- `Upgrade`: Returns the upgrade receipt `sui::package::UpgradeReceipt` for the upgraded package.
+- `Upgrade`: Returns the upgrade receipt `rtd::package::UpgradeReceipt` for the upgraded package.
 
 - `TransferObjects` and `MergeCoins` produce an empty result vector.
 
@@ -95,7 +95,7 @@ Each command takes `Argument`s that specify the input or result being used. The 
 
 - `Input(u16)` is an input argument, where the `u16` is the index of the input in the input vector. For example, given an input vector of `[Object1, Object2, Pure1, Object3]`, `Object1` is accessed with `Input(0)` and `Pure1` is accessed with `Input(2)`.
 
-- `GasCoin` is a special input argument representing the object for the SUI coin used to pay for gas. It is kept separate from the other inputs because the gas coin is present in every transaction and has special restrictions. The gas coin being separate makes its usage explicit, which is helpful for sponsored transactions where the sponsor might not want the sender to use the gas coin for anything other than gas. The gas coin can only be taken by-value with the `TransferObjects` command. If you need an owned version of the gas coin, you can first use `SplitCoins` to split off a single coin.
+- `GasCoin` is a special input argument representing the object for the RTD coin used to pay for gas. It is kept separate from the other inputs because the gas coin is present in every transaction and has special restrictions. The gas coin being separate makes its usage explicit, which is helpful for sponsored transactions where the sponsor might not want the sender to use the gas coin for anything other than gas. The gas coin can only be taken by-value with the `TransferObjects` command. If you need an owned version of the gas coin, you can first use `SplitCoins` to split off a single coin.
 
 - `NestedResult(u16, u16)` uses the value from a previous command. The first `u16` is the index of the command in the command vector, and the second `u16` is the index of the result in the result vector of that command. For example, given a command vector of `[MoveCall1, MoveCall2, TransferObjects]` where `MoveCall2` has a result vector of `[Value1, Value2]`, `Value1` would be accessed with `NestedResult(1, 0)` and `Value2` would be accessed with `NestedResult(1, 1)`.
 
@@ -109,7 +109,7 @@ For the execution of PTBs, the input vector is populated by the input objects or
 
 At the beginning of execution, the PTB runtime takes the already loaded input objects and loads them into the input array. The objects are already verified by the network, checking rules like existence and valid ownership. The pure value bytes are also loaded into the array but not validated until usage.
 
-The most important thing to note at this stage is the effects on the gas coin. At the beginning of execution, the maximum gas budget (in terms of `SUI`) is withdrawn from the gas coin. Any unused gas is returned to the gas coin at the end of execution, even if the coin has changed owners.
+The most important thing to note at this stage is the effects on the gas coin. At the beginning of execution, the maximum gas budget (in terms of `RTD`) is withdrawn from the gas coin. Any unused gas is returned to the gas coin at the end of execution, even if the coin has changed owners.
 
 ### Argument usage rules {#arguments}
 
@@ -119,7 +119,7 @@ Each argument can be used by-reference or by-value. The usage is based on the ty
 
 - If the signature expects an `&T`, the runtime checks the argument has type `T` and it is then immutably borrowed.
 
-- If the signature expects a `T`, the runtime checks the argument has type `T` and it is copied if `T: copy` and moved otherwise. No object in Sui has `copy` because the unique ID field `sui::object::UID` present in all objects does not have the `copy` ability.
+- If the signature expects a `T`, the runtime checks the argument has type `T` and it is copied if `T: copy` and moved otherwise. No object in Rtd has `copy` because the unique ID field `rtd::object::UID` present in all objects does not have the `copy` ability.
 
 The transaction fails if an argument is used in any form after being moved. There is no way to restore an argument to its position (its input or result index) after it is moved.
 
@@ -139,7 +139,7 @@ The borrowing of arguments has other rules to ensure unique safe usage of an arg
 
 #### Special object handling
 
-Object inputs have the type of their object `T` as you might expect. However, for `ObjectArg::Receiving` inputs, the object type `T` is instead wrapped as `sui::transfer::Receiving<T>`. This is because the object is not owned by the sender, but instead by another object. To prove ownership with that parent object, you call the `sui::transfer::receive` function to remove the wrapper.
+Object inputs have the type of their object `T` as you might expect. However, for `ObjectArg::Receiving` inputs, the object type `T` is instead wrapped as `rtd::transfer::Receiving<T>`. This is because the object is not owned by the sender, but instead by another object. To prove ownership with that parent object, you call the `rtd::transfer::receive` function to remove the wrapper.
 
 Shared objects have restrictions on being used by-value. These restrictions exist to ensure that at the end of the transaction the shared object is either still shared or deleted. A shared object cannot be unshared (having the owner changed) and it cannot be wrapped. A shared object:
 
@@ -187,13 +187,13 @@ Sends one or more objects to a specified address.
 
 Splits off one or more coins from a single coin.
 
-- `CoinArg: Argument`: Coin of type `sui::coin::Coin<T>` (any coin type). Taken by mutable reference.
+- `CoinArg: Argument`: Coin of type `rtd::coin::Coin<T>` (any coin type). Taken by mutable reference.
 
 - `AmountArgs: [Argument]`: `u64` values for split amounts. Taken by value (copied).
 
-**Returns:** Vector of coins `sui::coin::Coin<T>` matching the number of amounts.
+**Returns:** Vector of coins `rtd::coin::Coin<T>` matching the number of amounts.
 
-**Signature:** `<T: key + store>(coin: &mut sui::coin::Coin<T>, amounts: vector<u64>): vector<sui::coin::Coin<T>>`
+**Signature:** `<T: key + store>(coin: &mut rtd::coin::Coin<T>, amounts: vector<u64>): vector<rtd::coin::Coin<T>>`
 
 #### `MergeCoins`
 
@@ -201,13 +201,13 @@ Splits off one or more coins from a single coin.
 
 Merges multiple coins into a single coin.
 
-- `CoinArg: Argument`: Target coin of type `sui::coin::Coin<T>` (any coin type). Taken by mutable reference.
+- `CoinArg: Argument`: Target coin of type `rtd::coin::Coin<T>` (any coin type). Taken by mutable reference.
 
-- `ToMergeArgs: [Argument]`: Coins of type `sui::coin::Coin<T>` to merge. Taken by value (moved).
+- `ToMergeArgs: [Argument]`: Coins of type `rtd::coin::Coin<T>` to merge. Taken by value (moved).
 
 **Returns:** Empty result vector.
 
-**Signature:** `<T: key + store>(coin: &mut sui::coin::Coin<T>, to_merge: vector<sui::coin::Coin<T>>): ()`
+**Signature:** `<T: key + store>(coin: &mut rtd::coin::Coin<T>, to_merge: vector<rtd::coin::Coin<T>>): ()`
 
 #### `MakeMoveVec`
 
@@ -253,7 +253,7 @@ Creates a new package and calls the `init` function of each module.
 
 - `TransitiveDependencies: [ObjectID]`: Object IDs of package dependencies for version selection.
 
-**Returns:** Single result of type `sui::package::UpgradeCap` for the newly published package.
+**Returns:** Single result of type `rtd::package::UpgradeCap` for the newly published package.
 
 After verification, the `init` function of each module is called in the same order as the module byte vector.
 
@@ -269,11 +269,11 @@ Upgrades an existing package. No `init` functions are called for upgraded module
 
 - `Package: ObjectID`: Object ID of the package being upgraded (must exist and be latest version).
 
-- `UpgradeTicket: sui::package::UpgradeTicket`: Upgrade ticket generated from `sui::package::UpgradeCap`. Taken by value (moved).
+- `UpgradeTicket: rtd::package::UpgradeTicket`: Upgrade ticket generated from `rtd::package::UpgradeCap`. Taken by value (moved).
 
-**Returns:** Single result of type `sui::package::UpgradeReceipt` providing proof of upgrade.
+**Returns:** Single result of type `rtd::package::UpgradeReceipt` providing proof of upgrade.
 
-For more details on upgrades, see [Upgrading Packages](/concepts/sui-move-concepts/packages/upgrade.mdx).
+For more details on upgrades, see [Upgrading Packages](/concepts/rtd-move-concepts/packages/upgrade.mdx).
 
 ### End of execution
 
@@ -299,9 +299,9 @@ At the end of execution, the remaining values are checked and effects for the tr
 
 **For gas:**
 
-Any remaining SUI deducted from the gas coin at the beginning of execution is returned to the coin, even if the owner has changed. The maximum possible gas is deducted at the beginning of execution, and unused gas is returned at the end (all in SUI). Because the gas coin can only be taken by-value with `TransferObjects`, it has not been wrapped or deleted.
+Any remaining RTD deducted from the gas coin at the beginning of execution is returned to the coin, even if the owner has changed. The maximum possible gas is deducted at the beginning of execution, and unused gas is returned at the end (all in RTD). Because the gas coin can only be taken by-value with `TransferObjects`, it has not been wrapped or deleted.
 
-The total effects (created, mutated, and deleted objects) are then passed out of the execution layer and applied by the Sui network.
+The total effects (created, mutated, and deleted objects) are then passed out of the execution layer and applied by the Rtd network.
 
 ## Example
 
@@ -318,18 +318,18 @@ This example demonstrates a PTB's execution flow. Suppose you want to buy two it
     SplitCoins(GasCoin, [Input(2)]),
     MoveCall("some_package", "some_marketplace", "buy_two", [], [Input(1), NestedResult(0, 0)]),
     TransferObjects([GasCoin, NestedResult(1, 0)], Input(0)),
-    MoveCall("sui", "tx_context", "sender", [], []),
+    MoveCall("rtd", "tx_context", "sender", [], []),
     TransferObjects([NestedResult(1, 1)], NestedResult(3, 0)),
   ]
 }
 ```
 
-The inputs include the friend's address, the marketplace object, and the coin split value. The commands split off the coin, call the marketplace function, send the gas coin and one object, grab your address (through `sui::tx_context::sender`), and send the remaining object to yourself.
+The inputs include the friend's address, the marketplace object, and the coin split value. The commands split off the coin, call the marketplace function, send the gas coin and one object, grab your address (through `rtd::tx_context::sender`), and send the remaining object to yourself.
 
 #### Initial state
 
 ```rust
-Gas Coin: Coin<SUI> { id: gas_coin, balance: 1_000_000u64 }
+Gas Coin: Coin<RTD> { id: gas_coin, balance: 1_000_000u64 }
 Inputs: [Pure(@0x808), Marketplace { id: market_id }, Pure(100u64)]
 Results: []
 ```
@@ -337,18 +337,18 @@ Results: []
 After maximum gas budget of `500_000` is deducted:
 
 ```rust
-Gas Coin: Coin<SUI> { id: gas_coin, balance: 500_000u64 }
+Gas Coin: Coin<RTD> { id: gas_coin, balance: 500_000u64 }
 ```
 
 #### Command 0: `SplitCoins(GasCoin, [Input(2)])`
 
 Accesses gas coin by mutable reference, loads `Input(2)` as `100u64` (copied, not moved). Creates new coin.
 
-**Changes:** Gas coin balance decreases to `499_900u64`. New result: `[Coin<SUI> { id: new_coin, value: 100u64 }]`
+**Changes:** Gas coin balance decreases to `499_900u64`. New result: `[Coin<RTD> { id: new_coin, value: 100u64 }]`
 
 #### Command 1: `MoveCall("some_package", "some_marketplace", "buy_two", ...)`
 
-Calls `buy_two(marketplace: &mut Marketplace, coin: Coin<Sui>, ctx: &mut TxContext): (Item, Item)`
+Calls `buy_two(marketplace: &mut Marketplace, coin: Coin<Rtd>, ctx: &mut TxContext): (Item, Item)`
 
 Uses `Input(1)` by mutable reference (marketplace), `NestedResult(0, 0)` by value (coin is moved and deleted).
 
@@ -360,7 +360,7 @@ Transfers gas coin and first item to `0x808`. Both objects taken by value (moved
 
 **Changes:** Gas coin moved (`_`). First item moved (`_`). Empty result vector added.
 
-#### Command 3: `MoveCall("sui", "tx_context", "sender", [], [])`
+#### Command 3: `MoveCall("rtd", "tx_context", "sender", [], [])`
 
 Calls `sender(ctx: &TxContext): address`. Returns sender's address.
 

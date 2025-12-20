@@ -64,19 +64,19 @@ name = "move"
 path = "src/main.rs"
 
 [[test]]
-name = "sandbox_testsuite"
+name = "sandbox_testrtdte"
 harness = false
 
 [[test]]
-name = "build_testsuite"
+name = "build_testrtdte"
 harness = false
 
 [[test]]
-name = "tracing_testsuite"
+name = "tracing_testrtdte"
 harness = false
 
 [[test]]
-name = "move_unit_testsuite"
+name = "move_unit_testrtdte"
 harness = false
 
 [features]

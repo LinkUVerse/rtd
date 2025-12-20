@@ -1,15 +1,15 @@
 ---
 title: Custom Indexing Framework
-description: The `sui-indexer-alt-framework` is a powerful Rust framework for building high-performance, custom blockchain indexers on Sui. It provides customizable, production-ready components for data ingestion, processing, and storage.
+description: The `rtd-indexer-alt-framework` is a powerful Rust framework for building high-performance, custom blockchain indexers on Rtd. It provides customizable, production-ready components for data ingestion, processing, and storage.
 keywords: [ indexer, framework, indexer framework, dex, events, framework architecture ]
 pagination_prev: null
 ---
 
-Sui generates rich, complex data, including transactions, events, object changes, and more. While Sui provides standard APIs to access this data, many applications need customized data processing for workflows such as tracking specific events, aggregating analytics, building dashboards, or creating specialized databases.
+Rtd generates rich, complex data, including transactions, events, object changes, and more. While Rtd provides standard APIs to access this data, many applications need customized data processing for workflows such as tracking specific events, aggregating analytics, building dashboards, or creating specialized databases.
 
-A custom indexer can be used to extract, transform, and store the specific blockchain data you need. Instead of querying Sui APIs repeatedly or building complex filtering logic, you process the raw blockchain data once and store it in your preferred format.
+A custom indexer can be used to extract, transform, and store the specific blockchain data you need. Instead of querying Rtd APIs repeatedly or building complex filtering logic, you process the raw blockchain data once and store it in your preferred format.
 
-To create a custom indexer, the `sui-indexer-alt-framework` Rust framework can be used. It provides production-ready components for data ingestion, processing, and storage while giving you full control over your indexing logic.
+To create a custom indexer, the `rtd-indexer-alt-framework` Rust framework can be used. It provides production-ready components for data ingestion, processing, and storage while giving you full control over your indexing logic.
 
 Leveraging the custom indexing framework is necessary for projects and use cases such as:
 
@@ -23,7 +23,7 @@ Leveraging the custom indexing framework is necessary for projects and use cases
 
 At a high level, the indexing framework is a streaming pipeline that continuously polls for the latest available checkpoints from a pre-defined data source and streams that checkpoint data to your pipeline's processing logic.
 
-Checkpoints on Sui are batches of transactions that represent consistent blockchain state snapshots. Each checkpoint contains complete transaction details, events, object changes, and execution results with guaranteed ordering. See [Life of a Transaction](/concepts/transactions/transaction-lifecycle.mdx#checkpoints) for more information on checkpoints.
+Checkpoints on Rtd are batches of transactions that represent consistent blockchain state snapshots. Each checkpoint contains complete transaction details, events, object changes, and execution results with guaranteed ordering. See [Life of a Transaction](/concepts/transactions/transaction-lifecycle.mdx#checkpoints) for more information on checkpoints.
 
 ![Overview](./images/overview.png)
 
@@ -39,9 +39,9 @@ The indexing framework supports multiple data sources to give developers flexibi
 
 **Polling-based sources** periodically check for new checkpoints:
 
-- **Remote stores** connect to public checkpoint repositories such as [`https://checkpoints.mainnet.sui.io`](https://checkpoints.mainnet.sui.io/). This option offers the simplest setup and does not require you to operate any infrastructure.
-- **Local files** process checkpoint files produced by a local Sui full node. This method offers the lowest latency but is recommended only for testing because the node does not automatically clean up these files.
-- **RPC endpoints** connect directly to a Sui full node RPC endpoint. This approach lets you pull checkpoints from a trusted source you operate or access networks (like Devnet) that lack a remote store.
+- **Remote stores** connect to public checkpoint repositories such as [`https://checkpoints.mainnet.rtd.io`](https://checkpoints.mainnet.rtd.io/). This option offers the simplest setup and does not require you to operate any infrastructure.
+- **Local files** process checkpoint files produced by a local Rtd full node. This method offers the lowest latency but is recommended only for testing because the node does not automatically clean up these files.
+- **RPC endpoints** connect directly to a Rtd full node RPC endpoint. This approach lets you pull checkpoints from a trusted source you operate or access networks (like Devnet) that lack a remote store.
 
 **Push-based sources** provide real-time checkpoint data as it becomes available:
 
@@ -78,7 +78,7 @@ Sequential and concurrent pipeline types and their trade-offs are detailed in [P
 
 </summary>
 
-<ImportContent source="crates/sui-types/src/full_checkpoint_content.rs" mode="code" struct="CheckpointData" />
+<ImportContent source="crates/rtd-types/src/full_checkpoint_content.rs" mode="code" struct="CheckpointData" />
 
 </details>
 

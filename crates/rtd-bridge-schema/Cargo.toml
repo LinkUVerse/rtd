@@ -1,0 +1,17 @@
+[package]
+name = "rtd-bridge-schema"
+version = "0.1.0"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+diesel = { workspace = true, features = ["serde_json"] }
+diesel_migrations.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rtd-indexer-builder.workspace = true
+rtd-field-count.workspace = true
+strum.workspace = true
+strum_macros.workspace = true

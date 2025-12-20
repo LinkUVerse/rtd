@@ -1,21 +1,21 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use proptest::arbitrary::*;
 use proptest::test_runner::TestCaseError;
-use sui_types::base_types::dbg_addr;
-use sui_types::crypto::KeypairTraits;
-use sui_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use sui_types::transaction::TransactionData;
-use sui_types::transaction::TransactionKind;
-use sui_types::utils::to_sender_signed_transaction;
+use rtd_types::base_types::dbg_addr;
+use rtd_types::crypto::KeypairTraits;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::TransactionData;
+use rtd_types::transaction::TransactionKind;
+use rtd_types::utils::to_sender_signed_transaction;
 use tracing::debug;
 use transaction_fuzzer::GasDataGenConfig;
 use transaction_fuzzer::GasDataWithObjects;
 use transaction_fuzzer::executor::Executor;
 use transaction_fuzzer::run_proptest;
 
-/// Send transfer sui txn with provided random gas data and gas objects to an authority.
+/// Send transfer rtd txn with provided random gas data and gas objects to an authority.
 fn test_with_random_gas_data(
     gas_data_test: GasDataWithObjects,
     executor: &mut Executor,
@@ -29,7 +29,7 @@ fn test_with_random_gas_data(
     let pt = {
         let mut builder = ProgrammableTransactionBuilder::new();
         let recipient = dbg_addr(2);
-        builder.transfer_sui(recipient, None);
+        builder.transfer_rtd(recipient, None);
         builder.finish()
     };
     let kind = TransactionKind::ProgrammableTransaction(pt);

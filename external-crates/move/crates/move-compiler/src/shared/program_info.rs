@@ -16,7 +16,7 @@ use crate::{
         ConstantName, DatatypeName, DocComment, Field, FunctionName, TargetKind, VariantName,
     },
     shared::{unique_map::UniqueMap, *},
-    sui_mode::info::{SuiInfo, SuiModInfo},
+    rtd_mode::info::{RtdInfo, RtdModInfo},
     typing::ast::{self as T},
 };
 use move_core_types::runtime_value;
@@ -64,7 +64,7 @@ pub struct ModuleInfo {
     pub enums: UniqueMap<DatatypeName, EnumDefinition>,
     pub functions: UniqueMap<FunctionName, FunctionInfo>,
     pub constants: UniqueMap<ConstantName, ConstantInfo>,
-    pub sui_info: Option<SuiModInfo>,
+    pub rtd_info: Option<RtdModInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +132,7 @@ macro_rules! program_info {
                 enums,
                 functions,
                 constants,
-                sui_info: None,
+                rtd_info: None,
             };
             (mident, minfo)
         }))
@@ -184,19 +184,19 @@ impl TypingProgramInfo {
         // but this feels roughly equivalent
         if env
             .package_configs()
-            .any(|(_, config)| config.flavor == Flavor::Sui)
+            .any(|(_, config)| config.flavor == Flavor::Rtd)
         {
-            let mut sui_flavor_info = SuiInfo::new(modules, &info);
+            let mut rtd_flavor_info = RtdInfo::new(modules, &info);
             for (mident, module_info) in info.modules.key_cloned_iter_mut() {
-                let uid_holders = sui_flavor_info
+                let uid_holders = rtd_flavor_info
                     .uid_holders
                     .remove(&mident)
                     .unwrap_or_default();
-                let transferred = sui_flavor_info
+                let transferred = rtd_flavor_info
                     .transferred
                     .remove(&mident)
                     .unwrap_or_default();
-                module_info.sui_info = Some(SuiModInfo {
+                module_info.rtd_info = Some(RtdModInfo {
                     uid_holders,
                     transferred,
                 });

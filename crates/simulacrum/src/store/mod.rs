@@ -1,20 +1,20 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeMap;
-use sui_config::genesis;
-use sui_types::base_types::ObjectRef;
-use sui_types::error::UserInputError;
-use sui_types::transaction::InputObjects;
-use sui_types::transaction::ObjectReadResult;
-use sui_types::transaction::ReceivingObjectReadResult;
-use sui_types::transaction::ReceivingObjects;
-use sui_types::{
-    base_types::{ObjectID, SequenceNumber, SuiAddress},
+use rtd_config::genesis;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::error::UserInputError;
+use rtd_types::transaction::InputObjects;
+use rtd_types::transaction::ObjectReadResult;
+use rtd_types::transaction::ReceivingObjectReadResult;
+use rtd_types::transaction::ReceivingObjects;
+use rtd_types::{
+    base_types::{ObjectID, SequenceNumber, RtdAddress},
     committee::{Committee, EpochId},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents},
-    error::SuiResult,
+    error::RtdResult,
     messages_checkpoint::{
         CheckpointContents, CheckpointContentsDigest, CheckpointDigest, CheckpointSequenceNumber,
         VerifiedCheckpoint,
@@ -26,8 +26,8 @@ use sui_types::{
 pub mod in_mem_store;
 
 pub trait SimulatorStore:
-    sui_types::storage::BackingPackageStore
-    + sui_types::storage::ObjectStore
+    rtd_types::storage::BackingPackageStore
+    + rtd_types::storage::ObjectStore
     + ParentSync
     + ChildObjectResolver
 {
@@ -80,11 +80,11 @@ pub trait SimulatorStore:
 
     fn get_object_at_version(&self, id: &ObjectID, version: SequenceNumber) -> Option<Object>;
 
-    fn get_system_state(&self) -> sui_types::sui_system_state::SuiSystemState;
+    fn get_system_state(&self) -> rtd_types::rtd_system_state::RtdSystemState;
 
-    fn get_clock(&self) -> sui_types::clock::Clock;
+    fn get_clock(&self) -> rtd_types::clock::Clock;
 
-    fn owned_objects(&self, owner: SuiAddress) -> Box<dyn Iterator<Item = Object> + '_>;
+    fn owned_objects(&self, owner: RtdAddress) -> Box<dyn Iterator<Item = Object> + '_>;
 
     fn insert_checkpoint(&mut self, checkpoint: VerifiedCheckpoint);
 
@@ -123,7 +123,7 @@ pub trait SimulatorStore:
         _tx_digest: &TransactionDigest,
         input_object_kinds: &[InputObjectKind],
         receiving_object_refs: &[ObjectRef],
-    ) -> SuiResult<(InputObjects, ReceivingObjects)> {
+    ) -> RtdResult<(InputObjects, ReceivingObjects)> {
         let mut input_objects = Vec::new();
         for kind in input_object_kinds {
             let obj = match kind {

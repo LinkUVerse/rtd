@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! CommitSyncer implements efficient synchronization of committed data.
@@ -12,7 +12,7 @@
 //! CommitSyncer achieves efficient synchronization by relying on the following: when blocks
 //! are included in commits with >= 2f+1 certifiers by stake, these blocks must have passed
 //! verifications on some honest validators, so re-verifying them is unnecessary. In fact, the
-//! quorum certified commits themselves can be trusted to be sent to Sui directly, but for
+//! quorum certified commits themselves can be trusted to be sent to Rtd directly, but for
 //! simplicity this is not done. Blocks from trusted commits still go through Core and committer.
 //!
 //! Another way CommitSyncer improves the efficiency of synchronization is parallel fetching:
@@ -35,7 +35,7 @@ use consensus_config::AuthorityIndex;
 use consensus_types::block::BlockRef;
 use futures::{StreamExt as _, stream::FuturesOrdered};
 use itertools::Itertools as _;
-use mysten_metrics::spawn_logged_monitored_task;
+use linku_metrics::spawn_logged_monitored_task;
 use parking_lot::RwLock;
 use rand::{prelude::SliceRandom as _, rngs::ThreadRng};
 use tokio::{
@@ -832,7 +832,7 @@ mod tests {
     use bytes::Bytes;
     use consensus_config::{AuthorityIndex, Parameters};
     use consensus_types::block::{BlockRef, Round};
-    use mysten_metrics::monitored_mpsc;
+    use linku_metrics::monitored_mpsc;
     use parking_lot::RwLock;
 
     use crate::{

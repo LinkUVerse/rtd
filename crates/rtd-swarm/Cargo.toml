@@ -1,0 +1,35 @@
+[package]
+name = "rtd-swarm"
+version = "0.0.0"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rand.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["full"] }
+futures.workspace = true
+tempfile.workspace = true
+tonic-health.workspace = true
+tap.workspace = true
+prometheus.workspace = true
+
+rtd-config.workspace = true
+rtd-swarm-config.workspace = true
+rtd-macros.workspace = true
+rtd-node.workspace = true
+rtd-protocol-config.workspace = true
+rtd-tls.workspace = true
+rtd-types.workspace = true
+linku-metrics.workspace = true
+linku-network.workspace = true
+telemetry-subscribers.workspace = true
+
+[target.'cfg(msim)'.dependencies]
+rtd-simulator.workspace = true

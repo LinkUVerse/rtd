@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -371,8 +371,8 @@ pub struct CommittedSubDag {
     pub decided_with_local_blocks: bool,
     /// Whether rejected transactions in this commit have been recovered from storage.
     pub recovered_rejected_transactions: bool,
-    /// Optional scores that are provided as part of the consensus output to Sui
-    /// that can then be used by Sui for future submission to consensus.
+    /// Optional scores that are provided as part of the consensus output to Rtd
+    /// that can then be used by Rtd for future submission to consensus.
     pub reputation_scores_desc: Vec<(AuthorityIndex, u64)>,
 
     /// Set by CommitFinalizer.

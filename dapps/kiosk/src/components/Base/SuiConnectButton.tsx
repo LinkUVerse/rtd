@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { ConnectButton } from '@mysten/dapp-kit';
+import { ConnectButton } from '@linku/dapp-kit';
 
-export function SuiConnectButton() {
+export function RtdConnectButton() {
 	return <ConnectButton className="flex-shrink-0" />;
 }

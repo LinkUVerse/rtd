@@ -1,0 +1,9 @@
+[package]
+name = "rtdns"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+rtdns = "0x0"

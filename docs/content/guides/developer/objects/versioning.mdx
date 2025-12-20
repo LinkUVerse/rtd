@@ -1,6 +1,6 @@
 ---
 title: Object and Package Versioning
-description: Versioning provides the ability to upgrade packages and objects on the Sui network.
+description: Versioning provides the ability to upgrade packages and objects on the Rtd network.
 keywords: [ object versioning, object versions, versioning objects, package versioning, package versions, versioning packages ]
 ---
 
@@ -18,7 +18,7 @@ Versions are strictly increasing and (`ID`, `version`) pairs are never re-used. 
 
 ## Move objects
 
-Sui uses [Lamport timestamps](https://en.wikipedia.org/wiki/Lamport_timestamp) in its versioning algorithm for objects. The use of Lamport timestamps guarantees that versions never get re-used as the new version for objects touched by a transaction is 1 greater than the latest version among all input objects to the transaction. For example, a transaction transferring an object `O` at version 5 using a [gas object](/concepts/tokenomics/gas-in-sui.mdx) `G` at version 3 updates both `O` and `G` versions to `1 + max(5, 3) = 6`, creating version 6.
+Rtd uses [Lamport timestamps](https://en.wikipedia.org/wiki/Lamport_timestamp) in its versioning algorithm for objects. The use of Lamport timestamps guarantees that versions never get re-used as the new version for objects touched by a transaction is 1 greater than the latest version among all input objects to the transaction. For example, a transaction transferring an object `O` at version 5 using a [gas object](/concepts/tokenomics/gas-in-rtd.mdx) `G` at version 3 updates both `O` and `G` versions to `1 + max(5, 3) = 6`, creating version 6.
 
 ### Address-owned objects
 
@@ -50,9 +50,9 @@ You can't access [wrapped](/guides/developer/objects/object-ownership/wrapped.md
 
 ```move
 module example::wrapped {
-    use sui::object::{Self, UID};
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
+    use rtd::object::{Self, UID};
+    use rtd::transfer;
+    use rtd::tx_context::{Self, TxContext};
 
     struct Inner has key, store {
         id: UID,
@@ -130,9 +130,9 @@ A distinction between [dynamic fields](/concepts/dynamic-fields.mdx) and [wrappe
 
 :::
 
-Adding a new dynamic field to a parent object also creates a `Field` object, responsible for associating the field name and value with that parent. Unlike other newly created objects, the ID for the resulting instance of `Field` is not created using `sui::object::new`. Instead, it is computed as a hash of the parent object ID and the type and value of the field name, so that you can use it to look up the `Field` through its parent and name.
+Adding a new dynamic field to a parent object also creates a `Field` object, responsible for associating the field name and value with that parent. Unlike other newly created objects, the ID for the resulting instance of `Field` is not created using `rtd::object::new`. Instead, it is computed as a hash of the parent object ID and the type and value of the field name, so that you can use it to look up the `Field` through its parent and name.
 
-When you remove a field, Sui deletes its associated `Field`, and if you add a new field with the same name, Sui creates a new instance with the same ID. Versioning using Lamport timestamps coupled with [dynamic fields](/concepts/dynamic-fields.mdx) being only accessible through their parent object ensures that (`ID`, `version`) pairs are not reused in the process.
+When you remove a field, Rtd deletes its associated `Field`, and if you add a new field with the same name, Rtd creates a new instance with the same ID. Versioning using Lamport timestamps coupled with [dynamic fields](/concepts/dynamic-fields.mdx) being only accessible through their parent object ensures that (`ID`, `version`) pairs are not reused in the process.
 
 The transaction that deletes the original field increments the parent's version to be greater than the deleted field's version. The transaction that creates the new version of the same field creates the field with a version that is greater than the parent's version.
 
@@ -140,11 +140,11 @@ The version of the new `Field` instance is greater than the version of the delet
 
 ## Packages
 
-[Move packages](/concepts/sui-move-concepts/packages.mdx) are also versioned and stored on-chain, but follow a different versioning scheme to objects because they are immutable from their inception. This means that you refer to package transaction inputs by just their ID as they are always loaded at their latest version.
+[Move packages](/concepts/rtd-move-concepts/packages.mdx) are also versioned and stored on-chain, but follow a different versioning scheme to objects because they are immutable from their inception. This means that you refer to package transaction inputs by just their ID as they are always loaded at their latest version.
 
 ### User packages
 
-Every time you publish or upgrade a package, Sui generates a new ID. A newly published package has its version set to 1, whereas an upgraded package's version is 1 greater than the package it is upgrading. Unlike objects, older versions of a package remain accessible even after being upgraded. For example, imagine a package `P` that is published and upgraded twice. It might be represented in the store as:
+Every time you publish or upgrade a package, Rtd generates a new ID. A newly published package has its version set to 1, whereas an upgraded package's version is 1 greater than the package it is upgrading. Unlike objects, older versions of a package remain accessible even after being upgraded. For example, imagine a package `P` that is published and upgraded twice. It might be represented in the store as:
 
 ```
 (0x17fb7f87e48622257725f584949beac81539a3f4ff864317ad90357c37d82605, 1) => P v1
@@ -156,7 +156,7 @@ In this example, all 3 versions of the same package are at different IDs. The pa
 
 ### Framework packages
 
-Framework packages, such as the [Move standard library](https://move-book.com/reference/) at `0x1`, the [Sui framework library](https://docs.sui.io/references/framework/sui_sui) at `0x2`, [Sui system library](https://docs.sui.io/references/framework/sui_system) at `0x3` and [DeepBook](/standards/deepbook.mdx) at `0xdee9`, are a special case because their IDs must remain stable across upgrades. The network can upgrade framework packages while preserving their IDs through a system transaction, but can only perform this operation on epoch boundaries because they are considered immutable like other packages. New versions of framework packages retain the same ID as their predecessor, but increment their version by 1:
+Framework packages, such as the [Move standard library](https://move-book.com/reference/) at `0x1`, the [Rtd framework library](https://docs.rtd.io/references/framework/rtd_rtd) at `0x2`, [Rtd system library](https://docs.rtd.io/references/framework/rtd_system) at `0x3` and [DeepBook](/standards/deepbook.mdx) at `0xdee9`, are a special case because their IDs must remain stable across upgrades. The network can upgrade framework packages while preserving their IDs through a system transaction, but can only perform this operation on epoch boundaries because they are considered immutable like other packages. New versions of framework packages retain the same ID as their predecessor, but increment their version by 1:
 
 ```
 (0x1, 1) => MoveStdlib v1

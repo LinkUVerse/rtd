@@ -51,12 +51,12 @@ For example
 ```move
 module flash::loan;
 
-use sui::balance::Balance;
-use sui::sui::SUI;
+use rtd::balance::Balance;
+use rtd::rtd::RTD;
 
 public struct Bank has key {
     id: UID,
-    holdings: Balance<SUI>,
+    holdings: Balance<RTD>,
 }
 
 // This is a hot potato because it does not have `store` and does not have `drop`
@@ -64,13 +64,13 @@ public struct Loan {
     amount: u64,
 }
 
-public fun issue(bank: &mut Bank, amount: u64): (Balance<SUI>, Loan) {
+public fun issue(bank: &mut Bank, amount: u64): (Balance<RTD>, Loan) {
     assert!(bank.holdings.value() >= amount);
     let loaned = bank.holdings.split(amount);
     (loaned, Loan { amount })
 }
 
-public fun repay(bank: &mut Bank, loan: Loan, repayment: Balance<SUI>) {
+public fun repay(bank: &mut Bank, loan: Loan, repayment: Balance<RTD>) {
     let Loan { amount } = loan;
     assert!(repayment.value() == amount);
     bank.holdings.join(repayment);
@@ -95,7 +95,7 @@ Some brief terminology before looking at the rules and their defining algorithm.
   - No abilities
   - `copy`
   - `key`
-  - Note that a value cannot have both `key` and `copy` since `sui::object::UID` does not have `copy`
+  - Note that a value cannot have both `key` and `copy` since `rtd::object::UID` does not have `copy`
 - Each value belongs to a _clique_. A clique represents values that have been used together as arguments and their results.
 - Each clique has a count with the number of hot values. Meaning that the clique’s count is incremented when results are hot (once per result), and the clique’s count is decremented when a hot value is moved (taken by-value and not copied).
   - The count here is tracking how many hot potato (or similar) values are outstanding, and the clique is tracking which values they could restrict or otherwise influence.
@@ -118,7 +118,7 @@ In these examples, we will walk through the algorithm, showing each clique and i
 
 ```move
 // Invalid PTB
-// Input 0: Coin<SUI>
+// Input 0: Coin<RTD>
 // cliques: { Input(0) } => 0
 0: ex::m::hot(Input(0));
 // cliques: { Input(0), Result(0) } = 1
@@ -126,7 +126,7 @@ In these examples, we will walk through the algorithm, showing each clique and i
 2: ex::m::cool(Result(0));
 
 // Valid PTB
-// Input 0: Coin<SUI>
+// Input 0: Coin<RTD>
 // cliques: { Input(0) } => 0
 0: ex::m::hot(Input(0));
 // cliques: { Input(0), Result(0) } = 1
@@ -144,10 +144,10 @@ Using the `flash::loan` module from above, we can construct more involved exampl
 // cliques: { Input(0) } => 0, { Input(1) } =>  0,
 0: flash::loan::issue(Input(0), Input(1))
 // cliques: { Input(0), NestedResult(0,0), NestedResult(0,1) }  =>  1,
-1: sui::coin::from_balance(NestedResult(0,0));
+1: rtd::coin::from_balance(NestedResult(0,0));
 // cliques: { Input(0), NestedResult(0,1), Result(1) }  =>  1,
 2: ex::m::spend(Result(1)); // INVALID, Result(1)'s clique has count > 0
-3: sui::coin::into_balance(Result(1));
+3: rtd::coin::into_balance(Result(1));
 4: flash::loan::repay(Result(3), NestedResult(0,1));
 ```
 
@@ -161,7 +161,7 @@ As mentioned above, a clique with a shared object by-value is always hot. In oth
 
 Why? This rule is needed since shared objects cannot be wrapped—they either have to be re-shared or deleted. This means that a shared-object could be used to force behavior in a way similar to a hot potato. But unlike a hot potato, we cannot tell from signature of the function if it is used properly.
 
-If this algorithm was “dynamic” rather than “static”, it could be more precise at the cost of clarity. That is, a static set of rules is typically easier to describe and follow as compared to a dynamic set of rules. However, [party objects](https://docs.sui.io/guides/developer/objects/object-ownership/party) will fall under this restriction under more narrow cases than with shared objects. As such, we think that this restriction will be acceptable long term without having to sacrifice the clarity of the static system.
+If this algorithm was “dynamic” rather than “static”, it could be more precise at the cost of clarity. That is, a static set of rules is typically easier to describe and follow as compared to a dynamic set of rules. However, [party objects](https://docs.rtd.io/guides/developer/objects/object-ownership/party) will fall under this restriction under more narrow cases than with shared objects. As such, we think that this restriction will be acceptable long term without having to sacrifice the clarity of the static system.
 
 ## Coming Soon (v1.63 or later)
 

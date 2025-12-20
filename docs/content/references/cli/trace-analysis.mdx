@@ -1,9 +1,9 @@
 ---
-title: Sui Trace Analysis
-description: Use the Sui CLI to analyze transaction traces.
+title: Rtd Trace Analysis
+description: Use the Rtd CLI to analyze transaction traces.
 ---
 
-[Replaying a transaction](./replay.mdx) generates a trace file that contains detailed information about the execution of the transaction, such as gas usage, functions called, instructions executed, and more. Use the Sui CLI to analyze a trace file and extract useful insights.
+[Replaying a transaction](./replay.mdx) generates a trace file that contains detailed information about the execution of the transaction, such as gas usage, functions called, instructions executed, and more. Use the Rtd CLI to analyze a trace file and extract useful insights.
 
 :::info
 
@@ -13,7 +13,7 @@ Currently, only gas profile analysis is supported for transactions traced with t
 
 ### Profile a transaction
 
-Use the `sui analyze-trace -p <PATH_TO_TRACE_FILE> gas-profile` command to analyze a trace for a transaction and produce a gas profile. 
+Use the `rtd analyze-trace -p <PATH_TO_TRACE_FILE> gas-profile` command to analyze a trace for a transaction and produce a gas profile. 
 
 The command outputs a profile to the current working directory in the format `gas_profile_{TRACE_FILE_NAME}.json`. You can also supply an optional `--output/-o` flag to the `analyze-trace` command to specify a different output directory for the profile. Use [speedscope](https://www.speedscope.app/) to display the profile that was generated.
 
@@ -43,4 +43,4 @@ In both views, click the top section and drag to zoom in or out over different s
 
 **Sandwich** view shows a list of discrete values that correspond to gas consumption per function. The **Total** value shows the gas cost incurred in all functions called by the function. **Self** shows the gas cost for only the given function.
 
-Observing a transaction's gas consumption provides insight into the expected gas cost of a package. During package development, you can [run a local network](/guides/developer/sui-101/local-network.mdx) and publish your package locally. Then, create a transaction that calls your package and run the profiler on that transaction to see a breakdown of the gas cost.
+Observing a transaction's gas consumption provides insight into the expected gas cost of a package. During package development, you can [run a local network](/guides/developer/rtd-101/local-network.mdx) and publish your package locally. Then, create a transaction that calls your package and run the profiler on that transaction to see a breakdown of the gas cost.

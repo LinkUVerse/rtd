@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::{StreamExt, future::join_all};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use mysten_common::fatal;
+use linku_common::fatal;
 use rand::{distributions::*, rngs::OsRng, seq::SliceRandom};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -11,52 +11,52 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use sui_config::genesis::Genesis;
-use sui_config::node::{AuthorityOverloadConfig, DBCheckpointConfig, RunWithRange};
-use sui_config::{Config, ExecutionCacheConfig, SUI_CLIENT_CONFIG, SUI_NETWORK_CONFIG};
-use sui_config::{NodeConfig, PersistedConfig, SUI_KEYSTORE_FILENAME};
-use sui_core::authority_aggregator::AuthorityAggregator;
-use sui_core::authority_client::NetworkAuthorityClient;
-use sui_json_rpc_types::{
-    SuiExecutionStatus, SuiTransactionBlockEffectsAPI, SuiTransactionBlockResponse,
+use rtd_config::genesis::Genesis;
+use rtd_config::node::{AuthorityOverloadConfig, DBCheckpointConfig, RunWithRange};
+use rtd_config::{Config, ExecutionCacheConfig, RTD_CLIENT_CONFIG, RTD_NETWORK_CONFIG};
+use rtd_config::{NodeConfig, PersistedConfig, RTD_KEYSTORE_FILENAME};
+use rtd_core::authority_aggregator::AuthorityAggregator;
+use rtd_core::authority_client::NetworkAuthorityClient;
+use rtd_json_rpc_types::{
+    RtdExecutionStatus, RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponse,
     TransactionFilter,
 };
-use sui_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
-use sui_node::SuiNodeHandle;
-use sui_protocol_config::{Chain, ProtocolVersion};
-use sui_sdk::apis::QuorumDriverApi;
-use sui_sdk::sui_client_config::{SuiClientConfig, SuiEnv};
-use sui_sdk::wallet_context::WalletContext;
-use sui_sdk::{SuiClient, SuiClientBuilder};
-use sui_swarm::memory::{Swarm, SwarmBuilder};
-use sui_swarm_config::genesis_config::{
+use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
+use rtd_node::RtdNodeHandle;
+use rtd_protocol_config::{Chain, ProtocolVersion};
+use rtd_sdk::apis::QuorumDriverApi;
+use rtd_sdk::rtd_client_config::{RtdClientConfig, RtdEnv};
+use rtd_sdk::wallet_context::WalletContext;
+use rtd_sdk::{RtdClient, RtdClientBuilder};
+use rtd_swarm::memory::{Swarm, SwarmBuilder};
+use rtd_swarm_config::genesis_config::{
     AccountConfig, DEFAULT_GAS_AMOUNT, GenesisConfig, ValidatorGenesisConfig,
 };
-use sui_swarm_config::network_config::NetworkConfig;
-use sui_swarm_config::network_config_builder::{
+use rtd_swarm_config::network_config::NetworkConfig;
+use rtd_swarm_config::network_config_builder::{
     GlobalStateHashV2EnabledCallback, GlobalStateHashV2EnabledConfig, ProtocolVersionsConfig,
     SupportedProtocolVersionsCallback,
 };
-use sui_swarm_config::node_config_builder::{FullnodeConfigBuilder, ValidatorConfigBuilder};
-use sui_test_transaction_builder::TestTransactionBuilder;
-use sui_types::base_types::ConciseableName;
-use sui_types::base_types::{AuthorityName, ObjectID, ObjectRef, SuiAddress};
-use sui_types::committee::CommitteeTrait;
-use sui_types::committee::{Committee, EpochId};
-use sui_types::crypto::KeypairTraits;
-use sui_types::crypto::SuiKeyPair;
-use sui_types::digests::{ChainIdentifier, TransactionDigest};
-use sui_types::effects::{TransactionEffects, TransactionEvents};
-use sui_types::error::SuiResult;
-use sui_types::message_envelope::Message;
-use sui_types::messages_grpc::{RawSubmitTxRequest, SubmitTxType};
-use sui_types::object::Object;
-use sui_types::sui_system_state::SuiSystemState;
-use sui_types::sui_system_state::SuiSystemStateTrait;
-use sui_types::sui_system_state::epoch_start_sui_system_state::EpochStartSystemStateTrait;
-use sui_types::supported_protocol_versions::SupportedProtocolVersions;
-use sui_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
-use sui_types::transaction::{
+use rtd_swarm_config::node_config_builder::{FullnodeConfigBuilder, ValidatorConfigBuilder};
+use rtd_test_transaction_builder::TestTransactionBuilder;
+use rtd_types::base_types::ConciseableName;
+use rtd_types::base_types::{AuthorityName, ObjectID, ObjectRef, RtdAddress};
+use rtd_types::committee::CommitteeTrait;
+use rtd_types::committee::{Committee, EpochId};
+use rtd_types::crypto::KeypairTraits;
+use rtd_types::crypto::RtdKeyPair;
+use rtd_types::digests::{ChainIdentifier, TransactionDigest};
+use rtd_types::effects::{TransactionEffects, TransactionEvents};
+use rtd_types::error::RtdResult;
+use rtd_types::message_envelope::Message;
+use rtd_types::messages_grpc::{RawSubmitTxRequest, SubmitTxType};
+use rtd_types::object::Object;
+use rtd_types::rtd_system_state::RtdSystemState;
+use rtd_types::rtd_system_state::RtdSystemStateTrait;
+use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
+use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
+use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
+use rtd_types::transaction::{
     CertifiedTransaction, Transaction, TransactionData, TransactionDataAPI, TransactionKind,
 };
 use tokio::time::{Instant, timeout};
@@ -69,22 +69,22 @@ mod test_indexer_handle;
 const NUM_VALIDATOR: usize = 4;
 
 pub struct FullNodeHandle {
-    pub sui_node: SuiNodeHandle,
-    pub sui_client: SuiClient,
+    pub rtd_node: RtdNodeHandle,
+    pub rtd_client: RtdClient,
     pub rpc_client: HttpClient,
     pub rpc_url: String,
 }
 
 impl FullNodeHandle {
-    pub async fn new(sui_node: SuiNodeHandle, json_rpc_address: SocketAddr) -> Self {
+    pub async fn new(rtd_node: RtdNodeHandle, json_rpc_address: SocketAddr) -> Self {
         let rpc_url = format!("http://{}", json_rpc_address);
         let rpc_client = HttpClientBuilder::default().build(&rpc_url).unwrap();
 
-        let sui_client = SuiClientBuilder::default().build(&rpc_url).await.unwrap();
+        let rtd_client = RtdClientBuilder::default().build(&rpc_url).await.unwrap();
 
         Self {
-            sui_node,
-            sui_client,
+            rtd_node,
+            rtd_client,
             rpc_client,
             rpc_url,
         }
@@ -106,11 +106,11 @@ impl TestCluster {
             .unwrap_or(&self.fullnode_handle.rpc_client)
     }
 
-    pub fn sui_client(&self) -> &SuiClient {
+    pub fn rtd_client(&self) -> &RtdClient {
         self.indexer_handle
             .as_ref()
-            .map(|h| &h.sui_client)
-            .unwrap_or(&self.fullnode_handle.sui_client)
+            .map(|h| &h.rtd_client)
+            .unwrap_or(&self.fullnode_handle.rtd_client)
     }
 
     pub fn rpc_url(&self) -> &str {
@@ -121,7 +121,7 @@ impl TestCluster {
     }
 
     pub fn quorum_driver_api(&self) -> &QuorumDriverApi {
-        self.sui_client().quorum_driver_api()
+        self.rtd_client().quorum_driver_api()
     }
 
     pub fn wallet(&mut self) -> &WalletContext {
@@ -132,22 +132,22 @@ impl TestCluster {
         &mut self.wallet
     }
 
-    pub fn get_addresses(&self) -> Vec<SuiAddress> {
+    pub fn get_addresses(&self) -> Vec<RtdAddress> {
         self.wallet.get_addresses()
     }
 
     // Helper function to get the 0th address in WalletContext
-    pub fn get_address_0(&self) -> SuiAddress {
+    pub fn get_address_0(&self) -> RtdAddress {
         self.get_addresses()[0]
     }
 
     // Helper function to get the 1st address in WalletContext
-    pub fn get_address_1(&self) -> SuiAddress {
+    pub fn get_address_1(&self) -> RtdAddress {
         self.get_addresses()[1]
     }
 
     // Helper function to get the 2nd address in WalletContext
-    pub fn get_address_2(&self) -> SuiAddress {
+    pub fn get_address_2(&self) -> RtdAddress {
         self.get_addresses()[2]
     }
 
@@ -157,7 +157,7 @@ impl TestCluster {
 
     pub fn committee(&self) -> Arc<Committee> {
         self.fullnode_handle
-            .sui_node
+            .rtd_node
             .with(|node| node.state().epoch_store_for_testing().committee().clone())
     }
 
@@ -176,14 +176,14 @@ impl TestCluster {
         FullNodeHandle::new(node, json_rpc_address).await
     }
 
-    pub fn all_node_handles(&self) -> Vec<SuiNodeHandle> {
+    pub fn all_node_handles(&self) -> Vec<RtdNodeHandle> {
         self.swarm
             .all_nodes()
             .flat_map(|n| n.get_node_handle())
             .collect()
     }
 
-    pub fn all_validator_handles(&self) -> Vec<SuiNodeHandle> {
+    pub fn all_validator_handles(&self) -> Vec<RtdNodeHandle> {
         self.swarm
             .validator_nodes()
             .map(|n| n.get_node_handle().unwrap())
@@ -230,7 +230,7 @@ impl TestCluster {
     pub async fn spawn_new_validator(
         &mut self,
         genesis_config: ValidatorGenesisConfig,
-    ) -> SuiNodeHandle {
+    ) -> RtdNodeHandle {
         let node_config = ValidatorConfigBuilder::new()
             .build(genesis_config, self.swarm.config().genesis.clone());
         self.swarm.spawn_new_node(node_config).await
@@ -241,7 +241,7 @@ impl TestCluster {
     }
 
     pub async fn get_reference_gas_price(&self) -> u64 {
-        self.sui_client()
+        self.rtd_client()
             .governance_api()
             .get_reference_gas_price()
             .await
@@ -254,7 +254,7 @@ impl TestCluster {
 
     pub async fn get_object_from_fullnode_store(&self, object_id: &ObjectID) -> Option<Object> {
         self.fullnode_handle
-            .sui_node
+            .rtd_node
             .with_async(|node| async { node.state().get_object(object_id).await })
             .await
     }
@@ -271,7 +271,7 @@ impl TestCluster {
         object_id: ObjectID,
     ) -> ObjectRef {
         self.fullnode_handle
-            .sui_node
+            .rtd_node
             .state()
             .get_object_cache_reader()
             .get_latest_object_ref_or_tombstone(object_id)
@@ -289,7 +289,7 @@ impl TestCluster {
     ) -> Option<RunWithRange> {
         let mut shutdown_channel_rx = self
             .fullnode_handle
-            .sui_node
+            .rtd_node
             .with(|node| node.subscribe_to_shutdown_channel());
 
         timeout(timeout_dur, async move {
@@ -300,7 +300,7 @@ impl TestCluster {
                         Ok(Some(run_with_range)) => Some(run_with_range),
                         Ok(None) => None,
                         Err(e) => {
-                            error!("failed recv from sui-node shutdown channel: {}", e);
+                            error!("failed recv from rtd-node shutdown channel: {}", e);
                             None
                         },
                     }
@@ -308,13 +308,13 @@ impl TestCluster {
             }
         })
         .await
-        .expect("Timed out waiting for cluster to hit target epoch and recv shutdown signal from sui-node")
+        .expect("Timed out waiting for cluster to hit target epoch and recv shutdown signal from rtd-node")
     }
 
     pub async fn wait_for_protocol_version(
         &self,
         target_protocol_version: ProtocolVersion,
-    ) -> SuiSystemState {
+    ) -> RtdSystemState {
         self.wait_for_protocol_version_with_timeout(
             target_protocol_version,
             Duration::from_secs(60),
@@ -326,7 +326,7 @@ impl TestCluster {
         &self,
         target_protocol_version: ProtocolVersion,
         timeout_dur: Duration,
-    ) -> SuiSystemState {
+    ) -> RtdSystemState {
         timeout(timeout_dur, async move {
             loop {
                 let system_state = self.wait_for_epoch(None).await;
@@ -348,7 +348,7 @@ impl TestCluster {
         // Close epoch on 2f+1 validators.
         let cur_committee = self
             .fullnode_handle
-            .sui_node
+            .rtd_node
             .with(|node| node.state().clone_committee_for_testing());
         let mut cur_stake = 0;
         for node in self.swarm.active_validators() {
@@ -382,24 +382,24 @@ impl TestCluster {
     /// If target_epoch is specified, wait until the cluster reaches that epoch.
     /// If target_epoch is None, wait until the cluster reaches the next epoch.
     /// Note that this function does not guarantee that every node is at the target epoch.
-    pub async fn wait_for_epoch(&self, target_epoch: Option<EpochId>) -> SuiSystemState {
+    pub async fn wait_for_epoch(&self, target_epoch: Option<EpochId>) -> RtdSystemState {
         self.wait_for_epoch_with_timeout(target_epoch, Duration::from_secs(60))
             .await
     }
 
     pub async fn wait_for_epoch_on_node(
         &self,
-        handle: &SuiNodeHandle,
+        handle: &RtdNodeHandle,
         target_epoch: Option<EpochId>,
         timeout_dur: Duration,
-    ) -> SuiSystemState {
+    ) -> RtdSystemState {
         let mut epoch_rx = handle.with(|node| node.subscribe_to_epoch_change());
 
         let mut state = None;
         timeout(timeout_dur, async {
             let epoch = handle.with(|node| node.state().epoch_store_for_testing().epoch());
             if Some(epoch) == target_epoch {
-                return handle.with(|node| node.state().get_sui_system_state_object_for_testing().unwrap());
+                return handle.with(|node| node.state().get_rtd_system_state_object_for_testing().unwrap());
             }
             while let Ok(system_state) = epoch_rx.recv().await {
                 info!("received epoch {}", system_state.epoch());
@@ -430,8 +430,8 @@ impl TestCluster {
         &self,
         target_epoch: Option<EpochId>,
         timeout_dur: Duration,
-    ) -> SuiSystemState {
-        self.wait_for_epoch_on_node(&self.fullnode_handle.sui_node, target_epoch, timeout_dur)
+    ) -> RtdSystemState {
+        self.wait_for_epoch_on_node(&self.fullnode_handle.rtd_node, target_epoch, timeout_dur)
             .await
     }
 
@@ -517,7 +517,7 @@ impl TestCluster {
     pub async fn wait_for_authenticator_state_update(&self) {
         timeout(
             Duration::from_secs(60),
-            self.fullnode_handle.sui_node.with_async(|node| async move {
+            self.fullnode_handle.rtd_node.with_async(|node| async move {
                 let mut txns = node.state().subscription_handler.subscribe_transactions(
                     TransactionFilter::ChangedObject(ObjectID::from_hex_literal("0x7").unwrap()),
                 );
@@ -565,7 +565,7 @@ impl TestCluster {
 
     pub async fn test_transaction_builder_with_sender(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
     ) -> TestTransactionBuilder {
         let gas = self
             .wallet
@@ -579,7 +579,7 @@ impl TestCluster {
 
     pub async fn test_transaction_builder_with_gas_object(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         gas: ObjectRef,
     ) -> TestTransactionBuilder {
         let rgp = self.get_reference_gas_price().await;
@@ -593,7 +593,7 @@ impl TestCluster {
     pub async fn sign_and_execute_transaction(
         &self,
         tx_data: &TransactionData,
-    ) -> SuiTransactionBlockResponse {
+    ) -> RtdTransactionBlockResponse {
         let tx = self.wallet.sign_transaction(tx_data).await;
         self.execute_transaction(tx).await
     }
@@ -602,7 +602,7 @@ impl TestCluster {
     pub async fn sign_and_execute_transaction_directly(
         &self,
         tx_data: &TransactionData,
-    ) -> SuiResult<(TransactionDigest, TransactionEffects)> {
+    ) -> RtdResult<(TransactionDigest, TransactionEffects)> {
         let mut res = self
             .sign_and_execute_txns_in_soft_bundle(std::slice::from_ref(tx_data))
             .await?;
@@ -621,7 +621,7 @@ impl TestCluster {
     pub async fn sign_and_execute_txns_in_soft_bundle(
         &self,
         txns: &[TransactionData],
-    ) -> SuiResult<Vec<(TransactionDigest, TransactionEffects)>> {
+    ) -> RtdResult<Vec<(TransactionDigest, TransactionEffects)>> {
         // Sign all transactions
         let signed_txs: Vec<Transaction> =
             futures::future::join_all(txns.iter().map(|tx| self.wallet.sign_transaction(tx))).await;
@@ -632,7 +632,7 @@ impl TestCluster {
     pub async fn execute_signed_txns_in_soft_bundle(
         &self,
         signed_txs: &[Transaction],
-    ) -> SuiResult<Vec<(TransactionDigest, TransactionEffects)>> {
+    ) -> RtdResult<Vec<(TransactionDigest, TransactionEffects)>> {
         let digests: Vec<_> = signed_txs.iter().map(|tx| *tx.digest()).collect();
 
         let request = RawSubmitTxRequest {
@@ -661,16 +661,16 @@ impl TestCluster {
         assert_eq!(result.results.len(), signed_txs.len());
 
         for raw_result in result.results.iter() {
-            let submit_result: sui_types::messages_grpc::SubmitTxResult =
+            let submit_result: rtd_types::messages_grpc::SubmitTxResult =
                 raw_result.clone().try_into()?;
-            if let sui_types::messages_grpc::SubmitTxResult::Rejected { error } = submit_result {
+            if let rtd_types::messages_grpc::SubmitTxResult::Rejected { error } = submit_result {
                 return Err(error);
             }
         }
 
         let effects = self
             .fullnode_handle
-            .sui_node
+            .rtd_node
             .with_async(|node| {
                 let digests = digests.clone();
                 async move {
@@ -691,7 +691,7 @@ impl TestCluster {
 
     pub async fn wait_for_tx_settlement(&self, digests: &[TransactionDigest]) {
         self.fullnode_handle
-            .sui_node
+            .rtd_node
             .with_async(|node| async move {
                 let state = node.state();
                 // wait until the transactions are in checkpoints
@@ -715,7 +715,7 @@ impl TestCluster {
     /// Also expects the effects status to be ExecutionStatus::Success.
     /// This function is recommended for transaction execution since it most resembles the
     /// production path.
-    pub async fn execute_transaction(&self, tx: Transaction) -> SuiTransactionBlockResponse {
+    pub async fn execute_transaction(&self, tx: Transaction) -> RtdTransactionBlockResponse {
         self.wallet.execute_transaction_must_succeed(tx).await
     }
 
@@ -740,7 +740,7 @@ impl TestCluster {
 
     pub fn authority_aggregator(&self) -> Arc<AuthorityAggregator<NetworkAuthorityClient>> {
         self.fullnode_handle
-            .sui_node
+            .rtd_node
             .with(|node| node.clone_authority_aggregator().unwrap())
     }
 
@@ -801,7 +801,7 @@ impl TestCluster {
                 break replies;
             }
         };
-        let replies: SuiResult<Vec<_>> = replies.into_iter().collect();
+        let replies: RtdResult<Vec<_>> = replies.into_iter().collect();
         let replies = replies?;
         let mut all_effects = HashMap::new();
         let mut all_events = HashMap::new();
@@ -826,14 +826,14 @@ impl TestCluster {
         &self,
         rgp: u64,
         amount: Option<u64>,
-        funding_address: SuiAddress,
+        funding_address: RtdAddress,
     ) -> ObjectRef {
         let context = &self.wallet;
         let (sender, gas) = context.get_one_gas_object().await.unwrap().unwrap();
         let tx = context
             .sign_transaction(
                 &TestTransactionBuilder::new(sender, gas, rgp)
-                    .transfer_sui(amount, funding_address)
+                    .transfer_rtd(amount, funding_address)
                     .build(),
             )
             .await;
@@ -846,23 +846,23 @@ impl TestCluster {
             .unwrap()
     }
 
-    pub async fn transfer_sui_must_exceed(
+    pub async fn transfer_rtd_must_exceed(
         &self,
-        sender: SuiAddress,
-        receiver: SuiAddress,
+        sender: RtdAddress,
+        receiver: RtdAddress,
         amount: u64,
     ) -> ObjectID {
         let tx = self
             .test_transaction_builder_with_sender(sender)
             .await
-            .transfer_sui(Some(amount), receiver)
+            .transfer_rtd(Some(amount), receiver)
             .build();
         let effects = self
             .sign_and_execute_transaction(&tx)
             .await
             .effects
             .unwrap();
-        assert_eq!(&SuiExecutionStatus::Success, effects.status());
+        assert_eq!(&RtdExecutionStatus::Success, effects.status());
         effects.created().first().unwrap().object_id()
     }
 
@@ -970,13 +970,13 @@ pub struct TestClusterBuilder {
     validator_global_state_hash_v2_enabled_config: GlobalStateHashV2EnabledConfig,
 
     indexer_backed_rpc: bool,
-    rpc_config: Option<sui_config::RpcConfig>,
+    rpc_config: Option<rtd_config::RpcConfig>,
 
     chain_override: Option<Chain>,
 
-    execution_time_observer_config: Option<sui_config::node::ExecutionTimeObserverConfig>,
+    execution_time_observer_config: Option<rtd_config::node::ExecutionTimeObserverConfig>,
 
-    state_sync_config: Option<sui_config::p2p::StateSyncConfig>,
+    state_sync_config: Option<rtd_config::p2p::StateSyncConfig>,
 
     #[cfg(msim)]
     inject_synthetic_execution_time: bool,
@@ -1022,14 +1022,14 @@ impl TestClusterBuilder {
         }
     }
 
-    pub fn with_state_sync_config(mut self, config: sui_config::p2p::StateSyncConfig) -> Self {
+    pub fn with_state_sync_config(mut self, config: rtd_config::p2p::StateSyncConfig) -> Self {
         self.state_sync_config = Some(config);
         self
     }
 
     pub fn with_execution_time_observer_config(
         mut self,
-        config: sui_config::node::ExecutionTimeObserverConfig,
+        config: rtd_config::node::ExecutionTimeObserverConfig,
     ) -> Self {
         self.execution_time_observer_config = Some(config);
         self
@@ -1178,7 +1178,7 @@ impl TestClusterBuilder {
 
     pub fn with_validator_candidates(
         mut self,
-        addresses: impl IntoIterator<Item = SuiAddress>,
+        addresses: impl IntoIterator<Item = RtdAddress>,
     ) -> Self {
         self.get_or_init_genesis_config()
             .accounts
@@ -1249,7 +1249,7 @@ impl TestClusterBuilder {
         self
     }
 
-    pub fn with_rpc_config(mut self, config: sui_config::RpcConfig) -> Self {
+    pub fn with_rpc_config(mut self, config: rtd_config::RpcConfig) -> Self {
         self.rpc_config = Some(config);
         self
     }
@@ -1271,7 +1271,7 @@ impl TestClusterBuilder {
         // valid JWKs as well.
         #[cfg(msim)]
         if !self.default_jwks {
-            sui_node::set_jwk_injector(Arc::new(|_authority, provider| {
+            rtd_node::set_jwk_injector(Arc::new(|_authority, provider| {
                 use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
                 use rand::Rng;
 
@@ -1300,7 +1300,7 @@ impl TestClusterBuilder {
 
         if self.indexer_backed_rpc {
             if self.data_ingestion_dir.is_none() {
-                temp_data_ingestion_dir = Some(mysten_common::tempdir().unwrap());
+                temp_data_ingestion_dir = Some(linku_common::tempdir().unwrap());
                 self.data_ingestion_dir = Some(
                     temp_data_ingestion_dir
                         .as_ref()
@@ -1334,9 +1334,9 @@ impl TestClusterBuilder {
             (fullnode_handle.rpc_url.clone(), None)
         };
 
-        let mut wallet_conf: SuiClientConfig =
-            PersistedConfig::read(&working_dir.join(SUI_CLIENT_CONFIG)).unwrap();
-        wallet_conf.envs.push(SuiEnv {
+        let mut wallet_conf: RtdClientConfig =
+            PersistedConfig::read(&working_dir.join(RTD_CLIENT_CONFIG)).unwrap();
+        wallet_conf.envs.push(RtdEnv {
             alias: "localnet".to_string(),
             rpc: rpc_url,
             ws: None,
@@ -1346,11 +1346,11 @@ impl TestClusterBuilder {
         wallet_conf.active_env = Some("localnet".to_string());
 
         wallet_conf
-            .persisted(&working_dir.join(SUI_CLIENT_CONFIG))
+            .persisted(&working_dir.join(RTD_CLIENT_CONFIG))
             .save()
             .unwrap();
 
-        let wallet_conf = swarm.dir().join(SUI_CLIENT_CONFIG);
+        let wallet_conf = swarm.dir().join(RTD_CLIENT_CONFIG);
         let wallet = WalletContext::new(&wallet_conf).unwrap();
 
         TestCluster {
@@ -1459,7 +1459,7 @@ impl TestClusterBuilder {
                 }
                 builder = builder.with_execution_time_observer_config(config);
             } else if self.inject_synthetic_execution_time {
-                use sui_config::node::ExecutionTimeObserverConfig;
+                use rtd_config::node::ExecutionTimeObserverConfig;
 
                 let mut config = ExecutionTimeObserverConfig::default();
                 config.inject_synthetic_execution_time = Some(true);
@@ -1472,22 +1472,22 @@ impl TestClusterBuilder {
 
         let dir = swarm.dir();
 
-        let network_path = dir.join(SUI_NETWORK_CONFIG);
-        let wallet_path = dir.join(SUI_CLIENT_CONFIG);
-        let keystore_path = dir.join(SUI_KEYSTORE_FILENAME);
+        let network_path = dir.join(RTD_NETWORK_CONFIG);
+        let wallet_path = dir.join(RTD_CLIENT_CONFIG);
+        let keystore_path = dir.join(RTD_KEYSTORE_FILENAME);
 
         swarm.config().save(network_path)?;
         let mut keystore = Keystore::from(FileBasedKeystore::load_or_create(&keystore_path)?);
         for key in &swarm.config().account_keys {
             keystore
-                .import(None, SuiKeyPair::Ed25519(key.copy()))
+                .import(None, RtdKeyPair::Ed25519(key.copy()))
                 .await?;
         }
 
         let active_address = keystore.addresses().first().cloned();
 
         // Create wallet config with stated authorities port
-        SuiClientConfig {
+        RtdClientConfig {
             keystore: Keystore::from(FileBasedKeystore::load_or_create(&keystore_path)?),
             external_keys: None,
             envs: Default::default(),

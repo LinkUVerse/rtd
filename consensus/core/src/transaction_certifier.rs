@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use consensus_config::Stake;
 use consensus_types::block::{BlockRef, Round, TransactionIndex};
-use mysten_metrics::monitored_mpsc::UnboundedSender;
+use linku_metrics::monitored_mpsc::UnboundedSender;
 use parking_lot::RwLock;
 use tracing::{debug, info};
 
@@ -52,7 +52,7 @@ pub struct TransactionCertifier {
     block_verifier: Arc<dyn BlockVerifier>,
     // The state of the DAG.
     dag_state: Arc<RwLock<DagState>>,
-    // An unbounded channel to output certified blocks to Sui consensus block handler.
+    // An unbounded channel to output certified blocks to Rtd consensus block handler.
     certified_blocks_sender: UnboundedSender<CertifiedBlocksOutput>,
 }
 

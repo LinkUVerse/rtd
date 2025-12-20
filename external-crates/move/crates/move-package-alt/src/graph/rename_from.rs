@@ -245,19 +245,19 @@ mod tests {
     async fn test_modern_using_legacy_framework() {
         let scenario = TestPackageGraph::new(["root"])
             .add_package("std", |pkg| pkg.set_legacy().set_legacy_name("MoveStdLib"))
-            .add_package("sui", |pkg| pkg.set_legacy().set_legacy_name("Sui"))
-            .add_package("sui_system", |pkg| {
-                pkg.set_legacy().set_legacy_name("SuiSystem")
+            .add_package("rtd", |pkg| pkg.set_legacy().set_legacy_name("Rtd"))
+            .add_package("rtd_system", |pkg| {
+                pkg.set_legacy().set_legacy_name("RtdSystem")
             })
             .add_deps([("root", "std")])
-            .add_dep("root", "sui", |dep| dep.name("my_sui").rename_from("sui"))
-            .add_dep("root", "sui_system", |dep| {
-                dep.name("my_sui_system").rename_from("sui_system")
+            .add_dep("root", "rtd", |dep| dep.name("my_rtd").rename_from("rtd"))
+            .add_dep("root", "rtd_system", |dep| {
+                dep.name("my_rtd_system").rename_from("rtd_system")
             })
-            .add_dep("sui", "std", |dep| dep.name("MoveStdLib"))
-            // legacy -> legacy case (SuiSystem -> MoveStdLib (std)
-            .add_dep("sui_system", "sui", |dep| dep.name("Sui"))
-            .add_dep("sui_system", "std", |dep| dep.name("MoveStdLib"))
+            .add_dep("rtd", "std", |dep| dep.name("MoveStdLib"))
+            // legacy -> legacy case (RtdSystem -> MoveStdLib (std)
+            .add_dep("rtd_system", "rtd", |dep| dep.name("Rtd"))
+            .add_dep("rtd_system", "std", |dep| dep.name("MoveStdLib"))
             .build();
 
         scenario
@@ -267,31 +267,31 @@ mod tests {
             .unwrap();
 
         scenario
-            .graph_for("sui_system")
+            .graph_for("rtd_system")
             .await
             .check_rename_from()
             .unwrap();
     }
 
-    /// modern package `bat` depends on legacy package `sui` which has legacy name `Sui` (capital S).
+    /// modern package `bat` depends on legacy package `rtd` which has legacy name `Rtd` (capital S).
     ///
-    /// The dependency is named `Sui`. This should be disallowed, since the legacy name shouldn't
+    /// The dependency is named `Rtd`. This should be disallowed, since the legacy name shouldn't
     /// appear in a modern manifest
     #[test(tokio::test)]
     async fn modern_uses_legacy_name() {
         let scenario = TestPackageGraph::new(["bat"])
-            .add_package("sui", |pkg| pkg.set_legacy().set_legacy_name("Sui"))
-            .add_dep("bat", "sui", |dep| dep.name("Sui"))
+            .add_package("rtd", |pkg| pkg.set_legacy().set_legacy_name("Rtd"))
+            .add_dep("bat", "rtd", |dep| dep.name("Rtd"))
             .build();
 
         assert_snapshot!(scenario.graph_for("bat").await.check_rename_from().unwrap_err(), @r###"
-        In Move.toml, the dependency `Sui` refers to a package named `sui`. Consider renaming the dependency to `sui`:
+        In Move.toml, the dependency `Rtd` refers to a package named `rtd`. Consider renaming the dependency to `rtd`:
 
-            sui = { local = "../sui", ... }
+            rtd = { local = "../rtd", ... }
 
-        Alternatively, if you want to refer to `sui` as `Sui` in your source code, add a `rename-from` field to the dependency:
+        Alternatively, if you want to refer to `rtd` as `Rtd` in your source code, add a `rename-from` field to the dependency:
 
-            Sui = { local = "../sui", rename-from = "sui", ... }
+            Rtd = { local = "../rtd", rename-from = "rtd", ... }
         "###);
     }
 

@@ -1,0 +1,39 @@
+[package]
+name = "rtd-faucet"
+version.workspace = true
+edition = "2024"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+axum-extra.workspace = true
+bin-version.workspace = true
+clap.workspace = true
+http.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tonic.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+rtd-sdk.workspace = true
+rtd-config.workspace = true
+rtd-keys.workspace = true
+shared-crypto.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+test-cluster.workspace = true
+wiremock.workspace = true
+
+[[bin]]
+name = "rtd-faucet"
+path = "src/main.rs"

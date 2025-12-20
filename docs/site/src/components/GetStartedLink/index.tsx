@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -10,7 +10,7 @@ export default function GetStartedLink() {
   return (
     <>
       {location.pathname === "/" && (
-        <Link to="/guides#get-started-developing-on-sui" className="button-cta">
+        <Link to="/guides#get-started-developing-on-rtd" className="button-cta">
           Get started
         </Link>
       )}

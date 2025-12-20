@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { createNetworkConfig } from "@mysten/dapp-kit";
-import { getFullnodeUrl } from "@mysten/sui/client";
+import { createNetworkConfig } from "@linku/dapp-kit";
+import { getFullnodeUrl } from "@linku/rtd/client";
 
 import DevnetPackage from "./env.devnet.ts";
 import LocalnetPackage from "./env.localnet.ts";
@@ -20,21 +20,21 @@ const { networkConfig, useNetworkVariable } = createNetworkConfig({
     devnet: {
         url: getFullnodeUrl("devnet"),
         variables: {
-            explorer: (id: string) => `https://suiscan.xyz/devnet/object/${id}/`,
+            explorer: (id: string) => `https://rtdscan.xyz/devnet/object/${id}/`,
             ...DevnetPackage,
         },
     },
     testnet: {
         url: getFullnodeUrl("testnet"),
         variables: {
-            explorer: (id: string) => `https://suiscan.xyz/testnet/object/${id}/`,
+            explorer: (id: string) => `https://rtdscan.xyz/testnet/object/${id}/`,
             ...TestnetPackage,
         },
     },
     mainnet: {
         url: getFullnodeUrl("mainnet"),
         variables: {
-            explorer: (id: string) => `https://suiscan.xyz/mainnet/object/${id}/`,
+            explorer: (id: string) => `https://rtdscan.xyz/mainnet/object/${id}/`,
             ...MainnetPackage,
         },
     },

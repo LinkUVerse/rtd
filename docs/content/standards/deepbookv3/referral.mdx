@@ -35,7 +35,7 @@ Mint a new `DeepBookReferral` object with a specified multiplier. The multiplier
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="mint_referral"
 	noComments
@@ -48,7 +48,7 @@ Update the multiplier for an existing referral. Only the referral owner can upda
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="update_referral_multiplier"
 	noComments
@@ -61,7 +61,7 @@ Claim accumulated referral fees. Only the referral owner can claim rewards. Retu
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="claim_referral_rewards"
 	noComments
@@ -74,7 +74,7 @@ View the current accumulated balances for a referral without claiming them. Retu
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="get_referral_balances"
 	noComments
@@ -91,7 +91,7 @@ Associate a `BalanceManager` with a referral. Requires a `TradeCap` to authorize
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="set_referral"
 	noComments
@@ -104,7 +104,7 @@ Remove the referral association from a `BalanceManager`. Requires a `TradeCap` t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="unset_referral"
 	noComments
@@ -117,7 +117,7 @@ Retrieve the referral ID currently associated with a `BalanceManager`, if any. R
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="get_referral_id"
 	noComments
@@ -130,7 +130,7 @@ Get the owner address of a referral object.
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="referral_owner"
 	noComments
@@ -145,7 +145,7 @@ Emitted when a referral owner claims their accumulated fees.
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="ReferralClaimed"
 />
@@ -157,7 +157,7 @@ Emitted when referral fees are allocated during trade execution.
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="ReferralFeeEvent"
 />
@@ -165,7 +165,7 @@ Emitted when referral fees are allocated during trade execution.
 ## Related links
 
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3"
+	href="https://github.com/LinkUVerse/deepbookv3"
 	label="DeepBookV3 repository"
 	desc="The DeepBookV3 repository on GitHub."
 />

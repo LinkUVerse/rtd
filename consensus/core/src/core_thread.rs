@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -12,7 +12,7 @@ use std::{
 
 use async_trait::async_trait;
 use consensus_types::block::{BlockRef, Round};
-use mysten_metrics::{
+use linku_metrics::{
     monitored_mpsc::{Receiver, Sender, WeakSender, channel},
     monitored_scope, spawn_logged_monitored_task,
 };
@@ -421,7 +421,7 @@ impl CoreThreadDispatcher for MockCoreThreadDispatcher {
 
 #[cfg(test)]
 mod test {
-    use mysten_metrics::monitored_mpsc;
+    use linku_metrics::monitored_mpsc;
     use parking_lot::RwLock;
 
     use super::*;

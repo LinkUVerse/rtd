@@ -1,31 +1,31 @@
 ---
-title: Sui CLI
-description: Sui provides command line tools to interact with the network, its features, and the Move programming language. Individual command groups are referred to as Sui Client CLI, Sui Keytool CLI, Sui Move CLI, and Sui Validator CLI.
-keywords: [ Sui Client CLI, Sui Keytool CLI, Sui Move CLI, Sui Validator CLI, sui cli, update cli, sui cli commands, sui client PTB CLI, sui PTB CLI ] 
+title: Rtd CLI
+description: Rtd provides command line tools to interact with the network, its features, and the Move programming language. Individual command groups are referred to as Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, and Rtd Validator CLI.
+keywords: [ Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, Rtd Validator CLI, rtd cli, update cli, rtd cli commands, rtd client PTB CLI, rtd PTB CLI ] 
 pagination_prev: null
 ---
 
-Sui provides a command line interface (CLI) tool to interact with the Sui network, its features, and the Move programming language. The complete suite of tools is called the Sui CLI, with commands grouped together by feature. Each group of commands is commonly referred to by its top-level command: Sui Client CLI, Sui Keytool CLI, Sui Move CLI, and Sui Validator CLI.
+Rtd provides a command line interface (CLI) tool to interact with the Rtd network, its features, and the Move programming language. The complete rtdte of tools is called the Rtd CLI, with commands grouped together by feature. Each group of commands is commonly referred to by its top-level command: Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, and Rtd Validator CLI.
 
 <ImportContent source="cli-check-install.mdx" mode="snippet" />
 
 ## Update CLI
 
-The recommended way to manage Sui CLI installations and versions is via `suiup`: https://github.com/mystenLabs/suiup.
+The recommended way to manage Rtd CLI installations and versions is via `rtdup`: https://github.com/linkuLabs/rtdup.
 
 :::info
 
-The `tracing` feature is important as it adds Move test coverage and debugger support in the Sui CLI. Unless it is enabled you will not be able to use these two features.
+The `tracing` feature is important as it adds Move test coverage and debugger support in the Rtd CLI. Unless it is enabled you will not be able to use these two features.
 
 :::
 
-## Sui CLI commands
+## Rtd CLI commands
 
-There are a number of top-level commands available, but the five most useful to users are the following. Use the `help` flag for the commands that are not documented yet. For example, `sui validator --help`.
+There are a number of top-level commands available, but the five most useful to users are the following. Use the `help` flag for the commands that are not documented yet. For example, `rtd validator --help`.
 
-- **[Sui Client CLI](./cli/client.mdx):** Use the `sui client` commands to interact with the Sui network.
-- **[Sui Client PTB CLI](./cli/ptb.mdx):** Use the `sui client ptb` command to build and execute PTBs.
-- **[Sui Keytool CLI](./cli/keytool.mdx):** Use the `sui keytool` commands to access cryptography utilities.
-- **[Sui Move CLI](./cli/move.mdx):** Use the `sui move` commands to work with the Move programming language.
-- **[Sui Replay CLI](./cli/replay.mdx):** Use the `sui client replay` command to replay a transaction and generate transaction traces for the Move Debugger and trace analysis tools.
-- **[Sui Validator CLI](./cli/validator.mdx):** Use the `sui validator` commands to access tools useful for Sui validators.
+- **[Rtd Client CLI](./cli/client.mdx):** Use the `rtd client` commands to interact with the Rtd network.
+- **[Rtd Client PTB CLI](./cli/ptb.mdx):** Use the `rtd client ptb` command to build and execute PTBs.
+- **[Rtd Keytool CLI](./cli/keytool.mdx):** Use the `rtd keytool` commands to access cryptography utilities.
+- **[Rtd Move CLI](./cli/move.mdx):** Use the `rtd move` commands to work with the Move programming language.
+- **[Rtd Replay CLI](./cli/replay.mdx):** Use the `rtd client replay` command to replay a transaction and generate transaction traces for the Move Debugger and trace analysis tools.
+- **[Rtd Validator CLI](./cli/validator.mdx):** Use the `rtd validator` commands to access tools useful for Rtd validators.

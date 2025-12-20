@@ -31,11 +31,11 @@ use url::Url;
 use vfs::{MemoryFS, VfsPath};
 
 //**************************************************************************************************
-// Test Suites
+// Test Rtdtes
 //**************************************************************************************************
 
 #[derive(Serialize, Deserialize)]
-enum TestSuite {
+enum TestRtdte {
     UseDef {
         project: String,
         file_tests: BTreeMap<String, Vec<UseDefTest>>,
@@ -444,7 +444,7 @@ fn completion_test<F: MoveFlavor>(
 }
 
 //**************************************************************************************************
-// Test Suite Runner Code
+// Test Rtdte Runner Code
 //**************************************************************************************************
 
 /// Compute symbols with optional file modifications to trigger incremental compilation.
@@ -453,7 +453,7 @@ fn completion_test<F: MoveFlavor>(
 /// When `file_modifications` is Some, writes modified content to VFS overlay,
 /// which triggers incremental compilation by causing file hash mismatches.
 ///
-/// Returns both CompiledPkgInfo and Symbols for test suites that need both.
+/// Returns both CompiledPkgInfo and Symbols for test rtdtes that need both.
 fn test_symbols_with_optional_modifications<F: MoveFlavor>(
     packages_info: Arc<Mutex<CachedPackages>>,
     ide_files_root: VfsPath,
@@ -489,7 +489,7 @@ fn test_symbols_with_optional_modifications<F: MoveFlavor>(
         ide_files_root,
         project_path.as_path(),
         LintLevel::None,
-        Some(Flavor::Sui),
+        Some(Flavor::Rtd),
         None, // No cursor file
     )?;
 
@@ -518,7 +518,7 @@ fn test_symbols_for_autocomplete<F: MoveFlavor>(
         ide_files_root,
         project_path.as_path(),
         LintLevel::None,
-        Some(Flavor::Sui),
+        Some(Flavor::Rtd),
         Some(cursor_path),
     )?;
 
@@ -535,7 +535,7 @@ fn test_symbols_for_autocomplete<F: MoveFlavor>(
     Ok(symbols)
 }
 
-fn use_def_test_suite<F: MoveFlavor>(
+fn use_def_test_rtdte<F: MoveFlavor>(
     project: String,
     file_tests: BTreeMap<String, Vec<UseDefTest>>,
 ) -> datatest_stable::Result<String> {
@@ -570,9 +570,9 @@ fn use_def_test_suite<F: MoveFlavor>(
         let cpath = dunce::canonicalize(&fpath).unwrap();
 
         if symbols_opt.is_none() {
-            // We do incremental compilation only for the first file in the test suite.
+            // We do incremental compilation only for the first file in the test rtdte.
             // The results for remaining files should still be correct due to all symbols
-            // being computed during the initial full compilation at suite level, and
+            // being computed during the initial full compilation at rtdte level, and
             // due to merging of symbols from modified and unmofdified files
             // (which is what it is being tested here).
 
@@ -605,7 +605,7 @@ fn use_def_test_suite<F: MoveFlavor>(
     Ok(result)
 }
 
-fn auto_completion_test_suite<F: MoveFlavor>(
+fn auto_completion_test_rtdte<F: MoveFlavor>(
     project: String,
     file_tests: BTreeMap<String, Vec<AutoCompletionTest>>,
 ) -> datatest_stable::Result<String> {
@@ -657,7 +657,7 @@ fn auto_completion_test_suite<F: MoveFlavor>(
     Ok(result)
 }
 
-fn auto_import_test_suite<F: MoveFlavor>(
+fn auto_import_test_rtdte<F: MoveFlavor>(
     project: String,
     file_tests: BTreeMap<String, Vec<AutoImportTest>>,
 ) -> datatest_stable::Result<String> {
@@ -709,7 +709,7 @@ fn auto_import_test_suite<F: MoveFlavor>(
     Ok(result)
 }
 
-fn cursor_test_suite<F: MoveFlavor>(
+fn cursor_test_rtdte<F: MoveFlavor>(
     project: String,
     file_tests: BTreeMap<String, Vec<CursorTest>>,
 ) -> datatest_stable::Result<String> {
@@ -749,7 +749,7 @@ fn cursor_test_suite<F: MoveFlavor>(
     Ok(result)
 }
 
-fn hint_test_suite<F: MoveFlavor>(
+fn hint_test_rtdte<F: MoveFlavor>(
     project: String,
     file_tests: BTreeMap<String, Vec<HintTest>>,
 ) -> datatest_stable::Result<String> {
@@ -760,7 +760,7 @@ fn hint_test_suite<F: MoveFlavor>(
     let packages_info = Arc::new(Mutex::new(CachedPackages::new()));
     let ide_files_root: VfsPath = MemoryFS::new().into();
 
-    // Full compilation once at suite level - reused for all tests
+    // Full compilation once at rtdte level - reused for all tests
     let (_, symbols) = test_symbols_with_optional_modifications::<F>(
         packages_info.clone(),
         ide_files_root.clone(),
@@ -791,7 +791,7 @@ fn hint_test_suite<F: MoveFlavor>(
     Ok(result)
 }
 
-fn access_chain_quick_fix_test_suite<F: MoveFlavor>(
+fn access_chain_quick_fix_test_rtdte<F: MoveFlavor>(
     project: String,
     file_tests: BTreeMap<String, Vec<AccessChainQuickFixTest>>,
 ) -> datatest_stable::Result<String> {
@@ -802,7 +802,7 @@ fn access_chain_quick_fix_test_suite<F: MoveFlavor>(
     let packages_info = Arc::new(Mutex::new(CachedPackages::new()));
     let ide_files_root: VfsPath = MemoryFS::new().into();
 
-    // Compile once at suite level
+    // Compile once at rtdte level
     let (mut compiled_pkg_info, mut symbols) = test_symbols_with_optional_modifications::<F>(
         packages_info.clone(),
         ide_files_root.clone(),
@@ -833,36 +833,36 @@ fn access_chain_quick_fix_test_suite<F: MoveFlavor>(
     Ok(result)
 }
 
-fn move_ide_testsuite<F: MoveFlavor>(test_path: &Path) -> datatest_stable::Result<()> {
-    let suite_file = io::BufReader::new(File::open(test_path)?);
-    let stripped = StripComments::new(suite_file);
-    let suite: TestSuite = serde_json::from_reader(stripped)?;
+fn move_ide_testrtdte<F: MoveFlavor>(test_path: &Path) -> datatest_stable::Result<()> {
+    let rtdte_file = io::BufReader::new(File::open(test_path)?);
+    let stripped = StripComments::new(rtdte_file);
+    let rtdte: TestRtdte = serde_json::from_reader(stripped)?;
 
-    let output = match suite {
-        TestSuite::UseDef {
+    let output = match rtdte {
+        TestRtdte::UseDef {
             project,
             file_tests,
-        } => use_def_test_suite::<F>(project, file_tests),
-        TestSuite::AutoCompletion {
+        } => use_def_test_rtdte::<F>(project, file_tests),
+        TestRtdte::AutoCompletion {
             project,
             file_tests,
-        } => auto_completion_test_suite::<F>(project, file_tests),
-        TestSuite::AutoImport {
+        } => auto_completion_test_rtdte::<F>(project, file_tests),
+        TestRtdte::AutoImport {
             project,
             file_tests,
-        } => auto_import_test_suite::<F>(project, file_tests),
-        TestSuite::Cursor {
+        } => auto_import_test_rtdte::<F>(project, file_tests),
+        TestRtdte::Cursor {
             project,
             file_tests,
-        } => cursor_test_suite::<F>(project, file_tests),
-        TestSuite::Hint {
+        } => cursor_test_rtdte::<F>(project, file_tests),
+        TestRtdte::Hint {
             project,
             file_tests,
-        } => hint_test_suite::<F>(project, file_tests),
-        TestSuite::AccessChainQuickFixTest {
+        } => hint_test_rtdte::<F>(project, file_tests),
+        TestRtdte::AccessChainQuickFixTest {
             project,
             file_tests,
-        } => access_chain_quick_fix_test_suite::<F>(project, file_tests),
+        } => access_chain_quick_fix_test_rtdte::<F>(project, file_tests),
     }?;
 
     insta_assert! {
@@ -872,7 +872,7 @@ fn move_ide_testsuite<F: MoveFlavor>(test_path: &Path) -> datatest_stable::Resul
     Ok(())
 }
 
-datatest_stable::harness!(move_ide_testsuite::<Vanilla>, "tests/", r".*\.ide$");
+datatest_stable::harness!(move_ide_testrtdte::<Vanilla>, "tests/", r".*\.ide$");
 
 /// Generates cursor tests as json -- useful for making a new batch of tests. Update this list,
 /// set `harness = true` for this file in `Cargo.toml`,
@@ -912,7 +912,7 @@ fn generate_cursor_test() {
             description: description.to_string(),
         })
         .collect::<Vec<_>>();
-    let test = TestSuite::Cursor {
+    let test = TestRtdte::Cursor {
         project: "tests/move-2024".to_string(),
         file_tests: BTreeMap::from([("dot_call.move".to_string(), tests)]),
     };

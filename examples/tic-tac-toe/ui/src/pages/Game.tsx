@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import "./Game.css";
 
-import { useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
-import { MultiSigPublicKey } from "@mysten/sui/multisig";
+import { useCurrentAccount, useRtdClient } from "@linku/dapp-kit";
+import { MultiSigPublicKey } from "@linku/rtd/multisig";
 import { TrashIcon } from "@radix-ui/react-icons";
 import { AlertDialog, Badge, Button, Flex } from "@radix-ui/themes";
 import { Board } from "components/Board";
@@ -167,7 +167,7 @@ function OwnedGame({
 }): ReactElement {
     const adminKey = game.admin ? new MultiSigPublicKey(new Uint8Array(game.admin)) : null;
 
-    const client = useSuiClient();
+    const client = useRtdClient();
     const { mutate: signAndExecute } = useExecutor();
     const { mutate: multiSignAndExecute } = useExecutor({
         execute: ({ bytes, signature }) => {
@@ -246,7 +246,7 @@ function OwnedGame({
                     // by the player (as the multi-sig account doesn't have coins
                     // of its own).
                     const recv = tx.receiveMark(game, mark);
-                    recv.setSender(adminKey!!.toSuiAddress());
+                    recv.setSender(adminKey!!.toRtdAddress());
                     recv.setGasOwner(account?.address!!);
 
                     multiSignAndExecute({ tx: recv }, () => {
@@ -264,7 +264,7 @@ function OwnedGame({
         // a sponsored multi-sig transaction. This means only one of the
         // two players can clean up a finished game.
         const burn = tx.burn(game);
-        burn.setSender(adminKey!!.toSuiAddress());
+        burn.setSender(adminKey!!.toRtdAddress());
         burn.setGasOwner(account?.address!!);
 
         multiSignAndExecute({ tx: burn }, andThen);

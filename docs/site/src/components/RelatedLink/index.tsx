@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // src/components/RelatedLink.tsx
@@ -21,7 +21,7 @@ type Meta = {
 
 function useDescriptionsSafe(): Meta[] | null {
   try {
-    const raw = usePluginData("sui-description-plugin") as any;
+    const raw = usePluginData("rtd-description-plugin") as any;
     if (!raw) return null;
     if (Array.isArray(raw)) return raw as Meta[];
     if (Array.isArray(raw?.items)) return raw.items as Meta[];

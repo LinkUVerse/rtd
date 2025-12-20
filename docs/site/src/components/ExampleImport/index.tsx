@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState, useEffect } from "react";
@@ -14,7 +14,7 @@ require("prismjs/components/prism-rust");
 
 type LangExt = Language | "rust";
 
-const BASE = "https://raw.githubusercontent.com/MystenLabs/sui/main";
+const BASE = "https://raw.githubusercontent.com/LinkUVerse/rtd/main";
 
 export default function ExampleImport(props) {
   const [example, setExample] = useState(null);

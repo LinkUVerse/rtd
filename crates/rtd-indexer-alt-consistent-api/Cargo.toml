@@ -1,0 +1,18 @@
+[package]
+name = "rtd-indexer-alt-consistent-api"
+version.workspace = true
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+tonic.workspace = true
+tonic-prost.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+
+[dev-dependencies]
+protox.workspace = true
+tonic-prost-build.workspace = true
+walkdir.workspace = true

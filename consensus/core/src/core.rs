@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -15,10 +15,10 @@ use consensus_config::{Stake, local_committee_and_keys};
 use consensus_types::block::{BlockRef, BlockTimestampMs, Round};
 use itertools::Itertools as _;
 #[cfg(test)]
-use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-use mysten_metrics::monitored_scope;
+use linku_metrics::monitored_mpsc::UnboundedReceiver;
+use linku_metrics::monitored_scope;
 use parking_lot::RwLock;
-use sui_macros::fail_point;
+use rtd_macros::fail_point;
 use tokio::{
     sync::{broadcast, watch},
     time::Instant,
@@ -1211,7 +1211,7 @@ impl Core {
                         earlier_ancestor
                     }
                     None => {
-                        // No suitable earlier block found
+                        // No rtdtable earlier block found
                         continue;
                     }
                 }
@@ -1423,7 +1423,7 @@ impl CoreTextFixture {
         let (_transaction_client, tx_receiver) = TransactionClient::new(context.clone());
         let transaction_consumer = TransactionConsumer::new(tx_receiver, context.clone());
         let (blocks_sender, _blocks_receiver) =
-            mysten_metrics::monitored_mpsc::unbounded_channel("consensus_block_output");
+            linku_metrics::monitored_mpsc::unbounded_channel("consensus_block_output");
         let transaction_certifier = TransactionCertifier::new(
             context.clone(),
             Arc::new(NoopBlockVerifier {}),
@@ -1491,8 +1491,8 @@ mod test {
     use consensus_config::{AuthorityIndex, Parameters};
     use consensus_types::block::TransactionIndex;
     use futures::{StreamExt, stream::FuturesUnordered};
-    use mysten_metrics::monitored_mpsc;
-    use sui_protocol_config::ProtocolConfig;
+    use linku_metrics::monitored_mpsc;
+    use rtd_protocol_config::ProtocolConfig;
     use tokio::time::sleep;
 
     use super::*;

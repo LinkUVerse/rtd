@@ -1,8 +1,8 @@
 ---
 title: Coin Standard
-description: The Coin standard enables you to create a broad range of fungible tokens on the Sui network to satisfy a number of use cases. 
+description: The Coin standard enables you to create a broad range of fungible tokens on the Rtd network to satisfy a number of use cases. 
 sidebar_label: Coin
-keywords: [ sui coin standard, erc-20, erc-20 equivalent, creating coins, coin standard, fungible tokens, fungible token standard, treasury capability, regulated coins, denylist object, coin metadata, create coin with SDK, use SDK to create coin, mint coin, minting coins ]
+keywords: [ rtd coin standard, erc-20, erc-20 equivalent, creating coins, coin standard, fungible tokens, fungible token standard, treasury capability, regulated coins, denylist object, coin metadata, create coin with SDK, use SDK to create coin, mint coin, minting coins ]
 pagination_prev: null
 ---
 
@@ -10,25 +10,25 @@ pagination_prev: null
 
 The Coin and Currency standards are both used to create fungible tokens. However, they use different creation methods and store metadata in a different type of object. 
 
-Coin creates tokens using `coin::create_currency` while Currency uses `sui::coin_registry`.
+Coin creates tokens using `coin::create_currency` while Currency uses `rtd::coin_registry`.
 
 Coin uses `CoinMetadata` while Currency uses `Currency`. 
 
-Fungible tokens created on Sui using the Coin or Currency standard are referred to as _coins_. 
+Fungible tokens created on Rtd using the Coin or Currency standard are referred to as _coins_. 
 
-For fungible tokens created on Sui using the [Closed-Loop Token standard](/standards/closed-loop-token.mdx), the documentation uses the term _tokens_. In practice, the terms for both these objects are often interchangeable.
+For fungible tokens created on Rtd using the [Closed-Loop Token standard](/standards/closed-loop-token.mdx), the documentation uses the term _tokens_. In practice, the terms for both these objects are often interchangeable.
 
 :::
 
-The Coin Standard is a technical standard used by Move smart contracts for creating currency on Sui. The `sui::coin` module provides the logic that defines the standard.
+The Coin Standard is a technical standard used by Move smart contracts for creating currency on Rtd. The `rtd::coin` module provides the logic that defines the standard.
 
-The standardization of currency creation on Sui means that wallets, exchanges, and other smart contracts can manage currency created on Sui the same as they manage SUI, without any additional processing logic.
+The standardization of currency creation on Rtd means that wallets, exchanges, and other smart contracts can manage currency created on Rtd the same as they manage RTD, without any additional processing logic.
 
-See [Sui Tokenomics](/concepts/tokenomics.mdx) to learn more about the SUI native currency and its use on the network.
+See [Rtd Tokenomics](/concepts/tokenomics.mdx) to learn more about the RTD native currency and its use on the network.
 
 ## Fungible tokens
 
-The `Coin<T>` type represents open-loop fungible tokens (see `Token<T>` for closed-loop tokens). Coins are denominated by their type parameter, `T`, which is also associated with metadata (like name, symbol, decimal precision, and so on) that applies to all instances of `Coin<T>`. The `sui::coin` module exposes an interface over `Coin<T>` that treats it as fungible, meaning that a unit of `T` held in one instance of `Coin<T>` is interchangeable with any other unit of `T`, much like how traditional fiat currencies operate.
+The `Coin<T>` type represents open-loop fungible tokens (see `Token<T>` for closed-loop tokens). Coins are denominated by their type parameter, `T`, which is also associated with metadata (like name, symbol, decimal precision, and so on) that applies to all instances of `Coin<T>`. The `rtd::coin` module exposes an interface over `Coin<T>` that treats it as fungible, meaning that a unit of `T` held in one instance of `Coin<T>` is interchangeable with any other unit of `T`, much like how traditional fiat currencies operate.
 
 ## Coin creation
 
@@ -58,7 +58,7 @@ While `TreasuryCap` is freely transferable, never freeze or share the `TreasuryC
 
 :::
 
-The `TreasuryCap` object is required to mint new coins or to burn current ones. Consequently, only addresses that have access to this object can maintain the coin supply on the Sui network.
+The `TreasuryCap` object is required to mint new coins or to burn current ones. Consequently, only addresses that have access to this object can maintain the coin supply on the Rtd network.
 
 The `TreasuryCap` object is transferable, so a third party can take over the management of a coin that you create if you transfer the `TreasuryCap`. After transferring the capability, however, you can no longer mint and burn tokens yourself.
 
@@ -68,7 +68,7 @@ The Coin standard includes the ability to create regulated coins. To create a re
 
 :::tip
 
-The [regulated-coin-sample repository](https://github.com/MystenLabs/regulated-coin-sample) provides an example of regulated coin creation.
+The [regulated-coin-sample repository](https://github.com/LinkUVerse/regulated-coin-sample) provides an example of regulated coin creation.
 
 :::
 
@@ -101,7 +101,7 @@ The fields of the metadata objects include the following:
 | `id`          | The object ID of the metadata for the token. |
 | `decimals`    | The number of decimals the token uses. If you set this field to `3`, then a token of value `1000` displays as `1.000`.|
 | `name`        | Name of the coin. |
-| `symbol`      | Symbol for the coin. This might be the same as `name`, but is typically fewer than 5 all capital letters. For example, `SUI` is the `symbol` for the native coin on Sui but its `name` is also `SUI`. |
+| `symbol`      | Symbol for the coin. This might be the same as `name`, but is typically fewer than 5 all capital letters. For example, `RTD` is the `symbol` for the native coin on Rtd but its `name` is also `RTD`. |
 | `description` | A short description to describe the token. |
 | `icon_url`    | The URL for the token's icon, used for display in wallets, explorers, and other apps. |
 
@@ -115,13 +115,13 @@ The fields of the metadata objects include the following:
 
 ## Minting and burning coins
 
-The `coin` module provides the logic for creating and destroying coins on the Sui network (as long as you own the associated `TreasuryCap`). These functions are the same for all coins and each requires the `TreasuryCap` as an input.
+The `coin` module provides the logic for creating and destroying coins on the Rtd network (as long as you own the associated `TreasuryCap`). These functions are the same for all coins and each requires the `TreasuryCap` as an input.
 
 ### Mint
 
 Use the `coin::mint` function to create new tokens.
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/coin.move" mode="code" fun="mint" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="mint" noComments />
 
 The signature shows that a `Coin<T>` results from calling the function with a `TreasuryCap`, value for the coin created, and the transaction context. The function updates the total supply in `TreasuryCap` automatically. Upon display, the coin `value` respects the `decimals` value in the metadata. So, if you supply 1000000 as the coin `value` that has a `decimal` value of `6`, the coin's value displays as `1.000000`.
 
@@ -129,7 +129,7 @@ The signature shows that a `Coin<T>` results from calling the function with a `T
 
 Use the `coin::burn` function to destroy current tokens.
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/coin.move" mode="code" fun="burn" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="burn" noComments />
 
 The signature shows that only the `TreasuryCap` and coin object you want to burn are necessary inputs, returning the amount by which the supply was decreased (value of the coin). The function does not allow you to burn more coins than are available in the supply.
 
@@ -198,6 +198,6 @@ public entry fun <FUNCTION-NAME><T>(
 ## Related links
 
 <RelatedLink to="/standards/closed-loop-token.mdx" />
-<RelatedLink href="https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/coin.md" label="`coin` module rustdoc documentation" desc="Automated documentation output for the Sui framework `coin` module." />
-<RelatedLink href="https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/token.md" label="`token` module rustdoc documentation" desc="Automated documentation output for the Sui framework `token` module." />
+<RelatedLink href="https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/coin.md" label="`coin` module rustdoc documentation" desc="Automated documentation output for the Rtd framework `coin` module." />
+<RelatedLink href="https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/token.md" label="`token` module rustdoc documentation" desc="Automated documentation output for the Rtd framework `token` module." />
 <RelatedLink to="/concepts/tokenomics.mdx" />

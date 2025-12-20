@@ -1,4 +1,4 @@
-# Sui Dart SDK (MofaLabs)
+# Rtd Dart SDK (MofaLabs)
 
 ## Tooling Category
 
@@ -11,12 +11,12 @@
 
 ## Description
 
-Dart Client SDK for Sui blockchain
+Dart Client SDK for Rtd blockchain
 
 ## Features
 
-- [Features](https://github.com/mofalabs/sui?tab=readme-ov-file#usage)
+- [Features](https://github.com/mofalabs/rtd?tab=readme-ov-file#usage)
 - ⚠️ GraphQL is not supported yet.
-- [Sui BCS types are supported](https://github.com/mofalabs/sui/tree/main/lib/bcs)
+- [Rtd BCS types are supported](https://github.com/mofalabs/rtd/tree/main/lib/bcs)
 - [zkLogin SDK](https://github.com/mofalabs/zklogin)
 - ⚠️ [Deepbook SDK](https://github.com/mofalabs/deepbook) (not actively maintained)

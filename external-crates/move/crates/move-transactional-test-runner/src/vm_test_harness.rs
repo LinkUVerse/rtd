@@ -267,7 +267,7 @@ impl SimpleVMTestAdapter {
         let vm = MoveVM::new_with_config(
             move_stdlib_natives::all_natives(
                 STD_ADDR,
-                // TODO: come up with a suitable gas schedule
+                // TODO: come up with a rtdtable gas schedule
                 move_stdlib_natives::GasParameters::zeros(),
                 /* silent */ false,
             ),

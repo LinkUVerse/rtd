@@ -17,7 +17,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: "Thank you for opening this issue, a team member will review it shortly. Until then, please do not interact with any users that claim to be from Sui support and do not click on any links!"
+              body: "Thank you for opening this issue, a team member will review it shortly. Until then, please do not interact with any users that claim to be from Rtd support and do not click on any links!"
             })
 
   notify-issues:
@@ -25,10 +25,10 @@ jobs:
     if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch github-issues-external-prs-monitor in MystenLabs/sui-operations
+      - name: Dispatch github-issues-external-prs-monitor in LinkUVerse/rtd-operations
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with:
-          repository: MystenLabs/sui-operations
+          repository: LinkUVerse/rtd-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: github-issues-external-prs-monitor
           client-payload: '{"author": "${{github.event.issue.user.login}}", "event_name": "issue", "issue_number": "${{github.event.issue.number}}"}'

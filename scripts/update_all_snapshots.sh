@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Automatically update all snapshots. This is needed when the framework is changed or when protocol
@@ -41,15 +41,15 @@ if [ -z "$INSTA_UPDATE" ]; then
     export INSTA_UPDATE
 fi
 
-UPDATE=1 cargo test -p sui-framework --test build-system-packages
-cd "$ROOT/crates/sui-protocol-config" && cargo insta test
-cd "$ROOT/crates/sui-swarm-config" && cargo insta test
-cd "$ROOT/crates/sui-open-rpc" && cargo run --example generate-json-rpc-spec -- record
-cd "$ROOT/crates/sui-core" && cargo insta test -- snapshot_tests
-cd "$ROOT/crates/sui-core" && cargo run --example generate-format -- print > tests/staged/sui.yaml
-cd "$ROOT/crates/sui-graphql-rpc" && cargo insta test -- snapshot_tests
-cd "$ROOT/crates/sui-graphql-rpc" && cargo insta test -- test_schema_sdl_export
-cd "$ROOT/crates/sui-graphql-rpc" && cargo insta test --features staging -- test_schema_sdl_export
-cd "$ROOT/crates/sui-indexer-alt-graphql" && cargo insta test -- test_schema_sdl_export
-cd "$ROOT/crates/sui-indexer-alt-graphql" && cargo insta test --features staging -- test_schema_sdl_export
+UPDATE=1 cargo test -p rtd-framework --test build-system-packages
+cd "$ROOT/crates/rtd-protocol-config" && cargo insta test
+cd "$ROOT/crates/rtd-swarm-config" && cargo insta test
+cd "$ROOT/crates/rtd-open-rpc" && cargo run --example generate-json-rpc-spec -- record
+cd "$ROOT/crates/rtd-core" && cargo insta test -- snapshot_tests
+cd "$ROOT/crates/rtd-core" && cargo run --example generate-format -- print > tests/staged/rtd.yaml
+cd "$ROOT/crates/rtd-graphql-rpc" && cargo insta test -- snapshot_tests
+cd "$ROOT/crates/rtd-graphql-rpc" && cargo insta test -- test_schema_sdl_export
+cd "$ROOT/crates/rtd-graphql-rpc" && cargo insta test --features staging -- test_schema_sdl_export
+cd "$ROOT/crates/rtd-indexer-alt-graphql" && cargo insta test -- test_schema_sdl_export
+cd "$ROOT/crates/rtd-indexer-alt-graphql" && cargo insta test --features staging -- test_schema_sdl_export
 exit 0

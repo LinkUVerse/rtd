@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-module sui::tx_context;
+module rtd::tx_context;
 
 #[test_only]
 /// Number of bytes in an tx hash (which will be the transaction digest)

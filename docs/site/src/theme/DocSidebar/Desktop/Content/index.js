@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -99,7 +99,7 @@ export default function ContentWrapper(props) {
           icon="🗳️"
         />
         <SidebarIframe
-          url="https://discord.gg/sui"
+          url="https://discord.gg/rtd"
           label="Join Discord"
           icon="💬"
           openInNewTab={true}

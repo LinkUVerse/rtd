@@ -81,7 +81,7 @@ as you install the new CLI:
 
 **Pinning**
  - When you build your package, the dependencies will only be updated if
-   your `Move.toml` file changes or if you run `sui move update-deps`.
+   your `Move.toml` file changes or if you run `rtd move update-deps`.
 
  - If your dependencies are not updated, the CLI will not run `mvr` or refetch
    `git` dependencies, so you can build offline.

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /** @type {import('tailwindcss').Config} */
@@ -15,7 +15,7 @@ const config = {
 			},
 		},
 	},
-	plugins: [require('@headlessui/tailwindcss')],
+	plugins: [require('@headlesrtd/tailwindcss')],
 };
 
 export default config;

@@ -1,4 +1,4 @@
-# @mysten/prettier-plugin-move
+# @linku/prettier-plugin-move
 
 ## 0.3.3
 

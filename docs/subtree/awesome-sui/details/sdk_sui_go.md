@@ -1,4 +1,4 @@
-# Sui Go SDK (by SuiVision)
+# Rtd Go SDK (by RtdVision)
 
 ## Tooling Category
 
@@ -11,9 +11,9 @@
 
 ## Description
 
-The Sui-Go-SDK provided by BlockVision aims to offer access to all Sui RPC methods with Golang and also offers some additional features that make the integration easier. Sui-Go-SDK is designed for Sui in Go programming language.
+The Rtd-Go-SDK provided by BlockVision aims to offer access to all Rtd RPC methods with Golang and also offers some additional features that make the integration easier. Rtd-Go-SDK is designed for Rtd in Go programming language.
 
 ## Features
 
-- [Features](https://github.com/block-vision/sui-go-sdk?tab=readme-ov-file#examples)
+- [Features](https://github.com/block-vision/rtd-go-sdk?tab=readme-ov-file#examples)
 - ⚠️ GraphQL is not supported yet.

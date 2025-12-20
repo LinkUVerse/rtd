@@ -1,4 +1,4 @@
-# SuiKit (by OpenDive)
+# RtdKit (by OpenDive)
 
 ## Tooling Category
 
@@ -11,13 +11,13 @@
 
 ## Description
 
-SuiKit is a Swift SDK natively designed to make developing for the Sui Blockchain easy.
+RtdKit is a Swift SDK natively designed to make developing for the Rtd Blockchain easy.
 
 ## Features
 
-- [Features](https://github.com/OpenDive/SuiKit/tree/main?tab=readme-ov-file#features)
+- [Features](https://github.com/OpenDive/RtdKit/tree/main?tab=readme-ov-file#features)
 - ⚠️ `Bech32` encoded private key is not supported.
 - ⚠️ GraphQL is partially supported.
-- [Sui BCS types are supported](https://github.com/OpenDive/SuiKit/tree/main/Sources/SuiKit/Types)
-- ⚠️ [Kiosk is supported](https://github.com/OpenDive/SuiKit/tree/main/Sources/SuiKit/Types/Structs/Kiosk) (might not be actively maintained)
-- ⚠️ [SuiNS is supported](https://github.com/OpenDive/SuiKit/tree/main/Sources/SuiKit/Types/Structs/SuiNS) (might not be actively maintained)
+- [Rtd BCS types are supported](https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Types)
+- ⚠️ [Kiosk is supported](https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Types/Structs/Kiosk) (might not be actively maintained)
+- ⚠️ [RtdNS is supported](https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Types/Structs/RtdNS) (might not be actively maintained)

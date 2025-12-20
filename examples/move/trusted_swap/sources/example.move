@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Executing a swap of two objects via a third party, using object wrapping to
@@ -6,9 +6,9 @@
 /// the ability to modify those objects.
 module trusted_swap::example;
 
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, Coin};
-use sui::sui::SUI;
+use rtd::balance::{Self, Balance};
+use rtd::coin::{Self, Coin};
+use rtd::rtd::RTD;
 
 public struct Object has key, store {
     id: UID,
@@ -20,7 +20,7 @@ public struct SwapRequest has key {
     id: UID,
     owner: address,
     object: Object,
-    fee: Balance<SUI>,
+    fee: Balance<RTD>,
 }
 
 // === Errors ===
@@ -43,7 +43,7 @@ public fun new(scarcity: u8, style: u8, ctx: &mut TxContext): Object {
 
 /// Anyone who owns an `Object` can make it available for swapping, which
 /// sends a `SwapRequest` to a `service` responsible for matching swaps.
-public fun request_swap(object: Object, fee: Coin<SUI>, service: address, ctx: &mut TxContext) {
+public fun request_swap(object: Object, fee: Coin<RTD>, service: address, ctx: &mut TxContext) {
     assert!(coin::value(&fee) >= MIN_FEE, EFeeTooLow);
 
     let request = SwapRequest {
@@ -58,7 +58,7 @@ public fun request_swap(object: Object, fee: Coin<SUI>, service: address, ctx: &
 
 /// When the service has two swap requests, it can execute them, sending the
 /// objects to the respective owners and taking its fee.
-public fun execute_swap(s1: SwapRequest, s2: SwapRequest): Balance<SUI> {
+public fun execute_swap(s1: SwapRequest, s2: SwapRequest): Balance<RTD> {
     let SwapRequest { id: id1, owner: owner1, object: o1, fee: mut fee1 } = s1;
     let SwapRequest { id: id2, owner: owner2, object: o2, fee: fee2 } = s2;
 
@@ -80,7 +80,7 @@ public fun execute_swap(s1: SwapRequest, s2: SwapRequest): Balance<SUI> {
 
 // === Tests ===
 #[test_only]
-use sui::test_scenario as ts;
+use rtd::test_scenario as ts;
 
 #[test]
 fun successful_swap() {
@@ -92,7 +92,7 @@ fun successful_swap() {
     let i1 = {
         ts::next_tx(&mut ts, alice);
         let o1 = new(1, 0, ts::ctx(&mut ts));
-        let c1 = coin::mint_for_testing<SUI>(MIN_FEE, ts::ctx(&mut ts));
+        let c1 = coin::mint_for_testing<RTD>(MIN_FEE, ts::ctx(&mut ts));
         let i = object::id(&o1);
         request_swap(o1, c1, custodian, ts::ctx(&mut ts));
         i
@@ -101,7 +101,7 @@ fun successful_swap() {
     let i2 = {
         ts::next_tx(&mut ts, bob);
         let o2 = new(1, 1, ts::ctx(&mut ts));
-        let c2 = coin::mint_for_testing<SUI>(MIN_FEE, ts::ctx(&mut ts));
+        let c2 = coin::mint_for_testing<RTD>(MIN_FEE, ts::ctx(&mut ts));
         let i = object::id(&o2);
         request_swap(o2, c2, custodian, ts::ctx(&mut ts));
         i
@@ -120,7 +120,7 @@ fun successful_swap() {
 
     {
         ts::next_tx(&mut ts, custodian);
-        let fee: Coin<SUI> = ts::take_from_sender(&ts);
+        let fee: Coin<RTD> = ts::take_from_sender(&ts);
 
         assert!(ts::ids_for_address<Object>(alice) == vector[i2], 0);
         assert!(ts::ids_for_address<Object>(bob) == vector[i1], 0);
@@ -140,7 +140,7 @@ fun swap_too_cheap() {
 
     let mut ts = ts::begin(alice);
     let o1 = new(1, 0, ts::ctx(&mut ts));
-    let c1 = coin::mint_for_testing<SUI>(MIN_FEE - 1, ts::ctx(&mut ts));
+    let c1 = coin::mint_for_testing<RTD>(MIN_FEE - 1, ts::ctx(&mut ts));
     request_swap(o1, c1, custodian, ts::ctx(&mut ts));
 
     abort 1337
@@ -157,14 +157,14 @@ fun swap_different_scarcity() {
     {
         ts::next_tx(&mut ts, alice);
         let o1 = new(1, 0, ts::ctx(&mut ts));
-        let c1 = coin::mint_for_testing<SUI>(MIN_FEE, ts::ctx(&mut ts));
+        let c1 = coin::mint_for_testing<RTD>(MIN_FEE, ts::ctx(&mut ts));
         request_swap(o1, c1, custodian, ts::ctx(&mut ts));
     };
 
     {
         ts::next_tx(&mut ts, bob);
         let o2 = new(0, 1, ts::ctx(&mut ts));
-        let c2 = coin::mint_for_testing<SUI>(MIN_FEE, ts::ctx(&mut ts));
+        let c2 = coin::mint_for_testing<RTD>(MIN_FEE, ts::ctx(&mut ts));
         request_swap(o2, c2, custodian, ts::ctx(&mut ts));
     };
 
@@ -189,14 +189,14 @@ fun swap_same_style() {
     {
         ts::next_tx(&mut ts, alice);
         let o1 = new(1, 0, ts::ctx(&mut ts));
-        let c1 = coin::mint_for_testing<SUI>(MIN_FEE, ts::ctx(&mut ts));
+        let c1 = coin::mint_for_testing<RTD>(MIN_FEE, ts::ctx(&mut ts));
         request_swap(o1, c1, custodian, ts::ctx(&mut ts));
     };
 
     {
         ts::next_tx(&mut ts, bob);
         let o2 = new(1, 0, ts::ctx(&mut ts));
-        let c2 = coin::mint_for_testing<SUI>(MIN_FEE, ts::ctx(&mut ts));
+        let c2 = coin::mint_for_testing<RTD>(MIN_FEE, ts::ctx(&mut ts));
         request_swap(o2, c2, custodian, ts::ctx(&mut ts));
     };
 

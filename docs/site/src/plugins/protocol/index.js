@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Plugin copies file from crates and creates fullnode doc
@@ -17,7 +17,7 @@ const SPEC_MD = fs.readFileSync(PROTOCOL_PATH, "utf-8");
 
 const fullnodeProtocolPlugin = (context, options) => {
   return {
-    name: "sui-fullnode-protocol-plugin",
+    name: "rtd-fullnode-protocol-plugin",
     configureWebpack() {
       return {
         module: {

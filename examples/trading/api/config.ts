@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from 'fs';
 
-import { Network } from './sui-utils';
+import { Network } from './rtd-utils';
 
 /// We assume our config files are in the format: { "packageId": "0x..." }
 const parseConfigurationFile = (fileName: string) => {

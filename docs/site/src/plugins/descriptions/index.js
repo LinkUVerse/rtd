@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // This plugin gets the descriptions from yaml header and
@@ -79,7 +79,7 @@ function computeRouteFromFile(docsRootAbs, fileAbs) {
 // ---------- plugin ----------
 const descriptionPlugin = (context, options) => {
   return {
-    name: "sui-description-plugin",
+    name: "rtd-description-plugin",
 
     async loadContent() {
       // Find classic preset options robustly
@@ -98,7 +98,7 @@ const descriptionPlugin = (context, options) => {
 
       // Collect .md/.mdx, skipping known heavy/irrelevant trees
       const EXCLUDES = [
-        "/sui-api/sui-graphql/",
+        "/rtd-api/rtd-graphql/",
         "/content/snippets/",
         "/references/framework/",
         "/standards/deepbook-ref/",
@@ -190,7 +190,7 @@ const descriptionPlugin = (context, options) => {
       }
 
       // -------- llms-full.txt (raw site content converted to markdown)
-      const skips = new Set(["/404.html", "/search", "/sui-api-ref", "/"]);
+      const skips = new Set(["/404.html", "/search", "/rtd-api-ref", "/"]);
       const td = new TurndownService({
         headingStyle: "atx",
         preformattedCode: true,

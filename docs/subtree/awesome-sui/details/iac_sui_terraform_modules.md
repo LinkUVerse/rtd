@@ -1,4 +1,4 @@
-# Sui Terraform Modules
+# Rtd Terraform Modules
 
 ## Tooling Category
 
@@ -14,11 +14,11 @@
 
 ## Description
 
-All-in-one solution for deploying, monitoring, and managing SUI infrastructure with ease.
+All-in-one solution for deploying, monitoring, and managing RTD infrastructure with ease.
 
 ## Features
 - Supported entities for monitoring:
-    - Sui
+    - Rtd
         - Validator
     - Walrus
         - Storage Node

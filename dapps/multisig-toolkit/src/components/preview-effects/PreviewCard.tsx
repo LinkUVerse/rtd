@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { ObjectOwner } from '@mysten/sui/client';
+import { ObjectOwner } from '@linku/rtd/client';
 import { ReactNode } from 'react';
 
 import { ObjectLink } from './ObjectLink';

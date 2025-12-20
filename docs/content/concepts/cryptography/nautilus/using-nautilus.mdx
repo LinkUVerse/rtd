@@ -3,7 +3,7 @@ title: Using Nautilus
 description: Details on how to use Nautilus with the reproducible build template
 ---
 
-The [Nautilus framework](https://github.com/MystenLabs/nautilus) helps you deploy an AWS Nitro Enclave with scaffolding such as reproducible builds, signature formatting, and HTTPS traffic forwarding. This allows you to focus on implementing the off-chain computation logic inside the enclave.
+The [Nautilus framework](https://github.com/LinkUVerse/nautilus) helps you deploy an AWS Nitro Enclave with scaffolding such as reproducible builds, signature formatting, and HTTPS traffic forwarding. This allows you to focus on implementing the off-chain computation logic inside the enclave.
 
 The framework also provides an on-chain template that includes the minimal smart contract code required to register a Nautilus instance and its public key. To use Nautilus in your dApp:
 
@@ -34,7 +34,7 @@ When the enclave starts, it generates a fresh key pair and exposes the following
 
 ## Code structure
 
-Refer to the [GitHub repository](https://github.com/MystenLabs/nautilus) for the latest structure and related instructions.
+Refer to the [GitHub repository](https://github.com/LinkUVerse/nautilus) for the latest structure and related instructions.
 
 ```sh title="Repository structure"
 /move
@@ -94,7 +94,7 @@ Frontend code is not included in this guide. The Move call is demonstrated using
     :::info
 
     - Run `sh configure_enclave.sh -h` to view additional instructions.
-    - If your AWS account is not in `us-east-1`, you might need to configure `REGION` and `AMI_ID` values specific to your region. Refer to this [guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html) to find a suitable Amazon Linux image ID. 
+    - If your AWS account is not in `us-east-1`, you might need to configure `REGION` and `AMI_ID` values specific to your region. Refer to this [guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami.html) to find a rtdtable Amazon Linux image ID. 
 
         ```sh
         $ export REGION=<your-region>
@@ -268,21 +268,21 @@ After finalizing the Rust code, the dApp administrator can register the enclave 
 
 ```sh
 # optionally
-$ sui client switch --env testnet # or appropriate network
-$ sui client faucet
-$ sui client gas
+$ rtd client switch --env testnet # or appropriate network
+$ rtd client faucet
+$ rtd client gas
 # deploy the enclave package
 $ cd move/enclave
-$ sui move build
-$ sui client publish
+$ rtd move build
+$ rtd client publish
 
 # record ENCLAVE_PACKAGE_ID as env var from publish output
 $ ENCLAVE_PACKAGE_ID=0x3b009f952e11f0fa0612d0a8e07461fb69edc355d732e5d6e39267b1b4fd7138
 
 # deploy your dApp logic
 $ cd ../<APP>
-$ sui move build
-$ sui client publish
+$ rtd move build
+$ rtd client publish
 
 # record CAP_OBJECT_ID (owned object of type Cap), ENCLAVE_CONFIG_OBJECT_ID (shared object), APP_PACKAGE_ID (package containing weather module) as env var from publish output
 
@@ -314,10 +314,10 @@ $ echo $ENCLAVE_URL
 # =======
 
 # this calls the update_pcrs on-chain with the enclave cap and built PCRs, this can be reused to update PCRs if Rust server code is updated
-$ sui client call --function update_pcrs --module enclave --package $ENCLAVE_PACKAGE_ID --type-args "$APP_PACKAGE_ID::$MODULE_NAME::$OTW_NAME" --args $ENCLAVE_CONFIG_OBJECT_ID $CAP_OBJECT_ID 0x$PCR0 0x$PCR1 0x$PCR2
+$ rtd client call --function update_pcrs --module enclave --package $ENCLAVE_PACKAGE_ID --type-args "$APP_PACKAGE_ID::$MODULE_NAME::$OTW_NAME" --args $ENCLAVE_CONFIG_OBJECT_ID $CAP_OBJECT_ID 0x$PCR0 0x$PCR1 0x$PCR2
 
 # optional, give it a name you like
-$ sui client call --function update_name --module enclave --package $ENCLAVE_PACKAGE_ID --type-args "$APP_PACKAGE_ID::$MODULE_NAME::$OTW_NAME" --args $ENCLAVE_CONFIG_OBJECT_ID $CAP_OBJECT_ID "weather enclave, updated 2025-05-13"
+$ rtd client call --function update_name --module enclave --package $ENCLAVE_PACKAGE_ID --type-args "$APP_PACKAGE_ID::$MODULE_NAME::$OTW_NAME" --args $ENCLAVE_CONFIG_OBJECT_ID $CAP_OBJECT_ID "weather enclave, updated 2025-05-13"
 
 # this script calls the get_attestation endpoint from your enclave url and uses it to call register_enclave on-chain to register the public key, resulting in the created enclave object
 $ sh ../../register_enclave.sh $ENCLAVE_PACKAGE_ID $APP_PACKAGE_ID $ENCLAVE_CONFIG_OBJECT_ID $ENCLAVE_URL $MODULE_NAME $OTW_NAME
@@ -326,7 +326,7 @@ $ sh ../../register_enclave.sh $ENCLAVE_PACKAGE_ID $APP_PACKAGE_ID $ENCLAVE_CONF
 $ ENCLAVE_OBJECT_ID=0x1c9ccfc0f391f5e679e1f9f7d53c7fa455bf977e0f6dc71222990401f359c42a
 ```
 
-You can view an [example enclave config object](https://testnet.suivision.xyz/object/0x58a6a284aaea8c8e71151e4ae0de2350ae877f0bd94adc2b2d0266cf23b6b41d) containing PCR values on SuiScan. Additionally, see an [example enclave object](https://testnet.suivision.xyz/object/0xe0e70df5347560a1b43e5954267cadd1386a562095cb4285f2581bf2974c838d) that includes the registered enclave public key.
+You can view an [example enclave config object](https://testnet.rtdvision.xyz/object/0x58a6a284aaea8c8e71151e4ae0de2350ae877f0bd94adc2b2d0266cf23b6b41d) containing PCR values on RtdScan. Additionally, see an [example enclave object](https://testnet.rtdvision.xyz/object/0xe0e70df5347560a1b43e5954267cadd1386a562095cb4285f2581bf2974c838d) that includes the registered enclave public key.
 
 ### Artifacts for Twitter example
 
@@ -367,9 +367,9 @@ $ ENCLAVE_OBJECT_ID=0x53db077721140910697668f9b2ee80fbecd104ac076d60fc1fb49ae57c
 $ ENCLAVE_URL=http://<PUBLIC_IP>:3000
 ```
 
-You can view an [example enclave config object](https://testnet.suivision.xyz/object/0xe33641a2dae5eb4acad3859e603ec4e25641af05f837c85058645c7d8d9d831a) containing PCR values. You can also view an [example enclave object](https://testnet.suivision.xyz/object/0x53db077721140910697668f9b2ee80fbecd104ac076d60fc1fb49ae57cd96c0d) that includes the registered enclave public key.
+You can view an [example enclave config object](https://testnet.rtdvision.xyz/object/0xe33641a2dae5eb4acad3859e603ec4e25641af05f837c85058645c7d8d9d831a) containing PCR values. You can also view an [example enclave object](https://testnet.rtdvision.xyz/object/0x53db077721140910697668f9b2ee80fbecd104ac076d60fc1fb49ae57cd96c0d) that includes the registered enclave public key.
 
-You can find the frontend code for the Twitter example [in this repository](https://github.com/MystenLabs/nautilus-twitter/tree/main/frontend).
+You can find the frontend code for the Twitter example [in this repository](https://github.com/LinkUVerse/nautilus-twitter/tree/main/frontend).
 
 ### Enclave management
 
@@ -425,7 +425,7 @@ $ sh ../../update_weather.sh \
     13
 ```
 
-An example of a [created weather NFT](https://testnet.suivision.xyz/object/0xa78e166630c0ed004b3115b474fed15d71f27fc80b68e37d451494c6e815931e) is available on network scanners.
+An example of a [created weather NFT](https://testnet.rtdvision.xyz/object/0xa78e166630c0ed004b3115b474fed15d71f27fc80b68e37d451494c6e815931e) is available on network scanners.
 
 ### Signing payload
 
@@ -437,7 +437,7 @@ Write unit tests in both Move and Rust to ensure consistency. See `test_serde()`
 
 Some questions the community often asks about are answered in the following sections.
 
-### Why did Sui choose AWS Nitro Enclaves initially?
+### Why did Rtd choose AWS Nitro Enclaves initially?
 
 There are many TEE providers available, but initial support for AWS Nitro Enclaves is due to their maturity and support for reproducible builds. Support for additional TEE providers might be considered in the future.
 
@@ -445,11 +445,11 @@ There are many TEE providers available, but initial support for AWS Nitro Enclav
 
 ### Where is the root of trust of AWS?
 
-It is stored as part of the Sui framework and used to verify AWS attestation documents. You can verify its hash by following the steps outlined on [AWS](https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html#validation-process).
+It is stored as part of the Rtd framework and used to verify AWS attestation documents. You can verify its hash by following the steps outlined on [AWS](https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html#validation-process).
 
 ```sh
-$ curl https://raw.githubusercontent.com/MystenLabs/sui/refs/heads/main/crates/sui-types/src/nitro_root_certificate.pem -o cert_sui.pem
-$ sha256sum cert_sui.pem
+$ curl https://raw.githubusercontent.com/LinkUVerse/rtd/refs/heads/main/crates/rtd-types/src/nitro_root_certificate.pem -o cert_rtd.pem
+$ sha256sum cert_rtd.pem
 
 6eb9688305e4bbca67f44b59c29a0661ae930f09b5945b5d1d9ae01125c8d6c0
 
@@ -457,5 +457,5 @@ $ curl https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip -o
 $ unzip cert_aws.zip
 $ sha256sum root.pem
 
-6eb9688305e4bbca67f44b59c29a0661ae930f09b5945b5d1d9ae01125c8d6c0 # check it matches from the one downloaded from the Sui repo
+6eb9688305e4bbca67f44b59c29a0661ae930f09b5945b5d1d9ae01125c8d6c0 # check it matches from the one downloaded from the Rtd repo
 ```

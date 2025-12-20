@@ -1,5 +1,5 @@
 ---
-source: crates/move-unit-test/tests/move_unit_test_testsuite.rs
+source: crates/move-unit-test/tests/move_unit_test_testrtdte.rs
 ---
 Running Move unit tests
 [ PASS    ] 0x7::M::make_sure_not_other_number

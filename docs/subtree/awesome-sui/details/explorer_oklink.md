@@ -11,7 +11,7 @@
 
 ## Description
 
-Provide fundamental explorer and data APIs on Sui.
+Provide fundamental explorer and data APIs on Rtd.
 
 ## Features
 - Fundamental network data (transactions, epoch,...)

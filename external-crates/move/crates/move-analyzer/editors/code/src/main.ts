@@ -65,27 +65,27 @@ async function findPkgRoot(): Promise<string | undefined> {
     return undefined;
 }
 
-async function suiMoveCmd(context: Readonly<Context>, cmd: string): Promise<void> {
+async function rtdMoveCmd(context: Readonly<Context>, cmd: string): Promise<void> {
     const version = childProcess.spawnSync(
-        context.configuration.suiPath, ['--version'], { encoding: 'utf8' },
+        context.configuration.rtdPath, ['--version'], { encoding: 'utf8' },
     );
     if (version.stdout) {
         const pkgRoot = await findPkgRoot();
         if (pkgRoot !== undefined) {
-            const terminalName = 'sui move';
+            const terminalName = 'rtd move';
             let terminal = vscode.window.terminals.find(t => t.name === terminalName);
             if (!terminal) {
                 terminal = vscode.window.createTerminal(terminalName);
             }
             terminal.show(true);
             terminal.sendText('cd ' + pkgRoot, true);
-            terminal.sendText(`${context.configuration.suiPath} move ${cmd}`, true);
+            terminal.sendText(`${context.configuration.rtdPath} move ${cmd}`, true);
         }
     } else {
         await vscode.window.showErrorMessage(
-            `A problem occurred when executing the Sui command: '${context.configuration.suiPath}'`
-            + 'Make sure that Sui CLI is installed and available, either in your global PATH, '
-            + 'or on a path set via `move.sui.path` configuration option.',
+            `A problem occurred when executing the Rtd command: '${context.configuration.rtdPath}'`
+            + 'Make sure that Rtd CLI is installed and available, either in your global PATH, '
+            + 'or on a path set via `move.rtd.path` configuration option.',
         );
     }
 }
@@ -94,7 +94,7 @@ async function suiMoveCmd(context: Readonly<Context>, cmd: string): Promise<void
  * An extension command that that builds the current Move project.
  */
 async function buildProject(context: Readonly<Context>): Promise<void> {
-    return suiMoveCmd(context, 'build');
+    return rtdMoveCmd(context, 'build');
 }
 
 /**
@@ -109,7 +109,7 @@ async function testProject(context: Readonly<Context>): Promise<void> {
     });
     if (filter !== undefined) {
         const cmd = filter.length > 0 ? `test ${filter}` : 'test';
-        return suiMoveCmd(context, cmd);
+        return rtdMoveCmd(context, cmd);
     }
     return Promise.resolve();
 }
@@ -126,7 +126,7 @@ async function traceProject(context: Readonly<Context>): Promise<void> {
     });
     if (filter !== undefined) {
         const cmd = filter.length > 0 ? `test ${filter} --trace --disassemble` : 'test --trace --disassemble';
-        return suiMoveCmd(context, cmd);
+        return rtdMoveCmd(context, cmd);
     }
     return Promise.resolve();
 }

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState, useEffect, useRef } from "react";
@@ -43,14 +43,14 @@ export default function MDXDetails(props) {
   return (
     <div className="relative">
       <span
-        className={`absolute rounded -top-3 -left-1 text-xs bg-white dark:bg-sui-gray-95 px-2 py-0.5 border border-sui-gray-65 border-solid ${hover ? "opacity-100" : "opacity-0"} duration-300 transition-opacity`}
+        className={`absolute rounded -top-3 -left-1 text-xs bg-white dark:bg-rtd-gray-95 px-2 py-0.5 border border-rtd-gray-65 border-solid ${hover ? "opacity-100" : "opacity-0"} duration-300 transition-opacity`}
       >
         Click to {isOpen ? "close" : "open"}
       </span>
       <Details
         {...props}
         summary={enhancedSummary}
-        className={`${props.className || ""} bg-sui-gray-45 !border-sui-gray-65 dark:bg-sui-gray-90 dark:border-sui-gray-65`}
+        className={`${props.className || ""} bg-rtd-gray-45 !border-rtd-gray-65 dark:bg-rtd-gray-90 dark:border-rtd-gray-65`}
       >
         {children}
       </Details>

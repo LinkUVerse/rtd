@@ -17,12 +17,12 @@ The indexer consists of multiple pipelines that each read, transform, and write 
 - **CPU:** 2 cores per instance
 - **Memory:** 4GB per instance
 
-### Run `sui-indexer-alt`
+### Run `rtd-indexer-alt`
 
 Run an indexer instance using this command for each of the configuration files that follow:
 
 ```sh
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config <CONFIG_FILE> \
     --database-url <DATABASE_URL> \
     --remote-store-url <REMOTE_STORE_URL>
@@ -37,10 +37,10 @@ $ sui-indexer-alt indexer \
 Example:
 
 ```sh
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config misc.toml \
     --database-url postgres://username:password@localhost:5432/database \
-    --remote-store-url https://checkpoints.mainnet.sui.io
+    --remote-store-url https://checkpoints.mainnet.rtd.io
 ```
 
 ### Run config recommendations {#indexer-run-config}
@@ -197,7 +197,7 @@ All consistent store pipelines run in the same instance based on a single config
 Restores one or more pipelines from checkpoint data in a GCS bucket.
 
 ```sh
-$ sui-indexer-alt-consistent-store restore \
+$ rtd-indexer-alt-consistent-store restore \
     --azure <AZURE_BUCKET> \
     --database-path <DATABASE_PATH> \
     --gcs <GCS_BUCKET> \
@@ -210,28 +210,28 @@ $ sui-indexer-alt-consistent-store restore \
 
 | CLI parameter               | Description                                                                                                                               |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `<AZURE_BUCKET>` \*         | Name or URL of Azure bucket containing [managed snapshots](https://docs.sui.io/guides/operator/snapshots#mysten-labs-managed-snapshots).  |
+| `<AZURE_BUCKET>` \*         | Name or URL of Azure bucket containing [managed snapshots](https://docs.rtd.io/guides/operator/snapshots#linku-labs-managed-snapshots).  |
 | `<DATABASE_PATH>`           | Path to RocksDB database.                                                                                                                 |
-| `<GCS_ACCOUNT>` \*          | Name or URL of GCS bucket containing [managed snapshots](https://docs.sui.io/guides/operator/snapshots#mysten-labs-managed-snapshots).    |
+| `<GCS_ACCOUNT>` \*          | Name or URL of GCS bucket containing [managed snapshots](https://docs.rtd.io/guides/operator/snapshots#linku-labs-managed-snapshots).    |
 | `<HTTP_ENDPOINT>` \*        | URL of formal snapshot API.                                                                                                               |
 | `<OBJECT_FILE_CONCURRENCY>` | Path to indexer configuration file.                                                                                                       |
 | `<PIPELINE_NAME>`           | Name of pipeline to restore. Can be set multiple times; once per pipeline.                                                                |
 | `<REMOTE_STORE_URL>`        | URL of a checkpoint bucket to index from, one of multiple possible [data sources](/concepts/data-access/custom-indexing-framework#data-sources).      |
-| `<S3_BUCKET>` \*            | Name or URL of AWS S3 bucket containing [managed snapshots](https://docs.sui.io/guides/operator/snapshots#mysten-labs-managed-snapshots). |
+| `<S3_BUCKET>` \*            | Name or URL of AWS S3 bucket containing [managed snapshots](https://docs.rtd.io/guides/operator/snapshots#linku-labs-managed-snapshots). |
 
 \* Must specify one of `<AZURE_BUCKET>`, `<GCS_ACCOUNT>`, `<HTTP_ENDPOINT>`, or `<S3_BUCKET>`.
 
 Example:
 
 ```sh
-$ sui-indexer-alt-consistent-store restore \
+$ rtd-indexer-alt-consistent-store restore \
     --database-path /path/to/rocksdb \
-    --http https://formal-snapshot.mainnet.sui.io \
+    --http https://formal-snapshot.mainnet.rtd.io \
     --object-file-concurrency 5 \
     --pipeline balances \
     --pipeline object_by_owner \
     --pipeline object_by_type \
-    --remote-store-url https://checkpoints.mainnet.sui.io
+    --remote-store-url https://checkpoints.mainnet.rtd.io
 ```
 
 ### Run command
@@ -239,7 +239,7 @@ $ sui-indexer-alt-consistent-store restore \
 Run a consistent store instance using this command for the configuration file that follows:
 
 ```sh
-$ sui-indexer-alt-consistent-store run \
+$ rtd-indexer-alt-consistent-store run \
     --config <CONFIG_FILE> \
     --database-path <DATABASE_PATH> \
     --remote-store-url <REMOTE_STORE_URL>
@@ -254,10 +254,10 @@ $ sui-indexer-alt-consistent-store run \
 Example:
 
 ```sh
-$ sui-indexer-alt-consistent-store run \
+$ rtd-indexer-alt-consistent-store run \
     --config consistent-store.toml \
     --database-path /path/to/rocksdb \
-    --remote-store-url https://checkpoints.mainnet.sui.io
+    --remote-store-url https://checkpoints.mainnet.rtd.io
 ```
 
 ### Run config recommendations
@@ -315,17 +315,17 @@ The GraphQL RPC server relies on multiple backend services to fulfill different 
 
 Set the appropriate service URLs in your run command based on the query types your GraphQL RPC server needs to support.
 
-### Run `sui-indexer-alt-graphql`
+### Run `rtd-indexer-alt-graphql`
 
 :::info
 
-If you use the Sui Foundation–hosted public good archival service on Testnet or Mainnet, you may encounter performance issues. The team will address these before the GraphQL RPC and Archival Service reach general availability.
+If you use the Rtd Foundation–hosted public good archival service on Testnet or Mainnet, you may encounter performance issues. The team will address these before the GraphQL RPC and Archival Service reach general availability.
 
 :::
 
 Use the following command to run a GraphQL RPC server node:
 ```sh
-sui-indexer-alt-graphql rpc \
+rtd-indexer-alt-graphql rpc \
     --config <PATH_TO_GRAPHQL_CONFIG_FILE> \
     --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_1> \
     --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_2> \
@@ -350,7 +350,7 @@ Multiple `--indexer-config` parameters can be provided, one for each general-pur
 
 Example:
 ```sh
-sui-indexer-alt-graphql rpc \
+rtd-indexer-alt-graphql rpc \
     --config graphql.toml \
     --indexer-config events.toml \
     --indexer-config misc.toml \
@@ -359,7 +359,7 @@ sui-indexer-alt-graphql rpc \
     --indexer-config tx_affected_objects.toml \
     --indexer-config tx_calls.toml \
     --indexer-config tx_kinds.toml \
-    --ledger-grpc-url https://archive.mainnet.sui.io:443 \
+    --ledger-grpc-url https://archive.mainnet.rtd.io:443 \
     --consistent-store-url https://localhost:7001 \
     --database-url postgres://username:password@localhost:5432/database \
     --fullnode-rpc-url https://localhost:9000
@@ -371,7 +371,7 @@ You can run the GraphQL RPC server without a configuration file, which will use 
 
 ```sh
 
-sui-indexer-alt-graphql generate-config > <PATH_TO_GRAPHQL_CONFIG_FILE>
+rtd-indexer-alt-graphql generate-config > <PATH_TO_GRAPHQL_CONFIG_FILE>
 ```
 
 It will produce output similar to the following:
@@ -390,22 +390,22 @@ It will produce output similar to the following:
 <RelatedLink to="/concepts/data-access/archival-store" />
 <RelatedLink to="/guides/developer/advanced/custom-indexer" />
 <RelatedLink
-	href="https://github.com/MystenLabs/sui/tree/main/crates/sui-indexer-alt"
-	label="Sui Indexer Alt"
-	desc="The `sui-indexer-alt` crate in the Sui repo."
+	href="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-indexer-alt"
+	label="Rtd Indexer Alt"
+	desc="The `rtd-indexer-alt` crate in the Rtd repo."
 />
 <RelatedLink
-	href="https://github.com/MystenLabs/mvr/tree/main/crates/mvr-indexer"
+	href="https://github.com/LinkUVerse/mvr/tree/main/crates/mvr-indexer"
 	label="Move Registry"
 	desc="The indexer that the Move Registry (MVR) implements."
 />
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3/tree/main/crates/indexer"
+	href="https://github.com/LinkUVerse/deepbookv3/tree/main/crates/indexer"
 	label="DeepBook Indexer"
 	desc="The indexer that DeepBook implements."
 />
 <RelatedLink
-	href="/references/sui-api/sui-graphql/beta/reference"
+	href="/references/rtd-api/rtd-graphql/beta/reference"
 	label="GraphQL Beta schema"
 	desc="Schema documentation for GraphQL Beta"
 />

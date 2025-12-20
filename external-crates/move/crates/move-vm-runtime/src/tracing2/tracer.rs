@@ -541,7 +541,7 @@ impl VMTracer<'_> {
     }
 
     /// Load global data into the tracer state returning back the `TraceValue` and the `TraceIndex`
-    /// of the load (suitable for use in global locations).
+    /// of the load (rtdtable for use in global locations).
     fn emit_data_load(
         &mut self,
         value: SerializableMoveValue,

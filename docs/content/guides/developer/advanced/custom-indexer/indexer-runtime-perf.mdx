@@ -1,7 +1,7 @@
 ---
 title: Indexer Runtime and Performance
-description: Learn how to optimize Sui custom indexer performance through runtime configuration, resource monitoring, and debugging tools. Covers ingestion settings, database tuning, Tokio console debugging, Prometheus metrics, and data pruning strategies.
-keywords: [ sui indexer performance, indexer optimization, tokio console debugging, prometheus metrics, database tuning, checkpoint ingestion, data pruning, indexer configuration, performance monitoring, sui blockchain indexing ]
+description: Learn how to optimize Rtd custom indexer performance through runtime configuration, resource monitoring, and debugging tools. Covers ingestion settings, database tuning, Tokio console debugging, Prometheus metrics, and data pruning strategies.
+keywords: [ rtd indexer performance, indexer optimization, tokio console debugging, prometheus metrics, database tuning, checkpoint ingestion, data pruning, indexer configuration, performance monitoring, rtd blockchain indexing ]
 ---
 
 Proper configuration and resource monitoring delivers the most performant custom indexer possible. For example:
@@ -107,7 +107,7 @@ For complex configuration scenarios requiring deep understanding of pipeline int
 
 ## Tokio runtime debugging
 
-For performance-sensitive pipelines or when troubleshooting async runtime issues, the `sui-indexer-alt-framework` integrates with `tokio-console`, a powerful debugger for async Rust applications. This tool provides real-time insights into task execution, helping identify performance bottlenecks, stuck tasks, and memory issues.
+For performance-sensitive pipelines or when troubleshooting async runtime issues, the `rtd-indexer-alt-framework` integrates with `tokio-console`, a powerful debugger for async Rust applications. This tool provides real-time insights into task execution, helping identify performance bottlenecks, stuck tasks, and memory issues.
 
 [GitHub repo for `tokio-console`](https://github.com/tokio-rs/console)
 
@@ -130,7 +130,7 @@ Consult the [README](https://github.com/tokio-rs/console/blob/main/README.md) in
 
     ```rust
     [dependencies]
-    telemetry_subscribers = { git = "https://github.com/MystenLabs/sui.git", branch = "main" }
+    telemetry_subscribers = { git = "https://github.com/LinkUVerse/rtd.git", branch = "main" }
     ```
 
 1. Initialize telemetry
@@ -186,13 +186,13 @@ For detailed information about the console dashboard, available views, warnings,
 
 ## Metrics
 
-The `sui-indexer-alt-framework` provides built-in Prometheus metrics for monitoring indexer performance and health. All metrics are automatically exposed via HTTP and can be extended with custom metrics.
+The `rtd-indexer-alt-framework` provides built-in Prometheus metrics for monitoring indexer performance and health. All metrics are automatically exposed via HTTP and can be extended with custom metrics.
 
 ### Built-in metrics
 
-The framework tracks extensive metrics across ingestion, pipeline processing, database operations, and watermark management. For a complete list of available metrics with descriptions, refer to the `IndexerMetrics` struct in `sui-indexer-alt-framework/src/metrics.rs`.
+The framework tracks extensive metrics across ingestion, pipeline processing, database operations, and watermark management. For a complete list of available metrics with descriptions, refer to the `IndexerMetrics` struct in `rtd-indexer-alt-framework/src/metrics.rs`.
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/metrics.rs" mode="code" struct="IndexerMetrics" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/metrics.rs" mode="code" struct="IndexerMetrics" />
 
 Key metric categories include:
 

@@ -1,0 +1,9 @@
+[package]
+name = "emit_event"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+emit_event = "0x0"

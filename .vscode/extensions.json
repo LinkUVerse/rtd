@@ -1,6 +1,6 @@
 {
     "recommendations": [
-        "mysten.move",
+        "linku.move",
         "damirka.move-syntax",
         "rust-lang.rust-analyzer",
         "esbenp.prettier-vscode",

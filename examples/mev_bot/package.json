@@ -3,14 +3,14 @@
 	"version": "1.0.10",
 	"main": "src/index.ts",
 	"type": "module",
-	"author": "Patrick <patrick@mystenlabs.com>",
+	"author": "Patrick <patrick@linkulabs.com>",
 	"license": "MIT",
 	"scripts": {
 		"start": "npx ts-node --esm src/index.ts"
 	},
 	"dependencies": {
-		"@mysten/bcs": "^1.2.0",
-		"@mysten/sui": "^1.18.0",
+		"@linku/bcs": "^1.2.0",
+		"@linku/rtd": "^1.18.0",
 		"p-limit": "^6.1.0"
 	},
 	"devDependencies": {

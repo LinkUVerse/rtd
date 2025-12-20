@@ -1,0 +1,543 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::{
+    MoveTypeTagTrait, MoveTypeTagTraitGeneric, RTD_ACCUMULATOR_ROOT_ADDRESS,
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID,
+    accumulator_event::AccumulatorEvent,
+    accumulator_metadata::{
+        ACCUMULATOR_METADATA_KEY_TYPE, ACCUMULATOR_METADATA_TYPE, ACCUMULATOR_OWNER_KEY_TYPE,
+        ACCUMULATOR_OWNER_TYPE,
+    },
+    balance::Balance,
+    base_types::{ObjectID, SequenceNumber, RtdAddress},
+    digests::{Digest, TransactionDigest},
+    dynamic_field::{
+        BoundedDynamicFieldID, DYNAMIC_FIELD_FIELD_STRUCT_NAME, DYNAMIC_FIELD_MODULE_NAME,
+        DynamicFieldKey, DynamicFieldObject, Field, serialize_dynamic_field,
+    },
+    error::{RtdError, RtdErrorKind, RtdResult},
+    object::{MoveObject, Object, Owner},
+    storage::{ChildObjectResolver, ObjectStore},
+};
+use move_core_types::{
+    ident_str,
+    identifier::IdentStr,
+    language_storage::{StructTag, TypeTag},
+    u256::U256,
+};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+pub const ACCUMULATOR_ROOT_MODULE: &IdentStr = ident_str!("accumulator");
+pub const ACCUMULATOR_METADATA_MODULE: &IdentStr = ident_str!("accumulator_metadata");
+pub const ACCUMULATOR_SETTLEMENT_MODULE: &IdentStr = ident_str!("accumulator_settlement");
+pub const ACCUMULATOR_SETTLEMENT_EVENT_STREAM_HEAD: &IdentStr = ident_str!("EventStreamHead");
+pub const ACCUMULATOR_ROOT_CREATE_FUNC: &IdentStr = ident_str!("create");
+pub const ACCUMULATOR_ROOT_SETTLE_U128_FUNC: &IdentStr = ident_str!("settle_u128");
+pub const ACCUMULATOR_ROOT_SETTLEMENT_PROLOGUE_FUNC: &IdentStr = ident_str!("settlement_prologue");
+pub const ACCUMULATOR_ROOT_SETTLEMENT_SETTLE_EVENTS_FUNC: &IdentStr = ident_str!("settle_events");
+
+const ACCUMULATOR_KEY_TYPE: &IdentStr = ident_str!("Key");
+const ACCUMULATOR_U128_TYPE: &IdentStr = ident_str!("U128");
+
+pub fn get_accumulator_root_obj_initial_shared_version(
+    object_store: &dyn ObjectStore,
+) -> RtdResult<Option<SequenceNumber>> {
+    Ok(object_store
+        .get_object(&RTD_ACCUMULATOR_ROOT_OBJECT_ID)
+        .map(|obj| match obj.owner {
+            Owner::Shared {
+                initial_shared_version,
+            } => initial_shared_version,
+            _ => unreachable!("Accumulator root object must be shared"),
+        }))
+}
+
+/// Rust type for the Move type accumulator::Key used to derive the dynamic field id for the
+/// accumulator value.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AccumulatorKey {
+    pub owner: RtdAddress,
+}
+
+impl MoveTypeTagTraitGeneric for AccumulatorKey {
+    fn get_type_tag(type_params: &[TypeTag]) -> TypeTag {
+        TypeTag::Struct(Box::new(StructTag {
+            address: RTD_FRAMEWORK_PACKAGE_ID.into(),
+            module: ACCUMULATOR_ROOT_MODULE.to_owned(),
+            name: ACCUMULATOR_KEY_TYPE.to_owned(),
+            type_params: type_params.to_vec(),
+        }))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub enum AccumulatorValue {
+    U128(U128),
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub struct U128 {
+    pub value: u128,
+}
+
+impl MoveTypeTagTrait for U128 {
+    fn get_type_tag() -> TypeTag {
+        TypeTag::Struct(Box::new(StructTag {
+            address: RTD_FRAMEWORK_ADDRESS,
+            module: ACCUMULATOR_ROOT_MODULE.to_owned(),
+            name: ACCUMULATOR_U128_TYPE.to_owned(),
+            type_params: vec![],
+        }))
+    }
+}
+
+/// New-type for ObjectIDs that are known to have been properly derived as a Balance accumulator field.
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct AccumulatorObjId(ObjectID);
+
+impl AccumulatorObjId {
+    pub fn new_unchecked(id: ObjectID) -> Self {
+        Self(id)
+    }
+
+    pub fn inner(&self) -> &ObjectID {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for AccumulatorObjId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AccumulatorValue {
+    pub fn as_u128(&self) -> Option<u128> {
+        match self {
+            AccumulatorValue::U128(value) => Some(value.value),
+        }
+    }
+
+    pub fn get_field_id(owner: RtdAddress, type_: &TypeTag) -> RtdResult<AccumulatorObjId> {
+        if !Balance::is_balance_type(type_) {
+            return Err(RtdErrorKind::TypeError {
+                error: "only Balance<T> is supported".to_string(),
+            }
+            .into());
+        }
+
+        let key = AccumulatorKey { owner };
+        Ok(AccumulatorObjId(
+            DynamicFieldKey(
+                RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+                key,
+                AccumulatorKey::get_type_tag(std::slice::from_ref(type_)),
+            )
+            .into_unbounded_id()?
+            .as_object_id(),
+        ))
+    }
+
+    pub fn exists(
+        child_object_resolver: &dyn ChildObjectResolver,
+        version_bound: Option<SequenceNumber>,
+        owner: RtdAddress,
+        type_: &TypeTag,
+    ) -> RtdResult<bool> {
+        if !Balance::is_balance_type(type_) {
+            return Err(RtdErrorKind::TypeError {
+                error: "only Balance<T> is supported".to_string(),
+            }
+            .into());
+        }
+
+        let key = AccumulatorKey { owner };
+        DynamicFieldKey(
+            RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+            key,
+            AccumulatorKey::get_type_tag(std::slice::from_ref(type_)),
+        )
+        .into_id_with_bound(version_bound.unwrap_or(SequenceNumber::MAX))?
+        .exists(child_object_resolver)
+    }
+
+    pub fn load_by_id<T>(
+        child_object_resolver: &dyn ChildObjectResolver,
+        version_bound: Option<SequenceNumber>,
+        id: AccumulatorObjId,
+    ) -> RtdResult<Option<T>>
+    where
+        T: Serialize + DeserializeOwned,
+    {
+        BoundedDynamicFieldID::<AccumulatorKey>::new(
+            RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+            id.0,
+            version_bound.unwrap_or(SequenceNumber::MAX),
+        )
+        .load_object(child_object_resolver)?
+        .map(|o| o.load_value::<T>())
+        .transpose()
+    }
+
+    pub fn load(
+        child_object_resolver: &dyn ChildObjectResolver,
+        version_bound: Option<SequenceNumber>,
+        owner: RtdAddress,
+        type_: &TypeTag,
+    ) -> RtdResult<Option<Self>> {
+        if !Balance::is_balance_type(type_) {
+            return Err(RtdErrorKind::TypeError {
+                error: "only Balance<T> is supported".to_string(),
+            }
+            .into());
+        }
+
+        let key = AccumulatorKey { owner };
+        let key_type_tag = AccumulatorKey::get_type_tag(std::slice::from_ref(type_));
+
+        let Some(value) = DynamicFieldKey(RTD_ACCUMULATOR_ROOT_OBJECT_ID, key, key_type_tag)
+            .into_id_with_bound(version_bound.unwrap_or(SequenceNumber::MAX))?
+            .load_object(child_object_resolver)?
+            .map(|o| o.load_value::<U128>())
+            .transpose()?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(Self::U128(value)))
+    }
+
+    pub fn load_object(
+        child_object_resolver: &dyn ChildObjectResolver,
+        version_bound: Option<SequenceNumber>,
+        owner: RtdAddress,
+        type_: &TypeTag,
+    ) -> RtdResult<Option<Object>> {
+        let key = AccumulatorKey { owner };
+        let key_type_tag = AccumulatorKey::get_type_tag(std::slice::from_ref(type_));
+
+        Ok(
+            DynamicFieldKey(RTD_ACCUMULATOR_ROOT_OBJECT_ID, key, key_type_tag)
+                .into_id_with_bound(version_bound.unwrap_or(SequenceNumber::MAX))?
+                .load_object(child_object_resolver)?
+                .map(|o| o.into_object()),
+        )
+    }
+
+    pub fn load_object_by_id(
+        child_object_resolver: &dyn ChildObjectResolver,
+        version_bound: Option<SequenceNumber>,
+        id: ObjectID,
+    ) -> RtdResult<Option<Object>> {
+        Ok(BoundedDynamicFieldID::<AccumulatorKey>::new(
+            RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+            id,
+            version_bound.unwrap_or(SequenceNumber::MAX),
+        )
+        .load_object(child_object_resolver)?
+        .map(|o| o.into_object()))
+    }
+
+    pub fn create_for_testing(owner: RtdAddress, type_tag: TypeTag, balance: u64) -> Object {
+        let key = AccumulatorKey { owner };
+        let value = U128 {
+            value: balance as u128,
+        };
+
+        let field_key = DynamicFieldKey(
+            RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+            key,
+            AccumulatorKey::get_type_tag(std::slice::from_ref(&type_tag)),
+        );
+        let field = field_key.into_field(value).unwrap();
+        let move_object = field
+            .into_move_object_unsafe_for_testing(SequenceNumber::new())
+            .unwrap();
+
+        Object::new_move(
+            move_object,
+            Owner::ObjectOwner(RTD_ACCUMULATOR_ROOT_ADDRESS.into()),
+            TransactionDigest::genesis_marker(),
+        )
+    }
+}
+
+/// Extract stream id from an accumulator event if it targets rtd::accumulator_settlement::EventStreamHead
+pub fn stream_id_from_accumulator_event(ev: &AccumulatorEvent) -> Option<RtdAddress> {
+    if let TypeTag::Struct(tag) = &ev.write.address.ty
+        && tag.address == RTD_FRAMEWORK_ADDRESS
+        && tag.module.as_ident_str() == ACCUMULATOR_SETTLEMENT_MODULE
+        && tag.name.as_ident_str() == ACCUMULATOR_SETTLEMENT_EVENT_STREAM_HEAD
+    {
+        return Some(ev.write.address.address);
+    }
+    None
+}
+
+impl TryFrom<&MoveObject> for AccumulatorValue {
+    type Error = RtdError;
+    fn try_from(value: &MoveObject) -> Result<Self, Self::Error> {
+        let (_key, value): (AccumulatorKey, AccumulatorValue) = value.try_into()?;
+        Ok(value)
+    }
+}
+
+impl TryFrom<&MoveObject> for (AccumulatorKey, AccumulatorValue) {
+    type Error = RtdError;
+    fn try_from(value: &MoveObject) -> Result<Self, Self::Error> {
+        value
+            .type_()
+            .is_balance_accumulator_field()
+            .then(|| value.to_rust::<Field<AccumulatorKey, U128>>())
+            .flatten()
+            .map(|f| (f.name, AccumulatorValue::U128(f.value)))
+            .ok_or_else(|| {
+                RtdErrorKind::DynamicFieldReadError(format!(
+                    "Dynamic field {:?} is not a AccumulatorValue",
+                    value.id()
+                ))
+                .into()
+            })
+    }
+}
+
+pub fn update_account_balance_for_testing(account_object: &mut Object, balance_change: i128) {
+    let current_balance_field = DynamicFieldObject::<AccumulatorKey>::new(account_object.clone())
+        .load_field::<U128>()
+        .unwrap();
+
+    let current_balance = current_balance_field.value.value;
+
+    assert!(current_balance <= i128::MAX as u128);
+    assert!(current_balance as i128 >= balance_change.abs());
+
+    let new_balance = U128 {
+        value: (current_balance as i128 + balance_change) as u128,
+    };
+
+    let new_field = serialize_dynamic_field(
+        &current_balance_field.id,
+        &current_balance_field.name,
+        new_balance,
+    )
+    .unwrap();
+
+    let move_object = account_object.data.try_as_move_mut().unwrap();
+    move_object.set_contents_unsafe(new_field);
+}
+
+pub(crate) fn accumulator_value_balance_type_maybe(s: &StructTag) -> Option<TypeTag> {
+    if s.address == RTD_FRAMEWORK_ADDRESS
+        && s.module.as_ident_str() == DYNAMIC_FIELD_MODULE_NAME
+        && s.name.as_ident_str() == DYNAMIC_FIELD_FIELD_STRUCT_NAME
+        && s.type_params.len() == 2
+        && let Some(key_type) = accumulator_key_type_maybe(&s.type_params[0])
+        && is_accumulator_u128(&s.type_params[1])
+    {
+        Balance::maybe_get_balance_type_param(&key_type)
+    } else {
+        None
+    }
+}
+
+/// Check if a TypeTag is Key<Balance<T>>
+pub(crate) fn accumulator_key_type_maybe(t: &TypeTag) -> Option<TypeTag> {
+    if let TypeTag::Struct(s) = t
+        && s.address == RTD_FRAMEWORK_ADDRESS
+        && s.module.as_ident_str() == ACCUMULATOR_ROOT_MODULE
+        && s.name.as_ident_str() == ACCUMULATOR_KEY_TYPE
+        && s.type_params.len() == 1
+    {
+        Some(s.type_params[0].clone())
+    } else {
+        None
+    }
+}
+
+/// Check if a TypeTag is U128 from accumulator module
+pub(crate) fn is_accumulator_u128(t: &TypeTag) -> bool {
+    if let TypeTag::Struct(s) = t {
+        s.address == RTD_FRAMEWORK_ADDRESS
+            && s.module.as_ident_str() == ACCUMULATOR_ROOT_MODULE
+            && s.name.as_ident_str() == ACCUMULATOR_U128_TYPE
+            && s.type_params.is_empty()
+    } else {
+        false
+    }
+}
+
+// Check if this is a Field<OwnerKey, AccumulatorOwner> type
+pub(crate) fn is_balance_accumulator_owner_field(s: &StructTag) -> bool {
+    s.address == RTD_FRAMEWORK_ADDRESS
+        && s.module.as_ident_str() == DYNAMIC_FIELD_MODULE_NAME
+        && s.name.as_ident_str() == DYNAMIC_FIELD_FIELD_STRUCT_NAME
+        && s.type_params.len() == 2
+        && is_accumulator_owner_key(&s.type_params[0])
+        && is_accumulator_owner(&s.type_params[1])
+}
+
+// If s is Field<MetadataKey<Balance<T>>, Metadata<Balance<T>>>, return Some(T)
+pub(crate) fn accumulator_metadata_balance_type_maybe(s: &StructTag) -> Option<TypeTag> {
+    if s.address == RTD_FRAMEWORK_ADDRESS
+        && s.module.as_ident_str() == DYNAMIC_FIELD_MODULE_NAME
+        && s.name.as_ident_str() == DYNAMIC_FIELD_FIELD_STRUCT_NAME
+        && s.type_params.len() == 2
+        && let Some(metadata_key_type) = accumulator_metadata_key_type_maybe(&s.type_params[0])
+        && let Some(metadata_type) = accumulator_metadata_type_maybe(&s.type_params[1])
+        && type_params_equal(&metadata_key_type, &metadata_type)
+    {
+        Balance::maybe_get_balance_type_param(&metadata_key_type)
+    } else {
+        None
+    }
+}
+
+fn type_params_equal(t1: &TypeTag, t2: &TypeTag) -> bool {
+    if let (TypeTag::Struct(s1), TypeTag::Struct(s2)) = (t1, t2) {
+        s1.type_params == s2.type_params
+    } else {
+        false
+    }
+}
+
+pub(crate) fn is_accumulator_owner_key(t: &TypeTag) -> bool {
+    if let TypeTag::Struct(s) = t {
+        s.address == RTD_FRAMEWORK_ADDRESS
+            && s.module.as_ident_str() == ACCUMULATOR_METADATA_MODULE
+            && s.name.as_ident_str() == ACCUMULATOR_OWNER_KEY_TYPE
+            && s.type_params.is_empty()
+    } else {
+        false
+    }
+}
+
+pub(crate) fn is_accumulator_owner(t: &TypeTag) -> bool {
+    if let TypeTag::Struct(s) = t {
+        s.address == RTD_FRAMEWORK_ADDRESS
+            && s.module.as_ident_str() == ACCUMULATOR_METADATA_MODULE
+            && s.name.as_ident_str() == ACCUMULATOR_OWNER_TYPE
+            && s.type_params.is_empty()
+    } else {
+        false
+    }
+}
+
+/// If `t` is MetadataKey<T>, return Some(T)
+pub(crate) fn accumulator_metadata_key_type_maybe(t: &TypeTag) -> Option<TypeTag> {
+    if let TypeTag::Struct(s) = t
+        && s.address == RTD_FRAMEWORK_ADDRESS
+        && s.module.as_ident_str() == ACCUMULATOR_METADATA_MODULE
+        && s.name.as_ident_str() == ACCUMULATOR_METADATA_KEY_TYPE
+        && s.type_params.len() == 1
+    {
+        Some(s.type_params[0].clone())
+    } else {
+        None
+    }
+}
+
+/// If `t` is Metadata<T>, return Some(T)
+pub(crate) fn accumulator_metadata_type_maybe(t: &TypeTag) -> Option<TypeTag> {
+    if let TypeTag::Struct(s) = t
+        && s.address == RTD_FRAMEWORK_ADDRESS
+        && s.module.as_ident_str() == ACCUMULATOR_METADATA_MODULE
+        && s.name.as_ident_str() == ACCUMULATOR_METADATA_TYPE
+        && s.type_params.len() == 1
+    {
+        Some(s.type_params[0].clone())
+    } else {
+        None
+    }
+}
+
+/// Rust representation of the Move EventStreamHead struct from accumulator_settlement module.
+/// This represents the state of an authenticated event stream head stored on-chain.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct EventStreamHead {
+    /// The MMR (Merkle Mountain Range) digest representing the accumulated events
+    pub mmr: Vec<U256>,
+    /// The checkpoint sequence number when this stream head was last updated
+    pub checkpoint_seq: u64,
+    /// The total number of events accumulated in this stream
+    pub num_events: u64,
+}
+
+impl Default for EventStreamHead {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventStreamHead {
+    pub fn new() -> Self {
+        Self {
+            mmr: vec![],
+            checkpoint_seq: 0,
+            num_events: 0,
+        }
+    }
+
+    pub fn num_events(&self) -> u64 {
+        self.num_events
+    }
+
+    pub fn checkpoint_seq(&self) -> u64 {
+        self.checkpoint_seq
+    }
+
+    pub fn mmr(&self) -> &Vec<U256> {
+        &self.mmr
+    }
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+pub struct EventCommitment {
+    pub checkpoint_seq: u64,
+    pub transaction_idx: u64,
+    pub event_idx: u64,
+    pub digest: Digest,
+}
+
+impl EventCommitment {
+    pub fn new(checkpoint_seq: u64, transaction_idx: u64, event_idx: u64, digest: Digest) -> Self {
+        Self {
+            checkpoint_seq,
+            transaction_idx,
+            event_idx,
+            digest,
+        }
+    }
+}
+
+impl PartialOrd for EventCommitment {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for EventCommitment {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.checkpoint_seq, self.transaction_idx, self.event_idx).cmp(&(
+            other.checkpoint_seq,
+            other.transaction_idx,
+            other.event_idx,
+        ))
+    }
+}
+
+pub fn build_event_merkle_root(events: &[EventCommitment]) -> Digest {
+    use fastcrypto::hash::Blake2b256;
+    use fastcrypto::merkle::MerkleTree;
+
+    debug_assert!(
+        events.windows(2).all(|w| w[0] <= w[1]),
+        "Events must be ordered by (checkpoint_seq, transaction_idx, event_idx)"
+    );
+
+    let merkle_tree = MerkleTree::<Blake2b256>::build_from_unserialized(events.to_vec())
+        .expect("failed to serialize event commitments for merkle root");
+    let root_node = merkle_tree.root();
+    let root_digest = root_node.bytes();
+    Digest::new(root_digest)
+}

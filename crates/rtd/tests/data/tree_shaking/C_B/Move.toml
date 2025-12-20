@@ -1,0 +1,8 @@
+[package]
+name = "c"
+edition = "2024"
+implicit-dependencies = false
+
+[dependencies]
+rtd = { local = "../../system-packages/rtd-framework" }
+b = { local = "../B_A1"}

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::str::FromStr;
@@ -6,11 +6,11 @@ use std::str::FromStr;
 use anyhow::{self, Context};
 use move_core_types::language_storage::StructTag;
 use serde::{Deserialize, Serialize};
-use sui_indexer_alt_framework::types::base_types::SuiAddress;
-use sui_indexer_alt_framework::types::collection_types::VecMap;
-use sui_indexer_alt_framework::types::dynamic_field::Field;
-use sui_indexer_alt_framework::types::id::UID;
-use sui_indexer_alt_framework::types::object::{Object, Owner};
+use rtd_indexer_alt_framework::types::base_types::RtdAddress;
+use rtd_indexer_alt_framework::types::collection_types::VecMap;
+use rtd_indexer_alt_framework::types::dynamic_field::Field;
+use rtd_indexer_alt_framework::types::id::UID;
+use rtd_indexer_alt_framework::types::object::{Object, Owner};
 
 // ============================================================================
 // WALRUS BLOB DESERIALIZATION TYPES
@@ -90,7 +90,7 @@ pub fn get_metadata(tag: &StructTag, object: &Object) -> anyhow::Result<Option<B
 pub fn extract_content_from_metadata(
     tag: &StructTag,
     object: &Object,
-) -> anyhow::Result<Option<(BlogPostMetadata, SuiAddress)>> {
+) -> anyhow::Result<Option<(BlogPostMetadata, RtdAddress)>> {
     let Some(metadata) = get_metadata(tag, object)? else {
         return Ok(None);
     };
@@ -112,7 +112,7 @@ pub fn extract_content_from_metadata(
         .parse::<u64>()
         .context("Failed to parse view_count")?;
 
-    let publisher = SuiAddress::from_str(publisher)
+    let publisher = RtdAddress::from_str(publisher)
         .context("Failed to parse publisher")?
         .to_vec();
 

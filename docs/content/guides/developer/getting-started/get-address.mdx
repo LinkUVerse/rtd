@@ -1,12 +1,12 @@
 ---
-title: Create a Sui Address
-description: You need an address on the Sui network before you can build packages and own objects.
-keywords: [ create an address, sui address, how to get sui address, sui wallets, slush, suiet, glass wallet, martian extension, surf wallet, private keys ]
+title: Create a Rtd Address
+description: You need an address on the Rtd network before you can build packages and own objects.
+keywords: [ create an address, rtd address, how to get rtd address, rtd wallets, slush, rtdet, glass wallet, martian extension, surf wallet, private keys ]
 pagination_prev: null
 pagination_next: null
 ---
 
-An _address_ is a unique, anonymous identity on a blockchain network. On Sui, an address specifically represents a location on-chain that can:
+An _address_ is a unique, anonymous identity on a blockchain network. On Rtd, an address specifically represents a location on-chain that can:
 
 - Hold and send tokens 
 
@@ -16,7 +16,7 @@ An _address_ is a unique, anonymous identity on a blockchain network. On Sui, an
 
 You do not need to provide any personally identifying information to create an address. A single individual can create and own multiple addresses. 
 
-Every Sui address is a unique 32-byte identifier and appears in hexadecimal encoding with a `0x` prefix, unless referred to by an [alias](#address-aliases). For example:
+Every Rtd address is a unique 32-byte identifier and appears in hexadecimal encoding with a `0x` prefix, unless referred to by an [alias](#address-aliases). For example:
 
 ```
 0x02a212de6a9dfa3a69e22387acfbafbb1a9e591bd9d636e7895dcfc8de05f331
@@ -24,32 +24,32 @@ Every Sui address is a unique 32-byte identifier and appears in hexadecimal enco
 
 A cryptographic hash function generates a public key from which every address derives. Each public key has a corresponding private key that accesses the address and the objects that it owns. An address and its associated key pair together is an _account_. 
 
-[Learn more](/concepts/transactions/transaction-auth.mdx) about how a Sui address is derived and other cryptography related topics.
+[Learn more](/concepts/transactions/transaction-auth.mdx) about how a Rtd address is derived and other cryptography related topics.
 
-## Obtain a Sui address 
+## Obtain a Rtd address 
 
 :::caution 
 
-If you already have an address or created a new address in [Configure a Sui Client](/guides/developer/getting-started/configure-sui-client.mdx), you can skip to [Get SUI from Faucet](/guides/developer/getting-started/get-coins.mdx) to continue the onboarding steps.
+If you already have an address or created a new address in [Configure a Rtd Client](/guides/developer/getting-started/configure-rtd-client.mdx), you can skip to [Get RTD from Faucet](/guides/developer/getting-started/get-coins.mdx) to continue the onboarding steps.
 
 :::
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] [Download and install Sui](/guides/developer/getting-started/sui-install.mdx).
+- [x] [Download and install Rtd](/guides/developer/getting-started/rtd-install.mdx).
 
-- [x] [Configure your Sui client](/guides/developer/getting-started/configure-sui-client.mdx).
+- [x] [Configure your Rtd client](/guides/developer/getting-started/configure-rtd-client.mdx).
 
 </TabItem>
 </Tabs>
 
-By default, when the Sui client runs for the first time, it prompts you to [configure the client](/guides/developer/getting-started/configure-sui-client.mdx). This initial configuration generates a new Sui address, its key pair, and its associated secret recovery phrase. 
+By default, when the Rtd client runs for the first time, it prompts you to [configure the client](/guides/developer/getting-started/configure-rtd-client.mdx). This initial configuration generates a new Rtd address, its key pair, and its associated secret recovery phrase. 
 
-To create a new Sui address outside of the initial client configuration, run:
+To create a new Rtd address outside of the initial client configuration, run:
 
 ```
-$ sui client new-address ed25519
+$ rtd client new-address ed25519
 ```
 
 This command specifies the key pair scheme to be of type `ed25519`.
@@ -58,7 +58,7 @@ This command specifies the key pair scheme to be of type `ed25519`.
 
 ### Recovery phrases
 
-Every Sui address has a _recovery phrase_. Recovery phrases are a series of 12 randomly generated words that you use to recover the address if you lose access to the address's key pair. 
+Every Rtd address has a _recovery phrase_. Recovery phrases are a series of 12 randomly generated words that you use to recover the address if you lose access to the address's key pair. 
 
 :::danger
 
@@ -71,7 +71,7 @@ Store recovery phrases securely and do not share them with anyone, as they provi
 To recover an address using the recovery phrase, use the command:
 
 ```
-$ sui keytool import '<RECOVERY_PHRASE>' <KEY_SCHEME>
+$ rtd keytool import '<RECOVERY_PHRASE>' <KEY_SCHEME>
 ```
 
 Replace '`<RECOVERY_PHRASE>`' with your 12-word recovery phrase. The entire recovery phrase must be enclosed in single quotation marks `'`. You must enter the words in the correct order.
@@ -80,9 +80,9 @@ Replace `<KEY_SCHEME>` with the type of encryption used to originally create the
 
 If successful, the CLI restores your address and prints it in the CLI output.
 
-## `sui.keystore`
+## `rtd.keystore`
 
-Sui stores a private key for every address in either the  `~/.sui/sui_config/sui.keystore` or `%USERPROFILE/.sui/sui_config/sui.keystore` file on macOS/Linux or Windows systems, respectively.
+Rtd stores a private key for every address in either the  `~/.rtd/rtd_config/rtd.keystore` or `%USERPROFILE/.rtd/rtd_config/rtd.keystore` file on macOS/Linux or Windows systems, respectively.
 
 This file contains content similar to the following:
 
@@ -99,18 +99,18 @@ When you create a new address on your system, a new line is added to this file t
 
 :::danger 
 
-The `sui.keystore` file is **not** the same as your machine's local keystore that contains passwords for websites, biometric data like fingerprints, or other authentication credentials. Your machine's local keystore cannot sign and submit transactions on Sui. Only addresses with their associated keys included in the `sui.keystore` file can sign and submit transactions.
+The `rtd.keystore` file is **not** the same as your machine's local keystore that contains passwords for websites, biometric data like fingerprints, or other authentication credentials. Your machine's local keystore cannot sign and submit transactions on Rtd. Only addresses with their associated keys included in the `rtd.keystore` file can sign and submit transactions.
 
 :::
 
 ## Address aliases 
 
-An _alias_ is a human-readable name that can be used in place of a Sui address's full 32-byte hexadecimal string. They can be used anywhere an address would be used to make referencing the address easier in scripts and CLI commands. 
+An _alias_ is a human-readable name that can be used in place of a Rtd address's full 32-byte hexadecimal string. They can be used anywhere an address would be used to make referencing the address easier in scripts and CLI commands. 
 
 When an address is created, it is given a random alias by default. You can view an address's current alias with the command:
 
 ```
-$ sui client addresses
+$ rtd client addresses
 ```
 
 The output will include the address, its alias, and an indication of which address is active if there are multiple local addresses available:
@@ -126,29 +126,29 @@ The output will include the address, its alias, and an indication of which addre
 Then, to update the alias to something else, use the command:
 
 ```
-$ sui keytool update-alias <OLD-ALIAS> <NEW-ALIAS>
+$ rtd keytool update-alias <OLD-ALIAS> <NEW-ALIAS>
 ```
 
 You can now use the alias in place of the address in commands, such as:
 
 ```
-$ sui client objects <NEW-ALIAS>
+$ rtd client objects <NEW-ALIAS>
 ```
 
-## View all local Sui addresses
+## View all local Rtd addresses
 
-The _active address_ is the address that the Sui client is currently using. This address owns any objects you create and transactions you submit, unless you specify otherwise with the `--address` flag in a command. 
+The _active address_ is the address that the Rtd client is currently using. This address owns any objects you create and transactions you submit, unless you specify otherwise with the `--address` flag in a command. 
 
 To view the current active address, use the command:
 
 ```
-$ sui client active-address
+$ rtd client active-address
 ```
 
 To view all addresses on your local machine, run:
 
 ```
-$ sui keytool list
+$ rtd keytool list
 ```
 
 This returns all addresses, along with their alias, public key, key scheme, and peer ID. 
@@ -157,7 +157,7 @@ This returns all addresses, along with their alias, public key, key scheme, and 
 ╭────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ╭─────────────────┬──────────────────────────────────────────────────────────────────────╮ │
 │ │ alias           │  vigorous-spinel                                                     │ │
-│ │ suiAddress      │  0x6ebb36a3c1ab2124c082d93f60f518f70494b82d8d13c5aabb3abad6ec8cd82d  │ │
+│ │ rtdAddress      │  0x6ebb36a3c1ab2124c082d93f60f518f70494b82d8d13c5aabb3abad6ec8cd82d  │ │
 │ │ publicBase64Key │  AKDCajKN877Uc7o8NP2cQVJkSewhq1ZbWgw5LgpWVqbj                        │ │
 │ │ keyScheme       │  ed25519                                                             │ │
 │ │ flag            │  0                                                                   │ │
@@ -166,40 +166,40 @@ This returns all addresses, along with their alias, public key, key scheme, and 
 ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-For more information about the `keytool` command, see the [Sui Keytool CLI](/references/cli/keytool.mdx) documentation.
+For more information about the `keytool` command, see the [Rtd Keytool CLI](/references/cli/keytool.mdx) documentation.
 
 ### Change the active address 
 
 If you want to switch to another address, first confirm which address is the active address and which addresses are available for you to switch to:
 
 ```
-$ sui client addresses
+$ rtd client addresses
 ```
 
 Then, to switch to another address, use the command:
 
 ```
-$ sui client switch --address <ADDRESS>
+$ rtd client switch --address <ADDRESS>
 ```
 
 ## Query information about an address 
 
-You can use a Sui network explorer to find more information about an address, its token balances, and the objects it owns. Popular Sui explorers include:
+You can use a Rtd network explorer to find more information about an address, its token balances, and the objects it owns. Popular Rtd explorers include:
 
-- [SuiVision](https://suivision.xyz/)
+- [RtdVision](https://rtdvision.xyz/)
 
-- [SuiScan](https://suiscan.xyz/mainnet/accounts)
+- [RtdScan](https://rtdscan.xyz/mainnet/accounts)
 
 :::danger
 
-Data displayed on an explorer differs depending on which network you created your address on. If you've followed the [Configure a Sui Client](/guides/developer/getting-started/configure-sui-client.mdx) page previously, you are most likely using Testnet. Be sure to select Testnet on the Sui explorer or use the dedicated URL, such as https://**testnet**.suivision.xyz/.
+Data displayed on an explorer differs depending on which network you created your address on. If you've followed the [Configure a Rtd Client](/guides/developer/getting-started/configure-rtd-client.mdx) page previously, you are most likely using Testnet. Be sure to select Testnet on the Rtd explorer or use the dedicated URL, such as https://**testnet**.rtdvision.xyz/.
 
 :::
 
 From the CLI, you can view all objects an address owns with the command:
 
 ```
-$ sui client objects <ADDRESS>
+$ rtd client objects <ADDRESS>
 ```
 
 If an address is not provided, this command returns all objects owned by the active address.
@@ -210,10 +210,10 @@ If an address is not provided, this command returns all objects owned by the act
   </div>
   <div className="next-steps-grid">
     <Card className="plausible-event-name=address+faucet+button"
-      title="Get SUI from Faucet" 
+      title="Get RTD from Faucet" 
       href="/guides/developer/getting-started/get-coins"
     >
-      Obtain SUI from a faucet to deploy packages on Testnet.
+      Obtain RTD from a faucet to deploy packages on Testnet.
     </Card>
         <Card className="plausible-event-name=address+hello+button"
       title="Hello, World!" 

@@ -28,7 +28,7 @@ use move_compiler::{
         PackageConfig, PackagePaths, SaveFlag, SaveHook, files::MappedFiles,
         known_attributes::ModeAttribute,
     },
-    sui_mode,
+    rtd_mode,
 };
 use move_docgen::DocgenFlags;
 use move_package_alt::{
@@ -226,16 +226,16 @@ pub fn build_for_driver<W: Write + Send, T, F: MoveFlavor>(
     )?;
 
     let lint_level = build_config.lint_flag.get();
-    let sui_mode = build_config.default_flavor == Some(Flavor::Sui);
+    let rtd_mode = build_config.default_flavor == Some(Flavor::Rtd);
     let flags = compiler_flags(build_config);
     let mut compiler = Compiler::from_package_paths(vfs_root, package_paths, vec![])
         .unwrap()
         .set_flags(flags);
-    if sui_mode {
-        let (filter_attr_name, filters) = sui_mode::linters::known_filters();
+    if rtd_mode {
+        let (filter_attr_name, filters) = rtd_mode::linters::known_filters();
         compiler = compiler
             .add_custom_known_filters(filter_attr_name, filters)
-            .add_visitors(sui_mode::linters::linter_visitors(lint_level))
+            .add_visitors(rtd_mode::linters::linter_visitors(lint_level))
     }
     let (filter_attr_name, filters) = linters::known_filters();
     compiler = compiler
@@ -383,7 +383,7 @@ pub fn make_deps_for_compiler<W: Write + Send, F: MoveFlavor>(
                 .edition()
                 .or(build_config.default_edition)
                 .unwrap_or(Edition::LEGACY), // TODO require edition
-            flavor: Flavor::from_str(pkg.flavor().unwrap_or("sui"))?,
+            flavor: Flavor::from_str(pkg.flavor().unwrap_or("rtd"))?,
             warning_filter: WarningFiltersBuilder::new_for_source(),
         };
 

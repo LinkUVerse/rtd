@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import { CONSTANTS, QueryKey } from "@/constants";
 import { useTransactionExecution } from "@/hooks/useTransactionExecution";
 import { ApiEscrowObject, ApiLockedObject } from "@/types/types";
-import { useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
-import { SuiObjectData } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
+import { useCurrentAccount, useRtdClient } from "@linku/dapp-kit";
+import { RtdObjectData } from "@linku/rtd/client";
+import { Transaction } from "@linku/rtd/transactions";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 /**
@@ -20,7 +20,7 @@ export function useCreateEscrowMutation() {
       object,
       locked,
     }: {
-      object: SuiObjectData;
+      object: RtdObjectData;
       locked: ApiLockedObject;
     }) => {
       if (!currentAccount?.address)
@@ -53,10 +53,10 @@ export function useCancelEscrowMutation() {
   return useMutation({
     mutationFn: async ({
       escrow,
-      suiObject,
+      rtdObject,
     }: {
       escrow: ApiEscrowObject;
-      suiObject: SuiObjectData;
+      rtdObject: RtdObjectData;
     }) => {
       if (!currentAccount?.address)
         throw new Error("You need to connect your wallet!");
@@ -65,7 +65,7 @@ export function useCancelEscrowMutation() {
       const item = txb.moveCall({
         target: `${CONSTANTS.escrowContract.packageId}::shared::return_to_sender`,
         arguments: [txb.object(escrow.objectId)],
-        typeArguments: [suiObject?.type!],
+        typeArguments: [rtdObject?.type!],
       });
 
       txb.transferObjects([item], txb.pure.address(currentAccount?.address!));
@@ -86,7 +86,7 @@ export function useCancelEscrowMutation() {
  */
 export function useAcceptEscrowMutation() {
   const currentAccount = useCurrentAccount();
-  const client = useSuiClient();
+  const client = useRtdClient();
   const executeTransaction = useTransactionExecution();
   const queryClient = useQueryClient();
 

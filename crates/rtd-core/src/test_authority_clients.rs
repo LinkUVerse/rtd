@@ -1,0 +1,654 @@
+// Copyright (c) 2021, Facebook, Inc. and its affiliates
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use crate::authority::{ExecutionEnv, test_authority_builder::TestAuthorityBuilder};
+use crate::{authority::AuthorityState, authority_client::AuthorityAPI};
+use async_trait::async_trait;
+use consensus_types::block::BlockRef;
+use linku_metrics::spawn_monitored_task;
+use rtd_config::genesis::Genesis;
+use rtd_types::{
+    committee::EpochId,
+    crypto::AuthorityKeyPair,
+    error::{RtdError, RtdErrorKind},
+    executable_transaction::VerifiedExecutableTransaction,
+    messages_checkpoint::{CheckpointRequest, CheckpointResponse},
+    messages_consensus::ConsensusPosition,
+    messages_grpc::{ValidatorHealthRequest, ValidatorHealthResponse},
+    transaction::{CertifiedTransaction, Transaction, VerifiedTransaction},
+};
+use rtd_types::{
+    effects::TransactionEffectsAPI,
+    messages_checkpoint::{CheckpointRequestV2, CheckpointResponseV2},
+};
+use rtd_types::{
+    error::RtdResult,
+    messages_grpc::{HandleCertificateRequestV3, HandleCertificateResponseV3},
+};
+use rtd_types::{
+    messages_grpc::{
+        HandleCertificateResponseV2, HandleSoftBundleCertificatesRequestV3,
+        HandleSoftBundleCertificatesResponseV3, HandleTransactionResponse, ObjectInfoRequest,
+        ObjectInfoResponse, SubmitTxRequest, SubmitTxResponse, SubmitTxResult, SystemStateRequest,
+        TransactionInfoRequest, TransactionInfoResponse, WaitForEffectsRequest,
+        WaitForEffectsResponse,
+    },
+    rtd_system_state::RtdSystemState,
+};
+
+#[derive(Clone, Copy, Default)]
+pub struct LocalAuthorityClientFaultConfig {
+    pub fail_before_handle_transaction: bool,
+    pub fail_after_handle_transaction: bool,
+    pub fail_before_submit_transaction: bool,
+    pub fail_after_vote_transaction: bool,
+    pub fail_before_handle_confirmation: bool,
+    pub fail_after_handle_confirmation: bool,
+    pub overload_retry_after_handle_transaction: Option<Duration>,
+    pub overload_retry_after_vote_transaction: Option<Duration>,
+}
+
+impl LocalAuthorityClientFaultConfig {
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+#[derive(Clone)]
+pub struct LocalAuthorityClient {
+    pub state: Arc<AuthorityState>,
+    pub fault_config: LocalAuthorityClientFaultConfig,
+}
+
+#[async_trait]
+impl AuthorityAPI for LocalAuthorityClient {
+    async fn submit_transaction(
+        &self,
+        request: SubmitTxRequest,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<SubmitTxResponse, RtdError> {
+        if self.fault_config.fail_before_submit_transaction {
+            return Err(RtdError::from("Mock error before submit_transaction"));
+        }
+        let state = self.state.clone();
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
+
+        let raw_request = request.into_raw()?;
+        // TODO(fastpath): handle multiple transactions.
+        if raw_request.transactions.len() != 1 {
+            return Err(RtdErrorKind::UnsupportedFeatureError {
+                error: format!(
+                    "Expected exactly 1 transaction in request, got {}",
+                    raw_request.transactions.len()
+                ),
+            }
+            .into());
+        }
+
+        let deserialized_transaction = bcs::from_bytes::<Transaction>(&raw_request.transactions[0])
+            .map_err(|e| RtdErrorKind::TransactionDeserializationError {
+                error: e.to_string(),
+            })?;
+        let transaction = epoch_store
+            // Alias versions can be ignored for test authority client; we don't submit to
+            // consensus and no one else is voting.
+            .verify_transaction_with_current_aliases(deserialized_transaction.clone())
+            .map(|_| VerifiedTransaction::new_from_verified(deserialized_transaction))?;
+        state.handle_vote_transaction(&epoch_store, transaction.clone())?;
+        if self.fault_config.fail_after_vote_transaction {
+            return Err(RtdErrorKind::GenericAuthorityError {
+                error: "Mock error after vote transaction in submit_transaction".to_owned(),
+            }
+            .into());
+        }
+        if let Some(duration) = self.fault_config.overload_retry_after_vote_transaction {
+            return Err(RtdErrorKind::ValidatorOverloadedRetryAfter {
+                retry_after_secs: duration.as_secs(),
+            }
+            .into());
+        }
+
+        // No submission to consensus is needed for test authority client, return
+        // dummy consensus position
+        // TODO(fastpath): Return the actual consensus position
+        let consensus_position = ConsensusPosition {
+            epoch: EpochId::MIN,
+            block: BlockRef::MIN,
+            index: 0,
+        };
+
+        let submit_result = SubmitTxResult::Submitted { consensus_position };
+        Ok(SubmitTxResponse {
+            results: vec![submit_result],
+        })
+    }
+
+    async fn wait_for_effects(
+        &self,
+        _request: WaitForEffectsRequest,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<WaitForEffectsResponse, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_transaction(
+        &self,
+        transaction: Transaction,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleTransactionResponse, RtdError> {
+        if self.fault_config.fail_before_handle_transaction {
+            return Err(RtdError::from("Mock error before handle_transaction"));
+        }
+        let state = self.state.clone();
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
+        let transaction = epoch_store
+            .signature_verifier
+            .verify_tx_require_no_aliases(transaction.data())
+            .map(|_| VerifiedTransaction::new_from_verified(transaction))?;
+        let result = state.handle_transaction(&epoch_store, transaction).await;
+        if self.fault_config.fail_after_handle_transaction {
+            return Err(RtdErrorKind::GenericAuthorityError {
+                error: "Mock error after handle_transaction".to_owned(),
+            }
+            .into());
+        }
+        if let Some(duration) = self.fault_config.overload_retry_after_handle_transaction {
+            return Err(RtdErrorKind::ValidatorOverloadedRetryAfter {
+                retry_after_secs: duration.as_secs(),
+            }
+            .into());
+        }
+        result
+    }
+
+    async fn handle_certificate_v2(
+        &self,
+        certificate: CertifiedTransaction,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleCertificateResponseV2, RtdError> {
+        let state = self.state.clone();
+        let fault_config = self.fault_config;
+        let request = HandleCertificateRequestV3 {
+            certificate,
+            include_events: true,
+            include_input_objects: false,
+            include_output_objects: false,
+            include_auxiliary_data: false,
+        };
+        spawn_monitored_task!(Self::handle_certificate(state, request, fault_config))
+            .await
+            .unwrap()
+            .map(|resp| HandleCertificateResponseV2 {
+                signed_effects: resp.effects,
+                events: resp.events.unwrap_or_default(),
+                fastpath_input_objects: vec![],
+            })
+    }
+
+    async fn handle_certificate_v3(
+        &self,
+        request: HandleCertificateRequestV3,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleCertificateResponseV3, RtdError> {
+        let state = self.state.clone();
+        let fault_config = self.fault_config;
+        spawn_monitored_task!(Self::handle_certificate(state, request, fault_config))
+            .await
+            .unwrap()
+    }
+
+    async fn handle_soft_bundle_certificates_v3(
+        &self,
+        _request: HandleSoftBundleCertificatesRequestV3,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleSoftBundleCertificatesResponseV3, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_object_info_request(
+        &self,
+        request: ObjectInfoRequest,
+    ) -> Result<ObjectInfoResponse, RtdError> {
+        let state = self.state.clone();
+        state.handle_object_info_request(request).await
+    }
+
+    /// Handle Object information requests for this account.
+    async fn handle_transaction_info_request(
+        &self,
+        request: TransactionInfoRequest,
+    ) -> Result<TransactionInfoResponse, RtdError> {
+        let state = self.state.clone();
+        state.handle_transaction_info_request(request).await
+    }
+
+    async fn handle_checkpoint(
+        &self,
+        request: CheckpointRequest,
+    ) -> Result<CheckpointResponse, RtdError> {
+        let state = self.state.clone();
+
+        state.handle_checkpoint_request(&request)
+    }
+
+    async fn handle_checkpoint_v2(
+        &self,
+        request: CheckpointRequestV2,
+    ) -> Result<CheckpointResponseV2, RtdError> {
+        let state = self.state.clone();
+
+        state.handle_checkpoint_request_v2(&request)
+    }
+
+    async fn handle_system_state_object(
+        &self,
+        _request: SystemStateRequest,
+    ) -> Result<RtdSystemState, RtdError> {
+        self.state.get_rtd_system_state_object_for_testing()
+    }
+
+    async fn validator_health(
+        &self,
+        _request: ValidatorHealthRequest,
+    ) -> Result<ValidatorHealthResponse, RtdError> {
+        Ok(ValidatorHealthResponse {
+            last_committed_leader_round: 1000,
+            last_locally_built_checkpoint: 500,
+            ..Default::default()
+        })
+    }
+}
+
+impl LocalAuthorityClient {
+    pub async fn new(secret: AuthorityKeyPair, genesis: &Genesis) -> Self {
+        let state = TestAuthorityBuilder::new()
+            .with_genesis_and_keypair(genesis, &secret)
+            .build()
+            .await;
+        Self {
+            state,
+            fault_config: LocalAuthorityClientFaultConfig::default(),
+        }
+    }
+
+    pub fn new_from_authority(state: Arc<AuthorityState>) -> Self {
+        Self {
+            state,
+            fault_config: LocalAuthorityClientFaultConfig::default(),
+        }
+    }
+
+    // One difference between this implementation and actual certificate execution, is that
+    // this assumes shared object locks have already been acquired and tries to execute shared
+    // object transactions as well as owned object transactions.
+    async fn handle_certificate(
+        state: Arc<AuthorityState>,
+        request: HandleCertificateRequestV3,
+        fault_config: LocalAuthorityClientFaultConfig,
+    ) -> Result<HandleCertificateResponseV3, RtdError> {
+        if fault_config.fail_before_handle_confirmation {
+            return Err(RtdErrorKind::GenericAuthorityError {
+                error: "Mock error before handle_confirmation_transaction".to_owned(),
+            }
+            .into());
+        }
+        // Check existing effects before verifying the cert to allow querying certs finalized
+        // from previous epochs.
+        let tx_digest = *request.certificate.digest();
+        let epoch_store = state.epoch_store_for_testing();
+        let signed_effects = match state
+            .get_signed_effects_and_maybe_resign(&tx_digest, &epoch_store)
+        {
+            Ok(Some(effects)) => effects,
+            _ => {
+                let certificate = epoch_store
+                    .signature_verifier
+                    .verify_cert(request.certificate)
+                    .await?;
+                state.execution_scheduler().enqueue(
+                    vec![(
+                        VerifiedExecutableTransaction::new_from_certificate(certificate.clone())
+                            .into(),
+                        ExecutionEnv::new(),
+                    )],
+                    &epoch_store,
+                );
+                let effects = state.notify_read_effects("", *certificate.digest()).await?;
+                state.sign_effects(effects, &epoch_store)?
+            }
+        }
+        .into_inner();
+
+        let events = if request.include_events {
+            if signed_effects.events_digest().is_some() {
+                Some(state.get_transaction_events(signed_effects.transaction_digest())?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if fault_config.fail_after_handle_confirmation {
+            return Err(RtdErrorKind::GenericAuthorityError {
+                error: "Mock error after handle_confirmation_transaction".to_owned(),
+            }
+            .into());
+        }
+
+        let input_objects = request
+            .include_input_objects
+            .then(|| state.get_transaction_input_objects(&signed_effects))
+            .and_then(Result::ok);
+
+        let output_objects = request
+            .include_output_objects
+            .then(|| state.get_transaction_output_objects(&signed_effects))
+            .and_then(Result::ok);
+
+        Ok(HandleCertificateResponseV3 {
+            effects: signed_effects,
+            events,
+            input_objects,
+            output_objects,
+            auxiliary_data: None, // We don't have any aux data generated presently
+        })
+    }
+}
+
+// TODO: The way we are passing in and using delay and count is really ugly code. Please fix it.
+#[derive(Clone)]
+pub struct MockAuthorityApi {
+    delay: Duration,
+    count: Arc<Mutex<u32>>,
+    handle_object_info_request_result: Option<RtdResult<ObjectInfoResponse>>,
+}
+
+impl MockAuthorityApi {
+    pub fn new(delay: Duration, count: Arc<Mutex<u32>>) -> Self {
+        MockAuthorityApi {
+            delay,
+            count,
+            handle_object_info_request_result: None,
+        }
+    }
+
+    pub fn set_handle_object_info_request(&mut self, result: RtdResult<ObjectInfoResponse>) {
+        self.handle_object_info_request_result = Some(result);
+    }
+}
+
+#[async_trait]
+impl AuthorityAPI for MockAuthorityApi {
+    /// Submit a new transaction to a Rtd or Primary account.
+    async fn submit_transaction(
+        &self,
+        _request: SubmitTxRequest,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<SubmitTxResponse, RtdError> {
+        unimplemented!();
+    }
+
+    async fn wait_for_effects(
+        &self,
+        _request: WaitForEffectsRequest,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<WaitForEffectsResponse, RtdError> {
+        unimplemented!()
+    }
+
+    /// Initiate a new transaction to a Rtd or Primary account.
+    async fn handle_transaction(
+        &self,
+        _transaction: Transaction,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleTransactionResponse, RtdError> {
+        unimplemented!();
+    }
+
+    /// Execute a certificate.
+    async fn handle_certificate_v2(
+        &self,
+        _certificate: CertifiedTransaction,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleCertificateResponseV2, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_certificate_v3(
+        &self,
+        _request: HandleCertificateRequestV3,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleCertificateResponseV3, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_soft_bundle_certificates_v3(
+        &self,
+        _request: HandleSoftBundleCertificatesRequestV3,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleSoftBundleCertificatesResponseV3, RtdError> {
+        unimplemented!()
+    }
+
+    /// Handle Object information requests for this account.
+    async fn handle_object_info_request(
+        &self,
+        _request: ObjectInfoRequest,
+    ) -> Result<ObjectInfoResponse, RtdError> {
+        self.handle_object_info_request_result.clone().unwrap()
+    }
+
+    /// Handle Object information requests for this account.
+    async fn handle_transaction_info_request(
+        &self,
+        request: TransactionInfoRequest,
+    ) -> Result<TransactionInfoResponse, RtdError> {
+        let count = {
+            let mut count = self.count.lock().unwrap();
+            *count += 1;
+            *count
+        };
+
+        // timeout until the 15th request
+        if count < 15 {
+            tokio::time::sleep(self.delay).await;
+        }
+
+        Err(RtdErrorKind::TransactionNotFound {
+            digest: request.transaction_digest,
+        }
+        .into())
+    }
+
+    async fn handle_checkpoint(
+        &self,
+        _request: CheckpointRequest,
+    ) -> Result<CheckpointResponse, RtdError> {
+        unimplemented!();
+    }
+
+    async fn handle_checkpoint_v2(
+        &self,
+        _request: CheckpointRequestV2,
+    ) -> Result<CheckpointResponseV2, RtdError> {
+        unimplemented!();
+    }
+
+    async fn handle_system_state_object(
+        &self,
+        _request: SystemStateRequest,
+    ) -> Result<RtdSystemState, RtdError> {
+        unimplemented!();
+    }
+
+    async fn validator_health(
+        &self,
+        _request: ValidatorHealthRequest,
+    ) -> Result<ValidatorHealthResponse, RtdError> {
+        Ok(ValidatorHealthResponse {
+            last_committed_leader_round: 1000,
+            last_locally_built_checkpoint: 500,
+            ..Default::default()
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct HandleTransactionTestAuthorityClient {
+    pub tx_info_resp_to_return: RtdResult<HandleTransactionResponse>,
+    pub cert_resp_to_return: RtdResult<HandleCertificateResponseV2>,
+    // If set, sleep for this duration before responding to a request.
+    // This is useful in testing a timeout scenario.
+    pub sleep_duration_before_responding: Option<Duration>,
+}
+
+#[async_trait]
+impl AuthorityAPI for HandleTransactionTestAuthorityClient {
+    async fn submit_transaction(
+        &self,
+        _request: SubmitTxRequest,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<SubmitTxResponse, RtdError> {
+        unimplemented!()
+    }
+
+    async fn wait_for_effects(
+        &self,
+        _request: WaitForEffectsRequest,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<WaitForEffectsResponse, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_transaction(
+        &self,
+        _transaction: Transaction,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleTransactionResponse, RtdError> {
+        if let Some(duration) = self.sleep_duration_before_responding {
+            tokio::time::sleep(duration).await;
+        }
+        self.tx_info_resp_to_return.clone()
+    }
+
+    async fn handle_certificate_v2(
+        &self,
+        _certificate: CertifiedTransaction,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleCertificateResponseV2, RtdError> {
+        if let Some(duration) = self.sleep_duration_before_responding {
+            tokio::time::sleep(duration).await;
+        }
+        self.cert_resp_to_return.clone()
+    }
+
+    async fn handle_certificate_v3(
+        &self,
+        _request: HandleCertificateRequestV3,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleCertificateResponseV3, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_soft_bundle_certificates_v3(
+        &self,
+        _request: HandleSoftBundleCertificatesRequestV3,
+        _client_addr: Option<SocketAddr>,
+    ) -> Result<HandleSoftBundleCertificatesResponseV3, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_object_info_request(
+        &self,
+        _request: ObjectInfoRequest,
+    ) -> Result<ObjectInfoResponse, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_transaction_info_request(
+        &self,
+        _request: TransactionInfoRequest,
+    ) -> Result<TransactionInfoResponse, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_checkpoint(
+        &self,
+        _request: CheckpointRequest,
+    ) -> Result<CheckpointResponse, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_checkpoint_v2(
+        &self,
+        _request: CheckpointRequestV2,
+    ) -> Result<CheckpointResponseV2, RtdError> {
+        unimplemented!()
+    }
+
+    async fn handle_system_state_object(
+        &self,
+        _request: SystemStateRequest,
+    ) -> Result<RtdSystemState, RtdError> {
+        unimplemented!()
+    }
+
+    async fn validator_health(
+        &self,
+        _request: ValidatorHealthRequest,
+    ) -> Result<ValidatorHealthResponse, RtdError> {
+        unimplemented!()
+    }
+}
+
+impl HandleTransactionTestAuthorityClient {
+    pub fn new() -> Self {
+        Self {
+            tx_info_resp_to_return: Err(RtdErrorKind::Unknown("".to_string()).into()),
+            cert_resp_to_return: Err(RtdErrorKind::Unknown("".to_string()).into()),
+            sleep_duration_before_responding: None,
+        }
+    }
+
+    pub fn set_tx_info_response(&mut self, resp: HandleTransactionResponse) {
+        self.tx_info_resp_to_return = Ok(resp);
+    }
+
+    pub fn set_tx_info_response_error(&mut self, error: RtdError) {
+        self.tx_info_resp_to_return = Err(error);
+    }
+
+    pub fn reset_tx_info_response(&mut self) {
+        self.tx_info_resp_to_return = Err(RtdErrorKind::Unknown("".to_string()).into());
+    }
+
+    pub fn set_cert_resp_to_return(&mut self, resp: HandleCertificateResponseV2) {
+        self.cert_resp_to_return = Ok(resp);
+    }
+
+    pub fn set_cert_resp_to_return_error(&mut self, error: impl Into<RtdError>) {
+        self.cert_resp_to_return = Err(error.into());
+    }
+
+    pub fn reset_cert_response(&mut self) {
+        self.cert_resp_to_return = Err(RtdErrorKind::Unknown("".to_string()).into());
+    }
+
+    pub fn set_sleep_duration_before_responding(&mut self, duration: Duration) {
+        self.sleep_duration_before_responding = Some(duration);
+    }
+}
+
+impl Default for HandleTransactionTestAuthorityClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}

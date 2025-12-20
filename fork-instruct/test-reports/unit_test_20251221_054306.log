@@ -1,0 +1,419 @@
+   Compiling rtd-bridge v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-bridge)
+   Compiling rtd-transactional-test-runner v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-transactional-test-runner)
+   Compiling rtd-cluster-test v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-cluster-test)
+   Compiling rtd-graphql-e2e-tests v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-graphql-e2e-tests)
+   Compiling rtd-adapter-transactional-tests v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-adapter-transactional-tests)
+   Compiling rtd-verifier-transactional-tests v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-verifier-transactional-tests)
+   Compiling rtd-indexer-alt-e2e-tests v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-indexer-alt-e2e-tests)
+   Compiling rtd-bridge-indexer-alt v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-bridge-indexer-alt)
+   Compiling rtd-bridge-cli v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-bridge-cli)
+   Compiling rtd v1.63.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd)
+   Compiling rtd-bridge-indexer v0.1.0 (/Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd-bridge-indexer)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 16s
+     Running unittests src/lib.rs (target/debug/deps/anemo_benchmark-128d0ff9cebfcc65)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bin_version-0d69205a3cd230f0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/consensus_config-a94a72bff3fd900e)
+
+running 2 tests
+test committee::tests::committee_basic ... ok
+test committee::tests::committee_different_sizes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/consensus_core-6cdbb0825a7dffbc)
+
+running 189 tests
+test authority_service::tests::test_handle_send_block ... ok
+test ancestor::test::test_calculate_network_high_accepted_quorum_round ... ok
+test base_committer::base_committer_tests::direct_skip ... ok
+test base_committer::base_committer_declarative_tests::direct_skip ... ok
+test base_committer::base_committer_declarative_tests::test_equivocating_direct_skip ... ok
+test authority_service::tests::test_handle_fetch_latest_blocks ... ok
+test ancestor::test::test_update_all_ancestor_state_using_accepted_rounds ... ok
+test base_committer::base_committer_declarative_tests::direct_undecided ... ok
+test base_committer::base_committer_declarative_tests::test_equivocating_direct_commit ... ok
+test base_committer::base_committer_declarative_tests::indirect_commit ... ok
+test base_committer::base_committer_declarative_tests::direct_commit ... ok
+test base_committer::base_committer_declarative_tests::indirect_skip ... ok
+test base_committer::base_committer_tests::idempotence ... ok
+test base_committer::base_committer_tests::indirect_commit ... ok
+test base_committer::base_committer_tests::indirect_skip ... ok
+test base_committer::base_committer_tests::try_direct_commit ... ok
+test base_committer::base_committer_tests::test_byzantine_direct_commit ... ok
+test block::tests::test_genesis_blocks ... ok
+test base_committer::base_committer_tests::undecided ... ok
+test block::tests::test_sign_and_verify ... ok
+test base_committer::base_committer_tests::multiple_direct_commit ... ok
+test block_manager::tests::accept_blocks_with_complete_causal_history ... ok
+test block_manager::tests::skip_accepting_blocks_below_gc_round ... ok
+test block_manager::tests::test_verify_block_timestamps_and_accept ... ok
+test block_manager::tests::suspend_blocks_with_missing_ancestors ... ok
+test commit::tests::test_commit_range ... ok
+test block_manager::tests::accept_blocks_with_causal_history_below_gc_round ... ok
+test commit_consumer::test::test_commit_consumer_monitor ... ok
+test block_manager::tests::try_accept_block_returns_missing_blocks ... ok
+test block_manager::tests::try_accept_committed_blocks ... ok
+test block_manager::tests::try_find_blocks ... ok
+test commit::tests::test_new_subdag_from_commit ... ok
+test block_verifier::test::test_verify_and_vote_transactions ... ok
+test commit_finalizer::tests::test_direct_finalize_with_reject_votes ... ok
+test commit_finalizer::tests::test_direct_finalize_no_reject_votes ... ok
+test commit_finalizer::tests::test_finalize_remote_commits_with_reject_votes ... ok
+test commit_finalizer::tests::test_indirect_reject_with_gc ... ok
+test commit_syncer::tests::commit_syncer_start_and_pause_scheduling ... ok
+test commit_vote_monitor::test::test_commit_vote_monitor ... ok
+test commit_finalizer::tests::test_indirect_finalize_with_reject_votes ... ok
+test authority_node::tests::test_authority_start_and_stop::network_type_1_NetworkType__Tonic ... ok
+test core::test::test_add_certified_commits ... ok
+test core::test::test_commit_and_notify_for_block_status ... ok
+test core::test::test_core_propose_after_genesis ... ok
+test core::test::test_core_recover_from_store_for_full_round ... ok
+test core::test::test_core_recover_from_store_for_partial_round ... ok
+test core::test::test_core_set_min_propose_round ... ok
+test block_manager::tests::accept_blocks_unsuspend_children_blocks ... ok
+test core::test::test_core_set_propagation_delay_per_authority ... ok
+test core::test::test_core_compress_proposal_references ... ok
+test core::test::test_core_propose_once_receiving_a_quorum ... ok
+test core::test::test_excluded_ancestor_limit ... ok
+test core::test::test_core_try_new_block_leader_timeout ... ok
+test core::test::test_filter_new_commits ... ok
+test block_verifier::test::test_verify_block ... ok
+test core::test::test_multiple_commits_advance_threshold_clock ... ok
+test core::test::try_commit_with_certified_commits_gced_blocks ... ok
+test core::test::try_select_certified_leaders ... ok
+test core_thread::test::test_core_thread ... ok
+test dag_state::test::test_accept_block_not_panics_when_timestamp_is_ahead_and_median_timestamp ... ok
+test dag_state::test::test_ancestors_at_uncommitted_round ... ok
+test dag_state::test::test_block_info_as_committed ... ok
+test dag_state::test::test_contains_blocks_in_cache_or_store ... ok
+test dag_state::test::test_contains_cached_block_at_slot ... ok
+test dag_state::test::test_contains_cached_block_at_slot_panics_when_ask_out_of_range ... ignored
+test block_manager::tests::unsuspend_blocks_for_latest_gc_round::gc_depth_1_5 ... ok
+test dag_state::test::test_flush_and_recovery ... ok
+test dag_state::test::test_get_blocks ... ok
+test dag_state::test::test_get_blocks_in_cache_or_store ... ok
+test dag_state::test::test_get_cached_blocks ... ok
+test dag_state::test::test_get_cached_last_block_per_authority_requesting_out_of_round_range - should panic ... ok
+test dag_state::test::test_last_block_for_authority ... ok
+test dag_state::test::test_get_last_cached_block ... ok
+test dag_state::test::test_last_finalized_commit ... ok
+test core::test::test_smart_ancestor_selection ... ok
+test error::test::test_error_name ... ok
+test dag_state::test::test_last_quorum ... ok
+test dag_state::test::test_link_causal_history ... ok
+test leader_schedule::tests::test_elect_leader ... ok
+test leader_schedule::tests::test_elect_leader_stake_based ... ok
+test authority_service::tests::test_handle_fetch_blocks ... ok
+test leader_schedule::tests::test_leader_schedule_commits_until_leader_schedule_update ... ok
+test core::test::test_leader_schedule_change ... ok
+test leader_schedule::tests::test_leader_schedule_from_store ... ok
+test leader_schedule::tests::test_leader_schedule_from_store_no_commits ... ok
+test leader_schedule::tests::test_leader_schedule_from_store_no_commit_info ... ok
+test leader_schedule::tests::test_leader_schedule_update_leader_schedule ... ok
+test leader_schedule::tests::test_leader_swap_table ... ok
+test leader_schedule::tests::test_leader_swap_table_retrieve_first_nodes ... ok
+test leader_schedule::tests::test_leader_swap_table_swap ... ok
+test leader_schedule::tests::test_leader_swap_table_swap_stake_threshold_out_of_bounds - should panic ... ok
+test leader_schedule::tests::test_update_bad_leader_swap_table - should panic ... ok
+test leader_schedule::tests::test_update_leader_swap_table ... ok
+test leader_scoring::tests::test_reputation_scores_authorities_by_score ... ok
+test leader_scoring::tests::test_reputation_scores_update_metrics ... ok
+test core::test::test_core_try_new_block_with_leader_timeout_and_low_scoring_authority ... ok
+test leader_scoring::tests::test_scoring_subdag ... ok
+test leader_timeout::tests::basic_leader_timeout ... ok
+test leader_timeout::tests::multiple_leader_timeouts ... ok
+test linearizer::tests::test_median_timestamps_by_stake ... ok
+test linearizer::tests::test_handle_already_committed ... ok
+test linearizer::tests::test_calculate_commit_timestamp::case_1 ... ok
+test linearizer::tests::test_median_timestamps_by_stake_errors ... ok
+test linearizer::tests::test_handle_commit ... ok
+test linearizer::tests::test_handle_commit_below_highest_committed_round ... ok
+test linearizer::tests::test_handle_commit_with_gc_simple ... ok
+test core::test::test_commit_on_leader_schedule_change_boundary_without_multileader ... ok
+test round_tracker::test::test_compute_accepted_quorum_round ... ok
+test core::test::test_commit_on_leader_schedule_change_boundary_with_multileader ... ok
+test round_prober::test::test_round_prober ... ok
+test round_tracker::test::test_compute_quorum_round ... ok
+test round_tracker::test::test_compute_received_quorum_round ... ok
+test stake_aggregator::tests::test_add_unique_quorum_threshold ... ok
+test stake_aggregator::tests::test_aggregator_clear ... ok
+test round_tracker::test::test_quorum_round_manager ... ok
+test stake_aggregator::tests::test_aggregator_quorum_threshold ... ok
+test storage::store_tests::read_and_scan_commits::test_store_2_new_mem_teststore__ ... ok
+test storage::store_tests::scan_blocks::test_store_2_new_mem_teststore__ ... ok
+test stake_aggregator::tests::test_aggregator_validity_threshold ... ok
+test storage::store_tests::test_store_read::test_store_2_new_mem_teststore__ ... ok
+test storage::store_tests::read_and_scan_commits::test_store_1_new_rocksdb_teststore__ ... ok
+test storage::store_tests::test_store_read::test_store_1_new_rocksdb_teststore__ ... ok
+test storage::store_tests::scan_blocks::test_store_1_new_rocksdb_teststore__ ... ok
+test subscriber::test::subscriber_retries ... ok
+test synchronizer::tests::saturate_fetch_blocks_from_peer ... ok
+test synchronizer::tests::synchronizer_fetch_own_last_block ... ok
+test synchronizer::tests::test_inflight_blocks_map ... ok
+test synchronizer::tests::synchronizer_periodic_task_fetch_blocks ... ok
+test synchronizer::tests::test_process_fetched_blocks ... ok
+test test_dag_parser::tests::test_all_round_parsing ... ok
+test test_dag_parser::tests::test_genesis_round_parsing ... ok
+test test_dag_parser::tests::test_parse_author_and_connections ... ok
+test test_dag_parser::tests::test_slot_parsing ... ok
+test test_dag_parser::tests::test_dag_parsing ... ok
+test test_dag_parser::tests::test_str_to_authority_index ... ok
+test test_dag_parser::tests::test_specific_round_parsing ... ok
+test threshold_clock::tests::test_threshold_clock_add_block ... ok
+test threshold_clock::tests::test_threshold_clock_add_block_min_committee ... ok
+test threshold_clock::tests::test_threshold_clock_add_blocks ... ok
+test transaction::tests::basic_submit_and_consume ... ok
+test transaction::tests::block_status_update ... ok
+test synchronizer::tests::synchronizer_periodic_task_when_commit_lagging_gets_disabled ... ok
+test transaction::tests::submit_large_batch_and_ack ... ok
+test transaction::tests::submit_over_max_fetch_size_and_consume ... ok
+test transaction::tests::submit_with_no_transactions ... ok
+test transaction::tests::test_submit_over_max_block_size_and_validate_block_size ... ok
+test transaction_certifier::test::test_certify_basic ... ok
+test transaction_certifier::test::test_vote_info_basic ... ok
+test universal_committer::pipelined_committer_tests::direct_commit ... ok
+test universal_committer::pipelined_committer_tests::direct_commit_late_call ... ok
+test universal_committer::pipelined_committer_tests::direct_skip_enough_blame ... ok
+test universal_committer::pipelined_committer_tests::direct_skip_no_leader ... ok
+test universal_committer::pipelined_committer_tests::idempotence ... ok
+test block_manager::tests::unsuspend_blocks_for_latest_gc_round::gc_depth_2_10 ... ok
+test universal_committer::pipelined_committer_tests::indirect_commit ... ok
+test universal_committer::pipelined_committer_tests::indirect_skip ... ok
+test universal_committer::pipelined_committer_tests::multiple_direct_commit ... ok
+test universal_committer::pipelined_committer_tests::no_genesis_commit ... ok
+test universal_committer::pipelined_committer_tests::test_byzantine_validator ... ok
+test universal_committer::pipelined_committer_tests::undecided ... ok
+test universal_committer::universal_committer_tests::direct_commit ... ok
+test universal_committer::universal_committer_tests::direct_commit_late_call ... ok
+test universal_committer::universal_committer_tests::direct_skip_missing_leader_block ... ok
+test universal_committer::universal_committer_tests::direct_skip_no_leader_votes ... ok
+test universal_committer::universal_committer_tests::idempotence ... ok
+test universal_committer::universal_committer_tests::indirect_commit ... ok
+test universal_committer::universal_committer_tests::indirect_skip ... ok
+test universal_committer::universal_committer_tests::no_genesis_commit ... ok
+test universal_committer::universal_committer_tests::multiple_direct_commit ... ok
+test core::test::test_core_signals ... ok
+test universal_committer::universal_committer_tests::undecided ... ok
+test universal_committer::universal_committer_tests::test_byzantine_direct_commit ... ok
+test block_manager::tests::unsuspend_blocks_for_latest_gc_round::gc_depth_3_14 ... ok
+test transaction::tests::ping_transaction_index_never_reached ... ok
+test transaction_certifier::test::test_certify_randomized ... ok
+test commit_observer::tests::test_handle_commit ... ok
+test synchronizer::tests::successful_fetch_blocks_from_peer ... ok
+test network::network_tests::subscribe_and_receive_blocks::manager_builder_1_TonicManagerBuilder__ ... ok
+test commit_observer::tests::test_recover_and_send_commits ... ok
+test randomized_tests::test_randomized_dag_all_direct_commit ... ok
+test network::network_tests::send_and_receive_blocks_with_auth::manager_builder_1_TonicManagerBuilder__ ... ok
+test authority_node::tests::test_amnesia_recovery_success::gc_depth_2_10 ... ok
+test authority_node::tests::test_amnesia_recovery_success::gc_depth_1_5 ... ok
+test randomized_tests::test_randomized_dag_and_decision_sequence ... ok
+test authority_node::tests::test_small_committee::network_type_1_NetworkType__Tonic::num_authorities_1_1 ... ok
+test authority_node::tests::test_small_committee::network_type_1_NetworkType__Tonic::num_authorities_2_2 ... ok
+test authority_node::tests::test_small_committee::network_type_1_NetworkType__Tonic::num_authorities_3_3 ... ok
+test authority_node::tests::test_authority_committee::network_type_1_NetworkType__Tonic::gc_depth_1_5 ... ok
+test authority_node::tests::test_authority_committee::network_type_1_NetworkType__Tonic::gc_depth_2_10 ... ok
+
+test result: ok. 188 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 22.29s
+
+     Running unittests src/lib.rs (target/debug/deps/consensus_simtests-6e12787a5a61c406)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/consensus_types-830bbafe7fe7c0a7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/linku_common-4ee164390699343d)
+
+running 14 tests
+test backoff::test_exponential_backoff_base_100_factor_2_no_jitter ... ok
+test backoff::test_exponential_backoff_max_delay ... ok
+test moving_window::tests::test_float_window ... ok
+test moving_window::tests::test_duration_window ... ok
+test backoff::test_exponential_backoff_default ... ok
+test moving_window::tests::test_with_initial_value ... ok
+test logging::tests::test_fatal - should panic ... ok
+test logging::tests::test_debug_fatal - should panic ... ok
+test moving_window::tests::test_zero_size_panics - should panic ... ok
+test sync::notify_once::notify_once_test ... ok
+test sync::notify_read::tests::test_notify_read ... ok
+test sync::async_once_cell::tests::async_once_cell_test ... ok
+test logging::tests::test_assert_sometimes_side_effects ... ok
+test sync::notify_read::tests::test_notify_read_cancellation ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running unittests src/lib.rs (target/debug/deps/linku_metrics-dbe465966fe86b27)
+
+running 24 tests
+test histogram::tests::pct_index_test ... ok
+test histogram::tests::format_pct1000_test ... ok
+test metered_channel::metered_channel_tests::test_total ... ok
+test metered_channel::metered_channel_tests::test_send_backpressure_multi_senders ... ok
+test metered_channel::metered_channel_tests::test_empty_closed_channel ... ok
+test metered_channel::metered_channel_tests::test_reserve ... ok
+test metered_channel::metered_channel_tests::test_try_send_full ... ok
+test metered_channel::metered_channel_tests::test_reserve_backpressure ... ok
+test metered_channel::metered_channel_tests::test_send ... ok
+test metered_channel::metered_channel_tests::test_send_backpressure ... ok
+test metered_channel::metered_channel_tests::test_try_send ... ok
+test metered_channel::metered_channel_tests::test_reserve_and_drop ... ok
+test monitored_mpsc::test::test_bounded_send_and_receive ... ok
+test monitored_mpsc::test::test_reserve ... ok
+test monitored_mpsc::test::test_reserve_backpressure ... ok
+test monitored_mpsc::test::test_reserve_and_drop ... ok
+test monitored_mpsc::test::test_send_backpressure_multi_senders ... ok
+test monitored_mpsc::test::test_empty_closed_channel ... ok
+test tests::registry_service ... ok
+test monitored_mpsc::test::test_send_backpressure ... ok
+test monitored_mpsc::test::test_try_send_full ... ok
+test monitored_mpsc::test::test_try_send ... ok
+test monitored_mpsc::test::test_unbounded_send_and_receive ... ok
+test histogram::tests::histogram_test ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+     Running unittests src/lib.rs (target/debug/deps/linku_network-b420b2d851298ef1)
+
+running 19 tests
+test grpc_timeout::tests::test_header_not_present ... ok
+test grpc_timeout::tests::test_hours ... ok
+test grpc_timeout::tests::test_microseconds ... ok
+test grpc_timeout::tests::test_minutes ... ok
+test grpc_timeout::tests::test_nanoseconds ... ok
+test grpc_timeout::tests::test_seconds ... ok
+test grpc_timeout::tests::test_milliseconds ... ok
+test grpc_timeout::tests::test_invalid_digits - should panic ... ok
+test grpc_timeout::tests::test_too_many_digits - should panic ... ok
+test grpc_timeout::tests::test_invalid_unit - should panic ... ok
+test multiaddr::test::test_get_hostname_port ... ok
+test multiaddr::test::test_is_loosely_valid_tcp_addr ... ok
+test multiaddr::test::document_multiaddr_limitation_for_unix_protocol ... ok
+test multiaddr::test::test_to_socket_addr_basic ... ok
+test multiaddr::test::test_to_socket_addr_unsupported_protocol ... ok
+test multiaddr::test::test_with_localhost_ip ... ok
+test multiaddr::test::test_to_anemo_address ... ok
+test multiaddr::test::test_with_zero_ip ... ok
+test anemo_connection_monitor::tests::test_connectivity ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+     Running unittests src/lib.rs (target/debug/deps/linku_service-0696b6ad8df817d4)
+
+running 3 tests
+test tests::package_name_works ... ok
+test tests::package_version_works ... ok
+test health::tests::health_response_new_works ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/prometheus_closure_metric-f5f56d1fdb3a59e1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/rtd-476922756b1eb690)
+
+running 58 tests
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_upgrade_eof.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_colon.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_commands.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_dash.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_0x.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_dash_dash.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__gas.snap.new
+test client_ptb::lexer::tests::tokenize_commands ... FAILED
+test client_ptb::lexer::tests::unexpected_dash ... FAILED
+test client_ptb::lexer::tests::unexpected_0x ... FAILED
+test client_ptb::lexer::tests::unexpected_colon ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_publish_trailing.snap.new
+test client_ptb::lexer::tests::unexpected_upgrade_eof ... FAILED
+test client_ptb::lexer::tests::unexpected_dash_dash ... FAILED
+test client_ptb::lexer::tests::gas ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__unexpected_random_chars.snap.new
+test client_ptb::lexer::tests::unexpected_publish_trailing ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_flags.snap.new
+test client_ptb::parser::tests::test_parse ... ok
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_mvr_names_valid.snap.new
+test client_ptb::lexer::tests::unexpected_random_chars ... FAILED
+test client_ptb::lexer::tests::tokenize_flags ... FAILED
+test client_ptb::parser::tests::parse_mvr_names_valid ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_address.snap.new
+test client_ptb::lexer::tests::tokenize_address ... stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_num.snap.new
+FAILED
+test client_ptb::lexer::tests::tokenize_num ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_mvr_names_invalid.snap.new
+test client_ptb::parser::tests::parse_mvr_names_invalid ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/snapshots/rtd__clever_error_rendering__tests__parse_abort_status_string.snap.new
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_array.snap.new
+test clever_error_rendering::tests::test_parse_abort_status_string ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__dotted_idents.snap.new
+test client_ptb::lexer::tests::tokenize_array ... FAILED
+test client_ptb::lexer::tests::dotted_idents ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_vector.snap.new
+test client_ptb::lexer::tests::tokenize_vector ... FAILED
+test keytool::keytool_tests::test_keytool_bls12381 ... ok
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__functions.snap.new
+test client_ptb::lexer::tests::functions ... FAILED
+test keytool::keytool_tests::test_load_keystore_err ... ok
+test keytool::keytool_tests::test_flag_in_signature_and_keypair ... ok
+test keytool::keytool_tests::test_addresses_command ... ok
+test keytool::keytool_tests::test_private_keys_import_export ... FAILED
+test keytool::keytool_tests::test_read_write_keystore_with_flag ... ok
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__lexer__tests__tokenize_args.snap.new
+test client_ptb::lexer::tests::tokenize_args ... FAILED
+test keytool::keytool_tests::test_sign_command ... ok
+test keytool::keytool_tests::test_rtd_operations_config ... ok
+test upgrade_compatibility::upgrade_compatibility_tests::positional_formatting ... ok
+test keytool::keytool_tests::test_mnemonics_ed25519 ... FAILED
+test keytool::keytool_tests::test_mnemonics_secp256k1 ... FAILED
+test keytool::keytool_tests::test_mnemonics_secp256r1 ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_publish.snap.new
+test client_ptb::parser::tests::test_parse_publish ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_unexpected_top_level.snap.new
+test client_ptb::parser::tests::test_parse_unexpected_top_level ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_types_invalid.snap.new
+test client_ptb::parser::tests::test_parse_types_invalid ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_args_invalid.snap.new
+test client_ptb::parser::tests::test_parse_args_invalid ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_args.snap.new
+test client_ptb::parser::tests::test_parse_args ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_types.snap.new
+test client_ptb::parser::tests::test_parse_types ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_commands_invalid.snap.new
+test client_ptb::parser::tests::test_parse_commands_invalid ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/client_ptb/snapshots/rtd__client_ptb__parser__tests__parse_commands.snap.new
+test client_ptb::parser::tests::test_parse_commands ... FAILED
+stored new snapshot /Users/changzechuan/WenchuanProjects/SuiTestProjects/sui/crates/rtd/src/upgrade_compatibility/../unit_tests/snapshots/rtd__upgrade_compatibility__upgrade_compatibility_tests__emoji.snap.new
+test upgrade_compatibility::upgrade_compatibility_tests::test_missing_module_toml ... FAILED
+test keytool::keytool_tests::test_invalid_derivation_path ... ok
+test keytool::keytool_tests::test_valid_derivation_path ... ok
+test validator_commands::validator_tests::test_print_raw_rgp_txn ... FAILED
+test genesis_ceremony::test::ceremony ... FAILED
+test upgrade_compatibility::upgrade_compatibility_tests::test_additive has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_address_change has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_all has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_declarations_missing has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_deponly has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_entry_linking_ok has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_enum has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_friend_link_ok has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_function has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_struct has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_type_param has been running for over 60 seconds
+test upgrade_compatibility::upgrade_compatibility_tests::test_version_mismatch has been running for over 60 seconds

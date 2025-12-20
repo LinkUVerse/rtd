@@ -6,30 +6,30 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./utils/CommitteeUpgradeable.sol";
-import "./interfaces/ISuiBridge.sol";
+import "./interfaces/IRtdBridge.sol";
 import "./interfaces/IBridgeVault.sol";
 import "./interfaces/IBridgeLimiter.sol";
 import "./interfaces/IBridgeConfig.sol";
 
-/// @title SuiBridge
+/// @title RtdBridge
 /// @notice This contract implements a token bridge that enables users to deposit and withdraw
 /// supported tokens to and from other chains. The bridge supports the transfer of Ethereum and ERC20
-/// tokens. Bridge operations are managed by a committee of Sui validators that are responsible
+/// tokens. Bridge operations are managed by a committee of Rtd validators that are responsible
 /// for verifying and processing bridge messages. The bridge is designed to be upgradeable and
 /// can be paused in case of an emergency. The bridge also enforces limits on the amount of
 /// assets that can be withdrawn to prevent abuse.
-contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
+contract RtdBridge is IRtdBridge, CommitteeUpgradeable, PausableUpgradeable {
     /* ========== STATE VARIABLES ========== */
 
     mapping(uint64 nonce => bool isProcessed) public isTransferProcessed;
     IBridgeVault public vault;
     IBridgeLimiter public limiter;
 
-    uint8 constant SUI_ADDRESS_LENGTH = 32;
+    uint8 constant RTD_ADDRESS_LENGTH = 32;
 
     /* ========== INITIALIZER ========== */
 
-    /// @notice Initializes the SuiBridge contract with the provided parameters.
+    /// @notice Initializes the RtdBridge contract with the provided parameters.
     /// @dev this function should be called directly after deployment (see OpenZeppelin upgradeable standards).
     /// @param _committee The address of the committee contract.
     /// @param _vault The address of the bridge vault contract.
@@ -62,7 +62,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
         onlySupportedChain(message.chainID)
     {
         // verify that message has not been processed
-        require(!isTransferProcessed[message.nonce], "SuiBridge: Message already processed");
+        require(!isTransferProcessed[message.nonce], "RtdBridge: Message already processed");
 
         IBridgeConfig config = committee.config();
 
@@ -71,13 +71,13 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
 
         // verify target chain ID is this chain ID
         require(
-            tokenTransferPayload.targetChain == config.chainID(), "SuiBridge: Invalid target chain"
+            tokenTransferPayload.targetChain == config.chainID(), "RtdBridge: Invalid target chain"
         );
 
         // convert amount to ERC20 token decimals
-        uint256 erc20AdjustedAmount = BridgeUtils.convertSuiToERC20Decimal(
+        uint256 erc20AdjustedAmount = BridgeUtils.convertRtdToERC20Decimal(
             IERC20Metadata(config.tokenAddressOf(tokenTransferPayload.tokenID)).decimals(),
-            config.tokenSuiDecimalOf(tokenTransferPayload.tokenID),
+            config.tokenRtdDecimalOf(tokenTransferPayload.tokenID),
             tokenTransferPayload.amount
         );
 
@@ -130,7 +130,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
     /// have approved this contract to transfer the given token.
     /// @param tokenID The ID of the token to be bridged.
     /// @param amount The amount of tokens to be bridged.
-    /// @param recipientAddress The address on the Sui chain where the tokens will be sent.
+    /// @param recipientAddress The address on the Rtd chain where the tokens will be sent.
     /// @param destinationChainID The ID of the destination chain.
     function bridgeERC20(
         uint8 tokenID,
@@ -139,20 +139,20 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
         uint8 destinationChainID
     ) external whenNotPaused nonReentrant onlySupportedChain(destinationChainID) {
         require(
-            recipientAddress.length == SUI_ADDRESS_LENGTH,
-            "SuiBridge: Invalid recipient address length"
+            recipientAddress.length == RTD_ADDRESS_LENGTH,
+            "RtdBridge: Invalid recipient address length"
         );
 
         IBridgeConfig config = committee.config();
 
-        require(config.isTokenSupported(tokenID), "SuiBridge: Unsupported token");
+        require(config.isTokenSupported(tokenID), "RtdBridge: Unsupported token");
 
         address tokenAddress = config.tokenAddressOf(tokenID);
 
         // check that the bridge contract has allowance to transfer the tokens
         require(
             IERC20(tokenAddress).allowance(msg.sender, address(this)) >= amount,
-            "SuiBridge: Insufficient allowance"
+            "RtdBridge: Insufficient allowance"
         );
 
         // calculate old vault balance
@@ -168,9 +168,9 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
         uint256 amountTransfered = newBalance - oldBalance;
 
         // Adjust the amount
-        uint64 suiAdjustedAmount = BridgeUtils.convertERC20ToSuiDecimal(
+        uint64 rtdAdjustedAmount = BridgeUtils.convertERC20ToRtdDecimal(
             IERC20Metadata(tokenAddress).decimals(),
-            config.tokenSuiDecimalOf(tokenID),
+            config.tokenRtdDecimalOf(tokenID),
             amountTransfered
         );
 
@@ -179,7 +179,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
             nonces[BridgeUtils.TOKEN_TRANSFER],
             destinationChainID,
             tokenID,
-            suiAdjustedAmount,
+            rtdAdjustedAmount,
             msg.sender,
             recipientAddress
         );
@@ -200,23 +200,23 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
         onlySupportedChain(destinationChainID)
     {
         require(
-            recipientAddress.length == SUI_ADDRESS_LENGTH,
-            "SuiBridge: Invalid recipient address length"
+            recipientAddress.length == RTD_ADDRESS_LENGTH,
+            "RtdBridge: Invalid recipient address length"
         );
 
         uint256 amount = msg.value;
 
         // Transfer the unwrapped ETH to the target address
         (bool success,) = payable(address(vault)).call{value: amount}("");
-        require(success, "SuiBridge: Failed to transfer ETH to vault");
+        require(success, "RtdBridge: Failed to transfer ETH to vault");
 
         // Adjust the amount to emit.
         IBridgeConfig config = committee.config();
 
         // Adjust the amount
-        uint64 suiAdjustedAmount = BridgeUtils.convertERC20ToSuiDecimal(
+        uint64 rtdAdjustedAmount = BridgeUtils.convertERC20ToRtdDecimal(
             IERC20Metadata(config.tokenAddressOf(BridgeUtils.ETH)).decimals(),
-            config.tokenSuiDecimalOf(BridgeUtils.ETH),
+            config.tokenRtdDecimalOf(BridgeUtils.ETH),
             amount
         );
 
@@ -225,7 +225,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
             nonces[BridgeUtils.TOKEN_TRANSFER],
             destinationChainID,
             BridgeUtils.ETH,
-            suiAdjustedAmount,
+            rtdAdjustedAmount,
             msg.sender,
             recipientAddress
         );
@@ -250,7 +250,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
         address tokenAddress = committee.config().tokenAddressOf(tokenID);
 
         // Check that the token address is supported
-        require(tokenAddress != address(0), "SuiBridge: Unsupported token");
+        require(tokenAddress != address(0), "RtdBridge: Unsupported token");
 
         // transfer eth if token type is eth
         if (tokenID == BridgeUtils.ETH) {
@@ -273,7 +273,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
     modifier limitNotExceeded(uint8 chainID, uint8 tokenID, uint256 amount) {
         require(
             !limiter.willAmountExceedLimit(chainID, tokenID, amount),
-            "SuiBridge: Amount exceeds bridge limit"
+            "RtdBridge: Amount exceeds bridge limit"
         );
         _;
     }
@@ -283,7 +283,7 @@ contract SuiBridge is ISuiBridge, CommitteeUpgradeable, PausableUpgradeable {
     modifier onlySupportedChain(uint8 targetChainID) {
         require(
             committee.config().isChainSupported(targetChainID),
-            "SuiBridge: Target chain not supported"
+            "RtdBridge: Target chain not supported"
         );
         _;
     }

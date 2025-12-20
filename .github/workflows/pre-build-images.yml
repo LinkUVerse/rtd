@@ -1,4 +1,4 @@
-name: Trigger pre-build images for Sui commits
+name: Trigger pre-build images for Rtd commits
 
 on:
   workflow_dispatch:
@@ -8,26 +8,26 @@ on:
       - 'devnet'
       - 'testnet'
       - 'mainnet'
-      - 'releases/sui-*-release'
+      - 'releases/rtd-*-release'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  prebuild-sui-images:
+  prebuild-rtd-images:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Pre-build Images in MystenLabs/sui-operations
+      - name: Dispatch Pre-build Images in LinkUVerse/rtd-operations
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with: 
-          repository: MystenLabs/sui-operations
+          repository: LinkUVerse/rtd-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
-          event-type: prebuild-sui-images
+          event-type: prebuild-rtd-images
           client-payload: >
             {
-              "sui_commit": "${{ github.sha }}",
-              "caller_name": "sui_repo_${{ github.ref_name }}",
+              "rtd_commit": "${{ github.sha }}",
+              "caller_name": "rtd_repo_${{ github.ref_name }}",
               "push_to_dockerhub": true,
-              "build_arm64": ${{ github.ref_name != 'main' && (github.ref_name == 'devnet' || github.ref_name == 'testnet' || github.ref_name == 'mainnet' || (startsWith(github.ref_name, 'releases/sui-') && endsWith(github.ref_name, '-release'))) }},
+              "build_arm64": ${{ github.ref_name != 'main' && (github.ref_name == 'devnet' || github.ref_name == 'testnet' || github.ref_name == 'mainnet' || (startsWith(github.ref_name, 'releases/rtd-') && endsWith(github.ref_name, '-release'))) }},
               "graphql_rpc": true,
               "indexer_alt": true,
               "stress": true

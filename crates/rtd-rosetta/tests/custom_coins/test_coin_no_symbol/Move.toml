@@ -1,0 +1,9 @@
+[package]
+name = "test_coin"
+edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
+
+[dependencies]
+Rtd = { git = "https://github.com/LinkUVerse/rtd.git", subdir = "crates/rtd-framework/packages/rtd-framework", rev = "framework/testnet" }
+
+[addresses]
+test_coin = "0x0"

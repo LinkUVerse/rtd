@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module regulated_coin_example::regulated_coin;
 
-use sui::coin_registry;
+use rtd::coin_registry;
 
 /// OTW for the coin.
 public struct REGULATED_COIN has drop {}

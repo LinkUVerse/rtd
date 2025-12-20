@@ -1,2 +1,2 @@
-`@mysten/ledgerjs-hw-app-sui` has moved to
-https://github.com/MystenLabs/ts-sdks/tree/main/packages/ledgerjs-hw-app-sui
+`@linku/ledgerjs-hw-app-rtd` has moved to
+https://github.com/LinkUVerse/ts-sdks/tree/main/packages/ledgerjs-hw-app-rtd

@@ -9,7 +9,7 @@ on:
     - cron: '0 21 * * *' # equivalent to 1pm PST
   workflow_dispatch:
     inputs:
-      sui_ref:
+      rtd_ref:
         description: "Branch / commit to test"
         type: string
         required: true
@@ -26,7 +26,7 @@ on:
         default: ""
 
 env:
-  SUI_REF: "${{ github.event.inputs.sui_ref || 'main' }}"
+  RTD_REF: "${{ github.event.inputs.rtd_ref || 'main' }}"
   TEST_NUM: "${{ github.event.inputs.test_num || '30' }}"
 
 jobs:
@@ -50,9 +50,9 @@ jobs:
         uses: teleport-actions/auth@d48447391aa28b202c98ae3f3358097025c32511 # pin@v2.0.4
         with:
           # Specify the publically accessible address of your Teleport proxy.
-          proxy: mysten.teleport.sh:443
+          proxy: linku.teleport.sh:443
           # Specify the name of the join token for your bot.
-          token: sui-simtest-token
+          token: rtd-simtest-token
           # Specify the length of time that the generated credentials should be
           # valid for. This is optional and defaults to "1h"
           certificate-ttl: 6h
@@ -64,24 +64,24 @@ jobs:
       - name: Environment clean
         run: |
           tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 echo 'teleport OK'
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && rm -rf ~/sui"
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/ && git clone git@github.com:MystenLabs/sui.git"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && rm -rf ~/rtd"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/ && git clone git@github.com:LinkUVerse/rtd.git"
  
       # Deleting files in tmpfs that usually fill up pretty quickly after each run. Cargo clean to free up space as well.
       - name: Tmpfs and cargo clean
         run: |  
           tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "sudo rm -rf /tmp/*"
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && cargo clean"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/rtd && cargo clean"
 
-      # Checkout out the latest sui repo
-      - name: Checkout sui repo
+      # Checkout out the latest rtd repo
+      - name: Checkout rtd repo
         run: |
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && git fetch origin && git checkout ${{ env.SUI_REF }}"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/rtd && git fetch origin && git checkout ${{ env.RTD_REF }}"
 
       # Setting up cargo and simtest
       - name: Install simtest
         run: |
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && ./scripts/simtest/install.sh"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/rtd && ./scripts/simtest/install.sh"
 
       - name: Set protocol config override based on trigger
         # This step determines which protocol config override to use.
@@ -91,13 +91,13 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             if [[ -n "${{ github.event.inputs.protocol_config_override }}" ]]; then
               echo "Testing with protocol config override: ${{ github.event.inputs.protocol_config_override }}"
-              echo "SUI_PROTOCOL_CONFIG_CHAIN_OVERRIDE=${{ github.event.inputs.protocol_config_override }}" >> $GITHUB_ENV
+              echo "RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE=${{ github.event.inputs.protocol_config_override }}" >> $GITHUB_ENV
             else
               echo "Testing latest protocol config for dispatched run"
             fi
           elif [[ "${{ github.event.schedule }}" == "0 21 * * *" ]]; then
             echo "Testing mainnet protocol config"
-            echo "SUI_PROTOCOL_CONFIG_CHAIN_OVERRIDE=mainnet" >> $GITHUB_ENV
+            echo "RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE=mainnet" >> $GITHUB_ENV
             message="(mainnet config) "
           else
             echo "Testing latest protocol config"
@@ -108,7 +108,7 @@ jobs:
       # Run simulator tests
       - name: Run simtest
         run: |
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && RUSTUP_MAX_RETRIES=10 CARGO_TERM_COLOR=always CARGO_INCREMENTAL=0 CARGO_NET_RETRY=10 RUST_BACKTRACE=short RUST_LOG=off NUM_CPUS=24 TEST_NUM=${{ env.TEST_NUM }} ./scripts/simtest/simtest-run.sh"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/rtd && RUSTUP_MAX_RETRIES=10 CARGO_TERM_COLOR=always CARGO_INCREMENTAL=0 CARGO_NET_RETRY=10 RUST_BACKTRACE=short RUST_LOG=off NUM_CPUS=24 TEST_NUM=${{ env.TEST_NUM }} ./scripts/simtest/simtest-run.sh"
   
   notify:
     name: Notify
@@ -119,21 +119,21 @@ jobs:
     steps:
     - uses: technote-space/workflow-conclusion-action@45ce8e0eb155657ab8ccf346ade734257fd196a5 # Pin v4.1.1
 
-    - name: Checkout sui repo main branch
+    - name: Checkout rtd repo main branch
       uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
     
-    - name: Get sui commit
+    - name: Get rtd commit
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        export sui_sha=$(git rev-parse HEAD)
-        echo "sui_sha=${sui_sha}" >> $GITHUB_ENV
+        export rtd_sha=$(git rev-parse HEAD)
+        echo "rtd_sha=${rtd_sha}" >> $GITHUB_ENV
 
     - name: Get link to logs
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh_job_link=$(gh api -X GET 'repos/MystenLabs/sui/actions/runs/${{ github.run_id }}/jobs' --jq '.jobs.[0].html_url')
+        gh_job_link=$(gh api -X GET 'repos/LinkUVerse/rtd/actions/runs/${{ github.run_id }}/jobs' --jq '.jobs.[0].html_url')
         echo "gh_job_link=${gh_job_link}" >> $GITHUB_ENV
 
     - name: Get current oncall
@@ -163,21 +163,21 @@ jobs:
 
     - name: Get slack id for the oncall
       run: |
-        export slack_id=$(aws s3 cp s3://mysten-employees-dir/employees.json - | jq --arg ONCALL "${{ env.current_oncall }}" '.[] | if .name == $ONCALL then .slack_id else empty end')
+        export slack_id=$(aws s3 cp s3://linku-employees-dir/employees.json - | jq --arg ONCALL "${{ env.current_oncall }}" '.[] | if .name == $ONCALL then .slack_id else empty end')
         echo "slack_id=$(echo ${slack_id} | tr -d '"')" >> $GITHUB_ENV        
 
     - name: Post to slack
       uses: slackapi/slack-github-action@34c3fd73326693ef04728f8611669d918a2d781d # pin@v1.19.0
       env:
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-        SUI_SHA: ${{ env.sui_sha }}
+        RTD_SHA: ${{ env.rtd_sha }}
         GH_JOB_LINK: ${{ env.gh_job_link }}
         SLACK_ID: ${{ env.slack_id }}
         ONCALL_NAME: ${{ env.oncall_name }}
       with:
         channel-id: 'simtest-nightly'
         slack-message: |
-          :sui::error-cross: *${{ github.workflow }}* ${{ needs.simtest.outputs.protocol_message }}workflow status: `${{ env.WORKFLOW_CONCLUSION }}`
-          Sui commit: <https://github.com/MystenLabs/sui/commit/${{ env.SUI_SHA }}|${{ env.SUI_SHA }}>
+          :rtd::error-cross: *${{ github.workflow }}* ${{ needs.simtest.outputs.protocol_message }}workflow status: `${{ env.WORKFLOW_CONCLUSION }}`
+          Rtd commit: <https://github.com/LinkUVerse/rtd/commit/${{ env.RTD_SHA }}|${{ env.RTD_SHA }}>
           Run: <${{ env.GH_JOB_LINK }}|${{ github.run_id }}>
           <@${{ env.SLACK_ID }}>, current `${{ env.ONCALL_NAME }}` oncall, please debug failures: `tsh ssh ubuntu@simtest-01` and look in the `/home/ubuntu/simtest_logs/{date}` folder for test results

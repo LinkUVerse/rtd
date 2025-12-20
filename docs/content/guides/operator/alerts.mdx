@@ -1,9 +1,9 @@
 ---
-title: Sui Validator Alert Reference
+title: Rtd Validator Alert Reference
 description: A collection of the Prometheus Alertmanager rules that trigger alerts and warnings on Validator and Full nodes.
 ---
 
-When running a Sui Validator node or Full node, you may want to configure alerting based off some or all of the following metrics.
+When running a Rtd Validator node or Full node, you may want to configure alerting based off some or all of the following metrics.
 
 ## Alert reference 
 
@@ -95,13 +95,13 @@ epoch_random_beacon_dkg_failed{network="$network"} > 0 or absent(is_safe_mode{ne
 
 | Key          | Value                                     |
 | ------------ | ----------------------------------------- |
-| **Name**     | `Mysten validators are not upgraded`      |
+| **Name**     | `LinkU validators are not upgraded`      |
 | **Summary**  | Validators are behind on protocol version |
 | **Duration** | `1h`                                      |
 
 ```sh
-min(sui_configured_max_protocol_version{network="$network", host=~"Mysten-.*"})
-  < quantile(0.34, sui_configured_max_protocol_version{network="$network"})
+min(rtd_configured_max_protocol_version{network="$network", host=~"LinkU-.*"})
+  < quantile(0.34, rtd_configured_max_protocol_version{network="$network"})
 ```
 
 ## ⚠️ Non-urgent and warning alerts

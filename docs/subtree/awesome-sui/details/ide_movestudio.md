@@ -11,7 +11,7 @@
 
 ## Description
 
-Online IDE for Sui smart contract development
+Online IDE for Rtd smart contract development
 
 ## Features
 - Move
@@ -19,7 +19,7 @@ Online IDE for Sui smart contract development
     - Compilation
     - Unit Testing
     - Deployment
-    - Only support one default `sui` binary version
+    - Only support one default `rtd` binary version
 - Project Management
     - Multiple workspaces
     - Persistent session
@@ -30,6 +30,6 @@ Online IDE for Sui smart contract development
     - Package function call
 - Example templates
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On
 
-- `sui 1.25.0-b10ea7331e1c`
+- `rtd 1.25.0-b10ea7331e1c`

@@ -21,7 +21,7 @@ use crate::{
         attributes::expand_attributes,
         byte_string, hex_string,
         name_validation::{
-            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_SUI_MEMBERS, IMPLICIT_SUI_MODULES,
+            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES,
             ModuleMemberKind, NameCase, check_restricted_name_all_cases, check_valid_address_name,
             check_valid_function_parameter_name, check_valid_local_name,
             check_valid_module_member_alias, check_valid_module_member_name,
@@ -610,7 +610,7 @@ fn default_aliases(context: &mut Context) -> AliasMapBuilder {
     let loc = Loc::invalid();
     let std_address =
         maybe_make_well_known_address(context, loc, stdlib_definitions::STDLIB_ADDRESS_NAME);
-    let sui_address = maybe_make_well_known_address(context, loc, symbol!("sui"));
+    let rtd_address = maybe_make_well_known_address(context, loc, symbol!("rtd"));
     let mut modules: Vec<(Address, Symbol)> = vec![];
     let mut members: Vec<(Address, Symbol, Symbol, ModuleMemberKind)> = vec![];
     // if std is defined, add implicit std aliases
@@ -628,21 +628,21 @@ fn default_aliases(context: &mut Context) -> AliasMapBuilder {
                 .map(|(m, mem, k)| (std_address, m, mem, k)),
         );
     }
-    // if sui is defined and the current package is in Sui mode, add implicit sui aliases
-    if let Some(sui_address) = sui_address
-        && context.env().package_config(current_package).flavor == Flavor::Sui
+    // if rtd is defined and the current package is in Rtd mode, add implicit rtd aliases
+    if let Some(rtd_address) = rtd_address
+        && context.env().package_config(current_package).flavor == Flavor::Rtd
     {
         modules.extend(
-            IMPLICIT_SUI_MODULES
+            IMPLICIT_RTD_MODULES
                 .iter()
                 .copied()
-                .map(|m| (sui_address, m)),
+                .map(|m| (rtd_address, m)),
         );
         members.extend(
-            IMPLICIT_SUI_MEMBERS
+            IMPLICIT_RTD_MEMBERS
                 .iter()
                 .copied()
-                .map(|(m, mem, k)| (sui_address, m, mem, k)),
+                .map(|(m, mem, k)| (rtd_address, m, mem, k)),
         );
     }
     for (addr, module) in modules {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
@@ -43,7 +43,7 @@ INTERESTING_DIRECTORIES = [
     "external-crates",
     "kiosk",
     "nre",
-    "sui-execution",
+    "rtd-execution",
 ]
 
 # Start release notes with these sections, if they contain relevant
@@ -163,7 +163,7 @@ def extract_notes_for_pr(pr):
 
     """
 
-    url = f"https://api.github.com/repos/MystenLabs/sui/pulls/{pr}"
+    url = f"https://api.github.com/repos/LinkUVerse/rtd/pulls/{pr}"
     curl_command = [
         "curl", "-s",
         "-H", "Accept: application/vnd.github.groot-preview+json",
@@ -201,9 +201,9 @@ def extract_notes_for_commit(commit):
 def extract_protocol_version(commit):
     """Find the max protocol version at this commit.
 
-    Assumes that it is being called from the root of the sui repository."""
+    Assumes that it is being called from the root of the rtd repository."""
     for line in git(
-        "show", f"{commit}:crates/sui-protocol-config/src/lib.rs"
+        "show", f"{commit}:crates/rtd-protocol-config/src/lib.rs"
     ).splitlines():
         if "const MAX_PROTOCOL_VERSION" not in line:
             continue
@@ -221,7 +221,7 @@ def extract_protocol_version(commit):
 
 def print_changelog(pr, log):
     if pr:
-        print(f"https://github.com/MystenLabs/sui/pull/{pr}:")
+        print(f"https://github.com/LinkUVerse/rtd/pull/{pr}:")
     print(log)
 
 
@@ -305,7 +305,7 @@ def do_generate(from_, to):
         print(f"## {impacted}")
 
         if impacted == "Protocol":
-            print(f"#### Sui Protocol Version in this release: `{protocol_version}`")
+            print(f"#### Rtd Protocol Version in this release: `{protocol_version}`")
         print()
 
         for pr, note in reversed(notes):

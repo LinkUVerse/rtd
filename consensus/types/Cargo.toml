@@ -2,7 +2,7 @@
 name = "consensus-types"
 version = "0.1.0"
 license = "Apache-2.0"
-authors = ["Mysten Labs <build@mystenlabs.com>"]
+authors = ["LinkU Labs <build@linkulabs.com>"]
 edition = "2024"
 publish = false
 

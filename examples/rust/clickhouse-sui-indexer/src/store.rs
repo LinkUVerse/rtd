@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
@@ -8,7 +8,7 @@ use clickhouse::{Client, Row};
 use scoped_futures::ScopedBoxFuture;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use sui_indexer_alt_framework_store_traits::{
+use rtd_indexer_alt_framework_store_traits::{
     CommitterWatermark, Connection, PrunerWatermark, ReaderWatermark, Store, TransactionalStore,
 };
 use url::Url;

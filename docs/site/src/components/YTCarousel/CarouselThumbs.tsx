@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useRef, useEffect } from "react";
@@ -66,7 +66,7 @@ const CarouselThumbs: React.FC<CarouselThumbsProps> = ({
             style={{
               border:
                 currentIndex === index
-                  ? "4px solid var(--sui-blue-bright)"
+                  ? "4px solid var(--rtd-blue-bright)"
                   : "4px solid transparent",
             }}
           />

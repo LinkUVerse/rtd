@@ -321,7 +321,7 @@ pub fn compute_cursor(
     let cursor_info = Some((cursor_path, cursor_pos));
     let mut symbols_computation_data = SymbolsComputationData::new();
     // we only compute cursor context and tag it on the existing symbols to avoid spending time
-    // recomputing all symbols (saves quite a bit of time when running the test suite)
+    // recomputing all symbols (saves quite a bit of time when running the test rtdte)
     let typed_mod_named_address_maps = compiled_pkg_info
         .program
         .typed_modules

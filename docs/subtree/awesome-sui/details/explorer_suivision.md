@@ -1,4 +1,4 @@
-# SuiVision
+# RtdVision
 
 ## Tooling Category
 
@@ -25,7 +25,7 @@ Data analytics covering transactions, wallets, staking, and validators
     - Automatic portfolio tracking
 - Verify and publish contract code
 - Function execution
-- SuiNS is supported
+- RtdNS is supported
 - Supported networks:
     - Mainnet
     - Testnet

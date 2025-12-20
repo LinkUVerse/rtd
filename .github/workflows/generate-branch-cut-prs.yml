@@ -1,5 +1,5 @@
-name: Generate Sui Branch Cut PRs
-run-name: Generate Sui Branch Cut PRs
+name: Generate Rtd Branch Cut PRs
+run-name: Generate Rtd Branch Cut PRs
 
 on:
   workflow_dispatch:

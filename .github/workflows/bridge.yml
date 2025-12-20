@@ -7,12 +7,12 @@ on:
       - 'devnet'
       - 'testnet'
       - 'mainnet'
-      - 'releases/sui-*-release'
+      - 'releases/rtd-*-release'
   pull_request:
     types: [ opened, synchronize, reopened, ready_for_review ]
   workflow_dispatch:
     inputs:
-      sui_repo_ref:
+      rtd_repo_ref:
         description: "Branch / commit to test"
         type: string
         required: false
@@ -70,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # Pin v4.1.1
         with:
-          ref: ${{ github.event.inputs.sui_repo_ref || github.ref }}
+          ref: ${{ github.event.inputs.rtd_repo_ref || github.ref }}
       - run: rustup component add rustfmt
       - run: cargo fmt --check
 
@@ -81,7 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # Pin v4.1.1
         with:
-          ref: ${{ github.event.inputs.sui_repo_ref || github.ref }}
+          ref: ${{ github.event.inputs.rtd_repo_ref || github.ref }}
       - run: rustup component add clippy
       - name: cargo clippy
         run: cargo xclippy -D warnings
@@ -94,7 +94,7 @@ jobs:
       # Tests written with #[sim_test] are often flaky if run as #[tokio::test] - this var
       # causes #[sim_test] to only run under the deterministic `simtest` job, and not the
       # non-deterministic `test` job.
-      SUI_SKIP_SIMTESTS: 1
+      RTD_SKIP_SIMTESTS: 1
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -120,7 +120,7 @@ jobs:
         run: echo "/usr/lib/postgresql/14/bin" >> $GITHUB_PATH
       - name: cargo test
         run: |
-          cargo nextest run --profile ci -E 'package(sui-bridge) | package(sui-bridge-indexer)'
+          cargo nextest run --profile ci -E 'package(rtd-bridge) | package(rtd-bridge-indexer)'
       # Ensure there are no uncommitted changes in the repo after running tests
       - run: scripts/changed-files.sh
         shell: bash

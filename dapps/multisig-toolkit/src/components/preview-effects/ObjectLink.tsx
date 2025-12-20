@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-import { useSuiClientContext } from '@mysten/dapp-kit';
-import { ObjectOwner, SuiObjectChange } from '@mysten/sui/client';
+import { useRtdClientContext } from '@linku/dapp-kit';
+import { ObjectOwner, RtdObjectChange } from '@linku/rtd/client';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
@@ -27,12 +27,12 @@ export function ObjectLink({
 	inputObject?: string;
 	type?: string;
 	owner?: ObjectOwner;
-	object?: SuiObjectChange;
+	object?: RtdObjectChange;
 } & React.HTMLAttributes<HTMLAnchorElement> &
 	React.ComponentPropsWithoutRef<'a'>) {
 	const [copied, setCopied] = useState(false);
 
-	const { network } = useSuiClientContext();
+	const { network } = useRtdClientContext();
 
 	let objectId: string | undefined;
 	let display: string | undefined;
@@ -70,7 +70,7 @@ export function ObjectLink({
 	}
 
 	const link = objectId
-		? `https://suiexplorer.com/${ownerDisplay ? 'address' : 'object'}/${objectId}?network=${
+		? `https://rtdexplorer.com/${ownerDisplay ? 'address' : 'object'}/${objectId}?network=${
 				network.split(':')[1]
 			}`
 		: undefined;

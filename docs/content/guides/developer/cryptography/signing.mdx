@@ -1,13 +1,13 @@
 ---
-title: Sui On-Chain Signatures Verification in Move
-description: Sui supports verification within Move smart contracts through several signature schemes. Signature schemes include Ed25519, Secp256k1 recoverable, Secp256k1 non-recoverable, Secp256r1 non-recoverable, Secp256r1 recoverable, BLS G1, and BLS G2.
+title: Rtd On-Chain Signatures Verification in Move
+description: Rtd supports verification within Move smart contracts through several signature schemes. Signature schemes include Ed25519, Secp256k1 recoverable, Secp256k1 non-recoverable, Secp256r1 non-recoverable, Secp256r1 recoverable, BLS G1, and BLS G2.
 keywords: [ Ed25519, Secp256k1 recoverable, Secp256k1 non-recoverable, Secp256r1 non-recoverable, Secp256r1 recoverable, BLS G1, BLS G2, signature schemes, signature verification fastcrypto, on-chain verification ]
 ---
 
-Move contracts in Sui support verifications for several signature schemes on-chain. Not all signatures supported in on-chain verification are supported as user signature verification. See [Sui Signatures](/concepts/transactions/transaction-auth.mdx#user-signature) for valid signature schemes for transaction authorization.
+Move contracts in Rtd support verifications for several signature schemes on-chain. Not all signatures supported in on-chain verification are supported as user signature verification. See [Rtd Signatures](/concepts/transactions/transaction-auth.mdx#user-signature) for valid signature schemes for transaction authorization.
 
 This topic covers:
-1. How to use [fastcrypto](https://github.com/MystenLabs/fastcrypto)'s CLI tool to create a signature of a given scheme. For testing and debugging only, DO NOT use in production.
+1. How to use [fastcrypto](https://github.com/LinkUVerse/fastcrypto)'s CLI tool to create a signature of a given scheme. For testing and debugging only, DO NOT use in production.
 1. Call the Move method on-chain to verification by submitting the signature, the message and the public key. 
 
 Signature schemes covered: 
@@ -24,7 +24,7 @@ Signature schemes covered:
 ### Set up fastcrypto CLI binary
 
 ```sh
-git@github.com:MystenLabs/fastcrypto.git
+git@github.com:LinkUVerse/fastcrypto.git
 cd fastcrypto/
 cargo build --bin sigs-cli
 ```
@@ -49,7 +49,7 @@ Public key in hex: $PK
 2. Call the verify method in Move. All inputs are represented in bytes in hex format:
 
 ```move
-    use sui::ed25519;
+    use rtd::ed25519;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -76,7 +76,7 @@ Public key in hex: $PK
 2. Call the verify method in Move.
 
 ```move
-    use sui::ecdsa_k1;
+    use rtd::ecdsa_k1;
     
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -103,7 +103,7 @@ Public key in hex: $PK
 
 2. Call the ecrecover method in Move and check equality.
 ```move
-    use sui::ecdsa_k1;
+    use rtd::ecdsa_k1;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -131,7 +131,7 @@ Public key in hex: $PK
 2. Call the verify method in Move.
 
 ```move
-    use sui::ecdsa_r1;
+    use rtd::ecdsa_r1;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -159,7 +159,7 @@ Public key in hex: $PK
 2. Call the ecrecover method in Move and check equality.
 
 ```move
-    use sui::ecdsa_r1;
+    use rtd::ecdsa_r1;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -187,7 +187,7 @@ Public key in hex: $PK
 2. Call the verify method in Move.
 
 ```move
-    use sui::bls12381;
+    use rtd::bls12381;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -214,7 +214,7 @@ Public key in hex: $PK
 2. Call the verify method in Move.
 
 ```move
-    use sui::bls12381;
+    use rtd::bls12381;
 
     let msg = x"$MSG";
     let pk = x"$PK";

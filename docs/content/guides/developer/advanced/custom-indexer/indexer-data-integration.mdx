@@ -1,10 +1,10 @@
 ---
 title: Indexer Data and Integration
-description: Learn how to integrate custom data sources and storage systems with Sui indexers. Covers checkpoint data sources, custom store implementations, and Move event deserialization for building flexible indexing solutions.
-keywords: [sui custom indexer, checkpoint data sources, custom storage backend, move event deserialization, BCS serialization, indexer integration, bring your own store, postgresql indexer, blockchain data ingestion, sui indexing framework]
+description: Learn how to integrate custom data sources and storage systems with Rtd indexers. Covers checkpoint data sources, custom store implementations, and Move event deserialization for building flexible indexing solutions.
+keywords: [rtd custom indexer, checkpoint data sources, custom storage backend, move event deserialization, BCS serialization, indexer integration, bring your own store, postgresql indexer, blockchain data ingestion, rtd indexing framework]
 ---
 
-Building a custom indexer on Sui lets you take full control of data ingestion, storage, and processing. You can choose from multiple [checkpoint data sources](#checkpoint-data-sources) such as remote store, local files, or direct RPC API access, depending on whether you're indexing Mainnet data, testing against known checkpoints, or working on a local network.
+Building a custom indexer on Rtd lets you take full control of data ingestion, storage, and processing. You can choose from multiple [checkpoint data sources](#checkpoint-data-sources) such as remote store, local files, or direct RPC API access, depending on whether you're indexing Mainnet data, testing against known checkpoints, or working on a local network.
 
 For storage, you can either use the built-in `IndexerCluster` with PostgreSQL or implement your own [`Store` and `Connection` traits](#byos) to integrate a different database or storage backend. After connected, you can wire up a manual indexer, add your custom pipelines, and handle watermark coordination to keep data in sync.
 
@@ -12,7 +12,7 @@ Finally, you need to [deserialize Move events](#deserialize) from raw BCS bytes 
 
 ## Checkpoint data sources {#checkpoint-data-sources}
 
-The `sui-indexer-alt-framework` supports multiple data sources for accessing Sui blockchain data.You configure these sources through command-line arguments. They fall into two categories: **push-based** and **polling-based**.
+The `rtd-indexer-alt-framework` supports multiple data sources for accessing Rtd blockchain data.You configure these sources through command-line arguments. They fall into two categories: **push-based** and **polling-based**.
 
 ### Push-based data sources
 
@@ -23,10 +23,10 @@ Push-based sources deliver real-time checkpoint data as it becomes available, of
 gRPC streaming delivers real-time checkpoint data pushed from full nodes for the latest checkpoints. Because it only streams latest data, you must configure a polling-based fallback source (remote store, local path, or full node RPC) to retrieve historical checkpoints and ensure reliability:
 
 ```sh
-$ cargo run -- --remote-store-url https://checkpoints.testnet.sui.io --streaming-url https://fullnode.testnet.sui.io:443
+$ cargo run -- --remote-store-url https://checkpoints.testnet.rtd.io --streaming-url https://fullnode.testnet.rtd.io:443
 ```
 
-**Endpoint format:** `https://fullnode.NETWORK.sui.io:443` where `NETWORK` is one of the available networks:
+**Endpoint format:** `https://fullnode.NETWORK.rtd.io:443` where `NETWORK` is one of the available networks:
 
 - `testnet`
 - `devnet`
@@ -51,13 +51,13 @@ Polling-based sources periodically check for new checkpoints using the polling m
 
 #### Remote store
 
-The most direct stream source is a subscription to a remote checkpoint store. Sui provides the following endpoints:
+The most direct stream source is a subscription to a remote checkpoint store. Rtd provides the following endpoints:
 
-- **Testnet**: `https://checkpoints.testnet.sui.io`
-- **Mainnet**: `https://checkpoints.mainnet.sui.io`
+- **Testnet**: `https://checkpoints.testnet.rtd.io`
+- **Mainnet**: `https://checkpoints.mainnet.rtd.io`
 
 ```sh
-$ cargo run -- --remote-store-url https://checkpoints.testnet.sui.io
+$ cargo run -- --remote-store-url https://checkpoints.testnet.rtd.io
 ```
 
 #### Local path
@@ -78,10 +78,10 @@ $ cargo run -- --local-ingestion-path /path/to/checkpoints
 Full node RPC queries use gRPC:
 
 ```sh
-$ cargo run -- --rpc-api-url https://fullnode.testnet.sui.io:443
+$ cargo run -- --rpc-api-url https://fullnode.testnet.rtd.io:443
 ```
 
-**Endpoint format:** `https://fullnode.NETWORK.sui.io:443` where `NETWORK` is one of the available networks:
+**Endpoint format:** `https://fullnode.NETWORK.rtd.io:443` where `NETWORK` is one of the available networks:
 
 - `testnet`
 - `devnet`
@@ -90,18 +90,18 @@ $ cargo run -- --rpc-api-url https://fullnode.testnet.sui.io:443
 **When to use RPC API:**
 
 - Networks without official remote store (devnet, localnet, custom networks)
-- Development against local Sui networks
+- Development against local Rtd networks
 
 ## Bring your own store (BYOS) {#byos}
 
-The `IndexerCluster` provides a convenient way to get started with PostgreSQL, but you might want to use a different database or storage system. This requires using the manual `Indexer` class and implementing custom `Store` and `Connection` traits from `sui-indexer-alt-framework-store-traits`.
+The `IndexerCluster` provides a convenient way to get started with PostgreSQL, but you might want to use a different database or storage system. This requires using the manual `Indexer` class and implementing custom `Store` and `Connection` traits from `rtd-indexer-alt-framework-store-traits`.
 
 <details>
 <summary>
-`lib.rs` in `sui-indexer-alt-framework-store-traits`
+`lib.rs` in `rtd-indexer-alt-framework-store-traits`
 </summary>
 
-<ImportContent source="crates/sui-indexer-alt-framework-store-traits/src/lib.rs" mode="code" trait="Connection,Store" />
+<ImportContent source="crates/rtd-indexer-alt-framework-store-traits/src/lib.rs" mode="code" trait="Connection,Store" />
 
 </details>
 
@@ -122,7 +122,7 @@ To implement BYOS, you need to:
 ###step Define your store structure
 
 ```rust
-use sui_indexer_alt_framework::store::{Store, Connection};
+use rtd_indexer_alt_framework::store::{Store, Connection};
 use async_trait::async_trait;
 
 #[derive(Clone)]
@@ -182,17 +182,17 @@ impl Connection for MyCustomConnection<'_> {
 }
 ```
 
-For a complete reference, study the `sui-pg-db` implementation on `Connection`:
+For a complete reference, study the `rtd-pg-db` implementation on `Connection`:
 
-<ImportContent source="crates/sui-pg-db/src/store.rs" mode="code" impl="Connection" />
+<ImportContent source="crates/rtd-pg-db/src/store.rs" mode="code" impl="Connection" />
 
 ###step Use manual indexer
 
 Replace `IndexerCluster` with manual `Indexer`:
 
 ```rust
-use sui_indexer_alt_framework::{Indexer, IndexerArgs};
-use sui_indexer_alt_framework::ingestion::{
+use rtd_indexer_alt_framework::{Indexer, IndexerArgs};
+use rtd_indexer_alt_framework::ingestion::{
     ClientArgs, IngestionConfig,
     ingestion_client::IngestionClientArgs,
 };
@@ -207,7 +207,7 @@ async fn main() -> anyhow::Result<()> {
         IndexerArgs::default(),
         ClientArgs {
             ingestion: IngestionClientArgs {
-                remote_store_url: Some("https://checkpoints.testnet.sui.io".to_string()),
+                remote_store_url: Some("https://checkpoints.testnet.rtd.io".to_string()),
                 ..Default::default()
             },
             ..Default::default()
@@ -231,13 +231,13 @@ async fn main() -> anyhow::Result<()> {
 
 ### Example: ClickHouse implementation
 
-For a complete working example of BYOS with [ClickHouse](https://clickhouse.com/) (a high-performance columnar database for analytics), see the [example project in the Sui repo](https://github.com/MystenLabs/sui/tree/main/examples/rust/clickhouse-sui-indexer).
+For a complete working example of BYOS with [ClickHouse](https://clickhouse.com/) (a high-performance columnar database for analytics), see the [example project in the Rtd repo](https://github.com/LinkUVerse/rtd/tree/main/examples/rust/clickhouse-rtd-indexer).
 
 <details>
 <summary>
 ClickHouse example README
 </summary>
-<ImportContent source="examples/rust/clickhouse-sui-indexer/README.md" mode="code" style="md" />
+<ImportContent source="examples/rust/clickhouse-rtd-indexer/README.md" mode="code" style="md" />
 </details>
 
 This example demonstrates:
@@ -254,7 +254,7 @@ The example includes three main components:
     <summary>
     `store.rs`
     </summary>
-    <ImportContent source="examples/rust/clickhouse-sui-indexer/src/store.rs" mode="code" />
+    <ImportContent source="examples/rust/clickhouse-rtd-indexer/src/store.rs" mode="code" />
     </details>
 
 1. `handlers.rs` - `TxDigest` handler processing checkpoint data.
@@ -263,7 +263,7 @@ The example includes three main components:
     <summary>
     `handlers.rs`
     </summary>
-    <ImportContent source="examples/rust/clickhouse-sui-indexer/src/handlers.rs" mode="code" />
+    <ImportContent source="examples/rust/clickhouse-rtd-indexer/src/handlers.rs" mode="code" />
     </details>
 
 1. `main.rs` - Manual indexer setup with ClickHouse backend.
@@ -272,12 +272,12 @@ The example includes three main components:
     <summary>
     `main.rs`
     </summary>
-    <ImportContent source="examples/rust/clickhouse-sui-indexer/src/main.rs" mode="code" />
+    <ImportContent source="examples/rust/clickhouse-rtd-indexer/src/main.rs" mode="code" />
     </details>
 
 ## Deserializing Move events {#deserialize}
 
-When Move smart contracts execute on Sui, they can emit events using the `sui::event` module. These events are stored in checkpoints as **BCS-serialized bytes** that your indexer needs to deserialize to extract meaningful data.
+When Move smart contracts execute on Rtd, they can emit events using the `rtd::event` module. These events are stored in checkpoints as **BCS-serialized bytes** that your indexer needs to deserialize to extract meaningful data.
 
 ### Why deserialization is needed
 
@@ -285,7 +285,7 @@ Move contracts emit events like this:
 
 ```rust
 // Move smart contract
-use sui::event;
+use rtd::event;
 
 public fun transfer_balance(...) {
     event::emit(BalanceEvent {
@@ -311,11 +311,11 @@ But in checkpoint data, these events arrive as **raw BCS bytes** that need to be
 
 1. Define the `Event` struct in Rust
 
-    Define the same structure in Rust as declared in Move. You can do this manually or use [`move-binding`](https://github.com/MystenLabs/move-binding) to auto-generate it from on-chain packages.
+    Define the same structure in Rust as declared in Move. You can do this manually or use [`move-binding`](https://github.com/LinkUVerse/move-binding) to auto-generate it from on-chain packages.
 
     ```rust
     use serde::Deserialize;
-    use sui_indexer_alt_framework::types::::base_types::ObjectID;
+    use rtd_indexer_alt_framework::types::::base_types::ObjectID;
 
     #[derive(Deserialize, Debug)]
     struct BalanceEvent {

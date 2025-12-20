@@ -1,21 +1,21 @@
 {
     "release_binaries": [
-        "sui",
-        "sui-node",
-        "sui-tool",
-        "sui-faucet",
-        "sui-data-ingestion",
-        "sui-bridge",
-        "sui-bridge-cli",
-        "sui-graphql-rpc",
-        "sui-test-validator",
+        "rtd",
+        "rtd-node",
+        "rtd-tool",
+        "rtd-faucet",
+        "rtd-data-ingestion",
+        "rtd-bridge",
+        "rtd-bridge-cli",
+        "rtd-graphql-rpc",
+        "rtd-test-validator",
         "move-analyzer"
     ],
     "internal_binaries": [
         "stress",
-        "sui-proxy",
-        "sui-metric-checker",
-        "sui-analytics-indexer",
-        "sui-security-watchdog"
+        "rtd-proxy",
+        "rtd-metric-checker",
+        "rtd-analytics-indexer",
+        "rtd-security-watchdog"
 	]
 }

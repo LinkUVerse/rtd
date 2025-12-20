@@ -8,7 +8,7 @@ This document is the current version of the design in [notion][notion-design]; S
 [overview][notion-overview] for a higher level motivation and outline, and [user
 stories][notion-userstories] for a walkthrough of usage scenarios.
 
-[notion-design]: https://www.notion.so/mystenlabs/Package-Management-Revamp-Concrete-Design-1b56d9dcb4e980ccb06ad12ad18004c0?pvs=4
+[notion-design]: https://www.notion.so/linkulabs/Package-Management-Revamp-Concrete-Design-1b56d9dcb4e980ccb06ad12ad18004c0?pvs=4
 [notion-overview]: https://www.notion.so/Package-management-revamp-overview-1aa6d9dcb4e980128c1bc13063c418c7?pvs=21
 [notion-userstories]: https://www.notion.so/Package-management-user-stories-1bd6d9dcb4e98005a4a7ddea4424f757?pvs=21
 
@@ -87,7 +87,7 @@ source = { root = true, use-environment = "mainnet" }
 manifest_digest = "..."
 
 deps.std = "MoveStdlib"
-deps.sui = "Sui"
+deps.rtd = "Rtd"
 deps.foo = "Foo_0" # ensure rename-from is respected
 deps.non = "Foo_1" # ensure rename-from is respected
 deps.bar = "bar"
@@ -97,7 +97,7 @@ source = { git = "...", path = "...", rev = "1234" }
 manifest_digest = "..."
 deps = {}
 
-[pinned.mainnet.Sui]
+[pinned.mainnet.Rtd]
 source = { git = "...", path = "...", rev = "1234" }
 manifest_digest = "..."
 deps.std = "MoveStdlib"
@@ -106,26 +106,26 @@ deps.std = "MoveStdlib"
 source = { git = "...", path = "...", rev = "bade", use-environment = "mainnet_alpha" }
 manifest_digest = "..."
 deps.std = "MoveStdlib"
-deps.sui = "Sui"
+deps.rtd = "Rtd"
 
 [pinned.mainnet.Foo_1]
 source = { git = "...", path = "...", rev = "baaa" }
 manifest_digest = "..."
 deps.std = "MoveStdlib"
-deps.sui = "Sui"
+deps.rtd = "Rtd"
 
 [pinned.mainnet.bar]
 source = { git = "...", path = "...", rev = "bara" }
 manifest_digest = "..."
 deps.baz = "baz"
 deps.std = "MoveStdlib"
-deps.sui = "Sui"
+deps.rtd = "Rtd"
 
 [pinned.mainnet.baz]
 source = { git = "...", path = "...", rev = "baza", modes = ["test"] }
 manifest_digest = "..."
 deps.std = "MoveStdlib"
-deps.sui = "Sui"
+deps.rtd = "Rtd"
 
 [pinned.mainnet.[...]] # other transitive dependencies from example
 
@@ -135,17 +135,17 @@ source = { git = "...", path = "...", rev = "1234" }
 manifest_digest = "..."
 deps = {}
 
-[pinned.testnet.Sui]
+[pinned.testnet.Rtd]
 source = { git = "...", path = "...", rev = "1234" }
 manifest_digest = "..."
 deps.std = "MoveStdlib"
 
 # the same for other defined environments
-[pinned.env.Sui]
+[pinned.env.Rtd]
 source = { git = "...", path = "...", rev = "1234" }
 manifest_digest = "..."
 deps.std = "MoveStdlib"
-deps.sui = "Sui"
+deps.rtd = "Rtd"
 
 ```
 
@@ -228,7 +228,7 @@ Move.published
         original-id: Object ID
         version: uint
 
-        # sui specific
+        # rtd specific
         upgrade-cap: Optional Object ID
         toolchain-verison: String
         build-config: table
@@ -240,7 +240,7 @@ Published.toml
         original-id: Object ID
         version: uint
 
-        # sui specific
+        # rtd specific
         upgrade-cap: Optional Object ID
         toolchain-verison: String
         build-config: table
@@ -265,7 +265,7 @@ From here on, when we say "all dependencies", we are referring to dependencies i
 environment.
 
 From the CLI perspective, we have the problem of selecting an environment to use if the user doesn't
-provide one. By default we will use the current chain ID from `sui client` (which we will keep
+provide one. By default we will use the current chain ID from `rtd client` (which we will keep
 cached to support offline builds) to detect the correct environment from the manifest to use. By
 using the chain ID we decouple the client environment names (which are really RPC specific) from the
 manifest environment names, but we make things work out in the common cases of mainnet and testnet.
@@ -299,7 +299,7 @@ will store digests of all transitive dependency manifests and repin if any of th
 
 Dependencies are always pinned as a group and are only repinned in two situations:
 
-1. The user explicitly asks for it by running `sui move update-deps`. This command will repin all
+1. The user explicitly asks for it by running `rtd move update-deps`. This command will repin all
    dependencies for the current environment.
 
 2. If the parts of the manifest that are relevant for the current environment have changed, then all
@@ -371,7 +371,7 @@ override):
    and `testnet_beta` environments in the manifest and the user's active CLI environment is
    `testnet`.
     > Error: There is no `e` environment in the manifest, but environments `e1` and `e2` are
-    > available. Run `sui move build --build-env e1` or `sui move build --build-env e2`
+    > available. Run `rtd move build --build-env e1` or `rtd move build --build-env e2`
 
 5. If there are no environments in the manifest with chain ID `i`, then we assume `i` is an
    ephemeral network (e.g. `localnet` or `devnet`). If `Pub.e.toml` exists, we will use the
@@ -383,9 +383,9 @@ override):
     > Error: Your active environment `e` is not present in `Move.toml`, so you must specify the
     > environment to use to determine dependencies. Pass `--build-env <env-name>`, e.g.
     >
-    >   sui move build --build-env testnet
+    >   rtd move build --build-env testnet
     >
-    > Note: adding local networks to `Move.toml` is discouraged; see `sui client test-publish --help`
+    > Note: adding local networks to `Move.toml` is discouraged; see `rtd client test-publish --help`
     > for information on managing local networks.
 
    TODO: this message might be confusing since we have implicit environments
@@ -397,7 +397,7 @@ override):
     >   - If you want to create a temporary publication on `e` and record the addresses in a local
     >     file, use the `test-publish` command instead
     >
-    >        sui client test-publish --help
+    >        rtd client test-publish --help
     >
     >   - If you want to publish to `e` and record the addresses in the shared `Published.toml`
     >     file, you will need to add the following to `Move.toml`:
@@ -485,7 +485,7 @@ graph:
  - all environments in Published.toml or Move.lock are in Move.toml
 
 These can also be violated if a user mucks around with their lockfiles - I think we should just do
-best-effort on that. We may provide an additional tool to help fix things up (e.g. `sui move
+best-effort on that. We may provide an additional tool to help fix things up (e.g. `rtd move
 sync-lock` or something).
 
 ## Resolution
@@ -514,17 +514,17 @@ testing).
 
 Unlike the current system, explicitly including a system dependency is an error; you disable
 system dependencies by adding `system_dependencies = []` to the `[package]` section of your
-manifest. Each flavor can specify its default system dependencies (for Sui, that's `sui` and `std`).
-Non-default system dependencies can be specified like that: `system_dependencies = ["sui", "std", "sui_system"]`
+manifest. Each flavor can specify its default system dependencies (for Rtd, that's `rtd` and `std`).
+Non-default system dependencies can be specified like that: `system_dependencies = ["rtd", "std", "rtd_system"]`
 
 Like externally resolved dependencies, system dependencies will be pinned to different versions
 for each environment.
 
 TODO: maybe this isn't necessary; we can just disable local deps in the monorepo and put them in explicitly:
-> The default system deps for Sui would be `sui` and `std`. The available system deps are `std`,
-> `sui`, `system`, `deepbook-v2`, `bridge`, `monorepo-sui`, `monorepo-std`. The `monorepo` deps are
-> converted to local dependencies are are used for our internal tests (they would expand to `sui = {
-> local = "path_to_monorepo/crates/sui-framework/packages/sui" }` and would fail if they are used
+> The default system deps for Rtd would be `rtd` and `std`. The available system deps are `std`,
+> `rtd`, `system`, `deepbook-v2`, `bridge`, `monorepo-rtd`, `monorepo-std`. The `monorepo` deps are
+> converted to local dependencies are are used for our internal tests (they would expand to `rtd = {
+> local = "path_to_monorepo/crates/rtd-framework/packages/rtd" }` and would fail if they are used
 > outside the monorepo.
 
 ## Fetching
@@ -596,7 +596,7 @@ For example, we can perform the following checks:
     > different from your chain ID (in Move.toml). You may need to change the chain ID for devnet in
     > your Move.toml or update foo using
     >
-    >   sui move update-deps foo
+    >   rtd move update-deps foo
     >
 
 - If the dep-replacements do specify a published-at / original-id, does it match
@@ -688,8 +688,8 @@ See the `test` module in [src/graph/linkage.rs] for a bunch of worked examples o
 
 ## Update dependencies (repinning)
 
-If the user runs `sui move update-deps`, we rerun resolution, pinning, fetching, and validation for
-all dependencies. If they run `sui move update-deps d1 d2` we rerun these steps only for the
+If the user runs `rtd move update-deps`, we rerun resolution, pinning, fetching, and validation for
+all dependencies. If they run `rtd move update-deps d1 d2` we rerun these steps only for the
 specified dependencies.
 
 ## Build / Test
@@ -772,11 +772,11 @@ original-id = "0x000000000000000000000000000000000000000000000000000000000000567
 upgrade-cap = "0x000000000000000000000000000000000000000000000000000000000022cc00"
 ```
 
-We will add a new command `sui client test-publish <pubfile>` which will publish build the root
+We will add a new command `rtd client test-publish <pubfile>` which will publish build the root
 package for one environment and then publish it to a chain using the addresses from the ephemeral
 publication file.
 
-`sui client test-publish <pubfile> --build-env <env>` will work as follows:
+`rtd client test-publish <pubfile> --build-env <env>` will work as follows:
 
  - if `<pubfile>` is omitted, it defaults to `Pub.<env-name>.toml` where `<env-name>` is the name of
    the active environment (irrespective of the environments defined in the manifest). This file
@@ -788,7 +788,7 @@ publication file.
    > Error: When creating a new test publication file, you must pass `--build-env <env>`, for
    > example
    >
-   >   sui client test-publish <pubfile> --build-env testnet
+   >   rtd client test-publish <pubfile> --build-env testnet
    >
 
  - if `--build-env <env>` is present and different from the `build-env` in the file, we
@@ -907,10 +907,10 @@ does in this case.
 Note: @Manos Liolios promised me a particularly wild example or two, and a more comprehensive list
 of examples post-bootcamp.
 
- - Crazy example: https://github.com/pyth-network/pyth-crosschain/tree/main/target_chains/sui/contracts
- - Left this in the tooling meeting notes, but for anyone else interested, this is the SuiGPT Move
+ - Crazy example: https://github.com/pyth-network/pyth-crosschain/tree/main/target_chains/rtd/contracts
+ - Left this in the tooling meeting notes, but for anyone else interested, this is the RtdGPT Move
    Dataset v1:
-   [https://github.com/CMU-SuiGPT/sui-move-dataset-v1](https://github.com/CMU-SuiGPT/sui-move-dataset-v1)
+   [https://github.com/CMU-RtdGPT/rtd-move-dataset-v1](https://github.com/CMU-RtdGPT/rtd-move-dataset-v1)
    This includes Move 2024 and legacy Move repos, all with Move.toml files - it's 7 months old, so
    if you want fresher repos than that, another alternative would be grabbing repos from the
    Electric Capital dataset.
@@ -939,7 +939,7 @@ now.
 
 ## Impact on typescript SDK
 
-## Impact on the packages we deploy (e.g. suifrens)
+## Impact on the packages we deploy (e.g. rtdfrens)
 
 ## IDE integration
 

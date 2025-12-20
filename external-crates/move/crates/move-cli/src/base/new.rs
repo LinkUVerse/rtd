@@ -96,7 +96,7 @@ impl New {
             [dependencies]
 
             # Read more about the package management system options:
-            # https://docs.sui.io/guides/developer/sui-101/move-package-management
+            # https://docs.rtd.io/guides/developer/rtd-101/move-package-management
             "#
             ),
         )?;

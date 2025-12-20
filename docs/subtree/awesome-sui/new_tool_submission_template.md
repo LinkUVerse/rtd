@@ -20,4 +20,4 @@
 
 ## Documentation or Tutorial
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On

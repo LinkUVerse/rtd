@@ -1,0 +1,38 @@
+[package]
+name = "rtd-data-ingestion"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+aws-config.workspace = true
+aws-sdk-dynamodb.workspace = true
+backoff.workspace = true
+base64-url.workspace = true
+bcs.workspace = true
+byteorder.workspace = true
+bytes.workspace = true
+futures.workspace = true
+linku-metrics.workspace = true
+object_store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+prometheus.workspace = true
+telemetry-subscribers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+rtd-storage.workspace = true
+rtd-data-ingestion-core.workspace = true
+rtd-kvstore.workspace = true
+rtd-types.workspace = true
+tempfile.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
+tempfile.workspace = true

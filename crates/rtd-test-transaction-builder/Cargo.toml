@@ -1,0 +1,23 @@
+[package]
+name = "rtd-test-transaction-builder"
+version = "0.1.0"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+bcs.workspace = true
+
+shared-crypto.workspace = true
+rtd-genesis-builder.workspace = true
+rtd-move-build.workspace = true
+rtd-sdk.workspace = true
+rtd-types.workspace = true
+
+move-core-types.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(msim)',
+] }

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -15,11 +15,11 @@ use consensus_core::{
     NetworkType, TransactionClient, TransactionVerifier, to_socket_addr,
 };
 use consensus_types::block::BlockTimestampMs;
-use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-use mysten_metrics::monitored_mpsc::unbounded_channel;
+use linku_metrics::monitored_mpsc::UnboundedReceiver;
+use linku_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::Mutex;
 use prometheus::Registry;
-use sui_protocol_config::{ConsensusNetwork, ProtocolConfig};
+use rtd_protocol_config::{ConsensusNetwork, ProtocolConfig};
 use tempfile::TempDir;
 use tracing::{info, trace};
 
@@ -137,7 +137,7 @@ pub(crate) struct AuthorityNodeInner {
 
 #[derive(Debug)]
 struct NodeHandle {
-    node_id: sui_simulator::task::NodeId,
+    node_id: rtd_simulator::task::NodeId,
 }
 
 /// When dropped, stop and wait for the node running in this node to completely shutdown.
@@ -145,7 +145,7 @@ impl Drop for AuthorityNodeInner {
     fn drop(&mut self) {
         if let Some(handle) = self.handle.take() {
             tracing::info!("shutting down {}", handle.node_id);
-            sui_simulator::runtime::Handle::try_current().map(|h| h.delete_node(handle.node_id));
+            rtd_simulator::runtime::Handle::try_current().map(|h| h.delete_node(handle.node_id));
         }
     }
 }
@@ -156,7 +156,7 @@ impl AuthorityNodeInner {
         let (startup_sender, mut startup_receiver) = tokio::sync::watch::channel(false);
         let (cancel_sender, cancel_receiver) = tokio::sync::watch::channel(false);
 
-        let handle = sui_simulator::runtime::Handle::current();
+        let handle = rtd_simulator::runtime::Handle::current();
         let builder = handle.create_node();
 
         let authority = config.committee.authority(config.authority_index);

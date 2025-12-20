@@ -1,0 +1,20 @@
+[package]
+name = "rtd-move-lsp"
+version.workspace = true
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.1.4", features = ["derive"] }
+bin-version.workspace = true
+move-analyzer.workspace = true
+move-compiler.workspace = true
+rtd-package-alt.workspace = true
+rtd-move-build.workspace = true
+rtd-package-management.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tikv-jemalloc-ctl.workspace = true
+tikv-jemallocator.workspace = true

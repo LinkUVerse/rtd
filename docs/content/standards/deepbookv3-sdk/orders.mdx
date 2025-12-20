@@ -40,7 +40,7 @@ Use `placeLimitOrder` to place limit orders. The call returns a function that ta
 
 - `params`: `SwapParams` object that represents the parameters for the swap.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="placeLimitOrder" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="placeLimitOrder" signatureOnly/>
 
 ### placeMarketOrder
 
@@ -50,7 +50,7 @@ Use `placeMarketOrder` to place market orders. The call returns a function that 
 
 - `params`: `SwapParams` object that represents the parameters for the swap.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="placeMarketOrder" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="placeMarketOrder" signatureOnly/>
 
 ### cancelOrder
 
@@ -66,7 +66,7 @@ The `orderId` is the protocol `orderId` generated during order placement, which 
 - `balanceManagerKey`: String that identifies the `BalanceManager`.
 - `orderId`: String of the protocol order ID that identifies the order to cancel.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="cancelOrder" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="cancelOrder" signatureOnly/>
 
 ### cancelAllOrders
 
@@ -77,7 +77,7 @@ Use `cancelAllOrders` to cancel every order for the balance manager whose key yo
 - `poolKey`: String that identifies the pool from which to borrow.
 - `balanceManagerKey`: String that identifies the `BalanceManager`.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="cancelAllOrders" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="cancelAllOrders" signatureOnly/>
 
 ### `modifyOrder`
 
@@ -90,7 +90,7 @@ Use `modifyOrder` to modify an existing order by changing its quantity. The new 
 - `orderId`: String of the protocol order ID to modify.
 - `newQuantity`: Number representing the new quantity for the order.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="modifyOrder" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="modifyOrder" signatureOnly/>
 
 ### `withdrawSettledAmounts`
 
@@ -101,7 +101,7 @@ Use `withdrawSettledAmounts` to withdraw all settled amounts for a balance manag
 - `poolKey`: String that identifies the pool.
 - `balanceManagerKey`: String that identifies the `BalanceManager`.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="withdrawSettledAmounts" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="withdrawSettledAmounts" signatureOnly/>
 
 ## Examples
 
@@ -169,9 +169,9 @@ interface PlaceMarketOrderParams {
 }
 
 // Example usage in DeepBookMarketMaker class
-// Place a market sell of 10 SUI in the SUI_DBUSDC pool
+// Place a market sell of 10 RTD in the RTD_DBUSDC pool
 customPlaceMarketOrder = (tx: Transaction) => {
-	const poolKey = 'SUI_DBUSDC'; // Pool key, check constants.ts for more
+	const poolKey = 'RTD_DBUSDC'; // Pool key, check constants.ts for more
 	const managerKey = 'MANAGER_1'; // Balance manager key, initialized during client creation by user
 	tx.add(
 		this.deepBook.placeMarketOrder({
@@ -202,9 +202,9 @@ cancelOrder =
 	(poolKey: string, balanceManagerKey: string, orderId: number) => (tx: Transaction) => {};
 
 // Example usage in DeepBookMarketMaker class
-// Cancel order 12345678 in SUI_DBUSDC pool
+// Cancel order 12345678 in RTD_DBUSDC pool
 cancelOrder = (tx: Transaction) => {
-	const poolKey = 'SUI_DBUSDC'; // Pool key, check constants.ts for more
+	const poolKey = 'RTD_DBUSDC'; // Pool key, check constants.ts for more
 	const managerKey = 'MANAGER_1'; // Balance manager key, initialized during client creation by user
 	tx.add(this.deepBook.cancelOrder(poolKey, managerKey, 12345678));
 };
@@ -224,9 +224,9 @@ Example of canceling all orders in a pool for a balance manager.
 cancelAllOrders = (poolKey: string, balanceManagerKey: string) => (tx: Transaction) => {};
 
 // Example usage in DeepBookMarketMaker class
-// Cancel order 12345678 in SUI_DBUSDC pool
+// Cancel order 12345678 in RTD_DBUSDC pool
 cancelOrder = (tx: Transaction) => {
-	const poolKey = 'SUI_DBUSDC'; // Pool key, check constants.ts for more
+	const poolKey = 'RTD_DBUSDC'; // Pool key, check constants.ts for more
 	const managerKey = 'MANAGER_1'; // Balance manager key, initialized during client creation by user
 	tx.add(this.deepBook.cancelAllOrders(poolKey, managerKey));
 };
@@ -235,17 +235,17 @@ cancelOrder = (tx: Transaction) => {
 ## Related links
 
 <RelatedLink
-	href="https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3"
+	href="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3"
 	label="DeepBookV3 Indexer repository"
 	desc="The DeepBookV3 SDK repository on GitHub."
 />
 <RelatedLink
-	href="https://www.npmjs.com/package/@mysten/deepbook-v3"
+	href="https://www.npmjs.com/package/@linku/deepbook-v3"
 	label="DeepBookV3 SDK node package"
 	desc="The DeepBookV3 SDK node package on NPM."
 />
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3"
+	href="https://github.com/LinkUVerse/deepbookv3"
 	label="DeepBookV3 repository"
 	desc="The DeepBookV3 repository on GitHub."
 />

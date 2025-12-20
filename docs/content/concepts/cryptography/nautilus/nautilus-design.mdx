@@ -7,11 +7,11 @@ description: Overview of the design aspects of Nautilus, including its trust mod
 
 ## dApp developer actions
 
-1. Create a Nautilus off-chain server with a reproducible build using the [provided template](https://github.com/MystenLabs/nautilus).
+1. Create a Nautilus off-chain server with a reproducible build using the [provided template](https://github.com/LinkUVerse/nautilus).
 1. Publish the server code to a public repository like GitHub to ensure transparency and verifiability.
-1. Register the platform configuration registers (PCRs) of the instance. PCRs are measurements of the trusted computing base. Use a Sui smart contract to register them.
+1. Register the platform configuration registers (PCRs) of the instance. PCRs are measurements of the trusted computing base. Use a Rtd smart contract to register them.
 1. Deploy the server to an AWS Nitro Enclave.
-1. Register the deployed enclave using a Sui smart contract and attestation document. Include the ephemeral public key of the enclave for signing responses.
+1. Register the deployed enclave using a Rtd smart contract and attestation document. Include the ephemeral public key of the enclave for signing responses.
 
 To reduce the trusted computing base, route access to the enclave through backend services that handle load balancing, rate limiting, and other related aspects.
 

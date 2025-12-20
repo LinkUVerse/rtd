@@ -7,7 +7,7 @@ keywords:
     margin trading,
     typescript,
     typescript SDK,
-    mysten/deepbook,
+    linku/deepbook,
     deepbook margin SDK,
     margin manager,
     margin pool,
@@ -16,15 +16,15 @@ keywords:
 
 The DeepBook Margin TypeScript SDK abstracts away the transaction calls, allowing for direct interactions with the `DeepBook Margin` package for leveraged trading.
 
-- [SDK repository](https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3)
-- [NPM version](https://www.npmjs.com/package/@mysten/deepbook-v3)
+- [SDK repository](https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3)
+- [NPM version](https://www.npmjs.com/package/@linku/deepbook-v3)
 
 ## Install
 
-To use the SDK in your projects, install the `@mysten/deepbook-v3` package, which includes the margin trading functionality.
+To use the SDK in your projects, install the `@linku/deepbook-v3` package, which includes the margin trading functionality.
 
 ```sh npm2yarn
-npm install @mysten/deepbook-v3
+npm install @linku/deepbook-v3
 ```
 
 ## Constants
@@ -37,47 +37,47 @@ The DeepBook SDK includes a constants file (`/utils/constants.ts`) that maintain
 </summary>
 
 ```ts reference
-https://github.com/MystenLabs/ts-sdks/blob/main/packages/deepbook-v3/src/utils/constants.ts
+https://github.com/LinkUVerse/ts-sdks/blob/main/packages/deepbook-v3/src/utils/constants.ts
 ```
 
 </details>
 
 ## DeepBookClient
 
-To work with DeepBook Margin, you must create a `DeepBookClient`. To construct the `DeepBookClient`, pass in a `SuiClient`, the sender address, and environment. The [Sui TypeScript SDK](https://sdk.mystenlabs.com/typescript) provides the `SuiClient` and key functionality necessary to process transactions. The following example imports those libraries, as well.
+To work with DeepBook Margin, you must create a `DeepBookClient`. To construct the `DeepBookClient`, pass in a `RtdClient`, the sender address, and environment. The [Rtd TypeScript SDK](https://sdk.linkulabs.com/typescript) provides the `RtdClient` and key functionality necessary to process transactions. The following example imports those libraries, as well.
 
 ```tsx
-import { DeepBookClient } from '@mysten/deepbook-v3';
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { DeepBookClient } from '@linku/deepbook-v3';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
 class DeepBookMarginTrader {
 	dbClient: DeepBookClient; // For building transactions
-	suiClient: SuiClient; // For executing transactions
+	rtdClient: RtdClient; // For executing transactions
 	keypair: Ed25519Keypair; // For signing transactions
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: env,
-			client: this.suiClient,
+			client: this.rtdClient,
 		});
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 }
 ```
@@ -93,9 +93,9 @@ Before placing any margin trade, you must supply a margin manager address to the
 Example using an existing margin manager:
 
 ```tsx
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 import { config } from 'dotenv';
 
 import { DeepBookClient } from '../src';
@@ -108,39 +108,39 @@ const MARGIN_MANAGER_KEY = 'MARGIN_MANAGER_1';
 
 class DeepBookMarginTrader {
 	dbClient: DeepBookClient; // For building transactions
-	suiClient: SuiClient; // For executing transactions
+	rtdClient: RtdClient; // For executing transactions
 	keypair: Ed25519Keypair; // For signing transactions
 	env: 'testnet' | 'mainnet';
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.env = env;
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: env,
-			client: this.suiClient,
+			client: this.rtdClient,
 			marginManagers: this.getMarginManagers(),
 		});
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 
 	getMarginManagers(): { [key: string]: MarginManager } {
 		// Used wherever margin manager key is required
 		const marginManagerAddress = process.env.MARGIN_MANAGER_ADDRESS;
-		const poolKey = process.env.POOL_KEY || 'SUI_DBUSDC';
+		const poolKey = process.env.POOL_KEY || 'RTD_DBUSDC';
 		if (!marginManagerAddress) {
 			throw new Error('No margin manager address found');
 		}
@@ -157,10 +157,10 @@ class DeepBookMarginTrader {
 Example creating a margin manager:
 
 ```tsx
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookClient } from '../src';
 import { MarginManager } from './types';
@@ -170,40 +170,40 @@ const MARGIN_MANAGER_KEY = 'MARGIN_MANAGER_1';
 
 class DeepBookMarginTrader {
 	dbClient: DeepBookClient; // For building transactions
-	suiClient: SuiClient; // For executing transactions
+	rtdClient: RtdClient; // For executing transactions
 	keypair: Ed25519Keypair; // For signing transactions
 	env: 'testnet' | 'mainnet';
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.env = env;
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: env,
-			client: this.suiClient,
+			client: this.rtdClient,
 		});
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 
 	async createMarginManagerAndReinitialize() {
 		let tx = new Transaction();
-		const poolKey = 'SUI_DBUSDC';
+		const poolKey = 'RTD_DBUSDC';
 		tx.add(this.dbClient.marginManager.newMarginManager(poolKey));
 
-		const res = await this.suiClient.signAndExecuteTransaction({
+		const res = await this.rtdClient.signAndExecuteTransaction({
 			transaction: tx,
 			signer: this.keypair,
 			options: {
@@ -227,7 +227,7 @@ class DeepBookMarginTrader {
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: this.env,
-			client: this.suiClient,
+			client: this.rtdClient,
 			marginManagers: marginManagers,
 		});
 	}
@@ -241,14 +241,14 @@ The SDK comes with four default coins on Testnet and five default coins on Mainn
 **Default Testnet coins**
 
 - DEEP
-- SUI
+- RTD
 - DBUSDC
 - DBUSDT
 
 **Default Mainnet coins**
 
 - DEEP
-- SUI
+- RTD
 - USDC
 - USDT
 - WETH
@@ -260,18 +260,18 @@ You can also initialize the SDK with custom coins to interact with margin pools 
 Similar to coins, the SDK comes with default pools. You can provide a `PoolMap` during construction to override this behavior.
 
 ```tsx
-import { decodeSuiPrivateKey } from '@mysten/sui.js/cryptography';
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import type { Keypair } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import type { Transaction } from '@mysten/sui/transactions';
+import { decodeRtdPrivateKey } from '@linku/rtd.js/cryptography';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import type { Keypair } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import type { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookClient } from '../src/index.js'; // Adjust path according to new structure
 import type { MarginManager } from '../src/types/index.js';
 
 export class DeepBookMarginTrader extends DeepBookClient {
 	keypair: Keypair;
-	suiClient: SuiClient;
+	rtdClient: RtdClient;
 
 	constructor(
 		keypair: string | Keypair,
@@ -287,12 +287,12 @@ export class DeepBookMarginTrader extends DeepBookClient {
 			resolvedKeypair = keypair;
 		}
 
-		const address = resolvedKeypair.toSuiAddress();
+		const address = resolvedKeypair.toRtdAddress();
 
 		super({
 			address: address,
 			env: env,
-			client: new SuiClient({
+			client: new RtdClient({
 				url: getFullnodeUrl(env),
 			}),
 			marginManagers: marginManagers,
@@ -300,20 +300,20 @@ export class DeepBookMarginTrader extends DeepBookClient {
 		});
 
 		this.keypair = resolvedKeypair;
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 	}
 
 	static #getSignerFromPK = (privateKey: string) => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	signAndExecute = async (tx: Transaction) => {
-		return this.suiClient.signAndExecuteTransaction({
+		return this.rtdClient.signAndExecuteTransaction({
 			transaction: tx,
 			signer: this.keypair,
 			options: {
@@ -324,7 +324,7 @@ export class DeepBookMarginTrader extends DeepBookClient {
 	};
 
 	getActiveAddress() {
-		return this.keypair.getPublicKey().toSuiAddress();
+		return this.keypair.getPublicKey().toRtdAddress();
 	}
 }
 ```
@@ -334,7 +334,7 @@ export class DeepBookMarginTrader extends DeepBookClient {
 The following example uses the default pools and coins provided, and demonstrates margin trading operations.
 
 ```tsx
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookMarginTrader } from './deepbookMarginTrader.js';
 
@@ -345,7 +345,7 @@ import { DeepBookMarginTrader } from './deepbookMarginTrader.js';
 	const marginManagers = {
 		MARGIN_MANAGER_1: {
 			address: '',
-			poolKey: 'SUI_DBUSDC',
+			poolKey: 'RTD_DBUSDC',
 		},
 	};
 	const traderClient = new DeepBookMarginTrader(privateKey, 'testnet', marginManagers);
@@ -354,11 +354,11 @@ import { DeepBookMarginTrader } from './deepbookMarginTrader.js';
 
 	// Margin manager contract calls
 	traderClient.marginManager.deposit('MARGIN_MANAGER_1', 'DBUSDC', 10000)(tx);
-	traderClient.marginManager.borrowBase('MARGIN_MANAGER_1', 'SUI_DBUSDC', 100)(tx);
+	traderClient.marginManager.borrowBase('MARGIN_MANAGER_1', 'RTD_DBUSDC', 100)(tx);
 
 	// Place leveraged orders
 	traderClient.poolProxy.placeLimitOrder({
-		poolKey: 'SUI_DBUSDC',
+		poolKey: 'RTD_DBUSDC',
 		marginManagerKey: 'MARGIN_MANAGER_1',
 		clientOrderId: '12345',
 		price: 2.5,
@@ -380,12 +380,12 @@ import { DeepBookMarginTrader } from './deepbookMarginTrader.js';
 ## Related links
 
 <RelatedLink
-	href="https://www.npmjs.com/package/@mysten/deepbook-v3"
+	href="https://www.npmjs.com/package/@linku/deepbook-v3"
 	label="DeepBookV3 SDK node package"
 	desc="The DeepBookV3 SDK node package on NPM."
 />
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3"
+	href="https://github.com/LinkUVerse/deepbookv3"
 	label="DeepBook Margin package"
 	desc="The DeepBook Margin package on GitHub."
 />

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import Link from "@docusaurus/Link";
 import styles from "./index.module.css";
@@ -10,7 +10,7 @@ export default function FooterLayout({ style, links, logo, copyright }) {
         <div className={styles.footerLogo}>{logo}</div>
         <div className={styles.footerContent}>
           <div className={styles.footerLinks}>
-            <Link to="https://discord.gg/Sui">
+            <Link to="https://discord.gg/Rtd">
               <svg
                 width="32"
                 height="32"
@@ -26,7 +26,7 @@ export default function FooterLayout({ style, links, logo, copyright }) {
                 />
               </svg>
             </Link>
-            <Link to="https://x.com/suinetwork">
+            <Link to="https://x.com/rtdnetwork">
               <svg
                 width="32"
                 height="32"
@@ -42,7 +42,7 @@ export default function FooterLayout({ style, links, logo, copyright }) {
                 />
               </svg>
             </Link>
-            <Link to="https://www.youtube.com/@Sui-Network">
+            <Link to="https://www.youtube.com/@Rtd-Network">
               <svg
                 width="32"
                 height="32"
@@ -58,7 +58,7 @@ export default function FooterLayout({ style, links, logo, copyright }) {
                 />
               </svg>
             </Link>
-            <Link to="https://www.linkedin.com/company/sui-foundation/">
+            <Link to="https://www.linkedin.com/company/rtd-foundation/">
               <svg
                 width="32"
                 height="32"
@@ -72,7 +72,7 @@ export default function FooterLayout({ style, links, logo, copyright }) {
                 />
               </svg>
             </Link>
-            <Link to="https://github.com/mystenLabs/sui/">
+            <Link to="https://github.com/linkuLabs/rtd/">
               <svg
                 width="32"
                 height="32"

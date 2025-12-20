@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 pub mod errors;
 mod options;
@@ -24,7 +24,7 @@ use crate::{
 };
 use backoff::backoff::Backoff;
 use fastcrypto::hash::{Digest, HashFunction};
-use mysten_common::debug_fatal;
+use linku_common::debug_fatal;
 use prometheus::{Histogram, HistogramTimer};
 use rocksdb::properties::num_files_at_level;
 use rocksdb::{
@@ -43,7 +43,7 @@ use std::{
     time::Duration,
 };
 use std::{collections::HashSet, ffi::CStr};
-use sui_macros::{fail_point, nondeterministic};
+use rtd_macros::{fail_point, nondeterministic};
 #[cfg(tidehunter)]
 use tidehunter::{db::Db as TideHunterDb, key_shape::KeySpace};
 use tokio::sync::oneshot;

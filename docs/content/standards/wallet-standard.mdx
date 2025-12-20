@@ -1,13 +1,13 @@
 ---
 title: Wallet Standard
 description: The Wallet Standard defines how dApps can automatically discover and interact with wallets.
-keywords: [ mysten/wallet-standard, wallet standards, Wallet Standard, browser extensions, exposing accounts, wallet events, register in window, wallet best practices, efficient transaction execution, wallet data, managing wallets, wallet-standard ]
+keywords: [ linku/wallet-standard, wallet standards, Wallet Standard, browser extensions, exposing accounts, wallet events, register in window, wallet best practices, efficient transaction execution, wallet data, managing wallets, wallet-standard ]
 pagination_prev: null
 ---
 
-Browser extension wallets built for Sui use the [Wallet Standard](https://github.com/wallet-standard/wallet-standard/). This is a cross-chain standard that defines how dApps can automatically discover and interact with wallets.
+Browser extension wallets built for Rtd use the [Wallet Standard](https://github.com/wallet-standard/wallet-standard/). This is a cross-chain standard that defines how dApps can automatically discover and interact with wallets.
 
-If you are building a wallet, the helper library `@mysten/wallet-standard` provides types and utilities to help get started.
+If you are building a wallet, the helper library `@linku/wallet-standard` provides types and utilities to help get started.
 
 ## Working with wallets
 
@@ -16,10 +16,10 @@ The Wallet Standard includes features to help build wallets.
 ### Creating a wallet interface
 
 Create a class that represents your wallet. Use the `Wallet` interface from
-`@mysten/wallet-standard` to help ensure your class adheres to the standard.
+`@linku/wallet-standard` to help ensure your class adheres to the standard.
 
 ```tsx
-import { SUI_DEVNET_CHAIN, Wallet } from '@mysten/wallet-standard';
+import { RTD_DEVNET_CHAIN, Wallet } from '@linku/wallet-standard';
 
 class YourWallet implements Wallet {
 	get version() {
@@ -35,9 +35,9 @@ class YourWallet implements Wallet {
 		return 'some-icon-data-url';
 	}
 
-	// Return the Sui chains that your wallet supports.
+	// Return the Rtd chains that your wallet supports.
 	get chains() {
-		return [SUI_DEVNET_CHAIN];
+		return [RTD_DEVNET_CHAIN];
 	}
 }
 ```
@@ -56,18 +56,18 @@ Features are standard methods consumers can use to interact with a wallet. Walle
 Libraries built on top of the Wallet Standard (like dApp Kit) require transaction signing capabilities. Implement both current and legacy methods for maximum compatibility:
 
 Current methods:
-- `sui:signTransaction` - Use to prompt the user to sign a transaction and return the serialized
+- `rtd:signTransaction` - Use to prompt the user to sign a transaction and return the serialized
   transaction and signature back to the dApp. This method does not submit the transaction for
   execution.
-- `sui:signAndExecuteTransaction` - Use to prompt the user to sign a transaction, then submit it
+- `rtd:signAndExecuteTransaction` - Use to prompt the user to sign a transaction, then submit it
   for execution to the blockchain.
 
 Legacy methods:
-- `sui:signTransactionBlock` - The legacy version of `sui:signTransaction`. Many existing dApps still rely on this method.
-- `sui:signAndExecuteTransactionBlock` - The legacy version of `sui:signAndExecuteTransaction`. Many existing dApps still rely on this method.
+- `rtd:signTransactionBlock` - The legacy version of `rtd:signTransaction`. Many existing dApps still rely on this method.
+- `rtd:signAndExecuteTransactionBlock` - The legacy version of `rtd:signAndExecuteTransaction`. Many existing dApps still rely on this method.
 
 **Personal message signing**
-- `sui:signPersonalMessage` - Use to prompt the user to sign a personal message and return the
+- `rtd:signPersonalMessage` - Use to prompt the user to sign a personal message and return the
   message signature back to the dApp. This is essential for user verification flows used by many dApps.
 
 Implement these features in your wallet class under the `features` property:
@@ -78,21 +78,21 @@ import {
   StandardConnectMethod,
   StandardEventsFeature,
   StandardEventsOnMethod,
-  SuiFeatures,
-  SuiSignPersonalMessageMethod,
-  SuiSignTransactionMethod,
-  SuiSignAndExecuteTransactionMethod,
+  RtdFeatures,
+  RtdSignPersonalMessageMethod,
+  RtdSignTransactionMethod,
+  RtdSignAndExecuteTransactionMethod,
   StandardConnect,
   StandardEvents,
-  SuiSignPersonalMessage,
-  SuiSignTransaction,
-  SuiSignAndExecuteTransaction
-} from "@mysten/wallet-standard";
+  RtdSignPersonalMessage,
+  RtdSignTransaction,
+  RtdSignAndExecuteTransaction
+} from "@linku/wallet-standard";
 
 class YourWallet implements Wallet {
 	/* ... existing code from above ... */
 
-  get features(): ConnectFeature & EventsFeature & SuiFeatures {
+  get features(): ConnectFeature & EventsFeature & RtdFeatures {
     return {
       [StandardConnect]: {
         version: "1.0.0",
@@ -102,15 +102,15 @@ class YourWallet implements Wallet {
         version: "1.0.0",
         on: this.#on,
       },
-			[SuiSignPersonalMessage]: {
+			[RtdSignPersonalMessage]: {
         version: "1.1.0",
 				signPersonalMessage: this.#signPersonalMessage,
 			},
-      [SuiSignTransaction]: {
+      [RtdSignTransaction]: {
         version: "2.0.0",
         signTransaction: this.#signTransaction,
       },
-      [SuiSignAndExecuteTransaction]: {
+      [RtdSignAndExecuteTransaction]: {
         version: "2.0.0",
         signAndExecuteTransaction: this.#signAndExecuteTransaction,
       },
@@ -125,15 +125,15 @@ class YourWallet implements Wallet {
     // Your wallet's connect implementation
   };
 
-	#signPersonalMessage: SuiSignPersonalMessageMethod = () => {
+	#signPersonalMessage: RtdSignPersonalMessageMethod = () => {
     // Your wallet's signPersonalMessage implementation
   };
 
-  #signTransaction: SuiSignTransactionMethod = () => {
+  #signTransaction: RtdSignTransactionMethod = () => {
     // Your wallet's signTransaction implementation
   };
 
-  #signAndExecuteTransaction: SuiSignAndExecuteTransactionMethod = () => {
+  #signAndExecuteTransaction: RtdSignAndExecuteTransactionMethod = () => {
     // Your wallet's signAndExecuteTransaction implementation
   };
 }
@@ -150,7 +150,7 @@ The last requirement of the wallet interface is to expose an `accounts` interfac
 The accounts use the `ReadonlyWalletAccount` class to construct an account matching the required interface.
 
 ```tsx
-import { ReadonlyWalletAccount } from '@mysten/wallet-standard';
+import { ReadonlyWalletAccount } from '@linku/wallet-standard';
 
 class YourWallet implements Wallet {
 	get accounts() {
@@ -158,17 +158,17 @@ class YourWallet implements Wallet {
 		return someWalletAccounts.map(
 			(walletAccount) =>
 				new ReadonlyWalletAccount({
-					address: walletAccount.suiAddress,
+					address: walletAccount.rtdAddress,
 					publicKey: walletAccount.pubkey,
-					// The Sui chains that this account supports. This can be a subset of the wallet's supported chains.
+					// The Rtd chains that this account supports. This can be a subset of the wallet's supported chains.
           // These chains must exist on the wallet as well.
-					chains: [SUI_DEVNET_CHAIN],
+					chains: [RTD_DEVNET_CHAIN],
 					// The features that this account supports. This can be a subset of the wallet's supported features.
 					// These features must exist on the wallet as well.
 					features: [
-						SuiSignPersonalMessage,
-            SuiSignTransaction,
-						SuiSignAndExecuteTransaction,
+						RtdSignPersonalMessage,
+            RtdSignTransaction,
+						RtdSignAndExecuteTransaction,
 					],
 				}),
 		);
@@ -182,7 +182,7 @@ After you have a compatible interface for your wallet, use the `registerWallet`
 function to register it.
 
 ```tsx
-import { registerWallet } from '@mysten/wallet-standard';
+import { registerWallet } from '@linku/wallet-standard';
 
 registerWallet(new YourWallet());
 ```
@@ -196,7 +196,7 @@ The Wallet Standard includes features to help your apps interact with wallets.
 To query the installed wallets in a user's browser, use the `get` function of `getWallets`.
 
 ```tsx
-import { getWallets } from '@mysten/wallet-standard';
+import { getWallets } from '@linku/wallet-standard';
 
 const availableWallets = getWallets().get();
 ```
@@ -250,10 +250,10 @@ wallet.features['standard:disconnect'].disconnect();
 
 Once the user has authorized accounts from a wallet, your app has the necessary information to execute transactions, such as address and method.
 
-Construct the transaction separately with the `@mysten/sui` library and then sign it with the private key of the user. Use the `sui:signTransaction` feature to achieve this:
+Construct the transaction separately with the `@linku/rtd` library and then sign it with the private key of the user. Use the `rtd:signTransaction` feature to achieve this:
 
 ```tsx
-wallet.features['sui:signTransaction'].signTransaction({
+wallet.features['rtd:signTransaction'].signTransaction({
   transaction: <Transaction>,
   account: <WalletAccount>
 })
@@ -261,10 +261,10 @@ wallet.features['sui:signTransaction'].signTransaction({
 
 Similar to account authorization, this process opens a pop-up dialog for the user to either accept or decline the transaction. Upon accepting, the function returns an object in the form `{bytes: String, signature: Uint8Array}`. The `bytes` value is the `b64` encoding of the transaction and the `signature` value is the transaction signature.
 
-To execute the transaction, use `SuiClient` from `@mysten/sui`:
+To execute the transaction, use `RtdClient` from `@linku/rtd`:
 
 ```tsx
-const client: SuiClient
+const client: RtdClient
 client.executeTransactionBlock({
     transactionBlock: bytes,
     signature: signature,
@@ -274,7 +274,7 @@ client.executeTransactionBlock({
 
 ### Transactions - abbreviated approach
 
-Many wallets abstract the above flow into one feature: `sui:signAndExecuteTransaction`. The required arguments for this feature are the raw transaction and the options with the desired information to be included in the response:
+Many wallets abstract the above flow into one feature: `rtd:signAndExecuteTransaction`. The required arguments for this feature are the raw transaction and the options with the desired information to be included in the response:
 
 - `showEffects`: Include the transaction effects.
 - `showEvents`: Include the transaction events.
@@ -315,4 +315,4 @@ These values are all arrays containing the new or changed items. Consequently, e
 
 ### Implementation example
 
-Mysten Labs offers a bare bones scaffold for React-based applications called `@mysten/dapp-kit`. See the [dApp Kit documentation](https://sdk.mystenlabs.com/dapp-kit) for more information.
+LinkU Labs offers a bare bones scaffold for React-based applications called `@linku/dapp-kit`. See the [dApp Kit documentation](https://sdk.linkulabs.com/dapp-kit) for more information.

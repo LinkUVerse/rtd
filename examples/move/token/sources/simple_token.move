@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Create a simple Token with Denylist for every action; all four default
 /// actions are allowed as long as the user is not on the denylist.
 module examples::simple_token {
     use examples::denylist_rule::Denylist;
-    use sui::coin::{Self, TreasuryCap};
-    use sui::token::{Self, TokenPolicy, TokenPolicyCap};
-    use sui::tx_context::sender;
+    use rtd::coin::{Self, TreasuryCap};
+    use rtd::token::{Self, TokenPolicy, TokenPolicyCap};
+    use rtd::tx_context::sender;
 
     /// OTW and the type for the Token.
     public struct SIMPLE_TOKEN has drop {}
@@ -67,9 +67,9 @@ module examples::simple_token {
 module examples::simple_token_tests {
     use examples::denylist_rule as denylist;
     use examples::simple_token::set_rules;
-    use sui::coin;
-    use sui::token::{Self, TokenPolicy, TokenPolicyCap};
-    use sui::token_test_utils::{Self as test, TEST};
+    use rtd::coin;
+    use rtd::token::{Self, TokenPolicy, TokenPolicyCap};
+    use rtd::token_test_utils::{Self as test, TEST};
 
     const ALICE: address = @0x0;
     const BOB: address = @0x1;

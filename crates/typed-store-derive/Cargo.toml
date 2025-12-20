@@ -2,9 +2,9 @@
 name = "typed-store-derive"
 version = "0.3.0"
 license = "Apache-2.0"
-authors = ["Ade A. <ade@mystenlabs.com>"]
+authors = ["Ade A. <ade@linkulabs.com>"]
 description = "macros for the typed-store crate"
-repository = "https://github.com/mystenlabs/mysten-infra"
+repository = "https://github.com/linkulabs/linku-infra"
 edition = "2024"
 publish = false
 

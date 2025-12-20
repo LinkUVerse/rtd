@@ -34,5 +34,5 @@ tokio.workspace = true
 datatest-stable.workspace = true
 
 [[test]]
-name = "testsuite"
+name = "testrtdte"
 harness = false

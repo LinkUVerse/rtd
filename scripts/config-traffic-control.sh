@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 usage() {
     echo "Usage: $0 <search_string>"
     echo
     echo "Provides a recommended configuration for the client-id-source "
-    echo "field of the sui-node policy-config config for traffic controller."
+    echo "field of the rtd-node policy-config config for traffic controller."
     echo "To use, do the following:"
     echo
-    echo "1. Set the following sui-node config:"
+    echo "1. Set the following rtd-node config:"
     echo
     echo "  client-id-source:"
     echo "    x-forwarded-for: 0"
     echo
     echo "2. Start the node"
-    echo "3. Run this script, piping sui-node logs to it and providing the known client IP address as an argument."
+    echo "3. Run this script, piping rtd-node logs to it and providing the known client IP address as an argument."
     echo "4. The script will output the recommended configuration for the client-id-source field."
     echo "5. Set the client-id-source field to the recommended configuration."
     echo "6. Restart the node."
@@ -24,7 +24,7 @@ usage() {
     echo "NOTE: If the node is not running behind a proxy, this script will not yield any results."
     echo "      In such a case, set the client-id-source field to the default value of 'socket-addr'."
     echo
-    echo "Example 1: journalctl -fu sui-node | $0 1.2.3.4"
+    echo "Example 1: journalctl -fu rtd-node | $0 1.2.3.4"
     echo "Example 2: echo 'x-forwarded-for contents: [\"1.2.3.4\", \"5.6.7.8\", \"4.5.6.7\"]' | $0 1.2.3.4"
 }
 

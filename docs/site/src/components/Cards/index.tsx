@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useEffect, useState } from "react";
@@ -24,7 +24,7 @@ export function Card({ title, href, className, children }: CardProps) {
     return;
   }, [url]);
 
-  const { descriptions } = usePluginData("sui-description-plugin");
+  const { descriptions } = usePluginData("rtd-description-plugin");
   let h = href;
   if (!h.match(/^\//)) {
     h = `/${h}`;

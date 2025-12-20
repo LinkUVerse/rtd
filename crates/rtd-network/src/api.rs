@@ -1,0 +1,11 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+mod validator {
+    include!(concat!(env!("OUT_DIR"), "/rtd.validator.Validator.rs"));
+}
+
+pub use validator::{
+    validator_client::ValidatorClient,
+    validator_server::{Validator, ValidatorServer},
+};

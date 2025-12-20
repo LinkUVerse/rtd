@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 # originally from https://github.com/diem/diem/blob/main/scripts/git-checks.sh

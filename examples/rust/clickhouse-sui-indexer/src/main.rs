@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 mod handlers;
@@ -6,7 +6,7 @@ mod store;
 
 use anyhow::Result;
 use clap::Parser;
-use sui_indexer_alt_framework::{
+use rtd_indexer_alt_framework::{
     ingestion::{ClientArgs, IngestionConfig},
     pipeline::concurrent::ConcurrentConfig,
     Indexer, IndexerArgs,
@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
     store.create_tables_if_not_exists().await?;
 
     // Manually build the indexer with our custom ClickHouse store
-    // This is the key difference from basic-sui-indexer which uses IndexerCluster::builder()
+    // This is the key difference from basic-rtd-indexer which uses IndexerCluster::builder()
     let mut indexer = Indexer::new(
         store.clone(),
         args.indexer_args,
@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         )
         .await?;
 
-    println!("Starting ClickHouse Sui indexer...");
+    println!("Starting ClickHouse Rtd indexer...");
 
     // Start the indexer and wait for it to complete
     let handle = indexer.run().await?;

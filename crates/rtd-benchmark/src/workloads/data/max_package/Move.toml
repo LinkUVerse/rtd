@@ -1,0 +1,11 @@
+[package]
+name = "max_package"
+version = "0.0.1"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+max_package =  "0x0"
+rtd =  "0000000000000000000000000000000000000000000000000000000000000002"

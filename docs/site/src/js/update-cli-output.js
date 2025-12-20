@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const fs = require("fs");
@@ -13,19 +13,19 @@ console.log("Current working directory:", process.cwd());
  * to mirror the workflow outputs (snippets/console-output/*.mdx).
  */
 const COMMANDS = [
-  { cmd: "sui client --help", out: "sui-client-help.mdx" },
-  { cmd: "sui replay --help", out: "sui-replay-help.mdx" },
-  { cmd: "sui keytool --help", out: "sui-keytool-help.mdx" },
-  { cmd: "sui keytool sign --help", out: "sui-keytool-sign-help.mdx" },
-  { cmd: "sui move --help", out: "sui-move-help.mdx" },
-  { cmd: "sui move build --help", out: "sui-move-build-help.mdx" },
-  { cmd: "sui validator --help", out: "sui-validator-help.mdx" },
+  { cmd: "rtd client --help", out: "rtd-client-help.mdx" },
+  { cmd: "rtd replay --help", out: "rtd-replay-help.mdx" },
+  { cmd: "rtd keytool --help", out: "rtd-keytool-help.mdx" },
+  { cmd: "rtd keytool sign --help", out: "rtd-keytool-sign-help.mdx" },
+  { cmd: "rtd move --help", out: "rtd-move-help.mdx" },
+  { cmd: "rtd move build --help", out: "rtd-move-build-help.mdx" },
+  { cmd: "rtd validator --help", out: "rtd-validator-help.mdx" },
   {
-    cmd: "sui validator report-validator --help",
-    out: "sui-validator-report-validator-help.mdx",
+    cmd: "rtd validator report-validator --help",
+    out: "rtd-validator-report-validator-help.mdx",
   },
-  { cmd: "sui client call --help", out: "sui-client-call-help.mdx" },
-  { cmd: "sui client ptb --help", out: "sui-client-ptb-help.mdx" },
+  { cmd: "rtd client call --help", out: "rtd-client-call-help.mdx" },
+  { cmd: "rtd client ptb --help", out: "rtd-client-ptb-help.mdx" },
 ];
 
 /** Root for snippet outputs (kept identical to the workflow paths). */

@@ -11,10 +11,10 @@
 
 ## Description
 
-Explorer and analytics platform for Sui.
+Explorer and analytics platform for Rtd.
 
 ## Features
-- [Data APIs](https://docs.blockberry.one/reference/sui-quickstart)
+- [Data APIs](https://docs.blockberry.one/reference/rtd-quickstart)
 - Fundamental blockchain data (transactions, epoch,...)
 - Analytics:
     - DeFi
@@ -34,4 +34,4 @@ Explorer and analytics platform for Sui.
     - Devnet
     - Custom nodes
 - Administration:
-    - [Submit Hub](https://suiscan.xyz/submit-hub)
+    - [Submit Hub](https://rtdscan.xyz/submit-hub)

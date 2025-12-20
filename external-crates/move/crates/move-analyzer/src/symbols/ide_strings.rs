@@ -9,7 +9,7 @@ use move_compiler::{
     expansion::{
         ast::{self as E, AbilitySet, ModuleIdent_, Value, Value_, Visibility},
         name_validation::{
-            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_SUI_MEMBERS, IMPLICIT_SUI_MODULES,
+            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES,
             ModuleMemberKind,
         },
     },
@@ -22,7 +22,7 @@ use move_ir_types::location::*;
 use move_symbol_pool::Symbol;
 
 const STD_LIB_PKG_ADDRESS: &str = "0x1";
-const SUI_LIB_PKG_ADDRESS: &str = "0x2";
+const RTD_LIB_PKG_ADDRESS: &str = "0x2";
 
 pub fn visibility_to_ide_string(visibility: &Visibility) -> String {
     let mut visibility_str = "".to_string();
@@ -353,7 +353,7 @@ pub fn mod_ident_to_ide_string(
                 IMPLICIT_STD_MEMBERS,
             );
 
-            // check for Sui implicits only if the previous call determined
+            // check for Rtd implicits only if the previous call determined
             // that the prefix was not strippable with respect to implicits
             // passed as its arguments
             if !strippable {
@@ -363,9 +363,9 @@ pub fn mod_ident_to_ide_string(
                     mod_ident,
                     datatype_name_opt,
                     suffix,
-                    SUI_LIB_PKG_ADDRESS,
-                    IMPLICIT_SUI_MODULES,
-                    IMPLICIT_SUI_MEMBERS,
+                    RTD_LIB_PKG_ADDRESS,
+                    IMPLICIT_RTD_MODULES,
+                    IMPLICIT_RTD_MEMBERS,
                 );
             }
             res

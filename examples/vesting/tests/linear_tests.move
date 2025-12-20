@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
 module vesting::linear_tests;
 
-use sui::clock;
-use sui::coin;
-use sui::sui::SUI;
-use sui::test_scenario as ts;
+use rtd::clock;
+use rtd::coin;
+use rtd::rtd::RTD;
+use rtd::test_scenario as ts;
 use vesting::linear::{Self, new_wallet, Wallet};
 
 public struct Token has key, store { id: UID }
@@ -20,7 +20,7 @@ const START_TIME: u64 = 1_000;
 
 fun test_setup(): ts::Scenario {
     let mut ts = ts::begin(CONTROLLER_ADDR);
-    let coins = coin::mint_for_testing<SUI>(FULLY_VESTED_AMOUNT, ts.ctx());
+    let coins = coin::mint_for_testing<RTD>(FULLY_VESTED_AMOUNT, ts.ctx());
     let now = clock::create_for_testing(ts.ctx());
     let wallet = new_wallet(coins, &now, START_TIME, VESTING_DURATION, ts.ctx());
     transfer::public_transfer(wallet, OWNER_ADDR);
@@ -32,7 +32,7 @@ fun test_setup(): ts::Scenario {
 #[expected_failure(abort_code = linear::EInvalidStartTime)]
 fun test_invalid_start_time() {
     let mut ts = ts::begin(CONTROLLER_ADDR);
-    let coins = coin::mint_for_testing<SUI>(FULLY_VESTED_AMOUNT, ts.ctx());
+    let coins = coin::mint_for_testing<RTD>(FULLY_VESTED_AMOUNT, ts.ctx());
     let now = clock::create_for_testing(ts.ctx());
     let wallet = new_wallet(coins, &now, 0, VESTING_DURATION, ts.ctx());
     transfer::public_transfer(wallet, OWNER_ADDR);
@@ -45,7 +45,7 @@ fun test_linear_vesting() {
     let mut ts = test_setup();
     ts.next_tx(OWNER_ADDR);
     let mut now = clock::create_for_testing(ts.ctx());
-    let mut wallet = ts.take_from_sender<Wallet<SUI>>();
+    let mut wallet = ts.take_from_sender<Wallet<RTD>>();
 
     // check zero vested
     now.increment_for_testing(START_TIME);

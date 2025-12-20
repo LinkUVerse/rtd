@@ -1,4 +1,4 @@
-name: Generate Sui CLI Help Snippets
+name: Generate Rtd CLI Help Snippets
 
 on:
   workflow_dispatch: {}
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: sui-help
+  group: rtd-help
   cancel-in-progress: false
 
 jobs:
@@ -22,70 +22,70 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Determine latest Sui release tag
+      - name: Determine latest Rtd release tag
         id: release
         run: |
-          TAG=$(curl -s https://api.github.com/repos/MystenLabs/sui/releases \
+          TAG=$(curl -s https://api.github.com/repos/LinkUVerse/rtd/releases \
             | jq -r 'map(select(.tag_name | startswith("testnet-")))[0].tag_name')
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Restore cached Sui binary
+      - name: Restore cached Rtd binary
         id: cache
         uses: actions/cache@v4
         with:
-          path: .cache/sui/${{ steps.release.outputs.tag }}/sui
-          key: sui-${{ runner.os }}-${{ steps.release.outputs.tag }}
+          path: .cache/rtd/${{ steps.release.outputs.tag }}/rtd
+          key: rtd-${{ runner.os }}-${{ steps.release.outputs.tag }}
 
-      - name: Download Sui CLI if cache miss
+      - name: Download Rtd CLI if cache miss
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           TAG="${{ steps.release.outputs.tag }}"
-          mkdir -p ".cache/sui/${TAG}"
+          mkdir -p ".cache/rtd/${TAG}"
           
           # Try different possible asset names
           ASSETS=(
-            "sui-mainnet-v${TAG#testnet-v}-ubuntu-x86_64.tgz"
-            "sui-testnet-v${TAG#testnet-v}-ubuntu-x86_64.tgz"
-            "sui-${TAG}-ubuntu-x86_64.tgz"
-            "sui-linux-x86_64"
+            "rtd-mainnet-v${TAG#testnet-v}-ubuntu-x86_64.tgz"
+            "rtd-testnet-v${TAG#testnet-v}-ubuntu-x86_64.tgz"
+            "rtd-${TAG}-ubuntu-x86_64.tgz"
+            "rtd-linux-x86_64"
           )
           
           DOWNLOADED=false
           for ASSET in "${ASSETS[@]}"; do
-            URL="https://github.com/MystenLabs/sui/releases/download/${TAG}/${ASSET}"
+            URL="https://github.com/LinkUVerse/rtd/releases/download/${TAG}/${ASSET}"
             echo "Trying: $URL"
             
-            if curl -fsSL -o "/tmp/sui-download" "$URL" 2>/dev/null; then
+            if curl -fsSL -o "/tmp/rtd-download" "$URL" 2>/dev/null; then
               echo "Successfully downloaded: $ASSET"
               
               # Check if it's a tarball
               if [[ "$ASSET" == *.tgz ]]; then
-                tar -xzf /tmp/sui-download -C ".cache/sui/${TAG}/"
-                # Find the sui binary in extracted files
-                find ".cache/sui/${TAG}/" -name "sui" -type f -executable -exec mv {} ".cache/sui/${TAG}/sui" \;
+                tar -xzf /tmp/rtd-download -C ".cache/rtd/${TAG}/"
+                # Find the rtd binary in extracted files
+                find ".cache/rtd/${TAG}/" -name "rtd" -type f -executable -exec mv {} ".cache/rtd/${TAG}/rtd" \;
               else
-                mv /tmp/sui-download ".cache/sui/${TAG}/sui"
+                mv /tmp/rtd-download ".cache/rtd/${TAG}/rtd"
               fi
               
-              chmod +x ".cache/sui/${TAG}/sui"
+              chmod +x ".cache/rtd/${TAG}/rtd"
               DOWNLOADED=true
               break
             fi
           done
           
           if [ "$DOWNLOADED" = false ]; then
-            echo "Failed to download sui binary from any known location"
+            echo "Failed to download rtd binary from any known location"
             echo "Available assets for ${TAG}:"
-            curl -s "https://api.github.com/repos/MystenLabs/sui/releases/tags/${TAG}" | jq -r '.assets[].name'
+            curl -s "https://api.github.com/repos/LinkUVerse/rtd/releases/tags/${TAG}" | jq -r '.assets[].name'
             exit 1
           fi
           
           # Verify it's actually a binary
-          if ! file ".cache/sui/${TAG}/sui" | grep -q "executable"; then
+          if ! file ".cache/rtd/${TAG}/rtd" | grep -q "executable"; then
             echo "Downloaded file is not an executable:"
-            file ".cache/sui/${TAG}/sui"
-            head -n 5 ".cache/sui/${TAG}/sui"
+            file ".cache/rtd/${TAG}/rtd"
+            head -n 5 ".cache/rtd/${TAG}/rtd"
             exit 1
           fi
 
@@ -93,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.release.outputs.tag }}"
-          BIN=".cache/sui/${TAG}/sui"
+          BIN=".cache/rtd/${TAG}/rtd"
           OUT_DIR="docs/content/snippets/console-output"
           mkdir -p "$OUT_DIR"
 
@@ -105,17 +105,17 @@ jobs:
 
           echo "Generating help snippets from $BIN"
 
-          gen "sui-help.mdx" --help
-          gen "sui-client-help.mdx" client --help
-          gen "sui-client-call-help.mdx" client call --help
-          gen "sui-client-ptb-help.mdx" client ptb --help
-          gen "sui-replay-help.mdx" replay --help
-          gen "sui-keytool-sign-help.mdx" keytool sign --help
-          gen "sui-keytool-help.mdx" keytool --help
-          gen "sui-move-help.mdx" move --help
-          gen "sui-move-build-help.mdx" move build --help
-          gen "sui-validator-help.mdx" validator --help
-          gen "sui-validator-report-validator-help.mdx" validator report-validator --help
+          gen "rtd-help.mdx" --help
+          gen "rtd-client-help.mdx" client --help
+          gen "rtd-client-call-help.mdx" client call --help
+          gen "rtd-client-ptb-help.mdx" client ptb --help
+          gen "rtd-replay-help.mdx" replay --help
+          gen "rtd-keytool-sign-help.mdx" keytool sign --help
+          gen "rtd-keytool-help.mdx" keytool --help
+          gen "rtd-move-help.mdx" move --help
+          gen "rtd-move-build-help.mdx" move build --help
+          gen "rtd-validator-help.mdx" validator --help
+          gen "rtd-validator-report-validator-help.mdx" validator report-validator --help
 
       - name: Diff guard
         id: diff
@@ -135,5 +135,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/content/snippets/console-output/*.mdx
-          git commit -m "chore(ci): update Sui CLI help snippets (${{ steps.release.outputs.tag }})"
+          git commit -m "chore(ci): update Rtd CLI help snippets (${{ steps.release.outputs.tag }})"
           git push

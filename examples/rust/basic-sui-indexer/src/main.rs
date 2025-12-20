@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 mod models;
@@ -11,7 +11,7 @@ pub mod schema;
 use anyhow::Result;
 use clap::Parser;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations};
-use sui_indexer_alt_framework::{
+use rtd_indexer_alt_framework::{
     cluster::{Args, IndexerCluster},
     pipeline::sequential::SequentialConfig,
 };

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -16,7 +16,7 @@ const CompNav = (props) => {
           <div key={component}>
             <Link href={`#${component.toLowerCase()}`}
             data-to-scrollspy-id={`${component.toLowerCase()}`}
-            className="my-1 pl-4 block text-sui-gray-95 dark:text-sui-grey-35 hover:no-underline dark:hover:text-sui-blue">
+            className="my-1 pl-4 block text-rtd-gray-95 dark:text-rtd-grey-35 hover:no-underline dark:hover:text-rtd-blue">
               {component}
             </Link>
             </div>

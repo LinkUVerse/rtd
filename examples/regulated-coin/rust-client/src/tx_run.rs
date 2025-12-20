@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 mod coin;
@@ -6,23 +6,23 @@ mod deny;
 
 use anyhow::Result;
 use move_core_types::language_storage::TypeTag;
-use sui_keys::keystore::AccountKeystore;
-use sui_sdk::SuiClient;
-use sui_sdk::rpc_types::SuiTransactionBlockResponse;
-use sui_sdk::types::base_types::{SuiAddress, ObjectID};
-use sui_sdk::wallet_context::WalletContext;
+use rtd_keys::keystore::AccountKeystore;
+use rtd_sdk::RtdClient;
+use rtd_sdk::rpc_types::RtdTransactionBlockResponse;
+use rtd_sdk::types::base_types::{RtdAddress, ObjectID};
+use rtd_sdk::wallet_context::WalletContext;
 
 #[derive(Debug)]
 pub enum AppCommand {
-    DenyListAdd(SuiAddress),
-    DenyListRemove(SuiAddress),
-    MintAndTransfer(u64, SuiAddress),
-    Transfer(ObjectID, SuiAddress),
+    DenyListAdd(RtdAddress),
+    DenyListRemove(RtdAddress),
+    MintAndTransfer(u64, RtdAddress),
+    Transfer(ObjectID, RtdAddress),
     Burn(ObjectID)
 }
 
 pub struct AppConfig {
-    pub client: SuiClient,
+    pub client: RtdClient,
     pub wallet_context: WalletContext,
     pub type_tag: TypeTag,
 }
@@ -30,7 +30,7 @@ pub struct AppConfig {
 pub async fn execute_command(
     command: AppCommand,
     config: AppConfig,
-) -> Result<SuiTransactionBlockResponse> {
+) -> Result<RtdTransactionBlockResponse> {
     let AppConfig {
         client,
         mut wallet_context,

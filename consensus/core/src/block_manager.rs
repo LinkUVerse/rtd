@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -9,7 +9,7 @@ use std::{
 
 use consensus_types::block::{BlockRef, Round};
 use itertools::Itertools as _;
-use mysten_metrics::monitored_scope;
+use linku_metrics::monitored_scope;
 use parking_lot::RwLock;
 use tracing::{debug, trace, warn};
 

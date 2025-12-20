@@ -4,8 +4,8 @@ version = "0.0.1"
 edition = "2024.beta"
 
 [dependencies]
-Sui = { local = "../../../crates/sui-framework/packages/sui-framework", override = true }
-Kiosk = { git = "https://github.com/MystenLabs/apps.git", subdir = "kiosk", rev = "testnet" }
+Rtd = { local = "../../../crates/rtd-framework/packages/rtd-framework", override = true }
+Kiosk = { git = "https://github.com/LinkUVerse/apps.git", subdir = "kiosk", rev = "testnet" }
 
 [addresses]
 nft_rental = "0x0"

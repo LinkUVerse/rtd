@@ -1,0 +1,10 @@
+[package]
+name = "execution_time_test"
+version = "0.0.1"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+execution_time_test = "0x0"

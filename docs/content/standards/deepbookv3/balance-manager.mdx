@@ -40,7 +40,7 @@ The `new()` function creates a `BalanceManager`. Combine it with `share`, or els
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new"
 	noComments
@@ -53,7 +53,7 @@ The `new_with_custom_owner()` function creates a `BalanceManager` with a custom 
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_with_custom_owner"
 	noComments
@@ -70,7 +70,7 @@ Move code using DeepBookV3  uses `DepositCap`, `WithdrawCap`, and `TradeCap`, wh
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_with_custom_owner_and_caps"
 	noComments
@@ -83,7 +83,7 @@ The owner of a `BalanceManager` can mint a `TradeCap` and send it to another add
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="mint_trade_cap,revoke_trade_cap"
 />
@@ -95,7 +95,7 @@ The owner of a `BalanceManager` can mint a `DepositCap` or `WithdrawCap` and sen
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="mint_deposit_cap,mint_withdraw_cap"
 />
@@ -107,7 +107,7 @@ To call any function that requires a balance check or transfer, the user must pr
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="generate_proof_as_owner,generate_proof_as_trader"
 />
@@ -119,7 +119,7 @@ Only the owner can call this function to deposit funds into the `BalanceManager`
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="deposit"
 />
@@ -131,7 +131,7 @@ Only the owner can call this function to withdraw funds from the `BalanceManager
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="withdraw,withdraw_all"
 />
@@ -143,7 +143,7 @@ Only holders of a `DepositCap` for the `BalanceManager` can call this function t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="deposit_with_cap"
 />
@@ -155,7 +155,7 @@ Only holders of a `WithdrawCap` for the `BalanceManager` can call this function 
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="withdraw_with_cap"
 />
@@ -167,7 +167,7 @@ The owner of a `TradeCap` can set or unset a referral for the balance manager. S
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="set_referral,unset_referral"
 />
@@ -179,7 +179,7 @@ Register a balance manager with the registry. This adds the balance manager to t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="register_manager"
 />
@@ -189,7 +189,7 @@ Register a balance manager with the registry. This adds the balance manager to t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="validate_proof,balance,owner,id,get_referral_id,referral_owner"
 />
@@ -197,7 +197,7 @@ Register a balance manager with the registry. This adds the balance manager to t
 ## Related links
 
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3"
+	href="https://github.com/LinkUVerse/deepbookv3"
 	label="DeepBookV3 repository"
 	desc="The DeepBookV3 repository on GitHub."
 />

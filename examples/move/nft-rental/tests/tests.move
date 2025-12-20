@@ -1,16 +1,16 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 #[test_only]
 module nft_rental::tests;
 
 use kiosk::kiosk_lock_rule as lock_rule;
 use nft_rental::rentables_ext::{Self, Promise, ProtectedTP, RentalPolicy, Listed};
-use sui::clock::{Self, Clock};
-use sui::kiosk::{Kiosk, KioskOwnerCap};
-use sui::kiosk_test_utils;
-use sui::package::{Self, Publisher};
-use sui::test_scenario::{Self as ts, Scenario};
-use sui::transfer_policy::{Self, TransferPolicy, TransferPolicyCap};
+use rtd::clock::{Self, Clock};
+use rtd::kiosk::{Kiosk, KioskOwnerCap};
+use rtd::kiosk_test_utils;
+use rtd::package::{Self, Publisher};
+use rtd::test_scenario::{Self as ts, Scenario};
+use rtd::transfer_policy::{Self, TransferPolicy, TransferPolicyCap};
 
 const CREATOR: address = @0xCCCC;
 const RENTER: address = @0xAAAA;
@@ -850,7 +850,7 @@ fun rent(
     let mut renter_kiosk: Kiosk = ts.take_shared_by_id(renter_kiosk_id);
     let mut rental_policy: RentalPolicy<T> = ts.take_shared();
 
-    let coin = kiosk_test_utils::get_sui(coin_amount, ts.ctx());
+    let coin = kiosk_test_utils::get_rtd(coin_amount, ts.ctx());
 
     rentables_ext::rent<T>(
         &mut renter_kiosk,

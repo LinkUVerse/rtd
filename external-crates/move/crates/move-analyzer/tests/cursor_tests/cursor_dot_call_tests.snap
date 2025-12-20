@@ -1,5 +1,5 @@
 ---
-source: crates/move-analyzer/tests/ide_testsuite.rs
+source: crates/move-analyzer/tests/ide_testrtdte.rs
 ---
 == dot_call.move ========================================================
 -- test 0 @ 5:22 ------------

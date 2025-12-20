@@ -1,11 +1,11 @@
 ---
 title: Archival Store and Service (Beta)
-description: Overview of the Archival Store and Service to access historical Sui network data.
+description: Overview of the Archival Store and Service to access historical Rtd network data.
 beta: testnet, mainnet
-keywords: [ grpc, g rpc, RPC, sui full node grpc, full node rpc, what is grpc, grpc on sui, graphql, graph ql, what is graphql, graphql rpc ]
+keywords: [ grpc, g rpc, RPC, rtd full node grpc, full node rpc, what is grpc, grpc on rtd, graphql, graph ql, what is graphql, graphql rpc ]
 ---
 
-The Archival Store and Service provide a scalable, consistent foundation for accessing historical data on Sui beyond what Full nodes or indexer databases typically retain. They power rich developer experiences through [gRPC](./grpc-overview.mdx) and [GraphQL](/concepts/data-access/graphql-indexer.mdx) APIs while keeping storage and operations manageable.
+The Archival Store and Service provide a scalable, consistent foundation for accessing historical data on Rtd beyond what Full nodes or indexer databases typically retain. They power rich developer experiences through [gRPC](./grpc-overview.mdx) and [GraphQL](/concepts/data-access/graphql-indexer.mdx) APIs while keeping storage and operations manageable.
 
 :::info
 
@@ -15,7 +15,7 @@ The Archival Store and Service provide a scalable, consistent foundation for acc
 
 ## Overview
 
-- **Archival Store:** A long-term storage system (such as [Bigtable](https://cloud.google.com/bigtable)) that holds checkpoint-indexed Sui data.
+- **Archival Store:** A long-term storage system (such as [Bigtable](https://cloud.google.com/bigtable)) that holds checkpoint-indexed Rtd data.
 - **Archival Service:** A [gRPC API (LedgerService)](./grpc-overview.mdx) layer that exposes access to this store, enabling point lookups of historical data.
 
 Together, they let developers and data providers access older transactions, object versions, and checkpoints that Full nodes no longer store.
@@ -40,10 +40,10 @@ Though their goals and usage patterns differ, both developers and RPC / data pro
 
 ### Developers
 
-Access the Archival Service hosted by any participating provider. Sui Foundation offers a public good service on a Bigtable-based store. This service has strict rate limits:
+Access the Archival Service hosted by any participating provider. Rtd Foundation offers a public good service on a Bigtable-based store. This service has strict rate limits:
 
-- Testnet: archive.testnet.sui.io
-- Mainnet: archive.mainnet.sui.io
+- Testnet: archive.testnet.rtd.io
+- Mainnet: archive.mainnet.rtd.io
 
 ### RPC and data providers
 
@@ -57,16 +57,16 @@ Refer to [populating the Archival Store](#populating-the-archival-store) and [ru
 
 ## Populating the Archival Store
 
-Run an indexer pipeline to keep the Archival Store updated. Sui Foundation provides an ingestion mechanism for Bigtable:
+Run an indexer pipeline to keep the Archival Store updated. Rtd Foundation provides an ingestion mechanism for Bigtable:
 
-- Tool: [sui-kv-store](https://github.com/MystenLabs/sui/tree/main/crates/sui-kvstore)
+- Tool: [rtd-kv-store](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-kvstore)
 - Run the following script to initialize the Bigtable cluster:
 ```shell
-$ ./crates/sui-kvstore/src/bigtable/init.sh <name_of_bigtable_cluster>
+$ ./crates/rtd-kvstore/src/bigtable/init.sh <name_of_bigtable_cluster>
 ```
 - Run the ingestion daemon with:
 ```shell
-$ cargo run --bin sui-kvstore <name_of_your_bigtable_cluster> ingestion <mainnet|testnet>
+$ cargo run --bin rtd-kvstore <name_of_your_bigtable_cluster> ingestion <mainnet|testnet>
 ```
 
 If you're using a different storage backend:
@@ -78,7 +78,7 @@ If you're using a different storage backend:
 
 The Archival Service implements the [gRPC API's](./grpc-overview.mdx) `LedgerService`. Any implementation must support this interface.
 
-- Reference implementation for Bigtable: [sui-kv-rpc](https://github.com/MystenLabs/sui/tree/main/crates/sui-kv-rpc).
+- Reference implementation for Bigtable: [rtd-kv-rpc](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-kv-rpc).
 - Deploy the service independently or colocated with other infrastructure.
 
 ## Integration points

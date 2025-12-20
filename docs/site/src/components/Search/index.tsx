@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -24,17 +24,17 @@ export default function Search() {
   );
 
   const queryParam = getQueryParam("q");
-  const [activeTab, setActiveTab] = React.useState("sui_docs");
+  const [activeTab, setActiveTab] = React.useState("rtd_docs");
   const [tabCounts, setTabCounts] = React.useState<Record<string, number>>({
-    sui_docs: 0,
+    rtd_docs: 0,
   });
   const [query, setQuery] = React.useState(queryParam);
 
   const tabs = [
-    { label: "Sui", indexName: "sui_docs" },
-    { label: "SuiNS", indexName: "suins_docs" },
+    { label: "Rtd", indexName: "rtd_docs" },
+    { label: "RtdNS", indexName: "rtdns_docs" },
     { label: "The Move Book", indexName: "move_book" },
-    { label: "SDKs", indexName: "sui_sdks" },
+    { label: "SDKs", indexName: "rtd_sdks" },
     { label: "Walrus", indexName: "walrus_docs" },
   ];
 
@@ -48,13 +48,13 @@ export default function Search() {
   return (
     <InstantSearch
       searchClient={searchClient}
-      indexName="sui_docs"
+      indexName="rtd_docs"
       future={{ preserveSharedStateOnUnmount: true }}
       initialUiState={{
-        sui_docs: { query: queryParam },
-        suins_docs: { query: queryParam },
+        rtd_docs: { query: queryParam },
+        rtdns_docs: { query: queryParam },
         move_book: { query: queryParam },
-        sui_sdks: { query: queryParam },
+        rtd_sdks: { query: queryParam },
         walrus_docs: { query: queryParam },
       }}
     >
@@ -68,7 +68,7 @@ export default function Search() {
         </Index>
       ))}
 
-      <div className="grid grid-cols-12 gap-4 sui-search">
+      <div className="grid grid-cols-12 gap-4 rtd-search">
         <div className="col-span-12">
           <ControlledSearchBox
             placeholder={`Search`}

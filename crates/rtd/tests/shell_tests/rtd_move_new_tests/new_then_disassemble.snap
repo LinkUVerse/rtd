@@ -1,0 +1,46 @@
+---
+source: crates/rtd/tests/shell_tests.rs
+---
+----- script -----
+# Copyright (c) LinkU Labs, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+# tests that rtd move new followed by rtd move disassemble succeeds
+
+
+rtd move --client.config $CONFIG new example
+cat > example/sources/example.move <<EOF
+module example::example;
+
+public fun foo(_ctx: &mut TxContext) {}
+EOF
+cd example
+
+echo "=== Build ===" >&2
+rtd move --client.config $CONFIG build
+
+echo "=== Disassemble ===" >&2
+rtd move --client.config $CONFIG disassemble build/example/bytecode_modules/example.mv
+
+----- results -----
+success: true
+exit_code: 0
+----- stdout -----
+// Move bytecode v6
+module 0.example {
+use 0000000000000000000000000000000000000000000000000000000000000002::tx_context;
+
+public foo(_ctx#0#0: &mut TxContext) {
+B0:
+	0: Ret
+}
+
+}
+
+
+----- stderr -----
+=== Build ===
+INCLUDING DEPENDENCY MoveStdlib
+INCLUDING DEPENDENCY Rtd
+BUILDING example
+=== Disassemble ===

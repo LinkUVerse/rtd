@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Dialog, Transition } from '@headlessui/react';
+import { Dialog, Transition } from '@headlesrtd/react';
 import { Fragment, ReactNode } from 'react';
 
 export function ModalBase({

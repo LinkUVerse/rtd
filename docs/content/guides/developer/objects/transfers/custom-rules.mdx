@@ -1,12 +1,12 @@
 ---
 title: Custom Transfer Rules
-description: Custom transfer rules enable you to define a set of rules that must be met before Sui considers a transfer operation valid.
+description: Custom transfer rules enable you to define a set of rules that must be met before Rtd considers a transfer operation valid.
 keywords: [ custom transfer rules, transfer rules, store ability, key ability, transfer restrictions, public transfer, custom transfer function, object transfer, transfer conditions, locked objects, unlocked objects, transfer policy, object abilities ]
 ---
 
-Every Sui [object](/guides/developer/objects/object-model.mdx) must have the `key` ability. The `store` ability, on the other hand, is an optional ability you can add to Sui objects. Objects with the `store` ability are transferable by anyone using the [`transfer::public_transfer`](/references/framework/sui_sui/transfer#sui_transfer_public_transfer) function and can be [wrapped](/guides/developer/objects/object-ownership/wrapped.mdx) in other objects.
+Every Rtd [object](/guides/developer/objects/object-model.mdx) must have the `key` ability. The `store` ability, on the other hand, is an optional ability you can add to Rtd objects. Objects with the `store` ability are transferable by anyone using the [`transfer::public_transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_transfer) function and can be [wrapped](/guides/developer/objects/object-ownership/wrapped.mdx) in other objects.
 
-For custom transfer rules, if the Sui object `Object` does not have the `store` ability, you cannot call the [`sui::transfer::public_transfer`](/references/framework/sui_sui/transfer#sui_transfer_public_transfer) function to transfer it. The Move module that defines `Object` is the only entity that can transfer objects of that type using the [`sui::transfer::transfer`](/references/framework/sui_sui/transfer#sui_transfer_transfer) function. Consequently, the module that defines the object `Object` can define a custom transfer function for `Object` that can take any number of arguments and enforce any restrictions desired for performing a transfer operation, for example, a fee must be paid to transfer the object.
+For custom transfer rules, if the Rtd object `Object` does not have the `store` ability, you cannot call the [`rtd::transfer::public_transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_transfer) function to transfer it. The Move module that defines `Object` is the only entity that can transfer objects of that type using the [`rtd::transfer::transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_transfer) function. Consequently, the module that defines the object `Object` can define a custom transfer function for `Object` that can take any number of arguments and enforce any restrictions desired for performing a transfer operation, for example, a fee must be paid to transfer the object.
 
 ## `store` ability
 
@@ -63,4 +63,4 @@ public fun transfer_locked(object: Object) {
 }
 ```
 
-With these rules in place, there are different custom transfer rules for any object `Object`. Either it's unlocked and anyone can transfer it, or it's locked and it can only be transferred to `0xCAFE`. Importantly, these are the only ways of transferring any object of type `Object`. In particular, because `Object` does not have the `store` ability, you cannot transfer it using the [`sui::transfer::public_transfer`](/references/framework/sui_sui/transfer#sui_transfer_public_transfer) function.
+With these rules in place, there are different custom transfer rules for any object `Object`. Either it's unlocked and anyone can transfer it, or it's locked and it can only be transferred to `0xCAFE`. Importantly, these are the only ways of transferring any object of type `Object`. In particular, because `Object` does not have the `store` ability, you cannot transfer it using the [`rtd::transfer::public_transfer`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_transfer) function.

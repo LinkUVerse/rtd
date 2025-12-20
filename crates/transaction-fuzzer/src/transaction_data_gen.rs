@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::account_address::AccountAddress;
@@ -7,10 +7,10 @@ use proptest::prelude::*;
 
 use crate::type_arg_fuzzer::{gen_type_tag, pt_for_tags};
 use proptest::collection::vec;
-use sui_types::base_types::{ObjectID, ObjectRef, SequenceNumber, SuiAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
 
-use sui_types::digests::ObjectDigest;
-use sui_types::transaction::{
+use rtd_types::digests::ObjectDigest;
+use rtd_types::transaction::{
     GasData, TransactionData, TransactionDataV1, TransactionExpiration, TransactionKind,
 };
 
@@ -45,7 +45,7 @@ pub fn gen_object_ref() -> impl Strategy<Value = ObjectRef> {
         })
 }
 
-pub fn gen_gas_data(sender: SuiAddress) -> impl Strategy<Value = GasData> {
+pub fn gen_gas_data(sender: RtdAddress) -> impl Strategy<Value = GasData> {
     (
         vec(gen_object_ref(), 0..MAX_NUM_GAS_OBJS),
         gas_price_selection_strategy(),
@@ -65,7 +65,7 @@ pub fn gen_transaction_kind() -> impl Strategy<Value = TransactionKind> {
         .prop_map(TransactionKind::ProgrammableTransaction)
 }
 
-pub fn transaction_data_gen(sender: SuiAddress) -> impl Strategy<Value = TransactionData> {
+pub fn transaction_data_gen(sender: RtdAddress) -> impl Strategy<Value = TransactionData> {
     TransactionDataGenBuilder::new(sender)
         .kind(gen_transaction_kind())
         .gas_data(gen_gas_data(sender))
@@ -79,7 +79,7 @@ pub struct TransactionDataGenBuilder<
     E: Strategy<Value = TransactionExpiration>,
 > {
     pub kind: Option<K>,
-    pub sender: SuiAddress,
+    pub sender: RtdAddress,
     pub gas_data: Option<G>,
     pub expiration: Option<E>,
 }
@@ -90,7 +90,7 @@ impl<
     E: Strategy<Value = TransactionExpiration>,
 > TransactionDataGenBuilder<K, G, E>
 {
-    pub fn new(sender: SuiAddress) -> Self {
+    pub fn new(sender: RtdAddress) -> Self {
         Self {
             kind: None,
             sender,

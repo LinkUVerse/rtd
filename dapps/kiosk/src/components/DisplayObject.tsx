@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCurrentAccount } from '@mysten/dapp-kit';
-import { KioskListing } from '@mysten/kiosk';
+import { useCurrentAccount } from '@linku/dapp-kit';
+import { KioskListing } from '@linku/kiosk';
 import { ReactNode } from 'react';
 
 import { DEFAULT_IMAGE } from '../utils/constants';
-import { formatSui, mistToSui } from '../utils/utils';
+import { formatRtd, mistToRtd } from '../utils/utils';
 import { OwnedObjectType } from './Inventory/OwnedObjects';
 import { ItemLockedBadge } from './Kiosk/ItemLockedBadge';
 
@@ -19,7 +19,7 @@ export interface DisplayObject {
 export function DisplayObject({ item, listing = null, children }: DisplayObject) {
 	const currentAccount = useCurrentAccount();
 
-	const price = formatSui(mistToSui(listing?.price));
+	const price = formatRtd(mistToRtd(listing?.price));
 
 	return (
 		<div className="border relative border-gray-400 overflow-hidden text-center flex justify-between flex-col rounded-lg">
@@ -42,7 +42,7 @@ export function DisplayObject({ item, listing = null, children }: DisplayObject)
 
 				{listing && listing.price && (
 					<div className="absolute left-2 top-2 bg-primary text-white px-2 py-1 rounded-lg">
-						{price} SUI
+						{price} RTD
 					</div>
 				)}
 

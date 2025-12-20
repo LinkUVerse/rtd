@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useSuiClientContext } from "@mysten/dapp-kit";
-import { formatAddress } from "@mysten/sui/utils";
+import { useRtdClientContext } from "@linku/dapp-kit";
+import { formatAddress } from "@linku/rtd/utils";
 import { CheckIcon, CopyIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -19,9 +19,9 @@ export function ExplorerLink({
   isAddress?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const { network } = useSuiClientContext();
+  const { network } = useRtdClientContext();
 
-  const link = `https://suiexplorer.com/${
+  const link = `https://rtdexplorer.com/${
     isAddress ? "address" : "object"
   }/${id}?network=${network}`;
 

@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useSuiClientContext, useSuiClientQuery, UseSuiClientQueryOptions } from "@mysten/dapp-kit";
-import { GetObjectParams, SuiObjectResponse } from "@mysten/sui/client";
+import { useRtdClientContext, useRtdClientQuery, UseRtdClientQueryOptions } from "@linku/dapp-kit";
+import { GetObjectParams, RtdObjectResponse } from "@linku/rtd/client";
 import { useQueryClient, UseQueryResult } from "@tanstack/react-query";
 
-export type UseObjectQueryOptions = UseSuiClientQueryOptions<"getObject", SuiObjectResponse>;
-export type UseObjectQueryResponse = UseQueryResult<SuiObjectResponse, Error>;
+export type UseObjectQueryOptions = UseRtdClientQueryOptions<"getObject", RtdObjectResponse>;
+export type UseObjectQueryResponse = UseQueryResult<RtdObjectResponse, Error>;
 export type InvalidateUseObjectQuery = () => void;
 
 /**
@@ -17,9 +17,9 @@ export function useObjectQuery(
     params: GetObjectParams,
     options?: UseObjectQueryOptions,
 ): [UseObjectQueryResponse, InvalidateUseObjectQuery] {
-    const ctx = useSuiClientContext();
+    const ctx = useRtdClientContext();
     const client = useQueryClient();
-    const response = useSuiClientQuery("getObject", params, options);
+    const response = useRtdClientQuery("getObject", params, options);
 
     const invalidate = async () => {
         await client.invalidateQueries({

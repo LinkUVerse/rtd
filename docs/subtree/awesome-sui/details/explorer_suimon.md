@@ -1,4 +1,4 @@
-# Suimon CLI
+# Rtdmon CLI
 
 ## Tooling Category
 
@@ -11,7 +11,7 @@
 
 ## Description
 
-Powerful command line tool designed to provide detailed dashboards for monitoring SUI network
+Powerful command line tool designed to provide detailed dashboards for monitoring RTD network
 
 ## Features
 - Supported entities for monitoring:

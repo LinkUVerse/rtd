@@ -25,7 +25,7 @@ jobs:
         uses: actions-rs/cargo@9e120dd99b0fbad1c065f686657e914e76bd7b72 # pin@main
         with:
           command: doc
-          args: --workspace --exclude "sui-benchmark" --no-deps
+          args: --workspace --exclude "rtd-benchmark" --no-deps
 
       - name: Deploy documentation
         uses: peaceiris/actions-gh-pages@373f7f263a76c20808c831209c920827a82a2847 # pin@v3

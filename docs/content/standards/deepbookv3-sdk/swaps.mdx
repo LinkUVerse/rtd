@@ -41,8 +41,8 @@ The following examples demonstrate custom swap functions that you can place into
 ```tsx
 swapExactBaseForQuote = (tx: Transaction) => {
   const [baseOut, quoteOut, deepOut] = this.deepBook.swapExactBaseForQuote({
-    poolKey: 'SUI_DBUSDC',
-    amount: 1, // amount of SUI to swap
+    poolKey: 'RTD_DBUSDC',
+    amount: 1, // amount of RTD to swap
     deepAmount: 1, // amount of DEEP to pay as fees, excess is returned
     minOut: 0.1, // minimum amount of DBUSDC to receive or transaction fails
   })(tx);
@@ -53,10 +53,10 @@ swapExactBaseForQuote = (tx: Transaction) => {
 
 swapExactQuoteForBase = (tx: Transaction) => {
   const [baseOut, quoteOut, deepOut] = this.deepBook.swapExactQuoteForBase({
-    poolKey: 'SUI_DBUSDC',
+    poolKey: 'RTD_DBUSDC',
     amount: 1, // amount of DBUSDC to swap
     deepAmount: 1, // amount of DEEP to pay as fees, excess is returned
-    minOut: 0.1, // minimum amount of SUI to receive or transaction fails
+    minOut: 0.1, // minimum amount of RTD to receive or transaction fails
   })(tx);
 
   // Transfer received coins to own address
@@ -66,6 +66,6 @@ swapExactQuoteForBase = (tx: Transaction) => {
 
 ## Related links
 
-<RelatedLink href="https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3" label="DeepBookV3 Indexer repository" desc="The DeepBookV3 SDK repository on GitHub." />
-<RelatedLink href="https://www.npmjs.com/package/@mysten/deepbook-v3" label="DeepBookV3 SDK node package" desc="The DeepBookV3 SDK node package on NPM." />
-<RelatedLink href="https://github.com/MystenLabs/deepbookv3" label="DeepBookV3 repository" desc="The DeepBookV3 repository on GitHub." />
+<RelatedLink href="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3" label="DeepBookV3 Indexer repository" desc="The DeepBookV3 SDK repository on GitHub." />
+<RelatedLink href="https://www.npmjs.com/package/@linku/deepbook-v3" label="DeepBookV3 SDK node package" desc="The DeepBookV3 SDK node package on NPM." />
+<RelatedLink href="https://github.com/LinkUVerse/deepbookv3" label="DeepBookV3 repository" desc="The DeepBookV3 repository on GitHub." />

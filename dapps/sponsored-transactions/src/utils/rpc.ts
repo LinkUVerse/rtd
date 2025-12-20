@@ -1,6 +1,6 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
 
-export const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+export const client = new RtdClient({ url: getFullnodeUrl('testnet') });

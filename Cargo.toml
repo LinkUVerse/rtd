@@ -5,7 +5,7 @@ exclude = [
   "examples/tic-tac-toe/cli",
   "examples/regulated-coin/rust-client",
   "examples/custom-indexer/rust",
-  "examples/rust/clickhouse-sui-indexer",
+  "examples/rust/clickhouse-rtd-indexer",
   "external-crates/move/crates/jsonrpc",
   "external-crates/move/crates/bytecode-interpreter-crypto",
   "external-crates/move/crates/bytecode-verifier-libfuzzer",
@@ -85,127 +85,127 @@ members = [
   "consensus/types",
   "crates/anemo-benchmark",
   "crates/bin-version",
-  "crates/mysten-common",
-  "crates/mysten-metrics",
-  "crates/mysten-network",
-  "crates/mysten-service",
+  "crates/linku-common",
+  "crates/linku-metrics",
+  "crates/linku-network",
+  "crates/linku-service",
   "crates/prometheus-closure-metric",
   "crates/shared-crypto",
   "crates/simulacrum",
-  "crates/sui",
-  "crates/sui-adapter-transactional-tests",
-  "crates/sui-analytics-indexer",
-  "crates/sui-analytics-indexer-derive",
-  "crates/sui-authority-aggregation",
-  "crates/sui-aws-orchestrator",
-  "crates/sui-benchmark",
-  "crates/sui-bridge",
-  "crates/sui-bridge-cli",
-  "crates/sui-bridge-indexer",
-  "crates/sui-bridge-indexer-alt",
-  "crates/sui-bridge-schema",
-  "crates/sui-checkpoint-blob-indexer",
-  "crates/sui-cluster-test",
-  "crates/sui-config",
-  "crates/sui-core",
-  "crates/sui-cost",
-  "crates/sui-data-ingestion",
-  "crates/sui-data-ingestion-core",
-  "crates/sui-data-store",
-  "crates/sui-deepbook-indexer",
-  "crates/sui-default-config",
-  "crates/sui-display",
-  "crates/sui-e2e-tests",
-  "crates/sui-enum-compat-util",
-  "crates/sui-faucet",
-  "crates/sui-field-count",
-  "crates/sui-field-count-derive",
-  "crates/sui-framework",
-  "crates/sui-framework-snapshot",
-  "crates/sui-framework-tests",
-  "crates/sui-futures",
-  "crates/sui-genesis-builder",
-  "crates/sui-graphql-e2e-tests",
-  "crates/sui-graphql-rpc",
-  "crates/sui-graphql-rpc-client",
-  "crates/sui-graphql-rpc-headers",
-  "crates/sui-http",
-  "crates/sui-indexer",
-  "crates/sui-indexer-alt",
-  "crates/sui-indexer-alt-consistent-api",
-  "crates/sui-indexer-alt-consistent-store",
-  "crates/sui-indexer-alt-e2e-tests",
-  "crates/sui-indexer-alt-framework",
-  "crates/sui-indexer-alt-framework-store-traits",
-  "crates/sui-indexer-alt-graphql",
-  "crates/sui-indexer-alt-jsonrpc",
-  "crates/sui-indexer-alt-metrics",
-  "crates/sui-indexer-alt-object-store",
-  "crates/sui-indexer-alt-reader",
-  "crates/sui-indexer-alt-restorer",
-  "crates/sui-indexer-alt-schema",
-  "crates/sui-indexer-builder",
-  "crates/sui-json",
-  "crates/sui-json-rpc",
-  "crates/sui-json-rpc-api",
-  "crates/sui-json-rpc-tests",
-  "crates/sui-json-rpc-types",
-  "crates/sui-keys",
-  "crates/sui-kv-rpc",
-  "crates/sui-kvstore",
-  "crates/sui-light-client",
-  "crates/sui-macros",
-  "crates/sui-metric-checker",
-  "crates/sui-metrics-push-client",
-  "crates/sui-move",
-  "crates/sui-move-build",
-  "crates/sui-move-lsp",
-  "crates/sui-name-service",
-  "crates/sui-network",
-  "crates/sui-node",
-  "crates/sui-open-rpc",
-  "crates/sui-open-rpc-macros",
-  "crates/sui-oracle",
-  "crates/sui-package-alt",
-  "crates/sui-package-dump",
-  "crates/sui-package-management",
-  "crates/sui-package-resolver",
-  "crates/sui-pg-db",
-  "crates/sui-proc-macros",
-  "crates/sui-protocol-config",
-  "crates/sui-protocol-config-macros",
-  "crates/sui-proxy",
-  "crates/sui-replay",
-  "crates/sui-replay-2",
-  "crates/sui-rosetta",
-  "crates/sui-rpc-api",
-  "crates/sui-rpc-benchmark",
-  "crates/sui-rpc-loadgen",
-  "crates/sui-rpc-resolver",
-  "crates/sui-sdk",
-  "crates/sui-security-watchdog",
-  "crates/sui-simulator",
-  "crates/sui-single-node-benchmark",
-  "crates/sui-snapshot",
-  "crates/sui-source-validation",
-  "crates/sui-sql-macro",
-  "crates/sui-storage",
-  "crates/sui-surfer",
-  "crates/sui-swarm",
-  "crates/sui-swarm-config",
-  "crates/sui-synthetic-ingestion",
-  "crates/sui-telemetry",
-  "crates/sui-test-transaction-builder",
-  "crates/sui-test-validator",
-  "crates/sui-tls",
-  "crates/sui-tool",
-  "crates/sui-transaction-builder",
-  "crates/sui-transaction-checks",
-  "crates/sui-transactional-test-runner",
-  "crates/sui-types",
-  "crates/sui-upgrade-compatibility-transactional-tests",
-  "crates/sui-verifier-transactional-tests",
-  "crates/suins-indexer",
+  "crates/rtd",
+  "crates/rtd-adapter-transactional-tests",
+  "crates/rtd-analytics-indexer",
+  "crates/rtd-analytics-indexer-derive",
+  "crates/rtd-authority-aggregation",
+  "crates/rtd-aws-orchestrator",
+  "crates/rtd-benchmark",
+  "crates/rtd-bridge",
+  "crates/rtd-bridge-cli",
+  "crates/rtd-bridge-indexer",
+  "crates/rtd-bridge-indexer-alt",
+  "crates/rtd-bridge-schema",
+  "crates/rtd-checkpoint-blob-indexer",
+  "crates/rtd-cluster-test",
+  "crates/rtd-config",
+  "crates/rtd-core",
+  "crates/rtd-cost",
+  "crates/rtd-data-ingestion",
+  "crates/rtd-data-ingestion-core",
+  "crates/rtd-data-store",
+  "crates/rtd-deepbook-indexer",
+  "crates/rtd-default-config",
+  "crates/rtd-display",
+  "crates/rtd-e2e-tests",
+  "crates/rtd-enum-compat-util",
+  "crates/rtd-faucet",
+  "crates/rtd-field-count",
+  "crates/rtd-field-count-derive",
+  "crates/rtd-framework",
+  "crates/rtd-framework-snapshot",
+  "crates/rtd-framework-tests",
+  "crates/rtd-futures",
+  "crates/rtd-genesis-builder",
+  "crates/rtd-graphql-e2e-tests",
+  "crates/rtd-graphql-rpc",
+  "crates/rtd-graphql-rpc-client",
+  "crates/rtd-graphql-rpc-headers",
+  "crates/rtd-http",
+  "crates/rtd-indexer",
+  "crates/rtd-indexer-alt",
+  "crates/rtd-indexer-alt-consistent-api",
+  "crates/rtd-indexer-alt-consistent-store",
+  "crates/rtd-indexer-alt-e2e-tests",
+  "crates/rtd-indexer-alt-framework",
+  "crates/rtd-indexer-alt-framework-store-traits",
+  "crates/rtd-indexer-alt-graphql",
+  "crates/rtd-indexer-alt-jsonrpc",
+  "crates/rtd-indexer-alt-metrics",
+  "crates/rtd-indexer-alt-object-store",
+  "crates/rtd-indexer-alt-reader",
+  "crates/rtd-indexer-alt-restorer",
+  "crates/rtd-indexer-alt-schema",
+  "crates/rtd-indexer-builder",
+  "crates/rtd-json",
+  "crates/rtd-json-rpc",
+  "crates/rtd-json-rpc-api",
+  "crates/rtd-json-rpc-tests",
+  "crates/rtd-json-rpc-types",
+  "crates/rtd-keys",
+  "crates/rtd-kv-rpc",
+  "crates/rtd-kvstore",
+  "crates/rtd-light-client",
+  "crates/rtd-macros",
+  "crates/rtd-metric-checker",
+  "crates/rtd-metrics-push-client",
+  "crates/rtd-move",
+  "crates/rtd-move-build",
+  "crates/rtd-move-lsp",
+  "crates/rtd-name-service",
+  "crates/rtd-network",
+  "crates/rtd-node",
+  "crates/rtd-open-rpc",
+  "crates/rtd-open-rpc-macros",
+  "crates/rtd-oracle",
+  "crates/rtd-package-alt",
+  "crates/rtd-package-dump",
+  "crates/rtd-package-management",
+  "crates/rtd-package-resolver",
+  "crates/rtd-pg-db",
+  "crates/rtd-proc-macros",
+  "crates/rtd-protocol-config",
+  "crates/rtd-protocol-config-macros",
+  "crates/rtd-proxy",
+  "crates/rtd-replay",
+  "crates/rtd-replay-2",
+  "crates/rtd-rosetta",
+  "crates/rtd-rpc-api",
+  "crates/rtd-rpc-benchmark",
+  "crates/rtd-rpc-loadgen",
+  "crates/rtd-rpc-resolver",
+  "crates/rtd-sdk",
+  "crates/rtd-security-watchdog",
+  "crates/rtd-simulator",
+  "crates/rtd-single-node-benchmark",
+  "crates/rtd-snapshot",
+  "crates/rtd-source-validation",
+  "crates/rtd-sql-macro",
+  "crates/rtd-storage",
+  "crates/rtd-surfer",
+  "crates/rtd-swarm",
+  "crates/rtd-swarm-config",
+  "crates/rtd-synthetic-ingestion",
+  "crates/rtd-telemetry",
+  "crates/rtd-test-transaction-builder",
+  "crates/rtd-test-validator",
+  "crates/rtd-tls",
+  "crates/rtd-tool",
+  "crates/rtd-transaction-builder",
+  "crates/rtd-transaction-checks",
+  "crates/rtd-transactional-test-runner",
+  "crates/rtd-types",
+  "crates/rtd-upgrade-compatibility-transactional-tests",
+  "crates/rtd-verifier-transactional-tests",
+  "crates/rtdns-indexer",
   "crates/telemetry-subscribers",
   "crates/test-cluster",
   "crates/transaction-fuzzer",
@@ -214,24 +214,24 @@ members = [
   "crates/typed-store-error",
   "crates/typed-store-workspace-hack",
   "crates/x",
-  "sui-execution",
-  "sui-execution/cut",
-  "sui-execution/latest/sui-adapter",
-  "sui-execution/latest/sui-move-natives",
-  "sui-execution/latest/sui-verifier",
-  "sui-execution/v0/sui-adapter",
-  "sui-execution/v0/sui-move-natives",
-  "sui-execution/v0/sui-verifier",
-  "sui-execution/v1/sui-adapter",
-  "sui-execution/v1/sui-move-natives",
-  "sui-execution/v1/sui-verifier",
-  "sui-execution/v2/sui-adapter",
-  "sui-execution/v2/sui-move-natives",
-  "sui-execution/v2/sui-verifier",
+  "rtd-execution",
+  "rtd-execution/cut",
+  "rtd-execution/latest/rtd-adapter",
+  "rtd-execution/latest/rtd-move-natives",
+  "rtd-execution/latest/rtd-verifier",
+  "rtd-execution/v0/rtd-adapter",
+  "rtd-execution/v0/rtd-move-natives",
+  "rtd-execution/v0/rtd-verifier",
+  "rtd-execution/v1/rtd-adapter",
+  "rtd-execution/v1/rtd-move-natives",
+  "rtd-execution/v1/rtd-verifier",
+  "rtd-execution/v2/rtd-adapter",
+  "rtd-execution/v2/rtd-move-natives",
+  "rtd-execution/v2/rtd-verifier",
 ]
 
 [workspace.package]
-# This version string will be inherited by sui-core, sui-faucet, sui-node, sui-tools, sui-sdk, sui-move-build, and sui crates.
+# This version string will be inherited by rtd-core, rtd-faucet, rtd-node, rtd-tools, rtd-sdk, rtd-move-build, and rtd crates.
 version = "1.63.0"
 
 [profile.release]
@@ -239,7 +239,7 @@ version = "1.63.0"
 debug = 1
 # Write debug info into a separate file.
 split-debuginfo = 'packed'
-# Without stripping, sui binary size would be > 1GB.
+# Without stripping, rtd binary size would be > 1GB.
 strip = 'debuginfo'
 # Exit process with SIGABRT when any thread panics
 panic = 'abort'
@@ -439,8 +439,8 @@ moka = { version = "0.12", default-features = false, features = [
   "atomic64",
 ] }
 more-asserts = "0.3.1"
-msim = { git = "https://github.com/link-u-web3/mysten-sim.git", rev = "9d787303d855f6cec92eb94933717d4ee1963548", package = "msim" }
-msim-macros = { git = "https://github.com/link-u-web3/mysten-sim.git", rev = "9d787303d855f6cec92eb94933717d4ee1963548", package = "msim-macros" }
+msim = { git = "https://github.com/link-u-web3/linku-sim.git", rev = "9d787303d855f6cec92eb94933717d4ee1963548", package = "msim" }
+msim-macros = { git = "https://github.com/link-u-web3/linku-sim.git", rev = "9d787303d855f6cec92eb94933717d4ee1963548", package = "msim-macros" }
 multiaddr = "0.17.0"
 nexlint = { git = "https://github.com/nextest-rs/nexlint.git", rev = "7ce56bd591242a57660ed05f14ca2483c37d895b" }
 nexlint-lints = { git = "https://github.com/nextest-rs/nexlint.git", rev = "7ce56bd591242a57660ed05f14ca2483c37d895b" }
@@ -672,120 +672,120 @@ anemo-cli = { git = "https://github.com/link-u-web3/anemo.git", rev = "4b5f0f1d0
 anemo-tower = { git = "https://github.com/link-u-web3/anemo.git", rev = "4b5f0f1d06a31c8ef78ec2e5b446bc633e4e2f77" }
 
 # core-types from the new sdk for use in gRPC
-sui-sdk-types = { git = "https://github.com/link-u-web3/sui-rust-sdk.git", rev = "339c2272fd5b8fb4e1fa6662cfa9acdbb0d05704", features = [ "hash", "serde" ] }
-sui-crypto = { git = "https://github.com/link-u-web3/sui-rust-sdk.git", rev = "339c2272fd5b8fb4e1fa6662cfa9acdbb0d05704", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
-sui-rpc = { git = "https://github.com/link-u-web3/sui-rust-sdk.git", rev = "339c2272fd5b8fb4e1fa6662cfa9acdbb0d05704" }
+rtd-sdk-types = { git = "https://github.com/link-u-web3/rtd-rust-sdk.git", rev = "2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126", features = [ "hash", "serde" ] }
+rtd-crypto = { git = "https://github.com/link-u-web3/rtd-rust-sdk.git", rev = "2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
+rtd-rpc = { git = "https://github.com/link-u-web3/rtd-rust-sdk.git", rev = "2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126" }
 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 bin-version = { path = "crates/bin-version" }
-mysten-common = { path = "crates/mysten-common" }
-mysten-metrics = { path = "crates/mysten-metrics" }
-mysten-network = { path = "crates/mysten-network" }
-mysten-service = { path = "crates/mysten-service" }
+linku-common = { path = "crates/linku-common" }
+linku-metrics = { path = "crates/linku-metrics" }
+linku-network = { path = "crates/linku-network" }
+linku-service = { path = "crates/linku-service" }
 prometheus-closure-metric = { path = "crates/prometheus-closure-metric" }
 shared-crypto = { path = "crates/shared-crypto" }
 simulacrum = { path = "crates/simulacrum" }
-sui = { path = "crates/sui" }
-sui-adapter-transactional-tests = { path = "crates/sui-adapter-transactional-tests" }
-sui-analytics-indexer = { path = "crates/sui-analytics-indexer" }
-sui-analytics-indexer-derive = { path = "crates/sui-analytics-indexer-derive" }
-sui-authority-aggregation = { path = "crates/sui-authority-aggregation" }
-sui-benchmark = { path = "crates/sui-benchmark" }
-sui-bridge = { path = "crates/sui-bridge" }
-sui-bridge-schema = { path = "crates/sui-bridge-schema" }
-sui-cluster-test = { path = "crates/sui-cluster-test" }
-sui-config = { path = "crates/sui-config" }
-sui-core = { path = "crates/sui-core" }
-sui-cost = { path = "crates/sui-cost" }
-sui-data-ingestion = { path = "crates/sui-data-ingestion" }
-sui-data-ingestion-core = { path = "crates/sui-data-ingestion-core" }
-sui-data-store = { path = "crates/sui-data-store" }
-sui-default-config = { path = "crates/sui-default-config" }
-sui-display = { path = "crates/sui-display" }
-sui-e2e-tests = { path = "crates/sui-e2e-tests" }
-sui-enum-compat-util = { path = "crates/sui-enum-compat-util" }
-sui-faucet = { path = "crates/sui-faucet" }
-sui-field-count = { path = "crates/sui-field-count" }
-sui-field-count-derive = { path = "crates/sui-field-count-derive" }
-sui-futures = { path = "crates/sui-futures" }
-sui-framework = { path = "crates/sui-framework" }
-sui-framework-snapshot = { path = "crates/sui-framework-snapshot" }
-sui-framework-tests = { path = "crates/sui-framework-tests" }
-sui-graphql-rpc = { path = "crates/sui-graphql-rpc" }
-sui-graphql-rpc-client = { path = "crates/sui-graphql-rpc-client" }
-sui-graphql-rpc-headers = { path = "crates/sui-graphql-rpc-headers" }
-sui-genesis-builder = { path = "crates/sui-genesis-builder" }
-sui-http = { path = "crates/sui-http" }
-sui-indexer = { path = "crates/sui-indexer" }
-sui-indexer-alt = { path = "crates/sui-indexer-alt" }
-sui-indexer-alt-consistent-api = { path = "crates/sui-indexer-alt-consistent-api" }
-sui-indexer-alt-consistent-store = { path = "crates/sui-indexer-alt-consistent-store" }
-sui-indexer-alt-framework = { path = "crates/sui-indexer-alt-framework", default-features = false }
-sui-indexer-alt-framework-store-traits = { path = "crates/sui-indexer-alt-framework-store-traits" }
-sui-indexer-alt-graphql = { path = "crates/sui-indexer-alt-graphql" }
-sui-indexer-alt-jsonrpc = { path = "crates/sui-indexer-alt-jsonrpc" }
-sui-indexer-alt-metrics = { path = "crates/sui-indexer-alt-metrics" }
-sui-indexer-alt-reader = { path = "crates/sui-indexer-alt-reader" }
-sui-indexer-alt-restorer = { path = "crates/sui-indexer-alt-restorer" }
-sui-indexer-alt-schema = { path = "crates/sui-indexer-alt-schema" }
-sui-indexer-builder = { path = "crates/sui-indexer-builder" }
-sui-indexer-alt-object-store = { path = "crates/sui-indexer-alt-object-store" }
-sui-json = { path = "crates/sui-json" }
-sui-json-rpc = { path = "crates/sui-json-rpc" }
-sui-json-rpc-api = { path = "crates/sui-json-rpc-api" }
-sui-json-rpc-types = { path = "crates/sui-json-rpc-types" }
-sui-keys = { path = "crates/sui-keys" }
-sui-kvstore = { path = "crates/sui-kvstore" }
-sui-kv-rpc = { path = "crates/sui-kv-rpc" }
-sui-light-client = { path = "crates/sui-light-client" }
-sui-macros = { path = "crates/sui-macros" }
-sui-metric-checker = { path = "crates/sui-metric-checker" }
-sui-metrics-push-client = { path = "crates/sui-metrics-push-client" }
-sui-move = { path = "crates/sui-move" }
-sui-move-build = { path = "crates/sui-move-build" }
-sui-move-lsp = { path = "crates/sui-move-lsp" }
-sui-name-service = { path = "crates/sui-name-service" }
-sui-network = { path = "crates/sui-network" }
-sui-node = { path = "crates/sui-node" }
-sui-open-rpc = { path = "crates/sui-open-rpc" }
-sui-open-rpc-macros = { path = "crates/sui-open-rpc-macros" }
-sui-package-dump = { path = "crates/sui-package-dump" }
-sui-package-alt = { path = "crates/sui-package-alt" }
-sui-package-management = { path = "crates/sui-package-management" }
-sui-package-resolver = { path = "crates/sui-package-resolver" }
-sui-pg-db = { path = "crates/sui-pg-db" }
-sui-proc-macros = { path = "crates/sui-proc-macros" }
-sui-protocol-config = { path = "crates/sui-protocol-config" }
-sui-protocol-config-macros = { path = "crates/sui-protocol-config-macros" }
-sui-proxy = { path = "crates/sui-proxy" }
-sui-replay = { path = "crates/sui-replay" }
-sui-replay-2 = { path = "crates/sui-replay-2" }
-sui-rosetta = { path = "crates/sui-rosetta" }
-sui-rpc-loadgen = { path = "crates/sui-rpc-loadgen" }
-sui-sdk = { path = "crates/sui-sdk" }
-sui-simulator = { path = "crates/sui-simulator" }
-sui-snapshot = { path = "crates/sui-snapshot" }
-sui-source-validation = { path = "crates/sui-source-validation" }
-sui-sql-macro = { path = "crates/sui-sql-macro" }
-sui-storage = { path = "crates/sui-storage" }
-sui-surfer = { path = "crates/sui-surfer" }
-sui-swarm = { path = "crates/sui-swarm" }
-sui-swarm-config = { path = "crates/sui-swarm-config" }
-sui-synthetic-ingestion = { path = "crates/sui-synthetic-ingestion" }
-sui-telemetry = { path = "crates/sui-telemetry" }
-sui-test-transaction-builder = { path = "crates/sui-test-transaction-builder" }
-sui-test-validator = { path = "crates/sui-test-validator" }
-sui-tls = { path = "crates/sui-tls" }
-sui-rpc-api = { path = "crates/sui-rpc-api" }
-sui-rpc-resolver = { path = "crates/sui-rpc-resolver" }
-sui-tool = { path = "crates/sui-tool" }
-sui-transaction-builder = { path = "crates/sui-transaction-builder" }
-sui-transaction-checks = { path = "crates/sui-transaction-checks" }
-sui-transactional-test-runner = { path = "crates/sui-transactional-test-runner" }
-sui-types = { path = "crates/sui-types" }
-sui-upgrade-compatibility-transactional-tests = { path = "crates/sui-upgrade-compatibility-transactional-tests" }
-sui-verifier-transactional-tests = { path = "crates/sui-verifier-transactional-tests" }
+rtd = { path = "crates/rtd" }
+rtd-adapter-transactional-tests = { path = "crates/rtd-adapter-transactional-tests" }
+rtd-analytics-indexer = { path = "crates/rtd-analytics-indexer" }
+rtd-analytics-indexer-derive = { path = "crates/rtd-analytics-indexer-derive" }
+rtd-authority-aggregation = { path = "crates/rtd-authority-aggregation" }
+rtd-benchmark = { path = "crates/rtd-benchmark" }
+rtd-bridge = { path = "crates/rtd-bridge" }
+rtd-bridge-schema = { path = "crates/rtd-bridge-schema" }
+rtd-cluster-test = { path = "crates/rtd-cluster-test" }
+rtd-config = { path = "crates/rtd-config" }
+rtd-core = { path = "crates/rtd-core" }
+rtd-cost = { path = "crates/rtd-cost" }
+rtd-data-ingestion = { path = "crates/rtd-data-ingestion" }
+rtd-data-ingestion-core = { path = "crates/rtd-data-ingestion-core" }
+rtd-data-store = { path = "crates/rtd-data-store" }
+rtd-default-config = { path = "crates/rtd-default-config" }
+rtd-display = { path = "crates/rtd-display" }
+rtd-e2e-tests = { path = "crates/rtd-e2e-tests" }
+rtd-enum-compat-util = { path = "crates/rtd-enum-compat-util" }
+rtd-faucet = { path = "crates/rtd-faucet" }
+rtd-field-count = { path = "crates/rtd-field-count" }
+rtd-field-count-derive = { path = "crates/rtd-field-count-derive" }
+rtd-futures = { path = "crates/rtd-futures" }
+rtd-framework = { path = "crates/rtd-framework" }
+rtd-framework-snapshot = { path = "crates/rtd-framework-snapshot" }
+rtd-framework-tests = { path = "crates/rtd-framework-tests" }
+rtd-graphql-rpc = { path = "crates/rtd-graphql-rpc" }
+rtd-graphql-rpc-client = { path = "crates/rtd-graphql-rpc-client" }
+rtd-graphql-rpc-headers = { path = "crates/rtd-graphql-rpc-headers" }
+rtd-genesis-builder = { path = "crates/rtd-genesis-builder" }
+rtd-http = { path = "crates/rtd-http" }
+rtd-indexer = { path = "crates/rtd-indexer" }
+rtd-indexer-alt = { path = "crates/rtd-indexer-alt" }
+rtd-indexer-alt-consistent-api = { path = "crates/rtd-indexer-alt-consistent-api" }
+rtd-indexer-alt-consistent-store = { path = "crates/rtd-indexer-alt-consistent-store" }
+rtd-indexer-alt-framework = { path = "crates/rtd-indexer-alt-framework", default-features = false }
+rtd-indexer-alt-framework-store-traits = { path = "crates/rtd-indexer-alt-framework-store-traits" }
+rtd-indexer-alt-graphql = { path = "crates/rtd-indexer-alt-graphql" }
+rtd-indexer-alt-jsonrpc = { path = "crates/rtd-indexer-alt-jsonrpc" }
+rtd-indexer-alt-metrics = { path = "crates/rtd-indexer-alt-metrics" }
+rtd-indexer-alt-reader = { path = "crates/rtd-indexer-alt-reader" }
+rtd-indexer-alt-restorer = { path = "crates/rtd-indexer-alt-restorer" }
+rtd-indexer-alt-schema = { path = "crates/rtd-indexer-alt-schema" }
+rtd-indexer-builder = { path = "crates/rtd-indexer-builder" }
+rtd-indexer-alt-object-store = { path = "crates/rtd-indexer-alt-object-store" }
+rtd-json = { path = "crates/rtd-json" }
+rtd-json-rpc = { path = "crates/rtd-json-rpc" }
+rtd-json-rpc-api = { path = "crates/rtd-json-rpc-api" }
+rtd-json-rpc-types = { path = "crates/rtd-json-rpc-types" }
+rtd-keys = { path = "crates/rtd-keys" }
+rtd-kvstore = { path = "crates/rtd-kvstore" }
+rtd-kv-rpc = { path = "crates/rtd-kv-rpc" }
+rtd-light-client = { path = "crates/rtd-light-client" }
+rtd-macros = { path = "crates/rtd-macros" }
+rtd-metric-checker = { path = "crates/rtd-metric-checker" }
+rtd-metrics-push-client = { path = "crates/rtd-metrics-push-client" }
+rtd-move = { path = "crates/rtd-move" }
+rtd-move-build = { path = "crates/rtd-move-build" }
+rtd-move-lsp = { path = "crates/rtd-move-lsp" }
+rtd-name-service = { path = "crates/rtd-name-service" }
+rtd-network = { path = "crates/rtd-network" }
+rtd-node = { path = "crates/rtd-node" }
+rtd-open-rpc = { path = "crates/rtd-open-rpc" }
+rtd-open-rpc-macros = { path = "crates/rtd-open-rpc-macros" }
+rtd-package-dump = { path = "crates/rtd-package-dump" }
+rtd-package-alt = { path = "crates/rtd-package-alt" }
+rtd-package-management = { path = "crates/rtd-package-management" }
+rtd-package-resolver = { path = "crates/rtd-package-resolver" }
+rtd-pg-db = { path = "crates/rtd-pg-db" }
+rtd-proc-macros = { path = "crates/rtd-proc-macros" }
+rtd-protocol-config = { path = "crates/rtd-protocol-config" }
+rtd-protocol-config-macros = { path = "crates/rtd-protocol-config-macros" }
+rtd-proxy = { path = "crates/rtd-proxy" }
+rtd-replay = { path = "crates/rtd-replay" }
+rtd-replay-2 = { path = "crates/rtd-replay-2" }
+rtd-rosetta = { path = "crates/rtd-rosetta" }
+rtd-rpc-loadgen = { path = "crates/rtd-rpc-loadgen" }
+rtd-sdk = { path = "crates/rtd-sdk" }
+rtd-simulator = { path = "crates/rtd-simulator" }
+rtd-snapshot = { path = "crates/rtd-snapshot" }
+rtd-source-validation = { path = "crates/rtd-source-validation" }
+rtd-sql-macro = { path = "crates/rtd-sql-macro" }
+rtd-storage = { path = "crates/rtd-storage" }
+rtd-surfer = { path = "crates/rtd-surfer" }
+rtd-swarm = { path = "crates/rtd-swarm" }
+rtd-swarm-config = { path = "crates/rtd-swarm-config" }
+rtd-synthetic-ingestion = { path = "crates/rtd-synthetic-ingestion" }
+rtd-telemetry = { path = "crates/rtd-telemetry" }
+rtd-test-transaction-builder = { path = "crates/rtd-test-transaction-builder" }
+rtd-test-validator = { path = "crates/rtd-test-validator" }
+rtd-tls = { path = "crates/rtd-tls" }
+rtd-rpc-api = { path = "crates/rtd-rpc-api" }
+rtd-rpc-resolver = { path = "crates/rtd-rpc-resolver" }
+rtd-tool = { path = "crates/rtd-tool" }
+rtd-transaction-builder = { path = "crates/rtd-transaction-builder" }
+rtd-transaction-checks = { path = "crates/rtd-transaction-checks" }
+rtd-transactional-test-runner = { path = "crates/rtd-transactional-test-runner" }
+rtd-types = { path = "crates/rtd-types" }
+rtd-upgrade-compatibility-transactional-tests = { path = "crates/rtd-upgrade-compatibility-transactional-tests" }
+rtd-verifier-transactional-tests = { path = "crates/rtd-verifier-transactional-tests" }
 telemetry-subscribers = { path = "crates/telemetry-subscribers" }
 test-cluster = { path = "crates/test-cluster" }
 transaction-fuzzer = { path = "crates/transaction-fuzzer" }
@@ -798,10 +798,10 @@ consensus-core = { path = "consensus/core" }
 consensus-types = { path = "consensus/types" }
 consensus-simtests = { path = "consensus/simtests" }
 
-sui-execution = { path = "sui-execution" }
-# sui-move-natives = { path = "sui-execution/latest/sui-move-natives", package = "sui-move-natives-latest" }
-# sui-adapter = { path = "sui-execution/latest/sui-adapter", package = "sui-adapter-latest" }
-# sui-verifier = { path = "sui-execution/latest/sui-verifier", package = "sui-verifier-latest" }
+rtd-execution = { path = "rtd-execution" }
+# rtd-move-natives = { path = "rtd-execution/latest/rtd-move-natives", package = "rtd-move-natives-latest" }
+# rtd-adapter = { path = "rtd-execution/latest/rtd-adapter", package = "rtd-adapter-latest" }
+# rtd-verifier = { path = "rtd-execution/latest/rtd-verifier", package = "rtd-verifier-latest" }
 # move-stdlib = { path = "external-crates/move/move-stdlib" }
 # move-vm-runtime = { path = "external-crates/move/move-vm/runtime" }
 # move-bytecode-verifier = { path = "external-crates/move/move-bytecode-verifier" }

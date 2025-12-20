@@ -904,7 +904,7 @@ mod tests {
             [package]
             name = "name"
             edition = "2024"
-            authors = "me@mystenlabs.com"
+            authors = "me@linkulabs.com"
             "#,
         )
         .unwrap_err()

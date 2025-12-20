@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fmt;
 
 use fastcrypto::encoding::{Base64, Encoding};
 use serde::Deserialize;
-use sui_types::{
+use rtd_types::{
     base_types::{ObjectRef, SequenceNumber},
     digests::ObjectDigest,
     object::Owner,
@@ -26,14 +26,14 @@ pub(crate) enum GameKind {
     Owned(Owned),
 }
 
-/// Rust representation of a Move `shared::Game`, suitable for deserializing from their BCS
+/// Rust representation of a Move `shared::Game`, rtdtable for deserializing from their BCS
 /// representation.
 #[derive(Deserialize)]
 pub(crate) struct Shared {
     pub board: Board,
 }
 
-/// Rust representation of a Move `owned::Game`, suitable for deserializing from their BCS
+/// Rust representation of a Move `owned::Game`, rtdtable for deserializing from their BCS
 /// representation.
 #[derive(Deserialize)]
 pub(crate) struct Owned {

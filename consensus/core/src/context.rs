@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::SystemTime};
@@ -6,7 +6,7 @@ use std::{sync::Arc, time::SystemTime};
 use consensus_config::{AuthorityIndex, Committee, Parameters};
 use consensus_config::{NetworkKeyPair, ProtocolKeyPair};
 use consensus_types::block::BlockTimestampMs;
-use sui_protocol_config::ProtocolConfig;
+use rtd_protocol_config::ProtocolConfig;
 use tempfile::TempDir;
 use tokio::time::Instant;
 

@@ -1,5 +1,5 @@
 ---
-source: crates/move-docgen-tests/tests/testsuite.rs
+source: crates/move-docgen-tests/tests/testrtdte.rs
 info:
   section_level_start: 1
   exclude_private_fun: false

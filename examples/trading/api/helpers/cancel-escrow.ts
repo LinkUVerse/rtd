@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { TransactionBlock } from '@mysten/sui/transactions';
+import { TransactionBlock } from '@linku/rtd/transactions';
 
 import { CONFIG } from '../config';
-import { getActiveAddress, signAndExecute } from '../sui-utils';
+import { getActiveAddress, signAndExecute } from '../rtd-utils';
 
 /// Demo PTB to cancel an escrow.
 export const cancelEscrow = async (escrowId: string) => {

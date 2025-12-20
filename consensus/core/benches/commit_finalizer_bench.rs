@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::Duration};
@@ -8,7 +8,7 @@ use consensus_core::{
     NoopBlockVerifier, TransactionCertifier,
 };
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
-use mysten_metrics::monitored_mpsc;
+use linku_metrics::monitored_mpsc;
 use parking_lot::{Mutex, RwLock};
 
 // The fixture and helper functions are adapted from consensus/core/src/commit_finalizer.rs tests.

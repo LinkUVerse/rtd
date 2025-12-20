@@ -17,8 +17,8 @@
     "lint:fix": "pnpm run eslint:fix && pnpm run prettier:fix"
   },
   "dependencies": {
-    "@mysten/dapp-kit": "^0.14.53",
-    "@mysten/sui": "^1.18.0",
+    "@linku/dapp-kit": "^0.14.53",
+    "@linku/rtd": "^1.18.0",
     "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-icons": "^1.3.2",
     "@radix-ui/themes": "^3.2.1",

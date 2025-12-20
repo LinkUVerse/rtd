@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState } from 'react';
@@ -12,8 +12,8 @@ export function ExplorerLink(opts: LinkOptions) {
 	const [copied, setCopied] = useState<boolean>(false);
 	const link =
 		'address' in opts
-			? `https://suiexplorer.com/address/${opts.address}?network=testnet`
-			: `https://suiexplorer.com/object/${opts.object}?network=testnet`;
+			? `https://rtdexplorer.com/address/${opts.address}?network=testnet`
+			: `https://rtdexplorer.com/object/${opts.object}?network=testnet`;
 
 	const copyToClipboard = async () => {
 		await navigator.clipboard.writeText('address' in opts ? opts.address : opts.object);

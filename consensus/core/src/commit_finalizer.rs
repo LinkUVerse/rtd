@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -8,7 +8,7 @@ use std::{
 
 use consensus_config::Stake;
 use consensus_types::block::{BlockRef, Round, TransactionIndex};
-use mysten_metrics::{
+use linku_metrics::{
     monitored_mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
     monitored_scope, spawn_logged_monitored_task,
 };
@@ -135,7 +135,7 @@ impl CommitFinalizer {
                         );
                     }
                 }
-                // Commits and committed blocks must be persisted to storage before sending them to Sui
+                // Commits and committed blocks must be persisted to storage before sending them to Rtd
                 // to execute their finalized transactions.
                 // Commit metadata and uncommitted blocks can be persisted more lazily because they are recoverable.
                 // But for simplicity, all unpersisted commits and blocks are flushed to storage.
@@ -887,7 +887,7 @@ impl BlockState {
 
 #[cfg(test)]
 mod tests {
-    use mysten_metrics::monitored_mpsc;
+    use linku_metrics::monitored_mpsc;
     use parking_lot::RwLock;
 
     use crate::{

@@ -23,16 +23,16 @@ pub const IMPLICIT_STD_MEMBERS: &[(Symbol, Symbol, ModuleMemberKind)] = &[(
     ModuleMemberKind::Struct,
 )];
 
-// Implicit aliases for Sui mode:
-// use sui::object::{Self, ID, UID};
-// use sui::transfer;
-// use sui::tx_context::{Self, TxContext};
-pub const IMPLICIT_SUI_MODULES: &[Symbol] = &[
+// Implicit aliases for Rtd mode:
+// use rtd::object::{Self, ID, UID};
+// use rtd::transfer;
+// use rtd::tx_context::{Self, TxContext};
+pub const IMPLICIT_RTD_MODULES: &[Symbol] = &[
     symbol!("object"),
     symbol!("transfer"),
     symbol!("tx_context"),
 ];
-pub const IMPLICIT_SUI_MEMBERS: &[(Symbol, Symbol, ModuleMemberKind)] = &[
+pub const IMPLICIT_RTD_MEMBERS: &[(Symbol, Symbol, ModuleMemberKind)] = &[
     (symbol!("object"), symbol!("ID"), ModuleMemberKind::Struct),
     (symbol!("object"), symbol!("UID"), ModuleMemberKind::Struct),
     (

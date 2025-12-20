@@ -1,0 +1,10 @@
+[package]
+name = "move_registry"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+move_registry = "0x0"
+

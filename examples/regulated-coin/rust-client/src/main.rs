@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::str::FromStr;
@@ -8,9 +8,9 @@ use clap::{Parser, Subcommand};
 use move_core_types::account_address::AccountAddress;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use sui_config::{sui_config_dir, SUI_CLIENT_CONFIG};
-use sui_sdk::types::base_types::{ObjectID, SuiAddress};
-use sui_sdk::wallet_context::WalletContext;
+use rtd_config::{rtd_config_dir, RTD_CLIENT_CONFIG};
+use rtd_sdk::types::base_types::{ObjectID, RtdAddress};
+use rtd_sdk::wallet_context::WalletContext;
 use tracing::debug;
 
 use rust_client::tx_run;
@@ -58,7 +58,7 @@ enum CliCommand {
         #[arg(value_parser)]
         address: String,
     },
-    /// Transfer coin from the sui client's active address
+    /// Transfer coin from the rtd client's active address
     Transfer {
         /// The Coin to transfer
         #[arg(long = "coin", short = 'c')]
@@ -67,7 +67,7 @@ enum CliCommand {
         #[arg(value_parser)]
         address: String,
     },
-    /// Burn coin inside the sui client's active address
+    /// Burn coin inside the rtd client's active address
     Burn {
         /// The Coin to burn
         #[arg(value_parser)]
@@ -107,21 +107,21 @@ async fn cli_parse() -> Result<(AppConfig, AppCommand)> {
         type_params: vec![],
     }));
     let wallet_context =
-        WalletContext::new(&sui_config_dir()?.join(SUI_CLIENT_CONFIG), None, None).await?;
+        WalletContext::new(&rtd_config_dir()?.join(RTD_CLIENT_CONFIG), None, None).await?;
 
     let command = match command {
         CliCommand::DenyListAdd { address } => {
-            AppCommand::DenyListAdd(SuiAddress::from_str(&address)?)
+            AppCommand::DenyListAdd(RtdAddress::from_str(&address)?)
         }
         CliCommand::DenyListRemove { address } => {
-            AppCommand::DenyListRemove(SuiAddress::from_str(&address)?)
+            AppCommand::DenyListRemove(RtdAddress::from_str(&address)?)
         }
         CliCommand::MintAndTransfer { balance, address } => {
-            AppCommand::MintAndTransfer(balance, SuiAddress::from_str(&address)?)
+            AppCommand::MintAndTransfer(balance, RtdAddress::from_str(&address)?)
         }
         CliCommand::Transfer { coin, address } => AppCommand::Transfer(
             ObjectID::from_hex_literal(&coin)?,
-            SuiAddress::from_str(&address)?,
+            RtdAddress::from_str(&address)?,
         ),
         CliCommand::Burn { coin } => AppCommand::Burn(ObjectID::from_hex_literal(&coin)?),
     };

@@ -15,4 +15,4 @@
 
 ## Features
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On

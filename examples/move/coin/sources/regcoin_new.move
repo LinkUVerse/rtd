@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //docs::#regulate
 module examples::regcoin_new;
 
-use sui::coin::{Self, DenyCapV2};
-use sui::coin_registry;
-use sui::deny_list::DenyList;
+use rtd::coin::{Self, DenyCapV2};
+use rtd::coin_registry;
+use rtd::deny_list::DenyList;
 
 public struct REGCOIN_NEW has drop {}
 

@@ -1,5 +1,5 @@
 #!/bin/bash -x
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 # This script runs as part of the rust.yml CI workflow.

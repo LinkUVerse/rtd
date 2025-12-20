@@ -5,7 +5,7 @@ description: Learn how to use the DeepBookV3 SDK to execute functions relating t
 keywords: [ uncollaterized, flash loans, loans, uncollaterized loans, programmable transaction blocks, ptbs, borrow flash loan base, borrow flash loan quote, retrieve flash loan base, retrieve flash loan quote ]
 ---
 
-A flash loan is one where the borrowing and returning of loans from pools is performed within a single programmable transaction block. The SDK exposes functions that allow you to implement this functionality. See [Flash Loans](https://docs.sui.io/standards/deepbookv3/flash-loans) for more details on the API.
+A flash loan is one where the borrowing and returning of loans from pools is performed within a single programmable transaction block. The SDK exposes functions that allow you to implement this functionality. See [Flash Loans](https://docs.rtd.io/standards/deepbookv3/flash-loans) for more details on the API.
 
 ## Flash loan functions
 
@@ -85,18 +85,18 @@ The following example demonstrates flash loan usage in `DeepBookMarketMaker` cla
     
 ```tsx
 // Example of a flash loan transaction
-// Borrow 1 DEEP from DEEP_SUI pool
-// Swap 0.5 DBUSDC for SUI in SUI_DBUSDC pool, pay with deep borrowed
-// Swap SUI back to DEEP
-// Return 1 DEEP to DEEP_SUI pool
+// Borrow 1 DEEP from DEEP_RTD pool
+// Swap 0.5 DBUSDC for RTD in RTD_DBUSDC pool, pay with deep borrowed
+// Swap RTD back to DEEP
+// Return 1 DEEP to DEEP_RTD pool
 flashLoanExample = async (tx: Transaction) => {
   const borrowAmount = 1;
-  const [deepCoin, flashLoan] = tx.add(this.flashLoans.borrowBaseAsset('DEEP_SUI', borrowAmount));
+  const [deepCoin, flashLoan] = tx.add(this.flashLoans.borrowBaseAsset('DEEP_RTD', borrowAmount));
 
   // Execute trade using borrowed DEEP
   const [baseOut, quoteOut, deepOut] = tx.add(
     this.deepBook.swapExactQuoteForBase({
-      poolKey: 'SUI_DBUSDC',
+      poolKey: 'RTD_DBUSDC',
       amount: 0.5,
       deepAmount: 1,
       minOut: 0,
@@ -109,7 +109,7 @@ flashLoanExample = async (tx: Transaction) => {
   // Execute second trade to get back DEEP for repayment
   const [baseOut2, quoteOut2, deepOut2] = tx.add(
     this.deepBook.swapExactQuoteForBase({
-      poolKey: 'DEEP_SUI',
+      poolKey: 'DEEP_RTD',
       amount: 10,
       deepAmount: 0,
       minOut: 0,
@@ -120,7 +120,7 @@ flashLoanExample = async (tx: Transaction) => {
 
   // Return borrowed DEEP
   const loanRemain = tx.add(
-    this.flashLoans.returnBaseAsset('DEEP_SUI', borrowAmount, baseOut2, flashLoan),
+    this.flashLoans.returnBaseAsset('DEEP_RTD', borrowAmount, baseOut2, flashLoan),
   );
   
   // Send the remaining coin to user's address
@@ -130,6 +130,6 @@ flashLoanExample = async (tx: Transaction) => {
 
 ## Related links
 
-<RelatedLink href="https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3" label="DeepBookV3 Indexer repository" desc="The DeepBookV3 SDK repository on GitHub." />
-<RelatedLink href="https://www.npmjs.com/package/@mysten/deepbook-v3" label="DeepBookV3 SDK node package" desc="The DeepBookV3 SDK node package on NPM." />
-<RelatedLink href="https://github.com/MystenLabs/deepbookv3" label="DeepBookV3 repository" desc="The DeepBookV3 repository on GitHub." />
+<RelatedLink href="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3" label="DeepBookV3 Indexer repository" desc="The DeepBookV3 SDK repository on GitHub." />
+<RelatedLink href="https://www.npmjs.com/package/@linku/deepbook-v3" label="DeepBookV3 SDK node package" desc="The DeepBookV3 SDK node package on NPM." />
+<RelatedLink href="https://github.com/LinkUVerse/deepbookv3" label="DeepBookV3 repository" desc="The DeepBookV3 repository on GitHub." />

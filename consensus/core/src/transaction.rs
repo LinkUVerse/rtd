@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -6,8 +6,8 @@ use consensus_config::Epoch;
 use consensus_types::block::{
     BlockRef, NUM_RESERVED_TRANSACTION_INDICES, PING_TRANSACTION_INDEX, Round, TransactionIndex,
 };
-use mysten_common::debug_fatal;
-use mysten_metrics::monitored_mpsc::{Receiver, Sender, channel};
+use linku_common::debug_fatal;
+use linku_metrics::monitored_mpsc::{Receiver, Sender, channel};
 use parking_lot::Mutex;
 use tap::TapFallible;
 use thiserror::Error;
@@ -386,7 +386,7 @@ impl TransactionClient {
     }
 }
 
-/// `TransactionVerifier` implementation is supplied by Sui to validate transactions in a block,
+/// `TransactionVerifier` implementation is supplied by Rtd to validate transactions in a block,
 /// before acceptance of the block.
 pub trait TransactionVerifier: Send + Sync + 'static {
     /// Determines if this batch of transactions is valid.
@@ -443,7 +443,7 @@ mod tests {
         TransactionIndex,
     };
     use futures::{StreamExt, stream::FuturesUnordered};
-    use sui_protocol_config::ProtocolConfig;
+    use rtd_protocol_config::ProtocolConfig;
     use tokio::time::timeout;
 
     use crate::transaction::NoopTransactionVerifier;

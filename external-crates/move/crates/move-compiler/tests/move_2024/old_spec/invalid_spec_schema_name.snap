@@ -1,5 +1,5 @@
 ---
-source: crates/move-compiler/tests/move_check_testsuite.rs
+source: crates/move-compiler/tests/move_check_testrtdte.rs
 assertion_line: 252
 info:
   flavor: core

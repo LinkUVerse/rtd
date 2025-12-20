@@ -1,0 +1,43 @@
+[package]
+name = "rtd-indexer-alt-reader"
+version.workspace = true
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-graphql = { workspace = true, features = ["dataloader"] }
+async-trait.workspace = true
+bcs.workspace = true
+clap.workspace = true
+diesel.workspace = true
+diesel-async = { workspace = true, features = ["bb8", "postgres", "async-connection-wrapper"] }
+futures.workspace = true
+prost-types.workspace = true
+prometheus.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tonic = { workspace = true, features = ["tls-native-roots"] }
+tracing.workspace = true
+url.workspace = true
+
+move-core-types.workspace = true
+
+rtd-futures.workspace = true
+rtd-indexer-alt-consistent-api.workspace = true
+rtd-indexer-alt-metrics.workspace = true
+rtd-indexer-alt-schema.workspace = true
+rtd-kvstore.workspace = true
+rtd-package-resolver.workspace = true
+rtd-pg-db.workspace = true
+rtd-rpc.workspace = true
+rtd-rpc-api.workspace = true
+rtd-sdk-types.workspace = true
+rtd-sql-macro.workspace = true
+rtd-types.workspace = true

@@ -1,6 +1,6 @@
 ---
 title: Sponsored Transactions
-description: A sponsored transaction is when one Sui address pays the gas fee for a transaction submitted by another address. Sponsored transactions can help facilitate user onboarding and simplified asset management.
+description: A sponsored transaction is when one Rtd address pays the gas fee for a transaction submitted by another address. Sponsored transactions can help facilitate user onboarding and simplified asset management.
 keywords: [ sponsored transaction, how to sponsor a transaction, sponsor a transaction, pay gas for another address, can you pay gas for another address, sponsoring a transaction, paying fee for another user, paying gas for another user, paying for someone else, paying gas for someone else, sponsoring someone's transaction ]
 ---
 
@@ -8,11 +8,11 @@ A _sponsored transaction_ is when one address pays the gas fee for a [transactio
 
 You can provide a wildcard `GasData` object to users. The object covers the gas fees for a user transaction. The `GasData` object covers any fee amount determined for the transaction as long as the budget is sufficient.
 
-Sponsored transactions can also facilitate asset management as you don't need to maintain multiple accounts with SUI tokens to transfer funds.
+Sponsored transactions can also facilitate asset management as you don't need to maintain multiple accounts with RTD tokens to transfer funds.
 
 ## Potential risks
 
-The most significant risk when using sponsored transactions is [equivocation](/concepts/sui-architecture/epochs.mdx).  An equivocation occurs when an owned object's pair (`ObjectID`, `SequenceNumber`) is concurrently used in multiple non-finalized transactions. To avoid double spending, validators lock objects as they validate transactions.
+The most significant risk when using sponsored transactions is [equivocation](/concepts/rtd-architecture/epochs.mdx).  An equivocation occurs when an owned object's pair (`ObjectID`, `SequenceNumber`) is concurrently used in multiple non-finalized transactions. To avoid double spending, validators lock objects as they validate transactions.
 
 In some scenarios, sponsored transactions can result in locking all associated owned objects. 
 
@@ -30,18 +30,18 @@ A user-initiated sponsored transaction involves the following steps:
 
 1. The sponsor sends the signed `TransactionData` and the sponsor `Signature` back to the user.
 
-1. The user verifies and then signs `TransactionData` and sends the dual-signed transaction to Sui network through a full node or the sponsor.
+1. The user verifies and then signs `TransactionData` and sends the dual-signed transaction to Rtd network through a full node or the sponsor.
 
 ### `GasLessTransactionData`
 
-`GasLessTransactionData` is `TransactionData` without `GasData`. It is not a `sui-core` data structure; it is only an interface between user and sponsor.
+`GasLessTransactionData` is `TransactionData` without `GasData`. It is not a `rtd-core` data structure; it is only an interface between user and sponsor.
 
 The following example constructs a `GasLessTransactionData`  object:
 
 ```rust
 pub struct GasLessTransactionData {
     pub kind: TransactionKind,
-    sender: SuiAddress,
+    sender: RtdAddress,
     …
 }
 ```
@@ -54,7 +54,7 @@ A sponsor-initiated sponsored transaction involves the following steps:
 
 1. The user checks the transaction and signs it to generate the second `Signature` for the transaction.
 
-1. The user submits the dual-signed transaction to a Sui full node or sponsor to execute it.
+1. The user submits the dual-signed transaction to a Rtd full node or sponsor to execute it.
 
 You can use a sponsor-initiated sponsored transaction as an advertiser, or to incentivize specific user actions without requiring the user to pay for gas fees.
 
@@ -76,14 +76,14 @@ A sponsor transaction using a `GasData` object involves the following steps:
 
 ## Sponsored transaction data structure
 
-The following code block describes the `TransactionData` structure for sponsored transactions and `GasObject`. You can view the [source code](https://github.com/MystenLabs/sui/blob/224a28ed9dece21a952547896bd5d794bdf8b562/crates/sui-types/src/transaction.rs) in the Sui GitHub repository.
+The following code block describes the `TransactionData` structure for sponsored transactions and `GasObject`. You can view the [source code](https://github.com/LinkUVerse/rtd/blob/224a28ed9dece21a952547896bd5d794bdf8b562/crates/rtd-types/src/transaction.rs) in the Rtd GitHub repository.
 
 **`TransactionData` structure**
 ```rust
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct TransactionDataV1 {
     pub kind: TransactionKind,
-    pub sender: SuiAddress,
+    pub sender: RtdAddress,
     pub gas_data: GasData,
     pub expiration: TransactionExpiration,
 }
@@ -94,15 +94,15 @@ pub struct TransactionDataV1 {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct GasData {
     pub payment: Vec<ObjectRef>,
-    pub owner: SuiAddress,
+    pub owner: RtdAddress,
     pub price: u64,
     pub budget: u64,
 }
 ```
 
-## Create a Sui gas station
+## Create a Rtd gas station
 
-On Sui, the term _gas station_ refers to a concept where you set up processes to sponsor user transactions. You can customize a gas station to support the specific user-facing functionality you need. Some example use cases for a Sui gas station include:
+On Rtd, the term _gas station_ refers to a concept where you set up processes to sponsor user transactions. You can customize a gas station to support the specific user-facing functionality you need. Some example use cases for a Rtd gas station include:
 
 - Monitor real-time gas prices on the network to determine the gas price that the station provides.
 
@@ -120,7 +120,7 @@ For all gas objects that you provide as a sponsor, you should track if users eve
 
 ### Example
 
-The following Rust SDK code examples demonstrate how to implement a Sui gas station that supports each of the sponsored transaction types described previously.
+The following Rust SDK code examples demonstrate how to implement a Rtd gas station that supports each of the sponsored transaction types described previously.
 
 #### User-initiated sponsored transactions
 

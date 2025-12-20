@@ -1,22 +1,22 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use std::path::PathBuf;
 use std::time::Duration;
-use sui_config::local_ip_utils::new_local_tcp_socket_for_testing_string;
-use sui_indexer::test_utils::{
+use rtd_config::local_ip_utils::new_local_tcp_socket_for_testing_string;
+use rtd_indexer::test_utils::{
     start_indexer_jsonrpc_for_testing, start_indexer_writer_for_testing,
 };
-use sui_json_rpc_api::ReadApiClient;
-use sui_pg_db::temp::TempDb;
-use sui_sdk::{SuiClient, SuiClientBuilder};
+use rtd_json_rpc_api::ReadApiClient;
+use rtd_pg_db::temp::TempDb;
+use rtd_sdk::{RtdClient, RtdClientBuilder};
 use tempfile::TempDir;
 use tokio::time::sleep;
 
 pub(crate) struct IndexerHandle {
     pub(crate) rpc_client: HttpClient,
-    pub(crate) sui_client: SuiClient,
+    pub(crate) rtd_client: RtdClient,
     pub(crate) rpc_url: String,
     #[allow(unused)]
     cancellation_tokens: Vec<tokio_util::sync::DropGuard>,
@@ -71,14 +71,14 @@ impl IndexerHandle {
             sleep(Duration::from_millis(100)).await;
         }
 
-        let sui_client = SuiClientBuilder::default()
+        let rtd_client = RtdClientBuilder::default()
             .build(&rpc_address)
             .await
             .unwrap();
 
         IndexerHandle {
             rpc_client,
-            sui_client,
+            rtd_client,
             rpc_url: rpc_address.clone(),
             database,
             data_ingestion_dir,

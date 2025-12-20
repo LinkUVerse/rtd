@@ -1,11 +1,11 @@
 {
-	"name": "sui-monorepo",
+	"name": "rtd-monorepo",
 	"private": true,
 	"license": "Apache-2.0",
 	"scripts": {
 		"test": "turbo run test",
 		"test:dev": "turbo run test -- --run",
-		"changeset-version": "pnpm changeset version && pnpm --filter @mysten/sui codegen:version",
+		"changeset-version": "pnpm changeset version && pnpm --filter @linku/rtd codegen:version",
 		"prettier:check": "prettier -c --ignore-unknown .",
 		"prettier:fix": "prettier -w --ignore-unknown .",
 		"prettier:fix:watch": "onchange '**' -i -f add -f change -j 5 -- prettier -w --ignore-unknown {{file}}",

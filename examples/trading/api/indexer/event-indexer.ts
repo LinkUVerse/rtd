@@ -1,26 +1,26 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { EventId, SuiClient, SuiEvent, SuiEventFilter } from '@mysten/sui/client';
+import { EventId, RtdClient, RtdEvent, RtdEventFilter } from '@linku/rtd/client';
 
 import { CONFIG } from '../config';
 import { prisma } from '../db';
-import { getClient } from '../sui-utils';
+import { getClient } from '../rtd-utils';
 import { handleEscrowObjects } from './escrow-handler';
 import { handleLockObjects } from './locked-handler';
 
-type SuiEventsCursor = EventId | null | undefined;
+type RtdEventsCursor = EventId | null | undefined;
 
 type EventExecutionResult = {
-	cursor: SuiEventsCursor;
+	cursor: RtdEventsCursor;
 	hasNextPage: boolean;
 };
 
 type EventTracker = {
 	// The module that defines the type, with format `package::module`
 	type: string;
-	filter: SuiEventFilter;
-	callback: (events: SuiEvent[], type: string) => any;
+	filter: RtdEventFilter;
+	callback: (events: RtdEvent[], type: string) => any;
 };
 
 const EVENTS_TO_TRACK: EventTracker[] = [
@@ -47,9 +47,9 @@ const EVENTS_TO_TRACK: EventTracker[] = [
 ];
 
 const executeEventJob = async (
-	client: SuiClient,
+	client: RtdClient,
 	tracker: EventTracker,
-	cursor: SuiEventsCursor,
+	cursor: RtdEventsCursor,
 ): Promise<EventExecutionResult> => {
 	try {
 		// get the events from the chain.
@@ -83,7 +83,7 @@ const executeEventJob = async (
 	};
 };
 
-const runEventJob = async (client: SuiClient, tracker: EventTracker, cursor: SuiEventsCursor) => {
+const runEventJob = async (client: RtdClient, tracker: EventTracker, cursor: RtdEventsCursor) => {
 	const result = await executeEventJob(client, tracker, cursor);
 
 	// Trigger a timeout. Depending on the result, we either wait 0ms or the polling interval.

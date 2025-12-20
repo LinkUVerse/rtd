@@ -1,0 +1,8 @@
+[package]
+name = "test_functions"
+edition = "2024.beta"
+implicit-dependencies = false
+
+[dependencies]
+rtd = { local = "../system-packages/rtd-framework" }
+std = { local = "../system-packages/move-stdlib" }

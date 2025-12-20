@@ -1,0 +1,15 @@
+---
+source: crates/move-compiler/tests/move_check_testrtdte.rs
+info:
+  flavor: rtd
+  edition: legacy
+  lint: false
+---
+error[Rtd E02002]: invalid 'entry' function signature
+  ┌─ tests/rtd_mode/entry_points/clock_mut.move:4:35
+  │
+4 │     public entry fun no_clock_mut(_: &mut rtd::clock::Clock) {
+  │            -----                  ^  ---------------------- rtd::clock::Clock must be passed by immutable reference, e.g. '&rtd::clock::Clock'
+  │            │                      │   
+  │            │                      Invalid 'entry' parameter type for parameter '_'
+  │            'no_clock_mut' was declared 'entry' here

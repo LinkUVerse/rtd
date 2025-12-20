@@ -1,4 +1,4 @@
-# VSCode Move (Mysten Labs)
+# VSCode Move (LinkU Labs)
 
 ## Tooling Category
 
@@ -11,7 +11,7 @@
 
 ## Description
 
-- VSCode Extension for Move on Sui smart contract development powered by LSP Move Analyzer language server developed by Mysten Labs.
+- VSCode Extension for Move on Rtd smart contract development powered by LSP Move Analyzer language server developed by LinkU Labs.
 
 ## Features
 
@@ -25,8 +25,8 @@
     - Move 2024 is supported
     - Move 2024 syntax highlight ([VSCode Move Syntax](https://marketplace.visualstudio.com/items?itemName=damirka.move-syntax))
 - Utilities
-    - Integration with `sui` binary (Sui CLI)
+    - Integration with `rtd` binary (Rtd CLI)
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On
 
 Testnet v1.32.0

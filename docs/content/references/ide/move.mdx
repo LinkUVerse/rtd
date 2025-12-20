@@ -13,16 +13,16 @@ You can install the Move extension from the Visual Studio Code Marketplace:
 
 1. Open VS Code.
 1. Open the **Extensions** view (<kbd>⇧</kbd> + <kbd>⌘</kbd> + <kbd>X</kbd> on macOS, <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd> on Windows/Linux).
-1. Search for `mysten.move`.
-1. Click **Install** on the Move extension by Mysten Labs.
+1. Search for `linku.move`.
+1. Click **Install** on the Move extension by LinkU Labs.
 
 Alternative install methods include:
 
-  - Use <kbd>Ctrl</kbd> + <kbd>P</kbd> or <kbd>⌘</kbd> + <kbd>P</kbd> and type `ext install mysten.move`.
+  - Use <kbd>Ctrl</kbd> + <kbd>P</kbd> or <kbd>⌘</kbd> + <kbd>P</kbd> and type `ext install linku.move`.
   - Use the command line: 
 
       ```sh
-      $ code --install-extension mysten.move
+      $ code --install-extension linku.move
       ```
 
 The following extensions are included in the Move extension install:
@@ -35,10 +35,10 @@ The following extensions are included in the Move extension install:
 The Move extension attempts to install the appropriate `move-analyzer` binary for your platform. If this doesn't work, or you prefer to install it manually, build it with Cargo:
 
 ```sh
-$ cargo install --git https://github.com/MystenLabs/sui.git sui-move-lsp
+$ cargo install --git https://github.com/LinkUVerse/rtd.git rtd-move-lsp
 ```
 
-By default, the Move extension expects to find the `move-analyzer` binary in `~/.sui/bin`. You can either copy the binary to this location, or configure the extension to use a different path. 
+By default, the Move extension expects to find the `move-analyzer` binary in `~/.rtd/bin`. You can either copy the binary to this location, or configure the extension to use a different path. 
 
 ## Features
 
@@ -50,9 +50,9 @@ The Move extension installs command palette commands for building, testing, and 
 
 ![Move commands in the command palette](./images/commands.png)
 
-These commands find the `Move.toml` file for the open Move source file and open a terminal to run the appropriate `sui move` command.
+These commands find the `Move.toml` file for the open Move source file and open a terminal to run the appropriate `rtd move` command.
 
-To execute these commands you must have `sui` binary installed, in particular, to generate a trace, the `sui` binary version must be trace-generation capable. See [Debugger](./debugger.mdx#install) for installation instructions. The extension will search for the `sui` binary on a system path but you can configure the extension to use a different path.
+To execute these commands you must have `rtd` binary installed, in particular, to generate a trace, the `rtd` binary version must be trace-generation capable. See [Debugger](./debugger.mdx#install) for installation instructions. The extension will search for the `rtd` binary on a system path but you can configure the extension to use a different path.
 
 ### Syntax highlighting
 

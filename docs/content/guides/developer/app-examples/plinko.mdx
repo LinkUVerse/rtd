@@ -1,10 +1,10 @@
 ---
 title: Plinko
-description: Learn Sui through an example implementation of the popular casino game, Plinko.
+description: Learn Rtd through an example implementation of the popular casino game, Plinko.
 keywords: [ example dApp, example app, on-chain randomness, enoki sponsorship, sponsored transactions, codegen, typescript codegen, example game, game dApp ]
 ---
 
-Plinko is an example implementation of the popular casino game. The Plinko game on Sui leverages on-chain randomness to ensure fairness and transparency. Players drop Plinko balls onto a pegged board, where they randomly fall into slots representing different multipliers. This document details the game's mechanics, on-chain randomness implementation, sponsored transactions through Enoki, and TypeScript integration using codegen.
+Plinko is an example implementation of the popular casino game. The Plinko game on Rtd leverages on-chain randomness to ensure fairness and transparency. Players drop Plinko balls onto a pegged board, where they randomly fall into slots representing different multipliers. This document details the game's mechanics, on-chain randomness implementation, sponsored transactions through Enoki, and TypeScript integration using codegen.
 
 Building an on-chain Plinko game shares a lot of similarities with the [Coin Flip](./coin-flip.mdx) game and [Blackjack](./blackjack.mdx) game. For that reason, this example covers only the smart contracts (Move modules) and frontend logic.
 
@@ -12,17 +12,17 @@ Building an on-chain Plinko game shares a lot of similarities with the [Coin Fli
 
 :::info
 
-You can find the source files for this example in the [Plinko repo](https://github.com/MystenLabs/plinko-poc/tree/main) on GitHub.
+You can find the source files for this example in the [Plinko repo](https://github.com/LinkUVerse/plinko-poc/tree/main) on GitHub.
 
-A version of the game is also deployed at [Mysten Plinko](https://plinko-poc.vercel.app/).
+A version of the game is also deployed at [LinkU Plinko](https://plinko-poc.vercel.app/).
 
 :::
 
 ## Gameplay
 
-The Plinko game, implemented through smart contracts on the Sui blockchain, leverages Sui's native on-chain randomness to ensure fairness and transparency. The game calculates the trace path for each ball using secure random values generated directly on-chain, determining the game's outcome based on the number of Plinko balls a player chooses to drop.
+The Plinko game, implemented through smart contracts on the Rtd blockchain, leverages Rtd's native on-chain randomness to ensure fairness and transparency. The game calculates the trace path for each ball using secure random values generated directly on-chain, determining the game's outcome based on the number of Plinko balls a player chooses to drop.
 
-The game mechanics involve a player starting a game by specifying the number of balls and staking a certain amount. The on-chain randomness is provided through Sui's Move randomness framework, which ensures each game's randomness is cryptographically secure and cannot be predicted or manipulated. The number of Plinko balls, chosen by the player, directly influences the game's complexity and potential payout, as each ball's final position is determined by the on-chain random values that dictate the ball's path through the pegged board.
+The game mechanics involve a player starting a game by specifying the number of balls and staking a certain amount. The on-chain randomness is provided through Rtd's Move randomness framework, which ensures each game's randomness is cryptographically secure and cannot be predicted or manipulated. The number of Plinko balls, chosen by the player, directly influences the game's complexity and potential payout, as each ball's final position is determined by the on-chain random values that dictate the ball's path through the pegged board.
 
 ## Sequence diagram
 
@@ -32,7 +32,7 @@ sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
     participant Enoki as Enoki
-    participant Blockchain as Sui Blockchain
+    participant Blockchain as Rtd Blockchain
 
     Note over Player, Blockchain: Plinko Game Interaction Flow
 
@@ -80,7 +80,7 @@ Follow the comments in each module's code to understand the logic each creates.
 
 ### `plinko::plinko`
 
-The `plinko::plinko` module combines various Sui blockchain features, such as coin handling, event emissions, on-chain randomness, and game logic, to create fair and transparent on-chain Plinko games.
+The `plinko::plinko` module combines various Rtd blockchain features, such as coin handling, event emissions, on-chain randomness, and game logic, to create fair and transparent on-chain Plinko games.
 
 <details>
 <summary>
@@ -90,12 +90,12 @@ The `plinko::plinko` module combines various Sui blockchain features, such as co
 ```move title="plinko.move"
 module plinko::plinko;
 use plinko::house_data::{Self as hd, HouseData};
-use sui::balance::Balance;
-use sui::coin::{Self, Coin};
-use sui::dynamic_object_field as dof;
-use sui::event::emit;
-use sui::random::Random;
-use sui::sui::SUI;
+use rtd::balance::Balance;
+use rtd::coin::{Self, Coin};
+use rtd::dynamic_object_field as dof;
+use rtd::event::emit;
+use rtd::random::Random;
+use rtd::rtd::RTD;
 
 // === Errors ===
 const EStakeTooLow: u64 = 0;
@@ -110,7 +110,7 @@ const ENumberOfBallsNotAllowed: u64 = 7;
 public struct Game has key, store {
     id: UID,
     game_start_epoch: u64,
-    stake: Balance<SUI>,
+    stake: Balance<RTD>,
     player: address,
     fee_bp: u16,
 }
@@ -137,7 +137,7 @@ public struct GameFinished has copy, drop {
 // === Public Functions ===
 
 /// Function used to create a new game.
-public fun start_game(coin: Coin<SUI>, house_data: &mut HouseData, ctx: &mut TxContext): ID {
+public fun start_game(coin: Coin<RTD>, house_data: &mut HouseData, ctx: &mut TxContext): ID {
     let fee_bp = house_data.base_fee_in_bp();
     let (id, new_game) = internal_start_game(coin, house_data, fee_bp, ctx);
     dof::add(house_data.borrow_mut(), id, new_game);
@@ -176,7 +176,7 @@ entry fun finish_game(
     let mut trace = vector[];
 
     // Calculate the stake amount per ball
-    let stake_per_ball = stake.value<SUI>() / num_balls;
+    let stake_per_ball = stake.value<RTD>() / num_balls;
     let mut total_funds_amount: u64 = 0;
 
     // Calculate outcome for each ball using native randomness
@@ -204,7 +204,7 @@ entry fun finish_game(
         let result = house_data.multiplier()[multiplier_index];
 
         // Calculate funds amount for this particular ball
-        // Divide by 100 to adjust for multiplier scale and SUI units
+        // Divide by 100 to adjust for multiplier scale and RTD units
         let funds_amount_per_ball = (result * stake_per_ball) / 100;
         // Add the funds amount to the total funds amount
         total_funds_amount = total_funds_amount + funds_amount_per_ball;
@@ -216,7 +216,7 @@ entry fun finish_game(
     let available: u64 = hd::balance(house_data);
     assert!(available >= total_funds_amount, EInsufficientHouseBalance);
     let payout_balance_mut = house_data.borrow_balance_mut();
-    let payout_coin: Coin<SUI> = coin::take(payout_balance_mut, total_funds_amount, ctx);
+    let payout_coin: Coin<RTD> = coin::take(payout_balance_mut, total_funds_amount, ctx);
 
     payout_balance_mut.join(stake);
 
@@ -276,7 +276,7 @@ public fun borrow_game(game_id: ID, house_data: &HouseData): &Game {
 /// Internal helper function used to create a new game.
 /// Stake is taken from the player's coin and added to the game's stake.
 fun internal_start_game(
-    coin: Coin<SUI>,
+    coin: Coin<RTD>,
     house_data: &HouseData,
     fee_bp: u16,
     ctx: &mut TxContext,
@@ -299,7 +299,7 @@ fun internal_start_game(
     let new_game = Game {
         id,
         game_start_epoch: ctx.epoch(),
-        stake: coin.into_balance<SUI>(),
+        stake: coin.into_balance<RTD>(),
         player: ctx.sender(),
         fee_bp,
     };
@@ -339,7 +339,7 @@ Error handling is integral to the module, with specific codes indicating various
 #### Key functions
 
 - `start_game`: Initiates a new Plinko game session, accepting the player's stake coin, house data, and transaction context. Returns the game ID.
-- `finish_game`: Completes the game using on-chain randomness to calculate outcomes, traces the path each ball travels, and distributes the total winnings to the player. This is an entry function that takes the Random object from Sui's randomness framework.
+- `finish_game`: Completes the game using on-chain randomness to calculate outcomes, traces the path each ball travels, and distributes the total winnings to the player. This is an entry function that takes the Random object from Rtd's randomness framework.
 
 #### Accessors
 
@@ -370,10 +370,10 @@ The `plinko::house_data` module manages the game's treasury and configurations. 
 
 ```move title="house_data.move"
 module plinko::house_data;
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, Coin};
-use sui::package;
-use sui::sui::SUI;
+use rtd::balance::{Self, Balance};
+use rtd::coin::{Self, Coin};
+use rtd::package;
+use rtd::rtd::RTD;
 
 // === Errors ===
 const ECallerNotHouse: u64 = 0;
@@ -385,7 +385,7 @@ const EInsufficientBalance: u64 = 1;
 public struct HouseData has key {
     id: UID,
     // House's balance which also contains the accrued winnings of the house.
-    balance: Balance<SUI>,
+    balance: Balance<RTD>,
     // Address of the house or the game operator.
     house: address,
     // Maximum stake amount a player can bet in a single game.
@@ -393,7 +393,7 @@ public struct HouseData has key {
     // Minimum stake amount required to play the game.
     min_stake: u64,
     // The accrued fees from games played.
-    fees: Balance<SUI>,
+    fees: Balance<RTD>,
     // The default fee in basis points. 1 basis point = 0.01%.
     base_fee_in_bp: u16,
     // Multipliers used to calculate winnings based on the game outcome.
@@ -428,7 +428,7 @@ fun init(otw: HOUSE_DATA, ctx: &mut TxContext) {
 /// This object is involved in all games created by the same instance of this package.
 public fun initialize_house_data(
     house_cap: HouseCap,
-    coin: Coin<SUI>,
+    coin: Coin<RTD>,
     multiplier: vector<u64>,
     ctx: &mut TxContext,
 ) {
@@ -438,8 +438,8 @@ public fun initialize_house_data(
         id: object::new(ctx),
         balance: coin.into_balance(),
         house: ctx.sender(),
-        max_stake: 10_000_000_000, // 10 SUI = 10^9.
-        min_stake: 100_000_000, // 0.1 SUI.
+        max_stake: 10_000_000_000, // 10 RTD = 10^9.
+        min_stake: 100_000_000, // 0.1 RTD.
         fees: balance::zero(),
         base_fee_in_bp: 100, // 1% in basis points.
         multiplier: vector[],
@@ -467,7 +467,7 @@ public fun update_multiplier_vector(
 
 /// Function used to top up the house balance. Can be called by anyone.
 /// House can have multiple accounts so giving the treasury balance is not limited.
-public fun top_up(house_data: &mut HouseData, coin: Coin<SUI>, _: &mut TxContext) {
+public fun top_up(house_data: &mut HouseData, coin: Coin<RTD>, _: &mut TxContext) {
     coin::put(&mut house_data.balance, coin)
 }
 
@@ -553,12 +553,12 @@ public(package) fun borrow(house_data: &HouseData): &UID {
 }
 
 /// Returns a mutable reference to the balance of the house.
-public(package) fun borrow_balance_mut(house_data: &mut HouseData): &mut Balance<SUI> {
+public(package) fun borrow_balance_mut(house_data: &mut HouseData): &mut Balance<RTD> {
     &mut house_data.balance
 }
 
 /// Returns a mutable reference to the fees of the house.
-public(package) fun borrow_fees_mut(house_data: &mut HouseData): &mut Balance<SUI> {
+public(package) fun borrow_fees_mut(house_data: &mut HouseData): &mut Balance<RTD> {
     &mut house_data.fees
 }
 
@@ -630,7 +630,7 @@ Provide read-only and mutable access to house data properties, enabling operatio
 
 ## Enoki sponsorship
 
-The Plinko game demonstrates a frictionless user experience by leveraging [Enoki](https://docs.enoki.mystenlabs.com/) for transaction sponsorship. This allows players to interact with the game without needing to hold SUI tokens for gas fees, significantly reducing barriers to entry.
+The Plinko game demonstrates a frictionless user experience by leveraging [Enoki](https://docs.enoki.linkulabs.com/) for transaction sponsorship. This allows players to interact with the game without needing to hold RTD tokens for gas fees, significantly reducing barriers to entry.
 
 ### How sponsorship works
 
@@ -667,7 +667,7 @@ export const POST = async (req: NextRequest) => {
   try {
     const { transactionKindBytes, sender } = await req.json();
     const sponsored = await enokiClient.createSponsoredTransaction({
-      network: process.env.NEXT_PUBLIC_SUI_NETWORK_NAME as
+      network: process.env.NEXT_PUBLIC_RTD_NETWORK_NAME as
         | "mainnet"
         | "testnet"
         | "devnet",
@@ -717,7 +717,7 @@ export const POST = async (req: NextRequest) => {
 const tx = new Transaction();
 tx.setSender(sender);
 const betCoin = coinWithBalance({
-  type: "0x2::sui::SUI",
+  type: "0x2::rtd::RTD",
   balance: betInMist,
   useGasCoin: false, // important for sponsorship
 })(tx);
@@ -767,7 +767,7 @@ const execResp = await fetch("/api/execute", {
 
 ## TypeScript Integration with Codegen
 
-The Plinko frontend uses [Mysten's codegen tool](https://www.npmjs.com/package/@mysten/codegen?activeTab=readme) to automatically generate TypeScript bindings from the Move smart contracts. This provides several advantages:
+The Plinko frontend uses [LinkU's codegen tool](https://www.npmjs.com/package/@linku/codegen?activeTab=readme) to automatically generate TypeScript bindings from the Move smart contracts. This provides several advantages:
 
 ### Usage example
 
@@ -785,28 +785,28 @@ const tx = plinko.startGame({
 
 ## Deployment
 
-Navigate to the [setup folder](https://github.com/MystenLabs/plinko-poc/tree/main/setup) of the Plinko repository and execute the `publish.sh` script. Refer to the [README instructions](https://github.com/MystenLabs/plinko-poc/blob/main/README.md) for deploying the smart contracts and testing them locally.
+Navigate to the [setup folder](https://github.com/LinkUVerse/plinko-poc/tree/main/setup) of the Plinko repository and execute the `publish.sh` script. Refer to the [README instructions](https://github.com/LinkUVerse/plinko-poc/blob/main/README.md) for deploying the smart contracts and testing them locally.
 
 
 ## Frontend
 
-The Plinko frontend is built with React and integrates with the Sui blockchain using sponsored transactions through Enoki. The application provides an interactive and responsive gaming experience while abstracting away blockchain complexity from end users.
+The Plinko frontend is built with React and integrates with the Rtd blockchain using sponsored transactions through Enoki. The application provides an interactive and responsive gaming experience while abstracting away blockchain complexity from end users.
 
 ### State management and setup
 
 - **State hooks:** The application uses React's `useState` to manage game states, including `finalPaths`, `isPlaying`, `totalWon`, and more. These states track the current game status and update the UI in real-time.
 
-- **Sponsored transactions:** The frontend leverages Enoki's `/sponsor` and `/execute` APIs to create a gasless experience. Players can interact with the game without needing SUI tokens, as the backend sponsors all transaction fees.
+- **Sponsored transactions:** The frontend leverages Enoki's `/sponsor` and `/execute` APIs to create a gasless experience. Players can interact with the game without needing RTD tokens, as the backend sponsors all transaction fees.
 
 - **TypeScript integration:** Generated TypeScript bindings from codegen provide type-safe contract interactions, reducing errors, and improving developer experience.
 
 ## UI components and styling
 
-The `MatterSim` and `PlinkoSettings` components are the foundation for the Plinko frontend. To see code for all components and source files, see the [Plinko repo](https://github.com/MystenLabs/plinko-poc/tree/main/app/src).  
+The `MatterSim` and `PlinkoSettings` components are the foundation for the Plinko frontend. To see code for all components and source files, see the [Plinko repo](https://github.com/LinkUVerse/plinko-poc/tree/main/app/src).  
 
 ### Simulation component
 
-The [`MatterSim` component](https://github.com/MystenLabs/plinko-poc/blob/main/app/src/components/MatterSim.tsx) renders the game board with realistic physics for the dropping Plinko balls. It uses [Matter.js](https://brm.io/matter-js/), a 2D physics engine, to simulate the game dynamics.
+The [`MatterSim` component](https://github.com/LinkUVerse/plinko-poc/blob/main/app/src/components/MatterSim.tsx) renders the game board with realistic physics for the dropping Plinko balls. It uses [Matter.js](https://brm.io/matter-js/), a 2D physics engine, to simulate the game dynamics.
 
 ```ts
 import Matter, {
@@ -826,7 +826,7 @@ The component receives ball paths (trace data) generated from on-chain randomnes
 
 ## Plinko settings component
 
-The [`PlinkoSettings` component](https://github.com/MystenLabs/plinko-poc/blob/main/app/src/components/PlinkoSettings.tsx) is an integral part of the user interface in the Plinko game, enabling players to customize their gameplay experience according to their preferences. This React component allows users to select the number of Plinko balls they want to drop, set the bet size for each ball, and initiate the game round by pressing the **Play** button.
+The [`PlinkoSettings` component](https://github.com/LinkUVerse/plinko-poc/blob/main/app/src/components/PlinkoSettings.tsx) is an integral part of the user interface in the Plinko game, enabling players to customize their gameplay experience according to their preferences. This React component allows users to select the number of Plinko balls they want to drop, set the bet size for each ball, and initiate the game round by pressing the **Play** button.
 
 ### Customization options
 
@@ -835,9 +835,9 @@ The [`PlinkoSettings` component](https://github.com/MystenLabs/plinko-poc/blob/m
 
 ## User interaction and feedback
 
-Game Initiation: After selecting the desired number of balls and setting the bet size for each, players can initiate a new game by pressing the **Play** button. This action starts the game, with the button becoming disabled during gameplay to prevent new games from being initiated until the current game concludes and the last ball has reached the end. Links are also provided for players to view game details on a Sui network explorer for transparency and engagement.
+Game Initiation: After selecting the desired number of balls and setting the bet size for each, players can initiate a new game by pressing the **Play** button. This action starts the game, with the button becoming disabled during gameplay to prevent new games from being initiated until the current game concludes and the last ball has reached the end. Links are also provided for players to view game details on a Rtd network explorer for transparency and engagement.
 
 ## Related links
 
-<RelatedLink href="https://github.com/MystenLabs/plinko-poc/tree/main" label="Plinko repository" desc="The Plinko GitHub repository contains all the source files for this example." />
-<RelatedLink href="https://plinko-poc.vercel.app/" label="Mysten Plinko" desc="A hosted version of the Plinko game." />
+<RelatedLink href="https://github.com/LinkUVerse/plinko-poc/tree/main" label="Plinko repository" desc="The Plinko GitHub repository contains all the source files for this example." />
+<RelatedLink href="https://plinko-poc.vercel.app/" label="LinkU Plinko" desc="A hosted version of the Plinko game." />

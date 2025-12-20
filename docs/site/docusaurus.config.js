@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { fileURLToPath } from "url";
@@ -25,9 +25,9 @@ require("dotenv").config();
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Sui Documentation",
+  title: "Rtd Documentation",
   tagline:
-    "Sui is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by Move",
+    "Rtd is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by Move",
   favicon: "/img/favicon.ico",
   headTags: [
     {
@@ -39,7 +39,7 @@ const config = {
     },
   ],
   // Set the production url of your site here
-  url: "https://docs.sui.io",
+  url: "https://docs.rtd.io",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: "/",
@@ -58,7 +58,7 @@ const config = {
     [
       require.resolve("./src/plugins/plausible"),
       {
-        domain: "docs.sui.io",
+        domain: "docs.rtd.io",
         enableInDev: false,
         trackOutboundLinks: true,
         hashMode: false,
@@ -69,9 +69,9 @@ const config = {
       "@graphql-markdown/docusaurus",
       {
         id: "alpha",
-        schema: "../../crates/sui-graphql-rpc/schema.graphql",
+        schema: "../../crates/rtd-graphql-rpc/schema.graphql",
         rootPath: "../content", // docs will be generated under rootPath/baseURL
-        baseURL: "references/sui-api/sui-graphql/alpha/reference",
+        baseURL: "references/rtd-api/rtd-graphql/alpha/reference",
         loaders: {
           GraphQLFileLoader: "@graphql-tools/graphql-file-loader",
         },
@@ -116,9 +116,9 @@ const config = {
       "@graphql-markdown/docusaurus",
       {
         id: "beta",
-        schema: "../../crates/sui-indexer-alt-graphql/schema.graphql",
+        schema: "../../crates/rtd-indexer-alt-graphql/schema.graphql",
         rootPath: "../content",
-        baseURL: "references/sui-api/sui-graphql/beta/reference",
+        baseURL: "references/rtd-api/rtd-graphql/beta/reference",
         docOptions: {
           frontMatter: {
             isGraphQlBeta: true,
@@ -156,7 +156,7 @@ const config = {
           routeBasePath: "/",
           sidebarPath: SIDEBARS_PATH,
           // the double docs below is a fix for having the path set to ../content
-          editUrl: "https://github.com/MystenLabs/sui/tree/main/docs/docs",
+          editUrl: "https://github.com/LinkUVerse/rtd/tree/main/docs/docs",
           exclude: [
             "**/snippets/**",
             "**/standards/deepbook-ref/**",
@@ -216,7 +216,7 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      image: "img/sui-doc-og.png",
+      image: "img/rtd-doc-og.png",
       docs: {
         sidebar: {
           autoCollapseCategories: false,
@@ -224,10 +224,10 @@ const config = {
       },
 
       navbar: {
-        title: "Sui Documentation",
+        title: "Rtd Documentation",
         logo: {
-          alt: "Sui Docs Logo",
-          src: "img/sui-logo.svg",
+          alt: "Rtd Docs Logo",
+          src: "img/rtd-logo.svg",
         },
         items: [
           {
@@ -250,12 +250,12 @@ const config = {
       },
       footer: {
         logo: {
-          alt: "Sui Logo",
-          src: "img/sui-logo-footer.svg",
-          href: "https://sui.io",
+          alt: "Rtd Logo",
+          src: "img/rtd-logo-footer.svg",
+          href: "https://rtd.io",
         },
         style: "dark",
-        copyright: `© ${new Date().getFullYear()} Sui Foundation | Documentation distributed under <a href="https://github.com/MystenLabs/sui/blob/main/docs/site/LICENSE">CC BY 4.0</a>`,
+        copyright: `© ${new Date().getFullYear()} Rtd Foundation | Documentation distributed under <a href="https://github.com/LinkUVerse/rtd/blob/main/docs/site/LICENSE">CC BY 4.0</a>`,
       },
       codeblock: {
         showGithubLink: true,

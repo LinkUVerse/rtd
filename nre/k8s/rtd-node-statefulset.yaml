@@ -1,0 +1,105 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtd-node
+  namespace: rpc-mainnet
+spec:
+  ports:
+  - port: 9000
+    protocol: TCP
+    targetPort: 9000
+  selector:
+    app: rtd-node
+  type: ClusterIP
+---
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pd-ssd
+parameters:
+  type: pd-ssd
+provisioner: kubernetes.io/gce-pd
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: rtd-node
+  name: rtd-node
+  namespace: rpc-mainnet
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: rtd-node
+  serviceName: rtd-node
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9184"
+        prometheus.io/scrape: "true"
+      labels:
+        app: rtd-node
+    spec:
+      containers:
+      - command:
+        - /opt/rtd/bin/rtd-node
+        - --config-path
+        - /opt/rtd/config/rtd-node.yaml
+        env:
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: RUST_LOG
+          value: info,rtd_core=debug,rtd_network=debug,consensus=debug,jsonrpsee=error
+        image: x
+        imagePullPolicy: Always
+        name: rtd-node
+        ports:
+        - containerPort: 9000
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "32"
+            memory: 128G
+        volumeMounts:
+        - mountPath: /opt/rtd/db
+          name: ssd-storage
+        - mountPath: /opt/rtd/config/rtd-node.yaml
+          name: rtd-config-volume
+          subPath: rtd-node.yaml
+        - mountPath: /opt/rtd/config/genesis.blob
+          name: rtd-genesis-volume
+          subPath: genesis.blob
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 180
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: rtd-config
+        name: rtd-config-volume
+      - configMap:
+          defaultMode: 420
+          name: rtd-genesis
+        name: rtd-genesis-volume
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ssd-storage
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5000Gi
+      storageClassName: pd-ssd
+      volumeMode: Filesystem

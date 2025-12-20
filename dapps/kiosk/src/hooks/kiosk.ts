@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 /* eslint-disable @tanstack/query/exhaustive-deps */
 
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useRtdClient, useRtdClientContext } from '@linku/dapp-kit';
 import {
 	getKioskObject,
 	Kiosk,
@@ -10,8 +10,8 @@ import {
 	KioskItem,
 	KioskListing,
 	KioskOwnerCap,
-} from '@mysten/kiosk';
-import { SuiObjectResponse } from '@mysten/sui/client';
+} from '@linku/kiosk';
+import { RtdObjectResponse } from '@linku/rtd/client';
 import { useQuery } from '@tanstack/react-query';
 
 import { OwnedObjectType } from '../components/Inventory/OwnedObjects';
@@ -31,7 +31,7 @@ export type KioskFnType = (item: OwnedObjectType, price?: string) => Promise<voi
  */
 export function useOwnedKiosk(address: string | undefined) {
 	const kioskClient = useKioskClient();
-	const { network } = useSuiClientContext();
+	const { network } = useRtdClientContext();
 
 	return useQuery({
 		queryKey: [TANSTACK_OWNED_KIOSK_KEY, address, network],
@@ -60,13 +60,13 @@ export function useOwnedKiosk(address: string | undefined) {
  */
 export function useKiosk(kioskId: string | undefined | null) {
 	const kioskClient = useKioskClient();
-	const { network } = useSuiClientContext();
+	const { network } = useRtdClientContext();
 
 	return useQuery({
 		queryKey: [TANSTACK_KIOSK_KEY, kioskId, network],
 		queryFn: async (): Promise<{
 			kioskData: KioskData | null;
-			items: SuiObjectResponse[];
+			items: RtdObjectResponse[];
 		}> => {
 			if (!kioskId) return { kioskData: null, items: [] };
 			const res = await kioskClient.getKiosk({
@@ -116,8 +116,8 @@ export function useKiosk(kioskId: string | undefined | null) {
  * A hook to fetch a kiosk's details.
  */
 export function useKioskDetails(kioskId: string | undefined | null) {
-	const client = useSuiClient();
-	const { network } = useSuiClientContext();
+	const client = useRtdClient();
+	const { network } = useRtdClientContext();
 
 	return useQuery({
 		queryKey: [TANSTACK_KIOSK_DATA_KEY, kioskId, network],

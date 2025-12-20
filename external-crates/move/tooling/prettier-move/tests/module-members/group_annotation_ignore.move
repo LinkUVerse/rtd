@@ -5,12 +5,12 @@
 
 module prettier::group_imports;
 
-use sui::{
+use rtd::{
     clock::Clock,
     coin::Coin,
     dynamic_field as df,
     dynamic_object_field as dof,
-    sui::SUI,
+    rtd::RTD,
     table::{Self, Table},
     table_vec::{Self, TableVec as TV}
 };

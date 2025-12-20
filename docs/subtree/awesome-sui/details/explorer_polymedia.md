@@ -11,7 +11,7 @@
 
 ## Description
 
-A fork of the original Sui Explorer, which was discontinued by Mysten Labs.
+A fork of the original Rtd Explorer, which was discontinued by LinkU Labs.
 
 ## Features
 - Fundamental network data (transactions, epoch,...)

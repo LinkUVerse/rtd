@@ -1,4 +1,4 @@
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
@@ -144,5 +144,5 @@ else:
         if args.project == "move":
             repo = "move-language"
         else:
-            repo = "MystenLabs"
+            repo = "LinkUVerse"
     upgrade_revision(args.project, repo, args.rev, args.branch)

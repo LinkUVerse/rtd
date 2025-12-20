@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import fs from 'node:fs';
@@ -16,8 +16,8 @@ function dirExists(rel) {
   return fs.existsSync(path.join(CONTENT_ROOT, rel));
 }
 
-const alphaDir = 'references/sui-api/sui-graphql/alpha/reference';
-const betaDir  = 'references/sui-api/sui-graphql/beta/reference';
+const alphaDir = 'references/rtd-api/rtd-graphql/alpha/reference';
+const betaDir  = 'references/rtd-api/rtd-graphql/beta/reference';
 
 const graphqlAlpha = {
   type: 'category',
@@ -44,11 +44,11 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui RPC',
+		label: 'Rtd RPC',
 		collapsed: false,
 		link: {
 			type: 'doc',
-			id: 'references/sui-api',
+			id: 'references/rtd-api',
 		},
 		items: [
 			{
@@ -56,7 +56,7 @@ const references = [
 				label: 'GraphQL',
 				link: {
 					type: 'doc',
-					id: 'references/sui-graphql',
+					id: 'references/rtd-graphql',
 				},
 				items: [
 					graphqlBeta,
@@ -66,15 +66,15 @@ const references = [
 			{
 				type: 'link',
 				label: 'JSON-RPC',
-				href: '/sui-api-ref',
+				href: '/rtd-api-ref',
 			},
 			'references/fullnode-protocol',
-			'references/sui-api/rpc-best-practices',
+			'references/rtd-api/rpc-best-practices',
 		],
 	},
 	{
 		type: 'category',
-		label: 'Sui CLI',
+		label: 'Rtd CLI',
 		collapsed: false,
 		link: {
 			type: 'doc',
@@ -93,7 +93,7 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui IDE Support',
+		label: 'Rtd IDE Support',
 		collapsed: false,
 		items: [
 			'references/ide/move',
@@ -102,28 +102,28 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui SDKs',
+		label: 'Rtd SDKs',
 		collapsed: false,
 		link: {
 			type: 'doc',
-			id: 'references/sui-sdks',
+			id: 'references/rtd-sdks',
 		},
 		items: [
 			{
 				type: 'link',
 				label: 'dApp Kit',
-				href: 'https://sdk.mystenlabs.com/dapp-kit',
+				href: 'https://sdk.linkulabs.com/dapp-kit',
 			},
 			'references/rust-sdk',
 			{
 				type: 'link',
 				label: 'TypeScript SDK',
-				href: 'https://sdk.mystenlabs.com/typescript',
+				href: 'https://sdk.linkulabs.com/typescript',
 			},
 			{
 				type: 'link',
 				label: 'zkSend SDK',
-				href: 'https://sdk.mystenlabs.com/zksend',
+				href: 'https://sdk.linkulabs.com/zksend',
 			},
 		],
 	},
@@ -133,7 +133,7 @@ const references = [
 		collapsed: false,
 		link: {
 			type: 'doc',
-			id: 'references/sui-move',
+			id: 'references/rtd-move',
 		},
 		items: [
 			{
@@ -165,8 +165,8 @@ const references = [
 			},
 		],
 	},
-	'references/awesome-sui',
-	'references/sui-glossary',
+	'references/awesome-rtd',
+	'references/rtd-glossary',
 	{
 		type: 'category',
 		label: 'Contribute',
@@ -175,14 +175,14 @@ const references = [
 			id: 'references/contribute/contribution-process',
 		},
 		items: [
-			'references/contribute/sui-environment',
-			'references/contribute/contribute-to-sui-repos',
+			'references/contribute/rtd-environment',
+			'references/contribute/contribute-to-rtd-repos',
 			{
 				type: 'link',
 				label: 'Submit a SIP',
-				href: 'https://sips.sui.io',
+				href: 'https://sips.rtd.io',
 			},
-			'references/contribute/localize-sui-docs',
+			'references/contribute/localize-rtd-docs',
 			'references/contribute/code-of-conduct',
 			'references/contribute/style-guide',
 			'references/contribute/mdx-components',

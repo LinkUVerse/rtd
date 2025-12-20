@@ -1,6 +1,6 @@
 ---
 title: Shared Objects
-description: Anyone can access shared objects on the Sui network, so care must be taken to secure access, if needed.
+description: Anyone can access shared objects on the Rtd network, so care must be taken to secure access, if needed.
 keywords: [ shared objects, sharing objects, objects that are shared, public objects, accessing shared objects, accessing public objects ]
 ---
 
@@ -8,7 +8,7 @@ A shared object is a public, mutable object that is accessible to anyone on the 
 
 ## Create shared objects
 
-Use the [`sui::transfer::share_object`](/references/framework/sui_sui/transfer#sui_transfer_share_object) function to create a shared object, making it publicly accessible on the network. Extended functionality and accessibility of shared objects requires additional effort by securing access, if needed.
+Use the [`rtd::transfer::share_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_share_object) function to create a shared object, making it publicly accessible on the network. Extended functionality and accessibility of shared objects requires additional effort by securing access, if needed.
 
 Shared objects require the `key` ability.
 
@@ -33,14 +33,14 @@ Shared objects are ideal for things like marketplaces, games, or other scenarios
 
 ## Interact with shared objects 
 
-The following example creates a shop to sell digital donuts. Everyone needs access to the shop to purchase donuts from it, so the example creates the shop as a shared object using [`sui::transfer::share_object`](/references/framework/sui_sui/transfer#sui_transfer_share_object).
+The following example creates a shop to sell digital donuts. Everyone needs access to the shop to purchase donuts from it, so the example creates the shop as a shared object using [`rtd::transfer::share_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_share_object).
 
 ```move
 module examples::donuts;
 
-use sui::sui::SUI;
-use sui::coin::{Self, Coin};
-use sui::balance::{Self, Balance};
+use rtd::rtd::RTD;
+use rtd::coin::{Self, Coin};
+use rtd::balance::{Self, Balance};
 
 /// For when Coin balance is too low.
 const ENotEnough: u64 = 0;
@@ -55,7 +55,7 @@ public struct Donut has key { id: UID }
 public struct DonutShop has key {
     id: UID,
     price: u64,
-    balance: Balance<SUI>
+    balance: Balance<RTD>
 }
 
 /// Init function is often ideal place for initializing
@@ -75,11 +75,11 @@ fun init(ctx: &mut TxContext) {
 
 /// Entry function available to everyone who owns a Coin.
 public fun buy_donut(
-    shop: &mut DonutShop, payment: &mut Coin<SUI>, ctx: &mut TxContext
+    shop: &mut DonutShop, payment: &mut Coin<RTD>, ctx: &mut TxContext
 ) {
     assert!(coin::value(payment) >= shop.price, ENotEnough);
 
-    // Take amount = `shop.price` from Coin<SUI>
+    // Take amount = `shop.price` from Coin<RTD>
     let paid = payment.balance_mut.split(shop.price);
 
     // Put the coin to the Shop's balance

@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Listbox, Transition } from '@headlessui/react';
-import { KioskOwnerCap } from '@mysten/kiosk';
-import { formatAddress } from '@mysten/sui/utils';
+import { Listbox, Transition } from '@headlesrtd/react';
+import { KioskOwnerCap } from '@linku/kiosk';
+import { formatAddress } from '@linku/rtd/utils';
 import classNames from 'clsx';
 import { Fragment } from 'react';
 

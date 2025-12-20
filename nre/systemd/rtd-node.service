@@ -1,0 +1,13 @@
+[Unit]
+Description=Rtd Node
+
+[Service]
+User=rtd
+WorkingDirectory=/opt/rtd/
+Environment=RUST_BACKTRACE=1
+Environment=RUST_LOG=info,rtd_core=debug,consensus=debug,jsonrpsee=error
+ExecStart=/opt/rtd/bin/rtd-node --config-path /opt/rtd/config/validator.yaml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

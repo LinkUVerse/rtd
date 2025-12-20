@@ -2,7 +2,7 @@
 name = "consensus-simtests"
 version = "0.1.0"
 license = "Apache-2.0"
-authors = ["Mysten Labs <build@mystenlabs.com>"]
+authors = ["LinkU Labs <build@linkulabs.com>"]
 edition = "2024"
 publish = false
 
@@ -10,19 +10,19 @@ publish = false
 workspace = true
 
 [dependencies]
-sui-simulator.workspace = true
+rtd-simulator.workspace = true
 anyhow.workspace = true
 arc-swap.workspace = true
 consensus-config.workspace = true
 consensus-core.workspace = true
 consensus-types.workspace = true
-mysten-metrics.workspace = true
-mysten-network.workspace = true
+linku-metrics.workspace = true
+linku-network.workspace = true
 parking_lot.workspace = true
 prometheus.workspace = true
-sui-config.workspace = true
-sui-macros.workspace = true
-sui-protocol-config.workspace = true
+rtd-config.workspace = true
+rtd-macros.workspace = true
+rtd-protocol-config.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 typed-store.workspace = true

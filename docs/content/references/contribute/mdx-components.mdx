@@ -1,9 +1,9 @@
 ---
 title: MDX Components
-description: Extensions to the Sui docs rendering engine.
+description: Extensions to the Rtd docs rendering engine.
 ---
 
-The Sui developer documentation uses the MarkdownX (`.mdx`) format for all pages. MDX allows [JSX within Markdown content](https://mdxjs.com/). The site uses Docusaurus, an open-source framework that provides built-in features like admonitions and Mermaid diagrams. It also utilizes community plugins and custom components the documentation team developed. While none of these features are required in a contribution, you may include them if they enhance the reader’s experience.
+The Rtd developer documentation uses the MarkdownX (`.mdx`) format for all pages. MDX allows [JSX within Markdown content](https://mdxjs.com/). The site uses Docusaurus, an open-source framework that provides built-in features like admonitions and Mermaid diagrams. It also utilizes community plugins and custom components the documentation team developed. While none of these features are required in a contribution, you may include them if they enhance the reader’s experience.
 
 ## Custom frontmatter
 
@@ -54,7 +54,7 @@ Used for end-to-end tutorials. Adds an admonition box at the top indicating the 
 ```yaml
 ---
 title: A Guide
-description: A guide on how to do this thing in Sui.
+description: A guide on how to do this thing in Rtd.
 effort: medium
 ---
 ```
@@ -168,9 +168,9 @@ For guides and tutorials that have prerequisite requirements, the prerequisite t
 If a guide or tutorial uses the following prerequisites: 
 
 ```
-- [x] [Install the latest version of Sui](/guides/developer/getting-started/sui-install).
+- [x] [Install the latest version of Rtd](/guides/developer/getting-started/rtd-install).
 
-- [x] Set up your Sui account and CLI environment. 
+- [x] Set up your Rtd account and CLI environment. 
 
 - [x] Obtain test tokens. 
 ```
@@ -208,25 +208,25 @@ The effective use of `<ImportContent />` often requires code comments in the sou
 When including sections of code, understand that the code might change from what you reference during document creation to what a reader eventually consumes. Assume other processes will update the accompanying content, but be mindful of the possibility of changing code when considering the level of detail in your instruction. You can take comfort in the knowledge that the code is always valid, though.
 
 
-#### Referencing files within the Sui monorepo 
+#### Referencing files within the Rtd monorepo 
 
 Reference files via their relative path:
 
 #### Referencing files from other repos 
 
-If several code files located in another repo need to be referenced across multiple documentation pages, the Sui documentation team may have added it as a **submodule** of the Sui repo. Submodules are a GitHub feature that creates symlinks across repositories. 
+If several code files located in another repo need to be referenced across multiple documentation pages, the Rtd documentation team may have added it as a **submodule** of the Rtd repo. Submodules are a GitHub feature that creates symlinks across repositories. 
 
-Current submodules within the Sui docs include:
+Current submodules within the Rtd docs include:
 
-- [TS SDK](https://github.com/MystenLabs/ts-sdks): `/docs/submodules/ts-sdks`
+- [TS SDK](https://github.com/LinkUVerse/ts-sdks): `/docs/submodules/ts-sdks`
 
-- [DeepBook](https://github.com/MystenLabs/deepbookv3): `/docs/submodules/deepbookv3`
+- [DeepBook](https://github.com/LinkUVerse/deepbookv3): `/docs/submodules/deepbookv3`
 
-The Sui documentation team decides whether to add submodules. Community contributions should not attempt to add submodules.
+The Rtd documentation team decides whether to add submodules. Community contributions should not attempt to add submodules.
 
 #### How to use
 
-1. Set the `source` argument to the relative path of the file. Do not include the `sui` root. 
+1. Set the `source` argument to the relative path of the file. Do not include the `rtd` root. 
 1. Set the `mode` argument to `code`.
 1. Include options as needed.
 

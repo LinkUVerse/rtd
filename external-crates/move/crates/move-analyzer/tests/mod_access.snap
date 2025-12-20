@@ -1,5 +1,5 @@
 ---
-source: crates/move-analyzer/tests/ide_testsuite.rs
+source: crates/move-analyzer/tests/ide_testrtdte.rs
 ---
 == M9.move ========================================================
 -- test 0 -------------------

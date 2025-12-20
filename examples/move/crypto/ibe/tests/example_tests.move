@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
@@ -7,8 +7,8 @@ module ibe::tests;
 use ibe::example;
 use std::hash::sha2_256;
 use std::unit_test::assert_eq;
-use sui::bcs;
-use sui::bls12381;
+use rtd::bcs;
+use rtd::bls12381;
 
 // This test emulates drand based timelock encryption (using quicknet).
 #[test]

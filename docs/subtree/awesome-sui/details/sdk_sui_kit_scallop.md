@@ -1,4 +1,4 @@
-# Sui Kit (by [Scallop](github.com/scallop-io/sui-kit))
+# Rtd Kit (by [Scallop](github.com/scallop-io/rtd-kit))
 
 ## Tooling Category
 
@@ -11,11 +11,11 @@
 
 ## Description
 
-TypeScript Client Kit SDK for Sui blockchain
+TypeScript Client Kit SDK for Rtd blockchain
 
 ## Features
 
-- Transfer SUI, Custom Coin, and objects.
+- Transfer RTD, Custom Coin, and objects.
 - Move call functionality.
 - Programmable transaction support.
 - Query on-chain data.

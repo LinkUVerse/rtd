@@ -1,0 +1,41 @@
+[package]
+name = "rtd-swarm-config"
+version = "0.0.0"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anemo.workspace = true
+anyhow.workspace = true
+bcs.workspace = true
+fastcrypto.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_with.workspace = true
+serde_yaml.workspace = true
+tracing.workspace = true
+prometheus.workspace = true
+
+move-bytecode-utils.workspace = true
+linku-common.workspace = true
+shared-crypto.workspace = true
+rtd-config.workspace = true
+rtd-macros.workspace = true
+rtd-protocol-config.workspace = true
+rtd-types.workspace = true
+rtd-genesis-builder.workspace = true
+rtd-rpc-api.workspace = true
+
+[target.'cfg(msim)'.dependencies]
+rtd-simulator.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true
+
+rtd-execution.workspace = true

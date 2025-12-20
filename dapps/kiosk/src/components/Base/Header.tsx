@@ -1,18 +1,18 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useSuiClientContext } from '@mysten/dapp-kit';
+import { useRtdClientContext } from '@linku/dapp-kit';
 import classNames from 'clsx';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import FindKiosk from '../Kiosk/FindKiosk';
 import { Button } from './Button';
-import { SuiConnectButton } from './SuiConnectButton';
+import { RtdConnectButton } from './RtdConnectButton';
 
 export function Header() {
 	const navigate = useNavigate();
 
-	const { network, networks, selectNetwork } = useSuiClientContext();
+	const { network, networks, selectNetwork } = useRtdClientContext();
 
 	const location = useLocation();
 	const isHome = location.pathname === '/';
@@ -62,7 +62,7 @@ export function Header() {
 							</option>
 						))}
 					</select>
-					<SuiConnectButton></SuiConnectButton>
+					<RtdConnectButton></RtdConnectButton>
 				</div>
 			</div>
 		</div>

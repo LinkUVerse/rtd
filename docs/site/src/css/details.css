@@ -6,28 +6,28 @@
 }
 
 /* Force light mode background - grey */
-.theme-doc-markdown details.bg-sui-gray-45,
-.markdown details.bg-sui-gray-45,
-details.bg-sui-gray-45 {
+.theme-doc-markdown details.bg-rtd-gray-45,
+.markdown details.bg-rtd-gray-45,
+details.bg-rtd-gray-45 {
   background-color: #F2FAFF!important;
 }
 
 /* Force dark mode background - dark blue */
-[data-theme='dark'] .theme-doc-markdown details.bg-sui-gray-45,
-[data-theme='dark'] .markdown details.bg-sui-gray-45,
-[data-theme='dark'] details.bg-sui-gray-45,
-[data-theme='dark'] details.dark\:bg-sui-gray-90 {
+[data-theme='dark'] .theme-doc-markdown details.bg-rtd-gray-45,
+[data-theme='dark'] .markdown details.bg-rtd-gray-45,
+[data-theme='dark'] details.bg-rtd-gray-45,
+[data-theme='dark'] details.dark\:bg-rtd-gray-90 {
   background-color: #00060F !important;
 }
 
 /* Border colors */
-details.\!border-sui-gray-65,
-details.dark\:border-sui-gray-65 {
+details.\!border-rtd-gray-65,
+details.dark\:border-rtd-gray-65 {
   border-color: #4B515B !important;
 }
 
-[data-theme='dark'] details.\!border-sui-gray-65,
-[data-theme='dark'] details.dark\:border-sui-gray-65 {
+[data-theme='dark'] details.\!border-rtd-gray-65,
+[data-theme='dark'] details.dark\:border-rtd-gray-65 {
   border-color: rgba(143, 203, 255, 0.3) !important;
 }
 
@@ -55,7 +55,7 @@ details.dark\:border-sui-gray-65 {
 }
 
 details > div > div {
-  @apply !border-t-sui-gray-65;
+  @apply !border-t-rtd-gray-65;
 }
 
 @media (max-width: 1050px) {

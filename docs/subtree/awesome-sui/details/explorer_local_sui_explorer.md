@@ -1,4 +1,4 @@
-# Local Sui Explorer (by kkomelin)
+# Local Rtd Explorer (by kkomelin)
 
 ## Tooling Category
 
@@ -11,9 +11,9 @@
 
 ## Description
 
-Sui Explorer for your localnet.
+Rtd Explorer for your localnet.
 
-Sui Explorer Local is integrated into [Sui dApp Starter](https://github.com/suiware/sui-dapp-starter?tab=readme-ov-file) and [Suibase](https://github.com/chainmovers/suibase).
+Rtd Explorer Local is integrated into [Rtd dApp Starter](https://github.com/rtdware/rtd-dapp-starter?tab=readme-ov-file) and [Rtdbase](https://github.com/chainmovers/rtdbase).
 
 ## Features
 - Object and transaction data view

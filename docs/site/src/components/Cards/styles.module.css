@@ -1,17 +1,17 @@
 :root {
-  --sui-cards-border-color: transparent;
-  --sui-cards-background: #F4F5F7;
-  --sui-cards-header: #298DFF;
-  --sui-cards-copy: #6C7584;
-  --sui-cards-background-hover: #E0E2E6;
+  --rtd-cards-border-color: transparent;
+  --rtd-cards-background: #F4F5F7;
+  --rtd-cards-header: #298DFF;
+  --rtd-cards-copy: #6C7584;
+  --rtd-cards-background-hover: #E0E2E6;
 }
 
 [data-theme='dark'] {
-    --sui-cards-border-color: #343940;
-    --sui-cards-background: #222529;
-    --sui-cards-background-hover: #343940;
-    --sui-cards-header: #5CA9FF;
-    --sui-cards-copy: #89919F;
+    --rtd-cards-border-color: #343940;
+    --rtd-cards-background: #222529;
+    --rtd-cards-background-hover: #343940;
+    --rtd-cards-header: #5CA9FF;
+    --rtd-cards-copy: #89919F;
 }
 
 .card {
@@ -22,26 +22,26 @@
     border-radius: 20px;
     padding: 1.25rem;
     padding-bottom: 1.5rem;
-    background: var(--sui-cards-background);
+    background: var(--rtd-cards-background);
     cursor: pointer;
     transition: background .25s ease-in-out;
-    border: solid 1px var(--sui-cards-border-color);
+    border: solid 1px var(--rtd-cards-border-color);
 }
 .card:hover {
-    background: var(--sui-cards-background-hover);
+    background: var(--rtd-cards-background-hover);
 }
 
 .card__header__copy {
     margin: 0;
     font-size: 1.125rem;
     line-height: 1.25rem;
-    color: var(--sui-cards-header);
+    color: var(--rtd-cards-header);
 }
 
 .card__copy {
     font-size: .8125rem;
     line-height: 1.3125rem;
-    color: var(--sui-cards-copy);
+    color: var(--rtd-cards-copy);
 }
 
 /* Step Cards for Docusaurus */

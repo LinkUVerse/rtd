@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // This component is used as part of the effort plugin.
@@ -28,7 +28,7 @@ export default function EffortBox(props) {
     <Admonition
       title="Expected effort"
       icon="🧠"
-      className="!my-12 bg-sui-ghost-white border-sui-ghost-dark dark:bg-sui-ghost-dark dark:border-sui-ghost-white"
+      className="!my-12 bg-rtd-ghost-white border-rtd-ghost-dark dark:bg-rtd-ghost-dark dark:border-rtd-ghost-white"
       type="info"
     >
       <p className="pt-2">

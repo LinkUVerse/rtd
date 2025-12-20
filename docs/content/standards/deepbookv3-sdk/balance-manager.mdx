@@ -27,7 +27,7 @@ The DeepBookV3 SDK provides the following functions for managing balance manager
 
 Use `createAndShareBalanceManager` to create a new balance manager and automatically share it. The call returns a function that takes a `Transaction` object.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="createAndShareBalanceManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="createAndShareBalanceManager" signatureOnly/>
 
 ### `createBalanceManagerWithOwner`
 
@@ -37,7 +37,7 @@ Use `createBalanceManagerWithOwner` to create a new balance manager with a custo
 
 - `ownerAddress`: String representing the address of the owner.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="createBalanceManagerWithOwner" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="createBalanceManagerWithOwner" signatureOnly/>
 
 ### `createBalanceManagerWithOwnerAndCaps`
 
@@ -51,7 +51,7 @@ The DeepBookV3 SDK uses `depositCap`, `withdrawCap`, and `tradeCap`, while Move 
 
 - `ownerAddress`: String representing the address of the owner.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="createBalanceManagerWithOwnerAndCaps" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="createBalanceManagerWithOwnerAndCaps" signatureOnly/>
 
 ### `shareBalanceManager`
 
@@ -61,7 +61,7 @@ Use `shareBalanceManager` to share a balance manager that was created but not ye
 
 - `manager`: `TransactionArgument` representing the balance manager to share.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="shareBalanceManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="shareBalanceManager" signatureOnly/>
 
 ## Deposit and withdraw functions
 
@@ -75,7 +75,7 @@ Use `depositIntoManager` to deposit funds into a balance manager. The call retur
 - `coinKey`: String that identifies the coin to deposit.
 - `amountToDeposit`: Number representing the amount to deposit.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="depositIntoManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="depositIntoManager" signatureOnly/>
 
 ### `withdrawFromManager`
 
@@ -88,7 +88,7 @@ Use `withdrawFromManager` to withdraw funds from a balance manager. The call ret
 - `amountToWithdraw`: Number representing the amount to withdraw.
 - `recipient`: String representing the recipient address.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="withdrawFromManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="withdrawFromManager" signatureOnly/>
 
 ### `withdrawAllFromManager`
 
@@ -100,7 +100,7 @@ Use `withdrawAllFromManager` to withdraw all funds of a specific coin type from 
 - `coinKey`: String that identifies the coin to withdraw.
 - `recipient`: String representing the recipient address.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="withdrawAllFromManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="withdrawAllFromManager" signatureOnly/>
 
 ### `checkManagerBalance`
 
@@ -111,7 +111,7 @@ Use `checkManagerBalance` to check the balance of a specific coin in a balance m
 - `managerKey`: String that identifies the balance manager.
 - `coinKey`: String that identifies the coin to check.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="checkManagerBalance" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="checkManagerBalance" signatureOnly/>
 
 ## Trade proof functions
 
@@ -123,7 +123,7 @@ Use `generateProof` to generate a trade proof for the balance manager. Automatic
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="generateProof" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="generateProof" signatureOnly/>
 
 ### `generateProofAsOwner`
 
@@ -133,7 +133,7 @@ Use `generateProofAsOwner` to generate a trade proof as the owner of the balance
 
 - `managerId`: String representing the ID of the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="generateProofAsOwner" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="generateProofAsOwner" signatureOnly/>
 
 ### `generateProofAsTrader`
 
@@ -144,7 +144,7 @@ Use `generateProofAsTrader` to generate a trade proof using a `tradeCap`. The ca
 - `managerId`: String representing the ID of the balance manager.
 - `tradeCapId`: String representing the ID of the trade cap.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="generateProofAsTrader" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="generateProofAsTrader" signatureOnly/>
 
 ## Capability functions
 
@@ -156,7 +156,7 @@ Use `mintTradeCap` to mint a `tradeCap` for the balance manager. The call return
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="mintTradeCap" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="mintTradeCap" signatureOnly/>
 
 ### `mintDepositCap`
 
@@ -166,7 +166,7 @@ Use `mintDepositCap` to mint a `depositCap` for the balance manager. The call re
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="mintDepositCap" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="mintDepositCap" signatureOnly/>
 
 ### `mintWithdrawalCap`
 
@@ -176,7 +176,7 @@ Use `mintWithdrawalCap` to mint a `withdrawCap` for the balance manager. The cal
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="mintWithdrawalCap" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="mintWithdrawalCap" signatureOnly/>
 
 ### `depositWithCap`
 
@@ -188,7 +188,7 @@ Use `depositWithCap` to deposit funds into a balance manager using a `depositCap
 - `coinKey`: String that identifies the coin to deposit.
 - `amountToDeposit`: Number representing the amount to deposit.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="depositWithCap" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="depositWithCap" signatureOnly/>
 
 ### `withdrawWithCap`
 
@@ -200,7 +200,7 @@ Use `withdrawWithCap` to withdraw funds from a balance manager using a `withdraw
 - `coinKey`: String that identifies the coin to withdraw.
 - `amountToWithdraw`: Number representing the amount to withdraw.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="withdrawWithCap" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="withdrawWithCap" signatureOnly/>
 
 ## Referral functions
 
@@ -214,7 +214,7 @@ Use `setReferral` to set a referral for the balance manager. Requires a `tradeCa
 - `referral`: String representing the referral ID.
 - `tradeCap`: `TransactionArgument` representing the trade cap for permission.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="setReferral" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="setReferral" signatureOnly/>
 
 ### `unsetReferral`
 
@@ -225,7 +225,7 @@ Use `unsetReferral` to remove a referral from the balance manager. Requires a `t
 - `managerKey`: String that identifies the balance manager.
 - `tradeCap`: `TransactionArgument` representing the trade cap for permission.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="unsetReferral" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="unsetReferral" signatureOnly/>
 
 ## Registry functions
 
@@ -237,7 +237,7 @@ Use `registerManager` to register a balance manager with the registry. The call 
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="registerManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="registerManager" signatureOnly/>
 
 ## Read-only functions
 
@@ -249,7 +249,7 @@ Use `owner` to get the owner address of a balance manager. The call returns a fu
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="owner" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="owner" signatureOnly/>
 
 ### `id`
 
@@ -259,7 +259,7 @@ Use `id` to get the ID of a balance manager. The call returns a function that ta
 
 - `managerKey`: String that identifies the balance manager.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="id" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="id" signatureOnly/>
 
 ### `referralOwner`
 
@@ -269,7 +269,7 @@ Use `referralOwner` to get the owner address of a referral. The call returns a f
 
 - `referral_id`: String representing the ID of the referral.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="referralOwner" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/balanceManager.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="referralOwner" signatureOnly/>
 
 ## Examples
 
@@ -315,11 +315,11 @@ depositFunds = (tx: Transaction) => {
 	tx.add(this.balanceManager.depositIntoManager(managerKey, coinKey, amount));
 };
 
-// Example: Withdraw SUI from a balance manager
+// Example: Withdraw RTD from a balance manager
 withdrawFunds = (tx: Transaction) => {
 	const managerKey = 'MANAGER_1';
-	const coinKey = 'SUI';
-	const amount = 100; // 100 SUI
+	const coinKey = 'RTD';
+	const amount = 100; // 100 RTD
 	const recipient = '0x456...';
 
 	tx.add(this.balanceManager.withdrawFromManager(managerKey, coinKey, amount, recipient));
@@ -362,8 +362,8 @@ depositWithCapability = (tx: Transaction) => {
 // Example: Use WithdrawCap to withdraw funds
 withdrawWithCapability = (tx: Transaction) => {
 	const managerKey = 'MANAGER_1';
-	const coinKey = 'SUI';
-	const amount = 50; // 50 SUI
+	const coinKey = 'RTD';
+	const amount = 50; // 50 RTD
 
 	const withdrawnCoin = tx.add(this.balanceManager.withdrawWithCap(managerKey, coinKey, amount));
 
@@ -378,7 +378,7 @@ withdrawWithCapability = (tx: Transaction) => {
 // Example: Generate a trade proof and use it to place an order
 placeOrderWithProof = (tx: Transaction) => {
 	const managerKey = 'MANAGER_1';
-	const poolKey = 'SUI_DBUSDC';
+	const poolKey = 'RTD_DBUSDC';
 
 	// Generate proof automatically (uses owner or tradeCap method)
 	const proof = tx.add(this.balanceManager.generateProof(managerKey));
@@ -448,17 +448,17 @@ completeSetup = async (tx: Transaction) => {
 ## Related links
 
 <RelatedLink
-	href="https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3"
+	href="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3"
 	label="DeepBookV3 Indexer repository"
 	desc="The DeepBookV3 SDK repository on GitHub."
 />
 <RelatedLink
-	href="https://www.npmjs.com/package/@mysten/deepbook-v3"
+	href="https://www.npmjs.com/package/@linku/deepbook-v3"
 	label="DeepBookV3 SDK node package"
 	desc="The DeepBookV3 SDK node package on NPM."
 />
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3"
+	href="https://github.com/LinkUVerse/deepbookv3"
 	label="DeepBookV3 repository"
 	desc="The DeepBookV3 repository on GitHub."
 />

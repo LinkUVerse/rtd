@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 if ! cosign version &> /dev/null
@@ -10,17 +10,17 @@ then
 fi
 
 commit_sha=$1
-pub_key=https://sui-private.s3.us-west-2.amazonaws.com/sui_security_release.pem
-url=https://sui-releases.s3-accelerate.amazonaws.com/$commit_sha
+pub_key=https://rtd-private.s3.us-west-2.amazonaws.com/rtd_security_release.pem
+url=https://rtd-releases.s3-accelerate.amazonaws.com/$commit_sha
 
-echo "[+] Downloading sui binaries for $commit_sha ..."
-curl $url/sui -o sui
-curl $url/sui-indexer -o sui-indexer
-curl $url/sui-node -o sui-node
-curl $url/sui-tool -o sui-tool
+echo "[+] Downloading rtd binaries for $commit_sha ..."
+curl $url/rtd -o rtd
+curl $url/rtd-indexer -o rtd-indexer
+curl $url/rtd-node -o rtd-node
+curl $url/rtd-tool -o rtd-tool
 
-echo "[+] Verifying sui binaries for $commit_sha ..."
-cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/sui.sig sui
-cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/sui-indexer.sig sui-indexer
-cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/sui-node.sig sui-node
-cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/sui-tool.sig sui-tool
+echo "[+] Verifying rtd binaries for $commit_sha ..."
+cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/rtd.sig rtd
+cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/rtd-indexer.sig rtd-indexer
+cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/rtd-node.sig rtd-node
+cosign verify-blob --insecure-ignore-tlog --key $pub_key --signature $url/rtd-tool.sig rtd-tool

@@ -1,0 +1,16 @@
+[package]
+name = "rtd-name-service"
+version.workspace = true
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+bcs.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+move-core-types.workspace = true
+
+rtd-types.workspace = true

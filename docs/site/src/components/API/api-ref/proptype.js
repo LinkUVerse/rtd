@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -36,7 +36,7 @@ const PropType = (props) => {
     if (proptype[1].allOf.length == 1) {
       typeof proptype[1].allOf[0]["$ref"] !== "undefined"
         ? (allof = getRef(proptype[1].allOf[0]["$ref"]))
-        : (allof = "SuiERR");
+        : (allof = "RtdERR");
     }
   }
 
@@ -54,7 +54,7 @@ const PropType = (props) => {
           } else if (typeof i.type !== "undefined") {
             a.push(i.type);
           } else {
-            a.push("SuiERR");
+            a.push("RtdERR");
           }
         });
         array = a.join(", ");

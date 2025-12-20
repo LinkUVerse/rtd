@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { parseSerializedSignature, PublicKey, SignatureScheme } from '@mysten/sui/cryptography';
-import { MultiSigPublicKey, parsePartialSignatures } from '@mysten/sui/multisig';
-import { toBase64 } from '@mysten/sui/utils';
-import { publicKeyFromRawBytes } from '@mysten/sui/verify';
+import { parseSerializedSignature, PublicKey, SignatureScheme } from '@linku/rtd/cryptography';
+import { MultiSigPublicKey, parsePartialSignatures } from '@linku/rtd/multisig';
+import { toBase64 } from '@linku/rtd/utils';
+import { publicKeyFromRawBytes } from '@linku/rtd/verify';
 import { AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,7 +26,7 @@ interface MultiSigInfo {
 	participants: {
 		publicKey: PublicKey;
 		weight: number;
-		suiAddress: string;
+		rtdAddress: string;
 		keyType: string;
 	}[];
 }
@@ -65,17 +65,17 @@ AIYbCXAhPmILpWq6xsEY/Nu310Kednlb60Qcd/nD+u2WCXE/FvSXNRUQW9OQKGqt2CeskPyv2SEhaKMZ
 */
 
 function Signature({ signature, index }: { signature: SignaturePubkeyPair; index: number }) {
-	const suiAddress = signature.publicKey.toSuiAddress();
+	const rtdAddress = signature.publicKey.toRtdAddress();
 
-	const pubkey_base64_sui_format = signature.publicKey.toSuiPublicKey();
+	const pubkey_base64_rtd_format = signature.publicKey.toRtdPublicKey();
 
 	const pubkey = signature.publicKey.toBase64();
 	const scheme = signature.signatureScheme.toString();
 
 	const details = [
 		{ label: 'Signature Public Key', value: pubkey },
-		{ label: 'Sui Format Public Key ( flag | pk )', value: pubkey_base64_sui_format },
-		{ label: 'Sui Address', value: suiAddress },
+		{ label: 'Rtd Format Public Key ( flag | pk )', value: pubkey_base64_rtd_format },
+		{ label: 'Rtd Address', value: rtdAddress },
 		{ label: 'Signature', value: toBase64(signature.signature) },
 	];
 
@@ -100,8 +100,8 @@ function Signature({ signature, index }: { signature: SignaturePubkeyPair; index
 }
 
 function MultiSigDetails({ multisigInfo }: { multisigInfo: MultiSigInfo }) {
-	const multisigAddress = multisigInfo.publicKey.toSuiAddress();
-	const multisigPubkey = multisigInfo.publicKey.toSuiPublicKey();
+	const multisigAddress = multisigInfo.publicKey.toRtdAddress();
+	const multisigPubkey = multisigInfo.publicKey.toRtdPublicKey();
 
 	return (
 		<Card className="border-primary">
@@ -147,7 +147,7 @@ function MultiSigDetails({ multisigInfo }: { multisigInfo: MultiSigInfo }) {
 									<div className="space-y-1 text-sm">
 										<div>
 											<span className="text-muted-foreground">Address:</span>{' '}
-											<span className="font-mono">{participant.suiAddress}</span>
+											<span className="font-mono">{participant.rtdAddress}</span>
 										</div>
 										<div>
 											<span className="text-muted-foreground">Public Key:</span>{' '}
@@ -206,7 +206,7 @@ export default function SignatureAnalyzer() {
 							const participants = multiSigPubKey.getPublicKeys().map(({ publicKey, weight }) => ({
 								publicKey,
 								weight,
-								suiAddress: publicKey.toSuiAddress(),
+								rtdAddress: publicKey.toRtdAddress(),
 								keyType: (publicKey as any).keyType || getKeyTypeFromFlag(publicKey.flag()),
 							}));
 

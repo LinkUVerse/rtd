@@ -1,12 +1,12 @@
 ---
 title: Object Ownership
-description: On Sui, object ownership can be represented in different ways. Weigh the benefits of each to decide the best approach for your project.
+description: On Rtd, object ownership can be represented in different ways. Weigh the benefits of each to decide the best approach for your project.
 keywords: [ shared objects, owned objects, object types, locked<t>, key, types of objects, shared, owned, address-owned ]
 ---
 
 Every object has an owner that determines who can use it in transactions. If an object is [address owned](/guides/developer/objects/object-ownership/address-owned.mdx), then it is owned by either an account address derived from a particular signature scheme or an object ID. [Immutable](/guides/developer/objects/object-ownership/immutable.mdx) objects are not owned by anyone and are publicly available to be used, however they cannot be mutated, transferred, or deleted.
 
-[Party](/guides/developer/objects/object-ownership/party.mdx) objects are accessible by the `Party` to which it is transferred. They objects can be singly owned, but unlike address-owned objects, they are [versioned](/guides/developer/objects/versioning.mdx) by [consensus](/concepts/sui-architecture/consensus.mdx). 
+[Party](/guides/developer/objects/object-ownership/party.mdx) objects are accessible by the `Party` to which it is transferred. They objects can be singly owned, but unlike address-owned objects, they are [versioned](/guides/developer/objects/versioning.mdx) by [consensus](/concepts/rtd-architecture/consensus.mdx). 
 
 [Shared](/guides/developer/objects/object-ownership/shared.mdx) objects can be mutated and are accessible to everyone on the network. They can be used by different transactions concurrently.
 
@@ -14,7 +14,7 @@ Lastly, [wrapped](/guides/developer/objects/object-ownership/wrapped.mdx) are no
 
 ## Object versioning paths
 
-Objects on Sui can be [versioned](/guides/developer/objects/versioning.mdx) either through the [fastpath](#fastpath-objects) or through [consensus](/concepts/sui-architecture/consensus.mdx). The choice between these paths affects your options for object ownership. Applications can be built using a solution that either uses consensus objects or only uses fastpath objects, with trade-offs for each.
+Objects on Rtd can be [versioned](/guides/developer/objects/versioning.mdx) either through the [fastpath](#fastpath-objects) or through [consensus](/concepts/rtd-architecture/consensus.mdx). The choice between these paths affects your options for object ownership. Applications can be built using a solution that either uses consensus objects or only uses fastpath objects, with trade-offs for each.
 
 ### Fastpath objects
 
@@ -42,7 +42,7 @@ Applications that require coordination between multiple parties typically benefi
 
 This example demonstrates the trade-offs between consensus objects and fastpath objects by implementing the same application both ways. Both variations of the example implement a service that enables a trustless swap of objects between 2 addresses, with the service holding those objects in escrow.
 
-View the example's [complete code](https://github.com/MystenLabs/sui/blob/93e6b4845a481300ed4a56ab4ac61c5ccb6aa008/examples/move/escrow/sources/lock.move).
+View the example's [complete code](https://github.com/LinkUVerse/rtd/blob/93e6b4845a481300ed4a56ab4ac61c5ccb6aa008/examples/move/escrow/sources/lock.move).
 
 ### `Locked<T>` and `Key`
 

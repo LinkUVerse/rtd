@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use consensus_config::{
     Authority, AuthorityKeyPair, Committee, NetworkKeyPair, ProtocolKeyPair, Stake,
 };
 use insta::assert_yaml_snapshot;
-use mysten_network::Multiaddr;
+use linku_network::Multiaddr;
 use rand::{SeedableRng as _, rngs::StdRng};
 
 // Committee is not sent over network or stored on disk itself, but some of its fields are.

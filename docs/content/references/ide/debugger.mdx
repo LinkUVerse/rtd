@@ -4,7 +4,7 @@ description: Debug Move execution traces directly in VS Code to understand how y
 keywords: [ move trace debugger, debug move execution traces, debug move traces, move execution traces, vs code, debug in vs code, visual studio code, move extension, vs code extension, move vs code extension, debugging, debug interface, replay ]
 ---
 
-The [Move Trace Debugger](https://marketplace.visualstudio.com/items?itemName=mysten.move-trace-debug) extension for Visual Studio Code provides a familiar [debugging interface](https://code.visualstudio.com/docs/debugtest/debugging) for Move unit tests and on-chain transactions, including [PTB](/concepts/transactions/prog-txn-blocks) debugging support. You can inspect the state of PTB commands, step through code execution, track local variable values, and set line breakpoints for Move code, either in unit tests or in on-chain Move calls.
+The [Move Trace Debugger](https://marketplace.visualstudio.com/items?itemName=linku.move-trace-debug) extension for Visual Studio Code provides a familiar [debugging interface](https://code.visualstudio.com/docs/debugtest/debugging) for Move unit tests and on-chain transactions, including [PTB](/concepts/transactions/prog-txn-blocks) debugging support. You can inspect the state of PTB commands, step through code execution, track local variable values, and set line breakpoints for Move code, either in unit tests or in on-chain Move calls.
 
 Debugging is enabled via trace generation: traces can be generated during [unit test execution](#debugging-unit-tests) or during on-chain [transaction replay](#debugging-on-chain-transactions).
 
@@ -14,11 +14,11 @@ Debugging is enabled via trace generation: traces can be generated during [unit 
 Use the debugger by installing the [Move extension](./move.mdx), which includes the Move Trace Debugger extension; you do not need to install it separately. The install instructions are included for certain cases where a separate install might be necessary.
 :::
 
-The Move Trace Debugger extension is available in the Visual Studio Code Marketplace. Search for `Move Trace Debugger` in the **Extensions** view, or press <kbd>Ctrl</kbd> + <kbd>P</kbd> or <kbd>⌘</kbd> + <kbd>P</kbd> and type `ext install mysten.move-trace-debug`.
+The Move Trace Debugger extension is available in the Visual Studio Code Marketplace. Search for `Move Trace Debugger` in the **Extensions** view, or press <kbd>Ctrl</kbd> + <kbd>P</kbd> or <kbd>⌘</kbd> + <kbd>P</kbd> and type `ext install linku.move-trace-debug`.
 
-Alternatively, run `code --install-extension mysten.move-trace-debug` to install the extension from the command line.
+Alternatively, run `code --install-extension linku.move-trace-debug` to install the extension from the command line.
 
-To generate unit execution traces that enable unit test and on-chain transaction debugging, you need the `sui` binary installed with the `tracing` feature flag enabled. The `sui` binaries included in release tarballs, Homebrew, and Chocolatey installations have this feature enabled. See [Install Sui](/guides/developer/getting-started/sui-install) for more information.
+To generate unit execution traces that enable unit test and on-chain transaction debugging, you need the `rtd` binary installed with the `tracing` feature flag enabled. The `rtd` binaries included in release tarballs, Homebrew, and Chocolatey installations have this feature enabled. See [Install Rtd](/guides/developer/getting-started/rtd-install) for more information.
 
 ## Features
 
@@ -108,7 +108,7 @@ Debugging a Move unit test is a two-step process:
       </div>
 
       :::info
-        This command uses the `sui` binary under the hood which needs to be [pre-installed](#install). The location of the binary needs to be [discoverable by the Move extension](/references/ide/move#build-test-and-trace).
+        This command uses the `rtd` binary under the hood which needs to be [pre-installed](#install). The location of the binary needs to be [discoverable by the Move extension](/references/ide/move#build-test-and-trace).
       :::
 
 
@@ -123,7 +123,7 @@ Debugging a Move unit test is a two-step process:
       :::info
         If trace generation in the Visual Studio Code extension does not work for some reason, you can generate traces by executing tests for your package using additional flags:
         ```bash
-        sui move test  --trace-execution --disassemble
+        rtd move test  --trace-execution --disassemble
         ```
       :::
 
@@ -153,7 +153,7 @@ Debugging an on-chain transaction is a two-step process:
   You need to know a transaction's digest to generate a trace for it. For example, `0x42`.
 
   ```bash
-  sui replay --trace --digest 0x42
+  rtd replay --trace --digest 0x42
   ```
 
   This command re-executes the transaction locally, generates a trace of its execution, and downloads all data required for debugging this transaction. Data is deposited in a subdirectory of replay tool's output directory (`.replay` by default, but its location is [configurable](../../references/cli/replay.mdx#usage)). This subdirectory is named after the transaction digest.
@@ -181,14 +181,14 @@ The source code version of each package should be the same version that was used
 
 For example, consider a situation when an on-chain transaction executes a call to some public function `foo` which then calls some private function `bar`. The package's source code used to generate the debugging metadata still has public function `foo` but `foo` not longer calls `bar`. When attempting to do source-level debugging in such case, if a call to `bar` was part of the execution trace, the debugger would have no source for function `bar` to display when the call is reached during the debugging session.
 
-Using the newest version of a package might still work, particularly for packages whose existing functionality is largely stabilized and its source code rarely changes, such as Sui framework package. Below are the instructions on how to handle this simplified case, followed by instructions on how to locate precise versions of packages.
+Using the newest version of a package might still work, particularly for packages whose existing functionality is largely stabilized and its source code rarely changes, such as Rtd framework package. Below are the instructions on how to handle this simplified case, followed by instructions on how to locate precise versions of packages.
 
 Consider the following: a mainnet transaction and with the digest `95oR1YipjSnqd18K4BMshkLgPijypwzARHV988eRhMDs`. Assume that all commands (unless stated otherwise) are executed in some `$ROOT_DIR` (such as your home directory).
 
 Start by tracing execution of this transaction.
 
 ```bash
-sui replay --digest 95oR1YipjSnqd18K4BMshkLgPijypwzARHV988eRhMDs  --trace
+rtd replay --digest 95oR1YipjSnqd18K4BMshkLgPijypwzARHV988eRhMDs  --trace
 ```
 
 When you replay the transaction, the replay tool downloads data for all Move packages used by this transaction. In the case of this example, they reside in the `$ROOT_DIR/.replay/95oR1YipjSnqd18K4BMshkLgPijypwzARHV988eRhMDs` parent directory, with subdirectories named after package IDs:
@@ -204,30 +204,30 @@ When you replay the transaction, the replay tool downloads data for all Move pac
     0xecf47609d7da919ea98e7fd04f6e0648a0a79b337aaad373fa37aac8febf19c8
     ```
 
-The second directory on the list corresponds to the ID of the Sui framework package. To enable source-level debugging for this package, provide the replay tool with access to its debugging metadata: obtain the package source, build it, and copy the metadata to a specific location (`source` directory) in the Sui framework package subdirectory.
+The second directory on the list corresponds to the ID of the Rtd framework package. To enable source-level debugging for this package, provide the replay tool with access to its debugging metadata: obtain the package source, build it, and copy the metadata to a specific location (`source` directory) in the Rtd framework package subdirectory.
 
 <span id="metadata-generation">**Metadata generation**</span>
 
 
-   - Clone the repository, unless you already have the Sui source code repository available.
+   - Clone the repository, unless you already have the Rtd source code repository available.
 
         ```bash
-        git clone https://github.com/MystenLabs/sui.git
+        git clone https://github.com/LinkUVerse/rtd.git
         ```
 
-   - Build Sui framework package source code.
+   - Build Rtd framework package source code.
 
         ```bash
-        cd sui/crates/sui-framework/packages/sui-framework; sui move build
+        cd rtd/crates/rtd-framework/packages/rtd-framework; rtd move build
         ```
 
    - Copy the debugging metadata to the right location.
 
         ```bash
-        cp -r $ROOT_DIR/sui/crates/sui-framework/packages/sui-framework/build/Sui $ROOT_DIR.replay/95oR1YipjSnqd18K4BMshkLgPijypwzARHV988eRhMDs/0x0000000000000000000000000000000000000000000000000000000000000002/source
+        cp -r $ROOT_DIR/rtd/crates/rtd-framework/packages/rtd-framework/build/Rtd $ROOT_DIR.replay/95oR1YipjSnqd18K4BMshkLgPijypwzARHV988eRhMDs/0x0000000000000000000000000000000000000000000000000000000000000002/source
         ```
 
-When you start a debug session and reach the Sui framework code during debugging, you will be in the source view rather than disassembly view.
+When you start a debug session and reach the Rtd framework code during debugging, you will be in the source view rather than disassembly view.
 
 ### Locating precise package versions
 
@@ -237,13 +237,13 @@ Start debugging the transaction to collect some more information about Move code
 
 ![Deepbook PTB](./images/deepbook_ptb.png)
 
-The PTB summary reveals that this transaction consists of only one Move call to the function `add_deep_price_point`, in module `pool`, in user package `0xb29d83c26cdd2a64959263abbcfc4a6937f0c9fccaf98580ca56faded65be244`. Ideally, you want to be able to locate the buildable source code for this package and the correct version of the source code. Then, build debugging metadata for this package, which will automatically include information for all dependent packages, enabling uniform source-level debugging. Barring that, you might want to find the correct version of the source code for system packages to at least enable source-level debugging for Sui framework code.
+The PTB summary reveals that this transaction consists of only one Move call to the function `add_deep_price_point`, in module `pool`, in user package `0xb29d83c26cdd2a64959263abbcfc4a6937f0c9fccaf98580ca56faded65be244`. Ideally, you want to be able to locate the buildable source code for this package and the correct version of the source code. Then, build debugging metadata for this package, which will automatically include information for all dependent packages, enabling uniform source-level debugging. Barring that, you might want to find the correct version of the source code for system packages to at least enable source-level debugging for Rtd framework code.
 
 #### Precise versions for all packages
 
-To locate the correct version of the source code for a user package, utilize a Sui explorer (such as [suiscan](https://suiscan.xyz)) and Sui's Move Package Registry ([MVR](https://www.moveregistry.com/)).
+To locate the correct version of the source code for a user package, utilize a Rtd explorer (such as [rtdscan](https://rtdscan.xyz)) and Rtd's Move Package Registry ([MVR](https://www.moveregistry.com/)).
 
-Search for the package in a Sui explorer.
+Search for the package in a Rtd explorer.
 
 <div class="image-scale-50">
 ![Package search](./images/deepbook_search.png)
@@ -266,7 +266,7 @@ Proceed to building a correct version of this package to generate debugging meta
 - Clone the repository.
 
     ```bash
-    git clone https://github.com/MystenLabs/deepbookv3.git
+    git clone https://github.com/LinkUVerse/deepbookv3.git
     ```
 
 - Go to the `deepbook` package directory.
@@ -300,7 +300,7 @@ Proceed to building a correct version of this package to generate debugging meta
 - Build the package and copying the debugging metadata.
 
     ```bash
-    sui move build
+    rtd move build
     ```
 
     This creates a `build` directory with a `deepbook` subdirectory in it containing all the relevant metadata, which you now copy to the right directory.
@@ -316,9 +316,9 @@ Proceed to building a correct version of this package to generate debugging meta
 
 If you cannot locate sources for a user package, you can still locate source code and its correct version for system packages that the user package depends on. This allows you to at least view the source of system packages during the debugging session.
 
-System packages in Sui (the Sui framework package in particular), might only change when the protocol version for Sui changes. These changes [are tracked](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework-snapshot/manifest.json) and include information about protocol version numbers (starting with 3) and corresponding git revisions that represent the exact version of the Sui framework package's source code at a given protocol version. This allows you to locate which protocol version was in effect when the user package was published on-chain.
+System packages in Rtd (the Rtd framework package in particular), might only change when the protocol version for Rtd changes. These changes [are tracked](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework-snapshot/manifest.json) and include information about protocol version numbers (starting with 3) and corresponding git revisions that represent the exact version of the Rtd framework package's source code at a given protocol version. This allows you to locate which protocol version was in effect when the user package was published on-chain.
 
-Run the following query against Mainnet's GraphQL [endpoint](https://graphql.mainnet.sui.io/graphql) where the `address` parameter is the ID of the user package (`0xb29d83c26cdd2a64959263abbcfc4a6937f0c9fccaf98580ca56faded65be244` in this example).
+Run the following query against Mainnet's GraphQL [endpoint](https://graphql.mainnet.rtd.io/graphql) where the `address` parameter is the ID of the user package (`0xb29d83c26cdd2a64959263abbcfc4a6937f0c9fccaf98580ca56faded65be244` in this example).
 
 ```
 {
@@ -356,7 +356,7 @@ The result of this query looks as follows.
 }
 ```
 
-In this example, the user package was published at protocol version 84. The corresponding git revision from the protocol version tracking file is `25804c243d07dd73c0d199e7794383bd855cd436`. Now, you can follow the debugging metadata generation [instructions](#metadata-generation) for Sui framework code. The only difference is that before building the framework package, you need choose the right git revision.
+In this example, the user package was published at protocol version 84. The corresponding git revision from the protocol version tracking file is `25804c243d07dd73c0d199e7794383bd855cd436`. Now, you can follow the debugging metadata generation [instructions](#metadata-generation) for Rtd framework code. The only difference is that before building the framework package, you need choose the right git revision.
 
 ```bash
 git checkout 25804c243d07dd73c0d199e7794383bd855cd436

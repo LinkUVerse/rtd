@@ -1,20 +1,20 @@
-name: Attach Sui binaries to a release
-run-name: Attach Sui binaries to a ${{ inputs.sui_tag }} release
+name: Attach Rtd binaries to a release
+run-name: Attach Rtd binaries to a ${{ inputs.rtd_tag }} release
 
 on:
   release:
     types: created
   workflow_dispatch:
     inputs:
-      sui_tag:
-        description: 'Sui repo tag to build from'
+      rtd_tag:
+        description: 'Rtd repo tag to build from'
         type: string
         required: true
 
-concurrency: ${{ github.workflow }}-${{ inputs.sui_tag || github.ref_name }}
+concurrency: ${{ github.workflow }}-${{ inputs.rtd_tag || github.ref_name }}
 
 env:
-  TAG_NAME: "${{ github.event.inputs.sui_tag || github.ref_name }}"
+  TAG_NAME: "${{ github.event.inputs.rtd_tag || github.ref_name }}"
   BINARY_LIST_FILE: "./binary-build-list.json"
   CARGO_TERM_COLOR: always
   # Disable incremental compilation.
@@ -58,16 +58,16 @@ jobs:
       - name: Clean up and validate ${{ env.TAG_NAME }} tag name
         shell: bash
         run: |
-          export sui_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'//)
-          [[ "${sui_tag}" == "main" ]] && echo "tag cannot be equals to 'main'" && exit 1
-          echo "sui_tag=${sui_tag}" >> $GITHUB_ENV
-          export sui_version=$(echo ${sui_tag} | sed -e 's/mainnet-v//' -e 's/testnet-v//')
-          echo "sui_version=${sui_version}" >> $GITHUB_ENV
+          export rtd_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'//)
+          [[ "${rtd_tag}" == "main" ]] && echo "tag cannot be equals to 'main'" && exit 1
+          echo "rtd_tag=${rtd_tag}" >> $GITHUB_ENV
+          export rtd_version=$(echo ${rtd_tag} | sed -e 's/mainnet-v//' -e 's/testnet-v//')
+          echo "rtd_version=${rtd_version}" >> $GITHUB_ENV
 
-      - name: Check out ${{ env.sui_tag }}
+      - name: Check out ${{ env.rtd_tag }}
         uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v3
         with:
-          ref: ${{ env.sui_tag }}          
+          ref: ${{ env.rtd_tag }}          
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # pin v4.0.2
@@ -99,8 +99,8 @@ jobs:
         shell: bash
         run: |
           echo "s3_existing_archive=$(for network in mainnet testnet devnet; do \
-            if curl -Is https://sui-releases.s3.us-east-1.amazonaws.com/releases/sui-${network}-v${{ env.sui_version }}-${{ env.os_type }}.tgz \
-            | head -n1 | grep -q '200 OK'; then echo "releases/sui-${network}-v${{ env.sui_version }}-${{ env.os_type }}.tgz"; \
+            if curl -Is https://rtd-releases.s3.us-east-1.amazonaws.com/releases/rtd-${network}-v${{ env.rtd_version }}-${{ env.os_type }}.tgz \
+            | head -n1 | grep -q '200 OK'; then echo "releases/rtd-${network}-v${{ env.rtd_version }}-${{ env.os_type }}.tgz"; \
             break; fi; done)" >> $GITHUB_ENV
 
       - name: Download archive, if it exists
@@ -108,8 +108,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p ${{ env.TMP_BUILD_DIR }}
-          aws s3 cp s3://sui-releases/${{ env.s3_existing_archive }} ./tmp/sui-${{ env.sui_tag }}-${os_type}.tgz
-          tar -xf ./tmp/sui-${{ env.sui_tag }}-${os_type}.tgz -C ${{ env.TMP_BUILD_DIR }}
+          aws s3 cp s3://rtd-releases/${{ env.s3_existing_archive }} ./tmp/rtd-${{ env.rtd_tag }}-${os_type}.tgz
+          tar -xf ./tmp/rtd-${{ env.rtd_tag }}-${os_type}.tgz -C ${{ env.TMP_BUILD_DIR }}
 
       - name: Install nexttest (Windows)
         if: ${{ matrix.os == 'windows-ghcloud' && env.s3_existing_archive == '' }}
@@ -162,7 +162,7 @@ jobs:
         if: ${{ env.s3_existing_archive == '' }}
         shell: bash
         run: |
-          [ -f ~/.cargo/env ] && source ~/.cargo/env ; cargo build --release && cargo build --release --features tracing --bin sui && cargo build --profile=dev --bin sui --features tracing
+          [ -f ~/.cargo/env ] && source ~/.cargo/env ; cargo build --release && cargo build --release --features tracing --bin rtd && cargo build --profile=dev --bin rtd --features tracing
 
       - name: Rename binaries for ${{ matrix.os }}
         if: ${{ env.s3_existing_archive == '' }}
@@ -176,85 +176,85 @@ jobs:
             mv ./target/release/${binary}${{ env.extention }} ${{ env.TMP_BUILD_DIR }}/${binary}${{ env.extention }}
           done
 
-          mv ./target/debug/sui${{ env.extention }} ${{ env.TMP_BUILD_DIR }}/sui-debug${{ env.extention }}
-          tar -cvzf ./tmp/sui-${{ env.sui_tag }}-${{ env.os_type }}.tgz -C ${{ env.TMP_BUILD_DIR }} .
+          mv ./target/debug/rtd${{ env.extention }} ${{ env.TMP_BUILD_DIR }}/rtd-debug${{ env.extention }}
+          tar -cvzf ./tmp/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz -C ${{ env.TMP_BUILD_DIR }} .
 
           # Upload tar balls to s3 so that we don't have to rebuild if they have already built
-          aws s3 cp ./tmp/sui-${{ env.sui_tag }}-${{ env.os_type }}.tgz s3://sui-releases/releases/sui-${{ env.sui_tag }}-${{ env.os_type }}.tgz || true
+          aws s3 cp ./tmp/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz s3://rtd-releases/releases/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz || true
 
-      - name: Publish Windows sui binary to Chocolatey
-        if: ${{ matrix.os == 'windows-ghcloud' && contains(env.sui_tag, 'testnet') }}
+      - name: Publish Windows rtd binary to Chocolatey
+        if: ${{ matrix.os == 'windows-ghcloud' && contains(env.rtd_tag, 'testnet') }}
         shell: bash
         run: |
           choco install checksum
-          export sui_sha=$(checksum -t sha256 ${{ env.TMP_BUILD_DIR }}/sui.exe)
+          export rtd_sha=$(checksum -t sha256 ${{ env.TMP_BUILD_DIR }}/rtd.exe)
           cd chocolatey
 
           cat <<EOF >>VERIFICATION.txt
-          Sui Binary verification steps
-          1. Download https://github.com/MystenLabs/sui/releases/download/${{ env.sui_tag }}/sui-${{ env.sui_tag }}-windows-x86_64.tgz
-          2. Extract sui.exe
-          3. Verify binary: checksum.exe -t sha256 sui.exe: ${sui_sha}
+          Rtd Binary verification steps
+          1. Download https://github.com/LinkUVerse/rtd/releases/download/${{ env.rtd_tag }}/rtd-${{ env.rtd_tag }}-windows-x86_64.tgz
+          2. Extract rtd.exe
+          3. Verify binary: checksum.exe -t sha256 rtd.exe: ${rtd_sha}
 
-          File 'LICENSE.txt' is obtained from: https://github.com/MystenLabs/sui/blob/main/LICENSE
+          File 'LICENSE.txt' is obtained from: https://github.com/LinkUVerse/rtd/blob/main/LICENSE
           EOF
 
-          choco pack --version ${{ env.sui_version }} configuration=release
+          choco pack --version ${{ env.rtd_version }} configuration=release
           choco apikey --api-key ${{ secrets.CHOCO_API_KEY }} --source https://push.chocolatey.org/
-          choco push sui.${{ env.sui_version }}.nupkg --source https://push.chocolatey.org/
+          choco push rtd.${{ env.rtd_version }}.nupkg --source https://push.chocolatey.org/
 
       - name: Upload release artifacts for ${{ matrix.os }} platform
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # pin@4.4.3
         with:
-          name: sui-binaries-${{ matrix.os }}
+          name: rtd-binaries-${{ matrix.os }}
           if-no-files-found: error
           path: |
-            ./tmp/sui-${{ env.sui_tag }}-${{ env.os_type }}.tgz
+            ./tmp/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz
 
-      - name: Attach artifacts to ${{ env.sui_tag }} release in GH
+      - name: Attach artifacts to ${{ env.rtd_tag }} release in GH
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # pin@v1
         with:
-          tag_name: ${{ env.sui_tag }}
+          tag_name: ${{ env.rtd_tag }}
           files: |
-            ./tmp/sui-${{ env.sui_tag }}-${{ env.os_type }}.tgz
+            ./tmp/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz
 
   trigger-walrus-testnet-tag-update:
     name: Trigger Walrus Testnet Tag Update
     needs: release-build
-    if: ${{ contains( inputs.sui_tag, 'testnet') || contains( github.ref_name, 'testnet') }}
+    if: ${{ contains( inputs.rtd_tag, 'testnet') || contains( github.ref_name, 'testnet') }}
     runs-on: ubuntu-latest
 
     steps:
       - name: Clean up tag name ${{ env.TAG_NAME }}
         shell: bash
         run: |
-          echo "sui_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'//)" >> $GITHUB_ENV
+          echo "rtd_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'//)" >> $GITHUB_ENV
 
-      - name: Dispatch Sui Testnet tag update in MystenLabs/walrus
+      - name: Dispatch Rtd Testnet tag update in LinkUVerse/walrus
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with:
-          repository: MystenLabs/walrus
+          repository: LinkUVerse/walrus
           token: ${{ secrets.WALRUS_REPO_DISPATCH }}
-          event-type: update-walrus-sui-testnet-tag
-          client-payload: '{"new_tag": "${{ env.sui_tag }}"}'            
+          event-type: update-walrus-rtd-testnet-tag
+          client-payload: '{"new_tag": "${{ env.rtd_tag }}"}'            
 
   update-homebrew-formula:
-    name: Run brew bump-formula-pr for sui on testnet releases
+    name: Run brew bump-formula-pr for rtd on testnet releases
     needs: release-build
     runs-on: ubuntu-latest
-    # releasing sui cli on testnet releases because it lags `main` less than mainnet, but is more likely to be stable than devnet
-    if: ${{ contains( inputs.sui_tag, 'testnet') || contains( github.ref_name, 'testnet') }}
+    # releasing rtd cli on testnet releases because it lags `main` less than mainnet, but is more likely to be stable than devnet
+    if: ${{ contains( inputs.rtd_tag, 'testnet') || contains( github.ref_name, 'testnet') }}
     steps:
       - name: Clean up tag name ${{ env.TAG_NAME }}
         shell: bash
         run: |
-          echo "sui_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'//)" >> $GITHUB_ENV
+          echo "rtd_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'//)" >> $GITHUB_ENV
           echo "versionless_tag=$(echo ${{ env.TAG_NAME }} | sed s/'refs\/tags\/'// | sed s/'testnet\-v'//)" >> $GITHUB_ENV
       - uses: mislav/bump-homebrew-formula-action@b3327118b2153c82da63fd9cbf58942146ee99f0 # pin@v3
         with:
-          formula-name: sui
+          formula-name: rtd
           create-pullrequest: true
-          tag-name: "${{ env.sui_tag }}"
+          tag-name: "${{ env.rtd_tag }}"
           commit-message: |
             {{formulaName}} ${{ env.versionless_tag }}
 
@@ -265,28 +265,28 @@ jobs:
           # https://github.com/settings/tokens/new?scopes=public_repo,workflow
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_GH_FORMULA_BUMP }}
 
-  # Tag all sui images with release tag, so that they can be easily found
+  # Tag all rtd images with release tag, so that they can be easily found
   tag-docker-hub-images:
-    name: Tag sui docker images in DockerHub
+    name: Tag rtd docker images in DockerHub
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Tagging of images in DockerHub, in MystenLabs/sui-operations
+      - name: Dispatch Tagging of images in DockerHub, in LinkUVerse/rtd-operations
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with:
-          repository: MystenLabs/sui-operations
+          repository: LinkUVerse/rtd-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: tag-docker-images
-          client-payload: '{"sui_commit": "${{ github.sha }}", "tag": "${{ env.TAG_NAME }}"}'
+          client-payload: '{"rtd_commit": "${{ github.sha }}", "tag": "${{ env.TAG_NAME }}"}'
 
-  # Tag all sui images with release tag, so that they can be easily found
+  # Tag all rtd images with release tag, so that they can be easily found
   tag-release-binaries-in-s3:
-    name: Tag sui binaries in s3
+    name: Tag rtd binaries in s3
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Release binaries builds in MystenLabs/sui-operations
+      - name: Dispatch Release binaries builds in LinkUVerse/rtd-operations
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # pin@v3.0.0
         with:
-          repository: MystenLabs/sui-operations
+          repository: LinkUVerse/rtd-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: build-release-binaries
-          client-payload: '{"sui_commit": "${{ github.sha }}", "tag_name": "${{ env.TAG_NAME }}"}'
+          client-payload: '{"rtd_commit": "${{ github.sha }}", "tag_name": "${{ env.TAG_NAME }}"}'

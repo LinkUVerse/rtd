@@ -20,7 +20,7 @@ Transform raw indexed data (transactions, events,...) into meaningful usable dat
 - [Sentio Dash](https://dash.sentio.xyz) is similar to Dune
 - [Data Catalog](https://dash.sentio.xyz/sql)
 - Sentio Processor transform prebuilt indexed data into Metrics and Event Logs that can be used to create Sentio Dash (dashboard)
-- ⚠️ Sui specific documentation is missing.
+- ⚠️ Rtd specific documentation is missing.
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On
 

@@ -1,6 +1,6 @@
 {
-	"name": "@mysten/prettier-plugin-move",
-	"author": "Mysten Labs <build@mystenlabs.com>",
+	"name": "@linku/prettier-plugin-move",
+	"author": "LinkU Labs <build@linkulabs.com>",
 	"description": "Move Plugin for Prettier",
 	"version": "0.3.3",
 	"license": "Apache-2.0",

@@ -22,7 +22,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # output a note when they are encountered.
 ignore = [
     # "RUSTSEC-0000-0000",
-    # we don't do RSA signing on Sui (only verifying for zklogin)
+    # we don't do RSA signing on Rtd (only verifying for zklogin)
     "RUSTSEC-2023-0071",
     # allow yaml-rust being unmaintained
     "RUSTSEC-2024-0320",
@@ -202,8 +202,8 @@ allow-git = [
 
 [sources.allow-org]
 github = [
-    "mystenmark",
+    "linkumark",
     "bmwill",
-    "mystenlabs",
+    "linkulabs",
     "nextest-rs",
 ]

@@ -190,7 +190,7 @@ fn strip_comments(source: &str) -> String {
     result
 }
 
-/// Return legacy package metadata; this is needed for tests in sui side
+/// Return legacy package metadata; this is needed for tests in rtd side
 pub fn parse_legacy_package_info(
     package_path: &Path,
 ) -> Result<LegacyPackageMetadata, anyhow::Error> {

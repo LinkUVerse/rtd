@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::str::FromStr;
@@ -7,32 +7,32 @@ use anyhow::{anyhow, Result};
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::StructTag;
 use shared_crypto::intent::{Intent, IntentMessage};
-use sui_sdk::rpc_types::{
-    SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponseQuery, SuiTransactionBlockResponse,
-    SuiTransactionBlockResponseOptions,
+use rtd_sdk::rpc_types::{
+    RtdObjectDataFilter, RtdObjectDataOptions, RtdObjectResponseQuery, RtdTransactionBlockResponse,
+    RtdTransactionBlockResponseOptions,
 };
-use sui_sdk::types::base_types::{ObjectID, ObjectRef, SequenceNumber, SuiAddress};
-use sui_sdk::types::coin::COIN_MODULE_NAME;
-use sui_sdk::types::crypto::{Signature, SuiKeyPair};
-use sui_sdk::types::object::Owner;
-use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use sui_sdk::types::quorum_driver_types::ExecuteTransactionRequestType;
-use sui_sdk::types::transaction::{Command, ObjectArg, Transaction, TransactionData};
-use sui_sdk::types::{
-    TypeTag, SUI_DENY_LIST_OBJECT_ID, SUI_FRAMEWORK_ADDRESS, SUI_FRAMEWORK_PACKAGE_ID,
+use rtd_sdk::types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_sdk::types::coin::COIN_MODULE_NAME;
+use rtd_sdk::types::crypto::{Signature, RtdKeyPair};
+use rtd_sdk::types::object::Owner;
+use rtd_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_sdk::types::quorum_driver_types::ExecuteTransactionRequestType;
+use rtd_sdk::types::transaction::{Command, ObjectArg, Transaction, TransactionData};
+use rtd_sdk::types::{
+    TypeTag, RTD_DENY_LIST_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID,
 };
-use sui_sdk::SuiClient;
+use rtd_sdk::RtdClient;
 use tracing::info;
 
 use super::AppCommand;
 use crate::gas::select_gas;
 
-pub async fn get_deny_list(client: &SuiClient) -> Result<(ObjectID, SequenceNumber)> {
+pub async fn get_deny_list(client: &RtdClient) -> Result<(ObjectID, SequenceNumber)> {
     let resp = client
         .read_api()
         .get_object_with_options(
-            SUI_DENY_LIST_OBJECT_ID,
-            SuiObjectDataOptions {
+            RTD_DENY_LIST_OBJECT_ID,
+            RtdObjectDataOptions {
                 show_type: true,
                 show_owner: true,
                 show_previous_transaction: false,
@@ -50,21 +50,21 @@ pub async fn get_deny_list(client: &SuiClient) -> Result<(ObjectID, SequenceNumb
     else {
         return Err(anyhow!("Invalid deny-list owner!"));
     };
-    Ok((SUI_DENY_LIST_OBJECT_ID, initial_shared_version))
+    Ok((RTD_DENY_LIST_OBJECT_ID, initial_shared_version))
 }
 
 pub async fn get_deny_cap(
-    client: &SuiClient,
-    owner_addr: SuiAddress,
+    client: &RtdClient,
+    owner_addr: RtdAddress,
     type_tag: TypeTag,
 ) -> Result<ObjectRef> {
     let resp = client
         .read_api()
         .get_owned_objects(
             owner_addr,
-            Some(SuiObjectResponseQuery {
-                filter: Some(SuiObjectDataFilter::StructType(StructTag {
-                    address: SUI_FRAMEWORK_ADDRESS,
+            Some(RtdObjectResponseQuery {
+                filter: Some(RtdObjectDataFilter::StructType(StructTag {
+                    address: RTD_FRAMEWORK_ADDRESS,
                     module: Identifier::from(COIN_MODULE_NAME),
                     name: Identifier::from_str("DenyCap")?,
                     type_params: vec![type_tag],
@@ -86,8 +86,8 @@ pub async fn get_deny_cap(
 
 #[derive(Debug, Copy, Clone)]
 pub enum DenyListCommand {
-    Add(SuiAddress),
-    Remove(SuiAddress),
+    Add(RtdAddress),
+    Remove(RtdAddress),
 }
 
 impl TryFrom<AppCommand> for DenyListCommand {
@@ -103,7 +103,7 @@ impl TryFrom<AppCommand> for DenyListCommand {
 }
 
 impl DenyListCommand {
-    pub fn address(&self) -> SuiAddress {
+    pub fn address(&self) -> RtdAddress {
         match self {
             DenyListCommand::Add(addr) => *addr,
             DenyListCommand::Remove(addr) => *addr,
@@ -122,13 +122,13 @@ impl ToString for DenyListCommand {
 }
 // docs::#deny
 pub async fn deny_list_add(
-    client: &SuiClient,
-    signer: &SuiKeyPair,
+    client: &RtdClient,
+    signer: &RtdKeyPair,
     otw_type: TypeTag,
     deny_list: (ObjectID, SequenceNumber),
     deny_cap: ObjectRef,
-    addr: SuiAddress,
-) -> Result<SuiTransactionBlockResponse> {
+    addr: RtdAddress,
+) -> Result<RtdTransactionBlockResponse> {
     info!("ADDING {addr} TO DENY_LIST");
     deny_list_cmd(
         client,
@@ -142,13 +142,13 @@ pub async fn deny_list_add(
 }
 
 pub async fn deny_list_remove(
-    client: &SuiClient,
-    signer: &SuiKeyPair,
+    client: &RtdClient,
+    signer: &RtdKeyPair,
     otw_type: TypeTag,
     deny_list: (ObjectID, SequenceNumber),
     deny_cap: ObjectRef,
-    addr: SuiAddress,
-) -> Result<SuiTransactionBlockResponse> {
+    addr: RtdAddress,
+) -> Result<RtdTransactionBlockResponse> {
     info!("REMOVING {addr} FROM DENY_LIST");
     deny_list_cmd(
         client,
@@ -162,14 +162,14 @@ pub async fn deny_list_remove(
 }
 // docs::/#deny
 async fn deny_list_cmd(
-    client: &SuiClient,
-    signer: &SuiKeyPair,
+    client: &RtdClient,
+    signer: &RtdKeyPair,
     cmd: DenyListCommand,
     otw_type: TypeTag,
     deny_list: (ObjectID, SequenceNumber),
     deny_cap: ObjectRef,
-) -> Result<SuiTransactionBlockResponse> {
-    let signer_addr = SuiAddress::from(&signer.public());
+) -> Result<RtdTransactionBlockResponse> {
+    let signer_addr = RtdAddress::from(&signer.public());
     let gas_data = select_gas(client, signer_addr, None, None, vec![], None).await?;
 
     let mut ptb = ProgrammableTransactionBuilder::new();
@@ -182,7 +182,7 @@ async fn deny_list_cmd(
     let deny_cap = ptb.obj(ObjectArg::ImmOrOwnedObject(deny_cap))?;
     let address = ptb.pure(cmd.address())?;
     ptb.command(Command::move_call(
-        SUI_FRAMEWORK_PACKAGE_ID,
+        RTD_FRAMEWORK_PACKAGE_ID,
         Identifier::from(COIN_MODULE_NAME),
         Identifier::from_str(&cmd.to_string())?,
         vec![otw_type],
@@ -193,7 +193,7 @@ async fn deny_list_cmd(
 
     // Sign transaction
     let msg = IntentMessage {
-        intent: Intent::sui_transaction(),
+        intent: Intent::rtd_transaction(),
         value: TransactionData::new_programmable(
             signer_addr,
             vec![gas_data.object],
@@ -208,7 +208,7 @@ async fn deny_list_cmd(
         .quorum_driver_api()
         .execute_transaction_block(
             Transaction::from_data(msg.value, vec![sig]),
-            SuiTransactionBlockResponseOptions::new()
+            RtdTransactionBlockResponseOptions::new()
                 .with_effects()
                 .with_object_changes()
                 .with_input(),

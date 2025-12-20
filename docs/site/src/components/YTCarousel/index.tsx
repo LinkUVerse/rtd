@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState, useEffect, useRef } from "react";
@@ -87,7 +87,7 @@ export default function YTCarousel(props) {
   return (
     <>
       <div className="">{currentVid}</div>
-      <div className="flex flex-row items-center align-right bg-sui-ghost-white dark:bg-sui-ghost-dark rounded-lg mt-2">
+      <div className="flex flex-row items-center align-right bg-rtd-ghost-white dark:bg-rtd-ghost-dark rounded-lg mt-2">
         <div
           className={`flex items-center justify-center w-[200px] h-[100px] drop-shadow-none transition-[filter] ease-in-out duration-300 hover:drop-shadow-[0_0_4px_rgba(0,249,251,0.8)] ${currentIndex > 0 ? "cursor-pointer" : "opacity-10"}`}
           onClick={handlePrev}

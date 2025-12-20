@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -10,7 +10,7 @@ use std::{
 use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockDigest, BlockRef, Round, TransactionIndex};
-use sui_macros::fail_point;
+use rtd_macros::fail_point;
 use typed_store::{
     DBMapUtils, Map as _,
     metrics::SamplingInterval,

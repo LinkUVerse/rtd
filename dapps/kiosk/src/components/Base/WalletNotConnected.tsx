@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { SuiConnectButton } from './SuiConnectButton';
+import { RtdConnectButton } from './RtdConnectButton';
 
 export function WalletNotConnected() {
 	return (
@@ -15,7 +15,7 @@ export function WalletNotConnected() {
 							purchase from other kiosks.
 						</p>
 					</div>
-					<SuiConnectButton />
+					<RtdConnectButton />
 				</div>
 			</div>
 		</div>

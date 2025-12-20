@@ -4,11 +4,11 @@ description: Immutable objects cannot be changed, transferred, or deleted. Immut
 keywords: [ immutable objects, objects immutable, create immutable object, convert object, use immutable object, test immutable object ]
 ---
 
-Objects on Sui can either be immutable or mutable. An immutable object cannot be mutated, transferred, or deleted. These objects have no owner and are freely accessible to everyone.
+Objects on Rtd can either be immutable or mutable. An immutable object cannot be mutated, transferred, or deleted. These objects have no owner and are freely accessible to everyone.
 
 ## Create immutable objects
 
-To make an object immutable, call the [`sui::transfer::public_freeze_object`](/references/framework/sui_sui/transfer#sui_transfer_public_freeze_object) function from the [transfer module](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/sui-framework/sources/transfer.move):
+To make an object immutable, call the [`rtd::transfer::public_freeze_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_freeze_object) function from the [transfer module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/rtd-framework/sources/transfer.move):
 
 ```move
 public native fun public_freeze_object<T: key>(obj: T);
@@ -16,13 +16,13 @@ public native fun public_freeze_object<T: key>(obj: T);
 
 This call permanently makes the object immutable. The operation cannot be reversed. Only freeze objects when you are certain they never need modification.
 
-You can see this function used in the [`color_object` example module](https://github.com/MystenLabs/sui/blob/main/examples/move/color_object/sources/example.move) tests. The test creates a new address-owned `ColorObject` object, then calls `public_freeze_object` to turn it into an immutable object.
+You can see this function used in the [`color_object` example module](https://github.com/LinkUVerse/rtd/blob/main/examples/move/color_object/sources/example.move) tests. The test creates a new address-owned `ColorObject` object, then calls `public_freeze_object` to turn it into an immutable object.
 
 <ImportContent source="examples/move/color_object/sources/example.move" mode="code" fun="test_immutable" noComments />
 
 In this test, you must own a `ColorObject` initially. After freezing, the object becomes immutable and ownerless.
 
-The [`sui::transfer::public_freeze_object`](/references/framework/sui_sui/transfer#sui_transfer_public_freeze_object) function requires that you pass the object by value. If you are allowed to pass the object by a mutable reference, you could still mutate the object after the [`sui::transfer::public_freeze_object`](/references/framework/sui_sui/transfer#sui_transfer_public_freeze_object) call. This contradicts the fact that it should have become immutable.
+The [`rtd::transfer::public_freeze_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_freeze_object) function requires that you pass the object by value. If you are allowed to pass the object by a mutable reference, you could still mutate the object after the [`rtd::transfer::public_freeze_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_public_freeze_object) call. This contradicts the fact that it should have become immutable.
 
 Alternatively, you can also provide an API that creates an immutable object at creation:
 
@@ -37,9 +37,9 @@ This function creates a new `ColorObject` and immediately makes it immutable bef
 
 ## When to use immutable objects
 
-After an object becomes immutable, the rules of who can use this object in Sui Move calls change:
+After an object becomes immutable, the rules of who can use this object in Rtd Move calls change:
 
-1. You can only pass an immutable object as a read-only, immutable reference to Sui Move entry functions as `&T`.
+1. You can only pass an immutable object as a read-only, immutable reference to Rtd Move entry functions as `&T`.
 
 2. All network participants can access immutable objects.
 
@@ -56,48 +56,48 @@ In this function, anyone can pass an immutable object as the first argument, `fr
 First, view the objects you own:
 
 ```sh
-$ export ADDR=`sui client active-address`
+$ export ADDR=`rtd client active-address`
 ```
 ```sh
-$ sui client objects $ADDR
+$ rtd client objects $ADDR
 ```
 
-Publish the `ColorObject` code on-chain using the Sui CLI:
+Publish the `ColorObject` code on-chain using the Rtd CLI:
 
 <ImportContent source="info-gas-budget.mdx" mode="snippet" />
 
 ```sh
-$ sui client publish $ROOT/examples/move/color_object --gas-budget <GAS-AMOUNT>
+$ rtd client publish $ROOT/examples/move/color_object --gas-budget <GAS-AMOUNT>
 ```
 
 Set the package object ID to the `$PACKAGE` environment variable, if you have it set. Then create a new `ColorObject`:
 
 ```sh
-$ sui client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "create" --args 0 255 0
+$ rtd client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "create" --args 0 255 0
 ```
 
 Set the newly created object ID to `$OBJECT`. To view the objects in the current active address:
 
 ```sh
-$ sui client objects $ADDR
+$ rtd client objects $ADDR
 ```
 
 You should see an object with the ID you used for `$OBJECT`. To turn it into an immutable object:
 
 ```sh
-$ sui client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "freeze_object" --args \"$OBJECT\"
+$ rtd client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "freeze_object" --args \"$OBJECT\"
 ```
 
 View the list of objects again:
 
 ```sh
-$ sui client objects $ADDR
+$ rtd client objects $ADDR
 ```
 
 `$OBJECT` is no longer listed. It is no longer owned by anyone. You can see that it is now immutable by querying the object information:
 
 ```sh
-$ sui client object $OBJECT
+$ rtd client object $OBJECT
 ```
 
 The response includes:
@@ -109,7 +109,7 @@ Owner: Immutable  // This field shows the object's immutable status
 If you try to mutate it:
 
 ```sh
-$ sui client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "update" --args \"$OBJECT\" 0 0 0
+$ rtd client call --gas-budget <GAS-AMOUNT> --package $PACKAGE --module "color_object" --function "update" --args \"$OBJECT\" 0 0 0
 ```
 
 The response indicates that you cannot pass an immutable object to a mutable argument.

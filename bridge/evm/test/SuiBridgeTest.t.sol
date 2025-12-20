@@ -3,16 +3,16 @@ pragma solidity ^0.8.20;
 
 import "./BridgeBaseTest.t.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "../contracts/interfaces/ISuiBridge.sol";
-import "./mocks/MockSuiBridgeV2.sol";
+import "../contracts/interfaces/IRtdBridge.sol";
+import "./mocks/MockRtdBridgeV2.sol";
 
-contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
+contract RtdBridgeTest is BridgeBaseTest, IRtdBridge {
     // This function is called before each unit test
     function setUp() public {
         setUpBridgeTest();
     }
 
-    function testSuiBridgeInitialization() public {
+    function testRtdBridgeInitialization() public {
         assertEq(address(bridge.committee()), address(committee));
         assertEq(address(bridge.vault()), address(vault));
     }
@@ -51,7 +51,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         signatures[1] = getSignature(messageHash, committeeMemberPkB);
         signatures[2] = getSignature(messageHash, committeeMemberPkC);
         signatures[3] = getSignature(messageHash, committeeMemberPkD);
-        vm.expectRevert(bytes("SuiBridge: Amount exceeds bridge limit"));
+        vm.expectRevert(bytes("RtdBridge: Amount exceeds bridge limit"));
         bridge.transferBridgedTokensWithSignatures(signatures, message);
     }
 
@@ -89,7 +89,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         signatures[1] = getSignature(messageHash, committeeMemberPkB);
         signatures[2] = getSignature(messageHash, committeeMemberPkC);
         signatures[3] = getSignature(messageHash, committeeMemberPkD);
-        vm.expectRevert(bytes("SuiBridge: Target chain not supported"));
+        vm.expectRevert(bytes("RtdBridge: Target chain not supported"));
         bridge.transferBridgedTokensWithSignatures(signatures, message);
     }
 
@@ -102,7 +102,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
             recipientAddressLength: 0,
             recipientAddress: bridgerA,
             tokenID: BridgeUtils.ETH,
-            // This is Sui amount (eth decimal 8)
+            // This is Rtd amount (eth decimal 8)
             amount: 100_000_000
         });
         BridgeUtils.Message memory message = BridgeUtils.Message({
@@ -130,7 +130,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
             recipientAddressLength: 0,
             recipientAddress: bridgerA,
             tokenID: BridgeUtils.ETH,
-            // This is Sui amount (eth decimal 8)
+            // This is Rtd amount (eth decimal 8)
             amount: 100_000_000
         });
         BridgeUtils.Message memory message = BridgeUtils.Message({
@@ -162,7 +162,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         uint8 recipientAddressLength = 20;
         address recipientAddress = bridgerA;
         uint8 tokenID = BridgeUtils.ETH;
-        uint64 amount = 100000000; // 1 ether in sui decimals
+        uint64 amount = 100000000; // 1 ether in rtd decimals
         bytes memory payload = abi.encodePacked(
             senderAddressLength,
             senderAddress,
@@ -197,7 +197,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         bridge.transferBridgedTokensWithSignatures(signatures, message);
         assertEq(bridgerA.balance, aBalance + 1 ether);
 
-        vm.expectRevert(bytes("SuiBridge: Message already processed"));
+        vm.expectRevert(bytes("RtdBridge: Message already processed"));
         bridge.transferBridgedTokensWithSignatures(signatures, message);
     }
 
@@ -374,14 +374,14 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
     }
 
     function testBridgeERC20UnsupportedToken() public {
-        vm.expectRevert(bytes("SuiBridge: Unsupported token"));
+        vm.expectRevert(bytes("RtdBridge: Unsupported token"));
         bridge.bridgeERC20(
             255, 1 ether, hex"06bb77410cd326430fa2036c8282dbb54a6f8640cea16ef5eff32d638718b3e4", 0
         );
     }
 
     function testBridgeERC20InsufficientAllowance() public {
-        vm.expectRevert(bytes("SuiBridge: Insufficient allowance"));
+        vm.expectRevert(bytes("RtdBridge: Insufficient allowance"));
         bridge.bridgeERC20(
             BridgeUtils.ETH,
             type(uint256).max,
@@ -391,7 +391,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
     }
 
     function testBridgeERC20InvalidRecipientAddress() public {
-        vm.expectRevert(bytes("SuiBridge: Invalid recipient address length"));
+        vm.expectRevert(bytes("RtdBridge: Invalid recipient address length"));
         bridge.bridgeERC20(
             BridgeUtils.ETH,
             1 ether,
@@ -401,7 +401,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
     }
 
     function testBridgeEthInvalidRecipientAddress() public {
-        vm.expectRevert(bytes("SuiBridge: Invalid recipient address length"));
+        vm.expectRevert(bytes("RtdBridge: Invalid recipient address length"));
         bridge.bridgeETH{value: 1 ether}(
             hex"06bb77410cd326430fa2036c8282dbb54a6f8640cea16ef5eff32d638718b3", 0
         );
@@ -568,7 +568,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
 
         // assert emitted event
         vm.expectEmit(true, true, true, false);
-        emit ISuiBridge.TokensDeposited(
+        emit IRtdBridge.TokensDeposited(
             chainID,
             0, // nonce
             0, // destination chain id
@@ -599,7 +599,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         reentrantAttack.attack();
     }
 
-    function testSuiBridgeInvalidERC20DecimalConversion() public {
+    function testRtdBridgeInvalidERC20DecimalConversion() public {
         IERC20(wETH).approve(address(bridge), 10 ether);
         vm.expectRevert(bytes("BridgeUtils: Insufficient amount provided"));
         bridge.bridgeERC20(
@@ -610,14 +610,14 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         );
     }
 
-    function testSuiBridgeInvalidEthDecimalConversion() public {
+    function testRtdBridgeInvalidEthDecimalConversion() public {
         vm.expectRevert(bytes("BridgeUtils: Insufficient amount provided"));
         bridge.bridgeETH{value: 1}(
             hex"06bb77410cd326430fa2036c8282dbb54a6f8640cea16ef5eff32d638718b3e4", 0
         );
     }
 
-    function testSuiBridgeInvalidERC20Transfer() public {
+    function testRtdBridgeInvalidERC20Transfer() public {
         vm.expectRevert(bytes("BridgeUtils: Insufficient amount provided"));
         bridge.bridgeERC20(
             BridgeUtils.USDC,
@@ -627,7 +627,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         );
     }
 
-    function testSuiBridgeInvalidETHTransfer() public {
+    function testRtdBridgeInvalidETHTransfer() public {
         vm.expectRevert(bytes("BridgeUtils: Insufficient amount provided"));
         bridge.bridgeETH{value: 0}(
             hex"06bb77410cd326430fa2036c8282dbb54a6f8640cea16ef5eff32d638718b3e4", 0
@@ -635,7 +635,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
     }
 
     // An e2e token transfer regression test covering message ser/de and signature verification
-    function testTransferSuiToEthRegressionTest() public {
+    function testTransferRtdToEthRegressionTest() public {
         address[] memory _committeeList = new address[](4);
         uint16[] memory _stake = new uint16[](4);
         _committeeList[0] = 0x68B43fD906C0B8F024a18C56e06744F7c6157c65;
@@ -656,7 +656,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
 
         vault = new BridgeVault(wETH);
         tokenPrices = new uint64[](5);
-        tokenPrices[0] = 1 * USD_VALUE_MULTIPLIER; // SUI PRICE
+        tokenPrices[0] = 1 * USD_VALUE_MULTIPLIER; // RTD PRICE
         tokenPrices[1] = 1 * USD_VALUE_MULTIPLIER; // BTC PRICE
         tokenPrices[2] = 1 * USD_VALUE_MULTIPLIER; // ETH PRICE
         tokenPrices[3] = 1 * USD_VALUE_MULTIPLIER; // USDC PRICE
@@ -677,7 +677,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
             "BridgeConfig.sol",
             abi.encodeCall(
                 BridgeConfig.initialize,
-                (address(committee), 11, _supportedTokens, tokenPrices, tokenIds, suiDecimals, _supportedDestinationChains)
+                (address(committee), 11, _supportedTokens, tokenPrices, tokenIds, rtdDecimals, _supportedDestinationChains)
             ),
             opts
         );
@@ -698,14 +698,14 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
             opts
         );
         limiter = BridgeLimiter(_limiter);
-        address _suiBridge = Upgrades.deployUUPSProxy(
-            "SuiBridge.sol",
+        address _rtdBridge = Upgrades.deployUUPSProxy(
+            "RtdBridge.sol",
             abi.encodeCall(
-                SuiBridge.initialize, (address(committee), address(vault), address(limiter))
+                RtdBridge.initialize, (address(committee), address(vault), address(limiter))
             ),
             opts
         );
-        bridge = SuiBridge(_suiBridge);
+        bridge = RtdBridge(_rtdBridge);
 
         vault.transferOwnership(address(bridge));
         limiter.transferOwnership(address(bridge));
@@ -767,7 +767,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
 
         vault = new BridgeVault(wETH);
         tokenPrices = new uint64[](5);
-        tokenPrices[0] = 1 * USD_VALUE_MULTIPLIER; // SUI PRICE
+        tokenPrices[0] = 1 * USD_VALUE_MULTIPLIER; // RTD PRICE
         tokenPrices[1] = 1 * USD_VALUE_MULTIPLIER; // BTC PRICE
         tokenPrices[2] = 1 * USD_VALUE_MULTIPLIER; // ETH PRICE
         tokenPrices[3] = 1 * USD_VALUE_MULTIPLIER; // USDC PRICE
@@ -792,7 +792,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
                     _supportedTokens,
                     tokenPrices,
                     tokenIds,
-                    suiDecimals,
+                    rtdDecimals,
                     _supportedDestinationChains
                 )
             ),
@@ -818,15 +818,15 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
 
         limiter = BridgeLimiter(_limiter);
 
-        address _suiBridge = Upgrades.deployUUPSProxy(
-            "SuiBridge.sol",
+        address _rtdBridge = Upgrades.deployUUPSProxy(
+            "RtdBridge.sol",
             abi.encodeCall(
-                SuiBridge.initialize, (address(committee), address(vault), address(limiter))
+                RtdBridge.initialize, (address(committee), address(vault), address(limiter))
             ),
             opts
         );
 
-        bridge = SuiBridge(_suiBridge);
+        bridge = RtdBridge(_rtdBridge);
 
         bytes memory payload = hex"00";
         // Create emergency op message
@@ -871,7 +871,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
             "BridgeConfig.sol",
             abi.encodeCall(
                 BridgeConfig.initialize,
-                (address(committee), chainID, supportedTokens, tokenPrices, tokenIds, suiDecimals, supportedChains)
+                (address(committee), chainID, supportedTokens, tokenPrices, tokenIds, rtdDecimals, supportedChains)
             ),
             opts
         );
@@ -894,14 +894,14 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
         );
         limiter = BridgeLimiter(_limiter);
 
-        address _suiBridge = Upgrades.deployUUPSProxy(
-            "SuiBridge.sol",
+        address _rtdBridge = Upgrades.deployUUPSProxy(
+            "RtdBridge.sol",
             abi.encodeCall(
-                SuiBridge.initialize, (address(committee), address(vault), address(limiter))
+                RtdBridge.initialize, (address(committee), address(vault), address(limiter))
             ),
             opts
         );
-        bridge = SuiBridge(_suiBridge);
+        bridge = RtdBridge(_rtdBridge);
 
         assertFalse(bridge.paused());
 
@@ -998,7 +998,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
 
         vault = new BridgeVault(wETH);
         tokenPrices = new uint64[](5);
-        tokenPrices[0] = 1 * USD_VALUE_MULTIPLIER; // SUI PRICE
+        tokenPrices[0] = 1 * USD_VALUE_MULTIPLIER; // RTD PRICE
         tokenPrices[1] = 1 * USD_VALUE_MULTIPLIER; // BTC PRICE
         tokenPrices[2] = 1 * USD_VALUE_MULTIPLIER; // ETH PRICE
         tokenPrices[3] = 1 * USD_VALUE_MULTIPLIER; // USDC PRICE
@@ -1023,7 +1023,7 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
                     _supportedTokens,
                     tokenPrices,
                     tokenIds,
-                    suiDecimals,
+                    rtdDecimals,
                     _supportedDestinationChains
                 )
             ),
@@ -1044,14 +1044,14 @@ contract SuiBridgeTest is BridgeBaseTest, ISuiBridge {
             opts
         );
         limiter = BridgeLimiter(_limiter);
-        address _suiBridge = Upgrades.deployUUPSProxy(
-            "SuiBridge.sol",
+        address _rtdBridge = Upgrades.deployUUPSProxy(
+            "RtdBridge.sol",
             abi.encodeCall(
-                SuiBridge.initialize, (address(committee), address(vault), address(limiter))
+                RtdBridge.initialize, (address(committee), address(vault), address(limiter))
             ),
             opts
         );
-        bridge = SuiBridge(_suiBridge);
+        bridge = RtdBridge(_rtdBridge);
         vault.transferOwnership(address(bridge));
         limiter.transferOwnership(address(bridge));
 

@@ -1,0 +1,8 @@
+---
+source: crates/move-compiler/tests/move_check_testrtdte.rs
+info:
+  flavor: rtd
+  edition: legacy
+  lint: true
+---
+

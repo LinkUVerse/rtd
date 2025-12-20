@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Copyright (c) The Diem Core Contributors
@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use proptest::prelude::*;
-use sui_types::{
-    base_types::{ObjectID, SuiAddress},
+use rtd_types::{
+    base_types::{ObjectID, RtdAddress},
     crypto::{AccountKeyPair, get_key_pair},
     object::Object,
 };
@@ -21,7 +21,7 @@ pub const NUM_GAS_OBJECTS: usize = 1;
 
 #[derive(Debug)]
 pub struct Account {
-    pub address: SuiAddress,
+    pub address: RtdAddress,
     pub key: AccountKeyPair,
 }
 

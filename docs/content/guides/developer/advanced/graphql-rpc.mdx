@@ -1,7 +1,7 @@
 ---
-title: Querying Sui RPC with GraphQL
-description: Introductory guide to making queries of the Sui RPC using the GraphQL service.
-keywords: [ rpc, sui rpc, graphql, how to use graphql, schema, graphql schema, query transactions, query blocks, query block info, query dynamic field, execute transaction ]
+title: Querying Rtd RPC with GraphQL
+description: Introductory guide to making queries of the Rtd RPC using the GraphQL service.
+keywords: [ rpc, rtd rpc, graphql, how to use graphql, schema, graphql schema, query transactions, query blocks, query block info, query dynamic field, execute transaction ]
 ---
 
 :::info
@@ -12,7 +12,7 @@ keywords: [ rpc, sui rpc, graphql, how to use graphql, schema, graphql schema, q
 
 :::
 
-The quickest way to access the GraphQL service for Sui RPC is through the online IDE that provides a complete toolbox for fetching data and executing transactions on the network. The online IDE provides features such as auto-completion (use <kbd>Ctrl</kbd>+<kbd>Space</kbd> or just start typing), built-in documentation (Book icon, top-left), multi-tabs, and more.
+The quickest way to access the GraphQL service for Rtd RPC is through the online IDE that provides a complete toolbox for fetching data and executing transactions on the network. The online IDE provides features such as auto-completion (use <kbd>Ctrl</kbd>+<kbd>Space</kbd> or just start typing), built-in documentation (Book icon, top-left), multi-tabs, and more.
 
 The online IDE is available for Mainnet, Testnet, and Devnet. You can try the various queries on this page directly in the IDE.
 
@@ -22,17 +22,17 @@ Both Mainnet and Testnet services are rate-limited to keep network throughput op
 
 :::
 
-- Mainnet: https://graphql.mainnet.sui.io/graphql
-- Testnet: https://graphql.testnet.sui.io/graphql
-- Devnet: https://graphql.devnet.sui.io/graphql
+- Mainnet: https://graphql.mainnet.rtd.io/graphql
+- Testnet: https://graphql.testnet.rtd.io/graphql
+- Devnet: https://graphql.devnet.rtd.io/graphql
 
 :::caution
 
-Switch any apps that still use the GraphQL Alpha endpoints (`https://sui-mainnet.mystenlabs.com/graphql`, `https://sui-testnet.mystenlabs.com/graphql`, and `https://sui-devnet.mystenlabs.com/graphql`) as soon as possible. Migrate your apps to the GraphQL Beta endpoints to avoid disruption of service.
+Switch any apps that still use the GraphQL Alpha endpoints (`https://rtd-mainnet.linkulabs.com/graphql`, `https://rtd-testnet.linkulabs.com/graphql`, and `https://rtd-devnet.linkulabs.com/graphql`) as soon as possible. Migrate your apps to the GraphQL Beta endpoints to avoid disruption of service.
 
 :::
 
-For more details about some concepts used in the following examples, see the [GraphQL concepts](/concepts/data-access/graphql-rpc.mdx) page. Consult the [GraphQL reference](../../../references/sui-graphql.mdx) for full documentation on the supported schema.
+For more details about some concepts used in the following examples, see the [GraphQL concepts](/concepts/data-access/graphql-rpc.mdx) page. Consult the [GraphQL reference](../../../references/rtd-graphql.mdx) for full documentation on the supported schema.
 
 ## Discovering the schema
 
@@ -51,7 +51,7 @@ Some of the schema updates for the beta version include:
 - `dryRunTransactionBlock` is being replaced with `simulateTransaction`
 - `bcs` fields are qualified with the type of BCS data they hold to avoid confusion.
 - `changedObject` and `inputObject` filters in `transactions` query are being replaced with `affectedObject`.
-- `address.coins` and `address.stakedSuis` are being deprecated in favor of `address.objects` with the corresponding `type` filter.
+- `address.coins` and `address.stakedRtds` are being deprecated in favor of `address.objects` with the corresponding `type` filter.
 - `MoveValue.data` has been deprecated because it does not add value over `MoveValue.json`, which provides a more clear representation of the data.
 
 ### Consistency
@@ -97,7 +97,7 @@ As there is no longer a dedicated API for fetching the coins owned by an address
 
 ### Dry-run, gas estimation, and coin selection
 
-Dry-run now supports the same input schema as `gRPC`'s [`SimulateTransaction`](/references/fullnode-protocol#sui-rpc-v2-Transaction) in JSON form. This means that it can also accept transactions where the inputs have not been fully resolved or serialized, perform gas estimation, and coin selection. The feature is now called `simulateTransaction`.
+Dry-run now supports the same input schema as `gRPC`'s [`SimulateTransaction`](/references/fullnode-protocol#rtd-rpc-v2-Transaction) in JSON form. This means that it can also accept transactions where the inputs have not been fully resolved or serialized, perform gas estimation, and coin selection. The feature is now called `simulateTransaction`.
 
 ## Example queries
 
@@ -273,7 +273,7 @@ query {
 
 ### Find all transactions that touched a given object
 
-Find all the transactions that touched (modified/transferred/deleted) a given object. Useful when you want to trace the flow of a `Coin`, `StakeSui`, `NFT`, or similar object.
+Find all the transactions that touched (modified/transferred/deleted) a given object. Useful when you want to trace the flow of a `Coin`, `StakeRtd`, `NFT`, or similar object.
 
 :::info
 
@@ -284,7 +284,7 @@ This example uses GraphQL [variables](/concepts/data-access/graphql-rpc.mdx#vari
 <Tabs groupId="graphql">
 <TabItem label="Beta" value="beta">
 ```graphql
-query ($objectID: SuiAddress!) {
+query ($objectID: RtdAddress!) {
   transactions(filter: {affectedObject: $objectID}) {
     nodes {
       sender {
@@ -310,7 +310,7 @@ This example demonstrates future functionality.
 
 :::
 ```graphql
-query ($objectID: SuiAddress!) {
+query ($objectID: RtdAddress!) {
   transactionBlocks(filter: {changedObject: $objectID}) {
     nodes {
       sender {
@@ -399,9 +399,9 @@ This example demonstrates future functionality.
 
 :::
 ```graphql
-query ($address: SuiAddress!) {
+query ($address: RtdAddress!) {
   transactions(filter: {
-    function: "0x3::sui_system::request_add_stake"
+    function: "0x3::rtd_system::request_add_stake"
     sentAddress: $address
   }) {
     nodes {
@@ -423,9 +423,9 @@ query ($address: SuiAddress!) {
 </TabItem>
 <TabItem label="Alpha (deprecated)" value="alpha">
 ```graphql
-query ($address: SuiAddress!) {
+query ($address: RtdAddress!) {
   transactionBlocks(filter: {
-    function: "0x3::sui_system::request_add_stake"
+    function: "0x3::rtd_system::request_add_stake"
     sentAddress: $address
   }) {
     nodes {
@@ -568,7 +568,7 @@ fragment MoveValueFields on MoveValue {
 
 ### Fetch all dynamic fields on an object
 
-Paginate over the dynamic fields of an object. This works even when the object in question is [wrapped](/guides/developer/objects/object-ownership/wrapped.mdx) by using the <a href="/references/sui-api/sui-graphql/alpha/reference/operations/queries/owner.mdx" data-noBrokenLinkCheck='true'>owner query</a>. It can be used for iterating over the elements of on-chain data structures, like tables and bags. See [The Move Book](https://move-book.com/programmability/dynamic-collections.html) to learn more about dynamic collections available in Move.
+Paginate over the dynamic fields of an object. This works even when the object in question is [wrapped](/guides/developer/objects/object-ownership/wrapped.mdx) by using the <a href="/references/rtd-api/rtd-graphql/alpha/reference/operations/queries/owner.mdx" data-noBrokenLinkCheck='true'>owner query</a>. It can be used for iterating over the elements of on-chain data structures, like tables and bags. See [The Move Book](https://move-book.com/programmability/dynamic-collections.html) to learn more about dynamic collections available in Move.
 
 :::info
 
@@ -579,7 +579,7 @@ This example uses [fragments](/concepts/data-access/graphql-rpc.mdx#fragments) a
 <Tabs groupId="graphql">
 <TabItem label="Beta" value="beta">
 ```graphql
-query ($id: SuiAddress!) {
+query ($id: RtdAddress!) {
   address(address: $id) {
     dynamicFields {
       nodes {
@@ -610,7 +610,7 @@ fragment Value on MoveValue {
 </TabItem>
 <TabItem label="Alpha (deprecated)" value="alpha">
 ```graphql
-query ($id: SuiAddress!) {
+query ($id: RtdAddress!) {
   owner(address: $id) {
     dynamicFields {
       nodes {
@@ -733,7 +733,7 @@ query ($before: String) {
 
 ### Execute a transaction
 
-Transaction execution takes 2 arguments, `transactionDataBcs` and `signatures`. `transactionDataBcs` is the serialized unsigned transaction data, which the [Sui Client CLI](/references/cli/client.mdx) `client call` command can generate. Pass the `--serialize-unsigned-transaction` flag to the command to call a Move function. The [Sui Keytool CLI](/references/cli/keytool.mdx) command `sui keytool sign` can generate the `signatures`.
+Transaction execution takes 2 arguments, `transactionDataBcs` and `signatures`. `transactionDataBcs` is the serialized unsigned transaction data, which the [Rtd Client CLI](/references/cli/client.mdx) `client call` command can generate. Pass the `--serialize-unsigned-transaction` flag to the command to call a Move function. The [Rtd Keytool CLI](/references/cli/keytool.mdx) command `rtd keytool sign` can generate the `signatures`.
 
 <Tabs groupId="graphql">
 <TabItem label="Beta" value="beta">
@@ -793,7 +793,7 @@ When using the online IDE, copy the following JSON to the **Variables** window, 
 
 ## Migrating to GraphQL from JSON-RPC {#migrate}
 
-The examples in the following sections demonstrate the typical API calls. The calls are tabbed to show both the JSON-RPC call and the equivalent GraphQL structure. For a comprehensive list of all available GraphQL features, consult the [reference](/references/sui-graphql).
+The examples in the following sections demonstrate the typical API calls. The calls are tabbed to show both the JSON-RPC call and the equivalent GraphQL structure. For a comprehensive list of all available GraphQL features, consult the [reference](/references/rtd-graphql).
 
 ### Example 1: Get total transactions
 
@@ -807,7 +807,7 @@ Get the total number of transactions in the network.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "sui_getTotalTransactionBlocks",
+  "method": "rtd_getTotalTransactionBlocks",
   "params": []
 }
 ```
@@ -838,7 +838,7 @@ Get the transaction by its digest.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "sui_getTransactionBlock",
+  "method": "rtd_getTransactionBlock",
   "params": [
     "Hay2tj3GcDYcE3AMHrej5WDsHGPVAYsegcubixLUvXUF",
     {
@@ -885,7 +885,7 @@ query {
 
 ### Example 3: Get coin objects owned by an address
 
-Return all `Coin<0x2::sui::SUI>` objects that an address owns.
+Return all `Coin<0x2::rtd::RTD>` objects that an address owns.
 
 <Tabs groupId="migrating-json-rpc">
 
@@ -895,10 +895,10 @@ Return all `Coin<0x2::sui::SUI>` objects that an address owns.
 query {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "suix_getCoins",
+  "method": "rtdx_getCoins",
   "params": [
     "0x5094652429957619e6efa79a404a6714d1126e63f551f4b6c7fb76440f8118c9", //owner
-    "0x2::sui::SUI",                                                      //coin type
+    "0x2::rtd::RTD",                                                      //coin type
     "0xe5c651321915b06c81838c2e370109b554a448a78d3a56220f798398dde66eab", //cursor
     3 //limit
   ]
@@ -914,7 +914,7 @@ query {
     objects(
       first: 3,
       after: "vBIzCwAAAADMAQBQlGUkKZV2Gebvp5pASmcU0RJuY/VR9LbH+3ZED4EYyQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAARjb2luAAAAAAAAAARDb2luAAAAAAAAAAEAAAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAA3N1aQAAAAAAAAADU1VJAAAAAAAAAAAB/////XBZUf9feyhb9cW+AOBraL10O9t0D9JAr+tIq2wXDJdl5/zP5w==",
-      filter: { type: "0x2::coin::Coin<0x2::sui::SUI>" }
+      filter: { type: "0x2::coin::Coin<0x2::rtd::RTD>" }
     ) {
       nodes {
         address
@@ -964,7 +964,7 @@ query {
 
 ### Example 5: Paging through package versions
 
-Find all versions of the Sui framework and list their modules:
+Find all versions of the Rtd framework and list their modules:
 
 ```graphql
 query {
@@ -984,7 +984,7 @@ query {
 ## Related links
 
 <RelatedLink to="/concepts/data-access/graphql-rpc.mdx" />
-<RelatedLink to="/references/sui-graphql.mdx" />
+<RelatedLink to="/references/rtd-graphql.mdx" />
 <RelatedLink to="/concepts/data-access/graphql-indexer" />
-<RelatedLink href="https://graphql.testnet.sui.io/graphql" label="Sui Testnet GraphiQL" desc="Sui GraphiQL IDE for Testnet." />
-<RelatedLink href="https://graphql.mainnet.sui.io/graphql" label="Sui Mainnet GraphiQL" desc="Sui GraphiQL IDE for Mainnet." />
+<RelatedLink href="https://graphql.testnet.rtd.io/graphql" label="Rtd Testnet GraphiQL" desc="Rtd GraphiQL IDE for Testnet." />
+<RelatedLink href="https://graphql.mainnet.rtd.io/graphql" label="Rtd Mainnet GraphiQL" desc="Rtd GraphiQL IDE for Mainnet." />

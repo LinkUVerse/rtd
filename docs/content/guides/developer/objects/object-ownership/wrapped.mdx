@@ -83,16 +83,16 @@ public struct SwapRequest has key {
     id: UID,
     owner: address,
     object: Object,
-    fee: Balance<SUI>,
+    fee: Balance<RTD>,
 }
 ```
 
-`SwapRequest` defines a Sui object type, wraps the `object` to swap, and tracks the original `owner` of the object. To define an interface to request a swap by someone who owns an `Object`:
+`SwapRequest` defines a Rtd object type, wraps the `object` to swap, and tracks the original `owner` of the object. To define an interface to request a swap by someone who owns an `Object`:
 
 ```move
 public fun request_swap(
     object: Object,
-    fee: Coin<SUI>,
+    fee: Coin<RTD>,
     service: address,
     ctx: &mut TxContext,
 ) {
@@ -110,14 +110,14 @@ public fun request_swap(
 
 ```
 
-In the preceding function, you must pass the object by value so that it is fully consumed and wrapped into `SwapRequest`. The example also provides a fee of type `Coin<SUI>` and checks that the fee is sufficient. The example turns `Coin` into `Balance` when it's put into the `wrapper` object. This is because `Coin` is only used to pass objects, such as transaction inputs or objects sent to addresses. For coin balances that need to be embedded in other structs, use `Balance` instead to avoid the overhead of carrying around an unnecessary `UID` field.
+In the preceding function, you must pass the object by value so that it is fully consumed and wrapped into `SwapRequest`. The example also provides a fee of type `Coin<RTD>` and checks that the fee is sufficient. The example turns `Coin` into `Balance` when it's put into the `wrapper` object. This is because `Coin` is only used to pass objects, such as transaction inputs or objects sent to addresses. For coin balances that need to be embedded in other structs, use `Balance` instead to avoid the overhead of carrying around an unnecessary `UID` field.
 
 The wrapper object is then sent to the service operator with the address specified in the call as `service`.
 
 The interface for the function that the service operator can call to perform a swap between 2 objects sent from 2 addresses resembles:
 
 ```move
-public fun execute_swap(s1: SwapRequest, s2: SwapRequest): Balance<SUI>;
+public fun execute_swap(s1: SwapRequest, s2: SwapRequest): Balance<RTD>;
 ```
 
 `s1` and `s2` are 2 wrapped objects that were sent from different object owners to the service operator. Both wrapped objects are passed by value because they eventually need to be [unpacked](https://move-book.com/move-basics/struct.html#destructing-structures).
@@ -160,7 +160,7 @@ After this call, the 2 objects are swapped and the service provider collects the
 
 Because the contract defined only 1 way to deal with `SwapRequest` (`execute_swap`), there is no other way the service operator can interact with `SwapRequest` despite its ownership.
 
-View the full source code in the [`trusted_swap`](https://github.com/MystenLabs/sui/blob/main/examples/move/trusted_swap) example.
+View the full source code in the [`trusted_swap`](https://github.com/LinkUVerse/rtd/blob/main/examples/move/trusted_swap) example.
 
 ## Wrapping through `Option`
 
@@ -219,9 +219,9 @@ public fun equip_sword(warrior: &mut SimpleWarrior, sword: Sword, ctx: &mut TxCo
 
 The function passes a `warrior` as a mutable reference of `SimpleWarrior`, and passes a `sword` by value to wrap it into the `warrior`.
 
-Because `Sword` is a Sui object type without `drop` ability, if the warrior already has a sword equipped, the warrior can't drop that sword. If you call `option::fill` without first calling `equip_sword`, an error occurs. `equip_sword` checks whether there is already a sword equipped and if so, removes it and sends it back to the sender. To the player, this returns an equipped sword to their inventory when they equip the different sword.
+Because `Sword` is a Rtd object type without `drop` ability, if the warrior already has a sword equipped, the warrior can't drop that sword. If you call `option::fill` without first calling `equip_sword`, an error occurs. `equip_sword` checks whether there is already a sword equipped and if so, removes it and sends it back to the sender. To the player, this returns an equipped sword to their inventory when they equip the different sword.
 
-View the source code in the [`simple_warrior`](https://github.com/MystenLabs/sui/tree/main/examples/move/simple_warrior) example or check out the [`hero`](https://github.com/MystenLabs/sui/tree/main/examples/move/hero) example for a more complex implementation.
+View the source code in the [`simple_warrior`](https://github.com/LinkUVerse/rtd/tree/main/examples/move/simple_warrior) example or check out the [`hero`](https://github.com/LinkUVerse/rtd/tree/main/examples/move/hero) example for a more complex implementation.
 
 ## Wrapping through `vector`
 

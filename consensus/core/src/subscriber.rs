@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::Duration};
@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use consensus_config::AuthorityIndex;
 use consensus_types::block::Round;
 use futures::StreamExt;
-use mysten_metrics::spawn_monitored_task;
+use linku_metrics::spawn_monitored_task;
 use parking_lot::{Mutex, RwLock};
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::{debug, error, info};
@@ -120,7 +120,7 @@ impl<C: NetworkClient, S: NetworkService> Subscriber<C, S> {
         const IMMEDIATE_RETRIES: i64 = 3;
         const MIN_TIMEOUT: Duration = Duration::from_millis(500);
         // When not immediately retrying, limit retry delay between 100ms and 10s.
-        let mut backoff = mysten_common::backoff::ExponentialBackoff::new(
+        let mut backoff = linku_common::backoff::ExponentialBackoff::new(
             Duration::from_millis(100),
             Duration::from_secs(10),
         );

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // This component is used to display beta tag.
@@ -18,7 +18,7 @@ export default function BetaTag(props) {
     <Admonition
       title="Early-Stage Feature"
       icon="⚙️"
-      className={`${props.slim ? "" : "!my-12"} bg-sui-blue-light border-sui-blue-dark dark:bg-sui-blue-dark dark:border-sui-blue-light`}
+      className={`${props.slim ? "" : "!my-12"} bg-rtd-blue-light border-rtd-blue-dark dark:bg-rtd-blue-dark dark:border-rtd-blue-light`}
     >
       <p className="pt-2">
         This content describes an alpha/beta feature or service. These early

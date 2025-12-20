@@ -1,0 +1,23 @@
+[package]
+name = "rtd-synthetic-ingestion"
+version = "0.0.0"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+clap.workspace = true
+simulacrum.workspace = true
+rtd-test-transaction-builder.workspace = true
+rtd-types.workspace = true
+telemetry-subscribers.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+rtd-storage.workspace = true
+
+[dev-dependencies]
+rtd-storage.workspace = true
+tempfile.workspace = true

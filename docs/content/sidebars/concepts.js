@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const concepts = [
 	'concepts',
-	'concepts/sui-for-ethereum',
+	'concepts/rtd-for-ethereum',
 	{
 		type: 'category',
 		label: 'Architecture',
@@ -12,12 +12,12 @@ const concepts = [
 			id: 'concepts/architecture',
 		},
 		items: [
-			'concepts/sui-architecture/networks',
-			'concepts/sui-architecture/sui-storage',
-			'concepts/sui-architecture/consensus',
-			'concepts/sui-architecture/epochs',
-			'concepts/sui-architecture/sui-security',
-			'concepts/sui-architecture/protocol-upgrades',
+			'concepts/rtd-architecture/networks',
+			'concepts/rtd-architecture/rtd-storage',
+			'concepts/rtd-architecture/consensus',
+			'concepts/rtd-architecture/epochs',
+			'concepts/rtd-architecture/rtd-security',
+			'concepts/rtd-architecture/protocol-upgrades',
 		],
 	},
 	{
@@ -56,8 +56,8 @@ const concepts = [
 		},
 		items: [
 			'concepts/tokenomics/staking-unstaking',
-			'concepts/tokenomics/sui-bridging',
-			'concepts/tokenomics/gas-in-sui',
+			'concepts/tokenomics/rtd-bridging',
+			'concepts/tokenomics/gas-in-rtd',
 		],
 	},
 	{
@@ -65,7 +65,7 @@ const concepts = [
 		label: 'Move',
 		link: {
 			type: 'doc',
-			id: 'concepts/sui-move-concepts',
+			id: 'concepts/rtd-move-concepts',
 		},
 		items: [
 			{
@@ -73,12 +73,12 @@ const concepts = [
 				label: 'Packages',
 				link: {
 					type: 'doc',
-					id: 'concepts/sui-move-concepts/packages',
+					id: 'concepts/rtd-move-concepts/packages',
 				},
 				items: [
-					'concepts/sui-move-concepts/packages/upgrade',
-					'concepts/sui-move-concepts/packages/custom-policies',
-					'concepts/sui-move-concepts/packages/automated-address-management',
+					'concepts/rtd-move-concepts/packages/upgrade',
+					'concepts/rtd-move-concepts/packages/custom-policies',
+					'concepts/rtd-move-concepts/packages/automated-address-management',
 				],
 			},
 			{
@@ -90,8 +90,8 @@ const concepts = [
 				},
 				items: ['concepts/dynamic-fields/tables-bags'],
 			},
-			'concepts/sui-move-concepts/derived-objects',
-			'concepts/sui-move-concepts/conventions',
+			'concepts/rtd-move-concepts/derived-objects',
+			'concepts/rtd-move-concepts/conventions',
 		],
 	},
 	{

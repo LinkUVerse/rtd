@@ -1,17 +1,17 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { KioskListing, KioskOwnerCap } from '@mysten/kiosk';
-import { SuiObjectResponse } from '@mysten/sui/client';
-import { MIST_PER_SUI, normalizeSuiAddress } from '@mysten/sui/utils';
+import { KioskListing, KioskOwnerCap } from '@linku/kiosk';
+import { RtdObjectResponse } from '@linku/rtd/client';
+import { MIST_PER_RTD, normalizeRtdAddress } from '@linku/rtd/utils';
 
 // Parse the display of a list of objects into a simple {object_id: display} map
 // to use throughout the app.
 export const parseObjectDisplays = (
-	data: SuiObjectResponse[],
+	data: RtdObjectResponse[],
 ): Record<string, Record<string, string> | undefined> => {
 	return data.reduce<Record<string, Record<string, string> | undefined>>(
-		(acc, item: SuiObjectResponse) => {
+		(acc, item: RtdObjectResponse) => {
 			const display = item.data?.display?.data;
 			const id = item.data?.objectId!;
 			acc[id] = display || undefined;
@@ -33,12 +33,12 @@ export const processKioskListings = (data: KioskListing[]): Record<string, Kiosk
 	return results;
 };
 
-export const mistToSui = (mist: bigint | string | undefined) => {
+export const mistToRtd = (mist: bigint | string | undefined) => {
 	if (!mist) return 0;
-	return Number(mist || 0) / Number(MIST_PER_SUI);
+	return Number(mist || 0) / Number(MIST_PER_RTD);
 };
 
-export const formatSui = (amount: number) => {
+export const formatRtd = (amount: number) => {
 	return new Intl.NumberFormat('en-US', {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 5,
@@ -53,5 +53,5 @@ export const findActiveCap = (
 	caps: KioskOwnerCap[] = [],
 	kioskId: string,
 ): KioskOwnerCap | undefined => {
-	return caps.find((x) => normalizeSuiAddress(x.kioskId) === normalizeSuiAddress(kioskId));
+	return caps.find((x) => normalizeRtdAddress(x.kioskId) === normalizeRtdAddress(kioskId));
 };

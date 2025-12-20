@@ -33,5 +33,5 @@ anyhow.workspace = true
 regex.workspace = true
 
 [[test]]
-name = "testsuite"
+name = "testrtdte"
 harness = false

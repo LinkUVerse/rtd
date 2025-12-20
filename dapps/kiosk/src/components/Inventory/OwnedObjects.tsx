@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { KioskItem } from '@mysten/kiosk';
+import { KioskItem } from '@linku/kiosk';
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../contracts/SuiBridge.sol";
+import "../../contracts/RtdBridge.sol";
 
-contract MockSuiBridgeV2 is SuiBridge {
+contract MockRtdBridgeV2 is RtdBridge {
     uint8 public mock;
     bool public isPausing;
 

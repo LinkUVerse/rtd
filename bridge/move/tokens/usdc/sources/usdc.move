@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module bridged_usdc::usdc {
     use std::option;
 
-    use sui::coin;
-    use sui::transfer;
-    use sui::tx_context;
-    use sui::tx_context::TxContext;
+    use rtd::coin;
+    use rtd::transfer;
+    use rtd::tx_context;
+    use rtd::tx_context::TxContext;
 
     struct USDC has drop {}
 

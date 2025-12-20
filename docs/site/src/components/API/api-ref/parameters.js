@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState } from "react";
@@ -53,7 +53,7 @@ export const Parameter = (props) => {
 
   return (
     <>
-      <div className="grid grid-cols-6 ml-4 odd:bg-sui-ghost-white dark:odd:bg-sui-ghost-dark rounded-lg">
+      <div className="grid grid-cols-6 ml-4 odd:bg-rtd-ghost-white dark:odd:bg-rtd-ghost-dark rounded-lg">
         <div className="col-span-2 p-2 overflow-x-auto">
           <PropType proptype={[param.name, param.schema]}></PropType>
         </div>
@@ -79,13 +79,13 @@ const Parameters = (props) => {
     <div className="border-b mb-8">
       {hasParams && (
         <div className="grid grid-cols-6 ml-4">
-          <div className="rounded-tl-lg rounded-bl-lg col-span-2 p-2 bg-sui-blue dark:bg-sui-blue-dark text-sui-gray-95 dark:text-sui-gray-50 font-bold">
+          <div className="rounded-tl-lg rounded-bl-lg col-span-2 p-2 bg-rtd-blue dark:bg-rtd-blue-dark text-rtd-gray-95 dark:text-rtd-gray-50 font-bold">
             Name&lt;Type&gt;
           </div>
-          <div className="p-2 bg-sui-blue dark:bg-sui-blue-dark text-sui-gray-95 dark:text-sui-gray-50 text-sui-gray-35 font-bold">
+          <div className="p-2 bg-rtd-blue dark:bg-rtd-blue-dark text-rtd-gray-95 dark:text-rtd-gray-50 text-rtd-gray-35 font-bold">
             Required
           </div>
-          <div className="rounded-tr-lg rounded-br-lg col-span-3 p-2 bg-sui-blue dark:bg-sui-blue-dark text-sui-gray-95 dark:text-sui-gray-50 text-sui-gray-35 font-bold">
+          <div className="rounded-tr-lg rounded-br-lg col-span-3 p-2 bg-rtd-blue dark:bg-rtd-blue-dark text-rtd-gray-95 dark:text-rtd-gray-50 text-rtd-gray-35 font-bold">
             Description
           </div>
         </div>

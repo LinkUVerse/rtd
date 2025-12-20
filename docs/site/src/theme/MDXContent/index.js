@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import React from "react";
 import { MDXProvider } from "@mdx-js/react";
@@ -18,7 +18,7 @@ import RelatedLink from "@site/src/components/RelatedLink";
 import ImportContent from "@site/src/components/ImportContent";
 
 export default function MDXContent({ children }) {
-  const suiComponents = {
+  const rtdComponents = {
     ...MDXComponents,
     Card,
     Cards,
@@ -35,5 +35,5 @@ export default function MDXContent({ children }) {
     RelatedLink,
     ImportContent,
   };
-  return <MDXProvider components={suiComponents}>{children}</MDXProvider>;
+  return <MDXProvider components={rtdComponents}>{children}</MDXProvider>;
 }

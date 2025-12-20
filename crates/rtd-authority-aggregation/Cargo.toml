@@ -1,0 +1,14 @@
+[package]
+name = "rtd-authority-aggregation"
+authors = ["LinkU Labs <build@linkulabs.com>"]
+license = "Apache-2.0"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rtd-types.workspace = true
+linku-metrics.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+futures.workspace = true

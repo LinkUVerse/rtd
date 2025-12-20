@@ -1,20 +1,20 @@
 ---
 title: DeepBookV3 SDK
 description: Use the DeepBook TypeScript SDK to interact directly with the DeepBook package. 
-keywords: [ deepbook, deep book, deepbook v3, typescript, typescript SDK, mysten/deepbook, deepbookV3 SDK, Coin, Pool, Manager ] 
+keywords: [ deepbook, deep book, deepbook v3, typescript, typescript SDK, linku/deepbook, deepbookV3 SDK, Coin, Pool, Manager ] 
 ---
 
 The DeepBookV3 TypeScript SDK abstracts away the transaction calls, allowing for direct interactions with the `DeepBook` package.
 
-- [SDK repository](https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3)
-- [NPM version](https://www.npmjs.com/package/@mysten/deepbook-v3)
+- [SDK repository](https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3)
+- [NPM version](https://www.npmjs.com/package/@linku/deepbook-v3)
 
 ## Install
 
-To use the SDK in your projects, install the `@mysten/deepbook` package.
+To use the SDK in your projects, install the `@linku/deepbook` package.
 
 ```sh npm2yarn
-npm install @mysten/deepbook-v3
+npm install @linku/deepbook-v3
 ```
 
 ## Constants
@@ -27,47 +27,47 @@ The DeepBookV3 SDK includes a constants file (`/utils/constants.ts`) that mainta
 </summary>
 
 ```ts reference
-https://github.com/MystenLabs/ts-sdks/blob/main/packages/deepbook-v3/src/utils/constants.ts
+https://github.com/LinkUVerse/ts-sdks/blob/main/packages/deepbook-v3/src/utils/constants.ts
 ```
 
 </details>
 
 ## DeepBookClient
 
-To work with DeepBookV3, you must create a `DeepBookClient`. To construct the `DeepBookClient`, pass in a `SuiClient`, the sender address, and environment. The [Sui TypeScript SDK](https://sdk.mystenlabs.com/typescript) provides the `SuiClient` and key functionality necessary to process transactions. The following example imports those libraries, as well.
+To work with DeepBookV3, you must create a `DeepBookClient`. To construct the `DeepBookClient`, pass in a `RtdClient`, the sender address, and environment. The [Rtd TypeScript SDK](https://sdk.linkulabs.com/typescript) provides the `RtdClient` and key functionality necessary to process transactions. The following example imports those libraries, as well.
 
 ```tsx
-import { DeepBookClient } from '@mysten/deepbook-v3';
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { DeepBookClient } from '@linku/deepbook-v3';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
 class DeepBookMarketMaker {
 	dbClient: DeepBookClient; // For building transactions
-	suiClient: SuiClient; // For executing transactions
+	rtdClient: RtdClient; // For executing transactions
 	keypair: Ed25519Keypair; // For signing transactions
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: env,
-			client: this.suiClient,
+			client: this.rtdClient,
 		});
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 }
 ```
@@ -83,9 +83,9 @@ Before placing any trade, you must supply a balance manager address to the clien
 Example using an existing balance manager:
 
 ```tsx
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 import { config } from 'dotenv';
 
 import { DeepBookClient } from '../src';
@@ -98,33 +98,33 @@ const BALANCE_MANAGER_KEY = 'MANAGER_1';
 
 class DeepBookMarketMaker {
 	dbClient: DeepBookClient; // For building transactions
-	suiClient: SuiClient; // For executing transactions
+	rtdClient: RtdClient; // For executing transactions
 	keypair: Ed25519Keypair; // For signing transactions
 	env: 'testnet' | 'mainnet';
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.env = env;
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: env,
-			client: this.suiClient,
+			client: this.rtdClient,
 			balanceManagers: this.getBalanceManagers(),
 		});
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 
 	getBalanceManagers(): { [key: string]: BalanceManager } {
@@ -147,10 +147,10 @@ class DeepBookMarketMaker {
 Example creating a balance manager:
 
 ```tsx
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookClient } from '../src';
 import { BalanceManager } from './types';
@@ -160,39 +160,39 @@ const BALANCE_MANAGER_KEY = 'MANAGER_1';
 
 class DeepBookMarketMaker {
 	dbClient: DeepBookClient; // For building transactions
-	suiClient: SuiClient; // For executing transactions
+	rtdClient: RtdClient; // For executing transactions
 	keypair: Ed25519Keypair; // For signing transactions
 	env: 'testnet' | 'mainnet';
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.env = env;
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: env,
-			client: this.suiClient,
+			client: this.rtdClient,
 		});
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 
 	async createBalanceManagerAndReinitialize() {
 		let tx = new Transaction();
 		tx.add(this.dbClient.balanceManager.createAndShareBalanceManager());
 
-		const res = await this.suiClient.signAndExecuteTransaction({
+		const res = await this.rtdClient.signAndExecuteTransaction({
 			transaction: tx,
 			signer: this.keypair,
 			options: {
@@ -216,7 +216,7 @@ class DeepBookMarketMaker {
 		this.dbClient = new DeepBookClient({
 			address: this.getActiveAddress(),
 			env: this.env,
-			client: this.suiClient,
+			client: this.rtdClient,
 			balanceManagers: balanceManagers,
 		});
 	}
@@ -230,14 +230,14 @@ The SDK comes with four default coins on Testnet and five default coins on Mainn
 **Default Testnet coins**
 
 - DEEP
-- SUI
+- RTD
 - DBUSDC
 - DBUSDT
 
 **Default Mainnet coins**
 
 - DEEP
-- SUI
+- RTD
 - USDC
 - USDT
 - WETH
@@ -249,18 +249,18 @@ You can also initialize the SDK with custom coins to interact with pools that ar
 Similar to coins, the SDK comes with default pools. You can provide a `PoolMap` during construction to override this behavior.
 
 ```tsx
-import { decodeSuiPrivateKey } from '@mysten/sui.js/cryptography';
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import type { Keypair } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import type { Transaction } from '@mysten/sui/transactions';
+import { decodeRtdPrivateKey } from '@linku/rtd.js/cryptography';
+import { getFullnodeUrl, RtdClient } from '@linku/rtd/client';
+import type { Keypair } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import type { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookClient } from '../src/index.js'; // Adjust path according to new structure
 import type { BalanceManager } from '../src/types/index.js';
 
 export class DeepBookMarketMaker extends DeepBookClient {
 	keypair: Keypair;
-	suiClient: SuiClient;
+	rtdClient: RtdClient;
 
 	constructor(
 		keypair: string | Keypair,
@@ -276,12 +276,12 @@ export class DeepBookMarketMaker extends DeepBookClient {
 			resolvedKeypair = keypair;
 		}
 
-		const address = resolvedKeypair.toSuiAddress();
+		const address = resolvedKeypair.toRtdAddress();
 
 		super({
 			address: address,
 			env: env,
-			client: new SuiClient({
+			client: new RtdClient({
 				url: getFullnodeUrl(env),
 			}),
 			balanceManagers: balanceManagers,
@@ -289,13 +289,13 @@ export class DeepBookMarketMaker extends DeepBookClient {
 		});
 
 		this.keypair = resolvedKeypair;
-		this.suiClient = new SuiClient({
+		this.rtdClient = new RtdClient({
 			url: getFullnodeUrl(env),
 		});
 	}
 
 	static #getSignerFromPK = (privateKey: string) => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
@@ -303,7 +303,7 @@ export class DeepBookMarketMaker extends DeepBookClient {
 
 	signAndExecute = async (tx: Transaction) => {
 		// remove arguments
-		return this.suiClient.signAndExecuteTransaction({
+		return this.rtdClient.signAndExecuteTransaction({
 			transaction: tx,
 			signer: this.keypair,
 			options: {
@@ -314,7 +314,7 @@ export class DeepBookMarketMaker extends DeepBookClient {
 	};
 
 	getActiveAddress() {
-		return this.keypair.getPublicKey().toSuiAddress();
+		return this.keypair.getPublicKey().toRtdAddress();
 	}
 }
 ```
@@ -324,7 +324,7 @@ export class DeepBookMarketMaker extends DeepBookClient {
 The following example uses the default pools and coins provided.
 
 ```tsx
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookMarketMaker } from './deepbookMarketMaker.js';
 
@@ -343,8 +343,8 @@ import { DeepBookMarketMaker } from './deepbookMarketMaker.js';
 	const tx = new Transaction();
 
 	// Read only call
-	console.log(await mmClient.checkManagerBalance('MANAGER_1', 'SUI'));
-	console.log(await mmClient.getLevel2Range('SUI_DBUSDC', 0.1, 100, true));
+	console.log(await mmClient.checkManagerBalance('MANAGER_1', 'RTD'));
+	console.log(await mmClient.getLevel2Range('RTD_DBUSDC', 0.1, 100, true));
 
 	// Balance manager contract call
 	mmClient.balanceManager.depositIntoManager('MANAGER_1', 'DBUSDT', 10000)(tx);
@@ -366,6 +366,6 @@ import { DeepBookMarketMaker } from './deepbookMarketMaker.js';
 
 ## Related links
 
-<RelatedLink href="https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3" label="DeepBookV3 Indexer repository" desc="The DeepBookV3 SDK repository on GitHub." />
-<RelatedLink href="https://www.npmjs.com/package/@mysten/deepbook-v3" label="DeepBookV3 SDK node package" desc="The DeepBookV3 SDK node package on NPM." />
-<RelatedLink href="https://github.com/MystenLabs/deepbookv3" label="DeepBookV3 repository" desc="The DeepBookV3 repository on GitHub." />
+<RelatedLink href="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3" label="DeepBookV3 Indexer repository" desc="The DeepBookV3 SDK repository on GitHub." />
+<RelatedLink href="https://www.npmjs.com/package/@linku/deepbook-v3" label="DeepBookV3 SDK node package" desc="The DeepBookV3 SDK node package on NPM." />
+<RelatedLink href="https://github.com/LinkUVerse/deepbookv3" label="DeepBookV3 repository" desc="The DeepBookV3 repository on GitHub." />

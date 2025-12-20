@@ -31,7 +31,7 @@ use crate::{
         unique_map::UniqueMap,
         *,
     },
-    sui_mode,
+    rtd_mode,
     typing::{
         ast::{self as T},
         core::{
@@ -4988,7 +4988,7 @@ fn unused_module_members(
     }
 
     let mut reporter = env.diagnostic_reporter_at_top_level();
-    let is_sui_mode = env.package_config(mdef.package_name).flavor == Flavor::Sui;
+    let is_rtd_mode = env.package_config(mdef.package_name).flavor == Flavor::Rtd;
     reporter.push_warning_filter_scope(mdef.warning_filter);
 
     for (loc, name, c) in &mdef.constants {
@@ -5010,8 +5010,8 @@ fn unused_module_members(
             // functions with #[test] or R[random_test] attribute are implicitly used
             continue;
         }
-        if is_sui_mode && *name == sui_mode::INIT_FUNCTION_NAME {
-            // a Sui-specific filter to avoid signaling that the init function is unused
+        if is_rtd_mode && *name == rtd_mode::INIT_FUNCTION_NAME {
+            // a Rtd-specific filter to avoid signaling that the init function is unused
             continue;
         }
         reporter.push_warning_filter_scope(fun.warning_filter);

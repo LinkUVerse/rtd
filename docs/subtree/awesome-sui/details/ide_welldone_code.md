@@ -14,7 +14,7 @@
 
 ## Description
 
-WELLDONE Code is a Remix IDE Plugin. Using WELLDONE Code, developers can easily develop and test smart contracts in Remix IDE for non-EVM networks such as NEAR and Cosmos, in addition to EVM-compatible networks. Sui is also supported.
+WELLDONE Code is a Remix IDE Plugin. Using WELLDONE Code, developers can easily develop and test smart contracts in Remix IDE for non-EVM networks such as NEAR and Cosmos, in addition to EVM-compatible networks. Rtd is also supported.
 
 ## Features
 
@@ -32,6 +32,6 @@ WELLDONE Code is a Remix IDE Plugin. Using WELLDONE Code, developers can easily 
     - Package function call
 - Example templates
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On
 
 ⚠️ N/A

@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { bcs } from "@mysten/sui/bcs";
-import { PublicKey } from "@mysten/sui/cryptography";
-import { ObjectRef, Transaction } from "@mysten/sui/transactions";
+import { bcs } from "@linku/rtd/bcs";
+import { PublicKey } from "@linku/rtd/cryptography";
+import { ObjectRef, Transaction } from "@linku/rtd/transactions";
 import { useNetworkVariable } from "config";
 import { Game } from "hooks/useGameQuery";
 import { TurnCap } from "hooks/useTurnCapQuery";
@@ -43,13 +43,13 @@ export class Transactions {
         const game = tx.moveCall({
             target: `${this.packageId}::owned::new`,
             arguments: [
-                tx.pure.address(player.toSuiAddress()),
-                tx.pure.address(opponent.toSuiAddress()),
+                tx.pure.address(player.toRtdAddress()),
+                tx.pure.address(opponent.toRtdAddress()),
                 tx.pure(bcs.vector(bcs.u8()).serialize(admin.toRawBytes()).toBytes()),
             ],
         });
 
-        tx.transferObjects([game], admin.toSuiAddress());
+        tx.transferObjects([game], admin.toRtdAddress());
 
         return tx;
     }

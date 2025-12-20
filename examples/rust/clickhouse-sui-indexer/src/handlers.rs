@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
@@ -7,17 +7,17 @@ use clickhouse::Row;
 use serde::Serialize;
 use std::sync::Arc;
 
-use sui_indexer_alt_framework::{
+use rtd_indexer_alt_framework::{
     pipeline::{concurrent::Handler, Processor},
     FieldCount,
 };
-use sui_indexer_alt_framework_store_traits::Store;
-use sui_types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_framework_store_traits::Store;
+use rtd_types::full_checkpoint_content::Checkpoint;
 
 use crate::store::ClickHouseStore;
 
 /// Structure representing a transaction digest record in ClickHouse
-/// Aligned with sui-indexer-alt's StoredTxDigest structure
+/// Aligned with rtd-indexer-alt's StoredTxDigest structure
 #[derive(Row, Serialize, Clone, Debug, FieldCount)]
 pub struct StoredTxDigest {
     pub tx_sequence_number: i64,
@@ -25,7 +25,7 @@ pub struct StoredTxDigest {
 }
 
 /// Handler that processes checkpoint data and extracts transaction digests
-/// Named to align with sui-indexer-alt's TxDigests handler
+/// Named to align with rtd-indexer-alt's TxDigests handler
 #[derive(Clone, Default)]
 pub struct TxDigests;
 

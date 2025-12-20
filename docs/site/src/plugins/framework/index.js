@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Plugin copies files from specified directories into the
@@ -11,23 +11,23 @@ import fs from "fs";
 
 const BRIDGE_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/bridge",
+  "../../../../../crates/rtd-framework/docs/bridge",
 );
 const FRAMEWORK_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/sui",
+  "../../../../../crates/rtd-framework/docs/rtd",
 );
 const STDLIB_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/std",
+  "../../../../../crates/rtd-framework/docs/std",
 );
 // const DEEPBOOK_PATH = path.join(
 //   __dirname,
-//   "../../../../../crates/sui-framework/docs/deepbook",
+//   "../../../../../crates/rtd-framework/docs/deepbook",
 // );
-const SUISYS_PATH = path.join(
+const RTDSYS_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/sui_system",
+  "../../../../../crates/rtd-framework/docs/rtd_system",
 );
 const DOCS_PATH = path.join(
   __dirname,
@@ -35,21 +35,21 @@ const DOCS_PATH = path.join(
 );
 
 // prefix helper for the first path segment only
-const prefixRootDir = (seg) => `sui_${seg}`;
+const prefixRootDir = (seg) => `rtd_${seg}`;
 
 // map of crate dir -> prefixed dir, used to rewrite hrefs in HTML
 const CRATE_PREFIX_MAP = {
-  bridge: "sui_bridge",
-  sui: "sui_sui",
-  std: "sui_std",
-  sui_system: "sui_sui_system",
+  bridge: "rtd_bridge",
+  rtd: "rtd_rtd",
+  std: "rtd_std",
+  rtd_system: "rtd_rtd_system",
 };
 
 const CRATE_PACKAGES_PATH = {
-  bridge: "sui/crates/sui-framework/packages/bridge",
-  sui: "sui/crates/sui-framework/packages/sui",
-  std: "sui/crates/sui-framework/packages/std",
-  sui_system: "sui/crates/sui-framework/packages/sui_system",
+  bridge: "rtd/crates/rtd-framework/packages/bridge",
+  rtd: "rtd/crates/rtd-framework/packages/rtd",
+  std: "rtd/crates/rtd-framework/packages/std",
+  rtd_system: "rtd/crates/rtd-framework/packages/rtd_system",
 };
 
 const SKIP_INDEX_AT = new Set([DOCS_PATH]);
@@ -67,7 +67,7 @@ function shouldSkipIndex(absDir) {
 const pjoin = path.posix.join;
 
 const toLowerTitleText = (s) =>
-  s.replace(/^sui_/, "").replace(/[-_]+/g, " ").toLowerCase();
+  s.replace(/^rtd_/, "").replace(/[-_]+/g, " ").toLowerCase();
 
 /* ----------------- HTML-safe anchor helpers ----------------- */
 
@@ -229,7 +229,7 @@ function injectToc(md) {
 
 const frameworkPlugin = (_context, _options) => {
   return {
-    name: "sui-framework-plugin",
+    name: "rtd-framework-plugin",
 
     async loadContent() {
       // framework folder is added to gitignore, so should only exist locally.
@@ -261,14 +261,14 @@ const frameworkPlugin = (_context, _options) => {
       const frameworkFiles = recurseFiles(FRAMEWORK_PATH);
       const stdlibFiles = recurseFiles(STDLIB_PATH);
       // const deepbookFiles = recurseFiles(DEEPBOOK_PATH);
-      const suisysFiles = recurseFiles(SUISYS_PATH);
+      const rtdsysFiles = recurseFiles(RTDSYS_PATH);
 
       const allFiles = [
         bridgeFiles, 
         frameworkFiles,        
         stdlibFiles, 
         // deepbookFiles,
-        suisysFiles,
+        rtdsysFiles,
       ];
 
       allFiles.forEach((theseFiles) => {
@@ -298,12 +298,12 @@ const frameworkPlugin = (_context, _options) => {
           // crate-relative link rewriting
           reMarkdown = reMarkdown
             .replace(
-              /href=(["'])(\.\.\/)(bridge|sui|std|sui_system)\/([^"']*)\1/g,
+              /href=(["'])(\.\.\/)(bridge|rtd|std|rtd_system)\/([^"']*)\1/g,
               (_m, q, up, seg, tail) => `href=${q}${up}${CRATE_PREFIX_MAP[seg]}/${tail}${q}`,
             )
             // also handle single quotes just in case
             .replace(
-              /href='(\.\.\/)(bridge|sui|std|sui_system)\//g,
+              /href='(\.\.\/)(bridge|rtd|std|rtd_system)\//g,
               (m, up, seg) => `href='${up}${CRATE_PREFIX_MAP[seg]}/"`.replace(/"$/, "'"),
             );
 
@@ -340,10 +340,10 @@ const frameworkPlugin = (_context, _options) => {
                 const indexDocId = pjoin("references/framework", ...relParts, "index");
 
                 const top = relParts[0] || parts[0] || "";
-                const topUnpref = top.replace(/^sui_/, "");
+                const topUnpref = top.replace(/^rtd_/, "");
 
-                // Category label: lowercased dirname without sui_ prefix
-                const unprefixed = part.replace(/^sui_/, "");
+                // Category label: lowercased dirname without rtd_ prefix
+                const unprefixed = part.replace(/^rtd_/, "");
                 const label = unprefixed.toLowerCase();
 
                 const category = {
@@ -375,12 +375,12 @@ const frameworkPlugin = (_context, _options) => {
         const slug = pjoin("/references/framework", ...relParts);
 
         const dirName = relParts.length ? relParts[relParts.length - 1] : "framework";
-        const titleText = `sui:${toLowerTitleText(dirName)}`;
+        const titleText = `rtd:${toLowerTitleText(dirName)}`;
 
         const entries = fs.readdirSync(absDir, { withFileTypes: true });
         const children = [];
         const topDir = relParts[0] || "";
-        const frameworkName = topDir.replace(/^sui_/, "");
+        const frameworkName = topDir.replace(/^rtd_/, "");
         const norm = (s) => s.replace(/\.mdx?$/i, "").toLowerCase().replace(/-/g, "_");
 
         for (const ent of entries) {
@@ -408,7 +408,7 @@ const frameworkPlugin = (_context, _options) => {
           "---",
           `title: "${titleText.replace(/"/g, '\\"')}"`,
           `slug: ${slug}`,
-          `description: "${(`Documentation for the modules in the ${CRATE_PACKAGES_PATH[topDir?.replace(/^sui_/, "")] ?? ""} crate. Select a module from the list to see its details.`).replace(/"/g, '\\"')}"`,
+          `description: "${(`Documentation for the modules in the ${CRATE_PACKAGES_PATH[topDir?.replace(/^rtd_/, "")] ?? ""} crate. Select a module from the list to see its details.`).replace(/"/g, '\\"')}"`,
           "---",
           "",
         ].join("\n");

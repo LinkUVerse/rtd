@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use diesel::prelude::*;
-use sui_indexer_alt_framework::FieldCount;
+use rtd_indexer_alt_framework::FieldCount;
 use crate::schema::transaction_digests;
 
 #[derive(Insertable, Debug, Clone, FieldCount)]

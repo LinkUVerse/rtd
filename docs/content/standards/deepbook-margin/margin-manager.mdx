@@ -30,7 +30,7 @@ The `new()` function creates and shares a `MarginManager` in one transaction. It
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new"
 	noComments
@@ -43,7 +43,7 @@ The `new_with_initializer()` function creates a `MarginManager` and returns it a
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_with_initializer,share"
 	noComments
@@ -56,7 +56,7 @@ The owner of a `MarginManager` can set or unset a referral for trading fee benef
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="set_referral,unset_referral"
 />
@@ -68,7 +68,7 @@ Only the owner can deposit funds into the `MarginManager`. The deposited asset m
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="deposit"
 />
@@ -80,7 +80,7 @@ Only the owner can withdraw funds from the `MarginManager`. Withdrawals are subj
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="withdraw"
 />
@@ -92,7 +92,7 @@ Borrow base or quote assets from margin pools to increase position sizes. Borrow
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="borrow_base,borrow_quote"
 />
@@ -104,7 +104,7 @@ Repay borrowed assets to reduce debt. You can specify an exact amount or repay a
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="repay_base,repay_quote"
 />
@@ -116,7 +116,7 @@ Liquidate an undercollateralized margin manager. The liquidator provides repayme
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="liquidate"
 />
@@ -128,7 +128,7 @@ Returns the risk ratio of the margin manager, which represents the ratio of asse
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="risk_ratio"
 />
@@ -138,7 +138,7 @@ Returns the risk ratio of the margin manager, which represents the ratio of asse
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="balance_manager,calculate_assets,calculate_debts,owner,deepbook_pool,margin_pool_id,borrowed_shares,borrowed_base_shares,borrowed_quote_shares,has_base_debt"
 />
@@ -146,7 +146,7 @@ Returns the risk ratio of the margin manager, which represents the ratio of asse
 ## Related links
 
 <RelatedLink
-	href="https://github.com/MystenLabs/deepbookv3/tree/main/packages/deepbook_margin"
+	href="https://github.com/LinkUVerse/deepbookv3/tree/main/packages/deepbook_margin"
 	label="DeepBook Margin package"
 	desc="The DeepBook Margin package on GitHub."
 />

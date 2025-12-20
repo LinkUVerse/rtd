@@ -9,13 +9,13 @@ use a::b as c;
 use a::b::e as f;
 use a::{b::g as f, b::h as i};
 
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, Coin};
-use sui::dynamic_field as df;
-use sui::dynamic_object_field as dof;
-use sui::event;
-use sui::sui::SUI;
-use sui::transfer_policy::{Self, TransferPolicy, TransferRequest};
+use rtd::balance::{Self, Balance};
+use rtd::coin::{Self, Coin};
+use rtd::dynamic_field as df;
+use rtd::dynamic_object_field as dof;
+use rtd::event;
+use rtd::rtd::RTD;
+use rtd::transfer_policy::{Self, TransferPolicy, TransferRequest};
 
 use std::{
     string::String,

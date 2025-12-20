@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { KioskOwnerCap } from '@mysten/kiosk';
+import { KioskOwnerCap } from '@linku/kiosk';
 import { useEffect, useState } from 'react';
 
 import { useOwnedKiosk } from './kiosk';

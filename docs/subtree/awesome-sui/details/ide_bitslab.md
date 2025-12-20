@@ -19,7 +19,7 @@ BitsLab IDE is an out-of-the-box, configuration-free online development environm
     - Compilation
     - Unit Testing
     - Deployment
-    - Multiple `sui` binary versions to choose from
+    - Multiple `rtd` binary versions to choose from
 - Project Management
     - Multiple workspaces
     - Persistent session
@@ -31,7 +31,7 @@ BitsLab IDE is an out-of-the-box, configuration-free online development environm
     - Package function call
 - Example templates
 
-## Latest Version Number of Sui Tested On
+## Latest Version Number of Rtd Tested On
 
 - Devnet v1.31.0
 - Testnet v1.32.0

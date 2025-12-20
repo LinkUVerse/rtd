@@ -1,0 +1,8 @@
+[package]
+name = "invalid"
+version = "0.0.1"
+implicit-dependencies = false
+
+[dependencies]
+rtd = { local = "../system-packages/rtd-framework" }
+std = { local = "../system-packages/move-stdlib" }

@@ -1,20 +1,20 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
 use std::collections::{BTreeMap, HashMap};
-use sui_config::genesis;
-use sui_types::error::SuiErrorKind;
-use sui_types::storage::{PackageObject, get_module, load_package_object_from_object_store};
-use sui_types::{
-    base_types::{AuthorityName, ObjectID, SequenceNumber, SuiAddress},
+use rtd_config::genesis;
+use rtd_types::error::RtdErrorKind;
+use rtd_types::storage::{PackageObject, get_module, load_package_object_from_object_store};
+use rtd_types::{
+    base_types::{AuthorityName, ObjectID, SequenceNumber, RtdAddress},
     committee::{Committee, EpochId},
     crypto::{AccountKeyPair, AuthorityKeyPair},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents},
-    error::SuiError,
+    error::RtdError,
     messages_checkpoint::{
         CheckpointContents, CheckpointContentsDigest, CheckpointDigest, CheckpointSequenceNumber,
         VerifiedCheckpoint,
@@ -111,18 +111,18 @@ impl InMemoryStore {
             .and_then(|versions| versions.get(&version))
     }
 
-    pub fn get_system_state(&self) -> sui_types::sui_system_state::SuiSystemState {
-        sui_types::sui_system_state::get_sui_system_state(self).expect("system state must exist")
+    pub fn get_system_state(&self) -> rtd_types::rtd_system_state::RtdSystemState {
+        rtd_types::rtd_system_state::get_rtd_system_state(self).expect("system state must exist")
     }
 
-    pub fn get_clock(&self) -> sui_types::clock::Clock {
-        self.get_object(&sui_types::SUI_CLOCK_OBJECT_ID)
+    pub fn get_clock(&self) -> rtd_types::clock::Clock {
+        self.get_object(&rtd_types::RTD_CLOCK_OBJECT_ID)
             .expect("clock should exist")
             .to_rust()
             .expect("clock object should deserialize")
     }
 
-    pub fn owned_objects(&self, owner: SuiAddress) -> impl Iterator<Item = &Object> {
+    pub fn owned_objects(&self, owner: RtdAddress) -> impl Iterator<Item = &Object> {
         self.live_objects
             .iter()
             .flat_map(|(id, version)| self.get_object_at_version(id, *version))
@@ -221,7 +221,7 @@ impl BackingPackageStore for InMemoryStore {
     fn get_package_object(
         &self,
         package_id: &ObjectID,
-    ) -> sui_types::error::SuiResult<Option<PackageObject>> {
+    ) -> rtd_types::error::RtdResult<Option<PackageObject>> {
         load_package_object_from_object_store(self, package_id)
     }
 }
@@ -232,7 +232,7 @@ impl ChildObjectResolver for InMemoryStore {
         parent: &ObjectID,
         child: &ObjectID,
         child_version_upper_bound: SequenceNumber,
-    ) -> sui_types::error::SuiResult<Option<Object>> {
+    ) -> rtd_types::error::RtdResult<Option<Object>> {
         let child_object = match crate::store::SimulatorStore::get_object(self, child) {
             None => return Ok(None),
             Some(obj) => obj,
@@ -240,7 +240,7 @@ impl ChildObjectResolver for InMemoryStore {
 
         let parent = *parent;
         if child_object.owner != Owner::ObjectOwner(parent.into()) {
-            return Err(SuiErrorKind::InvalidChildObjectAccess {
+            return Err(RtdErrorKind::InvalidChildObjectAccess {
                 object: *child,
                 given_parent: parent,
                 actual_owner: child_object.owner.clone(),
@@ -249,7 +249,7 @@ impl ChildObjectResolver for InMemoryStore {
         }
 
         if child_object.version() > child_version_upper_bound {
-            return Err(SuiErrorKind::UnsupportedFeatureError {
+            return Err(RtdErrorKind::UnsupportedFeatureError {
                 error: "TODO InMemoryStorage::read_child_object does not yet support bounded reads"
                     .to_owned(),
             }
@@ -265,7 +265,7 @@ impl ChildObjectResolver for InMemoryStore {
         receiving_object_id: &ObjectID,
         receive_object_at_version: SequenceNumber,
         _epoch_id: EpochId,
-    ) -> sui_types::error::SuiResult<Option<Object>> {
+    ) -> rtd_types::error::RtdResult<Option<Object>> {
         let recv_object = match crate::store::SimulatorStore::get_object(self, receiving_object_id)
         {
             None => return Ok(None),
@@ -283,7 +283,7 @@ impl ChildObjectResolver for InMemoryStore {
 }
 
 impl GetModule for InMemoryStore {
-    type Error = SuiError;
+    type Error = RtdError;
     type Item = CompiledModule;
 
     fn get_module_by_id(&self, id: &ModuleId) -> Result<Option<Self::Item>, Self::Error> {
@@ -294,7 +294,7 @@ impl GetModule for InMemoryStore {
 }
 
 impl ModuleResolver for InMemoryStore {
-    type Error = SuiError;
+    type Error = RtdError;
 
     fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Self::Error> {
         get_module(self, module_id)
@@ -309,7 +309,7 @@ impl ObjectStore for InMemoryStore {
     fn get_object_by_key(
         &self,
         object_id: &ObjectID,
-        version: sui_types::base_types::VersionNumber,
+        version: rtd_types::base_types::VersionNumber,
     ) -> Option<Object> {
         self.get_object_at_version(object_id, version).cloned()
     }
@@ -319,7 +319,7 @@ impl ParentSync for InMemoryStore {
     fn get_latest_parent_entry_ref_deprecated(
         &self,
         _object_id: ObjectID,
-    ) -> Option<sui_types::base_types::ObjectRef> {
+    ) -> Option<rtd_types::base_types::ObjectRef> {
         panic!("Never called in newer protocol versions")
     }
 }
@@ -328,12 +328,12 @@ impl ParentSync for InMemoryStore {
 pub struct KeyStore {
     validator_keys: BTreeMap<AuthorityName, AuthorityKeyPair>,
     #[allow(unused)]
-    account_keys: BTreeMap<SuiAddress, AccountKeyPair>,
+    account_keys: BTreeMap<RtdAddress, AccountKeyPair>,
 }
 
 impl KeyStore {
     pub fn from_network_config(
-        network_config: &sui_swarm_config::network_config::NetworkConfig,
+        network_config: &rtd_swarm_config::network_config::NetworkConfig,
     ) -> Self {
         use fastcrypto::traits::KeyPair;
 
@@ -363,7 +363,7 @@ impl KeyStore {
         self.validator_keys.get(name)
     }
 
-    pub fn accounts(&self) -> impl Iterator<Item = (&SuiAddress, &AccountKeyPair)> {
+    pub fn accounts(&self) -> impl Iterator<Item = (&RtdAddress, &AccountKeyPair)> {
         self.account_keys.iter()
     }
 }
@@ -416,15 +416,15 @@ impl SimulatorStore for InMemoryStore {
         self.get_object_at_version(id, version).cloned()
     }
 
-    fn get_system_state(&self) -> sui_types::sui_system_state::SuiSystemState {
+    fn get_system_state(&self) -> rtd_types::rtd_system_state::RtdSystemState {
         self.get_system_state()
     }
 
-    fn get_clock(&self) -> sui_types::clock::Clock {
+    fn get_clock(&self) -> rtd_types::clock::Clock {
         self.get_clock()
     }
 
-    fn owned_objects(&self, owner: SuiAddress) -> Box<dyn Iterator<Item = Object> + '_> {
+    fn owned_objects(&self, owner: RtdAddress) -> Box<dyn Iterator<Item = Object> + '_> {
         Box::new(self.owned_objects(owner).cloned())
     }
 
@@ -470,7 +470,7 @@ impl SimulatorStore for InMemoryStore {
         self.update_objects(written_objects, deleted_objects)
     }
 
-    fn backing_store(&self) -> &dyn sui_types::storage::BackingStore {
+    fn backing_store(&self) -> &dyn rtd_types::storage::BackingStore {
         self
     }
 }

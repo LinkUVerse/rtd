@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import {
@@ -7,8 +7,8 @@ import {
 	useCurrentAccount,
 	useDisconnectWallet,
 	useSwitchAccount,
-} from '@mysten/dapp-kit';
-import { formatAddress } from '@mysten/sui/utils';
+} from '@linku/dapp-kit';
+import { formatAddress } from '@linku/rtd/utils';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { useState } from 'react';
 

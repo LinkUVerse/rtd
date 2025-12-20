@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -48,9 +48,9 @@ export default function Home() {
         >
           <div className="w-full mt-8 mb-4 mx-auto">
             <div className={styles.heroText}>
-              <h1 className="h1 center-text text-white">Sui Documentation</h1>
+              <h1 className="h1 center-text text-white">Rtd Documentation</h1>
               <h2 className="h2 center-text h3" style={{ color: '#89919F' }}>
-                Discover the power of Sui through examples, guides, and concepts
+                Discover the power of Rtd through examples, guides, and concepts
               </h2>
             </div>
           </div>
@@ -58,16 +58,16 @@ export default function Home() {
             <HomeCard title="Developers">
               <Link
                 className={`${styles.cardLink} plausible-event-name=homepage+start+button`}
-                to="./guides/developer/getting-started/sui-install"
+                to="./guides/developer/getting-started/rtd-install"
               >
                 Getting Started
               </Link>
-              <Link className={styles.cardLink} to="./guides/developer/sui-101">
-                Sui Developer Basics
+              <Link className={styles.cardLink} to="./guides/developer/rtd-101">
+                Rtd Developer Basics
               </Link>
               <Link
                 className={styles.cardLink}
-                to="./concepts/sui-move-concepts"
+                to="./concepts/rtd-move-concepts"
               >
                 Move
               </Link>
@@ -81,19 +81,19 @@ export default function Home() {
               </Link>
               <Link
                 className={styles.cardLink}
-                to="./guides/operator/sui-full-node"
+                to="./guides/operator/rtd-full-node"
               >
-                Run a Sui Full Node
+                Run a Rtd Full Node
                 <span className="block bg-auto bg-[url(../static/img/index/right-arrow.svg)]"></span>
               </Link>
               <Link
                 className={styles.cardLink}
                 to="./guides/operator/bridge-node-configuration"
               >
-                Sui Bridge Node Configuration
+                Rtd Bridge Node Configuration
               </Link>
             </HomeCard>
-            <HomeCard title="About Sui">
+            <HomeCard title="About Rtd">
               <Link className={styles.cardLink} to="./concepts/tokenomics">
                 Tokenomics
               </Link>
@@ -107,22 +107,22 @@ export default function Home() {
             <HomeCard title="References" aux>
               <Link
                 className={styles.cardLink}
-                to="https://sdk.mystenlabs.com/dapp-kit?ref=blog.sui.io"
+                to="https://sdk.linkulabs.com/dapp-kit?ref=blog.rtd.io"
               >
-                Sui dApp Kit
+                Rtd dApp Kit
               </Link>
-              <Link className={styles.cardLink} to="/references/sui-api">
-                Sui API
+              <Link className={styles.cardLink} to="/references/rtd-api">
+                Rtd API
               </Link>
               <Link
                 className={styles.cardLink}
-                to="https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/docs"
+                to="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/docs"
               >
-                Sui Framework
+                Rtd Framework
               </Link>
               <Link
                 className={styles.cardLink}
-                to="https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk"
+                to="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk"
               >
                 Rust SDK
               </Link>
@@ -130,21 +130,21 @@ export default function Home() {
             <HomeCard title="Resources" aux>
               <Link
                 className={styles.cardLink}
-                to="https://sui.directory/?_project_type=api%2Cdeveloper-tools%2Cinfrastructure%2Csdk"
+                to="https://rtd.directory/?_project_type=api%2Cdeveloper-tools%2Cinfrastructure%2Csdk"
               >
-                Sui Ecosystem
+                Rtd Ecosystem
               </Link>
-              <Link className={styles.cardLink} to="/references/awesome-sui">
-                Awesome Sui
+              <Link className={styles.cardLink} to="/references/awesome-rtd">
+                Awesome Rtd
               </Link>
-              <Link className={styles.cardLink} to="https://blog.sui.io/">
-                Sui blog
+              <Link className={styles.cardLink} to="https://blog.rtd.io/">
+                Rtd blog
               </Link>
               <Link
                 className={styles.cardLink}
                 to="guides/developer/dev-cheat-sheet"
               >
-                Sui Developer Cheat Sheet
+                Rtd Developer Cheat Sheet
               </Link>
             </HomeCard>
             <HomeCardCTA>
@@ -152,7 +152,7 @@ export default function Home() {
                 className={styles.cardCTALink}
                 to="/guides/developer/getting-started/hello-world"
               >
-                <span>Build your dApp on Sui</span>
+                <span>Build your dApp on Rtd</span>
                 <svg
                   width="11"
                   height="11"

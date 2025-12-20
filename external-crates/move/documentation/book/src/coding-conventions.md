@@ -1,1 +1,1 @@
-See [Sui's Coding Conventions for Move](https://docs.sui.io/concepts/sui-move-concepts/conventions)
+See [Rtd's Coding Conventions for Move](https://docs.rtd.io/concepts/rtd-move-concepts/conventions)

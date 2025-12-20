@@ -1,0 +1,27 @@
+---
+source: crates/rtd/src/client_ptb/lexer.rs
+assertion_line: 481
+expression: lex(unexpected)
+---
+[
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 5,
+        },
+        value: Lexeme(
+            Ident,
+            "hello",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 5,
+            end: 6,
+        },
+        value: Lexeme(
+            Unexpected,
+            ":",
+        ),
+    },
+]
