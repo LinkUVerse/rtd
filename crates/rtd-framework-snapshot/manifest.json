@@ -2338,5 +2338,35 @@
         "id": "0x000000000000000000000000000000000000000000000000000000000000000b"
       }
     ]
+  },
+  "105": {
+    "git_revision": "8302ffaeda1b7cea22190dfbd8edae0bfd68067d",
+    "packages": [
+      {
+        "name": "MoveStdlib",
+        "path": "crates/rtd-framework/packages/move-stdlib",
+        "id": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      {
+        "name": "Rtd",
+        "path": "crates/rtd-framework/packages/rtd-framework",
+        "id": "0x0000000000000000000000000000000000000000000000000000000000000002"
+      },
+      {
+        "name": "RtdSystem",
+        "path": "crates/rtd-framework/packages/rtd-system",
+        "id": "0x0000000000000000000000000000000000000000000000000000000000000003"
+      },
+      {
+        "name": "DeepBook",
+        "path": "crates/rtd-framework/packages/deepbook",
+        "id": "0x000000000000000000000000000000000000000000000000000000000000dee9"
+      },
+      {
+        "name": "Bridge",
+        "path": "crates/rtd-framework/packages/bridge",
+        "id": "0x000000000000000000000000000000000000000000000000000000000000000b"
+      }
+    ]
   }
 }
