@@ -11,6 +11,9 @@
 
 # Rust build directory
 **/target
+target/
+target-codex-debug/
+target-codex-release/
 .pre-commit*
 
 # Move build directory
