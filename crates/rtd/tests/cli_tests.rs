@@ -2340,6 +2340,28 @@ async fn test_package_upgrade_command() -> Result<(), anyhow::Error> {
         create_temp_dir_with_framework_packages("dummy_modules_upgrade", Some(chain_id))?;
 
     let build_config = BuildConfig::new_for_testing().config;
+    let dry_run = RtdClientCommands::Publish(PublishArgs {
+        package_path: package_path.clone(),
+        build_config: build_config.clone(),
+        skip_dependency_verification: false,
+        verify_deps: true,
+        with_unpublished_dependencies: false,
+        payment: PaymentArgs {
+            gas: vec![gas_obj_id],
+        },
+        gas_data: GasDataArgs {
+            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs {
+            dry_run: true,
+            ..Default::default()
+        },
+    })
+    .execute(context)
+    .await?;
+    assert!(matches!(dry_run, RtdClientCommandResult::DryRun(_)));
+
     let resp = RtdClientCommands::Publish(PublishArgs {
         package_path: package_path.clone(),
         build_config: build_config.clone(),
@@ -2369,6 +2391,30 @@ async fn test_package_upgrade_command() -> Result<(), anyhow::Error> {
 
     assert!(effects.status.is_ok());
     assert_eq!(effects.gas_object().object_id(), gas_obj_id);
+
+    let dry_run = RtdClientCommands::Upgrade {
+        package_path: package_path.clone(),
+        upgrade_capability: None,
+        build_config: build_config.clone(),
+        skip_verify_compatibility: false,
+        skip_dependency_verification: false,
+        verify_deps: true,
+        with_unpublished_dependencies: false,
+        payment: PaymentArgs {
+            gas: vec![gas_obj_id],
+        },
+        gas_data: GasDataArgs {
+            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs {
+            dry_run: true,
+            ..Default::default()
+        },
+    }
+    .execute(context)
+    .await?;
+    assert!(matches!(dry_run, RtdClientCommandResult::DryRun(_)));
 
     // Now run the upgrade
     let resp = RtdClientCommands::Upgrade {
