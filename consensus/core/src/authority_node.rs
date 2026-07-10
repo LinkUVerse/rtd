@@ -1,7 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use consensus_config::{AuthorityIndex, Committee, NetworkKeyPair, Parameters, ProtocolKeyPair};
 use itertools::Itertools;
@@ -45,6 +48,10 @@ pub enum ConsensusAuthority {
     WithTonic(AuthorityNode<TonicManager>),
 }
 
+fn should_sync_last_known_own_block(boot_counter: u64, timeout: Duration) -> bool {
+    boot_counter == 0 && !timeout.is_zero()
+}
+
 impl ConsensusAuthority {
     pub async fn start(
         network_type: NetworkType,
@@ -59,10 +66,9 @@ impl ConsensusAuthority {
         transaction_verifier: Arc<dyn TransactionVerifier>,
         commit_consumer: CommitConsumerArgs,
         registry: Registry,
-        // A counter that keeps track of how many times the authority node has been booted while the binary
-        // or the component that is calling the `ConsensusAuthority` has been running. It's mostly useful to
-        // make decisions on whether amnesia recovery should run or not. When `boot_counter` is 0, then `ConsensusAuthority`
-        // will initiate the process of amnesia recovery if that's enabled in the parameters.
+        // A counter that keeps track of how many times the consensus authority has been booted while the process
+        // has been running. It's useful for making decisions on whether amnesia recovery should run.
+        // When `boot_counter` is 0, `ConsensusAuthority` will initiate the process of amnesia recovery if that's enabled in the parameters.
         boot_counter: u64,
     ) -> Self {
         match network_type {
@@ -231,13 +237,16 @@ where
         let proposed_block_handler =
             spawn_logged_monitored_task!(proposed_block_handler.run(), "proposed_block_handler");
 
-        let sync_last_known_own_block = boot_counter == 0
-            && dag_state.read().highest_accepted_round() == 0
-            && !context
-                .parameters
-                .sync_last_known_own_block_timeout
-                .is_zero();
-        info!("Sync last known own block: {sync_last_known_own_block}");
+        let sync_last_known_own_block = should_sync_last_known_own_block(
+            boot_counter,
+            context.parameters.sync_last_known_own_block_timeout,
+        );
+        info!(
+            "Sync last known own block: {}. Boot count: {}. Timeout: {:?}.",
+            sync_last_known_own_block,
+            boot_counter,
+            context.parameters.sync_last_known_own_block_timeout
+        );
 
         let block_manager = BlockManager::new(context.clone(), dag_state.clone());
 
@@ -426,6 +435,13 @@ mod tests {
         block::{BlockAPI as _, CertifiedBlocksOutput, GENESIS_ROUND},
         transaction::NoopTransactionVerifier,
     };
+
+    #[test]
+    fn test_sync_last_known_own_block_on_first_process_boot() {
+        assert!(should_sync_last_known_own_block(0, Duration::from_secs(1)));
+        assert!(!should_sync_last_known_own_block(1, Duration::from_secs(1)));
+        assert!(!should_sync_last_known_own_block(0, Duration::ZERO));
+    }
 
     #[rstest]
     #[tokio::test]
