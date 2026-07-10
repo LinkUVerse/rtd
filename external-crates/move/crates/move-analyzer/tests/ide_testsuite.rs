@@ -573,7 +573,7 @@ fn use_def_test_rtdte<F: MoveFlavor>(
             // We do incremental compilation only for the first file in the test rtdte.
             // The results for remaining files should still be correct due to all symbols
             // being computed during the initial full compilation at rtdte level, and
-            // due to merging of symbols from modified and unmofdified files
+            // due to merging of symbols from modified and unmodified files
             // (which is what it is being tested here).
 
             let original = std::fs::read_to_string(&cpath)?;
