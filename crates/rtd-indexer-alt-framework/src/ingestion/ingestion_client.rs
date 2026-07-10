@@ -77,7 +77,7 @@ pub enum FetchError {
         #[source]
         error: anyhow::Error,
     },
-    #[error("Permenent error in {reason}: {error}")]
+    #[error("Permanent error in {reason}: {error}")]
     Permanent {
         reason: &'static str,
         #[source]
@@ -384,6 +384,19 @@ mod tests {
         let mock_client = Arc::new(MockIngestionClient::default());
         let client = IngestionClient::new_impl(mock_client.clone(), metrics);
         (client, mock_client)
+    }
+
+    #[test]
+    fn test_permanent_fetch_error_message() {
+        let error = FetchError::Permanent {
+            reason: "checkpoint decoding",
+            error: anyhow::anyhow!("invalid data"),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "Permanent error in checkpoint decoding: invalid data"
+        );
     }
 
     #[tokio::test]
