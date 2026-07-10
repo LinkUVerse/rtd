@@ -29,6 +29,36 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 
 #[test]
+fn test_move_calls_include_command_index() {
+    let transaction = ProgrammableTransaction {
+        inputs: vec![],
+        commands: vec![
+            Command::move_call(
+                RTD_FRAMEWORK_PACKAGE_ID,
+                Identifier::new("example").unwrap(),
+                Identifier::new("first").unwrap(),
+                vec![],
+                vec![],
+            ),
+            Command::MakeMoveVec(None, vec![]),
+            Command::move_call(
+                RTD_FRAMEWORK_PACKAGE_ID,
+                Identifier::new("example").unwrap(),
+                Identifier::new("second").unwrap(),
+                vec![],
+                vec![],
+            ),
+        ],
+    };
+
+    let calls = transaction.move_calls();
+    assert_eq!(calls[0].0, 0);
+    assert_eq!(calls[0].3, "first");
+    assert_eq!(calls[1].0, 2);
+    assert_eq!(calls[1].3, "second");
+}
+
+#[test]
 fn test_signed_values() {
     let mut authorities: BTreeMap<AuthorityPublicKeyBytes, u64> = BTreeMap::new();
     // TODO: refactor this test to not reuse the same keys for user and authority signing
