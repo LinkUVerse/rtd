@@ -29,16 +29,16 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 28	dcbf21a9840392f95ec120d6bafc661507fdb384	2026-01-05	fix: remove dead network_type from simtests config (#24760)	REVIEWED	EXCLUDE_FEATURE		删除未使用的 simtest network_type 配置
 29	f90d706acb71c7816104d5d106a8254dbf86b117	2026-01-05	fix permanent (#24728)	APPLIED	MERGE	62090c5d991f0cc3cc8bba18e63ccce7c71c3de8	修正 indexer ingestion 永久错误消息拼写
 30	4d8574f5bda22bac93dec9e082e01d6c4bb335e6	2026-01-05	Alt Framework Analytics Indexer (#24716)	REVIEWED	EXCLUDE_FEATURE		新增 analytics indexer alt framework 架构
-31	a9506dcf899903360d3ef6ef108f83f42753be5f	2026-01-05	[package-alt] implement --allow-dirty and fix --install-dir (#24715)	UNREVIEWED			
-32	ebc792b45b15cf18c50532dd11fb376df61c30d8	2026-01-05	graphql: clamp indices for pagination (#24785)	UNREVIEWED			
-33	1b08d0f6b41e2981e9d6a2f590f6f1771b903613	2026-01-05	remove overly verbose logs (#24791)	UNREVIEWED			
-34	2b0a76efc889cd65c4a4664b457387b6b187ece0	2026-01-05	[move-ide] Better on-hover value display for string constants (#24704)	UNREVIEWED			
-35	29de39bd6db5319f2b0b712f64be8b188d1d2057	2026-01-05	[move][cleanup] Remove `once_cell` in favor of not-stable `LazyLock` in `std` (#24695)	UNREVIEWED			
-36	2493af7373b531cfcef697c4f756f16bbc70b2f3	2026-01-05	[gas] New computation gas rounding (#24600)	UNREVIEWED			
-37	01e3d24f39e42e246aa279c05ba2ba7dba1e85d9	2026-01-06	graphql: delete GraphQL Alpha and Legacy Indexer (#24767)	UNREVIEWED			
-38	bcc86aee4bc45c738f1b62d3f75276997376688a	2026-01-06	refactor(basic-indexer): use Service abstraction	UNREVIEWED			
-39	47eedfae1867590748b5d6ddbb5b1be1561dd8e4	2026-01-06	refactor(clickhouse-indexer): use Service abstraction	UNREVIEWED			
-40	5474df434f777e3e4c9a0e426b173e22245ce3a1	2026-01-06	refactor(walrus-indexer): use Service abstraction	UNREVIEWED			
+31	a9506dcf899903360d3ef6ef108f83f42753be5f	2026-01-05	[package-alt] implement --allow-dirty and fix --install-dir (#24715)	REVIEWED	EXCLUDE_FEATURE		PackageLoader/allow-dirty feature 与大范围 API 迁移，install-dir 无独立小补丁
+32	ebc792b45b15cf18c50532dd11fb376df61c30d8	2026-01-05	graphql: clamp indices for pagination (#24785)	APPLIED	MERGE	ff9a47210d367e7dc887bd669bb907a478950ba3	限制索引游标范围，避免越界 node 访问
+33	1b08d0f6b41e2981e9d6a2f590f6f1771b903613	2026-01-05	remove overly verbose logs (#24791)	REVIEWED	EXCLUDE_FEATURE		只删除高频日志，不改变行为
+34	2b0a76efc889cd65c4a4664b457387b6b187ece0	2026-01-05	[move-ide] Better on-hover value display for string constants (#24704)	APPLIED	MERGE	4b82d050ae81a3b611e889219edbda85dbdf5896	使用 compiler analysis 保留 string constant hover 原文
+35	29de39bd6db5319f2b0b712f64be8b188d1d2057	2026-01-05	[move][cleanup] Remove `once_cell` in favor of not-stable `LazyLock` in `std` (#24695)	REVIEWED	EXCLUDE_FEATURE		行为不变的 LazyLock 依赖清理
+36	2493af7373b531cfcef697c4f756f16bbc70b2f3	2026-01-05	[gas] New computation gas rounding (#24600)	REVIEWED	EXCLUDE_FEATURE		协议 107 新 computation gas rounding 规则
+37	01e3d24f39e42e246aa279c05ba2ba7dba1e85d9	2026-01-06	graphql: delete GraphQL Alpha and Legacy Indexer (#24767)	REVIEWED	EXCLUDE_FEATURE		大规模退役 GraphQL Alpha 与 legacy indexer
+38	bcc86aee4bc45c738f1b62d3f75276997376688a	2026-01-06	refactor(basic-indexer): use Service abstraction	REVIEWED	EXCLUDE_FEATURE		basic indexer 示例 Service API 迁移
+39	47eedfae1867590748b5d6ddbb5b1be1561dd8e4	2026-01-06	refactor(clickhouse-indexer): use Service abstraction	REVIEWED	EXCLUDE_FEATURE		ClickHouse indexer 示例 Service API 迁移
+40	5474df434f777e3e4c9a0e426b173e22245ce3a1	2026-01-06	refactor(walrus-indexer): use Service abstraction	REVIEWED	EXCLUDE_FEATURE		Walrus indexer 示例 Service API 迁移
 41	d1182c0080d2a245862784da2f800673b49fb109	2026-01-06	graphql: raise 500 for panics	UNREVIEWED			
 42	a342a9edf7954c255d6c95664a4c601ac2c580e2	2026-01-06	jsonrpc-alt: catch panic handler	UNREVIEWED			
 43	c3a01cacd606407c5f828526321115ed88988bad	2026-01-06	consistent-store: raise internal error for panics	UNREVIEWED			
