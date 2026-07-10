@@ -11,10 +11,11 @@ use axum::extract::Request;
 use axum::response::IntoResponse;
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
+use linku_network::callback::CallbackLayer;
 use metrics::RpcMetrics;
 use middleware::metrics::MakeMetricsHandler;
+use middleware::panic::CatchPanicLayer;
 use middleware::version::Version;
-use linku_network::callback::CallbackLayer;
 use prometheus::Registry;
 use rtd_futures::service::Service;
 use tokio::net::TcpListener;
@@ -188,11 +189,12 @@ impl<'d> RpcService<'d> {
         router = add_service(router, reflection_v1alpha);
         router = add_service(router, health_service);
         router = router
-            .layer(CallbackLayer::new(MakeMetricsHandler::new(metrics)))
+            .layer(CallbackLayer::new(MakeMetricsHandler::new(metrics.clone())))
             .layer(axum::middleware::from_fn_with_state(
                 Version(version),
                 middleware::version::set_version,
-            ));
+            ))
+            .layer(CatchPanicLayer::new(metrics));
 
         for service_name in service_names {
             health_reporter

@@ -13248,6 +13248,7 @@ dependencies = [
  "move-core-types",
  "object_store",
  "ouroboros 0.17.2",
+ "pin-project",
  "prometheus",
  "reqwest 0.12.9",
  "rocksdb",
