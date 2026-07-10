@@ -190,6 +190,28 @@ async fn scan_blocks(
 
 #[rstest]
 #[tokio::test]
+async fn scan_last_blocks_across_vecdeque_wraparound(
+    #[values(new_rocksdb_teststore(), new_mem_teststore())] test_store: TestStore,
+) {
+    let store = test_store.store();
+    let author = AuthorityIndex::new_for_test(1);
+    let written_blocks = (1..=5)
+        .map(|round| VerifiedBlock::new_for_test(TestBlock::new(round, 1).build()))
+        .collect::<Vec<_>>();
+
+    store
+        .write(WriteBatch::default().blocks(written_blocks.clone()))
+        .unwrap();
+
+    let scanned_blocks = store
+        .scan_last_blocks_by_author(author, written_blocks.len() as u64, None)
+        .expect("Scan blocks should not fail");
+
+    assert_eq!(scanned_blocks, written_blocks);
+}
+
+#[rstest]
+#[tokio::test]
 async fn read_and_scan_commits(
     #[values(new_rocksdb_teststore(), new_mem_teststore())] test_store: TestStore,
 ) {
