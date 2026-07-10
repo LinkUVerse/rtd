@@ -201,14 +201,25 @@ impl DiscoveryEventLoop {
     }
 
     fn configure_preferred_peers(&mut self) {
-        for (peer_id, address) in self
+        for (peer_id, address, affinity) in self
             .discovery_config
             .allowlisted_peers
             .iter()
-            .map(|sp| (sp.peer_id, sp.address.clone()))
+            .map(|sp| {
+                (
+                    sp.peer_id,
+                    sp.address.clone(),
+                    anemo::types::PeerAffinity::Allowed,
+                )
+            })
             .chain(self.config.seed_peers.iter().filter_map(|ap| {
-                ap.peer_id
-                    .map(|peer_id| (peer_id, Some(ap.address.clone())))
+                ap.peer_id.map(|peer_id| {
+                    (
+                        peer_id,
+                        Some(ap.address.clone()),
+                        anemo::types::PeerAffinity::High,
+                    )
+                })
             }))
         {
             let anemo_address = if let Some(address) = address {
@@ -221,11 +232,9 @@ impl DiscoveryEventLoop {
                 None
             };
 
-            // TODO: once we have `PeerAffinity::Allowlisted` we should update allowlisted peers'
-            // affinity.
             let peer_info = anemo::types::PeerInfo {
                 peer_id,
-                affinity: anemo::types::PeerAffinity::High,
+                affinity,
                 address: anemo_address.into_iter().collect(),
             };
             debug!(?peer_info, "Add configured preferred peer");
