@@ -1,12 +1,17 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{convert::Infallible, fmt::Display};
+use std::{any::Any, convert::Infallible, fmt::Display, sync::Arc};
 
+use axum::{Json, response::IntoResponse};
 use jsonrpsee::types::{
     ErrorObject,
     error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE},
 };
+use serde_json::json;
+use tower_http::catch_panic::ResponseForPanic;
+
+use crate::metrics::RpcMetrics;
 
 /// Request timed out.
 pub const TIMEOUT_ERROR_CODE: i32 = -32604;
@@ -66,6 +71,18 @@ pub(crate) enum RpcError<E: std::error::Error = Infallible> {
 
     #[error("Internal Error: {0:#}")]
     InternalError(#[from] anyhow::Error),
+}
+
+/// Converts panics during request processing into JSON-RPC internal errors.
+#[derive(Clone)]
+pub(crate) struct PanicHandler {
+    metrics: Arc<RpcMetrics>,
+}
+
+impl PanicHandler {
+    pub fn new(metrics: Arc<RpcMetrics>) -> Self {
+        Self { metrics }
+    }
 }
 
 impl<T, E: std::error::Error> InternalContext<T, E> for Result<T, RpcError<E>> {
@@ -130,5 +147,34 @@ pub(crate) fn client_error_to_error_object(
         // internal errors.
         jsonrpsee::core::ClientError::Call(e) => e,
         _ => ErrorObject::owned(INTERNAL_ERROR_CODE, error.to_string(), None::<()>),
+    }
+}
+
+impl ResponseForPanic for PanicHandler {
+    type ResponseBody = axum::body::Body;
+
+    fn response_for_panic(
+        &mut self,
+        err: Box<dyn Any + Send + 'static>,
+    ) -> axum::http::Response<Self::ResponseBody> {
+        self.metrics.requests_panicked.inc();
+
+        let err = if let Some(s) = err.downcast_ref::<String>() {
+            anyhow::anyhow!(s.clone()).context("Request panicked")
+        } else if let Some(s) = err.downcast_ref::<&str>() {
+            anyhow::anyhow!(s.to_string()).context("Request panicked")
+        } else {
+            anyhow::anyhow!("Request panicked")
+        };
+
+        let err: RpcError = err.into();
+        let err: ErrorObject<'static> = err.into();
+
+        Json(json!({
+            "jsonrpc": "2.0",
+            "error": err,
+            "id": null,
+        }))
+        .into_response()
     }
 }
