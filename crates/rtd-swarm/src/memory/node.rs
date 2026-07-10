@@ -3,13 +3,13 @@
 
 use anyhow::Result;
 use anyhow::anyhow;
-use std::sync::Mutex;
-use std::sync::MutexGuard;
 use rtd_config::NodeConfig;
 use rtd_node::RtdNodeHandle;
 use rtd_types::base_types::AuthorityName;
 use rtd_types::base_types::ConciseableName;
 use rtd_types::crypto::KeypairTraits;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
 use tap::TapFallible;
 use tracing::{error, info};
 
@@ -25,6 +25,7 @@ use super::container::Container;
 pub struct Node {
     container: Mutex<Option<Container>>,
     config: Mutex<NodeConfig>,
+    startup_target: Mutex<Option<u64>>,
     runtime_type: RuntimeType,
 }
 
@@ -39,6 +40,7 @@ impl Node {
         Self {
             container: Default::default(),
             config: config.into(),
+            startup_target: Default::default(),
             runtime_type: RuntimeType::SingleThreaded,
         }
     }
@@ -60,8 +62,14 @@ impl Node {
     pub async fn spawn(&self) -> Result<()> {
         info!(name =% self.name().concise(), "starting in-memory node");
         let config = self.config().clone();
-        *self.container.lock().unwrap() = Some(Container::spawn(config, self.runtime_type).await);
+        let startup_target = *self.startup_target.lock().unwrap();
+        *self.container.lock().unwrap() =
+            Some(Container::spawn(config, self.runtime_type, startup_target).await);
         Ok(())
+    }
+
+    pub fn set_startup_target(&self, startup_target: u64) {
+        *self.startup_target.lock().unwrap() = Some(startup_target);
     }
 
     /// Start this Node, waiting until its completely started up.
@@ -133,6 +141,14 @@ impl Node {
                         self.name().concise()
                     )
                 })?;
+        } else if let Some(readiness) = self
+            .get_node_handle()
+            .and_then(|handle| handle.with(|node| node.fullnode_readiness().cloned()))
+        {
+            readiness
+                .ensure_ready()
+                .map_err(anyhow::Error::new)
+                .map_err(HealthCheckError::Failure)?;
         }
 
         Ok(())

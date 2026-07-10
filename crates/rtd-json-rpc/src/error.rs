@@ -8,7 +8,6 @@ use itertools::Itertools;
 use jsonrpsee::core::ClientError as RpcError;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use std::collections::BTreeMap;
 use rtd_json_rpc_api::{TRANSACTION_EXECUTION_CLIENT_ERROR_CODE, TRANSIENT_ERROR_CODE};
 use rtd_name_service::NameServiceError;
 use rtd_types::committee::{QUORUM_THRESHOLD, TOTAL_VOTING_POWER};
@@ -16,6 +15,7 @@ use rtd_types::error::{
     ErrorCategory, RtdError, RtdErrorKind, RtdObjectResponseError, UserInputError,
 };
 use rtd_types::quorum_driver_types::QuorumDriverError;
+use std::collections::BTreeMap;
 use thiserror::Error;
 use tokio::task::JoinError;
 
@@ -167,7 +167,8 @@ impl From<Error> for ErrorObjectOwned {
                     }
                     QuorumDriverError::TimeoutBeforeFinality
                     | QuorumDriverError::TimeoutBeforeFinalityWithErrors { .. }
-                    | QuorumDriverError::FailedWithTransientErrorAfterMaximumAttempts { .. } => {
+                    | QuorumDriverError::FailedWithTransientErrorAfterMaximumAttempts { .. }
+                    | QuorumDriverError::FullnodeCatchingUp { .. } => {
                         ErrorObject::owned(TRANSIENT_ERROR_CODE, err.to_string(), None::<()>)
                     }
                     QuorumDriverError::ObjectsDoubleUsed { conflicting_txes } => {
@@ -376,6 +377,18 @@ mod tests {
             SequenceNumber::from_u64(0),
             ObjectDigest::new([id; 32]),
         )
+    }
+
+    #[test]
+    fn fullnode_catching_up_is_a_transient_json_rpc_error() {
+        let error_object: ErrorObjectOwned =
+            Error::QuorumDriverError(QuorumDriverError::FullnodeCatchingUp {
+                details: "startup target 42, executed 41".to_string(),
+            })
+            .into();
+
+        assert_eq!(error_object.code(), TRANSIENT_ERROR_CODE);
+        assert!(error_object.message().contains("Fullnode is catching up"));
     }
 
     mod match_quorum_driver_error_tests {

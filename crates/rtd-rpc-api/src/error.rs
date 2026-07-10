@@ -153,6 +153,10 @@ impl From<rtd_types::quorum_driver_types::QuorumDriverError> for RpcError {
                     "timed-out before finality could be reached",
                 )
             }
+            FullnodeCatchingUp { details } => RpcError::new(
+                Code::Unavailable,
+                format!("Fullnode is catching up: {details}"),
+            ),
             TimeoutBeforeFinalityWithErrors {
                 last_error,
                 attempts,
@@ -235,6 +239,23 @@ impl From<rtd_types::quorum_driver_types::QuorumDriverError> for RpcError {
 impl From<crate::proto::google::rpc::bad_request::FieldViolation> for RpcError {
     fn from(value: crate::proto::google::rpc::bad_request::FieldViolation) -> Self {
         BadRequest::from(value).into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RpcError;
+    use rtd_types::quorum_driver_types::QuorumDriverError;
+
+    #[test]
+    fn fullnode_catching_up_maps_to_unavailable() {
+        let status: tonic::Status = RpcError::from(QuorumDriverError::FullnodeCatchingUp {
+            details: "startup target 42, executed 41".to_string(),
+        })
+        .into();
+
+        assert_eq!(status.code(), tonic::Code::Unavailable);
+        assert!(status.message().contains("Fullnode is catching up"));
     }
 }
 

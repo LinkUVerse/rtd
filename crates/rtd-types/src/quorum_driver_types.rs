@@ -56,6 +56,8 @@ pub enum QuorumDriverError {
         "Transaction failed to reach finality with transient error after {total_attempts} attempts."
     )]
     FailedWithTransientErrorAfterMaximumAttempts { total_attempts: u32 },
+    #[error("Fullnode is catching up: {details}")]
+    FullnodeCatchingUp { details: String },
     #[error("{NON_RECOVERABLE_ERROR_MSG}: {errors:?}.")]
     NonRecoverableTransactionError { errors: GroupedErrors },
     #[error(
@@ -93,6 +95,7 @@ impl QuorumDriverError {
             QuorumDriverError::TimeoutBeforeFinality => true,
             QuorumDriverError::TimeoutBeforeFinalityWithErrors { .. } => true,
             QuorumDriverError::FailedWithTransientErrorAfterMaximumAttempts { .. } => true,
+            QuorumDriverError::FullnodeCatchingUp { .. } => true,
             QuorumDriverError::NonRecoverableTransactionError { .. } => false,
             QuorumDriverError::SystemOverload { .. } => true,
             QuorumDriverError::SystemOverloadRetryAfter { .. } => true,

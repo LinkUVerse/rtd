@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prometheus::Registry;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Weak};
 use rtd_config::NodeConfig;
 use rtd_node::{RtdNode, RtdNodeHandle};
 use rtd_types::base_types::ConciseableName;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tracing::{info, trace};
 
@@ -36,7 +36,11 @@ impl Drop for Container {
 
 impl Container {
     /// Spawn a new Node.
-    pub async fn spawn(config: NodeConfig, _runtime: RuntimeType) -> Self {
+    pub async fn spawn(
+        config: NodeConfig,
+        _runtime: RuntimeType,
+        startup_target: Option<u64>,
+    ) -> Self {
         let (startup_sender, mut startup_receiver) = tokio::sync::watch::channel(Weak::new());
         let (cancel_sender, cancel_receiver) = tokio::sync::watch::channel(false);
 
@@ -60,7 +64,13 @@ impl Container {
                 let startup_sender = startup_sender.clone();
                 async move {
                     let registry_service = linku_metrics::RegistryService::new(Registry::new());
-                    let server = RtdNode::start(config, registry_service).await.unwrap();
+                    let server = RtdNode::start_with_startup_target(
+                        config,
+                        registry_service,
+                        startup_target,
+                    )
+                    .await
+                    .unwrap();
 
                     startup_sender.send(Arc::downgrade(&server)).ok();
 

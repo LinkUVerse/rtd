@@ -51,6 +51,7 @@ uuid.workspace = true
 url.workspace = true
 
 rtd-config.workspace = true
+rtd-core.workspace = true
 rtd-bridge.workspace = true
 rtd-data-store.workspace = true
 rtd-execution.workspace = true

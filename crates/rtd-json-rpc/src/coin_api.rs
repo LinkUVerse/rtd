@@ -15,6 +15,7 @@ use tap::TapFallible;
 use tracing::{debug, instrument};
 
 use rtd_core::authority::AuthorityState;
+use rtd_core::node_readiness::FullnodeReadiness;
 use rtd_json_rpc_api::{CoinReadApiOpenRpc, CoinReadApiServer, JsonRpcMetrics, cap_page_limit};
 use rtd_json_rpc_types::Balance;
 use rtd_json_rpc_types::{CoinPage, RtdCoinMetadata};
@@ -28,6 +29,7 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::gas_coin::{GAS, TOTAL_SUPPLY_MIST};
 use rtd_types::object::Object;
 use rtd_types::parse_rtd_struct_tag;
+use rtd_types::quorum_driver_types::QuorumDriverError;
 use rtd_types::storage::ObjectStore;
 
 #[cfg(test)]
@@ -52,6 +54,7 @@ pub fn parse_to_type_tag(coin_type: Option<String>) -> Result<TypeTag, RtdRpcInp
 pub struct CoinReadApi {
     // Trait object w/ Box as we do not need to share this across multiple threads
     internal: Box<dyn CoinReadInternal + Send + Sync>,
+    readiness: Option<Arc<FullnodeReadiness>>,
 }
 
 impl CoinReadApi {
@@ -66,7 +69,38 @@ impl CoinReadApi {
                 transaction_kv_store,
                 metrics,
             )),
+            readiness: None,
         }
+    }
+
+    pub fn new_with_readiness(
+        state: Arc<AuthorityState>,
+        transaction_kv_store: Arc<TransactionKeyValueStore>,
+        metrics: Arc<JsonRpcMetrics>,
+        readiness: Arc<FullnodeReadiness>,
+    ) -> Self {
+        Self {
+            internal: Box::new(CoinReadInternalImpl::new(
+                state,
+                transaction_kv_store,
+                metrics,
+            )),
+            readiness: Some(readiness),
+        }
+    }
+
+    fn ensure_ready(&self) -> RpcResult<()> {
+        if let Some(readiness) = &self.readiness {
+            readiness
+                .ensure_ready()
+                .map_err(|error| -> jsonrpsee::types::ErrorObjectOwned {
+                    Error::QuorumDriverError(QuorumDriverError::FullnodeCatchingUp {
+                        details: error.to_string(),
+                    })
+                    .into()
+                })?;
+        }
+        Ok(())
     }
 }
 
@@ -125,6 +159,7 @@ impl CoinReadApiServer for CoinReadApi {
         cursor: Option<String>,
         limit: Option<usize>,
     ) -> RpcResult<CoinPage> {
+        self.ensure_ready()?;
         with_tracing!(async move {
             let coin_type_tag = parse_to_type_tag(coin_type)?;
 
@@ -165,6 +200,7 @@ impl CoinReadApiServer for CoinReadApi {
         cursor: Option<String>,
         limit: Option<usize>,
     ) -> RpcResult<CoinPage> {
+        self.ensure_ready()?;
         with_tracing!(async move {
             let cursor = match cursor {
                 Some(c) => {
@@ -204,6 +240,7 @@ impl CoinReadApiServer for CoinReadApi {
         owner: RtdAddress,
         coin_type: Option<String>,
     ) -> RpcResult<Balance> {
+        self.ensure_ready()?;
         with_tracing!(async move {
             let coin_type_tag = parse_to_type_tag(coin_type)?;
             let balance = self
@@ -225,6 +262,7 @@ impl CoinReadApiServer for CoinReadApi {
 
     #[instrument(skip(self))]
     async fn get_all_balances(&self, owner: RtdAddress) -> RpcResult<Vec<Balance>> {
+        self.ensure_ready()?;
         with_tracing!(async move {
             let all_balance = self.internal.get_all_balance(owner).await.tap_err(|e| {
                 debug!(?owner, "Failed to get all balance with error: {:?}", e);
@@ -525,13 +563,16 @@ mod tests {
     use mockall::predicate;
     use move_core_types::account_address::AccountAddress;
     use move_core_types::language_storage::StructTag;
+    use rtd_core::checkpoints::CheckpointStore;
+    use rtd_core::node_readiness::FullnodeReadiness;
+    use rtd_json_rpc_api::TRANSIENT_ERROR_CODE;
     use rtd_json_rpc_types::Coin;
     use rtd_storage::key_value_store::{
         KVStoreCheckpointData, KVStoreTransactionData, TransactionKeyValueStoreTrait,
     };
     use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
     use rtd_types::balance::Supply;
-    use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
     use rtd_types::coin::TreasuryCap;
     use rtd_types::digests::{ObjectDigest, TransactionDigest};
     use rtd_types::effects::{TransactionEffects, TransactionEvents};
@@ -604,12 +645,35 @@ mod tests {
             let kv_store = kv_store.unwrap_or_else(|| Arc::new(MockKeyValueStore::new()));
             Self {
                 internal: Box::new(CoinReadInternalImpl::new_for_tests(state, Some(kv_store))),
+                readiness: None,
             }
         }
     }
 
     fn get_test_owner() -> RtdAddress {
         AccountAddress::ONE.into()
+    }
+
+    #[tokio::test]
+    async fn coin_query_rejects_catching_up_before_reading_index() {
+        let readiness = Arc::new(FullnodeReadiness::new(
+            42,
+            CheckpointStore::new_for_tests(),
+            None,
+            false,
+            false,
+        ));
+        let api = CoinReadApi {
+            internal: Box::new(MockCoinReadInternal::new()),
+            readiness: Some(readiness),
+        };
+
+        let error = api
+            .get_coins(get_test_owner(), None, None, None)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), TRANSIENT_ERROR_CODE);
     }
 
     fn get_test_package_id() -> ObjectID {
@@ -1467,6 +1531,7 @@ mod tests {
 
             let coin_read_api = CoinReadApi {
                 internal: Box::new(mock_internal),
+                readiness: None,
             };
 
             let response = coin_read_api.get_coin_metadata(coin_name.clone()).await;
@@ -1557,6 +1622,7 @@ mod tests {
 
             let coin_read_api = CoinReadApi {
                 internal: Box::new(mock_internal),
+                readiness: None,
             };
 
             let response = coin_read_api.get_coin_metadata(coin_name.clone()).await;
@@ -1635,6 +1701,7 @@ mod tests {
             let mock_internal = MockCoinReadInternal::new();
             let coin_read_api = CoinReadApi {
                 internal: Box::new(mock_internal),
+                readiness: None,
             };
 
             let response = coin_read_api.get_total_supply(coin_type.to_string()).await;
@@ -1675,6 +1742,7 @@ mod tests {
                 });
             let coin_read_api = CoinReadApi {
                 internal: Box::new(mock_internal),
+                readiness: None,
             };
 
             let response = coin_read_api.get_total_supply(coin_name.clone()).await;
@@ -1772,6 +1840,7 @@ mod tests {
 
             let coin_read_api = CoinReadApi {
                 internal: Box::new(mock_internal),
+                readiness: None,
             };
 
             let response = coin_read_api.get_total_supply(coin_name.clone()).await;

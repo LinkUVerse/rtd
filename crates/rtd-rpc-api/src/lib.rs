@@ -3,10 +3,10 @@
 
 use linku_network::callback::CallbackLayer;
 use reader::StateReader;
-use std::sync::Arc;
-use subscription::SubscriptionServiceHandle;
 use rtd_types::storage::RpcStateReader;
 use rtd_types::transaction_executor::TransactionExecutor;
+use std::sync::Arc;
+use subscription::SubscriptionServiceHandle;
 use tap::Pipe;
 
 pub mod client;
@@ -56,6 +56,7 @@ pub struct RpcService {
     chain_id: rtd_types::digests::ChainIdentifier,
     server_version: Option<ServerVersion>,
     metrics: Option<Arc<RpcMetrics>>,
+    readiness_check: Option<service::health::ReadinessCheck>,
     config: Config,
 }
 
@@ -69,6 +70,7 @@ impl RpcService {
             chain_id,
             server_version: None,
             metrics: None,
+            readiness_check: None,
             config: Config::default(),
         }
     }
@@ -95,6 +97,13 @@ impl RpcService {
 
     pub fn with_metrics(&mut self, metrics: RpcMetrics) {
         self.metrics = Some(Arc::new(metrics));
+    }
+
+    pub fn with_readiness_check(
+        &mut self,
+        readiness_check: impl Fn() -> anyhow::Result<()> + Send + Sync + 'static,
+    ) {
+        self.readiness_check = Some(Arc::new(readiness_check));
     }
 
     pub fn chain_id(&self) -> rtd_types::digests::ChainIdentifier {

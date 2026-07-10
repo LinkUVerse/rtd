@@ -3,12 +3,12 @@
 
 use super::node::RuntimeType;
 use futures::FutureExt;
-use std::sync::{Arc, Weak};
-use std::thread;
 use rtd_config::NodeConfig;
 use rtd_node::{RtdNode, RtdNodeHandle};
 use rtd_types::base_types::ConciseableName;
 use rtd_types::crypto::{AuthorityPublicKeyBytes, KeypairTraits};
+use std::sync::{Arc, Weak};
+use std::thread;
 use telemetry_subscribers::get_global_telemetry_config;
 use tracing::{info, trace};
 
@@ -40,7 +40,11 @@ impl Drop for Container {
 
 impl Container {
     /// Spawn a new Node.
-    pub async fn spawn(config: NodeConfig, runtime: RuntimeType) -> Self {
+    pub async fn spawn(
+        config: NodeConfig,
+        runtime: RuntimeType,
+        startup_target: Option<u64>,
+    ) -> Self {
         let (startup_sender, startup_receiver) = tokio::sync::oneshot::channel();
         let (cancel_sender, cancel_receiver) = tokio::sync::oneshot::channel();
         let name = AuthorityPublicKeyBytes::from(config.protocol_key_pair().public())
@@ -98,7 +102,13 @@ impl Container {
                     "Started Prometheus HTTP endpoint. To query metrics use\n\tcurl -s http://{}/metrics",
                     config.metrics_address
                 );
-                let server = RtdNode::start(config, registry_service).await.unwrap();
+                let server = RtdNode::start_with_startup_target(
+                    config,
+                    registry_service,
+                    startup_target,
+                )
+                .await
+                .unwrap();
                 // Notify that we've successfully started the node
                 let _ = startup_sender.send(Arc::downgrade(&server));
                 // run until canceled

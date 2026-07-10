@@ -16,15 +16,6 @@ use fastcrypto_zkp::bn254::zk_login::OIDCProvider;
 use futures::future::BoxFuture;
 use linku_common::debug_fatal;
 use prometheus::Registry;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fmt;
-use std::future::Future;
-use std::path::PathBuf;
-use std::str::FromStr;
-#[cfg(msim)]
-use std::sync::atomic::Ordering;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
 use rtd_core::authority::ExecutionEnv;
 use rtd_core::authority::RandomnessRoundReceiver;
 use rtd_core::authority::authority_store_tables::{
@@ -40,6 +31,15 @@ use rtd_core::epoch::randomness::RandomnessManager;
 use rtd_core::execution_cache::build_execution_cache;
 use rtd_network::validator::server::RTD_TLS_SERVER_NAME;
 use rtd_types::full_checkpoint_content::Checkpoint;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
+use std::future::Future;
+use std::path::PathBuf;
+use std::str::FromStr;
+#[cfg(msim)]
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use rtd_core::execution_scheduler::SchedulingSource;
 use rtd_core::global_state_hasher::GlobalStateHashMetrics;
@@ -105,6 +105,7 @@ use rtd_core::epoch::reconfiguration::ReconfigurationInitiator;
 use rtd_core::global_state_hasher::GlobalStateHasher;
 use rtd_core::jsonrpc_index::IndexStore;
 use rtd_core::module_cache_metrics::ResolverMetrics;
+use rtd_core::node_readiness::FullnodeReadiness;
 use rtd_core::overload_monitor::overload_monitor;
 use rtd_core::rpc_index::RpcIndexStore;
 use rtd_core::signature_verifier::SignatureVerifierMetrics;
@@ -175,8 +176,8 @@ pub struct P2pComponents {
 
 #[cfg(msim)]
 mod simulator {
-    use std::sync::atomic::AtomicBool;
     use rtd_types::error::RtdErrorKind;
+    use std::sync::atomic::AtomicBool;
 
     use super::*;
     pub(super) struct SimState {
@@ -227,15 +228,15 @@ mod simulator {
     }
 }
 
-#[cfg(msim)]
-pub use simulator::set_jwk_injector;
-#[cfg(msim)]
-use simulator::*;
 use rtd_core::authority::authority_store_pruner::{ObjectsCompactionFilter, PrunerWatermarks};
 use rtd_core::{
     consensus_handler::ConsensusHandlerInitializer, safe_client::SafeClientMetricsBase,
     validator_tx_finalizer::ValidatorTxFinalizer,
 };
+#[cfg(msim)]
+pub use simulator::set_jwk_injector;
+#[cfg(msim)]
+use simulator::*;
 
 const DEFAULT_GRPC_CONNECT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -258,6 +259,8 @@ pub struct RtdNode {
     state_sync_handle: state_sync::Handle,
     randomness_handle: randomness::Handle,
     checkpoint_store: Arc<CheckpointStore>,
+    startup_executed_checkpoint: u64,
+    fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     global_state_hasher: Mutex<Option<Arc<GlobalStateHasher>>>,
     connection_monitor_status: Arc<ConnectionMonitorStatus>,
 
@@ -302,12 +305,38 @@ impl RtdNode {
         config: NodeConfig,
         registry_service: RegistryService,
     ) -> Result<Arc<RtdNode>> {
-        Self::start_async(
+        Self::start_with_startup_target(config, registry_service, None).await
+    }
+
+    pub async fn start_with_startup_target(
+        config: NodeConfig,
+        registry_service: RegistryService,
+        startup_target: Option<u64>,
+    ) -> Result<Arc<RtdNode>> {
+        Self::start_async_with_startup_target(
             config,
             registry_service,
             ServerVersion::new("rtd-node", "unknown"),
+            startup_target,
         )
         .await
+    }
+
+    pub async fn start_async(
+        config: NodeConfig,
+        registry_service: RegistryService,
+        server_version: ServerVersion,
+    ) -> Result<Arc<RtdNode>> {
+        Self::start_async_with_startup_target(config, registry_service, server_version, None).await
+    }
+
+    async fn start_async_with_startup_target(
+        config: NodeConfig,
+        registry_service: RegistryService,
+        server_version: ServerVersion,
+        startup_target: Option<u64>,
+    ) -> Result<Arc<RtdNode>> {
+        Self::start_internal(config, registry_service, server_version, startup_target).await
     }
 
     fn start_jwk_updater(
@@ -445,10 +474,11 @@ impl RtdNode {
         }
     }
 
-    pub async fn start_async(
+    async fn start_internal(
         config: NodeConfig,
         registry_service: RegistryService,
         server_version: ServerVersion,
+        startup_target: Option<u64>,
     ) -> Result<Arc<RtdNode>> {
         NodeConfigMetrics::new(&registry_service.default_registry()).record_metrics(&config);
         let mut config = config.clone();
@@ -502,6 +532,10 @@ impl RtdNode {
             config.fork_recovery.as_ref(),
         )
         .await?;
+        let startup_executed_checkpoint = checkpoint_store
+            .get_highest_executed_checkpoint_seq_number()
+            .expect("checkpoint store read cannot fail")
+            .unwrap_or(0);
 
         let mut pruner_db = None;
         if config
@@ -587,10 +621,7 @@ impl RtdNode {
             signature_verifier_metrics,
             &config.expensive_safety_check_config,
             (chain_id, chain),
-            checkpoint_store
-                .get_highest_executed_checkpoint_seq_number()
-                .expect("checkpoint store read cannot fail")
-                .unwrap_or(0),
+            startup_executed_checkpoint,
             Arc::new(SubmittedTransactionCacheMetrics::new(
                 &registry_service.default_registry(),
             )),
@@ -672,6 +703,16 @@ impl RtdNode {
         } else {
             None
         };
+
+        let fullnode_readiness = is_full_node.then(|| {
+            Arc::new(FullnodeReadiness::new(
+                startup_target.unwrap_or(startup_executed_checkpoint),
+                checkpoint_store.clone(),
+                rpc_index.clone(),
+                index_store.is_some(),
+                run_with_range.is_none(),
+            ))
+        });
 
         let chain_identifier = epoch_store.get_chain_identifier();
 
@@ -821,6 +862,7 @@ impl RtdNode {
                 &config.db_path(),
                 &prometheus_registry,
                 &config,
+                fullnode_readiness.clone(),
             )))
         } else {
             None
@@ -833,6 +875,7 @@ impl RtdNode {
             &config,
             &prometheus_registry,
             server_version,
+            fullnode_readiness.clone(),
         )
         .await?;
 
@@ -923,6 +966,8 @@ impl RtdNode {
             state_sync_handle,
             randomness_handle,
             checkpoint_store,
+            startup_executed_checkpoint,
+            fullnode_readiness,
             global_state_hasher: Mutex::new(Some(global_state_hasher)),
             end_of_epoch_channel,
             connection_monitor_status,
@@ -952,6 +997,14 @@ impl RtdNode {
         });
 
         Ok(node)
+    }
+
+    pub fn startup_executed_checkpoint(&self) -> u64 {
+        self.startup_executed_checkpoint
+    }
+
+    pub fn fullnode_readiness(&self) -> Option<&Arc<FullnodeReadiness>> {
+        self.fullnode_readiness.as_ref()
     }
 
     pub fn subscribe_to_epoch_change(&self) -> broadcast::Receiver<RtdSystemState> {
@@ -1132,11 +1185,8 @@ impl RtdNode {
 
             let inbound_network_metrics =
                 linku_network::metrics::NetworkMetrics::new("rtd", "inbound", prometheus_registry);
-            let outbound_network_metrics = linku_network::metrics::NetworkMetrics::new(
-                "rtd",
-                "outbound",
-                prometheus_registry,
-            );
+            let outbound_network_metrics =
+                linku_network::metrics::NetworkMetrics::new("rtd", "outbound", prometheus_registry);
 
             let service = ServiceBuilder::new()
                 .layer(
@@ -2511,6 +2561,7 @@ async fn build_http_servers(
     config: &NodeConfig,
     prometheus_registry: &Registry,
     server_version: ServerVersion,
+    fullnode_readiness: Option<Arc<FullnodeReadiness>>,
 ) -> Result<(HttpServers, Option<tokio::sync::mpsc::Sender<Checkpoint>>)> {
     // Validators do not expose these APIs
     if config.consensus_config().is_some() {
@@ -2536,16 +2587,23 @@ async fn build_http_servers(
             kv_store.clone(),
             metrics.clone(),
         ))?;
-        server.register_module(CoinReadApi::new(
+        let readiness = fullnode_readiness
+            .clone()
+            .expect("fullnode readiness must exist for fullnode RPC");
+        server.register_module(CoinReadApi::new_with_readiness(
             state.clone(),
             kv_store.clone(),
             metrics.clone(),
+            readiness.clone(),
         ))?;
 
         // if run_with_range is enabled we want to prevent any transactions
         // run_with_range = None is normal operating conditions
         if config.run_with_range.is_none() {
-            server.register_module(TransactionBuilderApi::new(state.clone()))?;
+            server.register_module(TransactionBuilderApi::new_with_readiness(
+                state.clone(),
+                readiness,
+            ))?;
         }
         server.register_module(GovernanceReadApi::new(state.clone(), metrics.clone()))?;
         server.register_module(BridgeReadApi::new(state.clone(), metrics.clone()))?;
@@ -2607,6 +2665,10 @@ async fn build_http_servers(
 
         rpc_service.with_metrics(RpcMetrics::new(prometheus_registry));
         rpc_service.with_subscription_service(subscription_service_handle);
+        if let Some(readiness) = fullnode_readiness {
+            rpc_service
+                .with_readiness_check(move || readiness.ensure_ready().map_err(anyhow::Error::new));
+        }
 
         if let Some(transaction_orchestrator) = transaction_orchestrator {
             rpc_service.with_executor(transaction_orchestrator.clone())
@@ -2695,10 +2757,10 @@ struct HttpServers {
 mod tests {
     use super::*;
     use prometheus::Registry;
-    use std::collections::BTreeMap;
     use rtd_config::node::{ForkCrashBehavior, ForkRecoveryConfig};
     use rtd_core::checkpoints::{CheckpointMetrics, CheckpointStore};
     use rtd_types::digests::{CheckpointDigest, TransactionDigest, TransactionEffectsDigest};
+    use std::collections::BTreeMap;
 
     #[tokio::test]
     async fn test_fork_error_and_recovery_both_paths() {

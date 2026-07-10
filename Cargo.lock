@@ -11797,6 +11797,7 @@ dependencies = [
  "reqwest 0.12.9",
  "rtd-bridge",
  "rtd-config",
+ "rtd-core",
  "rtd-data-store",
  "rtd-execution",
  "rtd-faucet",

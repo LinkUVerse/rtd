@@ -72,6 +72,10 @@ impl WritePathPendingTransactionLog {
         Ok(())
     }
 
+    pub fn release_transaction(&self, tx: &TransactionDigest) {
+        self.transactions_set.lock().remove(tx);
+    }
+
     pub fn load_all_pending_transactions(&self) -> RtdResult<Vec<VerifiedTransaction>> {
         let mut transactions_set = self.transactions_set.lock();
         let transactions = self
@@ -93,8 +97,8 @@ impl WritePathPendingTransactionLog {
 mod tests {
     use super::*;
     use anyhow;
-    use std::collections::HashSet;
     use rtd_types::utils::create_fake_transaction;
+    use std::collections::HashSet;
 
     #[tokio::test]
     async fn test_pending_tx_log_basic() -> anyhow::Result<()> {

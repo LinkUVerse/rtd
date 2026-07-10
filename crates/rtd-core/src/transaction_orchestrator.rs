@@ -41,6 +41,7 @@ use tracing::{Instrument, debug, error_span, info, instrument, warn};
 use crate::authority::AuthorityState;
 use crate::authority_aggregator::AuthorityAggregator;
 use crate::authority_client::{AuthorityAPI, NetworkAuthorityClient};
+use crate::node_readiness::FullnodeReadiness;
 use crate::quorum_driver::reconfig_observer::{OnsiteReconfigObserver, ReconfigObserver};
 use crate::transaction_driver::{
     QuorumTransactionResponse, SubmitTransactionOptions, TransactionDriver, TransactionDriverError,
@@ -56,6 +57,32 @@ const WAIT_FOR_FINALITY_TIMEOUT: Duration = Duration::from_secs(90);
 
 pub type QuorumTransactionEffectsResult =
     Result<(Transaction, QuorumTransactionResponse), (TransactionDigest, QuorumDriverError)>;
+
+fn should_retry_recovered_transaction(error: &TransactionDriverError) -> bool {
+    error.is_submission_retriable()
+}
+
+fn load_pending_transactions_for_recovery(
+    pending_tx_log: &WritePathPendingTransactionLog,
+    fullnode_readiness: Option<&FullnodeReadiness>,
+) -> RtdResult<Vec<VerifiedTransaction>> {
+    let pending_transactions = pending_tx_log.load_all_pending_transactions()?;
+    if let Some(readiness) = fullnode_readiness {
+        readiness.mark_pending_recovery_started();
+    }
+    Ok(pending_transactions)
+}
+
+fn ensure_fullnode_ready(readiness: Option<&FullnodeReadiness>) -> Result<(), QuorumDriverError> {
+    if let Some(readiness) = readiness {
+        readiness
+            .ensure_ready()
+            .map_err(|error| QuorumDriverError::FullnodeCatchingUp {
+                details: error.to_string(),
+            })?;
+    }
+    Ok(())
+}
 
 /// Transaction Orchestrator is a Node component that utilizes Transaction Driver to
 /// submit transactions to validators for finality. It adds inflight deduplication,
@@ -74,6 +101,7 @@ impl TransactionOrchestrator<NetworkAuthorityClient> {
         parent_path: &Path,
         prometheus_registry: &Registry,
         node_config: &NodeConfig,
+        fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     ) -> Self {
         let observer = OnsiteReconfigObserver::new(
             reconfig_channel,
@@ -82,13 +110,14 @@ impl TransactionOrchestrator<NetworkAuthorityClient> {
             validators.safe_client_metrics_base.clone(),
             validators.metrics.deref().clone(),
         );
-        TransactionOrchestrator::new(
+        TransactionOrchestrator::new_with_readiness(
             validators,
             validator_state,
             parent_path,
             prometheus_registry,
             observer,
             node_config,
+            fullnode_readiness,
         )
     }
 }
@@ -105,6 +134,26 @@ where
         prometheus_registry: &Registry,
         reconfig_observer: OnsiteReconfigObserver,
         node_config: &NodeConfig,
+    ) -> Self {
+        Self::new_with_readiness(
+            validators,
+            validator_state,
+            parent_path,
+            prometheus_registry,
+            reconfig_observer,
+            node_config,
+            None,
+        )
+    }
+
+    fn new_with_readiness(
+        validators: Arc<AuthorityAggregator<A>>,
+        validator_state: Arc<AuthorityState>,
+        parent_path: &Path,
+        prometheus_registry: &Registry,
+        reconfig_observer: OnsiteReconfigObserver,
+        node_config: &NodeConfig,
+        fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     ) -> Self {
         let metrics = Arc::new(TransactionOrchestratorMetrics::new(prometheus_registry));
         let td_metrics = Arc::new(TransactionDriverMetrics::new(prometheus_registry));
@@ -127,6 +176,7 @@ where
         Inner::start_task_to_recover_txes_in_log(
             pending_tx_log.clone(),
             transaction_driver.clone(),
+            fullnode_readiness.clone(),
         );
 
         let td_allowed_submission_list = node_config
@@ -162,6 +212,7 @@ where
             td_allowed_submission_list,
             td_blocked_submission_list,
             enable_early_validation,
+            fullnode_readiness,
         });
         Self { inner }
     }
@@ -183,6 +234,7 @@ where
         client_addr: Option<SocketAddr>,
     ) -> Result<(ExecuteTransactionResponseV3, IsTransactionExecutedLocally), QuorumDriverError>
     {
+        ensure_fullnode_ready(self.inner.fullnode_readiness.as_deref())?;
         let timer = Instant::now();
         let tx_type = if request.transaction.is_consensus_tx() {
             TxType::SharedObject
@@ -259,6 +311,7 @@ where
         request: ExecuteTransactionRequestV3,
         client_addr: Option<SocketAddr>,
     ) -> Result<ExecuteTransactionResponseV3, QuorumDriverError> {
+        ensure_fullnode_ready(self.inner.fullnode_readiness.as_deref())?;
         let timer = Instant::now();
         let tx_type = if request.transaction.is_consensus_tx() {
             TxType::SharedObject
@@ -333,6 +386,7 @@ struct Inner<A: Clone> {
     td_allowed_submission_list: Vec<String>,
     td_blocked_submission_list: Vec<String>,
     enable_early_validation: bool,
+    fullnode_readiness: Option<Arc<FullnodeReadiness>>,
 }
 
 impl<A> Inner<A>
@@ -552,7 +606,7 @@ where
         // Wait for execution timeout.
         let mut timeout_future = tokio::time::sleep(finality_timeout).boxed();
 
-        loop {
+        let result = loop {
             tokio::select! {
                 biased;
 
@@ -654,7 +708,16 @@ where
                     break Err(QuorumDriverError::TimeoutBeforeFinality);
                 }
             }
+        };
+
+        if result
+            .as_ref()
+            .map_or_else(|error| !error.is_retriable(), |_| true)
+        {
+            guard.finish();
         }
+
+        result
     }
 
     #[instrument(level = "error", skip_all)]
@@ -844,15 +907,18 @@ where
     fn start_task_to_recover_txes_in_log(
         pending_tx_log: Arc<WritePathPendingTransactionLog>,
         transaction_driver: Arc<TransactionDriver<A>>,
+        fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     ) {
         spawn_logged_monitored_task!(async move {
             if std::env::var("SKIP_LOADING_FROM_PENDING_TX_LOG").is_ok() {
                 info!("Skipping loading pending transactions from pending_tx_log.");
                 return;
             }
-            let pending_txes = pending_tx_log
-                .load_all_pending_transactions()
-                .expect("failed to load all pending transactions");
+            let pending_txes = load_pending_transactions_for_recovery(
+                &pending_tx_log,
+                fullnode_readiness.as_deref(),
+            )
+            .expect("failed to load all pending transactions");
             let num_pending_txes = pending_txes.len();
             info!(
                 "Recovering {} pending transactions from pending_tx_log.",
@@ -868,19 +934,41 @@ where
                         // requires a migration.
                         let tx = tx.into_inner();
                         let tx_digest = *tx.digest();
-                        // It's not impossible we fail to enqueue a task but that's not the end of world.
-                        // TODO(william) correctly extract client_addr from logs
-                        if let Err(err) = transaction_driver
-                            .drive_transaction(
-                                SubmitTxRequest::new_transaction(tx),
-                                SubmitTransactionOptions::default(),
-                                Some(Duration::from_secs(60)),
-                            )
-                            .await
-                        {
-                            warn!(?tx_digest, "Failed to execute recovered transaction: {err}");
-                        } else {
-                            debug!(?tx_digest, "Executed recovered transaction");
+                        let mut retry_backoff = backoff::ExponentialBackoff::new(
+                            Duration::from_secs(1),
+                            Duration::from_secs(60),
+                        );
+                        loop {
+                            // TODO(william) correctly extract client_addr from logs
+                            match transaction_driver
+                                .drive_transaction(
+                                    SubmitTxRequest::new_transaction(tx.clone()),
+                                    SubmitTransactionOptions::default(),
+                                    Some(Duration::from_secs(60)),
+                                )
+                                .await
+                            {
+                                Ok(_) => {
+                                    debug!(?tx_digest, "Recovered pending transaction");
+                                    break;
+                                }
+                                Err(err) if should_retry_recovered_transaction(&err) => {
+                                    let delay = retry_backoff.next().unwrap();
+                                    warn!(
+                                        ?tx_digest,
+                                        ?delay,
+                                        "Retrying recovered pending transaction after retriable error: {err}"
+                                    );
+                                    sleep(delay).await;
+                                }
+                                Err(err) => {
+                                    warn!(
+                                        ?tx_digest,
+                                        "Recovered pending transaction failed permanently: {err}"
+                                    );
+                                    break;
+                                }
+                            }
                         }
                         if let Err(err) = pending_tx_log.finish_transaction(&tx_digest) {
                             warn!(
@@ -888,7 +976,7 @@ where
                                 "Failed to clean up transaction in pending log: {err}"
                             );
                         } else {
-                            debug!(?tx_digest, "Cleaned up transaction in pending log");
+                            debug!(?tx_digest, "Finished transaction in pending log");
                         }
                     }
                 })
@@ -1144,14 +1232,115 @@ impl TransactionSubmissionGuard {
     fn is_new_transaction(&self) -> bool {
         self.is_new_transaction
     }
-}
 
-impl Drop for TransactionSubmissionGuard {
-    fn drop(&mut self) {
+    fn finish(&self) {
         if let Err(err) = self.pending_tx_log.finish_transaction(&self.tx_digest) {
             warn!(?self.tx_digest, "Failed to clean up transaction in pending log: {err}");
         } else {
             debug!(?self.tx_digest, "Cleaned up transaction in pending log");
         }
+    }
+}
+
+impl Drop for TransactionSubmissionGuard {
+    fn drop(&mut self) {
+        self.pending_tx_log.release_transaction(&self.tx_digest);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        TransactionDriverError, TransactionSubmissionGuard, WritePathPendingTransactionLog,
+        ensure_fullnode_ready, load_pending_transactions_for_recovery,
+        should_retry_recovered_transaction,
+    };
+    use crate::authority::authority_store_pruner::PrunerWatermarks;
+    use crate::checkpoints::CheckpointStore;
+    use crate::node_readiness::FullnodeReadiness;
+    use rtd_types::quorum_driver_types::QuorumDriverError;
+    use rtd_types::transaction::VerifiedTransaction;
+    use rtd_types::utils::create_fake_transaction;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn unfinished_submission_guard_preserves_wal_and_allows_retry() {
+        let directory = linku_common::tempdir().unwrap();
+        let pending_tx_log = Arc::new(WritePathPendingTransactionLog::new(
+            directory.path().join("pending"),
+        ));
+        let transaction = VerifiedTransaction::new_unchecked(create_fake_transaction());
+        let transaction_digest = *transaction.digest();
+
+        {
+            let guard = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
+            assert!(guard.is_new_transaction());
+        }
+
+        let retry_guard = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
+        assert!(retry_guard.is_new_transaction());
+        drop(retry_guard);
+
+        let pending = pending_tx_log.load_all_pending_transactions().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].digest(), &transaction_digest);
+    }
+
+    #[tokio::test]
+    async fn pending_recovery_is_marked_started_after_wal_load() {
+        let directory = linku_common::tempdir().unwrap();
+        let pending_tx_log = WritePathPendingTransactionLog::new(directory.path().join("pending"));
+        let checkpoint_store = CheckpointStore::new(
+            &directory.path().join("checkpoints"),
+            Arc::new(PrunerWatermarks::default()),
+        );
+        let readiness = FullnodeReadiness::new(0, checkpoint_store, None, false, true);
+        assert!(!readiness.status().pending_recovery_started);
+
+        let pending =
+            load_pending_transactions_for_recovery(&pending_tx_log, Some(&readiness)).unwrap();
+
+        assert!(pending.is_empty());
+        assert!(readiness.status().pending_recovery_started);
+    }
+
+    #[test]
+    fn recovery_preserves_wal_for_timeout_with_retriable_error() {
+        let error = TransactionDriverError::TimeoutWithLastRetriableError {
+            last_error: None,
+            attempts: 3,
+            timeout: Duration::from_secs(60),
+        };
+
+        assert!(should_retry_recovered_transaction(&error));
+    }
+
+    #[test]
+    fn recovery_finishes_wal_for_validation_failure() {
+        let error = TransactionDriverError::ValidationFailed {
+            error: "invalid transaction".to_string(),
+        };
+
+        assert!(!should_retry_recovered_transaction(&error));
+    }
+
+    #[tokio::test]
+    async fn execute_gate_rejects_a_catching_up_fullnode() {
+        let directory = linku_common::tempdir().unwrap();
+        let readiness = FullnodeReadiness::new(
+            42,
+            CheckpointStore::new(directory.path(), Arc::new(PrunerWatermarks::default())),
+            None,
+            false,
+            false,
+        );
+
+        let error = ensure_fullnode_ready(Some(&readiness)).unwrap_err();
+
+        assert!(matches!(
+            error,
+            QuorumDriverError::FullnodeCatchingUp { .. }
+        ));
     }
 }

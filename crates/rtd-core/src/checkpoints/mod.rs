@@ -8,6 +8,7 @@ mod metrics;
 
 use crate::accumulators::{self, AccumulatorSettlementTxBuilder};
 use crate::authority::AuthorityState;
+use crate::authority::authority_store_tables::AuthorityPerpetualTables;
 use crate::authority::epoch_start_configuration::EpochStartConfigTrait;
 use crate::authority_client::{AuthorityAPI, make_network_authority_clients_with_network_config};
 use crate::checkpoints::causal_order::CausalOrder;
@@ -32,7 +33,6 @@ use linku_metrics::{MonitoredFutureExt, monitored_scope, spawn_monitored_task};
 use nonempty::NonEmpty;
 use parking_lot::Mutex;
 use pin_project_lite::pin_project;
-use serde::{Deserialize, Serialize};
 use rtd_macros::fail_point_arg;
 use rtd_network::default_linku_network_config;
 use rtd_types::RTD_ACCUMULATOR_ROOT_OBJECT_ID;
@@ -43,6 +43,7 @@ use rtd_types::messages_checkpoint::{
     CheckpointArtifacts, CheckpointCommitment, VersionedFullCheckpointContents,
 };
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch};
 use typed_store::rocks::{DBOptions, ReadWriteOptions, default_db_options};
 
@@ -50,22 +51,12 @@ use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::authority_store_pruner::PrunerWatermarks;
 use crate::consensus_handler::SequencedConsensusTransactionKey;
 use rand::seq::SliceRandom;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs::File;
-use std::future::Future;
-use std::io::Write;
-use std::path::Path;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::Weak;
-use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
 use rtd_protocol_config::ProtocolVersion;
 use rtd_types::base_types::{AuthorityName, EpochId, TransactionDigest};
 use rtd_types::committee::StakeUnit;
 use rtd_types::crypto::AuthorityStrongQuorumSignInfo;
 use rtd_types::digests::{
-    CheckpointContentsDigest, CheckpointDigest, Digest, TransactionEffectsDigest,
+    ChainIdentifier, CheckpointContentsDigest, CheckpointDigest, Digest, TransactionEffectsDigest,
 };
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::error::{RtdErrorKind, RtdResult};
@@ -79,11 +70,21 @@ use rtd_types::messages_checkpoint::{
 };
 use rtd_types::messages_checkpoint::{CheckpointRequestV2, SignedCheckpointSummary};
 use rtd_types::messages_consensus::ConsensusTransactionKey;
-use rtd_types::signature::GenericSignature;
 use rtd_types::rtd_system_state::{RtdSystemState, RtdSystemStateTrait};
+use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::{
     TransactionDataAPI, TransactionKey, TransactionKind, VerifiedTransaction,
 };
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fs::File;
+use std::future::Future;
+use std::io::Write;
+use std::path::Path;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::Weak;
+use std::task::{Context, Poll};
+use std::time::{Duration, SystemTime};
 use tokio::{sync::Notify, time::timeout};
 use tracing::{debug, error, info, instrument, trace, warn};
 use typed_store::DBMapUtils;
@@ -321,6 +322,71 @@ pub struct CheckpointStore {
     pub(crate) tables: CheckpointStoreTables,
     synced_checkpoint_notify_read: NotifyRead<CheckpointSequenceNumber, VerifiedCheckpoint>,
     executed_checkpoint_notify_read: NotifyRead<CheckpointSequenceNumber, VerifiedCheckpoint>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReadonlyCheckpointStoreInspection {
+    pub chain_identifier: ChainIdentifier,
+    pub highest_executed_checkpoint: CheckpointSequenceNumber,
+}
+
+pub fn inspect_readonly_checkpoint_store(
+    path: &Path,
+) -> anyhow::Result<ReadonlyCheckpointStoreInspection> {
+    let tables = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        CheckpointStore::open_readonly(path)
+    }))
+    .map_err(|_| anyhow::anyhow!("cannot open checkpoint store at {}", path.display()))?;
+    tables
+        .try_catch_up_with_primary_all()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    let genesis = tables
+        .certified_checkpoints
+        .get(&0)?
+        .ok_or_else(|| anyhow::anyhow!("checkpoint store has no genesis checkpoint"))?;
+    let (highest_executed_checkpoint, expected_digest) = tables
+        .watermarks
+        .get(&CheckpointWatermark::HighestExecuted)?
+        .ok_or_else(|| anyhow::anyhow!("checkpoint store has no executed checkpoint watermark"))?;
+    let highest_executed = tables
+        .certified_checkpoints
+        .get(&highest_executed_checkpoint)?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "executed checkpoint {highest_executed_checkpoint} is missing from checkpoint store"
+            )
+        })?;
+    anyhow::ensure!(
+        highest_executed.inner().digest() == &expected_digest,
+        "executed checkpoint {highest_executed_checkpoint} digest does not match its watermark"
+    );
+
+    Ok(ReadonlyCheckpointStoreInspection {
+        chain_identifier: ChainIdentifier::from(*genesis.inner().digest()),
+        highest_executed_checkpoint,
+    })
+}
+
+pub fn inspect_readonly_fullnode_db(
+    db_path: &Path,
+) -> anyhow::Result<ReadonlyCheckpointStoreInspection> {
+    let object_store_path = db_path.join("live/store");
+    let object_store = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        AuthorityPerpetualTables::open_readonly(&object_store_path)
+    }))
+    .map_err(|_| {
+        anyhow::anyhow!(
+            "cannot open fullnode object store at {}",
+            object_store_path.display()
+        )
+    })?;
+    object_store
+        .try_catch_up_with_primary_all()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    drop(object_store);
+
+    inspect_readonly_checkpoint_store(&db_path.join("live/checkpoints"))
 }
 
 impl CheckpointStore {
@@ -3394,8 +3460,6 @@ mod tests {
     use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
     use futures::FutureExt as _;
     use futures::future::BoxFuture;
-    use std::collections::HashMap;
-    use std::ops::Deref;
     use rtd_macros::sim_test;
     use rtd_protocol_config::{Chain, ProtocolConfig};
     use rtd_types::accumulator_event::AccumulatorEvent;
@@ -3404,8 +3468,58 @@ mod tests {
     use rtd_types::crypto::Signature;
     use rtd_types::effects::{TransactionEffects, TransactionEvents};
     use rtd_types::messages_checkpoint::SignedCheckpointSummary;
+    use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use rtd_types::transaction::VerifiedTransaction;
+    use std::collections::HashMap;
+    use std::ops::Deref;
     use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn readonly_inspection_returns_chain_and_highest_executed_checkpoint() {
+        let directory = linku_common::tempdir().unwrap();
+        let store = CheckpointStore::new(directory.path(), Arc::new(PrunerWatermarks::default()));
+        let mut builder = TestCheckpointBuilder::new(0);
+        let mut expected_chain_identifier = None;
+
+        for sequence_number in 0..=1 {
+            let checkpoint = VerifiedCheckpoint::new_unchecked(builder.build_checkpoint().summary);
+            expected_chain_identifier
+                .get_or_insert_with(|| ChainIdentifier::from(*checkpoint.digest()));
+            assert_eq!(*checkpoint.sequence_number(), sequence_number);
+            store.insert_verified_checkpoint(&checkpoint).unwrap();
+            store
+                .update_highest_executed_checkpoint(&checkpoint)
+                .unwrap();
+        }
+        drop(store);
+
+        let inspection = inspect_readonly_checkpoint_store(directory.path()).unwrap();
+
+        assert_eq!(
+            inspection.chain_identifier,
+            expected_chain_identifier.unwrap()
+        );
+        assert_eq!(inspection.highest_executed_checkpoint, 1);
+    }
+
+    #[tokio::test]
+    async fn readonly_fullnode_inspection_requires_an_openable_object_store() {
+        let directory = linku_common::tempdir().unwrap();
+        let checkpoint_path = directory.path().join("live/checkpoints");
+        let store = CheckpointStore::new(&checkpoint_path, Arc::new(PrunerWatermarks::default()));
+        let checkpoint = VerifiedCheckpoint::new_unchecked(
+            TestCheckpointBuilder::new(0).build_checkpoint().summary,
+        );
+        store.insert_verified_checkpoint(&checkpoint).unwrap();
+        store
+            .update_highest_executed_checkpoint(&checkpoint)
+            .unwrap();
+        drop(store);
+
+        let error = inspect_readonly_fullnode_db(directory.path()).unwrap_err();
+
+        assert!(error.to_string().contains("object store"));
+    }
 
     #[tokio::test]
     async fn test_clear_locally_computed_checkpoints_from_deletes_inclusive_range() {

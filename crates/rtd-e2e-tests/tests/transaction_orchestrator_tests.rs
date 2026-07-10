@@ -1,8 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_core::authority_client::NetworkAuthorityClient;
 use rtd_core::transaction_driver::SubmitTransactionOptions;
 use rtd_core::transaction_orchestrator::TransactionOrchestrator;
@@ -10,7 +8,8 @@ use rtd_macros::sim_test;
 use rtd_storage::key_value_store::TransactionKeyValueStore;
 use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
 use rtd_test_transaction_builder::{
-    batch_make_transfer_transactions, make_staking_transaction, make_transfer_rtd_transaction,
+    TestTransactionBuilder, batch_make_transfer_transactions, make_staking_transaction,
+    make_transfer_rtd_transaction,
 };
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::ErrorCategory;
@@ -20,7 +19,9 @@ use rtd_types::quorum_driver_types::{
     ExecuteTransactionRequestType, ExecuteTransactionRequestV3, ExecuteTransactionResponseV3,
     FinalizedEffects, IsTransactionExecutedLocally, QuorumDriverError,
 };
-use rtd_types::transaction::Transaction;
+use rtd_types::transaction::{Transaction, TransactionDataAPI};
+use std::sync::Arc;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tokio::time::timeout;
 use tracing::info;
@@ -184,6 +185,222 @@ async fn test_fullnode_wal_log() -> Result<(), anyhow::Error> {
     let pending_txes = orchestrator.load_all_pending_transactions_in_test()?;
     assert!(pending_txes.is_empty());
     assert!(orchestrator.empty_pending_tx_log_in_test());
+
+    Ok(())
+}
+
+#[sim_test]
+async fn test_pending_wal_recovers_same_digest_after_fullnode_crash_with_validator_locks()
+-> Result<(), anyhow::Error> {
+    telemetry_subscribers::init_for_testing();
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_epoch_duration_ms(600000)
+        .build()
+        .await;
+    let mut txns = batch_make_transfer_transactions(&test_cluster.wallet, 1).await;
+    let transaction = txns.pop().unwrap();
+    let transaction_digest = *transaction.digest();
+    let transaction_data = &transaction.data().intent_message().value;
+    let gas_object = transaction_data.gas()[0];
+    let conflicting_transaction = test_cluster
+        .wallet
+        .sign_transaction(
+            &TestTransactionBuilder::new(
+                transaction_data.sender(),
+                gas_object,
+                transaction_data.gas_price(),
+            )
+            .transfer_rtd(Some(3), test_cluster.get_address_1())
+            .build(),
+        )
+        .await;
+    assert_ne!(transaction_digest, *conflicting_transaction.digest());
+
+    let validator_names = test_cluster.get_validator_pubkeys();
+    test_cluster.stop_node(&validator_names[0]);
+    test_cluster.stop_node(&validator_names[1]);
+
+    let fullnode_name = test_cluster
+        .fullnode_handle
+        .rtd_node
+        .with(|node| node.state().name);
+    let initial_orchestrator = test_cluster
+        .fullnode_handle
+        .rtd_node
+        .with(|node| node.transaction_orchestrator().unwrap());
+    let initial_submission = test_cluster.fullnode_handle.rtd_node.with(|_| {
+        let orchestrator = initial_orchestrator.clone();
+        let transaction = transaction.clone();
+        tokio::spawn(async move {
+            execute_with_orchestrator(
+                &orchestrator,
+                transaction,
+                ExecuteTransactionRequestType::WaitForLocalExecution,
+            )
+            .await
+        })
+    });
+
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let pending = initial_orchestrator
+                .load_all_pending_transactions_in_test()
+                .unwrap();
+            if pending
+                .iter()
+                .any(|transaction| transaction.digest() == &transaction_digest)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await?;
+
+    let running_validator_handles = test_cluster
+        .swarm
+        .validator_nodes()
+        .filter(|node| node.is_running())
+        .map(|node| node.get_node_handle().unwrap())
+        .collect::<Vec<_>>();
+    let lock_wait = timeout(Duration::from_secs(30), async {
+        loop {
+            let mut all_locked_to_original = true;
+            for handle in &running_validator_handles {
+                let locked_digest = handle
+                    .with_async(|node| async move {
+                        let state = node.state();
+                        let epoch_store = state.epoch_store_for_testing();
+                        epoch_store
+                            .tables()
+                            .unwrap()
+                            .get_locked_transaction(&gas_object)
+                            .unwrap()
+                    })
+                    .await;
+                all_locked_to_original &= locked_digest == Some(transaction_digest);
+            }
+            if all_locked_to_original {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+    if lock_wait.is_err() {
+        let mut observed_locks = Vec::new();
+        for handle in &running_validator_handles {
+            observed_locks.push(
+                handle
+                    .with_async(|node| async move {
+                        let state = node.state();
+                        let epoch_store = state.epoch_store_for_testing();
+                        epoch_store
+                            .tables()
+                            .unwrap()
+                            .get_locked_transaction(&gas_object)
+                            .unwrap()
+                    })
+                    .await,
+            );
+        }
+        let submission_result = if initial_submission.is_finished() {
+            Some(initial_submission.await.unwrap())
+        } else {
+            None
+        };
+        anyhow::bail!(
+            "validators did not lock the original transaction: locks={observed_locks:?}, submission={submission_result:?}"
+        );
+    }
+
+    drop(initial_orchestrator);
+    test_cluster.stop_node(&fullnode_name);
+    test_cluster.fullnode_handle.rtd_node.release_for_testing();
+    test_cluster.start_node(&fullnode_name).await;
+    test_cluster.fullnode_handle.rtd_node = test_cluster
+        .swarm
+        .node(&fullnode_name)
+        .unwrap()
+        .get_node_handle()
+        .unwrap();
+    let recovered_orchestrator = test_cluster
+        .fullnode_handle
+        .rtd_node
+        .with(|node| node.transaction_orchestrator().unwrap());
+
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let pending = recovered_orchestrator
+                .load_all_pending_transactions_in_test()
+                .unwrap();
+            if pending.len() == 1 && pending[0].digest() == &transaction_digest {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await?;
+
+    let conflict_error = execute_with_orchestrator(
+        &recovered_orchestrator,
+        conflicting_transaction,
+        ExecuteTransactionRequestType::WaitForEffectsCert,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(
+            conflict_error,
+            QuorumDriverError::ObjectsDoubleUsed { .. }
+                | QuorumDriverError::TimeoutBeforeFinalityWithErrors { .. }
+                | QuorumDriverError::FailedWithTransientErrorAfterMaximumAttempts { .. }
+                | QuorumDriverError::TransactionFailed {
+                    category: ErrorCategory::LockConflict,
+                    ..
+                }
+        ),
+        "unexpected conflict error: {conflict_error:?}"
+    );
+
+    for handle in &running_validator_handles {
+        let locked_digest = handle
+            .with_async(|node| async move {
+                let state = node.state();
+                let epoch_store = state.epoch_store_for_testing();
+                epoch_store
+                    .tables()
+                    .unwrap()
+                    .get_locked_transaction(&gas_object)
+                    .unwrap()
+            })
+            .await;
+        assert_eq!(locked_digest, Some(transaction_digest));
+    }
+
+    test_cluster.start_node(&validator_names[0]).await;
+    timeout(Duration::from_secs(30), async {
+        test_cluster
+            .fullnode_handle
+            .rtd_node
+            .with_async(|node| {
+                let state = node.state();
+                async move {
+                    state
+                        .get_transaction_cache_reader()
+                        .notify_read_executed_effects("wal crash recovery", &[transaction_digest])
+                        .await;
+                }
+            })
+            .await;
+    })
+    .await?;
+    timeout(Duration::from_secs(10), async {
+        while !recovered_orchestrator.empty_pending_tx_log_in_test() {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await?;
 
     Ok(())
 }

@@ -43,9 +43,9 @@
 //! We can't prevent this completely, but we can at least make the right way the easy way.
 
 use super::RtdNode;
+use rtd_core::authority::AuthorityState;
 use std::future::Future;
 use std::sync::Arc;
-use rtd_core::authority::AuthorityState;
 
 /// Wrap RtdNode to allow correct access to RtdNode in simulator tests.
 pub struct RtdNodeHandle {
@@ -76,6 +76,10 @@ impl RtdNodeHandle {
 
     pub fn shutdown_on_drop(&mut self) {
         self.shutdown_on_drop = true;
+    }
+
+    pub fn release_for_testing(&mut self) {
+        self.node.take();
     }
 }
 

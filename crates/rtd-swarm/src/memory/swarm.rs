@@ -5,6 +5,7 @@ use super::Node;
 use anyhow::Result;
 use futures::future::try_join_all;
 use rand::rngs::OsRng;
+use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
@@ -13,7 +14,6 @@ use std::{
     ops,
     path::{Path, PathBuf},
 };
-use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 
 #[cfg(msim)]
 use rtd_config::node::ExecutionTimeObserverConfig;
@@ -48,6 +48,7 @@ pub struct SwarmBuilder<R = OsRng> {
     fullnode_rpc_port: Option<u16>,
     fullnode_rpc_addr: Option<SocketAddr>,
     fullnode_rpc_config: Option<rtd_config::RpcConfig>,
+    fullnode_config: Option<NodeConfig>,
     supported_protocol_versions_config: ProtocolVersionsConfig,
     // Default to supported_protocol_versions_config, but can be overridden.
     fullnode_supported_protocol_versions_config: Option<ProtocolVersionsConfig>,
@@ -84,6 +85,7 @@ impl SwarmBuilder {
             fullnode_rpc_port: None,
             fullnode_rpc_addr: None,
             fullnode_rpc_config: None,
+            fullnode_config: None,
             supported_protocol_versions_config: ProtocolVersionsConfig::Default,
             fullnode_supported_protocol_versions_config: None,
             db_checkpoint_config: DBCheckpointConfig::default(),
@@ -120,6 +122,7 @@ impl<R> SwarmBuilder<R> {
             fullnode_rpc_port: self.fullnode_rpc_port,
             fullnode_rpc_addr: self.fullnode_rpc_addr,
             fullnode_rpc_config: self.fullnode_rpc_config.clone(),
+            fullnode_config: self.fullnode_config,
             supported_protocol_versions_config: self.supported_protocol_versions_config,
             fullnode_supported_protocol_versions_config: self
                 .fullnode_supported_protocol_versions_config,
@@ -223,6 +226,11 @@ impl<R> SwarmBuilder<R> {
 
     pub fn with_fullnode_rpc_config(mut self, fullnode_rpc_config: rtd_config::RpcConfig) -> Self {
         self.fullnode_rpc_config = Some(fullnode_rpc_config);
+        self
+    }
+
+    pub fn with_fullnode_config(mut self, fullnode_config: NodeConfig) -> Self {
+        self.fullnode_config = Some(fullnode_config);
         self
     }
 
@@ -476,22 +484,27 @@ impl<R: rand::RngCore + rand::CryptoRng> SwarmBuilder<R> {
         }
 
         if self.fullnode_count > 0 {
+            let mut prebuilt_fullnode_config = self.fullnode_config;
             (0..self.fullnode_count).for_each(|idx| {
-                let mut builder = fullnode_config_builder.clone();
-                if idx == 0 {
-                    // Only the first fullnode is used as the rpc fullnode, we can only use the
-                    // same address once.
-                    if let Some(rpc_addr) = self.fullnode_rpc_addr {
-                        builder = builder.with_rpc_addr(rpc_addr);
+                let config = if idx == 0 && prebuilt_fullnode_config.is_some() {
+                    prebuilt_fullnode_config.take().unwrap()
+                } else {
+                    let mut builder = fullnode_config_builder.clone();
+                    if idx == 0 {
+                        // Only the first fullnode is used as the rpc fullnode, we can only use the
+                        // same address once.
+                        if let Some(rpc_addr) = self.fullnode_rpc_addr {
+                            builder = builder.with_rpc_addr(rpc_addr);
+                        }
+                        if let Some(rpc_port) = self.fullnode_rpc_port {
+                            builder = builder.with_rpc_port(rpc_port);
+                        }
+                        if let Some(rpc_config) = &self.fullnode_rpc_config {
+                            builder = builder.with_rpc_config(rpc_config.clone());
+                        }
                     }
-                    if let Some(rpc_port) = self.fullnode_rpc_port {
-                        builder = builder.with_rpc_port(rpc_port);
-                    }
-                    if let Some(rpc_config) = &self.fullnode_rpc_config {
-                        builder = builder.with_rpc_config(rpc_config.clone());
-                    }
-                }
-                let config = builder.build(&mut OsRng, &network_config);
+                    builder.build(&mut OsRng, &network_config)
+                };
                 info!(
                     "SwarmBuilder configuring full node with name {}",
                     config.protocol_public_key()
@@ -536,7 +549,17 @@ impl Swarm {
 
     /// Start all nodes associated with this Swarm
     pub async fn launch(&mut self) -> Result<()> {
-        try_join_all(self.nodes_iter_mut().map(|node| node.start())).await?;
+        try_join_all(self.validator_nodes().map(|node| node.start())).await?;
+        let startup_target = self
+            .validator_node_handles()
+            .into_iter()
+            .map(|handle| handle.with(|node| node.startup_executed_checkpoint()))
+            .max()
+            .unwrap_or(0);
+        for fullnode in self.fullnodes() {
+            fullnode.set_startup_target(startup_target);
+        }
+        try_join_all(self.fullnodes().map(|node| node.start())).await?;
         tracing::info!("Successfully launched Swarm");
         Ok(())
     }
@@ -652,6 +675,23 @@ mod test {
     use super::Swarm;
     use std::num::NonZeroUsize;
 
+    #[test]
+    fn prebuilt_fullnode_config_preserves_identity_and_db_path() {
+        let initial_swarm = Swarm::builder().with_fullnode_count(1).build();
+        let fullnode_config = initial_swarm.fullnodes().next().unwrap().config().clone();
+        let expected_name = fullnode_config.protocol_public_key();
+        let expected_db_path = fullnode_config.db_path.clone();
+
+        let resumed_swarm = Swarm::builder()
+            .with_fullnode_count(1)
+            .with_fullnode_config(fullnode_config)
+            .build();
+        let resumed_fullnode = resumed_swarm.fullnodes().next().unwrap();
+
+        assert_eq!(resumed_fullnode.name(), expected_name);
+        assert_eq!(resumed_fullnode.config().db_path, expected_db_path);
+    }
+
     #[tokio::test]
     async fn launch() {
         telemetry_subscribers::init_for_testing();
@@ -667,9 +707,44 @@ mod test {
         }
 
         for fullnode in swarm.fullnodes() {
-            fullnode.health_check(false).await.unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(60), async {
+                loop {
+                    if fullnode.health_check(false).await.is_ok() {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+            })
+            .await
+            .unwrap();
         }
 
         println!("hello");
+    }
+
+    #[tokio::test]
+    async fn launch_sets_fullnode_target_from_validator_startup_checkpoints() {
+        telemetry_subscribers::init_for_testing();
+        let mut swarm = Swarm::builder().with_fullnode_count(1).build();
+
+        swarm.launch().await.unwrap();
+
+        let expected_target = swarm
+            .validator_node_handles()
+            .into_iter()
+            .map(|handle| handle.with(|node| node.startup_executed_checkpoint()))
+            .max()
+            .unwrap();
+        let fullnode_handle = swarm.fullnodes().next().unwrap().get_node_handle().unwrap();
+        let readiness = fullnode_handle.with(|node| node.fullnode_readiness().unwrap().clone());
+
+        assert_eq!(readiness.startup_target(), expected_target);
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            while !readiness.is_ready() {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap();
     }
 }

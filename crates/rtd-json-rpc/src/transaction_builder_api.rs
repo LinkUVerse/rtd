@@ -10,6 +10,7 @@ use jsonrpsee::core::RpcResult;
 use move_core_types::language_storage::StructTag;
 
 use rtd_core::authority::AuthorityState;
+use rtd_core::node_readiness::FullnodeReadiness;
 use rtd_json::RtdJsonValue;
 use rtd_json_rpc_api::{TransactionBuilderOpenRpc, TransactionBuilderServer};
 use rtd_json_rpc_types::{RPCTransactionRequestParams, RtdObjectDataFilter};
@@ -21,21 +22,51 @@ use rtd_open_rpc::Module;
 use rtd_transaction_builder::{DataReader, TransactionBuilder};
 use rtd_types::base_types::ObjectInfo;
 use rtd_types::base_types::{ObjectID, RtdAddress};
+use rtd_types::quorum_driver_types::QuorumDriverError;
 use rtd_types::rtd_serde::BigInt;
 
 use crate::RtdRpcModule;
 use crate::authority_state::StateRead;
 
-pub struct TransactionBuilderApi(TransactionBuilder);
+pub struct TransactionBuilderApi(TransactionBuilder, Option<Arc<FullnodeReadiness>>);
 
 impl TransactionBuilderApi {
     pub fn new(state: Arc<AuthorityState>) -> Self {
         let reader = Arc::new(AuthorityStateDataReader::new(state));
-        Self(TransactionBuilder::new(reader))
+        Self(TransactionBuilder::new(reader), None)
+    }
+
+    pub fn new_with_readiness(
+        state: Arc<AuthorityState>,
+        readiness: Arc<FullnodeReadiness>,
+    ) -> Self {
+        let reader = Arc::new(AuthorityStateDataReader::new(state));
+        Self(TransactionBuilder::new(reader), Some(readiness))
     }
 
     pub fn new_with_data_reader(data_reader: Arc<dyn DataReader + Sync + Send>) -> Self {
-        Self(TransactionBuilder::new(data_reader))
+        Self(TransactionBuilder::new(data_reader), None)
+    }
+
+    pub fn new_with_data_reader_and_readiness(
+        data_reader: Arc<dyn DataReader + Sync + Send>,
+        readiness: Arc<FullnodeReadiness>,
+    ) -> Self {
+        Self(TransactionBuilder::new(data_reader), Some(readiness))
+    }
+
+    fn ensure_ready(&self) -> RpcResult<()> {
+        if let Some(readiness) = &self.1 {
+            readiness
+                .ensure_ready()
+                .map_err(|error| -> jsonrpsee::types::ErrorObjectOwned {
+                    crate::Error::QuorumDriverError(QuorumDriverError::FullnodeCatchingUp {
+                        details: error.to_string(),
+                    })
+                    .into()
+                })?;
+        }
+        Ok(())
     }
 }
 
@@ -89,6 +120,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas_budget: BigInt<u64>,
         recipient: RtdAddress,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .transfer_object(signer, object_id, gas, *gas_budget, recipient)
@@ -105,6 +137,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         recipient: RtdAddress,
         amount: Option<BigInt<u64>>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .transfer_rtd(
@@ -128,6 +161,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .pay(
@@ -151,6 +185,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         amounts: Vec<BigInt<u64>>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .pay_rtd(
@@ -172,6 +207,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         recipient: RtdAddress,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .pay_all_rtd(signer, input_coins, recipient, *gas_budget)
@@ -188,6 +224,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let compiled_modules = compiled_modules
             .into_iter()
             .map(|data| data.to_vec().map_err(|e| anyhow::anyhow!(e)))
@@ -209,6 +246,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let split_amounts = split_amounts.into_iter().map(|a| *a).collect();
         let data = self
             .0
@@ -226,6 +264,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .split_coin_equal(signer, coin_object_id, *split_count, gas, *gas_budget)
@@ -242,6 +281,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let data = self
             .0
             .merge_coins(signer, primary_coin, coin_to_merge, gas, *gas_budget)
@@ -262,6 +302,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas_budget: BigInt<u64>,
         _txn_builder_mode: Option<RtdTransactionBlockBuilderMode>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         Ok(TransactionBlockBytes::from_data(
             self.0
                 .move_call(
@@ -289,6 +330,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas_budget: BigInt<u64>,
         _txn_builder_mode: Option<RtdTransactionBlockBuilderMode>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         Ok(TransactionBlockBytes::from_data(
             self.0
                 .batch_transaction(signer, params, gas, *gas_budget)
@@ -307,6 +349,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         let amount = amount.map(|a| *a);
         Ok(TransactionBlockBytes::from_data(
             self.0
@@ -324,6 +367,7 @@ impl TransactionBuilderServer for TransactionBuilderApi {
         gas: Option<ObjectID>,
         gas_budget: BigInt<u64>,
     ) -> RpcResult<TransactionBlockBytes> {
+        self.ensure_ready()?;
         Ok(TransactionBlockBytes::from_data(
             self.0
                 .request_withdraw_stake(signer, staked_rtd, gas, *gas_budget)
@@ -341,5 +385,69 @@ impl RtdRpcModule for TransactionBuilderApi {
 
     fn rpc_doc_module() -> Module {
         TransactionBuilderOpenRpc::module_doc()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rtd_core::checkpoints::CheckpointStore;
+    use rtd_core::node_readiness::FullnodeReadiness;
+    use rtd_json_rpc_api::TRANSIENT_ERROR_CODE;
+
+    struct PanicDataReader;
+
+    #[async_trait]
+    impl DataReader for PanicDataReader {
+        async fn get_owned_objects(
+            &self,
+            _address: RtdAddress,
+            _object_type: StructTag,
+        ) -> Result<Vec<ObjectInfo>, anyhow::Error> {
+            panic!("data reader must not be called while fullnode is catching up")
+        }
+
+        async fn get_object_with_options(
+            &self,
+            _object_id: ObjectID,
+            _options: RtdObjectDataOptions,
+        ) -> Result<RtdObjectResponse, anyhow::Error> {
+            panic!("data reader must not be called while fullnode is catching up")
+        }
+
+        async fn get_reference_gas_price(&self) -> Result<u64, anyhow::Error> {
+            panic!("data reader must not be called while fullnode is catching up")
+        }
+    }
+
+    #[tokio::test]
+    async fn transaction_builder_rejects_catching_up_before_reading_objects() {
+        let readiness = Arc::new(FullnodeReadiness::new(
+            42,
+            CheckpointStore::new_for_tests(),
+            None,
+            false,
+            false,
+        ));
+        let api = TransactionBuilderApi::new_with_data_reader_and_readiness(
+            Arc::new(PanicDataReader),
+            readiness,
+        );
+
+        let result = api
+            .transfer_rtd(
+                RtdAddress::ZERO,
+                ObjectID::ZERO,
+                BigInt::from(1),
+                RtdAddress::ZERO,
+                None,
+            )
+            .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("transaction builder unexpectedly succeeded"),
+        };
+
+        assert_eq!(error.code(), TRANSIENT_ERROR_CODE);
     }
 }
