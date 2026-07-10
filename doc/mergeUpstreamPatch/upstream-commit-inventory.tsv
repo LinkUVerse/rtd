@@ -49,56 +49,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 48	8d453e593d58cbd43e7b046a2ea48a309d4e234a	2026-01-06	[move][tracing] Update event API to allow it to specify which events to save in the trace (#23138)	REVIEWED	EXCLUDE_FEATURE		扩展 tracing API 以支持调用方选择事件
 49	4c8c5e7fd3d24edfba3564d69fc09faeb7ee07f5	2026-01-06	fixup docker builds for indexer-alt rpc services (#24813)	REVIEWED	EXCLUDE_POST_FORK		只修复第 41-43 条新增 unwind profile 的 Docker 路径；必要 hunk 作为移植集成适配纳入
 50	c69bda536263dce7fcfe18a32611fef2bebd4ed1	2026-01-06	chore(pnpm audit): bump `qs >= 6.14.1` (#24814)	APPLIED	MERGE	66dd0f93fe41125b152dac744780e291deb73f15	更新 Express 与 lockfiles，当前解析到 qs 6.15.3
-51	4e353e1464395b95cfd3fccf356a5bd2f320d7ff	2026-01-06	docs: fix title capitalization (#24812)	UNREVIEWED			
-52	76f9503c63799b122b769dc8f90b6c732148d395	2026-01-06	fix: redirect (#24816)	UNREVIEWED			
-53	5a5818ed53ffdf5505efb95f90060ebe17ab8281	2026-01-06	docs: Gaming on Sui revision (#24719)	UNREVIEWED			
-54	1b872e186274e2b18895c8b1cd418bf892af680e	2026-01-06	Fix flaky test_simulated_load_conflicting_transfers simtest (#24759)	UNREVIEWED			
-55	af83c5bcd3567c7fc2e9e9f82d46ca4471c452f6	2026-01-06	Handle unindexed balance_changes (#24794)	UNREVIEWED			
-56	40793a635263ce37066f4a6ca66726371cad08a3	2026-01-06	Move full_checkpoint_content_v2 to the end of the list (#24818)	UNREVIEWED			
-57	57950d264b540b59fdec953fa5d790113fe1dfd2	2026-01-07	graphql: Introduce Query.node(id: ID!): Node	UNREVIEWED			
-58	ef3488d505c288809b78f60488ae986b27e547ea	2026-01-07	graphql(node): Object implements Node	UNREVIEWED			
-59	f3ec6a50a3d29c725415ae6c2ada250144386214	2026-01-07	graphql(node): MovePackage implements Node	UNREVIEWED			
-60	3789e36ac36a719b30291249e27587107d5e3a43	2026-01-07	graphql(node): Epoch implements Node	UNREVIEWED			
-61	afb5eba4db03d4d6b404cdb006c50bad626f1a6b	2026-01-07	graphql(node): Checkpoint implements Node	UNREVIEWED			
-62	06c0738d84d80d412f6b88339645893c03128bb3	2026-01-07	graphql(node): Transaction implements Node	UNREVIEWED			
-63	fbe7ab90e45e2e08e9731fbfe75e484ced021506	2026-01-07	graphql(node): MoveObject implements Node	UNREVIEWED			
-64	568c24b6317880d812fe409b354f52fe9f127551	2026-01-07	graphql(node): DynamicField implements Node	UNREVIEWED			
-65	b93b5e4c1e127d667721f544d1894e539ae097d4	2026-01-07	graphql(node): document Node, Node.id, Query.node	UNREVIEWED			
-66	00f4ff98b17118386aa7261490b1bf45e57ddc58	2026-01-07	rpc: add support for address balances to GetBalance and ListBlances (#24817)	UNREVIEWED			
-67	3e4bf56bdc66d74f97bdadb31056ef652845db78	2026-01-07	graphql: MoveModule.fullyQualifiedName	UNREVIEWED			
-68	fb55e5e428a3c0f079256b27795a9bab4c67ba14	2026-01-07	graphql: MoveFunction.fullyQualifiedName	UNREVIEWED			
-69	225279984087553efeb68a834e653cc16a219484	2026-01-07	graphql: IMoveDatatype.fullyQualifiedName	UNREVIEWED			
-70	e2c480c8defeca4de7199d821bedc2854440fd92	2026-01-07	Fix protocol compatibility check against testnet (#24830)	UNREVIEWED			
-71	d73f008d6d98597f887668d7ea316fb731654ad8	2026-01-07	Migrate native bridge from ethers to alloy (#24575)	UNREVIEWED			
-72	e0006bcc54c747977437c29ef5846373cb871fd0	2026-01-07	[indexer-alt] include address balance addresses in tx_affected_addresses (#24799)	UNREVIEWED			
-73	f55e95101969828318bdc1a171ab677c7701d746	2026-01-07	[tree-sitter] Fix `spec` variable-name parsing. Update kws (#24829)	UNREVIEWED			
-74	1bc43724cc798ba4d60ffba0040f065940016df7	2026-01-07	[cli] Fix publish/upgrade issues (#24822)	UNREVIEWED			
-75	400e0464cbdc2b3cd18f889fcdc4530d34a40f14	2026-01-07	[ptb] Support `TxContext` arguments in any position (#24802)	UNREVIEWED			
-76	76514039c96236fd631b70506c97bf3aa89caf91	2026-01-08	graphql: Epoch.totalTransactions for in-progress epochs (#24781)	UNREVIEWED			
-77	911155e271eb553937437d4885d559d719762bdc	2026-01-08	docs: Revise + move /concepts/sui-move-concepts pages  (#24796)	UNREVIEWED			
-78	fd8d5f94521f71d56801ef3a6d6fa77996067ac2	2026-01-08	docs: Revisions to `/concepts/data-access` pages (#24819)	UNREVIEWED			
-79	4ab28f7b8c403cf493fe8d4e1388d2d5c79d36bf	2026-01-08	[ci] append useful info to simtest oncall slack message (#24838)	UNREVIEWED			
-80	f68ddcccab699fb583bc2ab686cad61dda9eec89	2026-01-08	chore(imports): standardize imports for analytics-indexer	UNREVIEWED			
-81	7618e39df2115c0718c7612d6ea8b91f14313b4d	2026-01-08	chore(imports): standardize imports for `sui-checkpoint-blob-indexer`	UNREVIEWED			
-82	641c5b8569dfd0d7a62533b521bce3e053ea760b	2026-01-08	chore(imports): standardize imports for RPC macro crates	UNREVIEWED			
-83	ee871d337be9272266a06022312f5060badb3cfb	2026-01-08	chore(imports): standardize imports for `sui-pg-db`	UNREVIEWED			
-84	59190e5426ba227932cf09d8e1cc1efef1ab2f69	2026-01-08	chore(imports): standardize imports for `sui-package-resolver`	UNREVIEWED			
-85	b2cb0503146652428809e909dcc8037011edce8a	2026-01-08	chore(imports): standardize imports for `sui-display`	UNREVIEWED			
-86	7a657477f0f3ee3fc12c57a58b7da2e4dfb8b055	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-consistent-store`	UNREVIEWED			
-87	c6613286a258ab55d4f16d6f0b2c87f93fcd53d4	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-e2e-tests`	UNREVIEWED			
-88	0be1eff1991315dbb39e5e5cbf20e0784fc45651	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-framework`	UNREVIEWED			
-89	d950ab08807912bfce6d2aefacbee9e5f0ca5ac9	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-graphql`	UNREVIEWED			
-90	fa8b64264b2ae3a305a6d1478d9142896fca9377	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-jsonrpc`	UNREVIEWED			
-91	6f62b7b222d7cac531bafc7c08dad47060597c1b	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-metrics`	UNREVIEWED			
-92	4ee3348723b79d8ac6ef03b9217c751218bd5b47	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-object-store`	UNREVIEWED			
-93	75fc07e63792ea0a9bb8a03f0d28d50b1332a982	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-reader`	UNREVIEWED			
-94	978bbcc7d973a588b16265df5f64d1ecb8d0e47a	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-schema`	UNREVIEWED			
-95	ecae0049caaeb33d2773f625549ca0137637140c	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt`	UNREVIEWED			
-96	ac6149c74c7ff2ce4b5214012008176b68fc4297	2026-01-08	chore(imports): standardize imports for `sui-rpc-resolver`	UNREVIEWED			
-97	46f2ccfa04c520c85db140db4cacfb2e0bd209d2	2026-01-08	Ensure all immutable claims are complete and accurate (#24808)	UNREVIEWED			
-98	334a0a763ad277aba2f3c30626c2bda37c17b033	2026-01-08	[graphql-alt] Add effectsJson and transactionJson fields (#24750)	UNREVIEWED			
-99	67473595531afaa00023944c5126d5d3eb4edd7f	2026-01-08	[tidehunter] Use new compactor API (#24083)	UNREVIEWED			
-100	4ad95e4974ff33d2d8773cfb17f923c7bd3484c5	2026-01-08	fix: correct fetch_latest_blocks error label (#24850)	UNREVIEWED			
+51	4e353e1464395b95cfd3fccf356a5bd2f320d7ff	2026-01-06	docs: fix title capitalization (#24812)	REVIEWED	EXCLUDE_NON_CODE		仅修改文档标题大小写
+52	76f9503c63799b122b769dc8f90b6c732148d395	2026-01-06	fix: redirect (#24816)	REVIEWED	EXCLUDE_NON_CODE		仅修正文档站 Vercel redirect 配置
+53	5a5818ed53ffdf5505efb95f90060ebe17ab8281	2026-01-06	docs: Gaming on Sui revision (#24719)	REVIEWED	EXCLUDE_NON_CODE		仅重写 Gaming 文档
+54	1b872e186274e2b18895c8b1cd418bf892af680e	2026-01-06	Fix flaky test_simulated_load_conflicting_transfers simtest (#24759)	REVIEWED	EXCLUDE_POST_FORK		只修复第 20 条被排除 feature 新增的 soft-bundle workload
+55	af83c5bcd3567c7fc2e9e9f82d46ca4471c452f6	2026-01-06	Handle unindexed balance_changes (#24794)	APPLIED	MERGE	7d63628b06cbd103abaac25e315ead9b9c76604a	拒绝读取尚未追上 balance index watermark 的 checkpoint 和 transaction
+56	40793a635263ce37066f4a6ca66726371cad08a3	2026-01-06	Move full_checkpoint_content_v2 to the end of the list (#24818)	APPLIED	MERGE	8d3226de607f20fa4e75a4332d722de5659334d2	把基线新增 Tidehunter tables 移到列表末尾以保持既有 keyspace 编号
+57	57950d264b540b59fdec953fa5d790113fe1dfd2	2026-01-07	graphql: Introduce Query.node(id: ID!): Node	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL Global Node ID 接口
+58	ef3488d505c288809b78f60488ae986b27e547ea	2026-01-07	graphql(node): Object implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 Object 实现 Node
+59	f3ec6a50a3d29c725415ae6c2ada250144386214	2026-01-07	graphql(node): MovePackage implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 MovePackage 实现 Node
+60	3789e36ac36a719b30291249e27587107d5e3a43	2026-01-07	graphql(node): Epoch implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 Epoch 实现 Node
+61	afb5eba4db03d4d6b404cdb006c50bad626f1a6b	2026-01-07	graphql(node): Checkpoint implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 Checkpoint 实现 Node
+62	06c0738d84d80d412f6b88339645893c03128bb3	2026-01-07	graphql(node): Transaction implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 Transaction 实现 Node
+63	fbe7ab90e45e2e08e9731fbfe75e484ced021506	2026-01-07	graphql(node): MoveObject implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 MoveObject 实现 Node
+64	568c24b6317880d812fe409b354f52fe9f127551	2026-01-07	graphql(node): DynamicField implements Node	REVIEWED	EXCLUDE_FEATURE		扩展 DynamicField 实现 Node
+65	b93b5e4c1e127d667721f544d1894e539ae097d4	2026-01-07	graphql(node): document Node, Node.id, Query.node	REVIEWED	EXCLUDE_POST_FORK		只补充第 57-64 条新增 Node feature 的 schema 文档
+66	00f4ff98b17118386aa7261490b1bf45e57ddc58	2026-01-07	rpc: add support for address balances to GetBalance and ListBlances (#24817)	REVIEWED	EXCLUDE_FEATURE		为 balance RPC 新增 address-balance 查询能力
+67	3e4bf56bdc66d74f97bdadb31056ef652845db78	2026-01-07	graphql: MoveModule.fullyQualifiedName	REVIEWED	EXCLUDE_FEATURE		新增 fullyQualifiedName GraphQL 字段
+68	fb55e5e428a3c0f079256b27795a9bab4c67ba14	2026-01-07	graphql: MoveFunction.fullyQualifiedName	REVIEWED	EXCLUDE_FEATURE		新增 fullyQualifiedName GraphQL 字段
+69	225279984087553efeb68a834e653cc16a219484	2026-01-07	graphql: IMoveDatatype.fullyQualifiedName	REVIEWED	EXCLUDE_FEATURE		新增 fullyQualifiedName GraphQL 字段
+70	e2c480c8defeca4de7199d821bedc2854440fd92	2026-01-07	Fix protocol compatibility check against testnet (#24830)	REVIEWED	EXCLUDE_NON_CODE		仅给 Testnet 协议快照补 insta snapshot_kind 元数据
+71	d73f008d6d98597f887668d7ea316fb731654ad8	2026-01-07	Migrate native bridge from ethers to alloy (#24575)	REVIEWED	EXCLUDE_FEATURE		大规模 native bridge SDK 迁移
+72	e0006bcc54c747977437c29ef5846373cb871fd0	2026-01-07	[indexer-alt] include address balance addresses in tx_affected_addresses (#24799)	APPLIED	MERGE	bc0cec63adec8f3c3f762ad9f83b3f9751ccf888	补齐 accumulator balance write 所影响的地址
+73	f55e95101969828318bdc1a171ab677c7701d746	2026-01-07	[tree-sitter] Fix `spec` variable-name parsing. Update kws (#24829)	APPLIED	MERGE	762816a41c01291092a77e901dfd1fdc0215092e	允许 spec 作为普通变量名同时保留 spec block 解析
+74	1bc43724cc798ba4d60ffba0040f065940016df7	2026-01-07	[cli] Fix publish/upgrade issues (#24822)	APPLIED	MERGE	a8cbd6d0e51a0a86c1c430fdc0b359b54ef97db5	publish 和 upgrade 的 dry-run/serialize 结果不再被误报为错误
+75	400e0464cbdc2b3cd18f889fcdc4530d34a40f14	2026-01-07	[ptb] Support `TxContext` arguments in any position (#24802)	REVIEWED	EXCLUDE_FEATURE		协议 107 新增 PTB TxContext 参数位置能力
+76	76514039c96236fd631b70506c97bf3aa89caf91	2026-01-08	graphql: Epoch.totalTransactions for in-progress epochs (#24781)	REVIEWED	EXCLUDE_FEATURE		把原约定为 null 的未结束 epoch 字段扩展为实时计算
+77	911155e271eb553937437d4885d559d719762bdc	2026-01-08	docs: Revise + move /concepts/sui-move-concepts pages  (#24796)	REVIEWED	EXCLUDE_NON_CODE		仅移动并修订概念文档
+78	fd8d5f94521f71d56801ef3a6d6fa77996067ac2	2026-01-08	docs: Revisions to `/concepts/data-access` pages (#24819)	REVIEWED	EXCLUDE_NON_CODE		仅修订 data-access 文档
+79	4ab28f7b8c403cf493fe8d4e1388d2d5c79d36bf	2026-01-08	[ci] append useful info to simtest oncall slack message (#24838)	REVIEWED	EXCLUDE_NON_CODE		仅修改 CI oncall 通知内容
+80	f68ddcccab699fb583bc2ab686cad61dda9eec89	2026-01-08	chore(imports): standardize imports for analytics-indexer	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+81	7618e39df2115c0718c7612d6ea8b91f14313b4d	2026-01-08	chore(imports): standardize imports for `sui-checkpoint-blob-indexer`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+82	641c5b8569dfd0d7a62533b521bce3e053ea760b	2026-01-08	chore(imports): standardize imports for RPC macro crates	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+83	ee871d337be9272266a06022312f5060badb3cfb	2026-01-08	chore(imports): standardize imports for `sui-pg-db`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+84	59190e5426ba227932cf09d8e1cc1efef1ab2f69	2026-01-08	chore(imports): standardize imports for `sui-package-resolver`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+85	b2cb0503146652428809e909dcc8037011edce8a	2026-01-08	chore(imports): standardize imports for `sui-display`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+86	7a657477f0f3ee3fc12c57a58b7da2e4dfb8b055	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-consistent-store`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+87	c6613286a258ab55d4f16d6f0b2c87f93fcd53d4	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-e2e-tests`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+88	0be1eff1991315dbb39e5e5cbf20e0784fc45651	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-framework`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+89	d950ab08807912bfce6d2aefacbee9e5f0ca5ac9	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-graphql`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+90	fa8b64264b2ae3a305a6d1478d9142896fca9377	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-jsonrpc`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+91	6f62b7b222d7cac531bafc7c08dad47060597c1b	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-metrics`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+92	4ee3348723b79d8ac6ef03b9217c751218bd5b47	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-object-store`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+93	75fc07e63792ea0a9bb8a03f0d28d50b1332a982	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-reader`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+94	978bbcc7d973a588b16265df5f64d1ecb8d0e47a	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt-schema`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+95	ecae0049caaeb33d2773f625549ca0137637140c	2026-01-08	chore(imports): standardize imports for `sui-indexer-alt`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+96	ac6149c74c7ff2ce4b5214012008176b68fc4297	2026-01-08	chore(imports): standardize imports for `sui-rpc-resolver`	REVIEWED	EXCLUDE_FEATURE		仅标准化 import 排序
+97	46f2ccfa04c520c85db140db4cacfb2e0bd209d2	2026-01-08	Ensure all immutable claims are complete and accurate (#24808)	REVIEWED	EXCLUDE_POST_FORK		只修复第 20 条被排除 feature 新增的 immutable claim 验证
+98	334a0a763ad277aba2f3c30626c2bda37c17b033	2026-01-08	[graphql-alt] Add effectsJson and transactionJson fields (#24750)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL 原始 JSON 字段
+99	67473595531afaa00023944c5126d5d3eb4edd7f	2026-01-08	[tidehunter] Use new compactor API (#24083)	REVIEWED	EXCLUDE_FEATURE		迁移 Tidehunter compactor API，未修复基线行为
+100	4ad95e4974ff33d2d8773cfb17f923c7bd3484c5	2026-01-08	fix: correct fetch_latest_blocks error label (#24850)	APPLIED	MERGE	fbbfedd1f2bee5d57068baeee530ac720f9279da	修正 latest-block 初始 RPC 失败的错误标签
 101	37d5a62455f1402572fd5f7844b8fbfaf630b7c0	2026-01-08	Tweaks to checkpoint summary handling in state sync (#24832)	UNREVIEWED			
 102	a5ee2b9b736e712dfc917c5226ae1d835c59abd9	2026-01-08	[fix][ptb] Fix typing ordering  (#24848)	UNREVIEWED			
 103	ef85bdfcdef1856c278bba13b16fa0c78dce8489	2026-01-08	[chore] fixed warnings in package system  (#24847)	UNREVIEWED			
