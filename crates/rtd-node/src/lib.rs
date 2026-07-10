@@ -1480,6 +1480,7 @@ impl RtdNode {
             let epoch_store = epoch_store.clone();
             let rtd_tx_validator = RtdTxValidator::new(
                 state.clone(),
+                epoch_store.clone(),
                 checkpoint_service.clone(),
                 rtd_tx_validator_metrics.clone(),
             );

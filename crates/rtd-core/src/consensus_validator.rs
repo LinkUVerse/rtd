@@ -33,6 +33,7 @@ use crate::{
 #[derive(Clone)]
 pub struct RtdTxValidator {
     authority_state: Arc<AuthorityState>,
+    epoch_store: Arc<AuthorityPerEpochStore>,
     consensus_overload_checker: Arc<dyn ConsensusOverloadChecker>,
     checkpoint_service: Arc<dyn CheckpointServiceNotify + Send + Sync>,
     metrics: Arc<RtdTxValidatorMetrics>,
@@ -41,10 +42,10 @@ pub struct RtdTxValidator {
 impl RtdTxValidator {
     pub fn new(
         authority_state: Arc<AuthorityState>,
+        epoch_store: Arc<AuthorityPerEpochStore>,
         checkpoint_service: Arc<dyn CheckpointServiceNotify + Send + Sync>,
         metrics: Arc<RtdTxValidatorMetrics>,
     ) -> Self {
-        let epoch_store = authority_state.load_epoch_store_one_call_per_task().clone();
         info!(
             "RtdTxValidator constructed for epoch {}",
             epoch_store.epoch()
@@ -53,6 +54,7 @@ impl RtdTxValidator {
         let consensus_overload_checker = Arc::new(NoopConsensusOverloadChecker {});
         Self {
             authority_state,
+            epoch_store,
             consensus_overload_checker,
             checkpoint_service,
             metrics,
@@ -60,8 +62,7 @@ impl RtdTxValidator {
     }
 
     fn validate_transactions(&self, txs: &[ConsensusTransactionKind]) -> Result<(), RtdError> {
-        let epoch_store = self.authority_state.load_epoch_store_one_call_per_task();
-
+        let epoch_store = self.epoch_store.clone();
         let mut cert_batch = Vec::new();
         let mut ckpt_messages = Vec::new();
         let mut ckpt_batch = Vec::new();
@@ -169,7 +170,7 @@ impl RtdTxValidator {
         block_ref: &BlockRef,
         txs: Vec<ConsensusTransactionKind>,
     ) -> Vec<TransactionIndex> {
-        let epoch_store = self.authority_state.load_epoch_store_one_call_per_task();
+        let epoch_store = self.epoch_store.clone();
         if !epoch_store.protocol_config().mysticeti_fastpath() {
             return vec![];
         }
@@ -395,8 +396,12 @@ mod tests {
         .unwrap();
 
         let metrics = RtdTxValidatorMetrics::new(&Default::default());
-        let validator =
-            RtdTxValidator::new(state.clone(), Arc::new(CheckpointServiceNoop {}), metrics);
+        let validator = RtdTxValidator::new(
+            state.clone(),
+            state.epoch_store_for_testing().clone(),
+            Arc::new(CheckpointServiceNoop {}),
+            metrics,
+        );
         let res = validator.verify_batch(&[&first_transaction_bytes]);
         assert!(res.is_ok(), "{res:?}");
 
@@ -508,6 +513,7 @@ mod tests {
 
         let validator = RtdTxValidator::new(
             state.clone(),
+            state.epoch_store_for_testing().clone(),
             Arc::new(CheckpointServiceNoop {}),
             RtdTxValidatorMetrics::new(&Default::default()),
         );
@@ -591,6 +597,7 @@ mod tests {
 
         let validator = RtdTxValidator::new(
             state.clone(),
+            state.epoch_store_for_testing().clone(),
             Arc::new(CheckpointServiceNoop {}),
             RtdTxValidatorMetrics::new(&Default::default()),
         );
@@ -644,6 +651,7 @@ mod tests {
 
         let validator = RtdTxValidator::new(
             state.clone(),
+            state.epoch_store_for_testing().clone(),
             Arc::new(CheckpointServiceNoop {}),
             RtdTxValidatorMetrics::new(&Default::default()),
         );
@@ -705,6 +713,7 @@ mod tests {
         .unwrap();
         let validator = RtdTxValidator::new(
             state.clone(),
+            state.epoch_store_for_testing().clone(),
             Arc::new(CheckpointServiceNoop {}),
             RtdTxValidatorMetrics::new(&Default::default()),
         );
