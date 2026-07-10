@@ -80,6 +80,30 @@ mod checked {
     };
     use tracing::instrument;
 
+    fn merge_accumulator_events(
+        accumulator_events: Vec<AccumulatorEvent>,
+    ) -> Vec<AccumulatorEvent> {
+        accumulator_events
+            .into_iter()
+            .fold(
+                BTreeMap::<ObjectID, Vec<AccumulatorWriteV1>>::new(),
+                |mut map, event| {
+                    map.entry(*event.accumulator_obj.inner())
+                        .or_default()
+                        .push(event.write);
+                    map
+                },
+            )
+            .into_iter()
+            .map(|(obj_id, writes)| {
+                AccumulatorEvent::new(
+                    AccumulatorObjId::new_unchecked(obj_id),
+                    AccumulatorWriteV1::merge(writes),
+                )
+            })
+            .collect()
+    }
+
     /// Maintains all runtime state specific to programmable transactions
     pub struct ExecutionContext<'vm, 'state, 'a> {
         /// The protocol config
@@ -1533,44 +1557,49 @@ mod checked {
             .collect();
 
         let mut receiving_funds_type_and_owners = BTreeMap::new();
-        let accumulator_events = accumulator_events
-            .into_iter()
-            .map(|accum_event| {
-                if let Some(ty) = Balance::maybe_get_balance_type_param(&accum_event.target_ty) {
-                    receiving_funds_type_and_owners
-                        .entry(ty)
-                        .or_insert_with(BTreeSet::new)
-                        .insert(accum_event.target_addr.into());
-                }
-                let value = match accum_event.value {
-                    MoveAccumulatorValue::U64(amount) => AccumulatorValue::Integer(amount),
-                    MoveAccumulatorValue::EventRef(event_idx) => {
-                        let Some(event) = user_events.get(event_idx as usize) else {
-                            invariant_violation!(
-                                "Could not find authenticated event at index {}",
-                                event_idx
-                            );
-                        };
-                        let digest = event.digest();
-                        AccumulatorValue::EventDigest(nonempty![(event_idx, digest)])
+        let accumulator_events = merge_accumulator_events(
+            accumulator_events
+                .into_iter()
+                .map(|accum_event| {
+                    if let Some(ty) = Balance::maybe_get_balance_type_param(&accum_event.target_ty)
+                    {
+                        receiving_funds_type_and_owners
+                            .entry(ty)
+                            .or_insert_with(BTreeSet::new)
+                            .insert(accum_event.target_addr.into());
                     }
-                };
+                    let value = match accum_event.value {
+                        MoveAccumulatorValue::U64(amount) => AccumulatorValue::Integer(amount),
+                        MoveAccumulatorValue::EventRef(event_idx) => {
+                            let Some(event) = user_events.get(event_idx as usize) else {
+                                invariant_violation!(
+                                    "Could not find authenticated event at index {}",
+                                    event_idx
+                                );
+                            };
+                            let digest = event.digest();
+                            AccumulatorValue::EventDigest(nonempty![(event_idx, digest)])
+                        }
+                    };
 
-                let address =
-                    AccumulatorAddress::new(accum_event.target_addr.into(), accum_event.target_ty);
+                    let address = AccumulatorAddress::new(
+                        accum_event.target_addr.into(),
+                        accum_event.target_ty,
+                    );
 
-                let write = AccumulatorWriteV1 {
-                    address,
-                    operation: accum_event.action.into_rtd_accumulator_action(),
-                    value,
-                };
+                    let write = AccumulatorWriteV1 {
+                        address,
+                        operation: accum_event.action.into_rtd_accumulator_action(),
+                        value,
+                    };
 
-                Ok(AccumulatorEvent::new(
-                    AccumulatorObjId::new_unchecked(accum_event.accumulator_id),
-                    write,
-                ))
-            })
-            .collect::<Result<Vec<_>, ExecutionError>>()?;
+                    Ok(AccumulatorEvent::new(
+                        AccumulatorObjId::new_unchecked(accum_event.accumulator_id),
+                        write,
+                    ))
+                })
+                .collect::<Result<Vec<_>, ExecutionError>>()?,
+        );
 
         if protocol_config.enable_coin_deny_list_v2() {
             for object in written_objects.values() {
@@ -2177,6 +2206,29 @@ mod checked {
             }
             .into(),
             _ => convert_vm_error(error, vm, state_view, resolve_abort_location_to_package_id),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use rtd_types::effects::{AccumulatorOperation, AccumulatorValue};
+
+        #[test]
+        fn accumulator_events_are_merged_before_leaving_execution() {
+            let address = RtdAddress::random_for_testing_only();
+            let balance_type: TypeTag = "0x2::balance::Balance<0x2::rtd::RTD>".parse().unwrap();
+            let events = vec![
+                AccumulatorEvent::from_balance_change(address, balance_type.clone(), -100i64)
+                    .unwrap(),
+                AccumulatorEvent::from_balance_change(address, balance_type, -50i64).unwrap(),
+            ];
+
+            let merged = merge_accumulator_events(events);
+
+            assert_eq!(merged.len(), 1);
+            assert_eq!(merged[0].write.operation, AccumulatorOperation::Merge);
+            assert_eq!(merged[0].write.value, AccumulatorValue::Integer(150));
         }
     }
 }
