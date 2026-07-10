@@ -39,16 +39,16 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 38	bcc86aee4bc45c738f1b62d3f75276997376688a	2026-01-06	refactor(basic-indexer): use Service abstraction	REVIEWED	EXCLUDE_FEATURE		basic indexer 示例 Service API 迁移
 39	47eedfae1867590748b5d6ddbb5b1be1561dd8e4	2026-01-06	refactor(clickhouse-indexer): use Service abstraction	REVIEWED	EXCLUDE_FEATURE		ClickHouse indexer 示例 Service API 迁移
 40	5474df434f777e3e4c9a0e426b173e22245ce3a1	2026-01-06	refactor(walrus-indexer): use Service abstraction	REVIEWED	EXCLUDE_FEATURE		Walrus indexer 示例 Service API 迁移
-41	d1182c0080d2a245862784da2f800673b49fb109	2026-01-06	graphql: raise 500 for panics	UNREVIEWED			
-42	a342a9edf7954c255d6c95664a4c601ac2c580e2	2026-01-06	jsonrpc-alt: catch panic handler	UNREVIEWED			
-43	c3a01cacd606407c5f828526321115ed88988bad	2026-01-06	consistent-store: raise internal error for panics	UNREVIEWED			
-44	3adbd2446c06077ee11908e0b298f87fb995bc83	2026-01-06	docs: Revisions to `/concepts/cryptography` pages (#24757)	UNREVIEWED			
-45	b56147803c42e4ffcac4696df8d9df89d22b4841	2026-01-06	clean up READMEs for package-alt crates (#24811)	UNREVIEWED			
-46	baae1c4dedfd43180677400c885c37a7db7fa800	2026-01-06	rpc-index: include address balances in the balance index (#24797)	UNREVIEWED			
-47	6fce1bea1a63495887f7e10ab46a6b736a22b131	2026-01-06	[trace-view] Metadata generation for NPM publishing (#24753)	UNREVIEWED			
-48	8d453e593d58cbd43e7b046a2ea48a309d4e234a	2026-01-06	[move][tracing] Update event API to allow it to specify which events to save in the trace (#23138)	UNREVIEWED			
-49	4c8c5e7fd3d24edfba3564d69fc09faeb7ee07f5	2026-01-06	fixup docker builds for indexer-alt rpc services (#24813)	UNREVIEWED			
-50	c69bda536263dce7fcfe18a32611fef2bebd4ed1	2026-01-06	chore(pnpm audit): bump `qs >= 6.14.1` (#24814)	UNREVIEWED			
+41	d1182c0080d2a245862784da2f800673b49fb109	2026-01-06	graphql: raise 500 for panics	APPLIED	MERGE	9047fc5012a663f94ae6b37a452177b51b213a5b;6c2ddedd437865b88c4258a0de4e487bc032667a	捕获 GraphQL request panic，返回 500 internal error 并记录指标
+42	a342a9edf7954c255d6c95664a4c601ac2c580e2	2026-01-06	jsonrpc-alt: catch panic handler	APPLIED	MERGE	43001a4903f1c1b7d657c10cbed23ed90a93ce5a;6c2ddedd437865b88c4258a0de4e487bc032667a	捕获 JSON-RPC request panic，返回 internal error 并记录指标
+43	c3a01cacd606407c5f828526321115ed88988bad	2026-01-06	consistent-store: raise internal error for panics	APPLIED	MERGE	61284b0b331d57956d5cedb9da8df459ee6bf484;6c2ddedd437865b88c4258a0de4e487bc032667a	捕获 consistent-store gRPC panic 并返回 Internal status
+44	3adbd2446c06077ee11908e0b298f87fb995bc83	2026-01-06	docs: Revisions to `/concepts/cryptography` pages (#24757)	REVIEWED	EXCLUDE_NON_CODE		仅重组和修订 cryptography 文档
+45	b56147803c42e4ffcac4696df8d9df89d22b4841	2026-01-06	clean up READMEs for package-alt crates (#24811)	REVIEWED	EXCLUDE_NON_CODE		仅清理 package-alt README
+46	baae1c4dedfd43180677400c885c37a7db7fa800	2026-01-06	rpc-index: include address balances in the balance index (#24797)	REVIEWED	EXCLUDE_FEATURE		把 address balance 纳入 RPC balance index 的新索引能力
+47	6fce1bea1a63495887f7e10ab46a6b736a22b131	2026-01-06	[trace-view] Metadata generation for NPM publishing (#24753)	REVIEWED	EXCLUDE_FEATURE		trace-adapter NPM declaration 与发布配置
+48	8d453e593d58cbd43e7b046a2ea48a309d4e234a	2026-01-06	[move][tracing] Update event API to allow it to specify which events to save in the trace (#23138)	REVIEWED	EXCLUDE_FEATURE		扩展 tracing API 以支持调用方选择事件
+49	4c8c5e7fd3d24edfba3564d69fc09faeb7ee07f5	2026-01-06	fixup docker builds for indexer-alt rpc services (#24813)	REVIEWED	EXCLUDE_POST_FORK		只修复第 41-43 条新增 unwind profile 的 Docker 路径；必要 hunk 作为移植集成适配纳入
+50	c69bda536263dce7fcfe18a32611fef2bebd4ed1	2026-01-06	chore(pnpm audit): bump `qs >= 6.14.1` (#24814)	APPLIED	MERGE	66dd0f93fe41125b152dac744780e291deb73f15	更新 Express 与 lockfiles，当前解析到 qs 6.15.3
 51	4e353e1464395b95cfd3fccf356a5bd2f320d7ff	2026-01-06	docs: fix title capitalization (#24812)	UNREVIEWED			
 52	76f9503c63799b122b769dc8f90b6c732148d395	2026-01-06	fix: redirect (#24816)	UNREVIEWED			
 53	5a5818ed53ffdf5505efb95f90060ebe17ab8281	2026-01-06	docs: Gaming on Sui revision (#24719)	UNREVIEWED			
