@@ -187,8 +187,8 @@ impl Page<JsonCursor<usize>> {
         total: usize,
         node: impl Fn(usize) -> Result<N, E>,
     ) -> Result<Connection<String, N>, E> {
-        let mut lo = self.after().map_or(0, |a| a.saturating_add(1));
-        let mut hi = self.before().map_or(total, |b| **b);
+        let mut lo = self.after().map_or(0, |a| a.saturating_add(1)).min(total);
+        let mut hi = self.before().map_or(total, |b| **b).min(total);
         let mut conn = Connection::new(false, false);
 
         if hi <= lo {
@@ -439,6 +439,25 @@ mod tests {
                 max: 100,
             })
         ));
+    }
+
+    #[test]
+    fn test_paginate_indices_clamps_out_of_bounds_cursors() {
+        let page = Page {
+            after: Some(JsonCursor::new(1_000)),
+            before: Some(JsonCursor::new(2_000)),
+            limit: 10,
+            end: End::Front,
+        };
+
+        let values = [0, 1, 2];
+        let conn = page
+            .paginate_indices(values.len(), |index| Ok::<_, Infallible>(values[index]))
+            .unwrap();
+
+        assert!(conn.edges.is_empty());
+        assert!(!conn.has_previous_page);
+        assert!(!conn.has_next_page);
     }
 
     #[test]
