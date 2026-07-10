@@ -19,16 +19,16 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 18	b079752c05d5d53f3020fe18784c5da10c97a931	2025-12-31	[graphql-alt] Update IAddressable return types for partial error support [2/n] (#24681)	REVIEWED	EXCLUDE_FEATURE		GraphQL partial error 系列的返回类型/API 扩展
 19	d346634879d2839c9132d509d68a9c94f694e380	2025-12-31	Improvements & fixes for discovery protocol (#24720)	APPLIED	MERGE	49acd0b4410d0b92ed2dc68c87212fb1e0919fae	抽取基线 allowlist 主动拨号与 Private 节点信息泄露修复
 20	22f9fc9781732d651e18384c9a8eb1dabddf73a6	2025-12-31	Disable Owned Object Locking (#24676)	REVIEWED	EXCLUDE_FEATURE		协议级禁用 owned object locking 并改写交易执行路径
-21	b62fe4118e50eebe148644a3373a9f547c10a00d	2026-01-02	Sui v1.63.0 Framework Bytecode snapshot (#24755)	UNREVIEWED			
-22	c1524c8b2b814f6d1b9fb72b793a85061d460534	2026-01-02	Sui v1.64.0 Version Bump (#24756)	UNREVIEWED			
-23	c748f4b478d31236a1930bc70a65a793599c3d2d	2026-01-03	Use a single AuthorityPerEpochStore in SuiTxValidator (#24758)	UNREVIEWED			
-24	9f05896701704d0734d42ae2a64f2056a01cda56	2026-01-04	Gas charger refactoring (#24726)	UNREVIEWED			
-25	dbd8cfa70a222975ec3613eb3e552557742ad32d	2026-01-05	Merge accumulator events early to avoid discrepancy between TransactionOutputs::accumulator_events and TransactionEffects::acumulator_events (#24762)	UNREVIEWED			
-26	02ec45c773ca1d97044218ddfa90cf9e26964394	2026-01-05	[core] prune dead branches from forced-on configs (#24731)	UNREVIEWED			
-27	5cec996ec7a316dbf03b42388583d3cc8ec2d8d8	2026-01-05	[consensus] avoid redundant String allocation in median_timestamp_by_stake error (#24761)	UNREVIEWED			
-28	dcbf21a9840392f95ec120d6bafc661507fdb384	2026-01-05	fix: remove dead network_type from simtests config (#24760)	UNREVIEWED			
-29	f90d706acb71c7816104d5d106a8254dbf86b117	2026-01-05	fix permanent (#24728)	UNREVIEWED			
-30	4d8574f5bda22bac93dec9e082e01d6c4bb335e6	2026-01-05	Alt Framework Analytics Indexer (#24716)	UNREVIEWED			
+21	b62fe4118e50eebe148644a3373a9f547c10a00d	2026-01-02	Sui v1.63.0 Framework Bytecode snapshot (#24755)	REVIEWED	EXCLUDE_POST_FORK		协议 106 framework 快照依赖 fork 后新增的 accumulator 存储基金机制
+22	c1524c8b2b814f6d1b9fb72b793a85061d460534	2026-01-02	Sui v1.64.0 Version Bump (#24756)	REVIEWED	EXCLUDE_NON_CODE		仅版本、依赖和 changelog bump
+23	c748f4b478d31236a1930bc70a65a793599c3d2d	2026-01-03	Use a single AuthorityPerEpochStore in SuiTxValidator (#24758)	APPLIED	MERGE	1577e755f6dd00b1368cb508e94a5d4378819ea0	固定 validator 的 epoch store，避免 epoch 切换竞态
+24	9f05896701704d0734d42ae2a64f2056a01cda56	2026-01-04	Gas charger refactoring (#24726)	REVIEWED	EXCLUDE_FEATURE		为后续协议兼容层准备的 gas charger 重构
+25	dbd8cfa70a222975ec3613eb3e552557742ad32d	2026-01-05	Merge accumulator events early to avoid discrepancy between TransactionOutputs::accumulator_events and TransactionEffects::acumulator_events (#24762)	APPLIED	MERGE	aca95a578a822552524732a8c908c71f69b2cb50	在生成 TransactionOutputs 前按 accumulator object 合并 events
+26	02ec45c773ca1d97044218ddfa90cf9e26964394	2026-01-05	[core] prune dead branches from forced-on configs (#24731)	REVIEWED	EXCLUDE_FEATURE		协议配置强制开启后的 dead-code 清理
+27	5cec996ec7a316dbf03b42388583d3cc8ec2d8d8	2026-01-05	[consensus] avoid redundant String allocation in median_timestamp_by_stake error (#24761)	REVIEWED	EXCLUDE_FEATURE		行为不变的冗余 String 分配清理
+28	dcbf21a9840392f95ec120d6bafc661507fdb384	2026-01-05	fix: remove dead network_type from simtests config (#24760)	REVIEWED	EXCLUDE_FEATURE		删除未使用的 simtest network_type 配置
+29	f90d706acb71c7816104d5d106a8254dbf86b117	2026-01-05	fix permanent (#24728)	APPLIED	MERGE	62090c5d991f0cc3cc8bba18e63ccce7c71c3de8	修正 indexer ingestion 永久错误消息拼写
+30	4d8574f5bda22bac93dec9e082e01d6c4bb335e6	2026-01-05	Alt Framework Analytics Indexer (#24716)	REVIEWED	EXCLUDE_FEATURE		新增 analytics indexer alt framework 架构
 31	a9506dcf899903360d3ef6ef108f83f42753be5f	2026-01-05	[package-alt] implement --allow-dirty and fix --install-dir (#24715)	UNREVIEWED			
 32	ebc792b45b15cf18c50532dd11fb376df61c30d8	2026-01-05	graphql: clamp indices for pagination (#24785)	UNREVIEWED			
 33	1b08d0f6b41e2981e9d6a2f590f6f1771b903613	2026-01-05	remove overly verbose logs (#24791)	UNREVIEWED			
