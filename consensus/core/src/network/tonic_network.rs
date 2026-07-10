@@ -52,6 +52,14 @@ const MAX_FETCH_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
 const DEFAULT_GRPC_SERVER_TIMEOUT: Duration = Duration::from_secs(300);
 
+fn fetch_latest_blocks_error(error: tonic::Status) -> ConsensusError {
+    if error.code() == tonic::Code::DeadlineExceeded {
+        ConsensusError::NetworkRequestTimeout(format!("fetch_latest_blocks failed: {error:?}"))
+    } else {
+        ConsensusError::NetworkRequest(format!("fetch_latest_blocks failed: {error:?}"))
+    }
+}
+
 // Implements Tonic RPC client for Consensus.
 pub(crate) struct TonicClient {
     context: Arc<Context>,
@@ -249,13 +257,7 @@ impl NetworkClient for TonicClient {
         let mut stream = client
             .fetch_latest_blocks(request)
             .await
-            .map_err(|e| {
-                if e.code() == tonic::Code::DeadlineExceeded {
-                    ConsensusError::NetworkRequestTimeout(format!("fetch_blocks failed: {e:?}"))
-                } else {
-                    ConsensusError::NetworkRequest(format!("fetch_blocks failed: {e:?}"))
-                }
-            })?
+            .map_err(fetch_latest_blocks_error)?
             .into_inner();
 
         // Allow twice the max total size of transactions in the fetched blocks.
@@ -1163,4 +1165,27 @@ fn chunk_blocks(blocks: Vec<Bytes>, chunk_limit: usize) -> Vec<Vec<Bytes>> {
         chunks.push(chunk);
     }
     chunks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fetch_latest_blocks_error;
+    use crate::error::ConsensusError;
+
+    #[test]
+    fn fetch_latest_blocks_error_uses_the_rpc_name() {
+        let timeout = fetch_latest_blocks_error(tonic::Status::deadline_exceeded("timeout"));
+        assert!(matches!(
+            timeout,
+            ConsensusError::NetworkRequestTimeout(message)
+                if message.starts_with("fetch_latest_blocks failed:")
+        ));
+
+        let request = fetch_latest_blocks_error(tonic::Status::internal("failure"));
+        assert!(matches!(
+            request,
+            ConsensusError::NetworkRequest(message)
+                if message.starts_with("fetch_latest_blocks failed:")
+        ));
+    }
 }
