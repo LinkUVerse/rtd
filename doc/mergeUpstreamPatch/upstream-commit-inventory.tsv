@@ -549,7 +549,7 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 548	f6a8e9a1ac1a7d77de0ca5ff60a265ebae962372	2026-02-10	rpc-index: deprecate and drop transaction info column (#25382)	REVIEWED	EXCLUDE_FEATURE		RPC index schema 迁移。
 549	007b06a11fad0e7abb729c30f30297be0b63ae5b	2026-02-10	fix(consistency): update formal snapshot to read new checkpoint format (#25376)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后的新 checkpoint 格式与 formal snapshot 路径。
 550	b4bece7094fef8ed0859583ef383db5ceb810630	2026-02-10	Add metrics for funds scheduler	REVIEWED	EXCLUDE_NON_CODE		仅指标。
-551	e137532aea4b6087202a103b4be4baafb9b47a6b	2026-02-10	Certora audit fix: L-03 (#25396)	UNREVIEWED			
+551	e137532aea4b6087202a103b4be4baafb9b47a6b	2026-02-10	Certora audit fix: L-03 (#25396)	APPLIED	MERGE	088efe7bfc5f5499d58b4c944adbd909fed7d3cb	修复多地址 blocklist payload 的偏移累加错误，避免名单被错误解码。
 552	c03fabb7f91c19fa04036b63c2a3b4d06d6e43e2	2026-02-10	rpc: be more resilient in simulate and also expose suggested_gas_price (#25407)	UNREVIEWED			
 553	d1dae0a6d10499ae2cf96d2ea8a1f9cb99ed43f8	2026-02-10	Refactoring cli/config for indexers (#25394)	UNREVIEWED			
 554	eae3c89034d736bde54cdeaee12bc2ebe0206863	2026-02-10	Print tx digest when missing	UNREVIEWED			
@@ -562,11 +562,11 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 561	2d1485c6c856a4aecbd8162761853dc1b9bb72b0	2026-02-11	[move-compiler] Fix unbound module in unit test generation (#25381)	UNREVIEWED			
 562	a8a3e92a5d48fe096030e3d1aa63c86a3e43a402	2026-02-11	sdk: update sdk to include revert for 9b29d604 (#25420)	UNREVIEWED			
 563	56fbfa6cacf913d26fccc503e8f7a043d57ff031	2026-02-11	[move-unit-tests] Kill move unit test extension hook (#25418)	UNREVIEWED			
-564	3d6eb7ba5a3d0015ef7bc13559669822b6fb5fa8	2026-02-11	Certora audit fix: L-04 (#25399)	UNREVIEWED			
-565	f531d4321f0210add6e5796d53a8b0018841f9f7	2026-02-11	Certora audit fix: L-05 (#25401)	UNREVIEWED			
-566	e79ff6eed1076fc4232f35e9e56c269b1a9f7d96	2026-02-11	Certora audit fix: L-14 (#25404)	UNREVIEWED			
-567	a329bf07338628c491f3dbb29fb8bdf13e90f16b	2026-02-11	Certora audit fix: L-11 (#25403)	UNREVIEWED			
-568	07719b68bfac94bd7481b190329010c487997ad7	2026-02-11	Certora audit fix: L-10 (#25402)	UNREVIEWED			
+564	3d6eb7ba5a3d0015ef7bc13559669822b6fb5fa8	2026-02-11	Certora audit fix: L-04 (#25399)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	禁用 bridge authority HTTP 重定向，防止请求越界转发。
+565	f531d4321f0210add6e5796d53a8b0018841f9f7	2026-02-11	Certora audit fix: L-05 (#25401)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	先读取 finalized head 再读取 receipt，避免 reorg finality 竞态。
+566	e79ff6eed1076fc4232f35e9e56c269b1a9f7d96	2026-02-11	Certora audit fix: L-14 (#25404)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	脱敏 bridge HTTP 错误响应并返回正确状态码，避免泄露内部详情。
+567	a329bf07338628c491f3dbb29fb8bdf13e90f16b	2026-02-11	Certora audit fix: L-11 (#25403)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	限制 authority 响应体至 1 MiB，避免过大响应耗尽客户端资源。
+568	07719b68bfac94bd7481b190329010c487997ad7	2026-02-11	Certora audit fix: L-10 (#25402)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	限制 bridge HTTP URI/body 声明长度，避免 oversized request 资源耗尽。
 569	2adf3845064a4f612073c86e9c3331833d1452c9	2026-02-11	rpc: remove dead code in reader (#25400)	UNREVIEWED			
 570	3d2c959a2c49c6f5313db481b99bb578d274968e	2026-02-11	Fix error message matching in tests	UNREVIEWED			
 571	28c2dc551a04f8a25c97e954f2d23e2b8568282d	2026-02-11	Split failure count	UNREVIEWED			
