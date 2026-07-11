@@ -705,3 +705,73 @@ fn open_rocksdb<P: AsRef<Path>>(path: P, opt_cfs: &[&str]) -> Arc<Database> {
     )
     .expect("failed to open rocksdb")
 }
+
+/// Two types that have different BCS serialization formats.
+mod type_mismatch_types {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+    pub struct OriginalValue {
+        pub field_a: u64,
+        pub field_b: String,
+        pub field_c: Vec<u8>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+    pub struct IncompatibleValue {
+        pub field_a: String,
+        pub field_b: u64,
+    }
+}
+
+#[tokio::test]
+async fn safe_iter_returns_error_on_deserialization_failure() {
+    use type_mismatch_types::{IncompatibleValue, OriginalValue};
+
+    let path = temp_dir();
+    let cf_name = "test_cf";
+    let rocks = open_rocksdb(path, &[cf_name]);
+
+    let db_original: DBMap<i32, OriginalValue> =
+        DBMap::reopen(&rocks, Some(cf_name), &ReadWriteOptions::default(), false)
+            .expect("Failed to open storage");
+    for (key, value) in [
+        (
+            1,
+            OriginalValue {
+                field_a: 100,
+                field_b: "hello".to_owned(),
+                field_c: vec![1, 2, 3],
+            },
+        ),
+        (
+            2,
+            OriginalValue {
+                field_a: 200,
+                field_b: "world".to_owned(),
+                field_c: vec![4, 5, 6],
+            },
+        ),
+        (
+            3,
+            OriginalValue {
+                field_a: 300,
+                field_b: "test".to_owned(),
+                field_c: vec![7, 8, 9],
+            },
+        ),
+    ] {
+        db_original.insert(&key, &value).unwrap();
+    }
+
+    assert_eq!(db_original.safe_iter().count(), 3);
+
+    let db_incompatible: DBMap<i32, IncompatibleValue> =
+        DBMap::reopen(&rocks, Some(cf_name), &ReadWriteOptions::default(), false)
+            .expect("Failed to reopen storage with incompatible type");
+    let results: Vec<_> = db_incompatible.safe_iter().collect();
+
+    assert_eq!(results.len(), 3);
+    assert!(results.iter().all(Result::is_err));
+    assert_eq!(db_original.safe_iter().count(), 3);
+}
