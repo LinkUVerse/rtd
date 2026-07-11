@@ -599,56 +599,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 598	0653df00711b95319c3e340703f86ef12c0e2899	2026-02-17	[cli] Fixes pretty printing for tx output (#25480)	REVIEWED	EXCLUDE_NON_CODE		CLI 展示格式。
 599	5b84642b11f5c97ee185362c1e049a4774ea0434	2026-02-17	add protocol config to kv store (#25467)	REVIEWED	EXCLUDE_FEATURE		KV store protocol config 功能。
 600	fc8be700f021a5def82b8d397a272206bc4a314c	2026-02-17	[docs] chore: update hello world frontend page (#25493)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
-601	08d5d54c4fa14077c2b633984f91d420910f8e16	2026-02-17	Skip wait for settment tx key if already executed (#25408)	UNREVIEWED			
-602	1fe80ff91198d2d44b409db59608b71fe0ce5ec0	2026-02-17	bigtable connection pool (#25495)	UNREVIEWED			
-603	77206e08eb2c0929d57e4daa91cdc9d5e5ea1a61	2026-02-18	[move-ide] Fixed diagnostics display on first open (#25500)	UNREVIEWED			
-604	c19e916de408767804b4cf60f2f0a12abdd9bfd9	2026-02-18	Add staking cluster test (#25367)	UNREVIEWED			
-605	2e0cf5a2230814edd56eaeb3665cb5f982aad796	2026-02-18	docs: Revise/Reorganize Concepts and Guides 'Accessing Data' sections (#25331)	UNREVIEWED			
-606	a163a920cc7083d87f187439582a2c06c78c5374	2026-02-18	Relax assertions in composite workload (#25518)	UNREVIEWED			
-607	8b4767a3d3537dd70c69b8f2403ede0e58269674	2026-02-18	Clean up address balance test boilerplate (#25384)	UNREVIEWED			
-608	573888c3bbfa0f898960fc6d12658da279da2850	2026-02-19	[tidehunter] objects pruner (#25391)	UNREVIEWED			
-609	a686ec77de8f8549fcc846273ee422ef9e5d1cb1	2026-02-19	Add package data to kv store (#25494)	UNREVIEWED			
-610	fa796ad07bad0c0d1b963ba53783c7e39b92541b	2026-02-19	ge bug (#25492)	UNREVIEWED			
-611	df0b148729803516be77bcb8581b57f69f459db2	2026-02-19	[jsonrpc-alt] Migrate to read from consistent-store instead of `obj_info` (#25159)	UNREVIEWED			
-612	6ea537732dbdcb3ad1c40732d5297bc3b33e3021	2026-02-19	docs(graphql): remove "future functionality" call-outs (#25532)	UNREVIEWED			
-613	3bd472c11b3a52a808e0cc562a4d81d41ca02492	2026-02-19	chore: update prometheus (#25535)	UNREVIEWED			
-614	77a42de4be99383b98518541e0c6002d720cafc8	2026-02-19	Revert "[consensus] use fifo compaction by default (#25314)" (#25537)	UNREVIEWED			
-615	97266946487f72311672c83fb8b0bb4a417c4fbf	2026-02-19	Remove SchedulingSource enum and all references (#25515)	UNREVIEWED			
-616	1a14d82f81c829fea67b6378bda4be6608f6f54a	2026-02-19	Debottleneck indexing framework (#25498)	UNREVIEWED			
-617	62ede0dbd7bbff53cb297440bf9c507a63ff4f97	2026-02-19	chore: update num-bigint-dig (#25536)	UNREVIEWED			
-618	03e6ae4599573cac47f5b602781245aaef440a06	2026-02-19	increase MAX_PENDING_ROWS for busy pipelines (#25543)	UNREVIEWED			
-619	e2d1b344d71de04f17a186c343c956a62f382695	2026-02-19	[move-ide] Added tests for references (#25506)	UNREVIEWED			
-620	028cab899820b91a5fe1f5873fa3058895689270	2026-02-19	Concurrent pipeline rate limiter (#25542)	UNREVIEWED			
-621	2343ea58f33fe01972d32ba1f2463eff3522d92b	2026-02-19	[tidehunter] Use new batch API (#24947)	UNREVIEWED			
-622	54b5a7006dd8c5771c85b36986f0b3bbc02ace79	2026-02-20	runtime configurable pipeline knobs (#25523)	UNREVIEWED			
-623	2829f3a0dc8ee29566bbb923c9ffd32d28b88562	2026-02-19	Add address alias testing to composite benchmark workload (#25428)	UNREVIEWED			
-624	266201c9f4d5c05fe5ecf86d3564093f5e8dd536	2026-02-20	[test] Add retry logic to all gRPC client connections in authenticated events tests (#25511)	UNREVIEWED			
-625	fac14acf88f0a726f8d09f7fa9e748fdd41f930b	2026-02-20	docs(indexer): update checkpoint type in framework examples (#25534)	UNREVIEWED			
-626	f387d1378612ae9d12ba5f18665edcd25730d05b	2026-02-20	Decouple cross-pipeline lag and ingestion channel size (#25505)	UNREVIEWED			
-627	14f9035784b8fbdde667fd9fbbd5f2645944ffa7	2026-02-20	Use single validator in RPC tests (#25520)	UNREVIEWED			
-628	c57a1c7e994b53ccb19ecf75090f8ab385e26daa	2026-02-20	feat: Add gamma prime aws cognito provider (#25488)	UNREVIEWED			
-629	5aa4d10909838b3d2f582542d54e68312842f80d	2026-02-20	Composite workload: wait for alias tx in checkpoint before advancing (#25551)	UNREVIEWED			
-630	6d6c29e2c7f4a35da8a16f048af86418f012248e	2026-02-20	Clean up collector loop (#25547)	UNREVIEWED			
-631	57fbaeec2287e86406471d9ae59724d43116fc8f	2026-02-20	[docs] [graphql-alt] mention unpruned indexer pipelines that must index from genesis (#25433)	UNREVIEWED			
-632	4734f649499c1fc72ec199f5a462a35ec1775f1b	2026-02-20	Update tidehunter to b112cb0ef42845eff46803fb6fa964d3c17e2eae (#25545)	UNREVIEWED			
-633	977a4223a8d83eafcc6a3d115d001d5be05f5998	2026-02-20	docs: Misc docs site render fixes (#25552)	UNREVIEWED			
-634	69b8f2343833e2c87209b5c30de490bd5e8df884	2026-02-20	docs: Add page for Deploy Dockerized Nautilus apps to Marlin (#25533)	UNREVIEWED			
-635	be206f28c37f93af1965304b41a435d2ce86b8c0	2026-02-20	[move-compiler] Fix a crash when public(package) processing involves pre-compiled modules (#25469)	UNREVIEWED			
-636	eecefbe7a8882bdcb8e124e0ce72cc0859e68976	2026-02-20	Use tidehunter commit pool for large batches (#25554)	UNREVIEWED			
-637	3a5fd2a0aceb0e17b054dd055b7bdb4153b003e8	2026-02-20	[move-compiler] Fix Pack/PackVariant ICE. Fix `assert` arity ICE (#25525)	UNREVIEWED			
-638	74e2b611a3dcd559b3e359d320b276f87a40dc6f	2026-02-20	enable address aliases on mainnet (#25556)	UNREVIEWED			
-639	485d83658b8070aaf2073ed882a316e3939a59a0	2026-02-22	use zero address for move build --dump (#25074)	UNREVIEWED			
-640	fdc32c36924b849d214eb7e63b4da1a5ff6f4b5b	2026-02-22	fix: Update guides.mdx (#25558)	UNREVIEWED			
-641	2f31fcceb8449e7e8354e7eb05ec138496a3628e	2026-02-22	move conn pool size to cfg file (#25567)	UNREVIEWED			
-642	a37744b208b7f7e5af25c617df13a180f8c05cef	2026-02-23	Reduce CI test output verbosity (#25557)	UNREVIEWED			
-643	4393c7645e94c6b13c4008d8c74e7defb605b5c5	2026-02-23	Bump to protocol v113 and clean up some execution paths (#25585)	UNREVIEWED			
-644	05d92edfbfa98131e692f1aa598e786bcf28687d	2026-02-23	dial down fanout (#25586)	UNREVIEWED			
+601	08d5d54c4fa14077c2b633984f91d420910f8e16	2026-02-17	Skip wait for settment tx key if already executed (#25408)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后引入的 accumulator settlement 交易跟踪。
+602	1fe80ff91198d2d44b409db59608b71fe0ce5ec0	2026-02-17	bigtable connection pool (#25495)	REVIEWED	EXCLUDE_FEATURE		BigTable 连接池性能/容量改造。
+603	77206e08eb2c0929d57e4daa91cdc9d5e5ea1a61	2026-02-18	[move-ide] Fixed diagnostics display on first open (#25500)	REVIEWED	EXCLUDE_NON_CRITICAL		仅 Move IDE 首次打开时的诊断展示；不属关键编译正确性或安全修复。
+604	c19e916de408767804b4cf60f2f0a12abdd9bfd9	2026-02-18	Add staking cluster test (#25367)	REVIEWED	EXCLUDE_NON_CODE		仅集群测试。
+605	2e0cf5a2230814edd56eaeb3665cb5f982aad796	2026-02-18	docs: Revise/Reorganize Concepts and Guides 'Accessing Data' sections (#25331)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+606	a163a920cc7083d87f187439582a2c06c78c5374	2026-02-18	Relax assertions in composite workload (#25518)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark workload 断言。
+607	8b4767a3d3537dd70c69b8f2403ede0e58269674	2026-02-18	Clean up address balance test boilerplate (#25384)	REVIEWED	EXCLUDE_NON_CODE		仅测试样板清理。
+608	573888c3bbfa0f898960fc6d12658da279da2850	2026-02-19	[tidehunter] objects pruner (#25391)	REVIEWED	EXCLUDE_FEATURE		新增 Tidehunter objects pruner。
+609	a686ec77de8f8549fcc846273ee422ef9e5d1cb1	2026-02-19	Add package data to kv store (#25494)	REVIEWED	EXCLUDE_FEATURE		KV store package data 功能。
+610	fa796ad07bad0c0d1b963ba53783c7e39b92541b	2026-02-19	ge bug (#25492)	REVIEWED	EXCLUDE_POST_FORK		修复针对 fork 后新增的 kvstore-alt 路径与批量 API。
+611	df0b148729803516be77bcb8581b57f69f459db2	2026-02-19	[jsonrpc-alt] Migrate to read from consistent-store instead of `obj_info` (#25159)	REVIEWED	EXCLUDE_POST_FORK		jsonrpc-alt/consistent-store 路径不在 fork 基线。
+612	6ea537732dbdcb3ad1c40732d5297bc3b33e3021	2026-02-19	docs(graphql): remove "future functionality" call-outs (#25532)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+613	3bd472c11b3a52a808e0cc562a4d81d41ca02492	2026-02-19	chore: update prometheus (#25535)	REVIEWED	EXCLUDE_NON_CODE		依赖升级。
+614	77a42de4be99383b98518541e0c6002d720cafc8	2026-02-19	Revert "[consensus] use fifo compaction by default (#25314)" (#25537)	REVIEWED	EXCLUDE_POST_FORK		回滚的是 fork 后启用的 consensus FIFO compaction 默认值。
+615	97266946487f72311672c83fb8b0bb4a417c4fbf	2026-02-19	Remove SchedulingSource enum and all references (#25515)	REVIEWED	EXCLUDE_FEATURE		SchedulingSource 架构清理。
+616	1a14d82f81c829fea67b6378bda4be6608f6f54a	2026-02-19	Debottleneck indexing framework (#25498)	REVIEWED	EXCLUDE_FEATURE		indexing framework 吞吐架构改造。
+617	62ede0dbd7bbff53cb297440bf9c507a63ff4f97	2026-02-19	chore: update num-bigint-dig (#25536)	REVIEWED	EXCLUDE_NON_CODE		依赖升级。
+618	03e6ae4599573cac47f5b602781245aaef440a06	2026-02-19	increase MAX_PENDING_ROWS for busy pipelines (#25543)	REVIEWED	EXCLUDE_FEATURE		pipeline 容量调参。
+619	e2d1b344d71de04f17a186c343c956a62f382695	2026-02-19	[move-ide] Added tests for references (#25506)	REVIEWED	EXCLUDE_NON_CODE		仅 Move IDE 测试。
+620	028cab899820b91a5fe1f5873fa3058895689270	2026-02-19	Concurrent pipeline rate limiter (#25542)	REVIEWED	EXCLUDE_FEATURE		并发 pipeline rate limiter。
+621	2343ea58f33fe01972d32ba1f2463eff3522d92b	2026-02-19	[tidehunter] Use new batch API (#24947)	REVIEWED	EXCLUDE_POST_FORK		依赖 Tidehunter 新 batch API。
+622	54b5a7006dd8c5771c85b36986f0b3bbc02ace79	2026-02-20	runtime configurable pipeline knobs (#25523)	REVIEWED	EXCLUDE_FEATURE		新增运行时 pipeline 配置接口。
+623	2829f3a0dc8ee29566bbb923c9ffd32d28b88562	2026-02-19	Add address alias testing to composite benchmark workload (#25428)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 测试。
+624	266201c9f4d5c05fe5ecf86d3564093f5e8dd536	2026-02-20	[test] Add retry logic to all gRPC client connections in authenticated events tests (#25511)	REVIEWED	EXCLUDE_NON_CODE		仅 gRPC 测试重试。
+625	fac14acf88f0a726f8d09f7fa9e748fdd41f930b	2026-02-20	docs(indexer): update checkpoint type in framework examples (#25534)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+626	f387d1378612ae9d12ba5f18665edcd25730d05b	2026-02-20	Decouple cross-pipeline lag and ingestion channel size (#25505)	REVIEWED	EXCLUDE_FEATURE		ingestion pipeline 架构/调参。
+627	14f9035784b8fbdde667fd9fbbd5f2645944ffa7	2026-02-20	Use single validator in RPC tests (#25520)	REVIEWED	EXCLUDE_NON_CODE		仅 RPC 测试。
+628	c57a1c7e994b53ccb19ecf75090f8ab385e26daa	2026-02-20	feat: Add gamma prime aws cognito provider (#25488)	REVIEWED	EXCLUDE_FEATURE		新增 Cognito provider。
+629	5aa4d10909838b3d2f582542d54e68312842f80d	2026-02-20	Composite workload: wait for alias tx in checkpoint before advancing (#25551)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark workload。
+630	6d6c29e2c7f4a35da8a16f048af86418f012248e	2026-02-20	Clean up collector loop (#25547)	REVIEWED	EXCLUDE_FEATURE		collector loop 重构。
+631	57fbaeec2287e86406471d9ae59724d43116fc8f	2026-02-20	[docs] [graphql-alt] mention unpruned indexer pipelines that must index from genesis (#25433)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+632	4734f649499c1fc72ec199f5a462a35ec1775f1b	2026-02-20	Update tidehunter to b112cb0ef42845eff46803fb6fa964d3c17e2eae (#25545)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter 版本更新。
+633	977a4223a8d83eafcc6a3d115d001d5be05f5998	2026-02-20	docs: Misc docs site render fixes (#25552)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+634	69b8f2343833e2c87209b5c30de490bd5e8df884	2026-02-20	docs: Add page for Deploy Dockerized Nautilus apps to Marlin (#25533)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+635	be206f28c37f93af1965304b41a435d2ce86b8c0	2026-02-20	[move-compiler] Fix a crash when public(package) processing involves pre-compiled modules (#25469)	REVIEWED	EXCLUDE_POST_FORK		修复依赖 fork 后新增的预编译模块 public(package) 流程。
+636	eecefbe7a8882bdcb8e124e0ce72cc0859e68976	2026-02-20	Use tidehunter commit pool for large batches (#25554)	REVIEWED	EXCLUDE_FEATURE		Tidehunter commit pool 大批量写入改造。
+637	3a5fd2a0aceb0e17b054dd055b7bdb4153b003e8	2026-02-20	[move-compiler] Fix Pack/PackVariant ICE. Fix `assert` arity ICE (#25525)	APPLIED	MERGE	f51ba02f93bb0c72c5a737a5142b7815915afbee	将 Pack/PackVariant 与 assert 非法输入从 ICE 转为诊断，保留后续编译恢复。
+638	74e2b611a3dcd559b3e359d320b276f87a40dc6f	2026-02-20	enable address aliases on mainnet (#25556)	REVIEWED	EXCLUDE_FEATURE		主网 address alias 配置功能。
+639	485d83658b8070aaf2073ed882a316e3939a59a0	2026-02-22	use zero address for move build --dump (#25074)	REVIEWED	EXCLUDE_NON_CRITICAL		Move CLI dump 输出行为调整。
+640	fdc32c36924b849d214eb7e63b4da1a5ff6f4b5b	2026-02-22	fix: Update guides.mdx (#25558)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+641	2f31fcceb8449e7e8354e7eb05ec138496a3628e	2026-02-22	move conn pool size to cfg file (#25567)	REVIEWED	EXCLUDE_FEATURE		连接池配置化。
+642	a37744b208b7f7e5af25c617df13a180f8c05cef	2026-02-23	Reduce CI test output verbosity (#25557)	REVIEWED	EXCLUDE_NON_CODE		仅 CI 输出。
+643	4393c7645e94c6b13c4008d8c74e7defb605b5c5	2026-02-23	Bump to protocol v113 and clean up some execution paths (#25585)	REVIEWED	EXCLUDE_POST_FORK		fork 后 protocol v113 与 execution 路径。
+644	05d92edfbfa98131e692f1aa598e786bcf28687d	2026-02-23	dial down fanout (#25586)	REVIEWED	EXCLUDE_FEATURE		KV reader fanout 调参。
 645	b8d8cadb925848f8fc0077f81f17069f3aa16dac	2026-02-23	[move-compiler] Fix two crashes with macros (#25546)	APPLIED	MERGE	8f8439dfae6903c0cdc7f22a23b53773fd3377bf	MacroFuns 错误输入不再触发 tuple type/lvalue ICE，改为继续输出编译诊断。
 646	83f49f719306dfa31d648fb791065aa70fa7057d	2026-02-23	[move][move-compiler] Fix #25451, #25452, #25454 (#25502)	APPLIED	MERGE	d99398e44f818971f07fe70eaafaf069c7da5606	将异常 match pattern/guard/field/or-pattern 转为编译诊断，并避免矩阵特化空队列 panic。
 647	45d4937faa509aae619b2af3af70a6e97741aa17	2026-02-23	[move][move-compiler] Fix #25349 (#25501)	APPLIED	MERGE	f35e627e3f077c58e0f8fd16327bb40fdbecb3f0	把 string literal match 从 compiler crash 转为明确的 InvalidString 诊断。
-648	9c6f11ef03385a91c7f85c7be43ab3a202cec3cf	2026-02-23	[cli] Fix client ptb output format (#25587)	UNREVIEWED			
+648	9c6f11ef03385a91c7f85c7be43ab3a202cec3cf	2026-02-23	[cli] Fix client ptb output format (#25587)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI PTB 展示格式。
 649	0697f4038f7093d115c9bd968c059ee710ccf66d	2026-02-23	Fix sequence_key key type (#25590)	APPLIED	MERGE	6d98c2a9c2ccc3817dafed5586cefc1d89f00d7e	修正 fork 基线已有 epoch 表的序列键前缀与 pending-signatures 缓存配置，避免键空间错误。
-650	67710b8a2b230eb87f3729b5b99ec5500bca3bad	2026-02-23	reducing ingestion concurrency and channel size (#25593)	UNREVIEWED			
+650	67710b8a2b230eb87f3729b5b99ec5500bca3bad	2026-02-23	reducing ingestion concurrency and channel size (#25593)	REVIEWED	EXCLUDE_FEATURE		ingestion 并发/通道容量调参。
 651	699c2c28de6fdb1e88f3cf866d8949f8757fdc13	2026-02-24	[chore] better prettierrc override for Move (#25569)	UNREVIEWED			
 652	5fcbade49ca5b1b881dce95dde0872c595bcd385	2026-02-24	docs: directions to add new pipeline to indexer, reduce bloat (#25598)	UNREVIEWED			
 653	7a2216d0da798bf5e3a3d3b4a8524c6c1f44b1b0	2026-02-24	e (#25597)	UNREVIEWED			
