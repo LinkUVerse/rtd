@@ -749,56 +749,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 748	a0a246bb8cc10fec095e137950858a623ef16cba	2026-03-06	Remote store operator docs (#25702)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 749	cc660f33a3c681212dbd84242c4da6936bda6fc0	2026-03-06	docs: Update style guide (#25733)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 750	4c1bf5603130b56d0a590427556f258f6713de35	2026-03-06	docs: Compliance checks for llms spec (#25734)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
-751	324c65096723b6b8424e4545e958c2cb4dac479d	2026-03-06	Validator metadata tests (#25731)	UNREVIEWED			
-752	c5c84fd5ea23fd7c156215927c21fdb079977633	2026-03-06	docs: Improve llm.txt generation (#25738)	UNREVIEWED			
-753	954d631c0f0aa7f2e391d72fdee7b785db21ec95	2026-03-06	docs: Fix llm compliance CI (#25736)	UNREVIEWED			
-754	03a8010fca0594d7cee616552e7e4ded7c824c88	2026-03-06	Add gas validation fuzz and edge-case tests for dry-run and dev-inspect (#25692)	UNREVIEWED			
-755	10170e537cc871618e73369800a3f1cfd3884753	2026-03-06	Rosetta Address Balance Support (#25623)	UNREVIEWED			
-756	05a254bc31a87b979c3d0ad20e9fb80392ed6e4f	2026-03-06	[tidehunter] add sleep before removing per epoch dbs (#25740)	UNREVIEWED			
-757	1ff45e276f52342564adde5bb331649658f17494	2026-03-06	[move][move-compiler] Fix constant ICEs for self-referencing and cross-module constants (#25595, #25650) (#25730)	UNREVIEWED			
-758	a957b0f0ccb5d0575b39327d686f47d00684f119	2026-03-07	docs: Refine CI job for LLM tests (#25735)	UNREVIEWED			
-759	4e6afdf2dc6002cece070dcf2c82527491e4d3e5	2026-03-07	Move defer_unpaid_amplification=false from protocol v114 to v115 (#25743)	UNREVIEWED			
-760	a3322901cb2ff7de7d289a16b6852f6208ee9853	2026-03-08	Remove assertion_line metadata from v114 protocol config snapshots (#25757)	UNREVIEWED			
-761	13330ca14f57d3a4f115bee11a191b93a153308e	2026-03-08	[move-compiler] Fix sui mode id_leak reachable unwrap (#25746)	UNREVIEWED			
-762	f86ebf9fcac7ad107c31fd3e6ca2e6eb07c65e07	2026-03-08	[move-compiler] Relax asserts in borrows/mod.rs  (#25745)	UNREVIEWED			
-763	82614aec4758b017e73b9ed0ff5902a8c970fd4b	2026-03-08	Speed up transactional tests by ~50% (#25758)	UNREVIEWED			
-764	6ee0fb4901ce85512fb4508eaaffae269497cf8f	2026-03-09	docs: fix Address Alias page on sidebar (#25755)	UNREVIEWED			
-765	5124c9673a9df943e4738198528f8b576e48659a	2026-03-09	Go back to 1 bigtable connection for readers (#25763)	UNREVIEWED			
-766	55fcf9c1691b871f8ea14f3fb763104bc1d6451a	2026-03-09	docs: Remove unused CI job (#25756)	UNREVIEWED			
-767	43c4f15d7caba14b3c9351cd9e29b14fb0ca8e3d	2026-03-09	docs: remove duplicate files (#25754)	UNREVIEWED			
-768	aef2aa632b161223cec751751efeae18ee153fb1	2026-03-09	docs: Style Guide entry for ports/variables + skills file (#25751)	UNREVIEWED			
-769	7974b54a41cc3ccec2ea908288024feb4b77a235	2026-03-09	docs: cleaning up script locations (#25749)	UNREVIEWED			
-770	cd7d29fbd27f009cc9c216633c7cb189626bc008	2026-03-09	docs: adjust Concepts sidebar  (#25752)	UNREVIEWED			
-771	36d3e4cb4fb073d61ebee5485194a3e46d5bcb75	2026-03-09	Revert "[tidehunter] add sleep before removing per epoch dbs (#25740)" (#25759)	UNREVIEWED			
-772	7ddac5214c8ae427342f735a79bcbf3fae5c339c	2026-03-09	jsonrpc: compute gas from accumulator events for failed ab transactions (#25644)	UNREVIEWED			
-773	b10ad9881ded8b9fe7a8442e6b7e72718b60c9c5	2026-03-09	chore: update quinn-proto (#25762)	UNREVIEWED			
-774	ed52127b6aa6297d13f9215408ab0d042c5af5b7	2026-03-09	docs: Display V2 migration guide for dev announcement  (#25767)	UNREVIEWED			
-775	7fd871b729c31b61a81c9fb3b56914c408dc7418	2026-03-09	docs: Update display-v2-migration.mdx (#25768)	UNREVIEWED			
-776	fa9eab2cfa1b7ca648354ba42bf579f747adc7b8	2026-03-09	[framework] Display Registry (#23710)	UNREVIEWED			
-777	c49568b3570b05a4d491906c1f292fc7dfe992b8	2026-03-09	docs: Update display-v2-migration.mdx (#25769)	UNREVIEWED			
-778	4722b2af6a6ee8cd66f9fe109d487db657d69641	2026-03-09	Rename ExecutionFailureStatus to ExecutionErrorKind (#25710)	UNREVIEWED			
-779	dc73efd65e59a16699af8615870efe77db0848d6	2026-03-09	[move][move-compiler] Match tests and fixes (#25729)	UNREVIEWED			
-780	7fc33d10ae75fbcb9fc7a6f9dbe8b8981f96d67a	2026-03-10	add ingestion layer for ingestion config (#25780)	UNREVIEWED			
-781	309d966a8cfec1b088462e15877bfe1756cdb636	2026-03-10	display: avoid holding hash map lock while fetching objects (#25783)	UNREVIEWED			
-782	5b9cddcbb7aed091139f40add8d22c4c8dccfb90	2026-03-10	docs: Update Rust SDK mentions (#25782)	UNREVIEWED			
-783	18873ac3c45e576f0cf98ce85a1506a51772ef70	2026-03-10	graphql: uninitialized watermark is considered unhealthy (#25778)	UNREVIEWED			
-784	1213c9ac947018ad11e1e52e066ee921b65b9f69	2026-03-10	registry/display: GraphQL integration (#25242)	UNREVIEWED			
-785	9da886b697cd1480d9957d92510cd9ec95f2ceca	2026-03-10	indexer: log and track processor retries (#25776)	UNREVIEWED			
-786	853ffa64614fd3556f3bc5c3696989b756ec7c13	2026-03-10	display(jsonrpc): prepare for Display v2 (#25358)	UNREVIEWED			
-787	056596fada7926aad1a849625d44fe77e6637a77	2026-03-10	registry/display: JSONRPC-alt integration (#25359)	UNREVIEWED			
-788	273f9393478c22ae5690add9d5fde187ffb51d93	2026-03-10	fix(jsonrpc-alt): fix type mismatch in display field response (#25787)	UNREVIEWED			
-789	6f6e522a2b22a5c6cad7ce967e12631c426f8351	2026-03-11	easy(display): clarify Store trait contract (#25786)	UNREVIEWED			
-790	951cae315d8b252131836a331bcc16b89eb340d6	2026-03-11	registry/display: JSONRPC integration (#25360)	UNREVIEWED			
-791	d1f9e1927107497295d549ae8117b53f225aeadc	2026-03-11	display: abstract written json value type	UNREVIEWED			
-792	9118879afc08560adca637edfd566f607627cc89	2026-03-11	display: impl JsonValue for prost_types::Value	UNREVIEWED			
-793	592703ded266e947dd8dfc224a59b70b15375c0d	2026-03-11	grpc: integrate display v2	UNREVIEWED			
-794	8017bfe25d57a302b191405a0719157c3fda3a9a	2026-03-11	Verify balance change amounts in JSON RPC test (#25789)	UNREVIEWED			
-795	7da6cbcf6913015d4144f05de58df523a40623fb	2026-03-11	Remove unnecessary --simulator usage in transactional tests (#25770)	UNREVIEWED			
-796	4f8ee2381d34dad7117ad07687ec75bdc7b405f2	2026-03-11	Gate checkpointed transactions index check on enable_secondary_index_checks (#25726)	UNREVIEWED			
-797	fb3b45c207a41329e35c5b4183b9754ed9cdeabd	2026-03-11	Verify exact balance change amounts in JSON-RPC test (#25719)	UNREVIEWED			
-798	71167747ffaa6a3ab68938d8f357a5755f231259	2026-03-11	Normalize formula to be a more consistent shape and match the new VM  (#25798)	UNREVIEWED			
-799	fc75182812cc6b0dab0ce0cd67820d6bed66200d	2026-03-11	Release kvstore image to dockerhub (#25797)	UNREVIEWED			
-800	7f9b58a19efc7bc652c21415ad5912311a1dfc58	2026-03-12	[tidehunter] safe_drop_db: await LOCK file (#25794)	UNREVIEWED			
+751	324c65096723b6b8424e4545e958c2cb4dac479d	2026-03-06	Validator metadata tests (#25731)	REVIEWED	EXCLUDE_NON_CODE		仅 validator metadata 测试。
+752	c5c84fd5ea23fd7c156215927c21fdb079977633	2026-03-06	docs: Improve llm.txt generation (#25738)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+753	954d631c0f0aa7f2e391d72fdee7b785db21ec95	2026-03-06	docs: Fix llm compliance CI (#25736)	REVIEWED	EXCLUDE_NON_CODE		仅文档/CI。
+754	03a8010fca0594d7cee616552e7e4ded7c824c88	2026-03-06	Add gas validation fuzz and edge-case tests for dry-run and dev-inspect (#25692)	REVIEWED	EXCLUDE_NON_CODE		仅 dry-run/dev-inspect fuzz 与边界测试。
+755	10170e537cc871618e73369800a3f1cfd3884753	2026-03-06	Rosetta Address Balance Support (#25623)	REVIEWED	EXCLUDE_POST_FORK		Rosetta address-balance 功能。
+756	05a254bc31a87b979c3d0ad20e9fb80392ed6e4f	2026-03-06	[tidehunter] add sleep before removing per epoch dbs (#25740)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter per-epoch DB 删除行为调整，后续已被回滚。
+757	1ff45e276f52342564adde5bb331649658f17494	2026-03-06	[move][move-compiler] Fix constant ICEs for self-referencing and cross-module constants (#25595, #25650) (#25730)	APPLIED	MERGE	d6abebdffcbae3ffbfd075e4dc450f888f618057	常量依赖图忽略跨模块常量，并将单节点自引用转为循环诊断，避免展开 ICE。
+758	a957b0f0ccb5d0575b39327d686f47d00684f119	2026-03-07	docs: Refine CI job for LLM tests (#25735)	REVIEWED	EXCLUDE_NON_CODE		仅文档/CI。
+759	4e6afdf2dc6002cece070dcf2c82527491e4d3e5	2026-03-07	Move defer_unpaid_amplification=false from protocol v114 to v115 (#25743)	REVIEWED	EXCLUDE_POST_FORK		fork 后 amplification protocol 开关。
+760	a3322901cb2ff7de7d289a16b6852f6208ee9853	2026-03-08	Remove assertion_line metadata from v114 protocol config snapshots (#25757)	REVIEWED	EXCLUDE_NON_CODE		仅 protocol 快照元数据。
+761	13330ca14f57d3a4f115bee11a191b93a153308e	2026-03-08	[move-compiler] Fix sui mode id_leak reachable unwrap (#25746)	APPLIED	MERGE	aaceea141c94b2a1d8f4669d0be7557fccb6e71b	RTD mode object pack 字段缺失时安全退出 id-leak 分析，避免可达 unwrap。
+762	f86ebf9fcac7ad107c31fd3e6ca2e6eb07c65e07	2026-03-08	[move-compiler] Relax asserts in borrows/mod.rs  (#25745)	APPLIED	MERGE	90d506e37eb33ba2937c82d0983c8bb5eb6e4280	借用检查器把错误输入中的单值/引用断言改为诊断与恢复，避免多处 ICE。
+763	82614aec4758b017e73b9ed0ff5902a8c970fd4b	2026-03-08	Speed up transactional tests by ~50% (#25758)	REVIEWED	EXCLUDE_NON_CODE		仅 transactional tests 性能。
+764	6ee0fb4901ce85512fb4508eaaffae269497cf8f	2026-03-09	docs: fix Address Alias page on sidebar (#25755)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+765	5124c9673a9df943e4738198528f8b576e48659a	2026-03-09	Go back to 1 bigtable connection for readers (#25763)	REVIEWED	EXCLUDE_NON_CRITICAL		BigTable reader 连接数调参。
+766	55fcf9c1691b871f8ea14f3fb763104bc1d6451a	2026-03-09	docs: Remove unused CI job (#25756)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+767	43c4f15d7caba14b3c9351cd9e29b14fb0ca8e3d	2026-03-09	docs: remove duplicate files (#25754)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+768	aef2aa632b161223cec751751efeae18ee153fb1	2026-03-09	docs: Style Guide entry for ports/variables + skills file (#25751)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+769	7974b54a41cc3ccec2ea908288024feb4b77a235	2026-03-09	docs: cleaning up script locations (#25749)	REVIEWED	EXCLUDE_NON_CODE		仅文档脚本位置清理。
+770	cd7d29fbd27f009cc9c216633c7cb189626bc008	2026-03-09	docs: adjust Concepts sidebar  (#25752)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+771	36d3e4cb4fb073d61ebee5485194a3e46d5bcb75	2026-03-09	Revert "[tidehunter] add sleep before removing per epoch dbs (#25740)" (#25759)	REVIEWED	EXCLUDE_NON_CODE		仅回滚第 756 条行为调整。
+772	7ddac5214c8ae427342f735a79bcbf3fae5c339c	2026-03-09	jsonrpc: compute gas from accumulator events for failed ab transactions (#25644)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 address-balance 失败交易。
+773	b10ad9881ded8b9fe7a8442e6b7e72718b60c9c5	2026-03-09	chore: update quinn-proto (#25762)	REVIEWED	EXCLUDE_NON_CODE		依赖升级。
+774	ed52127b6aa6297d13f9215408ab0d042c5af5b7	2026-03-09	docs: Display V2 migration guide for dev announcement  (#25767)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+775	7fd871b729c31b61a81c9fb3b56914c408dc7418	2026-03-09	docs: Update display-v2-migration.mdx (#25768)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+776	fa9eab2cfa1b7ca648354ba42bf579f747adc7b8	2026-03-09	[framework] Display Registry (#23710)	REVIEWED	EXCLUDE_FEATURE		framework Display Registry 新功能。
+777	c49568b3570b05a4d491906c1f292fc7dfe992b8	2026-03-09	docs: Update display-v2-migration.mdx (#25769)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+778	4722b2af6a6ee8cd66f9fe109d487db657d69641	2026-03-09	Rename ExecutionFailureStatus to ExecutionErrorKind (#25710)	REVIEWED	EXCLUDE_FEATURE		ExecutionFailureStatus API/schema 重命名。
+779	dc73efd65e59a16699af8615870efe77db0848d6	2026-03-09	[move][move-compiler] Match tests and fixes (#25729)	APPLIED	MERGE	00b636e6549304eaf171b54a17435f517e62cf40	native struct 或缺失字段元数据的 match 生成诊断并安全失败，避免 specialization/compilation unwrap。
+780	7fc33d10ae75fbcb9fc7a6f9dbe8b8981f96d67a	2026-03-10	add ingestion layer for ingestion config (#25780)	REVIEWED	EXCLUDE_FEATURE		ingestion layer 配置功能。
+781	309d966a8cfec1b088462e15877bfe1756cdb636	2026-03-10	display: avoid holding hash map lock while fetching objects (#25783)	REVIEWED	EXCLUDE_FEATURE		Display v2 并发实现优化。
+782	5b9cddcbb7aed091139f40add8d22c4c8dccfb90	2026-03-10	docs: Update Rust SDK mentions (#25782)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+783	18873ac3c45e576f0cf98ce85a1506a51772ef70	2026-03-10	graphql: uninitialized watermark is considered unhealthy (#25778)	REVIEWED	EXCLUDE_FEATURE		GraphQL watermark 健康状态语义。
+784	1213c9ac947018ad11e1e52e066ee921b65b9f69	2026-03-10	registry/display: GraphQL integration (#25242)	REVIEWED	EXCLUDE_FEATURE		Display Registry GraphQL 集成。
+785	9da886b697cd1480d9957d92510cd9ec95f2ceca	2026-03-10	indexer: log and track processor retries (#25776)	REVIEWED	EXCLUDE_FEATURE		indexer processor retry 指标。
+786	853ffa64614fd3556f3bc5c3696989b756ec7c13	2026-03-10	display(jsonrpc): prepare for Display v2 (#25358)	REVIEWED	EXCLUDE_FEATURE		Display v2 JSON-RPC 准备。
+787	056596fada7926aad1a849625d44fe77e6637a77	2026-03-10	registry/display: JSONRPC-alt integration (#25359)	REVIEWED	EXCLUDE_FEATURE		Display v2 JSON-RPC-alt 集成。
+788	273f9393478c22ae5690add9d5fde187ffb51d93	2026-03-10	fix(jsonrpc-alt): fix type mismatch in display field response (#25787)	REVIEWED	EXCLUDE_POST_FORK		依赖 Display v2/JSON-RPC-alt 路径。
+789	6f6e522a2b22a5c6cad7ce967e12631c426f8351	2026-03-11	easy(display): clarify Store trait contract (#25786)	REVIEWED	EXCLUDE_FEATURE		Display store trait 契约调整。
+790	951cae315d8b252131836a331bcc16b89eb340d6	2026-03-11	registry/display: JSONRPC integration (#25360)	REVIEWED	EXCLUDE_FEATURE		Display Registry JSON-RPC 集成。
+791	d1f9e1927107497295d549ae8117b53f225aeadc	2026-03-11	display: abstract written json value type	REVIEWED	EXCLUDE_FEATURE		Display v2 JSON value 抽象。
+792	9118879afc08560adca637edfd566f607627cc89	2026-03-11	display: impl JsonValue for prost_types::Value	REVIEWED	EXCLUDE_FEATURE		Display v2 gRPC value 支持。
+793	592703ded266e947dd8dfc224a59b70b15375c0d	2026-03-11	grpc: integrate display v2	REVIEWED	EXCLUDE_FEATURE		Display v2 gRPC 集成。
+794	8017bfe25d57a302b191405a0719157c3fda3a9a	2026-03-11	Verify balance change amounts in JSON RPC test (#25789)	REVIEWED	EXCLUDE_NON_CODE		仅 JSON-RPC 测试。
+795	7da6cbcf6913015d4144f05de58df523a40623fb	2026-03-11	Remove unnecessary --simulator usage in transactional tests (#25770)	REVIEWED	EXCLUDE_NON_CODE		仅 transactional tests。
+796	4f8ee2381d34dad7117ad07687ec75bdc7b405f2	2026-03-11	Gate checkpointed transactions index check on enable_secondary_index_checks (#25726)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后异步 post-processing/secondary index 校验路径。
+797	fb3b45c207a41329e35c5b4183b9754ed9cdeabd	2026-03-11	Verify exact balance change amounts in JSON-RPC test (#25719)	REVIEWED	EXCLUDE_NON_CODE		仅 JSON-RPC 测试。
+798	71167747ffaa6a3ab68938d8f357a5755f231259	2026-03-11	Normalize formula to be a more consistent shape and match the new VM  (#25798)	REVIEWED	EXCLUDE_FEATURE		新 VM formula 归一化。
+799	fc75182812cc6b0dab0ce0cd67820d6bed66200d	2026-03-11	Release kvstore image to dockerhub (#25797)	REVIEWED	EXCLUDE_NON_CODE		仅 Docker 发布。
+800	7f9b58a19efc7bc652c21415ad5912311a1dfc58	2026-03-12	[tidehunter] safe_drop_db: await LOCK file (#25794)	REVIEWED	EXCLUDE_POST_FORK		依赖上游新 Tidehunter LOCK 文件协议；RTD 当前依赖未提供该语义。
 801	39751ed24f825eede5a8f12d6ea1f92caf1d0337	2026-03-12	Update ingest-concurrency docs (#25803)	UNREVIEWED			
 802	401ad00eed8878383f64d2f9d7d6669f903cce9c	2026-03-12	docs: Enable Kapa MCP server (#25804)	UNREVIEWED			
 803	9eba66a3375e853a21561f70493e427519f6659e	2026-03-12	sui-analytics-indexer: rename ComitterWatermark to CommitterWatermark (#25802)	UNREVIEWED			
