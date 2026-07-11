@@ -117,6 +117,10 @@ pub fn get_checkpoint(
             }
 
             if let Some(submask) = read_mask.subtree(Checkpoint::TRANSACTIONS_FIELD.name) {
+                // A permissive mask can render every event in a checkpoint.
+                // Keep one shared budget for the whole response so individual
+                // per-event limits cannot accumulate into an oversized reply.
+                let mut json_budget = service.config.max_json_move_value_response_size();
                 checkpoint.transactions = checkpoint_data
                     .transactions
                     .into_iter()
@@ -155,7 +159,11 @@ pub fn get_checkpoint(
                         {
                             for (message, event) in events.events.iter_mut().zip(&sdk_events.data) {
                                 message.json = service
-                                    .render_json(&event.type_, &event.contents)
+                                    .render_json_with_budget(
+                                        &event.type_,
+                                        &event.contents,
+                                        &mut json_budget,
+                                    )
                                     .map(Box::new);
                             }
                         }

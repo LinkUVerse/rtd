@@ -10,12 +10,13 @@ use crate::grpc::alpha::proof_service_proto::{
 use bcs;
 use fastcrypto::hash::Blake2b256;
 use fastcrypto::merkle::MerkleTree;
-use std::str::FromStr;
 use rtd_types::{
     base_types::{ObjectID, ObjectRef},
     digests::Digest,
+    effects::TransactionEffects,
     messages_checkpoint::CheckpointArtifacts,
 };
+use std::str::FromStr;
 
 pub struct ProofServiceImpl {
     service: RpcService,
@@ -49,6 +50,22 @@ fn build_ocs_inclusion_proof(
         .iter()
         .map(|tx| &tx.effects)
         .collect();
+
+    // Proofs were not available for V1 effects. Constructing checkpoint artifacts from them
+    // reaches an unimplemented code path, so reject early instead of aborting the node.
+    if effects_refs
+        .iter()
+        .any(|effects| matches!(effects, TransactionEffects::V1(_)))
+    {
+        return Err(RpcError::new(
+            tonic::Code::FailedPrecondition,
+            format!(
+                "Object inclusion proofs are not supported for checkpoint {} \
+                because it contains TransactionEffectsV1",
+                checkpoint_seq
+            ),
+        ));
+    }
 
     let checkpoint_artifacts = CheckpointArtifacts::from(effects_refs.as_slice());
 

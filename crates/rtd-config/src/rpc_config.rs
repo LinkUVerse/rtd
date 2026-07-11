@@ -39,6 +39,14 @@ pub struct RpcConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_json_move_value_size: Option<usize>,
 
+    /// Aggregate budget for Move-value JSON rendering across one response.
+    ///
+    /// Endpoints rendering many values share this budget so a single request
+    /// cannot multiply the per-value limit into unbounded materialization.
+    /// Defaults to `16 MiB` if not specified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_json_move_value_response_size: Option<usize>,
+
     /// Configuration for RPC index initialization and bulk loading
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index_initialization: Option<RpcIndexInitConfig>,
@@ -70,6 +78,11 @@ impl RpcConfig {
 
     pub fn max_json_move_value_size(&self) -> usize {
         self.max_json_move_value_size.unwrap_or(1024 * 1024)
+    }
+
+    pub fn max_json_move_value_response_size(&self) -> usize {
+        self.max_json_move_value_response_size
+            .unwrap_or(16 * 1024 * 1024)
     }
 
     pub fn index_initialization_config(&self) -> Option<&RpcIndexInitConfig> {

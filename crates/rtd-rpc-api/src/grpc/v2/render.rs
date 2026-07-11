@@ -39,6 +39,19 @@ impl RpcService {
         struct_tag: &move_core_types::language_storage::StructTag,
         contents: &[u8],
     ) -> Option<prost_types::Value> {
+        let mut budget = self.config.max_json_move_value_size();
+        self.render_json_with_budget(struct_tag, contents, &mut budget)
+    }
+
+    /// Render a Move value while drawing from a caller-owned budget. Endpoints
+    /// that render many values in one response can share the budget to bound
+    /// aggregate memory rather than multiplying the per-value limit.
+    pub fn render_json_with_budget(
+        &self,
+        struct_tag: &move_core_types::language_storage::StructTag,
+        contents: &[u8],
+        size_budget: &mut usize,
+    ) -> Option<prost_types::Value> {
         let layout = self
             .reader
             .inner()
@@ -46,10 +59,13 @@ impl RpcService {
             .ok()
             .flatten()?;
 
-        rtd_types::proto_value::ProtoVisitor::new(self.config.max_json_move_value_size())
-            .deserialize_value(contents, &layout)
-            .map_err(|e| tracing::debug!("unable to convert move value to JSON: {e}"))
-            .ok()
+        rtd_types::proto_value::ProtoVisitor::deserialize_value_with_budget(
+            contents,
+            &layout,
+            size_budget,
+        )
+        .map_err(|e| tracing::debug!("unable to convert move value to JSON: {e}"))
+        .ok()
     }
 
     pub fn render_events_to_proto(

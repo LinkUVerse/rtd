@@ -58,8 +58,12 @@ pub fn resolve_transaction(
         .map_err(|e| {
             FieldViolation::new("commands")
                 .with_description(format!("invalid command: {e}"))
-                .with_reason(ErrorReason::FieldInvalid)
+            .with_reason(ErrorReason::FieldInvalid)
         })?;
+
+    // Enforce the protocol's structural limits before any per-input scan,
+    // package fetch, or normalization runs.
+    enforce_ptb_structural_limits(protocol_config, &ptb.inputs, &commands)?;
 
     let mut called_packages = called_packages(&service.reader, protocol_config, &commands)?;
     resolve_unresolved_transaction(
@@ -73,6 +77,66 @@ pub fn resolve_transaction(
         unresolved_transaction.gas_payment.as_ref(),
         unresolved_transaction.expiration.as_ref(),
     )
+}
+
+/// Reject PTBs that exceed the protocol's structural limits before doing any
+/// resolution work. These match the bounds applied later by the
+/// `ProgrammableTransaction` and `Command` validity checks; applying them
+/// here prevents unauthenticated callers from driving resolver work beyond
+/// those limits.
+fn enforce_ptb_structural_limits(
+    protocol_config: &ProtocolConfig,
+    inputs: &[rtd_rpc::proto::rtd::rpc::v2::Input],
+    commands: &[Command],
+) -> Result<()> {
+    let max_commands = protocol_config.max_programmable_tx_commands() as usize;
+    if commands.len() >= max_commands {
+        return Err(RpcError::new(
+            tonic::Code::InvalidArgument,
+            format!(
+                "programmable transaction has too many commands: {} (limit {})",
+                commands.len(),
+                max_commands
+            ),
+        ));
+    }
+
+    let max_inputs = protocol_config.max_input_objects() as usize;
+    if inputs.len() > max_inputs {
+        return Err(RpcError::new(
+            tonic::Code::InvalidArgument,
+            format!(
+                "programmable transaction has too many inputs: {} (limit {})",
+                inputs.len(),
+                max_inputs
+            ),
+        ));
+    }
+
+    let max_args = protocol_config.max_arguments() as usize;
+    for command in commands {
+        let arg_count = match command {
+            Command::MoveCall(call) => call.arguments.len(),
+            Command::TransferObjects(transfer) => transfer.objects.len(),
+            Command::SplitCoins(split) => split.amounts.len(),
+            Command::MergeCoins(merge) => merge.coins_to_merge.len(),
+            Command::MakeMoveVector(vector) => vector.elements.len(),
+            Command::Publish(_) | Command::Upgrade(_) => 0,
+            _ => 0,
+        };
+        if arg_count >= max_args {
+            return Err(RpcError::new(
+                tonic::Code::InvalidArgument,
+                format!(
+                    "programmable transaction command has too many arguments: \
+                    {} (limit {})",
+                    arg_count, max_args
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 pub(super) struct NormalizedPackages {

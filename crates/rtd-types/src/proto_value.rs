@@ -62,6 +62,23 @@ impl ProtoVisitor {
             }),
         )
     }
+
+    /// Deserialize while drawing from a caller-owned budget. This lets a
+    /// response containing many values enforce one aggregate bound.
+    pub fn deserialize_value_with_budget(
+        bytes: &[u8],
+        layout: &A::MoveTypeLayout,
+        size_budget: &mut usize,
+    ) -> Result<Value, Error> {
+        A::MoveValue::visit_deserialize(
+            bytes,
+            layout,
+            &mut RV::RpcVisitor::new(ProtoWriter {
+                bound: size_budget,
+                depth: 0,
+            }),
+        )
+    }
 }
 
 impl ProtoWriter<'_> {
@@ -226,6 +243,15 @@ pub(crate) mod tests {
 
         ProtoVisitor::new(bound - 1)
             .deserialize_value(&bytes, &type_layout)
+            .unwrap_err();
+
+        let mut shared_budget = bound;
+        let deser =
+            ProtoVisitor::deserialize_value_with_budget(&bytes, &type_layout, &mut shared_budget)
+                .unwrap();
+        assert_eq!(expected, proto_value_to_json_value(deser));
+        assert_eq!(shared_budget, 0);
+        ProtoVisitor::deserialize_value_with_budget(&bytes, &type_layout, &mut shared_budget)
             .unwrap_err();
     }
 
