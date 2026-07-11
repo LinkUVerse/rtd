@@ -192,8 +192,26 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
                     .inc();
                 info!("Invalid block from {}: {}", peer, e);
             })?;
+        let excluded_ancestors = self
+            .parse_excluded_ancestors(peer, &verified_block, serialized_block.excluded_ancestors)
+            .tap_err(|e| {
+                debug!("Failed to parse excluded ancestors from {peer} {peer_hostname}: {e}");
+                self.context
+                    .metrics
+                    .node_metrics
+                    .invalid_blocks
+                    .with_label_values(&[peer_hostname, "handle_send_block", e.name()])
+                    .inc();
+            })?;
         let block_ref = verified_block.reference();
         debug!("Received block {} via send block.", block_ref);
+
+        self.context
+            .metrics
+            .node_metrics
+            .verified_blocks
+            .with_label_values(&[peer_hostname])
+            .inc();
 
         let now = self.context.clock.timestamp_utc_ms();
         let forward_time_drift =
@@ -209,6 +227,15 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
         // Observe the block for the commit votes. When local commit is lagging too much,
         // commit sync loop will trigger fetching.
         self.commit_vote_monitor.observe_block(&verified_block);
+
+        // Record received and accepted rounds as soon as parsing and verification succeed. This
+        // information remains useful for liveness even if commit lag rejects the block below.
+        self.round_tracker
+            .write()
+            .update_from_verified_block(&ExtendedBlock {
+                block: verified_block.clone(),
+                excluded_ancestors: excluded_ancestors.clone(),
+            });
 
         // Reject blocks when local commit index is lagging too far from quorum commit index,
         // to avoid the memory overhead from suspended blocks.
@@ -245,13 +272,6 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
             });
         }
 
-        self.context
-            .metrics
-            .node_metrics
-            .verified_blocks
-            .with_label_values(&[peer_hostname])
-            .inc();
-
         // The block is verified and current, so it can be processed in the fastpath.
         if self.context.protocol_config.mysticeti_fastpath() {
             self.transaction_certifier
@@ -284,27 +304,6 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
                 }
             });
         }
-
-        // ------------ After processing the block, process the excluded ancestors ------------
-
-        let excluded_ancestors = self
-            .parse_excluded_ancestors(peer, &verified_block, serialized_block.excluded_ancestors)
-            .tap_err(|e| {
-                debug!("Failed to parse excluded ancestors from {peer} {peer_hostname}: {e}");
-                self.context
-                    .metrics
-                    .node_metrics
-                    .invalid_blocks
-                    .with_label_values(&[peer_hostname, "handle_send_block", e.name()])
-                    .inc();
-            })?;
-
-        self.round_tracker
-            .write()
-            .update_from_verified_block(&ExtendedBlock {
-                block: verified_block,
-                excluded_ancestors: excluded_ancestors.clone(),
-            });
 
         let missing_excluded_ancestors = self
             .core_dispatcher
@@ -617,6 +616,12 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
         fail_point_async!("consensus-rpc-response");
 
         let mut highest_received_rounds = self.core_dispatcher.highest_received_rounds();
+        for (received, tracked) in highest_received_rounds
+            .iter_mut()
+            .zip(self.round_tracker.read().local_highest_received_rounds())
+        {
+            *received = (*received).max(tracked);
+        }
 
         let blocks = self
             .dag_state
@@ -816,12 +821,12 @@ mod tests {
     use crate::{
         authority_service::AuthorityService,
         block::{BlockAPI, SignedBlock, TestBlock, VerifiedBlock},
-        commit::{CertifiedCommits, CommitRange},
+        commit::{CertifiedCommits, CommitDigest, CommitRange, CommitRef},
         commit_vote_monitor::CommitVoteMonitor,
         context::Context,
         core_thread::{CoreError, CoreThreadDispatcher},
         dag_state::DagState,
-        error::ConsensusResult,
+        error::{ConsensusError, ConsensusResult},
         network::{BlockStream, ExtendedSerializedBlock, NetworkClient, NetworkService},
         round_tracker::PeerRoundTracker,
         storage::mem_store::MemStore,
@@ -887,7 +892,12 @@ mod tests {
         }
 
         fn highest_received_rounds(&self) -> Vec<Round> {
-            todo!()
+            let blocks = self.blocks.lock();
+            let mut rounds = vec![0; 4];
+            for block in blocks.iter() {
+                rounds[block.author()] = rounds[block.author()].max(block.round());
+            }
+            rounds
         }
     }
 
@@ -987,7 +997,7 @@ mod tests {
             context.clone(),
             block_verifier,
             commit_vote_monitor,
-            round_tracker,
+            round_tracker.clone(),
             synchronizer,
             core_dispatcher.clone(),
             rx_block_broadcast,
@@ -1065,6 +1075,36 @@ mod tests {
             )
             .await
             .unwrap_err();
+
+        // Verified blocks must update received rounds even when commit lag causes rejection.
+        for authority in 0..3 {
+            let block = VerifiedBlock::new_for_test(
+                TestBlock::new(100 + authority, authority)
+                    .set_commit_votes(vec![CommitRef::new(10_000, CommitDigest::MIN)])
+                    .build(),
+            );
+            let result = service
+                .handle_send_block(
+                    AuthorityIndex::new_for_test(authority),
+                    ExtendedSerializedBlock {
+                        block: block.serialized().clone(),
+                        excluded_ancestors: vec![],
+                    },
+                )
+                .await;
+            if authority < 2 {
+                result.unwrap();
+            } else {
+                assert!(matches!(result, Err(ConsensusError::BlockRejected { .. })));
+            }
+        }
+
+        assert_eq!(round_tracker.read().local_highest_received_rounds()[2], 102);
+        let (received_rounds, _) = service
+            .handle_get_latest_rounds(AuthorityIndex::new_for_test(1))
+            .await
+            .unwrap();
+        assert_eq!(received_rounds[2], 102);
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]

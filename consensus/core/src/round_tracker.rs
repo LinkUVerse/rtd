@@ -45,6 +45,8 @@ pub(crate) struct PeerRoundTracker {
     probed_accepted_rounds: Vec<Vec<Round>>,
     /// Highest received round per authority from round prober
     probed_received_rounds: Vec<Vec<Round>>,
+    /// Highest received round per authority tracked locally after block verification.
+    local_highest_received_rounds: Vec<Round>,
 }
 
 impl PeerRoundTracker {
@@ -55,6 +57,7 @@ impl PeerRoundTracker {
             block_accepted_rounds: vec![vec![0; size]; size],
             probed_accepted_rounds: vec![vec![0; size]; size],
             probed_received_rounds: vec![vec![0; size]; size],
+            local_highest_received_rounds: vec![0; size],
         }
     }
 
@@ -65,6 +68,9 @@ impl PeerRoundTracker {
         let block = &extended_block.block;
         let excluded_ancestors = &extended_block.excluded_ancestors;
         let author = block.author();
+
+        self.local_highest_received_rounds[author] =
+            self.local_highest_received_rounds[author].max(block.round());
 
         // Update author accepted round from block round
         self.block_accepted_rounds[author][author] =
@@ -92,6 +98,10 @@ impl PeerRoundTracker {
     ) {
         self.probed_accepted_rounds = accepted_rounds;
         self.probed_received_rounds = received_rounds;
+    }
+
+    pub(crate) fn local_highest_received_rounds(&self) -> Vec<Round> {
+        self.local_highest_received_rounds.clone()
     }
 
     // Returns the propagation delay of own blocks.

@@ -147,6 +147,12 @@ impl<C: NetworkClient> RoundProber<C> {
         // For our own index, the highest received & accepted round is our last
         // accepted round or our last proposed round.
         highest_received_rounds[own_index] = self.core_thread_dispatcher.highest_received_rounds();
+        for (received, tracked) in highest_received_rounds[own_index]
+            .iter_mut()
+            .zip(self.round_tracker.read().local_highest_received_rounds())
+        {
+            *received = (*received).max(tracked);
+        }
         highest_accepted_rounds[own_index] = local_highest_accepted_rounds;
         highest_received_rounds[own_index][own_index] = last_proposed_round;
         highest_accepted_rounds[own_index][own_index] = last_proposed_round;

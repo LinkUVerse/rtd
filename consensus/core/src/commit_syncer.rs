@@ -872,7 +872,7 @@ impl<C: NetworkClient> Inner<C> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
     use bytes::Bytes;
     use consensus_config::{AuthorityIndex, Parameters};
@@ -884,7 +884,7 @@ mod tests {
         CommitConsumerMonitor, CommitDigest, CommitRef,
         block::{TestBlock, VerifiedBlock},
         block_verifier::NoopBlockVerifier,
-        commit::CommitRange,
+        commit::{CommitRange, TrustedCommit},
         commit_syncer::CommitSyncer,
         commit_vote_monitor::CommitVoteMonitor,
         context::Context,
@@ -898,7 +898,11 @@ mod tests {
     };
 
     #[derive(Default)]
-    struct FakeNetworkClient {}
+    struct FakeNetworkClient {
+        serialized_commits: Vec<Bytes>,
+        serialized_vote_blocks: Vec<Bytes>,
+        serialized_blocks: BTreeMap<BlockRef, Bytes>,
+    }
 
     #[async_trait::async_trait]
     impl NetworkClient for FakeNetworkClient {
@@ -923,12 +927,15 @@ mod tests {
         async fn fetch_blocks(
             &self,
             _peer: AuthorityIndex,
-            _block_refs: Vec<BlockRef>,
+            block_refs: Vec<BlockRef>,
             _highest_accepted_rounds: Vec<Round>,
             _breadth_first: bool,
             _timeout: Duration,
         ) -> ConsensusResult<Vec<Bytes>> {
-            unimplemented!("Unimplemented")
+            Ok(block_refs
+                .into_iter()
+                .map(|block_ref| self.serialized_blocks[&block_ref].clone())
+                .collect())
         }
 
         async fn fetch_commits(
@@ -937,7 +944,10 @@ mod tests {
             _commit_range: CommitRange,
             _timeout: Duration,
         ) -> ConsensusResult<(Vec<Bytes>, Vec<Bytes>)> {
-            unimplemented!("Unimplemented")
+            Ok((
+                self.serialized_commits.clone(),
+                self.serialized_vote_blocks.clone(),
+            ))
         }
 
         async fn fetch_latest_blocks(
@@ -1065,24 +1075,76 @@ mod tests {
 
     #[tokio::test]
     async fn commit_syncer_observes_votes_from_fetched_blocks() {
-        let context = Arc::new(Context::new_for_test(4).0);
-        let monitor = CommitVoteMonitor::new(context);
+        let (mut context, _) = Context::new_for_test(4);
+        context.own_index = AuthorityIndex::new_for_test(3);
+        let context = Arc::new(context);
+
+        let commit_block = VerifiedBlock::new_for_test(TestBlock::new(10, 0).build());
+        let commit = TrustedCommit::new_for_test(
+            1,
+            CommitDigest::MIN,
+            0,
+            commit_block.reference(),
+            vec![commit_block.reference()],
+        );
         let vote_blocks = (0..3)
             .map(|authority| {
                 VerifiedBlock::new_for_test(
                     TestBlock::new(15, authority)
-                        .set_commit_votes(vec![CommitRef::new(10, CommitDigest::MIN)])
+                        .set_commit_votes(vec![commit.reference()])
                         .build(),
                 )
             })
             .collect::<Vec<_>>();
+        let network_client = Arc::new(FakeNetworkClient {
+            serialized_commits: vec![commit.serialized().clone()],
+            serialized_vote_blocks: vote_blocks
+                .iter()
+                .map(|block| block.serialized().clone())
+                .collect(),
+            serialized_blocks: BTreeMap::from([(
+                commit_block.reference(),
+                commit_block.serialized().clone(),
+            )]),
+        });
 
-        CommitSyncer::<FakeNetworkClient>::observe_fetched_commit_votes(
-            &monitor,
-            &[],
-            &vote_blocks,
+        let block_verifier = Arc::new(NoopBlockVerifier {});
+        let core_thread_dispatcher = Arc::new(MockCoreThreadDispatcher::default());
+        let store = Arc::new(MemStore::new());
+        let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store)));
+        let (blocks_sender, _blocks_receiver) =
+            monitored_mpsc::unbounded_channel("consensus_block_output");
+        let transaction_certifier = TransactionCertifier::new(
+            context.clone(),
+            block_verifier.clone(),
+            dag_state.clone(),
+            blocks_sender,
+        );
+        let monitor = Arc::new(CommitVoteMonitor::new(context.clone()));
+        let commit_consumer_monitor = Arc::new(CommitConsumerMonitor::new(0, 0));
+        let round_tracker = Arc::new(RwLock::new(PeerRoundTracker::new(context.clone())));
+        let commit_syncer = CommitSyncer::new(
+            context,
+            core_thread_dispatcher,
+            monitor.clone(),
+            commit_consumer_monitor,
+            block_verifier,
+            transaction_certifier,
+            round_tracker,
+            network_client,
+            dag_state,
         );
 
-        assert_eq!(monitor.quorum_commit_index(), 10);
+        let fetched = CommitSyncer::fetch_once(
+            commit_syncer.inner,
+            AuthorityIndex::new_for_test(0),
+            CommitRange::new(1..=1),
+            Duration::from_millis(1),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(fetched.commits().len(), 1);
+        assert_eq!(monitor.quorum_commit_index(), 1);
     }
 }
