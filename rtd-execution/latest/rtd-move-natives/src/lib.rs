@@ -49,6 +49,7 @@ use better_any::{Tid, TidAble};
 use crypto::nitro_attestation::{self, NitroAttestationCostParams};
 use crypto::vdf::{self, VDFCostParams};
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_binary_format::safe_unwrap;
 use move_core_types::{
     annotated_value as A,
     gas_algebra::{AbstractMemorySize, InternalGas},
@@ -68,9 +69,9 @@ use move_vm_types::{
     values::{Struct, Value},
     views::{SizeConfig, ValueView},
 };
-use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{MOVE_STDLIB_ADDRESS, RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_ADDRESS};
+use std::sync::Arc;
 use transfer::TransferReceiveObjectInternalCostParams;
 
 mod accumulator;
@@ -1284,6 +1285,7 @@ pub fn all_natives(silent: bool, protocol_config: &ProtocolConfig) -> NativeFunc
             .map(|(module_name, func_name, func)| {
                 (
                     RTD_FRAMEWORK_ADDRESS,
+                    // Safe: string literals are always valid identifiers
                     Identifier::new(module_name).unwrap(),
                     Identifier::new(func_name).unwrap(),
                     func,
@@ -1300,6 +1302,7 @@ pub fn all_natives(silent: bool, protocol_config: &ProtocolConfig) -> NativeFunc
         .map(|(module_name, func_name, func)| {
             (
                 RTD_SYSTEM_ADDRESS,
+                // Safe: string literals are always valid identifiers
                 Identifier::new(module_name).unwrap(),
                 Identifier::new(func_name).unwrap(),
                 func,
@@ -1337,7 +1340,7 @@ pub fn get_nested_struct_field(mut v: Value, offsets: &[usize]) -> Result<Value,
 
 pub fn get_nth_struct_field(v: Value, n: usize) -> Result<Value, PartialVMError> {
     let mut itr = v.value_as::<Struct>()?.unpack()?;
-    Ok(itr.nth(n).unwrap())
+    Ok(safe_unwrap!(itr.nth(n)))
 }
 
 /// Returns the struct tag, non-annotated type layout, and fully annotated type layout of `ty`.

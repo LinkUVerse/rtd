@@ -184,8 +184,10 @@ macro_rules! safe_unwrap_err {
         match $e {
             Ok(x) => x,
             Err(e) => {
-                let err = PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message(format!("{}:{} {:#}", file!(), line!(), e));
+                let err = move_binary_format::errors::PartialVMError::new(
+                    move_core_types::vm_status::StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                )
+                .with_message(format!("{}:{} {:#}", file!(), line!(), e));
                 if cfg!(debug_assertions) {
                     panic!("{:?}", err);
                 } else {
@@ -210,4 +212,54 @@ macro_rules! safe_assert {
             }
         }
     }};
+}
+
+/// Similar as above, but asserts two expressions are equal.
+#[macro_export]
+macro_rules! safe_assert_eq {
+    ($left:expr, $right:expr) => {{
+        let left = &$left;
+        let right = &$right;
+        if left != right {
+            let err = $crate::errors::PartialVMError::new(
+                move_core_types::vm_status::StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+            )
+            .with_message(format!(
+                "{}:{} (assert_eq: {:?} != {:?})",
+                file!(),
+                line!(),
+                left,
+                right,
+            ));
+            if cfg!(debug_assertions) {
+                panic!("{:?}", err)
+            } else {
+                return Err(err);
+            }
+        }
+    }};
+}
+
+#[cfg(test)]
+mod safe_assert_eq_tests {
+    use super::errors::PartialVMResult;
+
+    fn assert_equal(left: u64, right: u64) -> PartialVMResult<()> {
+        crate::safe_assert_eq!(left, right);
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_equal_values() {
+        assert!(assert_equal(7, 7).is_ok());
+    }
+
+    #[test]
+    fn rejects_unequal_values() {
+        #[cfg(debug_assertions)]
+        assert!(std::panic::catch_unwind(|| assert_equal(7, 8)).is_err());
+
+        #[cfg(not(debug_assertions))]
+        assert!(assert_equal(7, 8).is_err());
+    }
 }

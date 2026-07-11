@@ -4,6 +4,7 @@
 use std::collections::VecDeque;
 
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_binary_format::{safe_unwrap, safe_unwrap_err};
 use move_core_types::{account_address::AccountAddress, u256::U256, vm_status::StatusCode};
 use move_vm_runtime::{native_charge_gas_early_exit, native_functions::NativeContext};
 use move_vm_types::{
@@ -11,8 +12,8 @@ use move_vm_types::{
     natives::function::NativeResult,
     values::{Struct, Value},
 };
-use smallvec::smallvec;
 use rtd_types::base_types::ObjectID;
+use smallvec::smallvec;
 
 use crate::{
     NativesCostTable,
@@ -38,9 +39,9 @@ pub fn add_to_accumulator_address(
         .clone();
     native_charge_gas_early_exit!(context, event_emit_cost_params.event_emit_cost_base);
 
-    let ty_tag = context.type_to_type_tag(&ty_args.pop().unwrap())?;
+    let ty_tag = context.type_to_type_tag(&safe_unwrap!(ty_args.pop()))?;
 
-    let Some(value) = args.pop_back().unwrap().value_as::<Struct>().ok() else {
+    let Some(value) = safe_unwrap!(args.pop_back()).value_as::<Struct>().ok() else {
         // TODO in the future this is guaranteed/checked via a custom verifier rule
         debug_assert!(false);
         return Err(
@@ -49,17 +50,9 @@ pub fn add_to_accumulator_address(
             ),
         );
     };
-    let recipient = args
-        .pop_back()
-        .unwrap()
-        .value_as::<AccountAddress>()
-        .unwrap();
-    let accumulator: ObjectID = args
-        .pop_back()
-        .unwrap()
-        .value_as::<AccountAddress>()
-        .unwrap()
-        .into();
+    let recipient = safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>());
+    let accumulator: ObjectID =
+        safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
 
     // TODO this will need to look at the layout of T when this is not guaranteed to be a Balance
     let Some([amount]): Option<[Value; 1]> = value
@@ -118,20 +111,12 @@ pub fn withdraw_from_accumulator_address(
         .clone();
     native_charge_gas_early_exit!(context, event_emit_cost_params.event_emit_cost_base);
 
-    let ty_tag = context.type_to_type_tag(&ty_args.pop().unwrap())?;
+    let ty_tag = context.type_to_type_tag(&safe_unwrap!(ty_args.pop()))?;
 
-    let value = args.pop_back().unwrap().value_as::<U256>().unwrap();
-    let recipient = args
-        .pop_back()
-        .unwrap()
-        .value_as::<AccountAddress>()
-        .unwrap();
-    let accumulator: ObjectID = args
-        .pop_back()
-        .unwrap()
-        .value_as::<AccountAddress>()
-        .unwrap()
-        .into();
+    let value = safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<U256>());
+    let recipient = safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>());
+    let accumulator: ObjectID =
+        safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
 
     // TODO this will need to look at the layout of T when this is not guaranteed to be a Balance
     let Ok(amount): Result<u64, _> = value.try_into() else {
