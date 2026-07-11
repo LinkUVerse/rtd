@@ -52,7 +52,7 @@ impl RemoteIngestionClient {
         // SAFETY: The path being joined is statically known to be valid.
         let url = self
             .url
-            .join("/epochs.json")
+            .join("epochs.json")
             .expect("Unexpected invalid URL");
 
         self.client.get(url).send().await
@@ -64,7 +64,7 @@ impl RemoteIngestionClient {
         // SAFETY: The path being joined is statically known to be valid.
         let url = self
             .url
-            .join(&format!("/{checkpoint}.chk"))
+            .join(&format!("{checkpoint}.chk"))
             .expect("Unexpected invalid URL");
 
         self.client.get(url).send().await
@@ -155,7 +155,7 @@ pub(crate) mod tests {
     };
     use wiremock::{
         Mock, MockServer, Request, Respond, ResponseTemplate,
-        matchers::{method, path_regex},
+        matchers::{method, path, path_regex},
     };
 
     pub(crate) async fn respond_with(server: &MockServer, response: impl Respond + 'static) {
@@ -172,6 +172,33 @@ pub(crate) mod tests {
 
     fn remote_test_client(uri: String) -> IngestionClient {
         IngestionClient::new_remote(Url::parse(&uri).unwrap(), test_ingestion_metrics()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn preserves_remote_store_base_path() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/bucket/epochs.json"))
+            .respond_with(status(StatusCode::OK))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/bucket/42.chk"))
+            .respond_with(status(StatusCode::OK))
+            .mount(&server)
+            .await;
+
+        let url = Url::parse(&format!("{}/bucket/", server.uri())).unwrap();
+        let client = RemoteIngestionClient::new(url).unwrap();
+
+        assert_eq!(
+            client.end_of_epoch_checkpoints().await.unwrap().status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            client.checkpoint(42).await.unwrap().status(),
+            StatusCode::OK
+        );
     }
 
     #[tokio::test]
