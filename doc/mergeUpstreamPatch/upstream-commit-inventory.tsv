@@ -1799,22 +1799,22 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1798	14dbec736b4c363c5596102ba03356c3c3d0b3af	2026-07-08	sui-proxy: use grpc for dynamic peer lookups (#27193)	REVIEWED	EXCLUDE_FEATURE		代理功能。
 1799	bdca565f75ae6cc87ccbe922b53daf0d5d81a169	2026-07-09	Encapsulate event bitpacking (#27179)	REVIEWED	EXCLUDE_FEATURE		事件索引功能。
 1800	b76bcd0e2bc3551fda92dfff1eeaea75622061ab	2026-07-09	nickv/pipelined key batches (#27199)	REVIEWED	EXCLUDE_FEATURE		后置 KV 查询功能。
-1801	bcd2eed6cde42fd971c8e351f29dfe83b4eea977	2026-07-09	jsonrpc-alt: log unknown methods (#27205)	UNREVIEWED			
-1802	644aa81c537c426fae0268d9a1c3de82b5bb5e5f	2026-07-09	Bump ethnum to 1.5.3 to fix build on Rust 1.97+ (#27210)	UNREVIEWED			
-1803	a99451e90dca86595848450faab621e5bc6ebcf1	2026-07-09	docs: add RPC and data providers page (#27207)	UNREVIEWED			
-1804	9afe992c8ae139da32c2041df1436b2cb02543fb	2026-07-09	[grpc] Remove unused `options` in `item` or `boundary` watermark creation [1/n] (#27212)	UNREVIEWED			
-1805	9d08477202016d1d19f9b02dddb06b9f6635dc32	2026-07-09	[move][adapter] Add support for `init` on upgrade (#27121)	UNREVIEWED			
-1806	71ea70f1087d52d34f9859653ab7bcf8e0a47475	2026-07-09	[move][move-compiler] Remove unused type definitions from HLIR ast definitions (#27228)	UNREVIEWED			
-1807	cfeb86cb2b62eadf2bf841d4abfe9a38fe6f9d66	2026-07-09	[trace-view] Support for adding source-level metadata (#27201)	UNREVIEWED			
-1808	59cb8cc352082f10ede4ffe71424b43676bc9b3c	2026-07-10	[sui-framework] Scratchpad (#27105)	UNREVIEWED			
-1809	04d2a84ed7396cb7d64cf3ced92e543a45ba57f0	2026-07-10	Generate typed feature flag setters for testing (#27159)	UNREVIEWED			
-1810	138d1a06daae1aa845a5fd90337f2ff7e1ae0b47	2026-07-09	Improve address balance withdrawal error messages (#27203)	UNREVIEWED			
-1811	9765bc341f625e913873ca763b5d6fd1d0162708	2026-07-10	[Stress] allow create duplicate and amplified traffic (#27127)	UNREVIEWED			
-1812	37af425ff1d0b739192f197f80f16287be952a95	2026-07-10	Wait for rpc history indexes before tests (#27214)	UNREVIEWED			
-1813	5583826a1bac4514206c76417e64e8ff64690058	2026-07-10	docs: fix broken links, missing frontmatter, and onboarding gaps (#27220)	UNREVIEWED			
-1814	d985da9e756bb31f4a461e36c34323181004cca6	2026-07-10	[cli] Make `sui client chain-identifier` return Base58 and Hex formats (#27183)	UNREVIEWED			
-1815	db3a6d0499875801fba27b1fe052564b8d5da998	2026-07-10	Fix bridge e2e flakiness reading ETH coin from owned-object index (#27229)	UNREVIEWED			
-1816	4d03ff830073bbd22eafd5e07c9ca82d0ae5d6c1	2026-07-10	[chore] update fastcrypto (#27195)	UNREVIEWED			
-1817	361c1994e56f2abd698ae501dae7f4d230d44d7c	2026-07-10	rpc-api: run transaction simulation on a blocking thread (#27236)	UNREVIEWED			
-1818	d5b3e232983c0dbdcdb10d93b11b3769e086c4f0	2026-07-10	Remove admission queue bypass mode (#27149)	UNREVIEWED			
-1819	94c67f729f870593244b368203f8456ae8246e7a	2026-07-10	[jsonrpc-alt] Add `getProtocolConfig` and `devInspectExecuteTransactionBlock` apis (#27227)	UNREVIEWED			
+1801	bcd2eed6cde42fd971c8e351f29dfe83b4eea977	2026-07-09	jsonrpc-alt: log unknown methods (#27205)	REVIEWED	EXCLUDE_FEATURE		索引 JSON-RPC 功能。
+1802	644aa81c537c426fae0268d9a1c3de82b5bb5e5f	2026-07-09	Bump ethnum to 1.5.3 to fix build on Rust 1.97+ (#27210)	APPLIED	MERGE	20fe580f98ad10f9efd4571e41a9466705b175ce	升级 ethnum，修复 Rust 1.97+ 构建失败。
+1803	a99451e90dca86595848450faab621e5bc6ebcf1	2026-07-09	docs: add RPC and data providers page (#27207)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1804	9afe992c8ae139da32c2041df1436b2cb02543fb	2026-07-09	[grpc] Remove unused `options` in `item` or `boundary` watermark creation [1/n] (#27212)	REVIEWED	EXCLUDE_POST_FORK		依赖后置 KV RPC 路径。
+1805	9d08477202016d1d19f9b02dddb06b9f6635dc32	2026-07-09	[move][adapter] Add support for `init` on upgrade (#27121)	REVIEWED	EXCLUDE_FEATURE		Move 升级功能。
+1806	71ea70f1087d52d34f9859653ab7bcf8e0a47475	2026-07-09	[move][move-compiler] Remove unused type definitions from HLIR ast definitions (#27228)	REVIEWED	EXCLUDE_NON_CRITICAL		编译器清理。
+1807	cfeb86cb2b62eadf2bf841d4abfe9a38fe6f9d66	2026-07-09	[trace-view] Support for adding source-level metadata (#27201)	REVIEWED	EXCLUDE_FEATURE		IDE 功能。
+1808	59cb8cc352082f10ede4ffe71424b43676bc9b3c	2026-07-10	[sui-framework] Scratchpad (#27105)	REVIEWED	EXCLUDE_FEATURE		框架功能。
+1809	04d2a84ed7396cb7d64cf3ced92e543a45ba57f0	2026-07-10	Generate typed feature flag setters for testing (#27159)	REVIEWED	EXCLUDE_NON_CODE		测试配置。
+1810	138d1a06daae1aa845a5fd90337f2ff7e1ae0b47	2026-07-09	Improve address balance withdrawal error messages (#27203)	REVIEWED	EXCLUDE_NON_CRITICAL		地址余额错误文案。
+1811	9765bc341f625e913873ca763b5d6fd1d0162708	2026-07-10	[Stress] allow create duplicate and amplified traffic (#27127)	REVIEWED	EXCLUDE_FEATURE		压测功能。
+1812	37af425ff1d0b739192f197f80f16287be952a95	2026-07-10	Wait for rpc history indexes before tests (#27214)	REVIEWED	EXCLUDE_NON_CODE		测试稳定性。
+1813	5583826a1bac4514206c76417e64e8ff64690058	2026-07-10	docs: fix broken links, missing frontmatter, and onboarding gaps (#27220)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1814	d985da9e756bb31f4a461e36c34323181004cca6	2026-07-10	[cli] Make `sui client chain-identifier` return Base58 and Hex formats (#27183)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1815	db3a6d0499875801fba27b1fe052564b8d5da998	2026-07-10	Fix bridge e2e flakiness reading ETH coin from owned-object index (#27229)	REVIEWED	EXCLUDE_NON_CODE		桥接端到端测试。
+1816	4d03ff830073bbd22eafd5e07c9ca82d0ae5d6c1	2026-07-10	[chore] update fastcrypto (#27195)	REVIEWED	EXCLUDE_NON_CRITICAL		未说明关键缺陷的常规依赖更新。
+1817	361c1994e56f2abd698ae501dae7f4d230d44d7c	2026-07-10	rpc-api: run transaction simulation on a blocking thread (#27236)	APPLIED	MERGE	876da999a9067877bbc716e3bfcd405615faf389	同步模拟移至阻塞线程池，避免占用异步工作线程。
+1818	d5b3e232983c0dbdcdb10d93b11b3769e086c4f0	2026-07-10	Remove admission queue bypass mode (#27149)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后引入的准入队列。
+1819	94c67f729f870593244b368203f8456ae8246e7a	2026-07-10	[jsonrpc-alt] Add `getProtocolConfig` and `devInspectExecuteTransactionBlock` apis (#27227)	REVIEWED	EXCLUDE_FEATURE		索引 JSON-RPC 功能。
