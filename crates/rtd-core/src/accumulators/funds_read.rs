@@ -10,10 +10,14 @@ use rtd_types::{
 };
 
 pub trait AccountFundsRead: Send + Sync {
-    /// Gets latest amount in account together with the version of the accumulator root object.
-    /// If the account does not exist, returns the current root accumulator version.
-    /// It guarantees no data race between the read of the account object and the root accumulator version.
-    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> (u128, SequenceNumber);
+    /// Gets the unsequenced latest amount in an account, or zero when it does not exist.
+    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> u128;
+
+    /// Gets an account amount paired with a stable accumulator root version.
+    fn get_consistent_latest_account_amount_and_version(
+        &self,
+        account_id: &AccumulatorObjId,
+    ) -> (u128, SequenceNumber);
 
     /// Read the amount at a precise version. Care must be taken to only call this function if we
     /// can guarantee that objects behind this version have not yet been pruned.
@@ -31,7 +35,7 @@ pub trait AccountFundsRead: Send + Sync {
         requested_amounts: &BTreeMap<AccumulatorObjId, u64>,
     ) -> RtdResult {
         for (object_id, requested_amount) in requested_amounts {
-            let (actual_amount, _) = self.get_latest_account_amount(object_id);
+            let actual_amount = self.get_latest_account_amount(object_id);
 
             if actual_amount < *requested_amount as u128 {
                 return Err(RtdErrorKind::UserInputError {

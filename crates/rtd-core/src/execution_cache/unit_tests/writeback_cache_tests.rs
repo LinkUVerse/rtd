@@ -1347,3 +1347,64 @@ async fn test_transaction_cache_race() {
     t1.join().unwrap();
     t2.join().unwrap();
 }
+
+#[tokio::test]
+async fn test_consistent_account_amount_race_with_pending_settlement() {
+    use crate::accumulators::funds_read::AccountFundsRead;
+    use rtd_types::{
+        RTD_ACCUMULATOR_ROOT_OBJECT_ID, accumulator_root::AccumulatorValue, balance::Balance,
+        gas_coin::GAS,
+    };
+
+    let authority = TestAuthorityBuilder::new().build().await;
+    let store = authority.database_for_testing().clone();
+
+    static METRICS: once_cell::sync::Lazy<Arc<ExecutionCacheMetrics>> =
+        once_cell::sync::Lazy::new(|| Arc::new(ExecutionCacheMetrics::new(default_registry())));
+
+    let cache = Arc::new(WritebackCache::new(
+        &Default::default(),
+        store,
+        (*METRICS).clone(),
+        BackpressureManager::new_for_tests(),
+    ));
+
+    let version = SequenceNumber::from_u64(10);
+    let root = Object::with_id_owner_version_for_testing(
+        RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+        version,
+        Owner::Shared {
+            initial_shared_version: SequenceNumber::from_u64(1),
+        },
+    );
+    cache.write_object_entry(&RTD_ACCUMULATOR_ROOT_OBJECT_ID, version, root.into());
+
+    let (owner, _) = deterministic_random_account_key();
+    let balance_type: rtd_types::TypeTag = Balance::type_(GAS::type_tag()).into();
+    let expected_balance = 1_000;
+    let account =
+        AccumulatorValue::create_for_testing(owner, balance_type.clone(), expected_balance);
+    let account_id = AccumulatorValue::get_field_id(owner, &balance_type).unwrap();
+    let mut account_inner = account.into_inner();
+    account_inner
+        .data
+        .try_as_move_mut()
+        .unwrap()
+        .increment_version_to(version);
+    cache.write_object_entry(
+        account_id.inner(),
+        version,
+        Object::from(account_inner).into(),
+    );
+
+    cache.write_object_entry(account_id.inner(), version.next(), ObjectEntry::Deleted);
+
+    assert_eq!(
+        AccountFundsRead::get_latest_account_amount(&*cache, &account_id),
+        0
+    );
+    assert_eq!(
+        AccountFundsRead::get_consistent_latest_account_amount_and_version(&*cache, &account_id),
+        (expected_balance as u128, version)
+    );
+}

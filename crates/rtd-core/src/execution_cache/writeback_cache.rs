@@ -1386,20 +1386,42 @@ impl WritebackCache {
     }
 }
 
+fn account_amount_from_object(account_obj: &Object) -> u128 {
+    let (_, AccumulatorValue::U128(value)) =
+        account_obj.data.try_as_move().unwrap().try_into().unwrap();
+    value.value
+}
+
 impl AccountFundsRead for WritebackCache {
-    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> (u128, SequenceNumber) {
+    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> u128 {
+        ObjectCacheRead::get_object(self, account_id.inner())
+            .map(|account_obj| account_amount_from_object(&account_obj))
+            .unwrap_or(0)
+    }
+
+    fn get_consistent_latest_account_amount_and_version(
+        &self,
+        account_id: &AccumulatorObjId,
+    ) -> (u128, SequenceNumber) {
         let mut pre_root_version =
             ObjectCacheRead::get_object(self, &RTD_ACCUMULATOR_ROOT_OBJECT_ID)
                 .unwrap()
                 .version();
         let mut loop_iter = 0;
         loop {
+            loop_iter += 1;
             let value = self.get_account_amount_at_version(account_id, pre_root_version);
             let post_root_version =
                 ObjectCacheRead::get_object(self, &RTD_ACCUMULATOR_ROOT_OBJECT_ID)
                     .unwrap()
                     .version();
             if pre_root_version == post_root_version {
+                if loop_iter > 3 {
+                    debug_fatal!(
+                        "Root version stabilized after {} iterations during MVCC read",
+                        loop_iter
+                    );
+                }
                 return (value, pre_root_version);
             }
             debug!(
@@ -1407,10 +1429,6 @@ impl AccountFundsRead for WritebackCache {
                 pre_root_version, post_root_version
             );
             pre_root_version = post_root_version;
-            loop_iter += 1;
-            if loop_iter >= 3 {
-                debug_fatal!("Unable to get a stable version after 3 iterations");
-            }
         }
     }
 
@@ -1419,14 +1437,9 @@ impl AccountFundsRead for WritebackCache {
         account_id: &AccumulatorObjId,
         version: SequenceNumber,
     ) -> u128 {
-        let account_obj = self.find_object_lt_or_eq_version(*account_id.inner(), version);
-        if let Some(account_obj) = account_obj {
-            let (_, AccumulatorValue::U128(value)) =
-                account_obj.data.try_as_move().unwrap().try_into().unwrap();
-            value.value
-        } else {
-            0
-        }
+        self.find_object_lt_or_eq_version(*account_id.inner(), version)
+            .map(|account_obj| account_amount_from_object(&account_obj))
+            .unwrap_or(0)
     }
 }
 

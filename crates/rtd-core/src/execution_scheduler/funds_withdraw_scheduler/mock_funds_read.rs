@@ -103,15 +103,25 @@ impl MockFundsReadInner {
             .and_then(|(_, amount)| *amount)
     }
 
-    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> (u128, SequenceNumber) {
+    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> u128 {
         let account_amounts = self.amounts.get(account_id);
         match account_amounts {
             Some(amounts) => {
-                let (version, amount) = amounts.iter().last().unwrap();
-                (amount.unwrap_or(0), *version)
+                let (_, amount) = amounts.iter().last().unwrap();
+                amount.unwrap_or(0)
             }
-            None => (0, self.cur_version),
+            None => 0,
         }
+    }
+
+    fn get_consistent_latest_account_amount_and_version(
+        &self,
+        account_id: &AccumulatorObjId,
+    ) -> (u128, SequenceNumber) {
+        (
+            self.get_account_amount_at_version(account_id, self.cur_version),
+            self.cur_version,
+        )
     }
 
     fn get_account_amount_at_version(
@@ -121,19 +131,28 @@ impl MockFundsReadInner {
     ) -> u128 {
         let account_amounts = self.amounts.get(account_id);
         match account_amounts {
-            Some(amounts) => {
-                let (_, amount) = amounts.range(..=version).last().unwrap();
-                amount.unwrap_or(0)
-            }
+            Some(amounts) => amounts
+                .range(..=version)
+                .last()
+                .and_then(|(_, amount)| *amount)
+                .unwrap_or(0),
             None => 0,
         }
     }
 }
 
 impl AccountFundsRead for MockFundsRead {
-    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> (u128, SequenceNumber) {
+    fn get_latest_account_amount(&self, account_id: &AccumulatorObjId) -> u128 {
         let inner = self.inner.read();
         inner.get_latest_account_amount(account_id)
+    }
+
+    fn get_consistent_latest_account_amount_and_version(
+        &self,
+        account_id: &AccumulatorObjId,
+    ) -> (u128, SequenceNumber) {
+        let inner = self.inner.read();
+        inner.get_consistent_latest_account_amount_and_version(account_id)
     }
 
     fn get_account_amount_at_version(

@@ -63,7 +63,9 @@ impl FundsWithdrawSchedulerTrait for NaiveFundsWithdrawScheduler {
         let mut cur_funds = BTreeMap::new();
         let all_accounts = withdraws.all_accounts();
         for account_id in all_accounts {
-            let (balance, version) = self.funds_read.get_latest_account_amount(&account_id);
+            let (balance, version) = self
+                .funds_read
+                .get_consistent_latest_account_amount_and_version(&account_id);
             if version > withdraws.accumulator_version {
                 withdraws.notify_skip_schedule();
                 return;
