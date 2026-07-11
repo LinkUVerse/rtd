@@ -1299,56 +1299,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1298	18424d39b4d8024032151403d983851607e8ab36	2026-05-06	[protocol-config] Enable address balances and gasless transactions on mainnet (v125) (#26504)	REVIEWED	EXCLUDE_POST_FORK		后置协议开关。
 1299	fac8572b6685dbc76ffe9d778dcfce0bb54c2b69	2026-05-07	docs: automated fixes from weekly audit (26 issues) (#26527)	REVIEWED	EXCLUDE_NON_CODE		文档。
 1300	350f798617fa5552b994ae160962ba1d08e291da	2026-05-07	Add mainnet stablecoin allowlist for gasless transfers in protocol v123 (#26417)	REVIEWED	EXCLUDE_POST_FORK		gasless protocol v123。
-1301	4db30ced65ff0630186e63e1f5d41f6859a0bb76	2026-05-07	[doc] update life of a transaction (#26523)	UNREVIEWED			
-1302	c3374bfded918d40d864d34ccf879a3b9cf1c2cc	2026-05-07	docs: Sui Stack guides for Walrus and Seal (#26288)	UNREVIEWED			
-1303	365abc02a6618b1093f72c002b318ebd11caea05	2026-05-07	docs: add visitor_type custom prop to Plausible tracking (#26530)	UNREVIEWED			
-1304	5e9786bb5d3eb357f7a0486294cc999b728595f7	2026-05-07	indexer/ingestion: pass headers to remote stores (#26526)	UNREVIEWED			
-1305	9e52010210244236dc824d74e74b40eb1a604ab0	2026-05-07	[security] make coin reservation rewriter fallible to fix dryRun/devInspect panic (#26528)	UNREVIEWED			
-1306	e1efdc96bddf0ddd373e9ddc885d5f1692874586	2026-05-07	typed-store: additional tidehunter memory env knobs (#26529)	UNREVIEWED			
-1307	6e861b173ddeb04983a191f6a8d6805d69cc0c0b	2026-05-07	indexer/checkpoint: line up header configuration with #26526 (#26534)	UNREVIEWED			
-1308	c4eecb3e9e65d7a92951a7d48e31485ba069b0d0	2026-05-07	docs: Add example app tutorials (#26535)	UNREVIEWED			
-1309	813f9a5cdb084cb95a618108e7b5ea5590e456ef	2026-05-07	[chore] Update tidehunter to 5a5a23b (#26540)	UNREVIEWED			
-1310	1438bc914ea8da5725f5339f0b221e73d736f390	2026-05-08	[consensus] use a common function to compute fetch blocks limit (#26514)	UNREVIEWED			
-1311	0634b16963f26121898cb1301da4402264c63742	2026-05-08	[address balances] Invariant checks for transaction effects (#26541)	UNREVIEWED			
-1312	487db8f56c0cbaf01161c41ab98e111cdde97409	2026-05-08	[graphql] Add TransactionEffects.version field (#26525)	UNREVIEWED			
-1313	367fd808279bed26f7c64fc63160062a2ee29ab7	2026-05-08	docs: fix misc examples (#26548)	UNREVIEWED			
-1314	69e0578031ab05ae8816b036cba469261acaca83	2026-05-08	Sui v1.72.0 Framework Bytecode snapshot (#26549)	UNREVIEWED			
-1315	896f044d646c3a624be86d3e3b933799644129ad	2026-05-08	[easy][move-vm-runtime] Remove call name and module id from gas charger trait (#26474)	UNREVIEWED			
-1316	05a69e354207e0159bffcb534ac61a2476e5927c	2026-05-08	[sui] Don't hit RPC for publish env-validation; re-enable env_error tests (#26539)	UNREVIEWED			
-1317	d7aec60d9da3520ab4d17601db130abf89639196	2026-05-08	Sui v1.73.0 Version Bump (#26550)	UNREVIEWED			
-1318	5c7d9af737ab9ffa26363f6d1ccc5a94484059cd	2026-05-08	docs: Update style guide skill (#26543)	UNREVIEWED			
-1319	4e45765148573845b8adec966734b423f389dbf5	2026-05-08	[move] Cache-package path + external resolver env_name (DVX-2095, DVX-2097) (#26519)	UNREVIEWED			
-1320	8e334dd7795e2974e9c272ae223cf66cc81a645b	2026-05-08	hotfix: sidebar (#26554)	UNREVIEWED			
-1321	2f53af55509d5da8c3f551e049b84d7d35eaa993	2026-05-08	[docs] testnet checkpoint store docs updates (#26542)	UNREVIEWED			
-1322	3254a2e5622962784ed3169290be3aa5e4f6aade	2026-05-08	move-package-alt: sanitize Git env vars in subprocess calls (#26537)	UNREVIEWED			
-1323	7c931dc24d04895b865c073f7b6a52e8a81a8e79	2026-05-08	docs: Sui Stack guides for Walrus Sites and SuiNS (#26339)	UNREVIEWED			
-1324	56be7e3f5d673074810f9d7a32b6f31e84437b0c	2026-05-08	[snapshot_restore] wait_for_tidehunter_background_threads before rename (#26558)	UNREVIEWED			
-1325	6a45d72942b2d32a9e2b519d028e575a38e25904	2026-05-09	rpc: map simulate user errors to invalid argument (#26560)	UNREVIEWED			
-1326	c188832a5c2f8a48b9998e8c3888874a56bb1ca8	2026-05-09	sui-inverted-index: add inverted index crate + dimension extraction code (#26496)	UNREVIEWED			
-1327	a6a0f43fe494e7635eb885d5af71327e7c4bdf67	2026-05-11	[graphql-stream] Lift streamed checkpoint payload onto Scope [9/n] (#26476)	UNREVIEWED			
-1328	5a9ee16aa62220a7b66d4873e958163215184b9a	2026-05-11	sui-tool: add --metrics-port flag to download-formal-snapshot (#26564)	UNREVIEWED			
-1329	04b74c630341e2fed9ef3fb59247163f5021d789	2026-05-11	fix: sidebar link (#26557)	UNREVIEWED			
-1330	6ea643cecc8876eea8b3fdf0026af28f32751e9d	2026-05-11	[Block Streaming] Introduce the NodeRole and the capabilities (#26399)	UNREVIEWED			
-1331	f96f4305bc7f67ea1a713654e4a2c68bbcef1057	2026-05-11	seed-search: parse shortened path+file cargo package_id (#26566)	UNREVIEWED			
-1332	2947e1620cf77e430e9fa556601b568b590a494f	2026-05-11	fix: sidebar label (#26567)	UNREVIEWED			
-1333	94b5b70d55a0706dc59d6be2d061745a58a1a28e	2026-05-11	[stake-aggregator] fix: quorum falsely lost after bad-sig eviction in insert() (#26553)	UNREVIEWED			
-1334	a7d4992f299e4c75013bf5d3c7b1c48e9fdb91f2	2026-05-11	Add sui-fork to release binaries (#26570)	UNREVIEWED			
-1335	b3b46d3aa17623cefb497b869e50fb792ff9df1f	2026-05-11	[pruner] disable object pruner by default on tidehunter validators (#26569)	UNREVIEWED			
-1336	59a1bad904df87dfe5b508bf7f2c9537584995f6	2026-05-11	docker/sui-tools: build + ship move-analyzer (#26572)	UNREVIEWED			
-1337	f995c127b7e50976ab234a140d7374706c954003	2026-05-11	docs: automated fixes from weekly audit (10 issues) (#26568)	UNREVIEWED			
-1338	44a2d5dd8c47d787d2e5573a110383d48ef2ae12	2026-05-11	release: drop sui-test-validator from release_binaries (#26574)	UNREVIEWED			
-1339	7180e0a7137031f71e8fe9eb8ca0929394672823	2026-05-11	[sui cli] Add pass through command `sui move format` for `prettier-move` (#26521)	UNREVIEWED			
-1340	31fe251c47911a5445f8a87a738967c171dacf65	2026-05-11	sui-rpc-api: set ValidDuring expiration on gasless simulate path (#26576)	UNREVIEWED			
-1341	04968177b4bcb52d89a7b0f0f86737b7e721b896	2026-05-11	release.yml: build ubuntu binaries on the runner instead of S3 download (#26578)	UNREVIEWED			
-1342	eae850119fb07c80fc71e692114737739b3cf094	2026-05-11	ci: pass cache_family to prebuild-sui-images dispatch (#26584)	UNREVIEWED			
-1343	c267f1f8346841ce307ff5ade6af0286867f61aa	2026-05-11	[move][move-vm] Improve telemetry speed by swapping to thread-local atomics (#26559)	UNREVIEWED			
-1344	a62dc6bb2e20fb676aff3799b33ab583fc108607	2026-05-11	ci: pass cache_family to ensure-sui-binaries dispatch (#26586)	UNREVIEWED			
-1345	4e5667d5030740d2221320fbcd9bbf8070d6a2f2	2026-05-11	[graphql-stream]: SSE transport + SSE-aware GraphiQL [12/n] (#26425)	UNREVIEWED			
-1346	1880c49e97e34146cce331f957fdf3db2ae757ba	2026-05-12	sui-indexer-alt-consistent-store: support restoring from arbitrary epoch directories (#26565)	UNREVIEWED			
-1347	79317485684bd99e668786bc6e72c7f0ad745907	2026-05-12	sui-core: apply default_table_options to every rpc-index CF on reopen (#26589)	UNREVIEWED			
-1348	7dd0be5aa807a615163033aca4ed66d799229144	2026-05-12	sui-rosetta: harden MergeAndRedeemFungibleStakedSui (chain guard, epoch binding) (#26489)	UNREVIEWED			
-1349	ba3c4a8a537b6912470da7af3a078bf9ebd1af48	2026-05-12	[Block Streaming] skip commit processing for Observer sync enabled nodes (#26498)	UNREVIEWED			
-1350	fc75b00193e5069977c693e768b76e160cb90be4	2026-05-12	docs: update data access guidance (#26597)	UNREVIEWED			
+1301	4db30ced65ff0630186e63e1f5d41f6859a0bb76	2026-05-07	[doc] update life of a transaction (#26523)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1302	c3374bfded918d40d864d34ccf879a3b9cf1c2cc	2026-05-07	docs: Sui Stack guides for Walrus and Seal (#26288)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1303	365abc02a6618b1093f72c002b318ebd11caea05	2026-05-07	docs: add visitor_type custom prop to Plausible tracking (#26530)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1304	5e9786bb5d3eb357f7a0486294cc999b728595f7	2026-05-07	indexer/ingestion: pass headers to remote stores (#26526)	REVIEWED	EXCLUDE_FEATURE		索引器远端存储功能。
+1305	9e52010210244236dc824d74e74b40eb1a604ab0	2026-05-07	[security] make coin reservation rewriter fallible to fix dryRun/devInspect panic (#26528)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation 后置协议。
+1306	e1efdc96bddf0ddd373e9ddc885d5f1692874586	2026-05-07	typed-store: additional tidehunter memory env knobs (#26529)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1307	6e861b173ddeb04983a191f6a8d6805d69cc0c0b	2026-05-07	indexer/checkpoint: line up header configuration with #26526 (#26534)	REVIEWED	EXCLUDE_FEATURE		索引器远端存储功能。
+1308	c4eecb3e9e65d7a92951a7d48e31485ba069b0d0	2026-05-07	docs: Add example app tutorials (#26535)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1309	813f9a5cdb084cb95a618108e7b5ea5590e456ef	2026-05-07	[chore] Update tidehunter to 5a5a23b (#26540)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置依赖。
+1310	1438bc914ea8da5725f5339f0b221e73d736f390	2026-05-08	[consensus] use a common function to compute fetch blocks limit (#26514)	REVIEWED	EXCLUDE_FEATURE		consensus 重构。
+1311	0634b16963f26121898cb1301da4402264c63742	2026-05-08	[address balances] Invariant checks for transaction effects (#26541)	REVIEWED	EXCLUDE_POST_FORK		address balance 后置协议。
+1312	487db8f56c0cbaf01161c41ab98e111cdde97409	2026-05-08	[graphql] Add TransactionEffects.version field (#26525)	REVIEWED	EXCLUDE_FEATURE		GraphQL 字段功能。
+1313	367fd808279bed26f7c64fc63160062a2ee29ab7	2026-05-08	docs: fix misc examples (#26548)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1314	69e0578031ab05ae8816b036cba469261acaca83	2026-05-08	Sui v1.72.0 Framework Bytecode snapshot (#26549)	REVIEWED	EXCLUDE_FEATURE		framework 快照。
+1315	896f044d646c3a624be86d3e3b933799644129ad	2026-05-08	[easy][move-vm-runtime] Remove call name and module id from gas charger trait (#26474)	REVIEWED	EXCLUDE_FEATURE		VM trait 重构。
+1316	05a69e354207e0159bffcb534ac61a2476e5927c	2026-05-08	[sui] Don't hit RPC for publish env-validation; re-enable env_error tests (#26539)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI 环境验证。
+1317	d7aec60d9da3520ab4d17601db130abf89639196	2026-05-08	Sui v1.73.0 Version Bump (#26550)	REVIEWED	EXCLUDE_FEATURE		版本升级。
+1318	5c7d9af737ab9ffa26363f6d1ccc5a94484059cd	2026-05-08	docs: Update style guide skill (#26543)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1319	4e45765148573845b8adec966734b423f389dbf5	2026-05-08	[move] Cache-package path + external resolver env_name (DVX-2095, DVX-2097) (#26519)	REVIEWED	EXCLUDE_FEATURE		Move 包缓存功能。
+1320	8e334dd7795e2974e9c272ae223cf66cc81a645b	2026-05-08	hotfix: sidebar (#26554)	REVIEWED	EXCLUDE_NON_CODE		文档导航。
+1321	2f53af55509d5da8c3f551e049b84d7d35eaa993	2026-05-08	[docs] testnet checkpoint store docs updates (#26542)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1322	3254a2e5622962784ed3169290be3aa5e4f6aade	2026-05-08	move-package-alt: sanitize Git env vars in subprocess calls (#26537)	REVIEWED	EXCLUDE_NON_CRITICAL		依赖获取环境隔离，不属节点关键路径。
+1323	7c931dc24d04895b865c073f7b6a52e8a81a8e79	2026-05-08	docs: Sui Stack guides for Walrus Sites and SuiNS (#26339)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1324	56be7e3f5d673074810f9d7a32b6f31e84437b0c	2026-05-08	[snapshot_restore] wait_for_tidehunter_background_threads before rename (#26558)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1325	6a45d72942b2d32a9e2b519d028e575a38e25904	2026-05-09	rpc: map simulate user errors to invalid argument (#26560)	REVIEWED	EXCLUDE_NON_CRITICAL		RPC 错误码语义。
+1326	c188832a5c2f8a48b9998e8c3888874a56bb1ca8	2026-05-09	sui-inverted-index: add inverted index crate + dimension extraction code (#26496)	REVIEWED	EXCLUDE_FEATURE		索引器功能。
+1327	a6a0f43fe494e7635eb885d5af71327e7c4bdf67	2026-05-11	[graphql-stream] Lift streamed checkpoint payload onto Scope [9/n] (#26476)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1328	5a9ee16aa62220a7b66d4873e958163215184b9a	2026-05-11	sui-tool: add --metrics-port flag to download-formal-snapshot (#26564)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI 选项。
+1329	04b74c630341e2fed9ef3fb59247163f5021d789	2026-05-11	fix: sidebar link (#26557)	REVIEWED	EXCLUDE_NON_CODE		文档导航。
+1330	6ea643cecc8876eea8b3fdf0026af28f32751e9d	2026-05-11	[Block Streaming] Introduce the NodeRole and the capabilities (#26399)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 功能。
+1331	f96f4305bc7f67ea1a713654e4a2c68bbcef1057	2026-05-11	seed-search: parse shortened path+file cargo package_id (#26566)	REVIEWED	EXCLUDE_NON_CODE		测试脚本。
+1332	2947e1620cf77e430e9fa556601b568b590a494f	2026-05-11	fix: sidebar label (#26567)	REVIEWED	EXCLUDE_NON_CODE		文档导航。
+1333	94b5b70d55a0706dc59d6be2d061745a58a1a28e	2026-05-11	[stake-aggregator] fix: quorum falsely lost after bad-sig eviction in insert() (#26553)	APPLIED	MERGE	ec11083fc1ca887fce90bb4c5069bfd1b467de88	剔除坏签名后若有效签名仍达 quorum，立即重新聚合返回。
+1334	a7d4992f299e4c75013bf5d3c7b1c48e9fdb91f2	2026-05-11	Add sui-fork to release binaries (#26570)	REVIEWED	EXCLUDE_NON_CODE		发布配置。
+1335	b3b46d3aa17623cefb497b869e50fb792ff9df1f	2026-05-11	[pruner] disable object pruner by default on tidehunter validators (#26569)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1336	59a1bad904df87dfe5b508bf7f2c9537584995f6	2026-05-11	docker/sui-tools: build + ship move-analyzer (#26572)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1337	f995c127b7e50976ab234a140d7374706c954003	2026-05-11	docs: automated fixes from weekly audit (10 issues) (#26568)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1338	44a2d5dd8c47d787d2e5573a110383d48ef2ae12	2026-05-11	release: drop sui-test-validator from release_binaries (#26574)	REVIEWED	EXCLUDE_NON_CODE		发布配置。
+1339	7180e0a7137031f71e8fe9eb8ca0929394672823	2026-05-11	[sui cli] Add pass through command `sui move format` for `prettier-move` (#26521)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1340	31fe251c47911a5445f8a87a738967c171dacf65	2026-05-11	sui-rpc-api: set ValidDuring expiration on gasless simulate path (#26576)	REVIEWED	EXCLUDE_POST_FORK		gasless 后置协议。
+1341	04968177b4bcb52d89a7b0f0f86737b7e721b896	2026-05-11	release.yml: build ubuntu binaries on the runner instead of S3 download (#26578)	REVIEWED	EXCLUDE_NON_CODE		CI 发布流程。
+1342	eae850119fb07c80fc71e692114737739b3cf094	2026-05-11	ci: pass cache_family to prebuild-sui-images dispatch (#26584)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1343	c267f1f8346841ce307ff5ade6af0286867f61aa	2026-05-11	[move][move-vm] Improve telemetry speed by swapping to thread-local atomics (#26559)	REVIEWED	EXCLUDE_FEATURE		性能优化。
+1344	a62dc6bb2e20fb676aff3799b33ab583fc108607	2026-05-11	ci: pass cache_family to ensure-sui-binaries dispatch (#26586)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1345	4e5667d5030740d2221320fbcd9bbf8070d6a2f2	2026-05-11	[graphql-stream]: SSE transport + SSE-aware GraphiQL [12/n] (#26425)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1346	1880c49e97e34146cce331f957fdf3db2ae757ba	2026-05-12	sui-indexer-alt-consistent-store: support restoring from arbitrary epoch directories (#26565)	REVIEWED	EXCLUDE_FEATURE		索引器恢复功能。
+1347	79317485684bd99e668786bc6e72c7f0ad745907	2026-05-12	sui-core: apply default_table_options to every rpc-index CF on reopen (#26589)	APPLIED	MERGE	ec11083fc1ca887fce90bb4c5069bfd1b467de88	reopen 时全部列族保留禁用写入节流配置，防止 bulk 后停写。
+1348	7dd0be5aa807a615163033aca4ed66d799229144	2026-05-12	sui-rosetta: harden MergeAndRedeemFungibleStakedSui (chain guard, epoch binding) (#26489)	REVIEWED	EXCLUDE_POST_FORK		fungible stake 后置协议。
+1349	ba3c4a8a537b6912470da7af3a078bf9ebd1af48	2026-05-12	[Block Streaming] skip commit processing for Observer sync enabled nodes (#26498)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 功能。
+1350	fc75b00193e5069977c693e768b76e160cb90be4	2026-05-12	docs: update data access guidance (#26597)	REVIEWED	EXCLUDE_NON_CODE		文档。
 1351	e3f5ddcde4e61d62ddb8af9979fb6199a1e9723b	2026-05-12	docker: cache-friendly Dockerfile rewrites for Tier 1 images (#26601)	UNREVIEWED			
 1352	7c41cedd9dda50da88c2c226b70435bb39008daa	2026-05-12	[sui-fork] Fix the way object_by_key is handling deleted/wrapped objects (#26588)	UNREVIEWED			
 1353	27e8a310161ee2b1158bf6a1ba420beffdd4181b	2026-05-12	ci: thread cache_family into sui-operations tag-docker-images dispatch (#26602)	UNREVIEWED			
