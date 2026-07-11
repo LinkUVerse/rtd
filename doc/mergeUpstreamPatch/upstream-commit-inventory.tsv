@@ -1749,56 +1749,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1748	e386c3d87e83f89d9381a156c920a35f25d9771e	2026-07-05	test-cluster: wait for the embedded rpc-store index in test reads	REVIEWED	EXCLUDE_NON_CODE		测试。
 1749	eda1326dd12570dfb52f144003e190672abb5100	2026-07-05	rpc-store: fix owned-objects cursor to not duplicate across pages	REVIEWED	EXCLUDE_POST_FORK		依赖后置 RPC 存储查询路径。
 1750	511167f9c46875d9a393d519e0b579ec98b33850	2026-07-05	rpc-store: bound the rpc-api tip to the live-indexed checkpoint	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
-1751	ce12f3df1b7f8cccddc2b3e8e05ead15092d8a7b	2026-07-05	tests: stop racing the asynchronous embedded rpc-store index	UNREVIEWED			
-1752	530819001951a5d4aded30c054cfd9e19807b2d3	2026-07-05	rpc-store: fix dynamic-field and balance cursors duplicating pages	UNREVIEWED			
-1753	bae9819bc42817c626ef312ff884bbc7ff81cd7a	2026-07-05	rpc-store: seek owned-object and balance pagination to the cursor	UNREVIEWED			
-1754	644e8bb20459d14a443b6964f7c77f0a3dd2d585	2026-07-05	rpc-store: seek dynamic-field pagination to the cursor	UNREVIEWED			
-1755	a6a87ce7b2e5621db4679a6ea3353f1027fb055c	2026-07-05	rpc-store: seek package-version pagination to the cursor	UNREVIEWED			
-1756	540e185509676b46b2a37453a48a9dc8f788ab1f	2026-07-05	consistent-store: fix unresolved rustdoc link in iter_prefix_from	UNREVIEWED			
-1757	6abed0c00336342a807f41e0a372dafd0996d440	2026-07-05	rpc-store: drop the ledger-history-indexing config flag	UNREVIEWED			
-1758	9c4723828857d8d3d80096b61a23ac1eea579b50	2026-07-05	rpc-store: fail the health check while the index is backfilling	UNREVIEWED			
-1759	11b6dd5a6fc50ee7d57a3602e5a835f691681ca7	2026-07-05	rpc-store: delete the legacy rpc-index directory on startup	UNREVIEWED			
-1760	30ab9954b750c1d416e6f8370e7644a34336316f	2026-07-05	rpc-store: prune the embedded object_version_by_checkpoint index	UNREVIEWED			
-1761	5b8548fc436875b37b17373a566d3ee2b752a27d	2026-07-05	rpc-store: dedup per-object pruner retractions to one range tombstone	UNREVIEWED			
-1762	8ac4f463ee2392b1386870574d78aba6c194fec4	2026-07-05	rpc-store: point-delete object_version_by_checkpoint retractions	UNREVIEWED			
-1763	971a2b2769a1c6765900234bae9f195ba47ac1ff	2026-07-05	sui-rpc-store: disable snapshots when embedded	UNREVIEWED			
-1764	ffa84c9508a91a9cffa1aeb8ca86f9867140b3c0	2026-07-05	rpc-store: cache object_version_by_checkpoint floor lookups	UNREVIEWED			
-1765	0aff43c60a37ae9f50ac73b1d9975c690e336d9f	2026-07-05	[consensus adapter] end submission when transaction is rejected or dropped (#27138)	UNREVIEWED			
-1766	7063f1ba66eaa714eff5a7f525323f5e22fc5b07	2026-07-06	[consensus handler] fix test build after TestAuthorityBuilder API change (#27145)	UNREVIEWED			
-1767	e57212ac1f81428cdd6470117e9a2842f0db53fe	2026-07-06	[move-ide] Fixes to auto-import and quick-fix (#27089)	UNREVIEWED			
-1768	d9f4797dbdcc9c5ec019fa190b432ea0e1bc39c1	2026-07-06	[sui-core] Remove dead AuthorityEpochTables tables and their callers (#27130)	UNREVIEWED			
-1769	fbd893a4ab5283c3b8dbf1204490bb9ada32a6b6	2026-07-06	[sui-core] Remove dead builder_digest_to_checkpoint table (#27150)	UNREVIEWED			
-1770	beaa521b894c76e54eb3b14a420093b944bb5147	2026-07-06	[simtest] reduce flakiness by waiting for checkpoint indexing (#27148)	UNREVIEWED			
-1771	1a7258f2076e387e26efe49570f218164c6871d1	2026-07-06	[consensus] fix block publish/subscribe issues (#27057)	UNREVIEWED			
-1772	22a873aaae1026591f335b89c026b4632b4661b4	2026-07-06	Fix tidehunter build warnings and enforce them in CI (#27152)	UNREVIEWED			
-1773	0b67215315ba3b880eb9355f15644a2d7c13a7de	2026-07-06	[consensus] add v3 FlexCommitter (#26876)	UNREVIEWED			
-1774	90be567f4ccecfdc586bc797d171ad69f1186b89	2026-07-06	[gql] reject invalid txn cursor upfront (#27154)	UNREVIEWED			
-1775	c70b9cb88078131e760015b0f2653e732a0c4e13	2026-07-07	[cli] sets default flavor (#27162)	UNREVIEWED			
-1776	c9702c30019a861fa8dd339c1f4827367efb1cbe	2026-07-07	rust-sdk: bump pointer and migrate v2alpha ledger proto changes (#27153)	UNREVIEWED			
-1777	456ee4221ba61e477fcffb9bb4305157320cff85	2026-07-07	graphql: OpaqueCursor<C> (#27163)	UNREVIEWED			
-1778	2e66812f9096863f1d233a799b96e34b3c93d41f	2026-07-07	docs: strip PR review lines from release notes and add SDK v2 object handling (#27165)	UNREVIEWED			
-1779	c1e59401dc67b07c2875d9b414ffc3faadc930a5	2026-07-07	Fix flaky proof tests racing the async rpc-store index (#27166)	UNREVIEWED			
-1780	cc3c213638f828322ea07d1da54c7d99f1155d2f	2026-07-07	Generate ProtocolConfig feature flag getters (#26976)	UNREVIEWED			
-1781	a17b4691909890b915fcdea8b2442da5f4b3bd6e	2026-07-07	Bump crossbeam-epoch to 0.9.20 to fix RUSTSEC-2026-0204 (#27167)	UNREVIEWED			
-1782	463e769b07eb10bd5c8cd9900893fa646b765aa7	2026-07-07	graphql: backwards compatible cursor (#27168)	UNREVIEWED			
-1783	7592e84692ef6f3a1f30ccdcf06e3fb1444018a2	2026-07-07	Fix homebrew-bump concurrency self-deadlock when called from release.yml (#27173)	UNREVIEWED			
-1784	b551ad26ccd834e793548008dfcbda0137204b0c	2026-07-07	Remove Homebrew formula bump from the release pipeline (#27175)	UNREVIEWED			
-1785	85a0c930920e26ad1a9490ab51b9c4bd52f892ce	2026-07-07	rust-sdk: bump pointer and migrate merged filter literal change (#27171)	UNREVIEWED			
-1786	746bbe66130b4e85db12004fe5e173fcb58e36a0	2026-07-07	Record net withdraw amounts instead of running max in ObjectFundsChecker unsettled balance (#27157)	UNREVIEWED			
-1787	7d48d5ebcf0e55836c7b366f4efba029a3952beb	2026-07-07	Support setting boolean feature flags by name in transactional tests (#27158)	UNREVIEWED			
-1788	97ddc0c083d084b02c656a085f41dd7461eea525	2026-07-07	Add scheduled workflow to auto-fix cargo-deny advisories (#27174)	UNREVIEWED			
-1789	d05894756b3d215ab5096f6e0591f7269d122f26	2026-07-07	Tolerate non-JSON stderr noise in cargo-deny-autofix scan (#27177)	UNREVIEWED			
-1790	780e6c9f963504a1615510b197f418cd3b9dc918	2026-07-07	Set formal snapshot restore metrics port to 9185 (#27178)	UNREVIEWED			
-1791	f719301d07952626b53bf146213b60d5acadc6eb	2026-07-08	indexer-alt: group pipelines into ingestion cohorts by distance from tip (#27129)	UNREVIEWED			
-1792	2d157da8e85274f19ec2a78eb6da39156736a5d5	2026-07-07	[graphql] Fix backwards pagination on `paginate_preloaded_transactions` (#27181)	UNREVIEWED			
-1793	3a1fb78792adbd428ad531c917be92dec6f4edf1	2026-07-08	indexer-framework: clamp lower bound of processor channel size to 1 (#27180)	UNREVIEWED			
-1794	16f1402387c7ce0f9310e57610428efec930dbf4	2026-07-08	[sui-benchmark] Restore cancellation_count margin in test_composite_workload (#27182)	UNREVIEWED			
-1795	d27a74c00317fb61de7d13a1a743b064cb7d64be	2026-07-08	Skip zero net withdraws when recording unsettled object withdraws (#27191)	UNREVIEWED			
-1796	291915754e364b72405dfc59b5784bbedfae1a87	2026-07-08	rpc-store: scope the health check to the live cohort (#27187)	UNREVIEWED			
-1797	d389cc382bf750e835d6eb1990e6eb81a9a99cd4	2026-07-08	docs: update epoch and clock docs for timestamp-based epoch close (#27192)	UNREVIEWED			
-1798	14dbec736b4c363c5596102ba03356c3c3d0b3af	2026-07-08	sui-proxy: use grpc for dynamic peer lookups (#27193)	UNREVIEWED			
-1799	bdca565f75ae6cc87ccbe922b53daf0d5d81a169	2026-07-09	Encapsulate event bitpacking (#27179)	UNREVIEWED			
-1800	b76bcd0e2bc3551fda92dfff1eeaea75622061ab	2026-07-09	nickv/pipelined key batches (#27199)	UNREVIEWED			
+1751	ce12f3df1b7f8cccddc2b3e8e05ead15092d8a7b	2026-07-05	tests: stop racing the asynchronous embedded rpc-store index	REVIEWED	EXCLUDE_NON_CODE		测试。
+1752	530819001951a5d4aded30c054cfd9e19807b2d3	2026-07-05	rpc-store: fix dynamic-field and balance cursors duplicating pages	REVIEWED	EXCLUDE_POST_FORK		依赖后置 RPC 存储查询路径。
+1753	bae9819bc42817c626ef312ff884bbc7ff81cd7a	2026-07-05	rpc-store: seek owned-object and balance pagination to the cursor	REVIEWED	EXCLUDE_POST_FORK		依赖后置 RPC 存储查询路径。
+1754	644e8bb20459d14a443b6964f7c77f0a3dd2d585	2026-07-05	rpc-store: seek dynamic-field pagination to the cursor	REVIEWED	EXCLUDE_POST_FORK		依赖后置 RPC 存储查询路径。
+1755	a6a87ce7b2e5621db4679a6ea3353f1027fb055c	2026-07-05	rpc-store: seek package-version pagination to the cursor	REVIEWED	EXCLUDE_POST_FORK		依赖后置 RPC 存储查询路径。
+1756	540e185509676b46b2a37453a48a9dc8f788ab1f	2026-07-05	consistent-store: fix unresolved rustdoc link in iter_prefix_from	REVIEWED	EXCLUDE_NON_CODE		文档链接。
+1757	6abed0c00336342a807f41e0a372dafd0996d440	2026-07-05	rpc-store: drop the ledger-history-indexing config flag	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1758	9c4723828857d8d3d80096b61a23ac1eea579b50	2026-07-05	rpc-store: fail the health check while the index is backfilling	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1759	11b6dd5a6fc50ee7d57a3602e5a835f691681ca7	2026-07-05	rpc-store: delete the legacy rpc-index directory on startup	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1760	30ab9954b750c1d416e6f8370e7644a34336316f	2026-07-05	rpc-store: prune the embedded object_version_by_checkpoint index	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1761	5b8548fc436875b37b17373a566d3ee2b752a27d	2026-07-05	rpc-store: dedup per-object pruner retractions to one range tombstone	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1762	8ac4f463ee2392b1386870574d78aba6c194fec4	2026-07-05	rpc-store: point-delete object_version_by_checkpoint retractions	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1763	971a2b2769a1c6765900234bae9f195ba47ac1ff	2026-07-05	sui-rpc-store: disable snapshots when embedded	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1764	ffa84c9508a91a9cffa1aeb8ca86f9867140b3c0	2026-07-05	rpc-store: cache object_version_by_checkpoint floor lookups	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1765	0aff43c60a37ae9f50ac73b1d9975c690e336d9f	2026-07-05	[consensus adapter] end submission when transaction is rejected or dropped (#27138)	REVIEWED	EXCLUDE_POST_FORK		依赖后置的终态状态与丢弃路径模型。
+1766	7063f1ba66eaa714eff5a7f525323f5e22fc5b07	2026-07-06	[consensus handler] fix test build after TestAuthorityBuilder API change (#27145)	REVIEWED	EXCLUDE_NON_CODE		测试。
+1767	e57212ac1f81428cdd6470117e9a2842f0db53fe	2026-07-06	[move-ide] Fixes to auto-import and quick-fix (#27089)	REVIEWED	EXCLUDE_FEATURE		IDE 功能。
+1768	d9f4797dbdcc9c5ec019fa190b432ea0e1bc39c1	2026-07-06	[sui-core] Remove dead AuthorityEpochTables tables and their callers (#27130)	REVIEWED	EXCLUDE_NON_CRITICAL		遗留存储清理。
+1769	fbd893a4ab5283c3b8dbf1204490bb9ada32a6b6	2026-07-06	[sui-core] Remove dead builder_digest_to_checkpoint table (#27150)	REVIEWED	EXCLUDE_NON_CRITICAL		遗留存储清理。
+1770	beaa521b894c76e54eb3b14a420093b944bb5147	2026-07-06	[simtest] reduce flakiness by waiting for checkpoint indexing (#27148)	REVIEWED	EXCLUDE_NON_CODE		测试稳定性。
+1771	1a7258f2076e387e26efe49570f218164c6871d1	2026-07-06	[consensus] fix block publish/subscribe issues (#27057)	APPLIED	MERGE	63133b6afc1c58a63603a02dd6d138b45af9caf8	先订阅再快照，重连时重算恢复轮次。
+1772	22a873aaae1026591f335b89c026b4632b4661b4	2026-07-06	Fix tidehunter build warnings and enforce them in CI (#27152)	REVIEWED	EXCLUDE_NON_CODE		CI 与后置存储依赖。
+1773	0b67215315ba3b880eb9355f15644a2d7c13a7de	2026-07-06	[consensus] add v3 FlexCommitter (#26876)	REVIEWED	EXCLUDE_FEATURE		共识功能。
+1774	90be567f4ccecfdc586bc797d171ad69f1186b89	2026-07-06	[gql] reject invalid txn cursor upfront (#27154)	REVIEWED	EXCLUDE_NON_CRITICAL		GraphQL 输入校验。
+1775	c70b9cb88078131e760015b0f2653e732a0c4e13	2026-07-07	[cli] sets default flavor (#27162)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1776	c9702c30019a861fa8dd339c1f4827367efb1cbe	2026-07-07	rust-sdk: bump pointer and migrate v2alpha ledger proto changes (#27153)	REVIEWED	EXCLUDE_FEATURE		SDK 功能。
+1777	456ee4221ba61e477fcffb9bb4305157320cff85	2026-07-07	graphql: OpaqueCursor<C> (#27163)	REVIEWED	EXCLUDE_FEATURE		GraphQL API 功能。
+1778	2e66812f9096863f1d233a799b96e34b3c93d41f	2026-07-07	docs: strip PR review lines from release notes and add SDK v2 object handling (#27165)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1779	c1e59401dc67b07c2875d9b414ffc3faadc930a5	2026-07-07	Fix flaky proof tests racing the async rpc-store index (#27166)	REVIEWED	EXCLUDE_NON_CODE		测试稳定性。
+1780	cc3c213638f828322ea07d1da54c7d99f1155d2f	2026-07-07	Generate ProtocolConfig feature flag getters (#26976)	REVIEWED	EXCLUDE_FEATURE		协议配置功能。
+1781	a17b4691909890b915fcdea8b2442da5f4b3bd6e	2026-07-07	Bump crossbeam-epoch to 0.9.20 to fix RUSTSEC-2026-0204 (#27167)	APPLIED	MERGE	bc934d8327bce3649755eb08934c25df9de985a3	升级 crossbeam-epoch，修复指针解引用安全公告。
+1782	463e769b07eb10bd5c8cd9900893fa646b765aa7	2026-07-07	graphql: backwards compatible cursor (#27168)	REVIEWED	EXCLUDE_FEATURE		GraphQL API 功能。
+1783	7592e84692ef6f3a1f30ccdcf06e3fb1444018a2	2026-07-07	Fix homebrew-bump concurrency self-deadlock when called from release.yml (#27173)	REVIEWED	EXCLUDE_NON_CODE		发布 CI。
+1784	b551ad26ccd834e793548008dfcbda0137204b0c	2026-07-07	Remove Homebrew formula bump from the release pipeline (#27175)	REVIEWED	EXCLUDE_NON_CODE		发布 CI。
+1785	85a0c930920e26ad1a9490ab51b9c4bd52f892ce	2026-07-07	rust-sdk: bump pointer and migrate merged filter literal change (#27171)	REVIEWED	EXCLUDE_FEATURE		SDK 功能。
+1786	746bbe66130b4e85db12004fe5e173fcb58e36a0	2026-07-07	Record net withdraw amounts instead of running max in ObjectFundsChecker unsettled balance (#27157)	REVIEWED	EXCLUDE_FEATURE		依赖后续协议版本开关。
+1787	7d48d5ebcf0e55836c7b366f4efba029a3952beb	2026-07-07	Support setting boolean feature flags by name in transactional tests (#27158)	REVIEWED	EXCLUDE_FEATURE		测试工具功能。
+1788	97ddc0c083d084b02c656a085f41dd7461eea525	2026-07-07	Add scheduled workflow to auto-fix cargo-deny advisories (#27174)	REVIEWED	EXCLUDE_NON_CODE		CI 工作流。
+1789	d05894756b3d215ab5096f6e0591f7269d122f26	2026-07-07	Tolerate non-JSON stderr noise in cargo-deny-autofix scan (#27177)	REVIEWED	EXCLUDE_NON_CODE		CI 工具。
+1790	780e6c9f963504a1615510b197f418cd3b9dc918	2026-07-07	Set formal snapshot restore metrics port to 9185 (#27178)	REVIEWED	EXCLUDE_FEATURE		快照恢复配置。
+1791	f719301d07952626b53bf146213b60d5acadc6eb	2026-07-08	indexer-alt: group pipelines into ingestion cohorts by distance from tip (#27129)	REVIEWED	EXCLUDE_FEATURE		索引功能。
+1792	2d157da8e85274f19ec2a78eb6da39156736a5d5	2026-07-07	[graphql] Fix backwards pagination on `paginate_preloaded_transactions` (#27181)	REVIEWED	EXCLUDE_NON_CRITICAL		GraphQL 分页边缘路径。
+1793	3a1fb78792adbd428ad531c917be92dec6f4edf1	2026-07-08	indexer-framework: clamp lower bound of processor channel size to 1 (#27180)	REVIEWED	EXCLUDE_FEATURE		索引功能。
+1794	16f1402387c7ce0f9310e57610428efec930dbf4	2026-07-08	[sui-benchmark] Restore cancellation_count margin in test_composite_workload (#27182)	REVIEWED	EXCLUDE_NON_CODE		基准测试。
+1795	d27a74c00317fb61de7d13a1a743b064cb7d64be	2026-07-08	Skip zero net withdraws when recording unsettled object withdraws (#27191)	REVIEWED	EXCLUDE_FEATURE		依赖后续对象资金记录功能。
+1796	291915754e364b72405dfc59b5784bbedfae1a87	2026-07-08	rpc-store: scope the health check to the live cohort (#27187)	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1797	d389cc382bf750e835d6eb1990e6eb81a9a99cd4	2026-07-08	docs: update epoch and clock docs for timestamp-based epoch close (#27192)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1798	14dbec736b4c363c5596102ba03356c3c3d0b3af	2026-07-08	sui-proxy: use grpc for dynamic peer lookups (#27193)	REVIEWED	EXCLUDE_FEATURE		代理功能。
+1799	bdca565f75ae6cc87ccbe922b53daf0d5d81a169	2026-07-09	Encapsulate event bitpacking (#27179)	REVIEWED	EXCLUDE_FEATURE		事件索引功能。
+1800	b76bcd0e2bc3551fda92dfff1eeaea75622061ab	2026-07-09	nickv/pipelined key batches (#27199)	REVIEWED	EXCLUDE_FEATURE		后置 KV 查询功能。
 1801	bcd2eed6cde42fd971c8e351f29dfe83b4eea977	2026-07-09	jsonrpc-alt: log unknown methods (#27205)	UNREVIEWED			
 1802	644aa81c537c426fae0268d9a1c3de82b5bb5e5f	2026-07-09	Bump ethnum to 1.5.3 to fix build on Rust 1.97+ (#27210)	UNREVIEWED			
 1803	a99451e90dca86595848450faab621e5bc6ebcf1	2026-07-09	docs: add RPC and data providers page (#27207)	UNREVIEWED			
