@@ -263,11 +263,11 @@ impl Limits {
             max_query_payload_size: self.max_query_payload_size,
             max_tx_payload_size: self.max_tx_payload_size,
             tx_payload_args: BTreeSet::from([
-                ("Mutation", "executeTransaction", "txBytes"),
+                ("Mutation", "executeTransaction", "transactionDataBcs"),
                 ("Mutation", "executeTransaction", "signatures"),
                 ("Query", "simulateTransaction", "transaction"),
-                ("Query", "verifyZkloginSignature", "bytes"),
-                ("Query", "verifyZkloginSignature", "signature"),
+                ("Query", "verifyZkLoginSignature", "bytes"),
+                ("Query", "verifyZkLoginSignature", "signature"),
             ]),
         }
     }
@@ -540,4 +540,20 @@ fn max_across_protocol<T: Ord>(f: impl Fn(&ProtocolConfig) -> Option<T>) -> Opti
     }
 
     x
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transaction_payload_arguments_match_schema() {
+        let args = Limits::default().query_limits().tx_payload_args;
+
+        assert!(args.contains(&("Mutation", "executeTransaction", "transactionDataBcs")));
+        assert!(args.contains(&("Mutation", "executeTransaction", "signatures")));
+        assert!(args.contains(&("Query", "simulateTransaction", "transaction")));
+        assert!(args.contains(&("Query", "verifyZkLoginSignature", "bytes")));
+        assert!(args.contains(&("Query", "verifyZkLoginSignature", "signature")));
+    }
 }
