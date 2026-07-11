@@ -10,7 +10,10 @@ use rtd_types::accumulator_root::AccumulatorObjId;
 use rtd_types::base_types::VersionDigest;
 use rtd_types::committee::EpochId;
 use rtd_types::deny_list_v2::check_coin_deny_list_v2_during_execution;
-use rtd_types::effects::{AccumulatorWriteV1, TransactionEffects, TransactionEvents};
+use rtd_types::effects::{
+    AccumulatorOperation, AccumulatorValue, AccumulatorWriteV1, TransactionEffects,
+    TransactionEvents,
+};
 use rtd_types::error::ExecutionErrorKind;
 use rtd_types::execution::{
     DynamicallyLoadedObjectMetadata, ExecutionResults, ExecutionResultsV2, SharedInput,
@@ -216,6 +219,54 @@ impl<'backing> TemporaryStore<'backing> {
             // The object must be mutated as it was present in the input objects
             self.mutate_input_object(object.clone());
         }
+    }
+
+    pub fn check_accumulator_amounts_representable(&self) -> Result<(), ExecutionError> {
+        let supply = rtd_types::gas_coin::TOTAL_SUPPLY_MIST as u128;
+        let mut merge_totals: BTreeMap<AccumulatorObjId, u128> = BTreeMap::new();
+        let mut split_totals: BTreeMap<AccumulatorObjId, u128> = BTreeMap::new();
+        let mut total_rtd_split = 0u128;
+
+        for event in &self.execution_results.accumulator_events {
+            let AccumulatorValue::Integer(amount) = event.write.value else {
+                continue;
+            };
+            let amount = amount as u128;
+            let is_rtd = rtd_types::gas_coin::GasCoin::is_gas_balance_type(&event.write.address.ty);
+            let limit = if is_rtd { supply } else { u64::MAX as u128 };
+            let total = match event.write.operation {
+                AccumulatorOperation::Merge => {
+                    merge_totals.entry(event.accumulator_obj).or_default()
+                }
+                AccumulatorOperation::Split => {
+                    split_totals.entry(event.accumulator_obj).or_default()
+                }
+            };
+            *total += amount;
+            if *total > limit {
+                return Err(ExecutionError::new_with_source(
+                    ExecutionErrorKind::CoinBalanceOverflow,
+                    format!(
+                        "accumulator balance change for {:?} exceeds the representable limit \
+                         (gross total {}, limit {})",
+                        event.accumulator_obj, *total, limit
+                    ),
+                ));
+            }
+            if is_rtd && matches!(event.write.operation, AccumulatorOperation::Split) {
+                total_rtd_split += amount;
+                if total_rtd_split > supply {
+                    return Err(ExecutionError::new_with_source(
+                        ExecutionErrorKind::CoinBalanceOverflow,
+                        format!(
+                            "total RTD withdrawn across all accumulators ({total_rtd_split}) \
+                             exceeds the total supply ({supply})"
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn get_object_changes(&self) -> BTreeMap<ObjectID, EffectsObjectChange> {
@@ -1011,19 +1062,19 @@ impl TemporaryStore<'_> {
         layout_resolver: &mut impl LayoutResolver,
     ) -> Result<(), ExecutionError> {
         // total amount of RTD in input objects, including both coins and storage rebates
-        let mut total_input_rtd = 0;
+        let mut total_input_rtd: u128 = 0;
         // total amount of RTD in output objects, including both coins and storage rebates
-        let mut total_output_rtd = 0;
+        let mut total_output_rtd: u128 = 0;
 
         // settlement input/output rtd is used by the settlement transactions to account for
         // Rtd that has been gathered from the accumulator writes of transactions which it is
         // settling.
-        total_input_rtd += self.execution_results.settlement_input_rtd;
-        total_output_rtd += self.execution_results.settlement_output_rtd;
+        total_input_rtd += self.execution_results.settlement_input_rtd as u128;
+        total_output_rtd += self.execution_results.settlement_output_rtd as u128;
 
         for (id, input, output) in self.get_modified_objects() {
             if let Some(input) = input {
-                total_input_rtd += self.get_input_rtd(&id, input.version, layout_resolver)?;
+                total_input_rtd += self.get_input_rtd(&id, input.version, layout_resolver)? as u128;
             }
             if let Some(object) = output {
                 total_output_rtd += object.get_total_rtd(layout_resolver).map_err(|e| {
@@ -1032,24 +1083,25 @@ impl TemporaryStore<'_> {
                          mutated type {:?}: {e:#?}",
                         object.struct_tag(),
                     )
-                })?;
+                })? as u128;
             }
         }
 
         for event in &self.execution_results.accumulator_events {
             let (input, output) = event.total_rtd_in_event();
-            total_input_rtd += input;
-            total_output_rtd += output;
+            total_input_rtd += input as u128;
+            total_output_rtd += output as u128;
         }
 
         // note: storage_cost flows into the storage_rebate field of the output objects, which is
         // why it is not accounted for here.
         // similarly, all of the storage_rebate *except* the storage_fund_rebate_inflow
         // gets credited to the gas coin both computation costs and storage rebate inflow are
-        total_output_rtd += gas_summary.computation_cost + gas_summary.non_refundable_storage_fee;
+        total_output_rtd +=
+            gas_summary.computation_cost as u128 + gas_summary.non_refundable_storage_fee as u128;
         if let Some((epoch_fees, epoch_rebates)) = advance_epoch_gas_summary {
-            total_input_rtd += epoch_fees;
-            total_output_rtd += epoch_rebates;
+            total_input_rtd += epoch_fees as u128;
+            total_output_rtd += epoch_rebates as u128;
         }
         if total_input_rtd != total_output_rtd {
             return Err(ExecutionError::invariant_violation(format!(

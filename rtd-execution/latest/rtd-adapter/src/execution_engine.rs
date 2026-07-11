@@ -413,6 +413,12 @@ mod checked {
             Err((e, t)) => (Err(e), t),
         };
 
+        if result.is_ok()
+            && let Err(error) = temporary_store.check_accumulator_amounts_representable()
+        {
+            result = Err(error);
+        }
+
         let cost_summary = gas_charger.charge_gas(temporary_store, &mut result);
         // For advance epoch transaction, we need to provide epoch rewards and rebates as extra
         // information provided to check_rtd_conserved, because we mint rewards, and burn
