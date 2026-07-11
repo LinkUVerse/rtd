@@ -1099,56 +1099,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1098	1beda9a2883290c75a135eb8dbde2e4f39d06608	2026-04-15	[execution] Add Move VM telemetry reporting to ExecutionMetrics (#26178)	REVIEWED	EXCLUDE_FEATURE		ExecutionMetrics telemetry。
 1099	b4bd1f9f6dd50f9d5c98c23d362e18a3938cfdc3	2026-04-15	[indexer-alt-reader] Extract kv args to be shared by graphql and other readers (#26239)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt reader 参数抽取。
 1100	4ee7d76c2fe7a7567f6a21a66d4446d1b9a4c5dd	2026-04-15	[test] Drop redundant enable_coin_reservation_for_testing in simulate tests (#26255)	REVIEWED	EXCLUDE_NON_CODE		仅测试清理。
-1101	399f54b4ee0a0b4737c19631ae667c641165f3e8	2026-04-15	[move-vm] Added additional unreachable reference tests (#26238)	UNREVIEWED			
-1102	a5695d65dfc2d902066a4ef7c6c0d803e09bf8ed	2026-04-15	[consensus] remove block certification (#26144)	UNREVIEWED			
-1103	ebac86fb5fd8e62f2fcecd359cc91a0ca90b3ecb	2026-04-15	docs: Sui IA restructure (#26241)	UNREVIEWED			
-1104	3a2c517c03fa744d56b199980fe5197d0084b138	2026-04-15	[indexer-alt-reader] make FullnodeClient require execution client (#26240)	UNREVIEWED			
-1105	25ff0acc38c12152d131e18db5c2b1f04e51ff0a	2026-04-15	docs: fix reverted changes (#26256)	UNREVIEWED			
-1106	c84f8c5534ec8b3eb9d8ea64a7e217e6bc25c640	2026-04-15	Enable FIFO compaction on 10% of mainnet validators (#26217)	UNREVIEWED			
-1107	31ba9cede6ebaacf9c5863cc854f132b3860ceaa	2026-04-15	[sui-indexer-alt-reader] Add gRPC metrics middleware and refactor clients to use it (#26230)	UNREVIEWED			
-1108	bc8e900dc71f61397fbb50203ec4a691c156543e	2026-04-15	sui-indexer-alt-object-store: implement accepts_chain_id (#26247)	UNREVIEWED			
-1109	53e047687b95801d103c60dfd673195dd1572d05	2026-04-15	[forking 5/n] add transaction store APIs (#26192)	UNREVIEWED			
-1110	2aac6ea14af975c0b25f8224d6b33cbc09a6e924	2026-04-15	Fix watermark init bug (#26258)	UNREVIEWED			
-1111	876ac2eb6a9bc07e1610667f910131013033c2f7	2026-04-15	sui-kvstore: implement ConcurrentConnection for BigTableConnection (#26150)	UNREVIEWED			
-1112	ca31568261d1ecf95c7735564671235fa1a23b37	2026-04-15	[sui-indexer-alt-reader] Preserve FullnodeArgs inner `Option<Url>` (#26257)	UNREVIEWED			
-1113	a1037692e2c3a09babd5d6c73afd37c70c98b056	2026-04-16	[sui-rosetta] Parse FungibleStakedSui operations on read path (#26251)	UNREVIEWED			
-1114	ef16b0106b1058438137c68fbf0e7699a673d63c	2026-04-16	sui-kvstore: implement accepts_chain_id (#26262)	UNREVIEWED			
-1115	776b75b424ab9f3005ffe7be4d9acacf45f19656	2026-04-16	feat: Enable gamma prime zklogin providers to prod (#26252)	UNREVIEWED			
-1116	1bf0f5888b02326d44b05abdc6dbba75364d6e9f	2026-04-16	`simulate_transaction`: recommend 0 gas price for gasless-eligible tx (#26237)	UNREVIEWED			
-1117	b4841737e40c15f4d35ad2b0ab7a1895a82e786e	2026-04-16	ci: add setup-mold composite action for faster Linux linking (#26267)	UNREVIEWED			
-1118	a004abe96c79894475bb6cef746ba98677497e54	2026-04-17	Add address balance gas payment generation to transaction fuzzer (#26058)	UNREVIEWED			
-1119	ab901ab7501594c07d90c2e5b997248848a2ee38	2026-04-16	external signer docs (#25281)	UNREVIEWED			
-1120	931c3d9b96da98750c14e322b2c4675f511bba2a	2026-04-16	Revert "ci: add setup-mold composite action for faster Linux linking" (#26273)	UNREVIEWED			
-1121	fc981af0fe21fa744e9cfb3cc043ff365c1612e6	2026-04-16	typed-store: fix safe_drop_db lock race in tidehunter builds (#26271)	UNREVIEWED			
-1122	360d8e8f8fcaad6e85e26508bbee493b787113fb	2026-04-17	ci: resolve postgres bin dir dynamically for Ubuntu 22.04/24.04 compatibility (#26276)	UNREVIEWED			
-1123	d49a15eb8cd1c65358fe5cf30d988c272fff74bf	2026-04-17	[chore] Update tidehunter to eab7323cafeab0873a09172b12223f1539bd6fe2 (#26272)	UNREVIEWED			
-1124	d4662d77c8466b7dad89d44869c94f3902c8af97	2026-04-17	[Block Steaming] Introduce the ObserverSubscriber (#25939)	UNREVIEWED			
-1125	3e2948110cf405654f7c6a21abe756592c11d836	2026-04-17	fix: misc redirects (#26280)	UNREVIEWED			
-1126	8584309160a861be6a501c0bbb62dc3a5bc0db0c	2026-04-17	[sui-protocol-config] Add #[skip_accessor] attribute to protocol config macros (#26254)	UNREVIEWED			
-1127	a1a8af283a7a22036485c3b7cb097db9855ad91f	2026-04-17	Remove dead code gated on mysticeti_fastpath / disable_preconsensus_locking (#26278)	UNREVIEWED			
-1128	7bf420a388f9ce6d3cef591d24e33fb4da847d34	2026-04-17	ci: use upstream mold 2.40.4 as CI linker (fixes #26267 regression) (#26285)	UNREVIEWED			
-1129	c180fd1abf88ba66fd98a877133acddd1a3ad8f4	2026-04-17	docs: clarify checkpoint source guidance (#26244)	UNREVIEWED			
-1130	a75b95642dc1116ee4287a2c2532d75d9f4ef207	2026-04-17	deps: fix rustls-webpki CVE; ignore two reachability-zero unsound advisories (#26281)	UNREVIEWED			
-1131	d733c8701a331ce4f51b633dcf9774bd41efbe80	2026-04-17	docs: Create docs-style-guide.yml for style guide checks (#26290)	UNREVIEWED			
-1132	dde33b983a013d2169a04ac3bbe1a153763154b6	2026-04-17	[genesis] Directly splash system packages at genesis (#26265)	UNREVIEWED			
-1133	b71c21a99d3c1799050cc0607e99bc0c18483173	2026-04-17	docs: fix style guide CI (#26293)	UNREVIEWED			
-1134	74175e8217466afdb7eb84ea45e5e4ff708d35a5	2026-04-17	fix: Update docs-style-guide.yml (#26294)	UNREVIEWED			
-1135	cf60aa0595da062cbed7fea6f8ed09135c99bf4c	2026-04-17	Delete .github/workflows/docs-style-guide.yml (#26295)	UNREVIEWED			
-1136	e98e2b65f453fe068015f84efcd72905fa7e209a	2026-04-17	docs: Adhere to Cloudflare agent-ready spec (#26297)	UNREVIEWED			
-1137	1814ca4ee2d76d97b06040343eadf5e5b76fa68c	2026-04-17	[sui-types]: change ExecutionStatus::new_failure() to accept ExecutionFaillure (#26222)	UNREVIEWED			
-1138	2bfb44f88ef6d13477c5e53b2ba939995df936fc	2026-04-18	Add addr_bal_deposit load test workload (#26235)	UNREVIEWED			
-1139	1dcb7d666bb39179ae2eec2c9ec0f6bf8f25a61f	2026-04-17	Migrate jsonrpc alt governance 1/2 (#26145)	UNREVIEWED			
-1140	1b164b191f124b6a43b4328b55db06bfb873cb76	2026-04-18	consensus_adapter: remove staggered submission and other unused logic (#26279)	UNREVIEWED			
-1141	1c4b4d2b567d2c80f9182ca708140593f022ab4a	2026-04-20	chore: update tonic-reflection (#26311)	UNREVIEWED			
-1142	3b97f2e1f739c6efe4a8f0542c9ba8ad9516f986	2026-04-20	[move-package] Relax bounds in json-rpc to handle system packages. (#26313)	UNREVIEWED			
-1143	01d2237584aab3f1b9f726226155c92b2107e4cf	2026-04-20	[Move] Bulletproofs range proof as native function (#25959)	UNREVIEWED			
-1144	1ed1c8b78e0e16ab879be85ce677b3bd48ce9010	2026-04-20	build(deps): loosen workspace chrono pin from "=0.4.39" to "0.4.44" (#26315)	UNREVIEWED			
-1145	8ce40892223cbaad606efb74cf3ba97503cac6e9	2026-04-20	docs: Fix generation of llms.txt (#26317)	UNREVIEWED			
-1146	09e4f557d22797fe5e7ea80eb59ab9290da6d758	2026-04-20	[forking 6/n] add support for checkpoint contents (#26245)	UNREVIEWED			
-1147	8317aa11a6ca4b0a681306991baecfb0f4ec0c11	2026-04-20	test-cluster: preserve consensus positions for direct submits (#26283)	UNREVIEWED			
-1148	fb47d5fbdcbb2a278c9d65cbd65871bb5d6c9194	2026-04-20	[sui-framework] Add df/dof `replace`. Fix `remove_opt` (#26248)	UNREVIEWED			
-1149	4141589ae1076e80c4d89b6fc659eac237a28f36	2026-04-20	[forking 7/n] Add historical transaction query support in DataStore (#26261)	UNREVIEWED			
-1150	bee119a9c1801d87f4d3b4894c6b93c530660f85	2026-04-21	[gasless] Add remaining balance verification for withdrawals (#26264)	UNREVIEWED			
+1101	399f54b4ee0a0b4737c19631ae667c641165f3e8	2026-04-15	[move-vm] Added additional unreachable reference tests (#26238)	REVIEWED	EXCLUDE_NON_CODE		仅 Move VM 测试。
+1102	a5695d65dfc2d902066a4ef7c6c0d803e09bf8ed	2026-04-15	[consensus] remove block certification (#26144)	REVIEWED	EXCLUDE_FEATURE		consensus block certification 重构。
+1103	ebac86fb5fd8e62f2fcecd359cc91a0ca90b3ecb	2026-04-15	docs: Sui IA restructure (#26241)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1104	3a2c517c03fa744d56b199980fe5197d0084b138	2026-04-15	[indexer-alt-reader] make FullnodeClient require execution client (#26240)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt FullnodeClient API。
+1105	25ff0acc38c12152d131e18db5c2b1f04e51ff0a	2026-04-15	docs: fix reverted changes (#26256)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1106	c84f8c5534ec8b3eb9d8ea64a7e217e6bc25c640	2026-04-15	Enable FIFO compaction on 10% of mainnet validators (#26217)	REVIEWED	EXCLUDE_FEATURE		FIFO compaction rollout。
+1107	31ba9cede6ebaacf9c5863cc854f132b3860ceaa	2026-04-15	[sui-indexer-alt-reader] Add gRPC metrics middleware and refactor clients to use it (#26230)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt metrics middleware。
+1108	bc8e900dc71f61397fbb50203ec4a691c156543e	2026-04-15	sui-indexer-alt-object-store: implement accepts_chain_id (#26247)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt ObjectStore API。
+1109	53e047687b95801d103c60dfd673195dd1572d05	2026-04-15	[forking 5/n] add transaction store APIs (#26192)	REVIEWED	EXCLUDE_FEATURE		forking transaction store。
+1110	2aac6ea14af975c0b25f8224d6b33cbc09a6e924	2026-04-15	Fix watermark init bug (#26258)	REVIEWED	EXCLUDE_POST_FORK		后续 BigTableConnection watermark 路径。
+1111	876ac2eb6a9bc07e1610667f910131013033c2f7	2026-04-15	sui-kvstore: implement ConcurrentConnection for BigTableConnection (#26150)	REVIEWED	EXCLUDE_FEATURE		新增 BigTableConnection 并发接口。
+1112	ca31568261d1ecf95c7735564671235fa1a23b37	2026-04-15	[sui-indexer-alt-reader] Preserve FullnodeArgs inner `Option<Url>` (#26257)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt FullnodeArgs 语义。
+1113	a1037692e2c3a09babd5d6c73afd37c70c98b056	2026-04-16	[sui-rosetta] Parse FungibleStakedSui operations on read path (#26251)	REVIEWED	EXCLUDE_FEATURE		Rosetta 读取支持。
+1114	ef16b0106b1058438137c68fbf0e7699a673d63c	2026-04-16	sui-kvstore: implement accepts_chain_id (#26262)	REVIEWED	EXCLUDE_FEATURE		KV store chain-id API。
+1115	776b75b424ab9f3005ffe7be4d9acacf45f19656	2026-04-16	feat: Enable gamma prime zklogin providers to prod (#26252)	REVIEWED	EXCLUDE_FEATURE		zklogin provider 功能。
+1116	1bf0f5888b02326d44b05abdc6dbba75364d6e9f	2026-04-16	`simulate_transaction`: recommend 0 gas price for gasless-eligible tx (#26237)	REVIEWED	EXCLUDE_POST_FORK		gasless simulate 建议。
+1117	b4841737e40c15f4d35ad2b0ab7a1895a82e786e	2026-04-16	ci: add setup-mold composite action for faster Linux linking (#26267)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+1118	a004abe96c79894475bb6cef746ba98677497e54	2026-04-17	Add address balance gas payment generation to transaction fuzzer (#26058)	REVIEWED	EXCLUDE_POST_FORK		address-balance fuzzer。
+1119	ab901ab7501594c07d90c2e5b997248848a2ee38	2026-04-16	external signer docs (#25281)	REVIEWED	EXCLUDE_NON_CODE		external signer 文档。
+1120	931c3d9b96da98750c14e322b2c4675f511bba2a	2026-04-16	Revert "ci: add setup-mold composite action for faster Linux linking" (#26273)	REVIEWED	EXCLUDE_NON_CODE		CI revert。
+1121	fc981af0fe21fa744e9cfb3cc043ff365c1612e6	2026-04-16	typed-store: fix safe_drop_db lock race in tidehunter builds (#26271)	APPLIED	MERGE	080f57da088f147f07278e817558b74683889872	tidehunter build 中保留纯 RocksDB 的安全删除重试，避免数据库锁 panic。
+1122	360d8e8f8fcaad6e85e26508bbee493b787113fb	2026-04-17	ci: resolve postgres bin dir dynamically for Ubuntu 22.04/24.04 compatibility (#26276)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+1123	d49a15eb8cd1c65358fe5cf30d988c272fff74bf	2026-04-17	[chore] Update tidehunter to eab7323cafeab0873a09172b12223f1539bd6fe2 (#26272)	REVIEWED	EXCLUDE_FEATURE		tidehunter 依赖更新。
+1124	d4662d77c8466b7dad89d44869c94f3902c8af97	2026-04-17	[Block Steaming] Introduce the ObserverSubscriber (#25939)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 服务。
+1125	3e2948110cf405654f7c6a21abe756592c11d836	2026-04-17	fix: misc redirects (#26280)	REVIEWED	EXCLUDE_NON_CODE		仅 redirect。
+1126	8584309160a861be6a501c0bbb62dc3a5bc0db0c	2026-04-17	[sui-protocol-config] Add #[skip_accessor] attribute to protocol config macros (#26254)	REVIEWED	EXCLUDE_FEATURE		protocol-config 宏 API。
+1127	a1a8af283a7a22036485c3b7cb097db9855ad91f	2026-04-17	Remove dead code gated on mysticeti_fastpath / disable_preconsensus_locking (#26278)	REVIEWED	EXCLUDE_FEATURE		后续共识 dead-code 清理。
+1128	7bf420a388f9ce6d3cef591d24e33fb4da847d34	2026-04-17	ci: use upstream mold 2.40.4 as CI linker (fixes #26267 regression) (#26285)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+1129	c180fd1abf88ba66fd98a877133acddd1a3ad8f4	2026-04-17	docs: clarify checkpoint source guidance (#26244)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1130	a75b95642dc1116ee4287a2c2532d75d9f4ef207	2026-04-17	deps: fix rustls-webpki CVE; ignore two reachability-zero unsound advisories (#26281)	APPLIED	MERGE	2e1dffed327fdf88e38d21a279d18d4c17182c8f	升级 rustls-webpki 以修复证书约束绕过 CVE。
+1131	d733c8701a331ce4f51b633dcf9774bd41efbe80	2026-04-17	docs: Create docs-style-guide.yml for style guide checks (#26290)	REVIEWED	EXCLUDE_NON_CODE		仅文档检查。
+1132	dde33b983a013d2169a04ac3bbe1a153763154b6	2026-04-17	[genesis] Directly splash system packages at genesis (#26265)	REVIEWED	EXCLUDE_FEATURE		genesis system package 流程。
+1133	b71c21a99d3c1799050cc0607e99bc0c18483173	2026-04-17	docs: fix style guide CI (#26293)	REVIEWED	EXCLUDE_NON_CODE		仅文档 CI。
+1134	74175e8217466afdb7eb84ea45e5e4ff708d35a5	2026-04-17	fix: Update docs-style-guide.yml (#26294)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1135	cf60aa0595da062cbed7fea6f8ed09135c99bf4c	2026-04-17	Delete .github/workflows/docs-style-guide.yml (#26295)	REVIEWED	EXCLUDE_NON_CODE		仅删除文档 CI。
+1136	e98e2b65f453fe068015f84efcd72905fa7e209a	2026-04-17	docs: Adhere to Cloudflare agent-ready spec (#26297)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1137	1814ca4ee2d76d97b06040343eadf5e5b76fa68c	2026-04-17	[sui-types]: change ExecutionStatus::new_failure() to accept ExecutionFaillure (#26222)	REVIEWED	EXCLUDE_FEATURE		ExecutionStatus API 迁移。
+1138	2bfb44f88ef6d13477c5e53b2ba939995df936fc	2026-04-18	Add addr_bal_deposit load test workload (#26235)	REVIEWED	EXCLUDE_POST_FORK		address-balance load test。
+1139	1dcb7d666bb39179ae2eec2c9ec0f6bf8f25a61f	2026-04-17	Migrate jsonrpc alt governance 1/2 (#26145)	REVIEWED	EXCLUDE_FEATURE		jsonrpc-alt governance 迁移。
+1140	1b164b191f124b6a43b4328b55db06bfb873cb76	2026-04-18	consensus_adapter: remove staggered submission and other unused logic (#26279)	REVIEWED	EXCLUDE_FEATURE		consensus_adapter 重构。
+1141	1c4b4d2b567d2c80f9182ca708140593f022ab4a	2026-04-20	chore: update tonic-reflection (#26311)	REVIEWED	EXCLUDE_FEATURE		tonic-reflection 依赖更新。
+1142	3b97f2e1f739c6efe4a8f0542c9ba8ad9516f986	2026-04-20	[move-package] Relax bounds in json-rpc to handle system packages. (#26313)	REVIEWED	EXCLUDE_POST_FORK		依赖后续 genesis system package 流程。
+1143	01d2237584aab3f1b9f726226155c92b2107e4cf	2026-04-20	[Move] Bulletproofs range proof as native function (#25959)	REVIEWED	EXCLUDE_FEATURE		新增 Bulletproofs native。
+1144	1ed1c8b78e0e16ab879be85ce677b3bd48ce9010	2026-04-20	build(deps): loosen workspace chrono pin from "=0.4.39" to "0.4.44" (#26315)	REVIEWED	EXCLUDE_FEATURE		chrono workspace 依赖策略。
+1145	8ce40892223cbaad606efb74cf3ba97503cac6e9	2026-04-20	docs: Fix generation of llms.txt (#26317)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1146	09e4f557d22797fe5e7ea80eb59ab9290da6d758	2026-04-20	[forking 6/n] add support for checkpoint contents (#26245)	REVIEWED	EXCLUDE_FEATURE		forking checkpoint contents。
+1147	8317aa11a6ca4b0a681306991baecfb0f4ec0c11	2026-04-20	test-cluster: preserve consensus positions for direct submits (#26283)	REVIEWED	EXCLUDE_NON_CODE		test-cluster 测试基础设施。
+1148	fb47d5fbdcbb2a278c9d65cbd65871bb5d6c9194	2026-04-20	[sui-framework] Add df/dof `replace`. Fix `remove_opt` (#26248)	REVIEWED	EXCLUDE_FEATURE		framework df/dof API 扩展与编译包更新。
+1149	4141589ae1076e80c4d89b6fc659eac237a28f36	2026-04-20	[forking 7/n] Add historical transaction query support in DataStore (#26261)	REVIEWED	EXCLUDE_FEATURE		forking historical query。
+1150	bee119a9c1801d87f4d3b4894c6b93c530660f85	2026-04-21	[gasless] Add remaining balance verification for withdrawals (#26264)	REVIEWED	EXCLUDE_POST_FORK		gasless withdrawal 验证。
 1151	dfe6dffecd785480869546f78044943459b5624e	2026-04-21	[Block Streaming] Extract proposing logic to separate component & refactor node type bootstrap (#25940)	UNREVIEWED			
 1152	4ef8a0b3c7bcb20d29fca95ee42e8253d178b9f9	2026-04-21	[fix] use prod vk for testnet (#26330)	UNREVIEWED			
 1153	1ff1fdcd630b6b9bc3d0e21fddfc70d2770c32c3	2026-04-21	[sui-rpc-api] Add custom service support in rpc api (#26327)	UNREVIEWED			
