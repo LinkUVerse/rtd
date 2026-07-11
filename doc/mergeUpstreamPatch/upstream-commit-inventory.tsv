@@ -1649,56 +1649,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1648	d034d564f84b901efe507ff8f6e4b5c8c0cb53bd	2026-06-19	Sui v1.74.0 Framework Bytecode snapshot (#27016)	REVIEWED	EXCLUDE_NON_CODE		框架快照。
 1649	66ece6024145b27de72995acd469e7ed911cae1e	2026-06-19	Sui v1.75.0 Version Bump (#27017)	REVIEWED	EXCLUDE_NON_CODE		版本升级。
 1650	860cf61397fb48cd80cf6bc1fa444fec3bdbbc34	2026-06-22	graphql: generalize Address.asTransactionObject (#27018)	REVIEWED	EXCLUDE_FEATURE		GraphQL 查询功能泛化。
-1651	88ca368d52653c501f309f1319eec4218c025ba9	2026-06-22	[Block Streaming] consensus sync full nodes to verify local checkpoints (#26842)	UNREVIEWED			
-1652	26088ad2382ceb24c143862614688e766c044268	2026-06-22	docs: fix self-referencing link in migration-strategies.mdx (#27021)	UNREVIEWED			
-1653	cf371176c61147260d8ef1105fd9a7426ab91251	2026-06-22	Log GraphQL requests at trace level for replay (#27004)	UNREVIEWED			
-1654	11f312fbd74bfa218019f1df848aa8a42b2dd4e4	2026-06-22	docs: JSON-RPC deprecation banner and Playground analytics (#27028)	UNREVIEWED			
-1655	8e4fe12d5c4ef73e0d9065896979f5cd06166f1c	2026-06-22	[cli] Update the sui client balance to use gRPC list_balances (#26999)	UNREVIEWED			
-1656	f0287cc7ac1287bbcf0802f97e7b6a12d290ed28	2026-06-22	[typed-store] Double WAL mmap window for perpetual tidehunter DB (#27029)	UNREVIEWED			
-1657	ef5410b59f53a649e8c62ddec4f0939e97cb3147	2026-06-22	core: append TideHunter checkpoint watermark keyspace (#27033)	UNREVIEWED			
-1658	4ab62da4b488b1a09fa37f9974acbb7ab43a70ad	2026-06-23	[move-ide] Added support for smart features in non-inlined macro functions (#26651)	UNREVIEWED			
-1659	eed444460aa41926b10f54380caa03eb29db4f0d	2026-06-23	sui-proxy: add on-chain hashi committee resolver (#26975)	UNREVIEWED			
-1660	0816947943b4c8784532ef75d7b53ea87fc42ccf	2026-06-23	[move-compiler][lint] Unused return value (#26801)	UNREVIEWED			
-1661	443269fa63f79980e5f99f613568d9e4017a0c76	2026-06-23	[adapter] Simplify and remove stale gas-related gating (#27008)	UNREVIEWED			
-1662	22566432dc46011610a09d31f1b1a5f916fd0041	2026-06-23	ci(release): drop vestigial static sccache AWS keys (OIDC-only) (#27045)	UNREVIEWED			
-1663	1ddff1691ef82ed88efed6beee6ec8e597f3309d	2026-06-24	[trace-view] Hardening against source/bytecode mismatches (#26870)	UNREVIEWED			
-1664	81693c18bf8fb202ebba61dfc8b8a41841e87cc6	2026-06-24	Add lower bound to object scans (#27047)	UNREVIEWED			
-1665	0571566d49a8791e81ca43dd5577c3ed4b08738c	2026-06-24	Update quinn-proto (#27048)	UNREVIEWED			
-1666	ff11a4224e9b1160e52c486d3ca3426e47d9b88e	2026-06-24	docs: Security-related docs updates and lagging tasks (#26835)	UNREVIEWED			
-1667	bb17ee0d19ab1caaedd7c465ee7a0f4abf46c61d	2026-06-24	[typed-store] Add DBMap::snapshot_iterator for point-in-time iteration (#26874)	UNREVIEWED			
-1668	22209dd8c7166f3f2494a79d4ce8fd174514296d	2026-06-24	[decompiler] Determinism fixes + add corpus residual fixtures	UNREVIEWED			
-1669	34a2b608032cf6ba22706e2e33f121a1e0ae26fc	2026-06-24	[decompiler] Replace post-dom-based arm absorb with in-degree singly-entered check	UNREVIEWED			
-1670	0fe3ca73dd568368e4e6b291204406d0e8c82c5a	2026-06-24	[decompiler] Embed multi-pred sink arms at loop heads	UNREVIEWED			
-1671	1b40d65ad6d19cdae72ae541bea55183bc4f4a96	2026-06-24	[decompiler] Add convergence check to orphan hoist; refuse to fuse loop exits into Code blocks	UNREVIEWED			
-1672	b8812802cff8900b27de854cf1cec869391e9994	2026-06-24	[decompiler] Recover loop exits + hoist orphans in CFG order	UNREVIEWED			
-1673	9a1ee24a1beb69840e0deb201c8bbb5dc54741cd	2026-06-24	[decompiler] Add dispatch table for multi-succ loops	UNREVIEWED			
-1674	50c5a0ea07f3062edd777fdacc2bdba77bd7c24a	2026-06-24	[decompiler] Dispatch synthesis cleanups + convergence_ok regression fixture	UNREVIEWED			
-1675	b2f16fe5d5624e0159c66e7139eb8e8358617612	2026-06-24	[decompiler] Address review feedback on loop-refinement	UNREVIEWED			
-1676	22f73023751598722099982b17b1f85dd247f992	2026-06-24	[decompiler] Address review: spacing before 'as' + cleaner alt deref	UNREVIEWED			
-1677	fcffd3592a58848df968654c3f8176b283e665a1	2026-06-24	rpc-store: register RocksDB stats collector for embedded store (#27053)	UNREVIEWED			
-1678	f6f3f514d5a59adf6841025e0cf8cf354bc05d80	2026-06-24	[graphql-stream] Add cursor field to Checkpoint [13/n] (#26731)	UNREVIEWED			
-1679	c28e6fa308b46f30204c3aea7e36e9126c5e4656	2026-06-24	Suppress resubmission of consensus-processed transactions (#27054)	UNREVIEWED			
-1680	d07864d3404b5a175fb1d84f4471deef5fd946cb	2026-06-24	Reject soft bundles that repeat a transaction (#27056)	UNREVIEWED			
-1681	3cf6e7cdc5175a00d65252661162d9660fe62541	2026-06-25	[trace-view] Improved UX for starting inlined instructions (#27046)	UNREVIEWED			
-1682	e300cc811a107fe12826c08d2f167326b066355f	2026-06-25	[move-ide] Sort abilities for on-hover display (#27061)	UNREVIEWED			
-1683	e10164e89b3c9eb8f503ddf5b546b61075767a4d	2026-06-25	[state sync] support GCS (incl. requester-pays) in archive fallback (#27063)	UNREVIEWED			
-1684	20382058c46265ad3932fc384a7b0416bdc55402	2026-06-25	refactor spam weight calculation for handle_submit_transaction (#27064)	UNREVIEWED			
-1685	450aeda4928177abd5af6395ad7cb207cd7d6b33	2026-06-25	[graphql] Thread `alpha_ledger_grpc_reader` to optionally support bitmap stream apis with backward compatibility 1/n (#26894)	UNREVIEWED			
-1686	bbd632974aa17a0db31d0c24293419473fd4f956	2026-06-25	[framework] adds insert_(before|after) to linked_table (#26914)	UNREVIEWED			
-1687	03e40c5fae980ffdc5cb67f097c9e8eb165e667b	2026-06-25	Add monitored scopes to consensus commit steps (#27066)	UNREVIEWED			
-1688	43e318397de442fa6df1f63bdfd204ed33607f5f	2026-06-25	[framework] future proofing type_name in coin (#27067)	UNREVIEWED			
-1689	c9d976734fb59aeebc7871d06e06afd4055987aa	2026-06-25	[traffic controller] add consensus_submission_limit_exceeded tally me… (#27068)	UNREVIEWED			
-1690	588cc0cc189ad095f0d1330b4e11900bb839660b	2026-06-25	[consensus adapter] fix inflight count for soft bundles (#27074)	UNREVIEWED			
-1691	c0bf87f562830a14fe222bf7477ef02fbed154fa	2026-06-26	Suppress transaction resubmission (#27069)	UNREVIEWED			
-1692	aedf7060de585459f819a02ad405ea167575f545	2026-06-26	rpc-store: Replace bespoke owner prefix types with OwnerKind	UNREVIEWED			
-1693	f094e31bd7a6984855983fa12124683d49894c1a	2026-06-26	consistent-store: Remove the snapshot stride concept	UNREVIEWED			
-1694	53479077212eaac9ed64c1cc331006f00bd21c37	2026-06-26	rpc-store: Rename the schema keys module to primitives	UNREVIEWED			
-1695	3b2b6cfb5072d4b968bd3ba7b75b31dc29093ee1	2026-06-26	rpc-store: Index end-of-epoch system info into the epochs CF	UNREVIEWED			
-1696	2907605e17d38235ab1c87895f57da8e9fe32bce	2026-06-26	Drop vestigial ParentSync impl from latest TemporaryStore (#27015)	UNREVIEWED			
-1697	25eb3f373fb03223ceb2dccc18a64fb4c5475ce3	2026-06-26	Remove unread legacy protocol config index columns (#27085)	UNREVIEWED			
-1698	4bab257902a15b56d0ea316c397642100a9ed5ec	2026-06-26	Cancel pre-submission when a transaction is already processed by consensus (#27083)	UNREVIEWED			
-1699	656377ff8814c788abf286d2bea6e2a56287a5f2	2026-06-29	Extract execution-layer invariant checks into a InvariantChecker module (#27051)	UNREVIEWED			
-1700	254519b11609ae115c3360ca1b8c3e06c4bbc64d	2026-06-29	Add chain identifier to ProtocolConfig (#27090)	UNREVIEWED			
+1651	88ca368d52653c501f309f1319eec4218c025ba9	2026-06-22	[Block Streaming] consensus sync full nodes to verify local checkpoints (#26842)	REVIEWED	EXCLUDE_FEATURE		区块流同步功能。
+1652	26088ad2382ceb24c143862614688e766c044268	2026-06-22	docs: fix self-referencing link in migration-strategies.mdx (#27021)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1653	cf371176c61147260d8ef1105fd9a7426ab91251	2026-06-22	Log GraphQL requests at trace level for replay (#27004)	REVIEWED	EXCLUDE_NON_CRITICAL		GraphQL 追踪日志。
+1654	11f312fbd74bfa218019f1df848aa8a42b2dd4e4	2026-06-22	docs: JSON-RPC deprecation banner and Playground analytics (#27028)	REVIEWED	EXCLUDE_NON_CODE		文档站。
+1655	8e4fe12d5c4ef73e0d9065896979f5cd06166f1c	2026-06-22	[cli] Update the sui client balance to use gRPC list_balances (#26999)	REVIEWED	EXCLUDE_FEATURE		CLI 迁移功能。
+1656	f0287cc7ac1287bbcf0802f97e7b6a12d290ed28	2026-06-22	[typed-store] Double WAL mmap window for perpetual tidehunter DB (#27029)	REVIEWED	EXCLUDE_POST_FORK		依赖后置 TideHunter 存储路径。
+1657	ef5410b59f53a649e8c62ddec4f0939e97cb3147	2026-06-22	core: append TideHunter checkpoint watermark keyspace (#27033)	REVIEWED	EXCLUDE_POST_FORK		依赖后置 TideHunter 存储架构。
+1658	4ab62da4b488b1a09fa37f9974acbb7ab43a70ad	2026-06-23	[move-ide] Added support for smart features in non-inlined macro functions (#26651)	REVIEWED	EXCLUDE_FEATURE		IDE 功能。
+1659	eed444460aa41926b10f54380caa03eb29db4f0d	2026-06-23	sui-proxy: add on-chain hashi committee resolver (#26975)	REVIEWED	EXCLUDE_FEATURE		代理解析功能。
+1660	0816947943b4c8784532ef75d7b53ea87fc42ccf	2026-06-23	[move-compiler][lint] Unused return value (#26801)	REVIEWED	EXCLUDE_FEATURE		编译器 lint 功能。
+1661	443269fa63f79980e5f99f613568d9e4017a0c76	2026-06-23	[adapter] Simplify and remove stale gas-related gating (#27008)	REVIEWED	EXCLUDE_NON_CRITICAL		后续执行版本的计费整理。
+1662	22566432dc46011610a09d31f1b1a5f916fd0041	2026-06-23	ci(release): drop vestigial static sccache AWS keys (OIDC-only) (#27045)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1663	1ddff1691ef82ed88efed6beee6ec8e597f3309d	2026-06-24	[trace-view] Hardening against source/bytecode mismatches (#26870)	REVIEWED	EXCLUDE_NON_CRITICAL		调试视图保护。
+1664	81693c18bf8fb202ebba61dfc8b8a41841e87cc6	2026-06-24	Add lower bound to object scans (#27047)	REVIEWED	EXCLUDE_POST_FORK		现有项目没有对应 KV 扫描实现。
+1665	0571566d49a8791e81ca43dd5577c3ed4b08738c	2026-06-24	Update quinn-proto (#27048)	REVIEWED	EXCLUDE_POST_FORK		上游依赖版本路径不匹配。
+1666	ff11a4224e9b1160e52c486d3ca3426e47d9b88e	2026-06-24	docs: Security-related docs updates and lagging tasks (#26835)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1667	bb17ee0d19ab1caaedd7c465ee7a0f4abf46c61d	2026-06-24	[typed-store] Add DBMap::snapshot_iterator for point-in-time iteration (#26874)	REVIEWED	EXCLUDE_FEATURE		存储 API 功能。
+1668	22209dd8c7166f3f2494a79d4ce8fd174514296d	2026-06-24	[decompiler] Determinism fixes + add corpus residual fixtures	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1669	34a2b608032cf6ba22706e2e33f121a1e0ae26fc	2026-06-24	[decompiler] Replace post-dom-based arm absorb with in-degree singly-entered check	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1670	0fe3ca73dd568368e4e6b291204406d0e8c82c5a	2026-06-24	[decompiler] Embed multi-pred sink arms at loop heads	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1671	1b40d65ad6d19cdae72ae541bea55183bc4f4a96	2026-06-24	[decompiler] Add convergence check to orphan hoist; refuse to fuse loop exits into Code blocks	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1672	b8812802cff8900b27de854cf1cec869391e9994	2026-06-24	[decompiler] Recover loop exits + hoist orphans in CFG order	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1673	9a1ee24a1beb69840e0deb201c8bbb5dc54741cd	2026-06-24	[decompiler] Add dispatch table for multi-succ loops	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1674	50c5a0ea07f3062edd777fdacc2bdba77bd7c24a	2026-06-24	[decompiler] Dispatch synthesis cleanups + convergence_ok regression fixture	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1675	b2f16fe5d5624e0159c66e7139eb8e8358617612	2026-06-24	[decompiler] Address review feedback on loop-refinement	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1676	22f73023751598722099982b17b1f85dd247f992	2026-06-24	[decompiler] Address review: spacing before 'as' + cleaner alt deref	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1677	fcffd3592a58848df968654c3f8176b283e665a1	2026-06-24	rpc-store: register RocksDB stats collector for embedded store (#27053)	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1678	f6f3f514d5a59adf6841025e0cf8cf354bc05d80	2026-06-24	[graphql-stream] Add cursor field to Checkpoint [13/n] (#26731)	REVIEWED	EXCLUDE_FEATURE		GraphQL 流式查询功能。
+1679	c28e6fa308b46f30204c3aea7e36e9126c5e4656	2026-06-24	Suppress resubmission of consensus-processed transactions (#27054)	APPLIED	MERGE	9974884c1c50ae907545bafeb35a1c7ae2da6bb5	已处理交易不再重新送入共识。
+1680	d07864d3404b5a175fb1d84f4471deef5fd946cb	2026-06-24	Reject soft bundles that repeat a transaction (#27056)	APPLIED	MERGE	9974884c1c50ae907545bafeb35a1c7ae2da6bb5	拒绝软批内重复交易。
+1681	3cf6e7cdc5175a00d65252661162d9660fe62541	2026-06-25	[trace-view] Improved UX for starting inlined instructions (#27046)	REVIEWED	EXCLUDE_FEATURE		调试视图功能。
+1682	e300cc811a107fe12826c08d2f167326b066355f	2026-06-25	[move-ide] Sort abilities for on-hover display (#27061)	REVIEWED	EXCLUDE_FEATURE		IDE 功能。
+1683	e10164e89b3c9eb8f503ddf5b546b61075767a4d	2026-06-25	[state sync] support GCS (incl. requester-pays) in archive fallback (#27063)	REVIEWED	EXCLUDE_FEATURE		归档回退存储功能。
+1684	20382058c46265ad3932fc384a7b0416bdc55402	2026-06-25	refactor spam weight calculation for handle_submit_transaction (#27064)	REVIEWED	EXCLUDE_NON_CRITICAL		流量权重重构。
+1685	450aeda4928177abd5af6395ad7cb207cd7d6b33	2026-06-25	[graphql] Thread `alpha_ledger_grpc_reader` to optionally support bitmap stream apis with backward compatibility 1/n (#26894)	REVIEWED	EXCLUDE_FEATURE		GraphQL 位图流功能。
+1686	bbd632974aa17a0db31d0c24293419473fd4f956	2026-06-25	[framework] adds insert_(before|after) to linked_table (#26914)	REVIEWED	EXCLUDE_FEATURE		框架 API 功能。
+1687	03e40c5fae980ffdc5cb67f097c9e8eb165e667b	2026-06-25	Add monitored scopes to consensus commit steps (#27066)	REVIEWED	EXCLUDE_NON_CRITICAL		共识监控。
+1688	43e318397de442fa6df1f63bdfd204ed33607f5f	2026-06-25	[framework] future proofing type_name in coin (#27067)	REVIEWED	EXCLUDE_FEATURE		框架兼容功能。
+1689	c9d976734fb59aeebc7871d06e06afd4055987aa	2026-06-25	[traffic controller] add consensus_submission_limit_exceeded tally me… (#27068)	REVIEWED	EXCLUDE_NON_CRITICAL		流量控制指标。
+1690	588cc0cc189ad095f0d1330b4e11900bb839660b	2026-06-25	[consensus adapter] fix inflight count for soft bundles (#27074)	APPLIED	MERGE	9974884c1c50ae907545bafeb35a1c7ae2da6bb5	软批按实际交易数计入在途限制。
+1691	c0bf87f562830a14fe222bf7477ef02fbed154fa	2026-06-26	Suppress transaction resubmission (#27069)	APPLIED	MERGE	9974884c1c50ae907545bafeb35a1c7ae2da6bb5	时间窗口内抑制重复共识提交。
+1692	aedf7060de585459f819a02ad405ea167575f545	2026-06-26	rpc-store: Replace bespoke owner prefix types with OwnerKind	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1693	f094e31bd7a6984855983fa12124683d49894c1a	2026-06-26	consistent-store: Remove the snapshot stride concept	REVIEWED	EXCLUDE_FEATURE		一致性存储功能。
+1694	53479077212eaac9ed64c1cc331006f00bd21c37	2026-06-26	rpc-store: Rename the schema keys module to primitives	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1695	3b2b6cfb5072d4b968bd3ba7b75b31dc29093ee1	2026-06-26	rpc-store: Index end-of-epoch system info into the epochs CF	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1696	2907605e17d38235ab1c87895f57da8e9fe32bce	2026-06-26	Drop vestigial ParentSync impl from latest TemporaryStore (#27015)	REVIEWED	EXCLUDE_NON_CRITICAL		遗留实现清理。
+1697	25eb3f373fb03223ceb2dccc18a64fb4c5475ce3	2026-06-26	Remove unread legacy protocol config index columns (#27085)	REVIEWED	EXCLUDE_NON_CRITICAL		遗留配置列清理。
+1698	4bab257902a15b56d0ea316c397642100a9ed5ec	2026-06-26	Cancel pre-submission when a transaction is already processed by consensus (#27083)	APPLIED	MERGE	9974884c1c50ae907545bafeb35a1c7ae2da6bb5	已处理交易竞态返回可重试状态，避免伪造位置。
+1699	656377ff8814c788abf286d2bea6e2a56287a5f2	2026-06-29	Extract execution-layer invariant checks into a InvariantChecker module (#27051)	REVIEWED	EXCLUDE_NON_CRITICAL		执行层不变量重构。
+1700	254519b11609ae115c3360ca1b8c3e06c4bbc64d	2026-06-29	Add chain identifier to ProtocolConfig (#27090)	REVIEWED	EXCLUDE_FEATURE		协议配置功能。
 1701	cfa5527eb714f50a96cc10932617e6fcf5991853	2026-06-29	[telemetry-subscribers] add RUST_LOG_TAILS for per-target log file tails (#27026)	UNREVIEWED			
 1702	05d00c43f80ad03eb6ae1d92a35edf8eeed441b1	2026-06-29	Passing of accumulator_version should not be conditional on network (#27087)	UNREVIEWED			
 1703	6fdd192489210b146b13c0b922778fba5f53737e	2026-06-29	rpc-store: index object versions by checkpoint	UNREVIEWED			
