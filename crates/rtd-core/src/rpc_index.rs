@@ -476,7 +476,14 @@ impl IndexStoreTables {
         path: P,
         index_options: IndexStoreOptions,
     ) -> Self {
+        // Supplying a per-table override map disables the derive macro's
+        // field-level defaults for every table missing from the map. Start
+        // with the shared default so all column families retain the intended
+        // write-stall settings, then override the bespoke tables below.
         let mut table_options = std::collections::BTreeMap::new();
+        for (table_name, _) in IndexStoreTables::describe_tables() {
+            table_options.insert(table_name, default_table_options());
+        }
         table_options.insert("balance".to_string(), balance_table_options());
         table_options.insert(
             "events_by_stream".to_string(),

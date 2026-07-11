@@ -179,9 +179,20 @@ impl<const STRENGTH: bool> StakeAggregator<AuthoritySignInfo, STRENGTH> {
                                         bad_authorities.push(*name);
                                     }
                                 }
-                                InsertResult::NotEnoughVotes {
-                                    bad_votes,
-                                    bad_authorities,
+                                // Evicting invalid signatures can leave a valid quorum.
+                                if self.total_votes >= self.committee.threshold::<STRENGTH>() {
+                                    match AuthorityQuorumSignInfo::<STRENGTH>::new_from_auth_sign_infos(
+                                        self.data.values().cloned().collect(),
+                                        self.committee(),
+                                    ) {
+                                        Ok(aggregated) => InsertResult::QuorumReached(aggregated),
+                                        Err(error) => InsertResult::Failed { error },
+                                    }
+                                } else {
+                                    InsertResult::NotEnoughVotes {
+                                        bad_votes,
+                                        bad_authorities,
+                                    }
                                 }
                             }
                         }
@@ -625,6 +636,67 @@ mod multi_stake_aggregator_tests {
 
         // With evenly split votes, neither can reach quorum now
         assert!(agg.quorum_unreachable());
+    }
+}
+
+#[cfg(test)]
+mod stake_aggregator_insert_tests {
+    use super::*;
+    use fastcrypto::hash::{HashFunction, Sha3_256};
+    use shared_crypto::intent::IntentScope;
+
+    #[derive(Clone, Debug, Serialize, PartialEq, Eq, Hash)]
+    struct TestMessage {
+        value: String,
+    }
+
+    impl Message for TestMessage {
+        type DigestType = [u8; 32];
+        const SCOPE: IntentScope = IntentScope::SenderSignedTransaction;
+
+        fn digest(&self) -> Self::DigestType {
+            let mut hasher = Sha3_256::default();
+            hasher.update(self.value.as_bytes());
+            hasher.finalize().digest
+        }
+    }
+
+    #[test]
+    fn quorum_is_retained_after_bad_signature_eviction() {
+        let (committee, key_pairs) =
+            Committee::new_simple_test_committee_with_normalized_voting_power(vec![7, 3]);
+        let committee = Arc::new(committee);
+        let authorities: Vec<_> = committee.names().copied().collect();
+        let (majority_authority, majority_key) = (authorities[0], &key_pairs[0]);
+        let (minority_authority, minority_key) = (authorities[1], &key_pairs[1]);
+
+        let mut aggregator: StakeAggregator<AuthoritySignInfo, true> =
+            StakeAggregator::new(committee);
+        let message = TestMessage {
+            value: "real".to_string(),
+        };
+        let bad_message = TestMessage {
+            value: "wrong".to_string(),
+        };
+
+        let bad_envelope = Envelope::<TestMessage, AuthoritySignInfo>::new(
+            0,
+            bad_message,
+            minority_key,
+            minority_authority,
+        );
+        assert!(matches!(
+            aggregator.insert(bad_envelope),
+            InsertResult::NotEnoughVotes { .. }
+        ));
+
+        let valid_envelope = Envelope::<TestMessage, AuthoritySignInfo>::new(
+            0,
+            message,
+            majority_key,
+            majority_authority,
+        );
+        assert!(aggregator.insert(valid_envelope).is_quorum_reached());
     }
 }
 
