@@ -109,6 +109,21 @@ pub(crate) struct CommitSyncer<C: NetworkClient> {
 }
 
 impl<C: NetworkClient> CommitSyncer<C> {
+    fn observe_fetched_commit_votes(
+        monitor: &CommitVoteMonitor,
+        certified_commits: &[CertifiedCommit],
+        vote_blocks: &[VerifiedBlock],
+    ) {
+        for commit in certified_commits {
+            for block in commit.blocks() {
+                monitor.observe_block(block);
+            }
+        }
+        for block in vote_blocks {
+            monitor.observe_block(block);
+        }
+    }
+
     pub(crate) fn new(
         context: Arc<Context>,
         core_thread_dispatcher: Arc<dyn CoreThreadDispatcher>,
@@ -693,6 +708,12 @@ impl<C: NetworkClient> CommitSyncer<C> {
             }
         }
 
+        Self::observe_fetched_commit_votes(
+            &inner.commit_vote_monitor,
+            &certified_commits,
+            &vote_blocks,
+        );
+
         // Update round tracker from the fetched blocks. For fetched blocks,
         // excluded_ancestors are not available so we use an empty vector.
         {
@@ -1040,5 +1061,28 @@ mod tests {
             assert_eq!(range.start(), start);
             assert_eq!(range.end(), start + 4);
         }
+    }
+
+    #[tokio::test]
+    async fn commit_syncer_observes_votes_from_fetched_blocks() {
+        let context = Arc::new(Context::new_for_test(4).0);
+        let monitor = CommitVoteMonitor::new(context);
+        let vote_blocks = (0..3)
+            .map(|authority| {
+                VerifiedBlock::new_for_test(
+                    TestBlock::new(15, authority)
+                        .set_commit_votes(vec![CommitRef::new(10, CommitDigest::MIN)])
+                        .build(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        CommitSyncer::<FakeNetworkClient>::observe_fetched_commit_votes(
+            &monitor,
+            &[],
+            &vote_blocks,
+        );
+
+        assert_eq!(monitor.quorum_commit_index(), 10);
     }
 }
