@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::RpcService;
+use crate::{RpcError, RpcService};
 use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsRequest;
 use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsResponse;
 use rtd_rpc::proto::rtd::rpc::v2::BatchGetTransactionsRequest;
@@ -25,6 +25,16 @@ mod get_service_info;
 mod get_transaction;
 pub use get_epoch::protocol_config_to_proto;
 pub use get_object::validate_get_object_requests;
+
+pub fn validate_batch_size(actual: usize, limit: usize) -> Result<(), RpcError> {
+    if actual > limit {
+        return Err(RpcError::new(
+            tonic::Code::InvalidArgument,
+            format!("number of batch requests exceed limit of {limit}"),
+        ));
+    }
+    Ok(())
+}
 
 #[tonic::async_trait]
 impl LedgerService for RpcService {
@@ -89,5 +99,16 @@ impl LedgerService for RpcService {
         get_epoch::get_epoch(self, request.into_inner())
             .map(tonic::Response::new)
             .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batch_size_limit_is_inclusive() {
+        assert!(validate_batch_size(1_000, 1_000).is_ok());
+        assert!(validate_batch_size(1_001, 1_000).is_err());
     }
 }

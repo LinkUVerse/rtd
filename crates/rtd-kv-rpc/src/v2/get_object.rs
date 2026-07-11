@@ -11,9 +11,11 @@ use rtd_rpc::proto::rtd::rpc::v2::{GetObjectRequest, GetObjectResponse, GetObjec
 use rtd_rpc_api::proto::google::rpc::bad_request::FieldViolation;
 use rtd_rpc_api::{
     ErrorReason, ObjectNotFoundError, RpcError,
-    grpc::v2::ledger_service::validate_get_object_requests,
+    grpc::v2::ledger_service::{validate_batch_size, validate_get_object_requests},
 };
 use rtd_types::storage::ObjectKey;
+
+pub const MAX_BATCH_REQUESTS: usize = 1000;
 
 pub(crate) async fn get_object(
     mut client: BigTableClient,
@@ -52,6 +54,8 @@ pub(crate) async fn batch_get_objects(
         ..
     }: BatchGetObjectsRequest,
 ) -> Result<BatchGetObjectsResponse, RpcError> {
+    validate_batch_size(requests.len(), MAX_BATCH_REQUESTS)?;
+
     // only batch requests with `object_id` and `exact_version` are supported by the KV store
     if requests.iter().any(|r| r.version.is_none()) {
         return Err(FieldViolation::new("version")

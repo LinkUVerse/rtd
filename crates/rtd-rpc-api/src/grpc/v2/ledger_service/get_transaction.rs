@@ -21,6 +21,7 @@ use rtd_rpc::proto::rtd::rpc::v2::UserSignature;
 use rtd_rpc::proto::timestamp_ms_to_proto;
 use rtd_sdk_types::Digest;
 
+pub const MAX_BATCH_REQUESTS: usize = 200;
 pub const READ_MASK_DEFAULT: &str = "digest";
 
 #[tracing::instrument(skip(service))]
@@ -88,6 +89,8 @@ pub fn batch_get_transactions(
         digests, read_mask, ..
     }: BatchGetTransactionsRequest,
 ) -> Result<BatchGetTransactionsResponse, RpcError> {
+    super::validate_batch_size(digests.len(), MAX_BATCH_REQUESTS)?;
+
     let read_mask = {
         let read_mask = read_mask.unwrap_or_else(|| FieldMask::from_str(READ_MASK_DEFAULT));
         read_mask

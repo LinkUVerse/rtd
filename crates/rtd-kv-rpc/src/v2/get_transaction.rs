@@ -13,10 +13,12 @@ use rtd_rpc::proto::rtd::rpc::v2::{
 };
 use rtd_rpc_api::{
     ErrorReason, RpcError, TransactionNotFoundError,
+    grpc::v2::ledger_service::validate_batch_size,
     proto::google::rpc::bad_request::FieldViolation, proto::timestamp_ms_to_proto,
 };
 use rtd_types::base_types::TransactionDigest;
 
+pub const MAX_BATCH_REQUESTS: usize = 200;
 pub const READ_MASK_DEFAULT: &str = "digest";
 
 pub async fn get_transaction(
@@ -67,6 +69,8 @@ pub async fn batch_get_transactions(
         digests, read_mask, ..
     }: BatchGetTransactionsRequest,
 ) -> Result<BatchGetTransactionsResponse, RpcError> {
+    validate_batch_size(digests.len(), MAX_BATCH_REQUESTS)?;
+
     let read_mask = {
         let read_mask = read_mask.unwrap_or_else(|| FieldMask::from_str(READ_MASK_DEFAULT));
         read_mask
