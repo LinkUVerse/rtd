@@ -1450,7 +1450,7 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1449	bb4684278ac95af912f442efb4c5d832d4d07ec0	2026-05-21	Fullnode query apis (#26717)	REVIEWED	EXCLUDE_FEATURE		Fullnode API 功能。
 1450	5ee14d5314a82dee5aae423781faa22423eea690	2026-05-21	Simplify bitmap evaluation	REVIEWED	EXCLUDE_FEATURE		KV bitmap 查询重构。
 1451	66b4e55178cf041eab398e76893552653bf06a65	2026-05-21	Let the streams flow! (#26728)	UNREVIEWED			
-1452	df2e714ca6019ac5ead76aa20d45e52beae40d07	2026-05-21	[consensus] propose at latest possible round after restart (#26720)	UNREVIEWED			
+1452	df2e714ca6019ac5ead76aa20d45e52beae40d07	2026-05-21	[consensus] propose at latest possible round after restart (#26720)	APPLIED	MERGE	a2e616a0c1a5b810a5a59243ebecc486c4264c9f	重启同步 round 落后本地持久化提议时，按 threshold clock round 继续提议。
 1453	3be29b4ed2a1077d89a4c3c6c77c635b159efdc3	2026-05-21	sui-core: drop fastpath guard in object_funds_checker (#26610)	UNREVIEWED			
 1454	ac4d046824e762ad554c848e6f0f40982c53550b	2026-05-21	Gate rpc and consolidate rpcs (#26735)	UNREVIEWED			
 1455	37de2da6b748a172154d08fb79e35ea360449612	2026-05-21	Enable gas priority tx admission queue by default (#26730)	UNREVIEWED			
