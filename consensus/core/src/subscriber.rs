@@ -59,23 +59,7 @@ impl<C: NetworkClient, S: NetworkService> Subscriber<C, S> {
         let context = self.context.clone();
         let network_client = self.network_client.clone();
         let authority_service = self.authority_service.clone();
-        let (mut last_received, gc_round) = {
-            let dag_state = self.dag_state.read();
-            (
-                dag_state.get_last_block_for_authority(peer).round(),
-                dag_state.gc_round(),
-            )
-        };
-
-        // If the latest block we have accepted by an authority is older than the current gc round,
-        // then do not attempt to fetch any blocks from that point as they will simply be skipped. Instead
-        // do attempt to fetch from the gc round.
-        if last_received < gc_round {
-            info!(
-                "Last received block for peer {peer} is older than GC round, {last_received} < {gc_round}, fetching from GC round"
-            );
-            last_received = gc_round;
-        }
+        let dag_state = self.dag_state.clone();
 
         let mut subscriptions = self.subscriptions.lock();
         self.unsubscribe_locked(peer, &mut subscriptions[peer.value()]);
@@ -83,8 +67,8 @@ impl<C: NetworkClient, S: NetworkService> Subscriber<C, S> {
             context,
             network_client,
             authority_service,
+            dag_state,
             peer,
-            last_received,
         )));
     }
 
@@ -114,8 +98,8 @@ impl<C: NetworkClient, S: NetworkService> Subscriber<C, S> {
         context: Arc<Context>,
         network_client: Arc<C>,
         authority_service: Arc<S>,
+        dag_state: Arc<RwLock<DagState>>,
         peer: AuthorityIndex,
-        last_received: Round,
     ) {
         const IMMEDIATE_RETRIES: i64 = 3;
         const MIN_TIMEOUT: Duration = Duration::from_millis(500);
@@ -150,6 +134,16 @@ impl<C: NetworkClient, S: NetworkService> Subscriber<C, S> {
                 tokio::task::yield_now().await;
             }
             retries += 1;
+
+            // Recompute the resume round on every reconnect. It may have advanced
+            // while an earlier stream was active.
+            let last_received = {
+                let dag_state = dag_state.read();
+                dag_state
+                    .get_last_block_for_authority(peer)
+                    .round()
+                    .max(dag_state.gc_round())
+            };
 
             // Use longer timeout when retry delay is long, to adapt to slow network.
             let request_timeout = MIN_TIMEOUT.max(delay);
@@ -221,8 +215,12 @@ impl<C: NetworkClient, S: NetworkService> Subscriber<C, S> {
                                 }
                             }
                         }
-                        // Reset retries when a block is received.
+                        // A recovered peer should not retain an escalated reconnect delay.
                         retries = 0;
+                        backoff = linku_common::backoff::ExponentialBackoff::new(
+                            Duration::from_millis(100),
+                            Duration::from_secs(10),
+                        );
                     }
                     None => {
                         debug!(

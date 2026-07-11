@@ -341,12 +341,16 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
     ) -> ConsensusResult<BlockStream> {
         fail_point_async!("consensus-rpc-response");
 
+        // Subscribe before taking the snapshot below. A duplicate is harmless,
+        // whereas subscribing afterward can lose a block published in the gap.
+        let broadcast_rx = self.rx_block_broadcast.resubscribe();
+
         // Find past proposed blocks as the initial blocks to send to the peer. If the requested
         // cache window is empty, send the last proposed block to help the peer recover liveness.
         let past_proposed_blocks = {
             let dag_state = self.dag_state.read();
-            let mut proposed_blocks =
-                dag_state.get_cached_blocks(self.context.own_index, last_received + 1);
+            let mut proposed_blocks = dag_state
+                .get_cached_blocks(self.context.own_index, last_received.saturating_add(1));
             if proposed_blocks.is_empty() {
                 let last_proposed_block = dag_state.get_last_proposed_block();
                 if last_proposed_block.round() > GENESIS_ROUND {
@@ -363,11 +367,8 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
             )
         };
 
-        let broadcasted_blocks = BroadcastedBlockStream::new(
-            peer,
-            self.rx_block_broadcast.resubscribe(),
-            self.subscription_counter.clone(),
-        );
+        let broadcasted_blocks =
+            BroadcastedBlockStream::new(peer, broadcast_rx, self.subscription_counter.clone());
 
         // Return a stream of blocks that first yields past blocks, then new blocks.
         Ok(Box::pin(past_proposed_blocks.chain(
