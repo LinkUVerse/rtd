@@ -699,56 +699,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 698	053dc7ebc05db137bb0a6b1ebb5fc4b75483640a	2026-03-02	ci: enable sccache in External crates workflow (#25667)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
 699	1b50e041d8d9fc6b741ae889bd0ff197e9274089	2026-03-02	[light-clients] cleanup, harden tests (#25642)	REVIEWED	EXCLUDE_NON_CODE		仅 light-client 测试。
 700	d7a46f4d91353dd703837448a5e161078c1ba644	2026-03-02	[light-client] put authenticated events on sui-docs site (#25638)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
-701	d0df835a44b2933f8beed163b542b040322bae3d	2026-03-02	[antithesis] add auth events to composite wl (#25618)	UNREVIEWED			
-702	d02989e8ea88a9dbe8418e6c12af8ca513e631bf	2026-03-02	update anemo version (#25666)	UNREVIEWED			
-703	9ab1aaa258683ca155ac780d43cec36e1a431072	2026-03-02	Deepbook margin doc updates (#25669)	UNREVIEWED			
-704	ab68b8abdfc35e83c8becf4acdfd72f96ead8465	2026-03-02	Enable address aliases on mainnet in protocol v114 (#25674)	UNREVIEWED			
-705	70209096e611d76bef12d487ef5dce47b631c376	2026-03-02	[move-cli] Remove last dep on old tracing implementation, and migrate tracing from env var to per-invocation trace files (#25672)	UNREVIEWED			
-706	b7f20cb217943cec0843a33e1e438b75ef198fa0	2026-03-02	[tracing][move-vm-runtime] Remove old tracer and debugger in the VM (#25673)	UNREVIEWED			
-707	8fbe031dd03eb8a3ca87969657b5c5bac42c64b5	2026-03-02	ci: fix sccache setup failing on fork PRs (#25675)	UNREVIEWED			
-708	4d05d08049622f37dc539e97e73c1c845a6a1a4d	2026-03-02	Disable randomized checkpoint tx limit in authenticated_events_multiple_commits_per_checkpoint test (#25678)	UNREVIEWED			
-709	67aa18388da446d0775665f3e4efceb3b6265e16	2026-03-03	[cherry-pick] Fix some things for testnet expensive checks (#25639) (#25680)	UNREVIEWED			
-710	99c647d6d452cefc947e4b8c7f8a9de71db53161	2026-03-03	[test] replace bitmask flags with string-based operation identifiers in composite workload (#25683)	UNREVIEWED			
-711	6d6f67e669c0dfb7d6d5d9518ea09b3935d095c9	2026-03-03	docs: Add address balances migration guide (#25524)	UNREVIEWED			
-712	a3ed886baf6d995133caf399e868e653f6d1f1f7	2026-03-03	Add ExecutionFailure to ExecutionStatus Failed Variant (#25555)	UNREVIEWED			
-713	224e6f1f12f6e96865048f91a46765ebdf447c65	2026-03-03	add doc for address aliases (#25022)	UNREVIEWED			
-714	4458cbe7bbce4d7bb4e77844d1caf14d20136c84	2026-03-03	ci: fix simtest nightly SSH session drops with detached execution (#25684)	UNREVIEWED			
-715	7ebef32993c408b2cc9ee251c1cb6a51fcbe0674	2026-03-03	graphql: MoveValue.asVector (#25479)	UNREVIEWED			
-716	e50c3fe5ae2b3c43a42f9d25743386ba87bb150c	2026-03-03	Fix balance changes for address-balance-backed transactions (#25685)	UNREVIEWED			
-717	5da15b2170ebd4c8bb5afa0ffef643c85758ecac	2026-03-03	[move] Remove old metadata in snapshot files (#25693)	UNREVIEWED			
-718	8bdfbd2a45c24e2a59c4a952a91a6602c9e1732a	2026-03-04	[graphql-alt] Add SignatureScheme union with simple signature types [1/n] (#25657)	UNREVIEWED			
-719	f35e50f2340375fb5b0630c712715f41017f209d	2026-03-04	[graphql-alt] Add ZkLogin and Passkey to SignatureScheme union [3/n] (#25659)	UNREVIEWED			
-720	ccd748b645148b736291b848815c0b0620e33fd9	2026-03-04	display: Support `$self` meta variable (#25481)	UNREVIEWED			
-721	b4ef6dd96c0f6a281a0fee220f2eaf5ab77fae2c	2026-03-04	graphql: better consistent watermark warnings (#25695)	UNREVIEWED			
-722	f765bcc8fd145fb7d495a5c26fc605cc992c23c8	2026-03-04	Add USDSUI token and pools to DeepBook docs (#25687)	UNREVIEWED			
-723	75f077e0799f61964e22bfba76cbeffed68f20d4	2026-03-04	Adaptive concurrency controller for ingestion and processing. (#25641)	UNREVIEWED			
-724	7e26e7476fe320744e4ee77f459a53e88d2d48a3	2026-03-04	fix(ci): use GitHub App token for auto-merge so CI triggers on branch cut PRs (#25694)	UNREVIEWED			
-725	93f3daa963d287c05999629f1e7306686c3c9021	2026-03-04	operator docs (#25682)	UNREVIEWED			
-726	4befa9e8ff744c9a2f81945f665bd3c4b15abf01	2026-03-04	[test] Fix flaky test_consensus_commit_handler by yielding in check_empty_for_testing (#25686)	UNREVIEWED			
-727	7f128b7974d0ee6ae8903862315ba738d6de25f3	2026-03-04	sccache-warmup: add missing commit_sha to failure notification (#25701)	UNREVIEWED			
-728	8ed3da1c4fe3f716a535cc447f60a2fcac169ab3	2026-03-04	More `main` ground work for `bella-ciao` landing (#25699)	UNREVIEWED			
-729	c05de326ee64bac031ae0b330aad95675aa9a439	2026-03-04	[hardening][address-balances] Additional checks for address balance gas payments (#25648)	UNREVIEWED			
-730	624dc94a0b0503f08693731cbd48e03e40db11c8	2026-03-04	[trace-view] New file hash format fix (#25705)	UNREVIEWED			
-731	947fa325a6f8a2627ec5bc843fd07c2571e87988	2026-03-04	Gate accumulator balance read stats check on address_balance_enabled (#25670)	UNREVIEWED			
-732	84831b187111d1a604b6f834c89010104f5c18f1	2026-03-04	Add ImmutableObjectRead operation to composite workload (#25646)	UNREVIEWED			
-733	c4a3778f39f8b2b689894162a2cb8b0788b5936f	2026-03-05	[address-balances] Additional tests for gas usage (#25647)	UNREVIEWED			
-734	9a783fde8ad1b3a3f47af1ff361d5e374f1c3439	2026-03-05	[move-regex-borrow-graph] Improve perf with a custom graph (#25422)	UNREVIEWED			
-735	97e246f6a080abe20bc4edcc1e14a95495d6cc36	2026-03-04	graphql-alt: scan apis (#24900)	UNREVIEWED			
-736	42112ebfe716d85128a553132c710162d47f330b	2026-03-05	Revert "graphql-alt: scan apis (#24900)"	UNREVIEWED			
-737	c6cd3eaecf1d1d478da4ee46b2b1ec79587590d1	2026-03-05	docs: Add "Read this first" section to address balances migration guide (#25708)	UNREVIEWED			
-738	177b8924f9b2bf67910f15720109159849da2462	2026-03-05	Disable tx amplification from bench driver (#25713)	UNREVIEWED			
-739	fc97ac0a2f7408c0defb4bef0bd70ede5b50ab07	2026-03-05	More cleanup on `main` for landing `bella-ciao` (#25721)	UNREVIEWED			
-740	a52ef37a516fa07198274fcab9273852e58e19ad	2026-03-05	[move][move-compiler] Fixes #25455, #25457, #25458 (#25691)	UNREVIEWED			
-741	d89cc341c79ad22f937f2135a07ff416fcaa0635	2026-03-06	[graphql-alt] Add missing ZkLogin fields to match gRPC interface [4/n] (#25696)	UNREVIEWED			
-742	663723f2625508f82b25517b581afa82294c282e	2026-03-06	Remove error from ZkLoginVerifyResult (#25715)	UNREVIEWED			
-743	a05b35434723a4995b5dae58572d2d2883b25696	2026-03-06	[move-ide] Added support for module extensions (#25409)	UNREVIEWED			
-744	949691f4d795bae4cdfb77bd9a752dd972879c43	2026-03-06	[move-compiler] Avoid IO when no artifacts are generated (#25712)	UNREVIEWED			
-745	8590a8a14d4a460d97fcb692824fc8f572e971ab	2026-03-06	Relax ValidDuring requirement for transactions with owned inputs (#25564)	UNREVIEWED			
-746	9ad89fa253790a7f6ed2261a6488929e1216b4a6	2026-03-06	docs: Fix auto-gen'd card lists, shuffle content, add Related Topics module (#25724)	UNREVIEWED			
-747	e3039f3fc6b7174b279b48aab9e14109e72e9400	2026-03-06	docs: Remove outdated related link lists (#25732)	UNREVIEWED			
-748	a0a246bb8cc10fec095e137950858a623ef16cba	2026-03-06	Remote store operator docs (#25702)	UNREVIEWED			
-749	cc660f33a3c681212dbd84242c4da6936bda6fc0	2026-03-06	docs: Update style guide (#25733)	UNREVIEWED			
-750	4c1bf5603130b56d0a590427556f258f6713de35	2026-03-06	docs: Compliance checks for llms spec (#25734)	UNREVIEWED			
+701	d0df835a44b2933f8beed163b542b040322bae3d	2026-03-02	[antithesis] add auth events to composite wl (#25618)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis/composite workload。
+702	d02989e8ea88a9dbe8418e6c12af8ca513e631bf	2026-03-02	update anemo version (#25666)	REVIEWED	EXCLUDE_NON_CODE		依赖升级。
+703	9ab1aaa258683ca155ac780d43cec36e1a431072	2026-03-02	Deepbook margin doc updates (#25669)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+704	ab68b8abdfc35e83c8becf4acdfd72f96ead8465	2026-03-02	Enable address aliases on mainnet in protocol v114 (#25674)	REVIEWED	EXCLUDE_POST_FORK		address alias protocol v114。
+705	70209096e611d76bef12d487ef5dce47b631c376	2026-03-02	[move-cli] Remove last dep on old tracing implementation, and migrate tracing from env var to per-invocation trace files (#25672)	REVIEWED	EXCLUDE_FEATURE		Move CLI tracing 架构迁移。
+706	b7f20cb217943cec0843a33e1e438b75ef198fa0	2026-03-02	[tracing][move-vm-runtime] Remove old tracer and debugger in the VM (#25673)	REVIEWED	EXCLUDE_FEATURE		Move VM tracing/debugger 架构移除。
+707	8fbe031dd03eb8a3ca87969657b5c5bac42c64b5	2026-03-02	ci: fix sccache setup failing on fork PRs (#25675)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+708	4d05d08049622f37dc539e97e73c1c845a6a1a4d	2026-03-02	Disable randomized checkpoint tx limit in authenticated_events_multiple_commits_per_checkpoint test (#25678)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+709	67aa18388da446d0775665f3e4efceb3b6265e16	2026-03-03	[cherry-pick] Fix some things for testnet expensive checks (#25639) (#25680)	REVIEWED	EXCLUDE_NON_CRITICAL		第 690 条 testnet expensive check 容错修复的 cherry-pick。
+710	99c647d6d452cefc947e4b8c7f8a9de71db53161	2026-03-03	[test] replace bitmask flags with string-based operation identifiers in composite workload (#25683)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark workload 测试。
+711	6d6f67e669c0dfb7d6d5d9518ea09b3935d095c9	2026-03-03	docs: Add address balances migration guide (#25524)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+712	a3ed886baf6d995133caf399e868e653f6d1f1f7	2026-03-03	Add ExecutionFailure to ExecutionStatus Failed Variant (#25555)	REVIEWED	EXCLUDE_FEATURE		ExecutionStatus API/schema 语义扩展。
+713	224e6f1f12f6e96865048f91a46765ebdf447c65	2026-03-03	add doc for address aliases (#25022)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+714	4458cbe7bbce4d7bb4e77844d1caf14d20136c84	2026-03-03	ci: fix simtest nightly SSH session drops with detached execution (#25684)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+715	7ebef32993c408b2cc9ee251c1cb6a51fcbe0674	2026-03-03	graphql: MoveValue.asVector (#25479)	REVIEWED	EXCLUDE_FEATURE		GraphQL MoveValue API 扩展。
+716	e50c3fe5ae2b3c43a42f9d25743386ba87bb150c	2026-03-03	Fix balance changes for address-balance-backed transactions (#25685)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 address-balance 交易。
+717	5da15b2170ebd4c8bb5afa0ffef643c85758ecac	2026-03-03	[move] Remove old metadata in snapshot files (#25693)	REVIEWED	EXCLUDE_NON_CODE		仅 Move 快照元数据清理。
+718	8bdfbd2a45c24e2a59c4a952a91a6602c9e1732a	2026-03-04	[graphql-alt] Add SignatureScheme union with simple signature types [1/n] (#25657)	REVIEWED	EXCLUDE_FEATURE		GraphQL SignatureScheme API 扩展。
+719	f35e50f2340375fb5b0630c712715f41017f209d	2026-03-04	[graphql-alt] Add ZkLogin and Passkey to SignatureScheme union [3/n] (#25659)	REVIEWED	EXCLUDE_FEATURE		GraphQL SignatureScheme API 扩展。
+720	ccd748b645148b736291b848815c0b0620e33fd9	2026-03-04	display: Support `$self` meta variable (#25481)	REVIEWED	EXCLUDE_FEATURE		display 元变量功能。
+721	b4ef6dd96c0f6a281a0fee220f2eaf5ab77fae2c	2026-03-04	graphql: better consistent watermark warnings (#25695)	REVIEWED	EXCLUDE_FEATURE		GraphQL watermark 告警语义。
+722	f765bcc8fd145fb7d495a5c26fc605cc992c23c8	2026-03-04	Add USDSUI token and pools to DeepBook docs (#25687)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+723	75f077e0799f61964e22bfba76cbeffed68f20d4	2026-03-04	Adaptive concurrency controller for ingestion and processing. (#25641)	REVIEWED	EXCLUDE_FEATURE		indexer 自适应并发控制器。
+724	7e26e7476fe320744e4ee77f459a53e88d2d48a3	2026-03-04	fix(ci): use GitHub App token for auto-merge so CI triggers on branch cut PRs (#25694)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+725	93f3daa963d287c05999629f1e7306686c3c9021	2026-03-04	operator docs (#25682)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+726	4befa9e8ff744c9a2f81945f665bd3c4b15abf01	2026-03-04	[test] Fix flaky test_consensus_commit_handler by yielding in check_empty_for_testing (#25686)	REVIEWED	EXCLUDE_NON_CODE		仅测试稳定性。
+727	7f128b7974d0ee6ae8903862315ba738d6de25f3	2026-03-04	sccache-warmup: add missing commit_sha to failure notification (#25701)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+728	8ed3da1c4fe3f716a535cc447f60a2fcac169ab3	2026-03-04	More `main` ground work for `bella-ciao` landing (#25699)	REVIEWED	EXCLUDE_FEATURE		landing 分支准备。
+729	c05de326ee64bac031ae0b330aad95675aa9a439	2026-03-04	[hardening][address-balances] Additional checks for address balance gas payments (#25648)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 address-balance gas payments。
+730	624dc94a0b0503f08693731cbd48e03e40db11c8	2026-03-04	[trace-view] New file hash format fix (#25705)	REVIEWED	EXCLUDE_NON_CRITICAL		trace-view 文件格式修复。
+731	947fa325a6f8a2627ec5bc843fd07c2571e87988	2026-03-04	Gate accumulator balance read stats check on address_balance_enabled (#25670)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 address_balance_enabled/accumulator 路径。
+732	84831b187111d1a604b6f834c89010104f5c18f1	2026-03-04	Add ImmutableObjectRead operation to composite workload (#25646)	REVIEWED	EXCLUDE_NON_CODE		仅 composite workload。
+733	c4a3778f39f8b2b689894162a2cb8b0788b5936f	2026-03-05	[address-balances] Additional tests for gas usage (#25647)	REVIEWED	EXCLUDE_POST_FORK		address-balance 测试。
+734	9a783fde8ad1b3a3f47af1ff361d5e374f1c3439	2026-03-05	[move-regex-borrow-graph] Improve perf with a custom graph (#25422)	REVIEWED	EXCLUDE_FEATURE		Move regex borrow graph 性能实现。
+735	97e246f6a080abe20bc4edcc1e14a95495d6cc36	2026-03-04	graphql-alt: scan apis (#24900)	REVIEWED	EXCLUDE_FEATURE		GraphQL API scan 功能。
+736	42112ebfe716d85128a553132c710162d47f330b	2026-03-05	Revert "graphql-alt: scan apis (#24900)"	REVIEWED	EXCLUDE_NON_CODE		仅回滚第 735 条 GraphQL 功能。
+737	c6cd3eaecf1d1d478da4ee46b2b1ec79587590d1	2026-03-05	docs: Add "Read this first" section to address balances migration guide (#25708)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+738	177b8924f9b2bf67910f15720109159849da2462	2026-03-05	Disable tx amplification from bench driver (#25713)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 配置。
+739	fc97ac0a2f7408c0defb4bef0bd70ede5b50ab07	2026-03-05	More cleanup on `main` for landing `bella-ciao` (#25721)	REVIEWED	EXCLUDE_FEATURE		landing 分支准备。
+740	a52ef37a516fa07198274fcab9273852e58e19ad	2026-03-05	[move][move-compiler] Fixes #25455, #25457, #25458 (#25691)	APPLIED	MERGE	9fbd4a495065d9134393c7b21bb36a904b7849fc	将发散/无效 match subject 与 native struct 解构转为诊断，避免 match analysis/HLIR lowering ICE。
+741	d89cc341c79ad22f937f2135a07ff416fcaa0635	2026-03-06	[graphql-alt] Add missing ZkLogin fields to match gRPC interface [4/n] (#25696)	REVIEWED	EXCLUDE_FEATURE		GraphQL ZkLogin API 扩展。
+742	663723f2625508f82b25517b581afa82294c282e	2026-03-06	Remove error from ZkLoginVerifyResult (#25715)	REVIEWED	EXCLUDE_FEATURE		ZkLogin 结果 API 语义调整。
+743	a05b35434723a4995b5dae58572d2d2883b25696	2026-03-06	[move-ide] Added support for module extensions (#25409)	REVIEWED	EXCLUDE_FEATURE		Move IDE module extensions。
+744	949691f4d795bae4cdfb77bd9a752dd972879c43	2026-03-06	[move-compiler] Avoid IO when no artifacts are generated (#25712)	REVIEWED	EXCLUDE_NON_CRITICAL		编译器无 artifact 时的 IO 优化。
+745	8590a8a14d4a460d97fcb692824fc8f572e971ab	2026-03-06	Relax ValidDuring requirement for transactions with owned inputs (#25564)	REVIEWED	EXCLUDE_POST_FORK		依赖 address-balance 与 protocol v115 的 ValidDuring 语义。
+746	9ad89fa253790a7f6ed2261a6488929e1216b4a6	2026-03-06	docs: Fix auto-gen'd card lists, shuffle content, add Related Topics module (#25724)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+747	e3039f3fc6b7174b279b48aab9e14109e72e9400	2026-03-06	docs: Remove outdated related link lists (#25732)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+748	a0a246bb8cc10fec095e137950858a623ef16cba	2026-03-06	Remote store operator docs (#25702)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+749	cc660f33a3c681212dbd84242c4da6936bda6fc0	2026-03-06	docs: Update style guide (#25733)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+750	4c1bf5603130b56d0a590427556f258f6713de35	2026-03-06	docs: Compliance checks for llms spec (#25734)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 751	324c65096723b6b8424e4545e958c2cb4dac479d	2026-03-06	Validator metadata tests (#25731)	UNREVIEWED			
 752	c5c84fd5ea23fd7c156215927c21fdb079977633	2026-03-06	docs: Improve llm.txt generation (#25738)	UNREVIEWED			
 753	954d631c0f0aa7f2e391d72fdee7b785db21ec95	2026-03-06	docs: Fix llm compliance CI (#25736)	UNREVIEWED			
