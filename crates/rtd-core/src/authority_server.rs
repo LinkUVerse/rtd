@@ -10,6 +10,7 @@ use itertools::Itertools as _;
 use linku_common::{assert_reachable, debug_fatal};
 use linku_metrics::spawn_monitored_task;
 use moka::sync::Cache;
+use parking_lot::Mutex;
 use prometheus::{
     Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, Registry,
     register_gauge_with_registry, register_histogram_vec_with_registry,
@@ -235,6 +236,8 @@ pub struct ValidatorServiceMetrics {
     submission_suppressed_recently_submitted: IntCounterVec,
     recently_submitted_cache_size: IntGauge,
     recently_submitted_resubmission_interval: Histogram,
+    submission_suppressed_inflight: IntCounterVec,
+    inflight_transactions: IntGauge,
     connection_ip_not_found: IntCounter,
     forwarded_header_parse_error: IntCounter,
     forwarded_header_invalid: IntCounter,
@@ -429,6 +432,19 @@ impl ValidatorServiceMetrics {
                 registry,
             )
             .unwrap(),
+            submission_suppressed_inflight: register_int_counter_vec_with_registry!(
+                "validator_service_submission_suppressed_inflight",
+                "Number of submissions suppressed while an identical request is in flight",
+                &["req_type"],
+                registry,
+            )
+            .unwrap(),
+            inflight_transactions: register_int_gauge_with_registry!(
+                "validator_service_inflight_transactions",
+                "Number of transaction digests being handled by submit requests",
+                registry,
+            )
+            .unwrap(),
             connection_ip_not_found: register_int_counter_with_registry!(
                 "validator_service_connection_ip_not_found",
                 "Number of times connection IP was not extractable from request",
@@ -483,6 +499,7 @@ pub struct ValidatorService {
     client_id_source: Option<ClientIdSource>,
     recently_submitted: Cache<TransactionDigest, Instant>,
     recent_submission_window: Duration,
+    inflight_transactions: Arc<Mutex<HashSet<TransactionDigest>>>,
 }
 
 const RECENT_SUBMISSION_PEAK_TPS: u64 = 50_000;
@@ -504,6 +521,7 @@ impl ValidatorService {
             client_id_source,
             recently_submitted: Self::new_recently_submitted_cache(recent_submission_window),
             recent_submission_window,
+            inflight_transactions: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -528,6 +546,7 @@ impl ValidatorService {
             client_id_source: None,
             recently_submitted: Self::new_recently_submitted_cache(recent_submission_window),
             recent_submission_window,
+            inflight_transactions: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -565,6 +584,7 @@ impl ValidatorService {
             client_id_source: _,
             recently_submitted: _,
             recent_submission_window: _,
+            inflight_transactions: _,
         } = self.clone();
         let transaction = request.into_inner();
         let epoch_store = state.load_epoch_store_one_call_per_task();
@@ -650,6 +670,9 @@ impl ValidatorService {
             metrics,
             traffic_controller: _,
             client_id_source,
+            recently_submitted: _,
+            recent_submission_window: _,
+            inflight_transactions: _,
         } = self.clone();
 
         let submitter_client_addr = if let Some(client_id_source) = &client_id_source {
@@ -663,6 +686,7 @@ impl ValidatorService {
 
         let next_epoch = start_epoch + 1;
         let mut max_retries = 1;
+        let mut inflight_guard = InflightTransactionsGuard::new(self);
 
         loop {
             let res = self
@@ -672,6 +696,7 @@ impl ValidatorService {
                     &metrics,
                     &inner,
                     submitter_client_addr,
+                    &mut inflight_guard,
                 )
                 .await;
             match res {
@@ -714,6 +739,7 @@ impl ValidatorService {
         metrics: &ValidatorServiceMetrics,
         request: &RawSubmitTxRequest,
         submitter_client_addr: Option<IpAddr>,
+        inflight_guard: &mut InflightTransactionsGuard,
     ) -> RtdResult<(RawSubmitTxResponse, Weight)> {
         let epoch_store = state.load_epoch_store_one_call_per_task();
         if !epoch_store.protocol_config().mysticeti_fastpath() {
@@ -788,7 +814,7 @@ impl ValidatorService {
         // Total size of all transactions in the request.
         let mut total_size_bytes = 0;
         let mut expected_soft_bundle_gas_price = None;
-        let mut soft_bundle_digests = HashSet::new();
+        let mut request_digests = HashSet::new();
 
         let req_type = if is_ping_request {
             "ping"
@@ -821,16 +847,16 @@ impl ValidatorService {
             let tx_size = transaction.validity_check(&epoch_store.tx_validity_check_context())?;
             let tx_digest = *transaction.digest();
 
-            if is_soft_bundle_request {
-                fp_ensure!(
-                    soft_bundle_digests.insert(tx_digest),
-                    RtdErrorKind::UserInputError {
-                        error: UserInputError::RepeatedTransactionInSoftBundle {
-                            digest: tx_digest,
-                        },
-                    }
-                    .into()
-                );
+            if !request_digests.insert(tx_digest) {
+                let error = RtdErrorKind::UserInputError {
+                    error: UserInputError::RepeatedTransactions { digest: tx_digest },
+                }
+                .into();
+                if is_soft_bundle_request {
+                    return Err(error);
+                }
+                results[idx] = Some(SubmitTxResult::Rejected { error });
+                continue;
             }
 
             if is_soft_bundle_request {
@@ -951,30 +977,37 @@ impl ValidatorService {
                 continue;
             }
 
-            if let Some(recorded_at) = self.recently_submitted.get(&tx_digest)
-                && recorded_at.elapsed() < self.recent_submission_window
-            {
-                metrics
-                    .submission_suppressed_recently_submitted
-                    .with_label_values(&[req_type])
-                    .inc();
-                metrics
-                    .recently_submitted_resubmission_interval
-                    .observe(recorded_at.elapsed().as_secs_f64());
-                results[idx] = Some(SubmitTxResult::Rejected {
-                    error: RtdErrorKind::TransactionProcessing {
-                        digest: tx_digest,
-                        status: "recently submitted".to_string(),
-                    }
-                    .into(),
-                });
-                debug!(?tx_digest, "handle_submit_transaction: recently submitted");
-                continue;
+            match inflight_guard.try_acquire(tx_digest) {
+                AcquireOutcome::Acquired | AcquireOutcome::AlreadyAcquiredByThisRequest => {}
+                AcquireOutcome::AlreadyAcquiredByAnotherRequest => {
+                    metrics
+                        .submission_suppressed_inflight
+                        .with_label_values(&[req_type])
+                        .inc();
+                    results[idx] = Some(SubmitTxResult::Rejected {
+                        error: RtdErrorKind::TransactionSubmitted { digest: tx_digest }.into(),
+                    });
+                    debug!(
+                        ?tx_digest,
+                        "handle_submit_transaction: concurrent submission in progress"
+                    );
+                    continue;
+                }
+                AcquireOutcome::RecentlyProcessed { since } => {
+                    metrics
+                        .submission_suppressed_recently_submitted
+                        .with_label_values(&[req_type])
+                        .inc();
+                    metrics
+                        .recently_submitted_resubmission_interval
+                        .observe(since.as_secs_f64());
+                    results[idx] = Some(SubmitTxResult::Rejected {
+                        error: RtdErrorKind::TransactionSubmitted { digest: tx_digest }.into(),
+                    });
+                    debug!(?tx_digest, "handle_submit_transaction: recently submitted");
+                    continue;
+                }
             }
-            self.recently_submitted.insert(tx_digest, Instant::now());
-            metrics
-                .recently_submitted_cache_size
-                .set(self.recently_submitted.entry_count() as i64);
 
             debug!(
                 ?tx_digest,
@@ -1569,6 +1602,90 @@ impl ValidatorService {
 }
 
 type WrappedServiceResponse<T> = Result<(tonic::Response<T>, Weight), tonic::Status>;
+
+struct InflightTransactionsGuard {
+    inflight: Arc<Mutex<HashSet<TransactionDigest>>>,
+    recently_submitted: Cache<TransactionDigest, Instant>,
+    window: Duration,
+    metrics: Arc<ValidatorServiceMetrics>,
+    acquired: HashSet<TransactionDigest>,
+}
+
+enum AcquireOutcome {
+    Acquired,
+    AlreadyAcquiredByThisRequest,
+    AlreadyAcquiredByAnotherRequest,
+    RecentlyProcessed { since: Duration },
+}
+
+impl InflightTransactionsGuard {
+    fn new(service: &ValidatorService) -> Self {
+        Self {
+            inflight: service.inflight_transactions.clone(),
+            recently_submitted: service.recently_submitted.clone(),
+            window: service.recent_submission_window,
+            metrics: service.metrics.clone(),
+            acquired: HashSet::new(),
+        }
+    }
+
+    fn try_acquire(&mut self, digest: TransactionDigest) -> AcquireOutcome {
+        if self.acquired.contains(&digest) {
+            return AcquireOutcome::AlreadyAcquiredByThisRequest;
+        }
+
+        if let Some(outcome) = self.recently_processed_outcome(digest) {
+            return outcome;
+        }
+
+        {
+            let mut set = self.inflight.lock();
+            if !set.insert(digest) {
+                return AcquireOutcome::AlreadyAcquiredByAnotherRequest;
+            }
+            self.metrics.inflight_transactions.set(set.len() as i64);
+        }
+
+        if let Some(outcome) = self.recently_processed_outcome(digest) {
+            let mut set = self.inflight.lock();
+            set.remove(&digest);
+            self.metrics.inflight_transactions.set(set.len() as i64);
+            return outcome;
+        }
+
+        self.acquired.insert(digest);
+        AcquireOutcome::Acquired
+    }
+
+    fn recently_processed_outcome(&self, digest: TransactionDigest) -> Option<AcquireOutcome> {
+        let recorded_at = self.recently_submitted.get(&digest)?;
+        let since = recorded_at.elapsed();
+        (since < self.window).then_some(AcquireOutcome::RecentlyProcessed { since })
+    }
+}
+
+impl Drop for InflightTransactionsGuard {
+    fn drop(&mut self) {
+        if self.acquired.is_empty() {
+            return;
+        }
+
+        let now = Instant::now();
+        for digest in &self.acquired {
+            self.recently_submitted.insert(*digest, now);
+        }
+        {
+            let mut set = self.inflight.lock();
+            for digest in &self.acquired {
+                set.remove(digest);
+            }
+            self.metrics.inflight_transactions.set(set.len() as i64);
+        }
+        self.metrics
+            .recently_submitted_cache_size
+            .set(self.recently_submitted.entry_count() as i64);
+    }
+}
 
 impl ValidatorService {
     async fn transaction_impl(
@@ -2566,5 +2683,75 @@ impl Validator for ValidatorService {
     ) -> Result<tonic::Response<rtd_types::messages_grpc::RawValidatorHealthResponse>, tonic::Status>
     {
         handle_with_decoration!(self, validator_health_impl, request)
+    }
+}
+
+#[cfg(test)]
+mod inflight_guard_tests {
+    use super::*;
+
+    fn make_guard(
+        inflight: Arc<Mutex<HashSet<TransactionDigest>>>,
+        cache: Cache<TransactionDigest, Instant>,
+        metrics: Arc<ValidatorServiceMetrics>,
+    ) -> InflightTransactionsGuard {
+        InflightTransactionsGuard {
+            inflight,
+            recently_submitted: cache,
+            window: Duration::from_secs(10),
+            metrics,
+            acquired: HashSet::new(),
+        }
+    }
+
+    #[test]
+    fn concurrent_acquire_rejects_other_request_and_is_idempotent_for_owner() {
+        let inflight = Arc::new(Mutex::new(HashSet::new()));
+        let cache = ValidatorService::new_recently_submitted_cache(Duration::from_secs(10));
+        let metrics = Arc::new(ValidatorServiceMetrics::new(&Registry::new()));
+        let digest = TransactionDigest::random();
+
+        let mut first = make_guard(inflight.clone(), cache.clone(), metrics.clone());
+        let mut second = make_guard(inflight, cache, metrics.clone());
+
+        assert!(matches!(
+            first.try_acquire(digest),
+            AcquireOutcome::Acquired
+        ));
+        assert_eq!(metrics.inflight_transactions.get(), 1);
+        assert!(matches!(
+            second.try_acquire(digest),
+            AcquireOutcome::AlreadyAcquiredByAnotherRequest
+        ));
+        assert!(matches!(
+            first.try_acquire(digest),
+            AcquireOutcome::AlreadyAcquiredByThisRequest
+        ));
+    }
+
+    #[test]
+    fn drop_demotes_to_recent_submission_cache() {
+        let inflight = Arc::new(Mutex::new(HashSet::new()));
+        let cache = ValidatorService::new_recently_submitted_cache(Duration::from_secs(10));
+        let metrics = Arc::new(ValidatorServiceMetrics::new(&Registry::new()));
+        let digest = TransactionDigest::random();
+
+        {
+            let mut guard = make_guard(inflight.clone(), cache.clone(), metrics.clone());
+            assert!(matches!(
+                guard.try_acquire(digest),
+                AcquireOutcome::Acquired
+            ));
+        }
+
+        assert!(inflight.lock().is_empty());
+        assert_eq!(metrics.inflight_transactions.get(), 0);
+        cache.run_pending_tasks();
+
+        let mut next = make_guard(inflight, cache, metrics);
+        assert!(matches!(
+            next.try_acquire(digest),
+            AcquireOutcome::RecentlyProcessed { .. }
+        ));
     }
 }

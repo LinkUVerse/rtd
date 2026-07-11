@@ -163,8 +163,7 @@ async fn test_duplicate_submission_suppressed_within_window() {
     assert!(matches!(
         second.results[0],
         SubmitTxResult::Rejected { ref error }
-            if matches!(error.as_inner(), RtdErrorKind::TransactionProcessing { status, .. }
-                if status == "recently submitted")
+            if matches!(error.as_inner(), RtdErrorKind::TransactionSubmitted { .. })
     ));
 }
 
@@ -641,8 +640,37 @@ async fn test_submit_soft_bundle_with_repeated_transaction() {
     assert!(matches!(
         error.into_inner(),
         RtdErrorKind::UserInputError {
-            error: UserInputError::RepeatedTransactionInSoftBundle { digest }
+            error: UserInputError::RepeatedTransactions { digest }
         } if digest == tx_digest
+    ));
+}
+
+#[tokio::test]
+async fn test_submit_batch_with_repeated_transaction_rejects_only_duplicate() {
+    let test_context = TestContext::new().await;
+    let tx = test_context.build_test_transaction();
+    let response = test_context
+        .client
+        .client()
+        .unwrap()
+        .submit_transaction(RawSubmitTxRequest {
+            transactions: vec![
+                bcs::to_bytes(&tx).unwrap().into(),
+                bcs::to_bytes(&tx).unwrap().into(),
+            ],
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert!(matches!(
+        response.results[0].inner,
+        Some(rtd_types::messages_grpc::RawValidatorSubmitStatus::Submitted(_))
+    ));
+    assert!(matches!(
+        response.results[1].inner,
+        Some(rtd_types::messages_grpc::RawValidatorSubmitStatus::Rejected(_))
     ));
 }
 

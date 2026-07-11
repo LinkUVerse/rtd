@@ -811,6 +811,7 @@ impl ConsensusAdapter {
         // - If is_soft_bundle, then all transactions are of CertifiedTransaction or UserTransaction kind.
         // - If not is_soft_bundle, then transactions must contain exactly 1 tx, and transactions[0] can be of any kind.
         let is_soft_bundle = transactions.len() > 1;
+        let is_system_message = !transactions[0].is_user_transaction();
 
         let mut transaction_keys = Vec::new();
         let mut tx_consensus_positions = tx_consensus_positions;
@@ -924,12 +925,17 @@ impl ConsensusAdapter {
             guard.preceding_disconnected = Some(preceding_disconnected);
             guard.amplification_factor = Some(amplification_factor);
 
-            let _permit: SemaphorePermit = self
-                .submit_semaphore
-                .acquire()
-                .count_in_flight(self.metrics.sequencing_in_flight_semaphore_wait.clone())
-                .await
-                .expect("Consensus adapter does not close semaphore");
+            let _permit: Option<SemaphorePermit> = if is_system_message {
+                None
+            } else {
+                Some(
+                    self.submit_semaphore
+                        .acquire()
+                        .count_in_flight(self.metrics.sequencing_in_flight_semaphore_wait.clone())
+                        .await
+                        .expect("Consensus adapter does not close semaphore"),
+                )
+            };
             let _in_flight_submission_guard =
                 GaugeGuard::acquire(&self.metrics.sequencing_in_flight_submissions);
 
@@ -1455,12 +1461,13 @@ impl SubmitToConsensus for Arc<ConsensusAdapter> {
         // timeout is required, or the spawned task can run forever
         timeout: Duration,
     ) -> RtdResult {
-        let permit = match self.submit_semaphore.clone().try_acquire_owned() {
-            Ok(permit) => permit,
-            Err(_) => {
-                return Err(RtdErrorKind::TooManyTransactionsPendingConsensus.into());
+        if transaction.is_user_transaction() {
+            debug_fatal!("submit_best_effort called with a user transaction");
+            return Err(RtdErrorKind::GenericAuthorityError {
+                error: "submit_best_effort does not accept user transactions".to_string(),
             }
-        };
+            .into());
+        }
 
         let _in_flight_submission_guard =
             GaugeGuard::acquire(&self.metrics.sequencing_in_flight_submissions);
@@ -1474,8 +1481,6 @@ impl SubmitToConsensus for Arc<ConsensusAdapter> {
             let this = self.clone();
 
             async move {
-                let _permit = permit; // Hold permit for lifetime of task
-
                 let result = tokio::time::timeout(
                     timeout,
                     this.submit_inner(&[transaction], &epoch_store, &[key], tx_type),
