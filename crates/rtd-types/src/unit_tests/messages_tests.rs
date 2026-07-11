@@ -788,7 +788,7 @@ fn test_sponsored_transaction_message() {
 
     assert_eq!(
         transaction.get_signer_sig_mapping(true).unwrap(),
-        BTreeMap::from([(sender, &sender_sig), (sponsor, &sponsor_sig)]),
+        BTreeMap::from([(sender, (0, &sender_sig)), (sponsor, (1, &sponsor_sig))]),
     );
 
     assert_eq!(transaction.sender_address(), sender,);
@@ -801,6 +801,10 @@ fn test_sponsored_transaction_message() {
     )
     .try_into_verified_for_testing(epoch, &Default::default())
     .unwrap();
+    assert_eq!(
+        transaction.get_signer_sig_mapping(true).unwrap(),
+        BTreeMap::from([(sender, (1, &sender_sig)), (sponsor, (0, &sponsor_sig))]),
+    );
 
     // Test incomplete signature lists (missing sponsor sig)
     assert!(matches!(

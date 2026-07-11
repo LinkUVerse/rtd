@@ -3129,17 +3129,20 @@ impl SenderSignedTransaction {
     pub(crate) fn get_signer_sig_mapping(
         &self,
         verify_legacy_zklogin_address: bool,
-    ) -> RtdResult<BTreeMap<RtdAddress, &GenericSignature>> {
+    ) -> RtdResult<BTreeMap<RtdAddress, (u8, &GenericSignature)>> {
         let mut mapping = BTreeMap::new();
-        for sig in &self.tx_signatures {
+        for (index, sig) in self.tx_signatures.iter().enumerate() {
             if verify_legacy_zklogin_address {
                 // Try deriving the address from the legacy padded way.
                 if let GenericSignature::ZkLoginAuthenticator(z) = sig {
-                    mapping.insert(RtdAddress::try_from_padded(&z.inputs)?, sig);
+                    mapping.insert(
+                        RtdAddress::try_from_padded(&z.inputs)?,
+                        (index as u8, sig),
+                    );
                 };
             }
             let address = sig.try_into()?;
-            mapping.insert(address, sig);
+            mapping.insert(address, (index as u8, sig));
         }
         Ok(mapping)
     }
@@ -3185,7 +3188,7 @@ impl SenderSignedData {
     pub(crate) fn get_signer_sig_mapping(
         &self,
         verify_legacy_zklogin_address: bool,
-    ) -> RtdResult<BTreeMap<RtdAddress, &GenericSignature>> {
+    ) -> RtdResult<BTreeMap<RtdAddress, (u8, &GenericSignature)>> {
         self.inner()
             .get_signer_sig_mapping(verify_legacy_zklogin_address)
     }
@@ -3636,7 +3639,8 @@ impl Transaction {
             verify_params,
             Arc::new(VerifiedDigestCache::new_empty()),
             vec![],
-        )
+        )?;
+        Ok(())
     }
 
     pub fn try_into_verified_for_testing(

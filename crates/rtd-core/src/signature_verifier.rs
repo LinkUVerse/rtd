@@ -100,7 +100,7 @@ pub struct SignatureVerifier {
     committee: Arc<Committee>,
     object_store: Arc<dyn ObjectStore + Send + Sync>,
     certificate_cache: VerifiedDigestCache<CertificateDigest>,
-    signed_data_cache: VerifiedDigestCache<SenderSignedDataDigest>,
+    signed_data_cache: VerifiedDigestCache<SenderSignedDataDigest, Vec<u8>>,
     zklogin_inputs_cache: Arc<VerifiedDigestCache<ZKLoginInputsDigest>>,
 
     /// Map from JwkId (iss, kid) to the fetched JWK for that key.
@@ -449,8 +449,19 @@ impl SignatureVerifier {
             }
         }
 
-        self.verify_tx(signed_tx, &versions, aliases)?;
-        Ok(NonEmpty::from_vec(versions).expect("must have at least one required_signer"))
+        let signature_indices = self.verify_tx(signed_tx, &versions, aliases)?;
+        let mut versions_by_signature = vec![None; signed_tx.tx_signatures().len()];
+        for ((signer, version), signature_index) in
+            versions.into_iter().zip_eq(signature_indices)
+        {
+            versions_by_signature[signature_index as usize] = Some((signer, version));
+        }
+        let versions_by_signature = versions_by_signature
+            .into_iter()
+            .map(|entry| entry.expect("each signature must match one required signer"))
+            .collect();
+        Ok(NonEmpty::from_vec(versions_by_signature)
+            .expect("must have at least one required_signer"))
     }
 
     pub fn verify_tx_require_no_aliases(&self, signed_tx: &SenderSignedData) -> RtdResult {
@@ -468,31 +479,33 @@ impl SignatureVerifier {
         signed_tx: &SenderSignedData,
         alias_versions: &Vec<(RtdAddress, Option<SequenceNumber>)>,
         aliased_addresses: Vec<(RtdAddress, NonEmpty<RtdAddress>)>,
-    ) -> RtdResult {
-        self.signed_data_cache.is_verified(
-            signed_tx.full_message_digest_with_alias_versions(alias_versions),
-            || {
-                let jwks = self.jwks.read().clone();
-                let verify_params = VerifyParams::new(
-                    jwks,
-                    self.zk_login_params.supported_providers.clone(),
-                    self.zk_login_params.env,
-                    self.zk_login_params.verify_legacy_zklogin_address,
-                    self.zk_login_params.accept_zklogin_in_multisig,
-                    self.zk_login_params.accept_passkey_in_multisig,
-                    self.zk_login_params.zklogin_max_epoch_upper_bound_delta,
-                    self.zk_login_params.additional_multisig_checks,
-                );
-                verify_sender_signed_data_message_signatures(
-                    signed_tx,
-                    self.committee.epoch(),
-                    &verify_params,
-                    self.zklogin_inputs_cache.clone(),
-                    aliased_addresses,
-                )
-            },
-            || Ok(()),
-        )
+    ) -> RtdResult<Vec<u8>> {
+        let digest = signed_tx.full_message_digest_with_alias_versions(alias_versions);
+        if let Some(signature_indices) = self.signed_data_cache.get_cached(&digest) {
+            return Ok(signature_indices);
+        }
+
+        let jwks = self.jwks.read().clone();
+        let verify_params = VerifyParams::new(
+            jwks,
+            self.zk_login_params.supported_providers.clone(),
+            self.zk_login_params.env,
+            self.zk_login_params.verify_legacy_zklogin_address,
+            self.zk_login_params.accept_zklogin_in_multisig,
+            self.zk_login_params.accept_passkey_in_multisig,
+            self.zk_login_params.zklogin_max_epoch_upper_bound_delta,
+            self.zk_login_params.additional_multisig_checks,
+        );
+        let signature_indices = verify_sender_signed_data_message_signatures(
+            signed_tx,
+            self.committee.epoch(),
+            &verify_params,
+            self.zklogin_inputs_cache.clone(),
+            aliased_addresses,
+        )?;
+        self.signed_data_cache
+            .cache_with_value(digest, signature_indices.clone());
+        Ok(signature_indices)
     }
 
     pub fn clear_signature_cache(&self) {
@@ -647,6 +660,84 @@ pub fn batch_verify_certificates(
             .collect(),
 
         Err(e) => vec![Err(e)],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rtd_types::base_types::{FullObjectRef, dbg_addr, random_object_ref};
+    use rtd_types::crypto::{RtdKeyPair, Signature, get_key_pair};
+    use rtd_types::in_memory_storage::InMemoryStorage;
+    use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+    use rtd_types::signature::GenericSignature;
+    use rtd_types::transaction::{GasData, TransactionData, TransactionKind};
+    use shared_crypto::intent::IntentMessage;
+
+    #[test]
+    fn alias_versions_follow_signature_order() {
+        let sender_key = RtdKeyPair::Ed25519(get_key_pair().1);
+        let sender = (&sender_key.public()).into();
+        let sponsor_key = RtdKeyPair::Ed25519(get_key_pair().1);
+        let sponsor = (&sponsor_key.public()).into();
+        let mut builder = ProgrammableTransactionBuilder::new();
+        builder
+            .transfer_object(
+                dbg_addr(1),
+                FullObjectRef::from_fastpath_ref(random_object_ref()),
+            )
+            .unwrap();
+        let gas_data = GasData {
+            payment: vec![random_object_ref()],
+            owner: sponsor,
+            price: 10,
+            budget: 10_000_000,
+        };
+        let tx_data = TransactionData::new_with_gas_data(
+            TransactionKind::programmable(builder.finish()),
+            sender,
+            gas_data,
+        );
+        let intent_message = IntentMessage::new(Intent::rtd_transaction(), tx_data.clone());
+        let sender_sig: GenericSignature =
+            Signature::new_secure(&intent_message, &sender_key).into();
+        let sponsor_sig: GenericSignature =
+            Signature::new_secure(&intent_message, &sponsor_key).into();
+        let signed_tx = SenderSignedData::new(tx_data, vec![sponsor_sig, sender_sig]);
+        let (committee, _) = Committee::new_simple_test_committee();
+        let verifier = SignatureVerifier::new(
+            Arc::new(committee),
+            Arc::new(InMemoryStorage::default()),
+            SignatureVerifierMetrics::new(&Registry::new()),
+            vec![],
+            ZkLoginEnv::Test,
+            true,
+            true,
+            true,
+            Some(30),
+            true,
+            false,
+        );
+
+        let versions = verifier
+            .verify_tx_with_current_aliases(&signed_tx)
+            .unwrap();
+
+        assert_eq!(
+            versions.into_iter().map(|(address, _)| address).collect::<Vec<_>>(),
+            vec![sponsor, sender],
+        );
+        let cached_versions = verifier
+            .verify_tx_with_current_aliases(&signed_tx)
+            .unwrap();
+        assert_eq!(
+            cached_versions
+                .into_iter()
+                .map(|(address, _)| address)
+                .collect::<Vec<_>>(),
+            vec![sponsor, sender],
+        );
+        assert_eq!(verifier.metrics.signed_data_cache_hits.get(), 1);
     }
 }
 
