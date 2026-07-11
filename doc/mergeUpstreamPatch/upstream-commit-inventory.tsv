@@ -1149,56 +1149,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1148	fb47d5fbdcbb2a278c9d65cbd65871bb5d6c9194	2026-04-20	[sui-framework] Add df/dof `replace`. Fix `remove_opt` (#26248)	REVIEWED	EXCLUDE_FEATURE		framework df/dof API 扩展与编译包更新。
 1149	4141589ae1076e80c4d89b6fc659eac237a28f36	2026-04-20	[forking 7/n] Add historical transaction query support in DataStore (#26261)	REVIEWED	EXCLUDE_FEATURE		forking historical query。
 1150	bee119a9c1801d87f4d3b4894c6b93c530660f85	2026-04-21	[gasless] Add remaining balance verification for withdrawals (#26264)	REVIEWED	EXCLUDE_POST_FORK		gasless withdrawal 验证。
-1151	dfe6dffecd785480869546f78044943459b5624e	2026-04-21	[Block Streaming] Extract proposing logic to separate component & refactor node type bootstrap (#25940)	UNREVIEWED			
-1152	4ef8a0b3c7bcb20d29fca95ee42e8253d178b9f9	2026-04-21	[fix] use prod vk for testnet (#26330)	UNREVIEWED			
-1153	1ff1fdcd630b6b9bc3d0e21fddfc70d2770c32c3	2026-04-21	[sui-rpc-api] Add custom service support in rpc api (#26327)	UNREVIEWED			
-1154	e3ab16ed5081161e701b8428a42fd9bb5204ff5a	2026-04-21	Update alert settings recommended for operators (#26324)	UNREVIEWED			
-1155	1e7bcfcbecbcf27180e84aefe74586ef661ba480	2026-04-21	docs: Import content fix (#26322)	UNREVIEWED			
-1156	1c410b5eaebaa86f6867f28681859bbc113f5d89	2026-04-21	docs: automated updates for breaking_change (#26310)	UNREVIEWED			
-1157	69f878bc3370206611a463694a7d2b2a7c294460	2026-04-21	[execution] Update linkage computation to allow for amendments (#26318)	UNREVIEWED			
-1158	f746631d8d623f1d06317119f37b10eaeecbb0a1	2026-04-21	[move-ir] switch . to :: (#26325)	UNREVIEWED			
-1159	12f277360ddf96a4868581089236b3a98f9b792b	2026-04-21	[chore] Remove unneeded/unused rust deps (#26319)	UNREVIEWED			
-1160	dd9015371ac2977bdc3f855d8a1e8a451b159e73	2026-04-21	Remove release-binaries job from trigger-builds.yml (#26340)	UNREVIEWED			
-1161	bef6332646d71cc67a4b27e764d6e75e7a53b0d7	2026-04-21	[sui-framework] Switch df/dof `get_*` macros to use `exists` instead of `exists_with_type`  (#26299)	UNREVIEWED			
-1162	f101cee3dbb5d72e7e1d57a0ece7905c6618bfbb	2026-04-21	docker/sui-services: build sui-metric-checker (#26341)	UNREVIEWED			
-1163	85bcd3a5fa238cf346128ad32449529218896854	2026-04-21	Add gasless and accumulator account monitoring (#26224)	UNREVIEWED			
-1164	1d21085971b1bff950c851251be4bd764060b063	2026-04-21	[forking 8/n] add RPC support through `sui-rpc-api` and its gRPC interfaces (#26270)	UNREVIEWED			
-1165	e7df4f63b0f866b2b3151ce2d1f9ead0085e3a8c	2026-04-22	Cap gasless tx at 16 KiB, raise max_tps to 300, lower max_computation_units to 5_000 (#26156)	UNREVIEWED			
-1166	52c8ced44cddb7ec39bd6e35f169ae8d2b73d525	2026-04-22	[Block Streaming] Process received blocks (#25975)	UNREVIEWED			
-1167	ae0735af69f47d460716b2e5ed2abc19d6605046	2026-04-22	docs: misc fix for afdocs tests  (#26334)	UNREVIEWED			
-1168	64efba214efaa2760f379e769d01de6d88d3b483	2026-04-22	adaptive ingestion for sequential pipelines (#26302)	UNREVIEWED			
-1169	332e54812ed2dc7025caaeb8a12ba5881522b209	2026-04-22	soft-deprecate checkpoint-buffer-size (#26352)	UNREVIEWED			
-1170	7207d97415a63364ba1b2ccf9879c4db08503409	2026-04-22	Prioritize admission of tx to consensus by gas price (#26114)	UNREVIEWED			
-1171	716f0b1df650bbea7b8aa2ade6f0a6953e52f893	2026-04-22	Fix warnings in release mode (#26349)	UNREVIEWED			
-1172	30247030dd6a7336e05e12a1073ed0e3f65e90d5	2026-04-22	docs: More fixes for AF docs spec  (#26354)	UNREVIEWED			
-1173	becf8c60349ae15135343237688d45efba68270f	2026-04-22	ci: dispatch S3 release-tag flow to ensure-sui-binaries (#26355)	UNREVIEWED			
-1174	7dcec13f0a1c25924c8bca17883b11a2e753faf1	2026-04-22	docs: Address balances / free tier docs (#26105)	UNREVIEWED			
-1175	d502662dc474bb315f0e9155ff12743b8ad7e45d	2026-04-23	Move expensive checkpoint decoding off IO threads (#26350)	UNREVIEWED			
-1176	1a844db79902ad31e454be5ee18feb9a37f36240	2026-04-23	[system] adds public function to sui system (#26347)	UNREVIEWED			
-1177	2fe425e44e7222c30204a4e1f21435e0cb42aa5e	2026-04-23	feat: Update `multiaddr` to fix the build failure caused by yanked `c… (#26332)	UNREVIEWED			
-1178	3086f3090af33baad72291a4ceb6375eba72edaf	2026-04-23	Fix race condition in admission queue simtest (#26359)	UNREVIEWED			
-1179	3b50577f52a42dee0564973400a724660561db77	2026-04-23	sui-indexer-alt-framework: unify MockIngestionClient code (#26360)	UNREVIEWED			
-1180	9fb571d8fe846105f896c520ccc1c6dbce1283ee	2026-04-23	Enable amplification deferral in mainnet (#26367)	UNREVIEWED			
-1181	c5dd267eb2ba4ecb2b7a44f05bc8a5008e638213	2026-04-23	[chore] Update tidehunter to 3c0611a (#26366)	UNREVIEWED			
-1182	73dd2c2ba6f9fdb21d7ffde2b50a3f2f0ac39bc1	2026-04-23	[jsonrpc-alt] in-house validators apy calculation (#26303)	UNREVIEWED			
-1183	6dc394b1f206300ce4447ce86a79a2a250845112	2026-04-24	Sui v1.71.0 Framework Bytecode snapshot (#26370)	UNREVIEWED			
-1184	3181de85fecbed25ec58c688f3bef735886efb01	2026-04-24	Sui v1.72.0 Version Bump (#26371)	UNREVIEWED			
-1185	35abd5c201430ece1826e6fcf96ede6b4a756eeb	2026-04-23	[consensus] increase mainnet FIFO compaction coverage to 50% (#26363)	UNREVIEWED			
-1186	11d6cee4970082473d16433dc8e24b5c6dded473	2026-04-24	[Block Streaming] Introduce the PeersPool & Refactor synchornizer (#25979)	UNREVIEWED			
-1187	d8f78bb7af37b82cb25ecea569abc4aac3c5c91a	2026-04-24	fix: sui client send-funds always reported zero balance (#26369)	UNREVIEWED			
-1188	620af9de156ab9b8ebb06bbf90550716b1f770c6	2026-04-24	docs: fix afdocs again and sui::bag render (#26375)	UNREVIEWED			
-1189	730ff6dbd509288ef1a85e7a3e01c41c26db054a	2026-04-24	Composite workload: test accumulator create/delete cycles via coin reservations (#26029)	UNREVIEWED			
-1190	db8f417c63995d52992a1f4feba9aca2a6ecd15e	2026-04-24	[cleanup] remove benchmark client type (#26260)	UNREVIEWED			
-1191	32c2447c3d8bb4fc7362bdb5a5b828409e31c9f7	2026-04-24	[test] add send_funds PTB benchmark (#26326)	UNREVIEWED			
-1192	fb819328e423deead8687263d9fce3877b353a7b	2026-04-24	pipelined batch/commit for sequential pipelines (#26357)	UNREVIEWED			
-1193	4af8007cf2fa1115515780b4854fdc827c36a867	2026-04-24	[forking 9/n] add transaction executor service (#26292)	UNREVIEWED			
-1194	e60fb4329058503f0a1a8f9badf913334eb152bc	2026-04-24	Eager loop in sequential pipelines (#26358)	UNREVIEWED			
-1195	0192aba5944a3a30d74681a1dbcdb72085058500	2026-04-24	fix(accumulator): make settlement appear atomic in get_latest_account_amount (#26379)	UNREVIEWED			
-1196	e8433a01265b414316bbc3d6eea0cc4e564e6ed1	2026-04-24	[graphql-stream] Add package caching from streamed checkpoints [5/n] (#26194)	UNREVIEWED			
-1197	766f1c2f4bfef076d15a612a03401a246f4fefa4	2026-04-25	[chore] Fix advisories (#26380)	UNREVIEWED			
-1198	0848536e53349b9460e1c96274c2a3e3b72bd9cc	2026-04-25	Add timestamp-based epoch close (#26158)	UNREVIEWED			
-1199	80e03d76d2544fd3928bedfceef2fe5be8316b44	2026-04-26	Extend address deny list to also cover alias signing (#26368)	UNREVIEWED			
-1200	b8f2d40f6d5ea25f63d79883f45e4639dc799948	2026-04-27	[Consensus] clean up unused broadcaster. (#26373)	UNREVIEWED			
+1151	dfe6dffecd785480869546f78044943459b5624e	2026-04-21	[Block Streaming] Extract proposing logic to separate component & refactor node type bootstrap (#25940)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 重构。
+1152	4ef8a0b3c7bcb20d29fca95ee42e8253d178b9f9	2026-04-21	[fix] use prod vk for testnet (#26330)	APPLIED	MERGE	d331e7fd85821cc6bbbcb25e211b935fb1ac574a	测试网 zkLogin 签名验证改用生产验证键，与 JSON-RPC 一致。
+1153	1ff1fdcd630b6b9bc3d0e21fddfc70d2770c32c3	2026-04-21	[sui-rpc-api] Add custom service support in rpc api (#26327)	REVIEWED	EXCLUDE_FEATURE		RPC custom service 功能。
+1154	e3ab16ed5081161e701b8428a42fd9bb5204ff5a	2026-04-21	Update alert settings recommended for operators (#26324)	REVIEWED	EXCLUDE_NON_CRITICAL		operator alert 设置。
+1155	1e7bcfcbecbcf27180e84aefe74586ef661ba480	2026-04-21	docs: Import content fix (#26322)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1156	1c410b5eaebaa86f6867f28681859bbc113f5d89	2026-04-21	docs: automated updates for breaking_change (#26310)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1157	69f878bc3370206611a463694a7d2b2a7c294460	2026-04-21	[execution] Update linkage computation to allow for amendments (#26318)	REVIEWED	EXCLUDE_FEATURE		execution linkage 语义。
+1158	f746631d8d623f1d06317119f37b10eaeecbb0a1	2026-04-21	[move-ir] switch . to :: (#26325)	REVIEWED	EXCLUDE_FEATURE		Move IR 语法迁移。
+1159	12f277360ddf96a4868581089236b3a98f9b792b	2026-04-21	[chore] Remove unneeded/unused rust deps (#26319)	REVIEWED	EXCLUDE_FEATURE		依赖清理。
+1160	dd9015371ac2977bdc3f855d8a1e8a451b159e73	2026-04-21	Remove release-binaries job from trigger-builds.yml (#26340)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+1161	bef6332646d71cc67a4b27e764d6e75e7a53b0d7	2026-04-21	[sui-framework] Switch df/dof `get_*` macros to use `exists` instead of `exists_with_type`  (#26299)	REVIEWED	EXCLUDE_FEATURE		framework macro 语义。
+1162	f101cee3dbb5d72e7e1d57a0ece7905c6618bfbb	2026-04-21	docker/sui-services: build sui-metric-checker (#26341)	REVIEWED	EXCLUDE_FEATURE		Docker 服务构建。
+1163	85bcd3a5fa238cf346128ad32449529218896854	2026-04-21	Add gasless and accumulator account monitoring (#26224)	REVIEWED	EXCLUDE_POST_FORK		gasless/accumulator 监控。
+1164	1d21085971b1bff950c851251be4bd764060b063	2026-04-21	[forking 8/n] add RPC support through `sui-rpc-api` and its gRPC interfaces (#26270)	REVIEWED	EXCLUDE_FEATURE		forking RPC 支持。
+1165	e7df4f63b0f866b2b3151ce2d1f9ead0085e3a8c	2026-04-22	Cap gasless tx at 16 KiB, raise max_tps to 300, lower max_computation_units to 5_000 (#26156)	REVIEWED	EXCLUDE_POST_FORK		gasless 配置。
+1166	52c8ced44cddb7ec39bd6e35f169ae8d2b73d525	2026-04-22	[Block Streaming] Process received blocks (#25975)	REVIEWED	EXCLUDE_FEATURE		Block Streaming。
+1167	ae0735af69f47d460716b2e5ed2abc19d6605046	2026-04-22	docs: misc fix for afdocs tests  (#26334)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1168	64efba214efaa2760f379e769d01de6d88d3b483	2026-04-22	adaptive ingestion for sequential pipelines (#26302)	REVIEWED	EXCLUDE_FEATURE		sequential ingestion。
+1169	332e54812ed2dc7025caaeb8a12ba5881522b209	2026-04-22	soft-deprecate checkpoint-buffer-size (#26352)	REVIEWED	EXCLUDE_FEATURE		ingestion 配置。
+1170	7207d97415a63364ba1b2ccf9879c4db08503409	2026-04-22	Prioritize admission of tx to consensus by gas price (#26114)	REVIEWED	EXCLUDE_FEATURE		consensus admission 策略。
+1171	716f0b1df650bbea7b8aa2ade6f0a6953e52f893	2026-04-22	Fix warnings in release mode (#26349)	REVIEWED	EXCLUDE_NON_CRITICAL		release 警告清理。
+1172	30247030dd6a7336e05e12a1073ed0e3f65e90d5	2026-04-22	docs: More fixes for AF docs spec  (#26354)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1173	becf8c60349ae15135343237688d45efba68270f	2026-04-22	ci: dispatch S3 release-tag flow to ensure-sui-binaries (#26355)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+1174	7dcec13f0a1c25924c8bca17883b11a2e753faf1	2026-04-22	docs: Address balances / free tier docs (#26105)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1175	d502662dc474bb315f0e9155ff12743b8ad7e45d	2026-04-23	Move expensive checkpoint decoding off IO threads (#26350)	REVIEWED	EXCLUDE_FEATURE		checkpoint 解码调度。
+1176	1a844db79902ad31e454be5ee18feb9a37f36240	2026-04-23	[system] adds public function to sui system (#26347)	REVIEWED	EXCLUDE_FEATURE		system framework API。
+1177	2fe425e44e7222c30204a4e1f21435e0cb42aa5e	2026-04-23	feat: Update `multiaddr` to fix the build failure caused by yanked `c… (#26332)	REVIEWED	EXCLUDE_FEATURE		multiaddr 依赖升级。
+1178	3086f3090af33baad72291a4ceb6375eba72edaf	2026-04-23	Fix race condition in admission queue simtest (#26359)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest。
+1179	3b50577f52a42dee0564973400a724660561db77	2026-04-23	sui-indexer-alt-framework: unify MockIngestionClient code (#26360)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt 测试重构。
+1180	9fb571d8fe846105f896c520ccc1c6dbce1283ee	2026-04-23	Enable amplification deferral in mainnet (#26367)	REVIEWED	EXCLUDE_POST_FORK		amplification 协议开关。
+1181	c5dd267eb2ba4ecb2b7a44f05bc8a5008e638213	2026-04-23	[chore] Update tidehunter to 3c0611a (#26366)	REVIEWED	EXCLUDE_FEATURE		tidehunter 依赖更新。
+1182	73dd2c2ba6f9fdb21d7ffde2b50a3f2f0ac39bc1	2026-04-23	[jsonrpc-alt] in-house validators apy calculation (#26303)	REVIEWED	EXCLUDE_FEATURE		jsonrpc-alt APY。
+1183	6dc394b1f206300ce4447ce86a79a2a250845112	2026-04-24	Sui v1.71.0 Framework Bytecode snapshot (#26370)	REVIEWED	EXCLUDE_POST_FORK		framework 快照。
+1184	3181de85fecbed25ec58c688f3bef735886efb01	2026-04-24	Sui v1.72.0 Version Bump (#26371)	REVIEWED	EXCLUDE_NON_CODE		版本 bump。
+1185	35abd5c201430ece1826e6fcf96ede6b4a756eeb	2026-04-23	[consensus] increase mainnet FIFO compaction coverage to 50% (#26363)	REVIEWED	EXCLUDE_FEATURE		consensus compaction rollout。
+1186	11d6cee4970082473d16433dc8e24b5c6dded473	2026-04-24	[Block Streaming] Introduce the PeersPool & Refactor synchornizer (#25979)	REVIEWED	EXCLUDE_FEATURE		Block Streaming。
+1187	d8f78bb7af37b82cb25ecea569abc4aac3c5c91a	2026-04-24	fix: sui client send-funds always reported zero balance (#26369)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI send-funds 展示修复。
+1188	620af9de156ab9b8ebb06bbf90550716b1f770c6	2026-04-24	docs: fix afdocs again and sui::bag render (#26375)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1189	730ff6dbd509288ef1a85e7a3e01c41c26db054a	2026-04-24	Composite workload: test accumulator create/delete cycles via coin reservations (#26029)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation workload。
+1190	db8f417c63995d52992a1f4feba9aca2a6ecd15e	2026-04-24	[cleanup] remove benchmark client type (#26260)	REVIEWED	EXCLUDE_FEATURE		benchmark 清理。
+1191	32c2447c3d8bb4fc7362bdb5a5b828409e31c9f7	2026-04-24	[test] add send_funds PTB benchmark (#26326)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 测试。
+1192	fb819328e423deead8687263d9fce3877b353a7b	2026-04-24	pipelined batch/commit for sequential pipelines (#26357)	REVIEWED	EXCLUDE_FEATURE		sequential ingestion。
+1193	4af8007cf2fa1115515780b4854fdc827c36a867	2026-04-24	[forking 9/n] add transaction executor service (#26292)	REVIEWED	EXCLUDE_FEATURE		forking executor service。
+1194	e60fb4329058503f0a1a8f9badf913334eb152bc	2026-04-24	Eager loop in sequential pipelines (#26358)	REVIEWED	EXCLUDE_FEATURE		sequential ingestion。
+1195	0192aba5944a3a30d74681a1dbcdb72085058500	2026-04-24	fix(accumulator): make settlement appear atomic in get_latest_account_amount (#26379)	APPLIED	MERGE	b32ddf98195dbab9dada9182b8410812afb9b37a	按 accumulator root 版本进行 MVCC 余额读取，使结算对读者原子可见。
+1196	e8433a01265b414316bbc3d6eea0cc4e564e6ed1	2026-04-24	[graphql-stream] Add package caching from streamed checkpoints [5/n] (#26194)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 缓存。
+1197	766f1c2f4bfef076d15a612a03401a246f4fefa4	2026-04-25	[chore] Fix advisories (#26380)	REVIEWED	EXCLUDE_FEATURE		diesel 重大版本升级。
+1198	0848536e53349b9460e1c96274c2a3e3b72bd9cc	2026-04-25	Add timestamp-based epoch close (#26158)	REVIEWED	EXCLUDE_FEATURE		epoch close 语义。
+1199	80e03d76d2544fd3928bedfceef2fe5be8316b44	2026-04-26	Extend address deny list to also cover alias signing (#26368)	APPLIED	MERGE	b32ddf98195dbab9dada9182b8410812afb9b37a	将实际签名地址纳入 deny-list，防止 address alias 绕过。
+1200	b8f2d40f6d5ea25f63d79883f45e4639dc799948	2026-04-27	[Consensus] clean up unused broadcaster. (#26373)	REVIEWED	EXCLUDE_FEATURE		consensus 清理。
 1201	65e8b2fb13992272c48dc3f843f1915a18d40be4	2026-04-27	[graphql-stream] Add top-level transaction subscription [6/n] (#26202)	UNREVIEWED			
 1202	9d7a86c64fc2d72b6189975c9c8a8ccaaf563d86	2026-04-27	Update CLAUDE.md linting instructions (#26364)	UNREVIEWED			
 1203	0af885e0773536dff089d8cb7a72c59426df43d6	2026-04-27	[forking 10/n] add forking service grpc for interacting with the network (#26328)	UNREVIEWED			
