@@ -1249,56 +1249,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1248	dd6ec39af0709ad859a70f811e6db84d8edb9600	2026-05-01	[typed-store] Fix safe_range_iter dropping the entry at an inclusive upper bound equal to the encoded max key (#26456)	APPLIED	MERGE	d73a8516919872ad0fc9f3c23162a1c193d5c776	保留 inclusive 最大编码键的迭代项。
 1249	d81e958a21fe8e41b2d4d574821212e38ccc6c09	2026-05-01	allow setting gcs project id on write path too (#26464)	REVIEWED	EXCLUDE_FEATURE		GCS 写路径配置。
 1250	2444691e4d0187526c516d625c109ce5d5bb07ad	2026-05-01	[move-ir] Require public on structs/enums (#26462)	REVIEWED	EXCLUDE_FEATURE		Move IR 语法变更。
-1251	2626e94f4c30a642ee4cc2f5204b5b3c2317eb7f	2026-05-01	[chore] Update tidehunter to 06520e9 (#26450)	UNREVIEWED			
-1252	c655581b79ba70d3398428330b573927b1e55568	2026-05-01	[graphql-stream] Add top-level events subscription [8/n] (#26453)	UNREVIEWED			
-1253	7fbdf456757093d211e4b0463cc9bfb38335c3b3	2026-05-02	[Graphql-alt] Graphql client sdk metric (#26437)	UNREVIEWED			
-1254	46dd93078d7d6cd560c6550ed75fe6e46b98ba0f	2026-05-03	Drive simtest-nightly via seed-search.py instead of MSIM_TEST_NUM (#26400)	UNREVIEWED			
-1255	a1fafb3cb2ccd6c73de3afa98f656eb5c1d0bd07	2026-05-04	Add gasless transaction kill switch to TransactionDenyConfig (#26426)	UNREVIEWED			
-1256	a10e08dcdce8e14040681697c09b43460eca2855	2026-05-04	add send-pr skill (#26420)	UNREVIEWED			
-1257	5ac310cc92c4c246361abfe10d513f73a7ab8168	2026-05-04	sui-benchmark: retry soft bundles on retriable wait_for_effects responses (#26447)	UNREVIEWED			
-1258	2f5bb500c1120124c3d450f69a48e5e01a039178	2026-05-04	chore: sync shared Docusaurus components (#26473)	UNREVIEWED			
-1259	40fc99d8b776d910e293cf526a6cea6320f66ab0	2026-05-04	[chore] Bump tokio to 1.52.1 (#26467)	UNREVIEWED			
-1260	5d0f09c92674fae3fe685c0c6d7288a830f42f02	2026-05-04	[move][move-compiler] Fix `vector<void>` ICE (#26454)	UNREVIEWED			
-1261	c45d27079a3cf1c89da1f4b3d405976060e9b4cf	2026-05-04	[move][move-compiler] Fix hexstring multiline parse crash (#26452)	UNREVIEWED			
-1262	a5608655bb0081e741579b57e98838e8a6e36e90	2026-05-04	[move][move-compiler] Revise warning filter system, add #[expect], #[deny], #[warn] support (#26282)	UNREVIEWED			
-1263	a5f422e6ab3b3c6d14237fb54196321f42e017bf	2026-05-04	Provision mode for external keys (#26346)	UNREVIEWED			
-1264	2f549c97b88c62bf3416e0ce4ceb2492f36612fa	2026-05-04	Add DeepBook Predict documentation to onchain finance (#26480)	UNREVIEWED			
-1265	3f6d2ddf475f393a84e368be83a874a86f25a6e6	2026-05-04	sui-indexer-alt-framework-store-traits: add shared connection test macros (#26268)	UNREVIEWED			
-1266	f65eb06155ccbdeef641ccaa7211d4bf42a02530	2026-05-04	kv rpc: configure watermark pipelines (#26481)	UNREVIEWED			
-1267	079a7e3ffdc36c7547ffcff838c71f0796e7ed8c	2026-05-04	[forking 15/n] Add owned object index tracking (#26424)	UNREVIEWED			
-1268	c2dd5940cf098a82b4a5f44c40e9633028537c6a	2026-05-04	typed-store: strip prefix from tidehunter iterator bounds (#26483)	UNREVIEWED			
-1269	0094adf437e49c8f11d2181caecb9bbd34c86b18	2026-05-05	kvstore: add tx seq digest pipeline (#26482)	UNREVIEWED			
-1270	edbda305efb104551d1cbdcbc1e53fe3630cdf62	2026-05-05	[Move] Set limit on public inputs for `groth16::prepare_verifying_key` (#26236)	UNREVIEWED			
-1271	5ea39770dd2811c54ae725a44be1e952c44dac21	2026-05-05	sui-rpc-api: subtract mock gas coin storage cost from simulate budget (#26479)	UNREVIEWED			
-1272	0cca170dcdec0e12e81ecec12f8c36f8f45c71dc	2026-05-05	[forking 16/n] Add object seeding (#26422)	UNREVIEWED			
-1273	2aa5397ae4c3493d00838787ef4e51f05f57ce2c	2026-05-05	[typed-store] Fix safe_range_iter including the entry at an exclusive lower bound equal to the encoded max key (#26469)	UNREVIEWED			
-1274	c23812a638a228441df59db5aaf5255cbcc16e82	2026-05-05	docker/sui-node: correctness fixes + better layer caching (#26478)	UNREVIEWED			
-1275	d5b7991e6f62c78b9b7df40efdaf3b794565e239	2026-05-05	Fix SuiErrorKind wire compat by moving new variant to end (#26493)	UNREVIEWED			
-1276	3a97028ca4b88d722f10c5820e45fe4d77af4a5f	2026-05-05	[forking] allow impersonating a sender 17/n (#26485)	UNREVIEWED			
-1277	9d9d18eb71446e9499755f6e864968d691fbfddb	2026-05-05	[move] Add RPC endpoint to SuiFlavor for network-aware system deps (DVX-1814) (#26232)	UNREVIEWED			
-1278	1bccba29835483628ded58eb583881d2667fa6fd	2026-05-05	docker/sui-node-th: align with #26478 + unlock mp3 cargo cache (#26501)	UNREVIEWED			
-1279	678061b8804f6f79375de4f5c00fe3a31e9462d0	2026-05-05	Cherry pick gas refresh from 1.71 (#26505)	UNREVIEWED			
-1280	df9843f5da85df35c17283fed67829d3d83ed1b3	2026-05-05	docker(sui-tools): apply Dockerfile cleanup pattern from #26478, #26501 (#26503)	UNREVIEWED			
-1281	cdb2d4d31e510e1371b1a11b19eeee3a22910d9d	2026-05-06	Enable FIFO compaction by default on mainnet (#26491)	UNREVIEWED			
-1282	eb397121168bc2d0c76bbc9b4a34ce1400582309	2026-05-06	Switch `cargo insta` to default to `nextest` (#26506)	UNREVIEWED			
-1283	c97381d18dac58461c27ad7750b1cde4fc322b52	2026-05-06	[grpc] test simulate falls back to priced flow for non-allowlisted coin types (#26502)	UNREVIEWED			
-1284	ff56b3bd0631ec01c0bae37a9b65904dc9ad416d	2026-05-06	Remove CLI shell tests that rely on querying devnet (#26515)	UNREVIEWED			
-1285	556d85f8cba7d721ef76b74f991da6a7001aebdd	2026-05-06	sui-rpc-api: reject V1 effects in object inclusion proof handler	UNREVIEWED			
-1286	5e59a05f3fb4dd06ee8eaff1001dcc48796e15bc	2026-05-06	sui-types: replace assert in funds withdrawal accumulation	UNREVIEWED			
-1287	d6b23d2b93889e8315ac9869e66da4827296b62b	2026-05-06	sui-rpc-api: precompute argument uses in simulate PTB resolver	UNREVIEWED			
-1288	a54a1f0323a2f92633a343ff7ad68d8886489532	2026-05-06	sui-rpc-api: enforce PTB structural limits at resolver entry	UNREVIEWED			
-1289	9db626d96473a2899888821a05f152c394334b89	2026-05-06	sui-rpc-api: skip already-normalized packages in simulate resolver	UNREVIEWED			
-1290	482d62c2d004d568179d75ef67ba90e35e54e0aa	2026-05-06	sui-rpc-api: cap aggregate JSON render budget in get_checkpoint	UNREVIEWED			
-1291	a29b338ad5069d285f8d167d74132b7fa3a505e4	2026-05-06	sui-rpc-api: bound metric label cardinality on gRPC requests	UNREVIEWED			
-1292	b666366a52aa68548a8028a780f6b554a3931e49	2026-05-06	docs: Add page on Gasless stablecoins + payments landing page (#26448)	UNREVIEWED			
-1293	fe41e735e2702ae53f23a745b641dcefce5a992e	2026-05-06	typed-store: add tidehunter memory env knobs (#26511)	UNREVIEWED			
-1294	b0fa0dfcba1f637f884e79b886989dbbe34ac262	2026-05-06	[move-package-alt] Replace Dependency<T> with DependencyContext (#26065)	UNREVIEWED			
-1295	6f0aefb676b250e3fbc390fcea251966d98fedb8	2026-05-06	[move][move-compiler] IndexMap for deterministic type constraints (#26518)	UNREVIEWED			
-1296	d1727d8238e83ac08037855a6b9954adfc26cf3c	2026-05-06	consensus_manager: switch address_overrides to parking_lot::Mutex (#26510)	UNREVIEWED			
-1297	6ab8047ae57790622a46a784e31847f9600a0c6e	2026-05-06	[address balances] Additional address balance gas tests (#26520)	UNREVIEWED			
-1298	18424d39b4d8024032151403d983851607e8ab36	2026-05-06	[protocol-config] Enable address balances and gasless transactions on mainnet (v125) (#26504)	UNREVIEWED			
-1299	fac8572b6685dbc76ffe9d778dcfce0bb54c2b69	2026-05-07	docs: automated fixes from weekly audit (26 issues) (#26527)	UNREVIEWED			
-1300	350f798617fa5552b994ae160962ba1d08e291da	2026-05-07	Add mainnet stablecoin allowlist for gasless transfers in protocol v123 (#26417)	UNREVIEWED			
+1251	2626e94f4c30a642ee4cc2f5204b5b3c2317eb7f	2026-05-01	[chore] Update tidehunter to 06520e9 (#26450)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置依赖。
+1252	c655581b79ba70d3398428330b573927b1e55568	2026-05-01	[graphql-stream] Add top-level events subscription [8/n] (#26453)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1253	7fbdf456757093d211e4b0463cc9bfb38335c3b3	2026-05-02	[Graphql-alt] Graphql client sdk metric (#26437)	REVIEWED	EXCLUDE_FEATURE		GraphQL 指标功能。
+1254	46dd93078d7d6cd560c6550ed75fe6e46b98ba0f	2026-05-03	Drive simtest-nightly via seed-search.py instead of MSIM_TEST_NUM (#26400)	REVIEWED	EXCLUDE_NON_CODE		测试编排。
+1255	a1fafb3cb2ccd6c73de3afa98f656eb5c1d0bd07	2026-05-04	Add gasless transaction kill switch to TransactionDenyConfig (#26426)	REVIEWED	EXCLUDE_POST_FORK		gasless 后置协议。
+1256	a10e08dcdce8e14040681697c09b43460eca2855	2026-05-04	add send-pr skill (#26420)	REVIEWED	EXCLUDE_NON_CODE		开发技能。
+1257	5ac310cc92c4c246361abfe10d513f73a7ab8168	2026-05-04	sui-benchmark: retry soft bundles on retriable wait_for_effects responses (#26447)	REVIEWED	EXCLUDE_NON_CODE		benchmark。
+1258	2f5bb500c1120124c3d450f69a48e5e01a039178	2026-05-04	chore: sync shared Docusaurus components (#26473)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1259	40fc99d8b776d910e293cf526a6cea6320f66ab0	2026-05-04	[chore] Bump tokio to 1.52.1 (#26467)	REVIEWED	EXCLUDE_NON_CODE		常规依赖更新。
+1260	5d0f09c92674fae3fe685c0c6d7288a830f42f02	2026-05-04	[move][move-compiler] Fix `vector<void>` ICE (#26454)	APPLIED	MERGE	8f632a8eebd1b11ef6e18b4af0522c1fdddb5692	将 divergent type 先解析为 Void，避免 vector<void> 编译器 ICE。
+1261	c45d27079a3cf1c89da1f4b3d405976060e9b4cf	2026-05-04	[move][move-compiler] Fix hexstring multiline parse crash (#26452)	APPLIED	MERGE	8f632a8eebd1b11ef6e18b4af0522c1fdddb5692	lex lookahead 出错时保留诊断路径，不再 parser crash。
+1262	a5608655bb0081e741579b57e98838e8a6e36e90	2026-05-04	[move][move-compiler] Revise warning filter system, add #[expect], #[deny], #[warn] support (#26282)	REVIEWED	EXCLUDE_FEATURE		警告系统功能。
+1263	a5f422e6ab3b3c6d14237fb54196321f42e017bf	2026-05-04	Provision mode for external keys (#26346)	REVIEWED	EXCLUDE_FEATURE		外部密钥功能。
+1264	2f549c97b88c62bf3416e0ce4ceb2492f36612fa	2026-05-04	Add DeepBook Predict documentation to onchain finance (#26480)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1265	3f6d2ddf475f393a84e368be83a874a86f25a6e6	2026-05-04	sui-indexer-alt-framework-store-traits: add shared connection test macros (#26268)	REVIEWED	EXCLUDE_NON_CODE		测试宏。
+1266	f65eb06155ccbdeef641ccaa7211d4bf42a02530	2026-05-04	kv rpc: configure watermark pipelines (#26481)	REVIEWED	EXCLUDE_FEATURE		KV pipeline 功能。
+1267	079a7e3ffdc36c7547ffcff838c71f0796e7ed8c	2026-05-04	[forking 15/n] Add owned object index tracking (#26424)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1268	c2dd5940cf098a82b4a5f44c40e9633028537c6a	2026-05-04	typed-store: strip prefix from tidehunter iterator bounds (#26483)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1269	0094adf437e49c8f11d2181caecb9bbd34c86b18	2026-05-05	kvstore: add tx seq digest pipeline (#26482)	REVIEWED	EXCLUDE_FEATURE		KV pipeline 功能。
+1270	edbda305efb104551d1cbdcbc1e53fe3630cdf62	2026-05-05	[Move] Set limit on public inputs for `groth16::prepare_verifying_key` (#26236)	REVIEWED	EXCLUDE_POST_FORK		依赖 protocol v123 配置门控。
+1271	5ea39770dd2811c54ae725a44be1e952c44dac21	2026-05-05	sui-rpc-api: subtract mock gas coin storage cost from simulate budget (#26479)	REVIEWED	EXCLUDE_NON_CRITICAL		模拟 mock gas 路径。
+1272	0cca170dcdec0e12e81ecec12f8c36f8f45c71dc	2026-05-05	[forking 16/n] Add object seeding (#26422)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1273	2aa5397ae4c3493d00838787ef4e51f05f57ce2c	2026-05-05	[typed-store] Fix safe_range_iter including the entry at an exclusive lower bound equal to the encoded max key (#26469)	APPLIED	MERGE	a9b764e701882ed597eb851a9851fad2a01cac49	排除最大 lower bound 时不再泄漏最大键。
+1274	c23812a638a228441df59db5aaf5255cbcc16e82	2026-05-05	docker/sui-node: correctness fixes + better layer caching (#26478)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1275	d5b7991e6f62c78b9b7df40efdaf3b794565e239	2026-05-05	Fix SuiErrorKind wire compat by moving new variant to end (#26493)	REVIEWED	EXCLUDE_POST_FORK		修复的 enum variant 在 fork 基线后引入。
+1276	3a97028ca4b88d722f10c5820e45fe4d77af4a5f	2026-05-05	[forking] allow impersonating a sender 17/n (#26485)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1277	9d9d18eb71446e9499755f6e864968d691fbfddb	2026-05-05	[move] Add RPC endpoint to SuiFlavor for network-aware system deps (DVX-1814)	REVIEWED	EXCLUDE_FEATURE		MoveFlavor 功能。
+1278	1bccba29835483628ded58eb583881d2667fa6fd	2026-05-05	docker/sui-node-th: align with #26478 + unlock mp3 cargo cache (#26501)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1279	678061b8804f6f79375de4f5c00fe3a31e9462d0	2026-05-05	Cherry pick gas refresh from 1.71 (#26505)	REVIEWED	EXCLUDE_POST_FORK		protocol v124 gas 模型。
+1280	df9843f5da85df35c17283fed67829d3d83ed1b3	2026-05-05	docker(sui-tools): apply Dockerfile cleanup pattern from #26478, #26501 (#26503)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1281	cdb2d4d31e510e1371b1a11b19eeee3a22910d9d	2026-05-06	Enable FIFO compaction by default on mainnet (#26491)	REVIEWED	EXCLUDE_FEATURE		运行参数策略。
+1282	eb397121168bc2d0c76bbc9b4a34ce1400582309	2026-05-06	Switch `cargo insta` to default to `nextest` (#26506)	REVIEWED	EXCLUDE_NON_CODE		测试工具配置。
+1283	c97381d18dac58461c27ad7750b1cde4fc322b52	2026-05-06	[grpc] test simulate falls back to priced flow for non-allowlisted coin types (#26502)	REVIEWED	EXCLUDE_NON_CODE		测试。
+1284	ff56b3bd0631ec01c0bae37a9b65904dc9ad416d	2026-05-06	Remove CLI shell tests that rely on querying devnet (#26515)	REVIEWED	EXCLUDE_NON_CODE		测试。
+1285	556d85f8cba7d721ef76b74f991da6a7001aebdd	2026-05-06	sui-rpc-api: reject V1 effects in object inclusion proof handler	APPLIED	MERGE	d860750009c968a100c6a0db1353b97f008a6c0c	拒绝 V1 effects，防止 proof 构造调用 unimplemented 而 abort 节点。
+1286	5e59a05f3fb4dd06ee8eaff1001dcc48796e15bc	2026-05-06	sui-types: replace assert in funds withdrawal accumulation	REVIEWED	EXCLUDE_POST_FORK		funds withdrawal 后置协议。
+1287	d6b23d2b93889e8315ac9869e66da4827296b62b	2026-05-06	sui-rpc-api: precompute argument uses in simulate PTB resolver	REVIEWED	EXCLUDE_NON_CRITICAL		解析性能优化。
+1288	a54a1f0323a2f92633a343ff7ad68d8886489532	2026-05-06	sui-rpc-api: enforce PTB structural limits at resolver entry	APPLIED	MERGE	d860750009c968a100c6a0db1353b97f008a6c0c	在解析前执行协议 PTB 结构限制，限制未认证请求工作量。
+1289	9db626d96473a2899888821a05f152c394334b89	2026-05-06	sui-rpc-api: skip already-normalized packages in simulate resolver	REVIEWED	EXCLUDE_NON_CRITICAL		解析性能优化。
+1290	482d62c2d004d568179d75ef67ba90e35e54e0aa	2026-05-06	sui-rpc-api: cap aggregate JSON render budget in get_checkpoint	APPLIED	MERGE	d860750009c968a100c6a0db1353b97f008a6c0c	checkpoint JSON 事件渲染共享预算，防止请求放大内存。
+1291	a29b338ad5069d285f8d167d74132b7fa3a505e4	2026-05-06	sui-rpc-api: bound metric label cardinality on gRPC requests	APPLIED	MERGE	b37b515fbf73902e36a4c09c72724d6f0d9ea85e	未知 gRPC 方法回退为路由标签，限制 Prometheus 常驻序列。
+1292	b666366a52aa68548a8028a780f6b554a3931e49	2026-05-06	docs: Add page on Gasless stablecoins + payments landing page (#26448)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1293	fe41e735e2702ae53f23a745b641dcefce5a992e	2026-05-06	typed-store: add tidehunter memory env knobs (#26511)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1294	b0fa0dfcba1f637f884e79b886989dbbe34ac262	2026-05-06	[move-package-alt] Replace Dependency<T> with DependencyContext (#26065)	REVIEWED	EXCLUDE_FEATURE		Move package API 重构。
+1295	6f0aefb676b250e3fbc390fcea251966d98fedb8	2026-05-06	[move][move-compiler] IndexMap for deterministic type constraints (#26518)	REVIEWED	EXCLUDE_NON_CRITICAL		编译器确定性诊断改进。
+1296	d1727d8238e83ac08037855a6b9954adfc26cf3c	2026-05-06	consensus_manager: switch address_overrides to parking_lot::Mutex (#26510)	REVIEWED	EXCLUDE_FEATURE		锁实现优化。
+1297	6ab8047ae57790622a46a784e31847f9600a0c6e	2026-05-06	[address balances] Additional address balance gas tests (#26520)	REVIEWED	EXCLUDE_POST_FORK		address balance 后置协议。
+1298	18424d39b4d8024032151403d983851607e8ab36	2026-05-06	[protocol-config] Enable address balances and gasless transactions on mainnet (v125) (#26504)	REVIEWED	EXCLUDE_POST_FORK		后置协议开关。
+1299	fac8572b6685dbc76ffe9d778dcfce0bb54c2b69	2026-05-07	docs: automated fixes from weekly audit (26 issues) (#26527)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1300	350f798617fa5552b994ae160962ba1d08e291da	2026-05-07	Add mainnet stablecoin allowlist for gasless transfers in protocol v123 (#26417)	REVIEWED	EXCLUDE_POST_FORK		gasless protocol v123。
 1301	4db30ced65ff0630186e63e1f5d41f6859a0bb76	2026-05-07	[doc] update life of a transaction (#26523)	UNREVIEWED			
 1302	c3374bfded918d40d864d34ccf879a3b9cf1c2cc	2026-05-07	docs: Sui Stack guides for Walrus and Seal (#26288)	UNREVIEWED			
 1303	365abc02a6618b1093f72c002b318ebd11caea05	2026-05-07	docs: add visitor_type custom prop to Plausible tracking (#26530)	UNREVIEWED			
