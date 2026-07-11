@@ -99,56 +99,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 98	334a0a763ad277aba2f3c30626c2bda37c17b033	2026-01-08	[graphql-alt] Add effectsJson and transactionJson fields (#24750)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL 原始 JSON 字段
 99	67473595531afaa00023944c5126d5d3eb4edd7f	2026-01-08	[tidehunter] Use new compactor API (#24083)	REVIEWED	EXCLUDE_FEATURE		迁移 Tidehunter compactor API，未修复基线行为
 100	4ad95e4974ff33d2d8773cfb17f923c7bd3484c5	2026-01-08	fix: correct fetch_latest_blocks error label (#24850)	APPLIED	MERGE	fbbfedd1f2bee5d57068baeee530ac720f9279da	修正 latest-block 初始 RPC 失败的错误标签
-101	37d5a62455f1402572fd5f7844b8fbfaf630b7c0	2026-01-08	Tweaks to checkpoint summary handling in state sync (#24832)	UNREVIEWED			
-102	a5ee2b9b736e712dfc917c5226ae1d835c59abd9	2026-01-08	[fix][ptb] Fix typing ordering  (#24848)	UNREVIEWED			
-103	ef85bdfcdef1856c278bba13b16fa0c78dce8489	2026-01-08	[chore] fixed warnings in package system  (#24847)	UNREVIEWED			
-104	2769218551599e980acd4a3294ceddb3b2af89b0	2026-01-09	[pkg-alt] Use deterministic dummy addresses (fix for analyzer) (#24845)	UNREVIEWED			
-105	cd8b36a9f1bf85b73eb7e174f5306d56b643dcc4	2026-01-09	ephemeral pubfiles use absolute paths for local deps (#24853)	UNREVIEWED			
-106	9d31b5b64b7a60d79b162b9f700858361b87c349	2026-01-09	[cli] Add a no-tree-shaking flag to sui move build command (#24844)	UNREVIEWED			
-107	5461f7c462f13aa2215119acaf3b68a7b1a3d0cf	2026-01-09	consistency: enable fsync on writes (#24860)	UNREVIEWED			
-108	a5a9a55c34c03e66884058388f12e337d5f5946f	2026-01-09	rpc: move lookup_address_balance to be a method on StateReader	UNREVIEWED			
-109	3983c400d96e97633f9348bb2b08c72b0a51ddbd	2026-01-09	transaction: make owner_for_withdrawal public	UNREVIEWED			
-110	6f8d2268b131f792b108d77b3c1a18b896dd5605	2026-01-09	transaction: introduce a more flexible Command::is_argument_used method	UNREVIEWED			
-111	b5c21d33a612205ff581f409caf65526e411ecf9	2026-01-09	transaction: add TransactionDataAPI::expiration_mut method	UNREVIEWED			
-112	7d270de34b60a5c280d88b0a1cb109bb8ac38f64	2026-01-09	simulate: add support for address balances to select_gas	UNREVIEWED			
-113	3e497b2a919fd8f7d001c02dca43ef6c459b9e18	2026-01-09	fix(indexer-alt-framework): Fix client_args not being parsed from CLI (#24823)	UNREVIEWED			
-114	ac03ae1b29b6a47ad3c9c71891e8ec5f00329fd2	2026-01-09	[chore][bug fix] fix stackless ops (#24846)	UNREVIEWED			
-115	25549eb34d20e1f6ce4727fb2c51cb58b29eda40	2026-01-09	[chore] update Move lock files (#24869)	UNREVIEWED			
-116	9d49203d76ba19b49d89e22520103d6f9e5ea604	2026-01-09	[ptbs] Disable entry signature check (#24835)	UNREVIEWED			
-117	04f721aefa8e6bce86536e783e058542c3a9c72d	2026-01-10	graphql: Apply a "rich query" limit (#24865)	UNREVIEWED			
-118	9058a90118accc8306ddeb721cf876ec140f5bfb	2026-01-09	resolve: properly resolve FundsWithdrawal arguments (#24873)	UNREVIEWED			
-119	f40b60f3a9d81bd177f1990902d41b71d5e86ffe	2026-01-10	[consensus] improve direct finalization (#24856)	UNREVIEWED			
-120	14172d3847746cfd243242504a70c8b478fc8f9d	2026-01-11	Do not cancel effects wait on epoch change (#24824)	UNREVIEWED			
-121	fcc4d0ae3fd9a7bcae7a29d8d6b4bc7c54f9bf95	2026-01-11	docs: update graphql data-access retention docs (#24784)	UNREVIEWED			
-122	3d26e488e5df3b9501fe762ec77a5679ae7c86f9	2026-01-11	[sui-tool] Add retry logic and fail-fast behavior to formal snapshot restore (#24864)	UNREVIEWED			
-123	be31a131a28670c406532729c6a5ccf518a4dcca	2026-01-12	[pkg system] introduce `test-upgrade` command (#24858)	UNREVIEWED			
-124	d4ddf29251b3d1b0e28bc7049791086af695e706	2026-01-12	remove legacy suins and deepbook indexers (#24884)	UNREVIEWED			
-125	2b310f2bfb12a14f8be7dfb06ee902a09775c4d7	2026-01-12	[pkg-system] Improve error message when trying to republish (#24859)	UNREVIEWED			
-126	9f4959c9c943eb6891d1f416ce2453bf407a693c	2026-01-12	address-balance: remove Reservation::EntireBalance (#24866)	UNREVIEWED			
-127	20453d8502a6e448d7a77973ad11c42db8be092a	2026-01-12	Add immutable owned input to random transaction workload (#24798)	UNREVIEWED			
-128	1608b2bf6ec2dca91c3c6ba19c9c1fa5f7781d06	2026-01-12	docker: remove suins and deepbook indexers (#24889)	UNREVIEWED			
-129	61ae43cb483f3eada92e714134e6d56cbcb77db2	2026-01-12	invariant-checks: check type for withdrawals (#24891)	UNREVIEWED			
-130	622a9bf96a89f4940cb5fdfc7e31425bbb390f1b	2026-01-12	Add alt binary that uses framework for ingestion (#24872)	UNREVIEWED			
-131	9be31e98a7607bbccc7b41ea3e7c696d6042af94	2026-01-12	[address-balances] merge gas payment accumulator events in temporary_store (#24875)	UNREVIEWED			
-132	5f1cb54db95fc25cb3a97538951189c77c54f54b	2026-01-12	[pkg-alt] Enable recursive publishing (#24863)	UNREVIEWED			
-133	829f797aa371c9bc1980ba5753b34b4c01034f50	2026-01-12	Partially mitigate cargo deny warnings (#24890)	UNREVIEWED			
-134	6970c08ffbaa47e31356dcfad10894d0fe645a27	2026-01-12	address-balance: use TypeTag instead of TypeInput (#24868)	UNREVIEWED			
-135	84636e91f09a5764d7ce24c72350796a69b66b74	2026-01-12	Fix documentation for ephemeral publication (#24886)	UNREVIEWED			
-136	d7c922e73726d2caeec534362f5abbabccc66e20	2026-01-12	enable address aliases in testnet (#24895)	UNREVIEWED			
-137	5dc752931b986e56e55a1645d5ada984e0eafdb7	2026-01-12	prevent legacy packages from depending on modern ones (#24893)	UNREVIEWED			
-138	84ae728bdc5b6c096fb8ee802f96e0ebc4f32025	2026-01-12	Do not depend on old accumulator objects (#24721)	UNREVIEWED			
-139	c68433e1e63da679e8834496333c798c0ecaf7a7	2026-01-12	Clean up address balance test code to make tests more concise (#24897)	UNREVIEWED			
-140	70d760ea24c5f113aa35248bd1361c1c4362ddd5	2026-01-13	[consensus] improve protocol config in tests (#24899)	UNREVIEWED			
-141	529897211a427354e1a9f7359b995022679c25c7	2026-01-12	add update-all command to sparse-checkout.py (#24904)	UNREVIEWED			
-142	2c3a24d4124c2005a2ca8891ca4c2b824037a6ba	2026-01-12	Return address balance specific balances in json rpc (#24901)	UNREVIEWED			
-143	cdcfcfe09c402358e1f53655c47b2b3347c9dab8	2026-01-12	[move-stdlib] Checked arithmetic functions (#24834)	UNREVIEWED			
-144	0a2fc7fee1c27112813dbb14e07011a5b49907c5	2026-01-13	Add `settled_fund_value` API (#24692)	UNREVIEWED			
-145	4db95c858f215c39918b4dcad8d660c11e40524f	2026-01-13	Enable poseidon on mainnet (#24879)	UNREVIEWED			
-146	57ec9220318e5a8b413d8163367f48d74e7fcb44	2026-01-13	Fix unit test note to reference #[random_test] (#24908)	UNREVIEWED			
-147	b46e479c54b667b1ebc0349b7eff5aba64ab3ac9	2026-01-13	[graphql-alt] Add TransactionEffect BalanceChangeJson field (#24836)	UNREVIEWED			
-148	e91b58652a326939400c9ec801e3e32212d8d982	2026-01-13	[benchmark] add composite workload for exercising heterogeneous transaction types (#24885)	UNREVIEWED			
-149	2ddbe44f8e518e6b16ca57bdc776630ab5390fe3	2026-01-13	Cache txn digest -> executed effects directly (#23022)	UNREVIEWED			
-150	b86c475b42187baea159d6ae03240edb9518d955	2026-01-13	 graphql: expose FundsWithdrawal PTB inputs (#24876)	UNREVIEWED			
+101	37d5a62455f1402572fd5f7844b8fbfaf630b7c0	2026-01-08	Tweaks to checkpoint summary handling in state sync (#24832)	REVIEWED	EXCLUDE_FEATURE		新增 state-sync lookahead、批量 summary 获取和配置项，属于同步架构/吞吐能力扩展
+102	a5ee2b9b736e712dfc917c5226ae1d835c59abd9	2026-01-08	[fix][ptb] Fix typing ordering  (#24848)	REVIEWED	EXCLUDE_POST_FORK		修复由第 75 条被排除的任意位置 TxContext 协议能力引入的类型检查顺序问题
+103	ef85bdfcdef1856c278bba13b16fa0c78dce8489	2026-01-08	[chore] fixed warnings in package system  (#24847)	REVIEWED	EXCLUDE_FEATURE		仅调整 package-alt 警告和未使用项，行为不变
+104	2769218551599e980acd4a3294ceddb3b2af89b0	2026-01-09	[pkg-alt] Use deterministic dummy addresses (fix for analyzer) (#24845)	APPLIED	MERGE	c0f3899cb3db6239022135ce74d8c0a8eb9311a7	移除全局递增 dummy address，以 pinned dependency 稳定哈希派生地址并稳定 linkage 顺序
+105	cd8b36a9f1bf85b73eb7e174f5306d56b643dcc4	2026-01-09	ephemeral pubfiles use absolute paths for local deps (#24853)	APPLIED	MERGE	5c2372b60289db5c716bbce452f1299fb7e777d2	本地/root ephemeral publication key 改用规范化绝对路径，避免跨包目录复用时指错依赖
+106	9d31b5b64b7a60d79b162b9f700858361b87c349	2026-01-09	[cli] Add a no-tree-shaking flag to sui move build command (#24844)	REVIEWED	EXCLUDE_FEATURE		新增 CLI 构建选项和 tree-shaking 控制能力
+107	5461f7c462f13aa2215119acaf3b68a7b1a3d0cf	2026-01-09	consistency: enable fsync on writes (#24860)	APPLIED	MERGE	77784dc7e6494c5be5c6c9a15095256eae1cbb10	consistent store 的 watermark/restore 写入遗漏同步落盘，崩溃重启可能丢失已确认进度
+108	a5a9a55c34c03e66884058388f12e337d5f5946f	2026-01-09	rpc: move lookup_address_balance to be a method on StateReader	REVIEWED	EXCLUDE_FEATURE		为后续 simulate address-balance 支持移动查询 API，纯准备性重构
+109	3983c400d96e97633f9348bb2b08c72b0a51ddbd	2026-01-09	transaction: make owner_for_withdrawal public	REVIEWED	EXCLUDE_FEATURE		为后续 simulate 支持扩大 helper 可见性
+110	6f8d2268b131f792b108d77b3c1a18b896dd5605	2026-01-09	transaction: introduce a more flexible Command::is_argument_used method	REVIEWED	EXCLUDE_FEATURE		为后续 gas 选择新增通用参数使用查询 API
+111	b5c21d33a612205ff581f409caf65526e411ecf9	2026-01-09	transaction: add TransactionDataAPI::expiration_mut method	REVIEWED	EXCLUDE_FEATURE		新增可变 expiration API，供后续 simulate 流程使用
+112	7d270de34b60a5c280d88b0a1cb109bb8ac38f64	2026-01-09	simulate: add support for address balances to select_gas	REVIEWED	EXCLUDE_FEATURE		新增 simulate 自动选择 address-balance gas 的能力
+113	3e497b2a919fd8f7d001c02dca43ef6c459b9e18	2026-01-09	fix(indexer-alt-framework): Fix client_args not being parsed from CLI (#24823)	APPLIED	MERGE	b9db696fe88111e12c3ed7ccd2ba201e54f694b5	nested Clap flatten 遗漏导致 ingestion client 参数无法从命令行解析
+114	ac03ae1b29b6a47ad3c9c71891e8ec5f00329fd2	2026-01-09	[chore][bug fix] fix stackless ops (#24846)	APPLIED	MERGE	8871d89c42779ab845e846268915033f00e22d6a	stackless translator 错把整数位运算结果标成 bool
+115	25549eb34d20e1f6ce4727fb2c51cb58b29eda40	2026-01-09	[chore] update Move lock files (#24869)	REVIEWED	EXCLUDE_NON_CODE		仅更新框架 Move.lock 和 ignore 配置
+116	9d49203d76ba19b49d89e22520103d6f9e5ea604	2026-01-09	[ptbs] Disable entry signature check (#24835)	REVIEWED	EXCLUDE_FEATURE		通过协议配置改变 entry signature 验证语义并新增版本 107 行为
+117	04f721aefa8e6bce86536e783e058542c3a9c72d	2026-01-10	graphql: Apply a "rich query" limit (#24865)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL rich-query 复杂度限制与 schema 配置
+118	9058a90118accc8306ddeb721cf876ec140f5bfb	2026-01-09	resolve: properly resolve FundsWithdrawal arguments (#24873)	REVIEWED	EXCLUDE_POST_FORK		基线 resolver 没有 funds_withdrawal proto 字段；修复依赖第 108-112 条 simulate feature
+119	f40b60f3a9d81bd177f1990902d41b71d5e86ffe	2026-01-10	[consensus] improve direct finalization (#24856)	REVIEWED	EXCLUDE_FEATURE		引入协议 108 direct-finalization 行为和大量配置快照
+120	14172d3847746cfd243242504a70c8b478fc8f9d	2026-01-11	Do not cancel effects wait on epoch change (#24824)	APPLIED	MERGE	018490cd2bd164a6d21e3fbfa9bdfd7831dfa2f7	effects 通知等待错误绑定 epoch 生命周期，跨 epoch 完成的交易会被取消并超时
+121	fcc4d0ae3fd9a7bcae7a29d8d6b4bc7c54f9bf95	2026-01-11	docs: update graphql data-access retention docs (#24784)	REVIEWED	EXCLUDE_NON_CODE		仅修改 GraphQL data-access 文档
+122	3d26e488e5df3b9501fe762ec77a5679ae7c86f9	2026-01-11	[sui-tool] Add retry logic and fail-fast behavior to formal snapshot restore (#24864)	APPLIED	MERGE	c368185dcced0cafe3d48ab54dd8b63ef82a8a9a	formal snapshot checkpoint 下载遇瞬时 EOF 不重试，且并行任务失败不能及时返回
+123	be31a131a28670c406532729c6a5ccf518a4dcca	2026-01-12	[pkg system] introduce `test-upgrade` command (#24858)	REVIEWED	EXCLUDE_FEATURE		新增 test-upgrade CLI、shell fixtures 和 package workflow
+124	d4ddf29251b3d1b0e28bc7049791086af695e706	2026-01-12	remove legacy suins and deepbook indexers (#24884)	REVIEWED	EXCLUDE_FEATURE		删除 legacy indexer 组件，属于产品/仓库清理
+125	2b310f2bfb12a14f8be7dfb06ee902a09775c4d7	2026-01-12	[pkg-system] Improve error message when trying to republish (#24859)	APPLIED	MERGE	dbcf9ba84aa3021e401c91e0e146a34ae755f4d3	已发布包被误报为模块地址非零，改为指出 publication 记录及两种修复方式
+126	9f4959c9c943eb6891d1f416ce2453bf407a693c	2026-01-12	address-balance: remove Reservation::EntireBalance (#24866)	REVIEWED	EXCLUDE_FEATURE		移除 address-balance API variant 并改变序列化/协议表面
+127	20453d8502a6e448d7a77973ad11c42db8be092a	2026-01-12	Add immutable owned input to random transaction workload (#24798)	REVIEWED	EXCLUDE_FEATURE		扩展 benchmark 随机交易 workload
+128	1608b2bf6ec2dca91c3c6ba19c9c1fa5f7781d06	2026-01-12	docker: remove suins and deepbook indexers (#24889)	REVIEWED	EXCLUDE_FEATURE		配合第 124 条移除 Docker 中的 legacy indexer
+129	61ae43cb483f3eada92e714134e6d56cbcb77db2	2026-01-12	invariant-checks: check type for withdrawals (#24891)	APPLIED	MERGE	b07611f815e2cc28612437680dc2ff7e7854216b	defining-ID invariant 遍历遗漏 withdrawal input 类型
+130	622a9bf96a89f4940cb5fdfc7e31425bbb390f1b	2026-01-12	Add alt binary that uses framework for ingestion (#24872)	REVIEWED	EXCLUDE_FEATURE		新增 kvstore-alt ingestion binary、handler 和 Docker image
+131	9be31e98a7607bbccc7b41ea3e7c696d6042af94	2026-01-12	[address-balances] merge gas payment accumulator events in temporary_store (#24875)	APPLIED	MERGE	d0445d206e218c95ccbb3de288b34c8af6164e53	同一交易的 gas 与 Move accumulator write 未按对象合并，effects/最终余额可能错误
+132	5f1cb54db95fc25cb3a97538951189c77c54f54b	2026-01-12	[pkg-alt] Enable recursive publishing (#24863)	REVIEWED	EXCLUDE_FEATURE		新增递归发布未发布依赖的 package/CLI 能力
+133	829f797aa371c9bc1980ba5753b34b4c01034f50	2026-01-12	Partially mitigate cargo deny warnings (#24890)	REVIEWED	EXCLUDE_NON_CODE		仅调整 Cargo.lock 与 deny 配置
+134	6970c08ffbaa47e31356dcfad10894d0fe645a27	2026-01-12	address-balance: use TypeTag instead of TypeInput (#24868)	REVIEWED	EXCLUDE_FEATURE		跨 crate 的 TypeInput 到 TypeTag 表示重构，无独立缺陷修复
+135	84636e91f09a5764d7ce24c72350796a69b66b74	2026-01-12	Fix documentation for ephemeral publication (#24886)	REVIEWED	EXCLUDE_NON_CODE		仅重写 package manager 文档
+136	d7c922e73726d2caeec534362f5abbabccc66e20	2026-01-12	enable address aliases in testnet (#24895)	REVIEWED	EXCLUDE_FEATURE		通过协议 108 在 testnet 启用 address aliases
+137	5dc752931b986e56e55a1645d5ada984e0eafdb7	2026-01-12	prevent legacy packages from depending on modern ones (#24893)	APPLIED	MERGE	918ec3d8216d13f191ce2ffb4fe07cd8ed89117e	legacy manifest 直接依赖 modern package 会产生无效解析，现显式拒绝并给出迁移链接
+138	84ae728bdc5b6c096fb8ee802f96e0ebc4f32025	2026-01-12	Do not depend on old accumulator objects (#24721)	APPLIED	MERGE	7647f416fee43c299d02d17cda5cc9d8edd7b8b7	eager scheduler 读取可能已被 prune 的旧 accumulator object；改为原子读取最新余额/版本并按版本结算
+139	c68433e1e63da679e8834496333c798c0ecaf7a7	2026-01-12	Clean up address balance test code to make tests more concise (#24897)	REVIEWED	EXCLUDE_NON_CODE		仅重构 address-balance 测试 helper 与 fixtures
+140	70d760ea24c5f113aa35248bd1361c1c4362ddd5	2026-01-13	[consensus] improve protocol config in tests (#24899)	REVIEWED	EXCLUDE_NON_CODE		仅改进测试环境 protocol config 注入与测试辅助 API
+141	529897211a427354e1a9f7359b995022679c25c7	2026-01-12	add update-all command to sparse-checkout.py (#24904)	REVIEWED	EXCLUDE_FEATURE		为开发脚本新增 update-all 命令
+142	2c3a24d4124c2005a2ca8891ca4c2b824037a6ba	2026-01-12	Return address balance specific balances in json rpc (#24901)	REVIEWED	EXCLUDE_FEATURE		扩展 JSON-RPC coin balance 返回 address-balance 明细
+143	cdcfcfe09c402358e1f53655c47b2b3347c9dab8	2026-01-12	[move-stdlib] Checked arithmetic functions (#24834)	REVIEWED	EXCLUDE_FEATURE		为 Move stdlib 新增 checked arithmetic API 和已编译 framework
+144	0a2fc7fee1c27112813dbb14e07011a5b49907c5	2026-01-13	Add `settled_fund_value` API (#24692)	REVIEWED	EXCLUDE_FEATURE		新增 accumulator/balance settled fund 查询 API
+145	4db95c858f215c39918b4dcad8d660c11e40524f	2026-01-13	Enable poseidon on mainnet (#24879)	REVIEWED	EXCLUDE_FEATURE		协议 108 主网 feature gate 变更
+146	57ec9220318e5a8b413d8163367f48d74e7fcb44	2026-01-13	Fix unit test note to reference #[random_test] (#24908)	APPLIED	MERGE	bc090924850ecf5b2dd6b924ac5780a25f0294b2	Move compiler 用户提示引用不存在的 #[rand_test]，改为实际属性 #[random_test]
+147	b46e479c54b667b1ebc0349b7eff5aba64ab3ac9	2026-01-13	[graphql-alt] Add TransactionEffect BalanceChangeJson field (#24836)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL BalanceChangeJson 字段、pipeline 与 schema
+148	e91b58652a326939400c9ec801e3e32212d8d982	2026-01-13	[benchmark] add composite workload for exercising heterogeneous transaction types (#24885)	REVIEWED	EXCLUDE_FEATURE		新增 2000 余行 composite benchmark workload
+149	2ddbe44f8e518e6b16ca57bdc776630ab5390fe3	2026-01-13	Cache txn digest -> executed effects directly (#23022)	APPLIED	MERGE	a8de77ecdc4b1ad21b2464aca09447ee57487248	digest 通知唤醒后 effects 内容可能已被 prune；改为原子缓存并通知完整 effects
+150	b86c475b42187baea159d6ae03240edb9518d955	2026-01-13	 graphql: expose FundsWithdrawal PTB inputs (#24876)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL FundsWithdrawal PTB input 类型与字段
 151	6406a2f3df5ba791412cdb62ddeeb9c6c61944bb	2026-01-13	Add default of 0 for funds_in_address_balance (#24913)	UNREVIEWED			
 152	9b836a6fdfed0c3784ad7741fc85b913e62787c9	2026-01-13	[benchmark] add gas w/ address balances to composite probabalistic workload (#24910)	UNREVIEWED			
 153	6a634e7ee9a4addd5d1f4a8ad32b0c2a4d7ec971	2026-01-13	[consensus] improve randomized tests (#24892)	UNREVIEWED			
