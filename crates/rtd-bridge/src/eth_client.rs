@@ -80,6 +80,11 @@ where
         tx_hash: TxHash,
         event_idx: u16,
     ) -> BridgeResult<BridgeAction> {
+        // Query the finalized head first, then fetch receipt, to avoid a race where
+        // the receipt is observed before finalization and then reorged out.
+        // TODO: save the latest finalized block id so we don't have to query it every time
+        let last_finalized_block_id = self.get_last_finalized_block_id().await?;
+
         let receipt = self
             .provider
             .get_transaction_receipt(tx_hash)
@@ -89,8 +94,6 @@ where
         let receipt_block_num = receipt.block_number.ok_or(BridgeError::ProviderError(
             "Provider returns log without block_number".into(),
         ))?;
-        // TODO: save the latest finalized block id so we don't have to query it every time
-        let last_finalized_block_id = self.get_last_finalized_block_id().await?;
         if receipt_block_num.as_u64() > last_finalized_block_id {
             return Err(BridgeError::TxNotFinalized);
         }
