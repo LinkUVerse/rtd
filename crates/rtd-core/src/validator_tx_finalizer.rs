@@ -691,8 +691,9 @@ mod tests {
                 )
             })
             .collect();
+        let genesis_committee = network_config.genesis.committee().unwrap();
         let auth_agg = AuthorityAggregatorBuilder::from_network_config(&network_config)
-            .build_custom_clients(clients.clone());
+            .build_custom_clients(&genesis_committee, clients.clone());
         (
             authority_states,
             Arc::new(ArcSwap::new(Arc::new(auth_agg))),

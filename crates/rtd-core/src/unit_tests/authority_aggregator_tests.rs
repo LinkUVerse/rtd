@@ -591,9 +591,9 @@ fn get_genesis_agg<A: Clone>(
 ) -> AuthorityAggregator<A> {
     let committee = Committee::new_for_testing_with_normalized_voting_power(0, authorities);
     let timeouts_config = TimeoutConfig::default();
-    AuthorityAggregatorBuilder::from_committee(committee)
+    AuthorityAggregatorBuilder::from_committee(committee.clone())
         .with_timeouts_config(timeouts_config)
-        .build_custom_clients(clients)
+        .build_custom_clients(&committee, clients)
 }
 
 fn get_agg_at_epoch<A>(
@@ -611,6 +611,25 @@ where
         .unwrap();
     agg.committee = Arc::new(committee);
     agg
+}
+
+#[tokio::test]
+async fn custom_clients_use_genesis_committee_for_committee_store() {
+    let (genesis_committee, _) = Committee::new_simple_test_committee();
+    let current_committee = Committee::new_for_testing_with_normalized_voting_power(
+        1,
+        genesis_committee.voting_rights.iter().copied().collect(),
+    );
+    let clients = current_committee
+        .names()
+        .map(|name| (*name, ()))
+        .collect();
+
+    let aggregator = AuthorityAggregatorBuilder::from_committee(current_committee)
+        .build_custom_clients(&genesis_committee, clients);
+
+    assert_eq!(aggregator.committee.epoch, 1);
+    assert_eq!(aggregator.committee_store.get_latest_committee().unwrap().epoch, 0);
 }
 
 fn sign_tx(
