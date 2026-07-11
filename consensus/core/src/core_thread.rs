@@ -151,7 +151,9 @@ impl CoreThread {
                     let _scope = monitored_scope("CoreThread::loop::set_last_known_proposed_round");
                     let round = *self.rx_last_known_proposed_round.borrow();
                     self.core.set_last_known_proposed_round(round);
-                    self.core.new_block(round + 1, true)?;
+                    // Select the threshold clock round instead of constraining proposals to the
+                    // synced round: local persisted proposals may already be at a higher round.
+                    self.core.new_block(Round::MAX, true)?;
                 }
                 _ = self.rx_propagation_delay.changed() => {
                     let _scope = monitored_scope("CoreThread::loop::set_propagation_delay");
