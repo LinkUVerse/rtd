@@ -399,56 +399,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 398	b50e5f0dc02041d40fa2339d89ed471eb4e63987	2026-01-30	Add support for peer address overrides in P2pConfig (#25187)	UNREVIEWED			
 399	364431782bcee01be3649f12a01a4277b85d85a0	2026-01-30	[fix] improve handling of roaring bitmap (#25165)	UNREVIEWED			
 400	5428f2feccc058ce18b9c37d5b71d8ab4b080673	2026-01-30	Upgrade 3rd party gh actions (Part 3) (#25181)	UNREVIEWED			
-401	e984ad82b6dcd0f693f8e6f21250d8b6e9a98eb5	2026-01-30	graphql-alt: scanning api bloom filter pipelines (#24788)	UNREVIEWED			
-402	5675fb27c5dd4a02dc6b4c77b4163e7be8256828	2026-01-30	grpc-client: add get_dynamic_fields method	UNREVIEWED			
-403	059b8c0ee7207d81c918b04dec6c3bd231e0dd96	2026-01-30	sui: migrate DynamicFieldQuery to grpc	UNREVIEWED			
-404	eb94a45367a51701763fa08e05ecca5b34702733	2026-01-30	grpc-client: add batch_get_objects method	UNREVIEWED			
-405	1730e63899806b542343d30a1aac69b5ca79d0d0	2026-01-30	sui: migrate some package methods to grpc	UNREVIEWED			
-406	273b639f110cdc4d0c4374827b5711a361dcac1b	2026-01-30	sui: convert object commands to grpc	UNREVIEWED			
-407	1f764a9fa63537b550541633652b98be1b5330e2	2026-01-30	grpc-client: add get_coin_info method	UNREVIEWED			
-408	c821b95def6b0583902de99c14d736d7e48e54e4	2026-01-30	sui: convert balance command to grpc	UNREVIEWED			
-409	e35cb64b3d528b88bb21b15b6059309ac89ddf60	2026-01-30	grpc-client: add simulate_transaction method	UNREVIEWED			
-410	357fa89050651b47761df75339a1d1f7fb071442	2026-01-30	sui: migrate dry_run command to grpc	UNREVIEWED			
-411	11356ffcbde020ccc0cc1c3477b8d3c0e05fd527	2026-01-30	Using PAT instead (#25193)	UNREVIEWED			
-412	4b550eb362f186ad96ede5ed798c337c583962ff	2026-01-30	Adding safety check to tagging repo (#25195)	UNREVIEWED			
-413	cd444b04fa0b1f94022717a6d29b0a3cf4840f1a	2026-01-30	grpc-client: add list balance and stake methods	UNREVIEWED			
-414	6e7b20b2a7d5c2f08f10a983a3ec49a912976df4	2026-01-30	sui: migrate sui_commands to grpc	UNREVIEWED			
-415	acf83906b07c4c9d6bd757bb37d5e9657e4ce331	2026-01-30	sui: migrate cli_tests to grpc	UNREVIEWED			
-416	8f56b62748585294afb044ef3d78ba23d339c19c	2026-01-30	sui: convert zklogin_commands_util to grpc	UNREVIEWED			
-417	5806e553c097b5feaefd851bfa0a2193f51a378c	2026-01-30	sui: migrate fire_drill to grpc	UNREVIEWED			
-418	d1d56ef84b2e424756f8c2d48118ea9b49c25115	2026-01-30	sui: migrate validator_commands to grpc	UNREVIEWED			
-419	a5113dad65ac7f91015d337e84f86453b11ddaca	2026-01-30	sdk: remove jsonrpc client from WalletContext	UNREVIEWED			
-420	8f27181bddd1b1b9d4f1b6ef2a5691b4bb31f742	2026-01-30	Add log file management and commit strategy to simtest-debug skill (#25197)	UNREVIEWED			
-421	7cdd120175f1563b465fb9f64ee7f17b0119136a	2026-01-30	Fix flaky test_reconfig_with_committee_change_stress test (#25198)	UNREVIEWED			
-422	226c12d69ad8c66ae23df2525a2a5d25e93da0fe	2026-01-30	[decompiler] Handle native functions with early return for empty input	UNREVIEWED			
-423	c76c4cfd64a626e7760bdcf8b2b6b7356bf55503	2026-01-31	Reduce checkpoint and JWK log volume at INFO level (#25196)	UNREVIEWED			
-424	292880a3e96bfe887b32b5d295dd9c2daa903eca	2026-01-31	sui-types: fix format test to not shell out to cargo	UNREVIEWED			
-425	dde7508afaee250c289d175288102be73c5e3669	2026-01-31	sui-open-rpc: fix format test to not shell out to cargo	UNREVIEWED			
-426	79adab8799c60114cfd46934007c317d48e7f58f	2026-01-31	Make funds withdraw schedulers return more precise results (#24953)	UNREVIEWED			
-427	5a35161761be01aeaeb30462c89d011a00618bc3	2026-02-01	Improve simtest debug skill and seed-search validation (#25210)	UNREVIEWED			
-428	fb1df6f94e63ddf74e1a4de30932deadd7fec96b	2026-02-01	benchmark uses shared safe client metrics base (#25208)	UNREVIEWED			
-429	ddd6267283e6fa1c50ca296be9e4cd4097e00e48	2026-02-01	[move-model2] Fix VecPack type inference bug causing Vector<T> vs T mismatches	UNREVIEWED			
-430	d1611d7fc477d9cd20440716e38119b0f462d2f4	2026-02-01	Fix test_composite_workload flakiness by reducing SharedCounterIncrement probability (#25207)	UNREVIEWED			
-431	63f084e464b09af771708197388e4c6e5a43e877	2026-02-01	Fix flaky test_simulated_load_shared_object_congestion_control (#25201)	UNREVIEWED			
-432	df041745e417a21793224fe7aa990f60201b6c3d	2026-02-02	[tidehunter] sanity check for database type (#25120)	UNREVIEWED			
-433	307a3014a3e648ebedf8497c2990190f2d020e86	2026-02-02	sui-types: add TryFrom<&SystemState> for SuiSystemStateSummary	UNREVIEWED			
-434	84ce0bffe4d58a1b5511986d0b76574d1a3c1e6f	2026-02-02	sui-types: add TryFrom<&ValidatorCommittee> for Committee	UNREVIEWED			
-435	9e8aecf9d541f9f8b8c7055f70ab86ff97b5f414	2026-02-02	grpc-client: add get_committee and get_system_state_summary methods	UNREVIEWED			
-436	49810b072981d714e49d4d8e7e0ed23e13f678ee	2026-02-02	benchmark: migrate to use grpc	UNREVIEWED			
-437	fcfae68b8855e3dc6ff6005e95439ebe4f6e9bbe	2026-02-02	sui-light-client: migrate to grpc	UNREVIEWED			
-438	fd4089a350e60fef2c18284b871a2a5bdf36aa06	2026-02-02	sui-tool: migrate to grpc	UNREVIEWED			
-439	1cac7d2d7f0c49635b12fc1159a3eb45d0e0dd2f	2026-02-02	test-cluster: mark jsonrpc client as deprecated	UNREVIEWED			
-440	bb388400e0a3277586b0e5467697f69dafffcf84	2026-02-02	Require Protocol release notes when bumping MAX_PROTOCOL_VERSION + naming improvements (#25202)	UNREVIEWED			
-441	79f9b2c9e21b347722c3b084809c3e7edcf04aa0	2026-02-02	Remove unused fields from TransactionOutputs (#25206)	UNREVIEWED			
-442	f9828a3a5b8580be762cc0aec144028cb7312f96	2026-02-02	Margin Risk Docs (#25173)	UNREVIEWED			
-443	8f98bcfe797bb3a833f6e42e335fe5b091c850ca	2026-02-02	Merge accumulator events before effects generation (#25178)	UNREVIEWED			
-444	8152123f8f179a6a2bd1dc3aacdb799b2c3c27c3	2026-02-02	Add release branch monitoring workflow (#25220)	UNREVIEWED			
-445	24954053cfd0e1a23bbcd326c63e9666e380e97e	2026-02-02	Track total withdraw amount per account for object funds withdraw (#25073)	UNREVIEWED			
-446	446798b352373440c039ebe296008cd62cdd7d37	2026-02-02	[tidehunter] unregister metrics on Drop (#25215)	UNREVIEWED			
-447	2555b2fb5973bbd25b8aa40e8fba38989073af62	2026-02-02	Fix FundsWithdrawScheduler DB reference leak (#25213)	UNREVIEWED			
-448	6080661beaf3bc533a205b1fe5814e0b4e1fcb60	2026-02-02	Do not panic on deprecated `RandomnessStateUpdate` message (#25205)	UNREVIEWED			
-449	89b39a384b539109c4a1328c386bdefecc9340ad	2026-02-03	Remove S3 employee lookup, use PagerDuty email + Slack API (#25224)	UNREVIEWED			
-450	de97e292c9d2b884a03e9b5c0aa2bf59b44a9801	2026-02-03	Enable object balance on testnet (#25223)	UNREVIEWED			
+401	e984ad82b6dcd0f693f8e6f21250d8b6e9a98eb5	2026-01-30	graphql-alt: scanning api bloom filter pipelines (#24788)	REVIEWED	EXCLUDE_FEATURE		新增 indexer-alt checkpoint bloom 扫描表、schema 与 pipeline。
+402	5675fb27c5dd4a02dc6b4c77b4163e7be8256828	2026-01-30	grpc-client: add get_dynamic_fields method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC dynamic fields API。
+403	059b8c0ee7207d81c918b04dec6c3bd231e0dd96	2026-01-30	sui: migrate DynamicFieldQuery to grpc	REVIEWED	EXCLUDE_FEATURE		CLI DynamicFieldQuery 从 JSON-RPC 迁移到新 gRPC API。
+404	eb94a45367a51701763fa08e05ecca5b34702733	2026-01-30	grpc-client: add batch_get_objects method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC batch_get_objects API。
+405	1730e63899806b542343d30a1aac69b5ca79d0d0	2026-01-30	sui: migrate some package methods to grpc	REVIEWED	EXCLUDE_FEATURE		CLI package 操作及 PTB 解析迁移到 gRPC。
+406	273b639f110cdc4d0c4374827b5711a361dcac1b	2026-01-30	sui: convert object commands to grpc	REVIEWED	EXCLUDE_FEATURE		CLI object 命令迁移到 gRPC。
+407	1f764a9fa63537b550541633652b98be1b5330e2	2026-01-30	grpc-client: add get_coin_info method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC coin metadata API。
+408	c821b95def6b0583902de99c14d736d7e48e54e4	2026-01-30	sui: convert balance command to grpc	REVIEWED	EXCLUDE_FEATURE		CLI balance 命令迁移到 gRPC。
+409	e35cb64b3d528b88bb21b15b6059309ac89ddf60	2026-01-30	grpc-client: add simulate_transaction method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC transaction simulation API。
+410	357fa89050651b47761df75339a1d1f7fb071442	2026-01-30	sui: migrate dry_run command to grpc	REVIEWED	EXCLUDE_FEATURE		CLI dry-run 改用新 simulation API，并替换展示格式。
+411	11356ffcbde020ccc0cc1c3477b8d3c0e05fd527	2026-01-30	Using PAT instead (#25193)	REVIEWED	EXCLUDE_NON_CODE		仅 tagging GitHub workflow 的认证方式调整。
+412	4b550eb362f186ad96ede5ed798c337c583962ff	2026-01-30	Adding safety check to tagging repo (#25195)	REVIEWED	EXCLUDE_NON_CODE		仅 tagging workflow 的仓库安全检查。
+413	cd444b04fa0b1f94022717a6d29b0a3cf4840f1a	2026-01-30	grpc-client: add list balance and stake methods	REVIEWED	EXCLUDE_FEATURE		新增 gRPC balance、stake 列表 API。
+414	6e7b20b2a7d5c2f08f10a983a3ec49a912976df4	2026-01-30	sui: migrate sui_commands to grpc	REVIEWED	EXCLUDE_FEATURE		CLI 顶层命令迁移到 gRPC。
+415	acf83906b07c4c9d6bd757bb37d5e9657e4ce331	2026-01-30	sui: migrate cli_tests to grpc	REVIEWED	EXCLUDE_NON_CODE		仅 CLI 测试调用迁移。
+416	8f56b62748585294afb044ef3d78ba23d339c19c	2026-01-30	sui: convert zklogin_commands_util to grpc	REVIEWED	EXCLUDE_FEATURE		zkLogin CLI 调用迁移到 gRPC。
+417	5806e553c097b5feaefd851bfa0a2193f51a378c	2026-01-30	sui: migrate fire_drill to grpc	REVIEWED	EXCLUDE_FEATURE		fire-drill 命令迁移到 gRPC。
+418	d1d56ef84b2e424756f8c2d48118ea9b49c25115	2026-01-30	sui: migrate validator_commands to grpc	REVIEWED	EXCLUDE_FEATURE		validator CLI 命令与测试迁移到 gRPC。
+419	a5113dad65ac7f91015d337e84f86453b11ddaca	2026-01-30	sdk: remove jsonrpc client from WalletContext	REVIEWED	EXCLUDE_FEATURE		SDK WalletContext 移除 JSON-RPC client 的 API 迁移。
+420	8f27181bddd1b1b9d4f1b6ef2a5691b4bb31f742	2026-01-30	Add log file management and commit strategy to simtest-debug skill (#25197)	REVIEWED	EXCLUDE_NON_CODE		仅调试技能文档。
+421	7cdd120175f1563b465fb9f64ee7f17b0119136a	2026-01-30	Fix flaky test_reconfig_with_committee_change_stress test (#25198)	REVIEWED	EXCLUDE_NON_CODE		仅 e2e 压力测试稳定性调整。
+422	226c12d69ad8c66ae23df2525a2a5d25e93da0fe	2026-01-30	[decompiler] Handle native functions with early return for empty input	APPLIED	MERGE	4d2f2f4d0222b7f467447230d366318c865f0db7	原生函数没有 basic block；空 CFG 会在 dominator 算法触发越界 panic，现返回空结构。
+423	c76c4cfd64a626e7760bdcf8b2b6b7356bf55503	2026-01-31	Reduce checkpoint and JWK log volume at INFO level (#25196)	REVIEWED	EXCLUDE_NON_CODE		仅运行日志等级与输出量调整。
+424	292880a3e96bfe887b32b5d295dd9c2daa903eca	2026-01-31	sui-types: fix format test to not shell out to cargo	REVIEWED	EXCLUDE_NON_CODE		仅格式快照测试重构。
+425	dde7508afaee250c289d175288102be73c5e3669	2026-01-31	sui-open-rpc: fix format test to not shell out to cargo	REVIEWED	EXCLUDE_NON_CODE		仅 OpenRPC 格式快照测试重构。
+426	79adab8799c60114cfd46934007c317d48e7f58f	2026-01-31	Make funds withdraw schedulers return more precise results (#24953)	REVIEWED	EXCLUDE_FEATURE		大规模重构 scheduler 返回模型与测试接口，不是既有缺陷的最小修复。
+427	5a35161761be01aeaeb30462c89d011a00618bc3	2026-02-01	Improve simtest debug skill and seed-search validation (#25210)	REVIEWED	EXCLUDE_NON_CODE		仅调试技能和 seed-search 脚本。
+428	fb1df6f94e63ddf74e1a4de30932deadd7fec96b	2026-02-01	benchmark uses shared safe client metrics base (#25208)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 测试基础设施与 metrics 复用。
+429	ddd6267283e6fa1c50ca296be9e4cd4097e00e48	2026-02-01	[move-model2] Fix VecPack type inference bug causing Vector<T> vs T mismatches	APPLIED	MERGE	78b2c7695380ed091efdbf2157d63c465bb8522a	VecPack 栈效果错误标为元素 T，导致 Vector<T> 与 T 的类型不匹配。
+430	d1611d7fc477d9cd20440716e38119b0f462d2f4	2026-02-01	Fix test_composite_workload flakiness by reducing SharedCounterIncrement probability (#25207)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark simtest 概率调整。
+431	63f084e464b09af771708197388e4c6e5a43e877	2026-02-01	Fix flaky test_simulated_load_shared_object_congestion_control (#25201)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark simtest 稳定性调整。
+432	df041745e417a21793224fe7aa990f60201b6c3d	2026-02-02	[tidehunter] sanity check for database type (#25120)	APPLIED	MERGE	e8100f55497253305978d1ca7443ec32a855b621	打开 DB 前识别 SST/WAL 标记，阻止 RocksDB 与 TideHunter 目录混用。
+433	307a3014a3e648ebedf8497c2990190f2d020e86	2026-02-02	sui-types: add TryFrom<&SystemState> for SuiSystemStateSummary	REVIEWED	EXCLUDE_FEATURE		新增 system-state proto 转换 API。
+434	84ce0bffe4d58a1b5511986d0b76574d1a3c1e6f	2026-02-02	sui-types: add TryFrom<&ValidatorCommittee> for Committee	REVIEWED	EXCLUDE_FEATURE		新增 committee proto 转换 API。
+435	9e8aecf9d541f9f8b8c7055f70ab86ff97b5f414	2026-02-02	grpc-client: add get_committee and get_system_state_summary methods	REVIEWED	EXCLUDE_FEATURE		新增 gRPC committee/system-state API。
+436	49810b072981d714e49d4d8e7e0ed23e13f678ee	2026-02-02	benchmark: migrate to use grpc	REVIEWED	EXCLUDE_FEATURE		benchmark 改用 gRPC client。
+437	fcfae68b8855e3dc6ff6005e95439ebe4f6e9bbe	2026-02-02	sui-light-client: migrate to grpc	REVIEWED	EXCLUDE_FEATURE		light-client 从 JSON-RPC 迁移到 gRPC。
+438	fd4089a350e60fef2c18284b871a2a5bdf36aa06	2026-02-02	sui-tool: migrate to grpc	REVIEWED	EXCLUDE_FEATURE		tool 命令迁移到 gRPC。
+439	1cac7d2d7f0c49635b12fc1159a3eb45d0e0dd2f	2026-02-02	test-cluster: mark jsonrpc client as deprecated	REVIEWED	EXCLUDE_FEATURE		JSON-RPC client 弃用标记及其调用方迁移。
+440	bb388400e0a3277586b0e5467697f69dafffcf84	2026-02-02	Require Protocol release notes when bumping MAX_PROTOCOL_VERSION + naming improvements (#25202)	REVIEWED	EXCLUDE_NON_CODE		仅 release-notes workflow 与脚本命名调整。
+441	79f9b2c9e21b347722c3b084809c3e7edcf04aa0	2026-02-02	Remove unused fields from TransactionOutputs (#25206)	REVIEWED	EXCLUDE_NON_CODE		仅删除未使用的 TransactionOutputs/temporary-store 字段。
+442	f9828a3a5b8580be762cc0aec144028cb7312f96	2026-02-02	Margin Risk Docs (#25173)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+443	8f98bcfe797bb3a833f6e42e335fe5b091c850ca	2026-02-02	Merge accumulator events before effects generation (#25178)	APPLIED	MERGE	199bd3200a0b42795a7d3cfc4b628d7108637d03	在 effects 生成前统一合并，避免多次执行路径产生重复 accumulator object 写入。
+444	8152123f8f179a6a2bd1dc3aacdb799b2c3c27c3	2026-02-02	Add release branch monitoring workflow (#25220)	REVIEWED	EXCLUDE_NON_CODE		仅 GitHub workflow。
+445	24954053cfd0e1a23bbcd326c63e9666e380e97e	2026-02-02	Track total withdraw amount per account for object funds withdraw (#25073)	REVIEWED	EXCLUDE_POST_FORK		关键检查位于 fork 基线后新增的 object_funds_checker；RTD 基线不存在该模块。
+446	446798b352373440c039ebe296008cd62cdd7d37	2026-02-02	[tidehunter] unregister metrics on Drop (#25215)	APPLIED	MERGE	e8100f55497253305978d1ca7443ec32a855b621	TideHunter Database drop 时注销其动态 metrics registry，避免 registry/指标持续泄漏。
+447	2555b2fb5973bbd25b8aa40e8fba38989073af62	2026-02-02	Fix FundsWithdrawScheduler DB reference leak (#25213)	APPLIED	MERGE	3976fd61999e46b7dafce3d553bf6920323d2722	后台任务不再保留 scheduler 的 sender，authority drop 后 channel 可关闭并释放 DB 引用。
+448	6080661beaf3bc533a205b1fe5814e0b4e1fcb60	2026-02-02	Do not panic on deprecated `RandomnessStateUpdate` message (#25205)	REVIEWED	EXCLUDE_POST_FORK		RTD 仍将该消息用于现有共识和 checkpoint 路径；上游“废弃并拒收”语义依赖 fork 后协议改造。
+449	89b39a384b539109c4a1328c386bdefecc9340ad	2026-02-03	Remove S3 employee lookup, use PagerDuty email + Slack API (#25224)	REVIEWED	EXCLUDE_NON_CODE		仅 CI/workflow 联系人查找方式调整。
+450	de97e292c9d2b884a03e9b5c0aa2bf59b44a9801	2026-02-03	Enable object balance on testnet (#25223)	REVIEWED	EXCLUDE_POST_FORK		仅启用 protocol v110 testnet object balance 配置与 snapshot；RTD 不具备该协议版本。
 451	8b077c59f5a52d60cafb5d29157960fdda83e863	2026-02-03	change inputs to strings (#25235)	UNREVIEWED			
 452	8c637bb8d687c162d9a6bc43471e1c485e971252	2026-02-03	[bridge] Handle storage layout mismatch during EVM contract upgrades (#25228)	UNREVIEWED			
 453	b0f61e9d9ce740e49b91130465d7e330923c564b	2026-02-03	[cargo-deny] Bump bytes crate to avoid deny issue (#25244)	UNREVIEWED			
