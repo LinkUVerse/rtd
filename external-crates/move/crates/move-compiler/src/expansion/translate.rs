@@ -990,12 +990,13 @@ fn into_modules_and_extenions(
                 }
                 let addr = top_level_address_(
                     &mut context.defn_context,
-                    na_map,
+                    na_map.clone(),
                     /* suggest_declaration */ false,
                     addr,
                 );
 
-                modules
+                context.defn_context.named_address_mapping = Some(na_map);
+                let modules = modules
                     .into_iter()
                     .map(|mut def| {
                         let module_addr = Some(check_module_address(context, loc, addr, &mut def));
@@ -1007,7 +1008,9 @@ fn into_modules_and_extenions(
                         };
                         (module_addr, def)
                     })
-                    .collect()
+                    .collect();
+                context.defn_context.named_address_mapping = None;
+                modules
             }
         }
     }
