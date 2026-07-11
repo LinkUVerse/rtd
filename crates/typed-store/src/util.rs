@@ -47,10 +47,16 @@ where
         Bound::Excluded(lower_bound) => {
             let mut key_buf = be_fix_int_ser(&lower_bound);
 
-            // Since we want exclusive, we need to increment the key to exclude the previous
-            big_endian_saturating_add_one(&mut key_buf);
+            if is_max(&key_buf) {
+                // No representable key is strictly greater than the maximum at this byte
+                // length. Appending a zero byte moves the lower bound past every same-length
+                // key, so the iterator yields nothing as requested.
+                key_buf.push(0);
+            } else {
+                // Since we want exclusive, increment the key to exclude the previous.
+                big_endian_saturating_add_one(&mut key_buf);
+            }
             Some(key_buf)
-            // readopts.set_iterate_lower_bound(key_buf);
         }
         Bound::Unbounded => None,
     };
