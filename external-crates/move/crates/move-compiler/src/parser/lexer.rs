@@ -13,7 +13,7 @@ use move_ir_types::location::Loc;
 use std::{collections::BTreeSet, fmt};
 
 // This should be replaced with std::mem::variant::count::<Tok>() if it ever comes out of nightly.
-pub const TOK_COUNT: usize = 77;
+pub const TOK_COUNT: usize = 78;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Tok {
@@ -94,6 +94,10 @@ pub enum Tok {
     BlockLabel,
     MinusGreater,
     For,
+    // Sentinel returned by lookahead when the next token cannot be read due to a lex error.
+    // Callers should treat it as "not the token I'm looking for" and let advance re-encounter
+    // and report the error.
+    LexError,
 }
 
 impl fmt::Display for Tok {
@@ -177,6 +181,7 @@ impl fmt::Display for Tok {
             BlockLabel => "'<Identifier>",
             MinusGreater => "->",
             For => "for",
+            LexError => "<LexError>",
         };
         fmt::Display::fmt(s, formatter)
     }
@@ -444,49 +449,37 @@ impl<'input> Lexer<'input> {
         text
     }
 
-    // Look ahead to the next token after the current one and return it, and its starting offset,
-    // without advancing the state of the lexer.
-    pub fn lookahead(&mut self) -> Result<Tok, Box<Diagnostic>> {
-        let (text, _) =
-            self.trim_whitespace_and_comments(self.cur_end, /* track doc comments */ false)?;
-        let next_start = self.text.len() - text.len();
-        let (result, _) = find_token(
-            /* panic_mode */ false,
-            self.file_hash,
-            self.edition,
-            text,
-            next_start,
-        );
-        // unwrap safe because panic_mode is false
-        result.map_err(|diag_opt| diag_opt.unwrap())
-    }
-
-    // Look ahead to the next two tokens after the current one and return them without advancing
-    // the state of the lexer.
-    pub fn lookahead2(&mut self) -> Result<(Tok, Tok), Box<Diagnostic>> {
-        let (text, _) =
-            self.trim_whitespace_and_comments(self.cur_end, /* track doc comments */ false)?;
+    // Trim whitespace/comments starting at `start`, then lex the next token without recording
+    // diagnostics. A lexing failure is represented as `Tok::LexError`; `advance` will
+    // re-encounter and report it if the parser consumes this position.
+    fn lookahead_token(&mut self, start: usize) -> (Tok, usize) {
+        let Ok((text, _)) =
+            self.trim_whitespace_and_comments(start, /* track doc comments */ false)
+        else {
+            return (Tok::LexError, start);
+        };
         let offset = self.text.len() - text.len();
+        // Panic mode avoids constructing diagnostics that lookahead would discard.
         let (result, length) = find_token(
-            /* panic_mode */ false,
+            /* panic_mode */ true,
             self.file_hash,
             self.edition,
             text,
             offset,
         );
-        let first = result.map_err(|diag_opt| diag_opt.unwrap())?;
-        let (text2, _) = self
-            .trim_whitespace_and_comments(offset + length, /* track doc comments */ false)?;
-        let offset2 = self.text.len() - text2.len();
-        let (result2, _) = find_token(
-            /* panic_mode */ false,
-            self.file_hash,
-            self.edition,
-            text2,
-            offset2,
-        );
-        let second = result2.map_err(|diag_opt| diag_opt.unwrap())?;
-        Ok((first, second))
+        (result.unwrap_or(Tok::LexError), offset + length)
+    }
+
+    // Look ahead to the next token after the current one without advancing the lexer.
+    pub fn lookahead(&mut self) -> Tok {
+        self.lookahead_token(self.cur_end).0
+    }
+
+    // Look ahead to the next two tokens after the current one without advancing the lexer.
+    pub fn lookahead2(&mut self) -> (Tok, Tok) {
+        let (first, end) = self.lookahead_token(self.cur_end);
+        let (second, _) = self.lookahead_token(end);
+        (first, second)
     }
 
     // Takes the doc comment of the current token, if there is one. It modifies the lexer state to
