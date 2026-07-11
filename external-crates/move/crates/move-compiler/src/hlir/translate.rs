@@ -12,12 +12,13 @@ use crate::{
         detect_dead_code::program as detect_dead_code_analysis,
         match_compilation,
     },
-    ice,
+    ice, ice_assert,
     naming::ast as N,
     parser::ast::{
         Ability_, BinOp, BinOp_, ConstantName, DatatypeName, Field, FunctionName, TargetKind,
         VariantName,
     },
+    rtd_mode::ID_FIELD_NAME,
     shared::{
         matching::{MATCH_TEMP_PREFIX, MatchContext, new_match_var_name},
         program_info::TypingProgramInfo,
@@ -25,7 +26,6 @@ use crate::{
         unique_map::UniqueMap,
         *,
     },
-    rtd_mode::ID_FIELD_NAME,
     typing::ast as T,
 };
 
@@ -766,6 +766,10 @@ pub(crate) fn type_(reporter: &DiagnosticReporter, ty @ sp!(loc, ty_): &N::Type)
 
 fn error_base_type(loc: Loc) -> H::BaseType {
     sp(loc, H::BaseType_::UnresolvedError)
+}
+
+fn error_single_type(loc: Loc) -> H::SingleType {
+    sp(loc, H::SingleType_::Base(error_base_type(loc)))
 }
 
 fn error_type(loc: Loc) -> H::Type {
@@ -2230,7 +2234,18 @@ fn make_assignments(
     let mut lvalues = vec![];
     let mut after = Block::new();
     for (idx, a) in assigns.into_iter().enumerate() {
-        let a_ty = rvalue.ty.value.type_at_index(idx);
+        let error_ty = error_single_type(a.loc);
+        let a_ty = rvalue.ty.value.type_at_index(idx).unwrap_or_else(|| {
+            // We can only get here if the rvalue was malformed and somewhere has an unresolved
+            // error.
+            ice_assert!(
+                context,
+                context.env.has_errors(),
+                a.loc,
+                "Unable to find a type for assignment lvalue from the rvalue"
+            );
+            &error_ty
+        });
         let (ls, mut af) = assign(context, case, a, a_ty);
 
         lvalues.push(ls);
