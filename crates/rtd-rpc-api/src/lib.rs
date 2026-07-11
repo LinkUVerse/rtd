@@ -24,7 +24,10 @@ pub use config::Config;
 pub use error::{
     CheckpointNotFoundError, ErrorDetails, ErrorReason, ObjectNotFoundError, Result, RpcError,
 };
-pub use metrics::{RpcMetrics, RpcMetricsMakeCallbackHandler};
+pub use metrics::{
+    GrpcMethodAllowlist, RpcMetrics, RpcMetricsMakeCallbackHandler,
+    grpc_method_paths_from_file_descriptor_sets,
+};
 pub use reader::TransactionNotFoundError;
 pub use rtd_rpc::proto;
 
@@ -116,6 +119,16 @@ impl RpcService {
 
     pub async fn into_router(self) -> axum::Router {
         let metrics = self.metrics.clone();
+        let file_descriptor_sets: &[&[u8]] = &[
+            crate::proto::google::protobuf::FILE_DESCRIPTOR_SET,
+            crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
+            tonic_health::pb::FILE_DESCRIPTOR_SET,
+        ];
+        let grpc_method_allowlist = Arc::new(
+            metrics::grpc_method_paths_from_file_descriptor_sets(file_descriptor_sets)
+                .expect("registered FileDescriptorSet bytes must be valid protobuf"),
+        );
 
         let router = {
             let ledger_service =
@@ -244,7 +257,10 @@ rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionServiceSe
             .pipe(|router| {
                 if let Some(metrics) = metrics {
                     router.layer(CallbackLayer::new(
-                        metrics::RpcMetricsMakeCallbackHandler::new(metrics),
+                        metrics::RpcMetricsMakeCallbackHandler::with_grpc_method_allowlist(
+                            metrics,
+                            grpc_method_allowlist,
+                        ),
                     ))
                 } else {
                     router
