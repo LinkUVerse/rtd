@@ -733,6 +733,7 @@ impl ValidatorService {
         let mut results: Vec<Option<SubmitTxResult>> = vec![None; request.transactions.len()];
         // Total size of all transactions in the request.
         let mut total_size_bytes = 0;
+        let mut expected_soft_bundle_gas_price = None;
 
         let req_type = if is_ping_request {
             "ping"
@@ -763,6 +764,26 @@ impl ValidatorService {
 
             // Ok to fail the request when any transaction is invalid.
             let tx_size = transaction.validity_check(&epoch_store.tx_validity_check_context())?;
+            let tx_digest = *transaction.digest();
+
+            if is_soft_bundle_request {
+                let gas_price = transaction.data().transaction_data().gas_price();
+                if let Some(expected) = expected_soft_bundle_gas_price {
+                    fp_ensure!(
+                        gas_price == expected,
+                        RtdErrorKind::UserInputError {
+                            error: UserInputError::GasPriceMismatchError {
+                                digest: tx_digest,
+                                expected,
+                                actual: gas_price,
+                            }
+                        }
+                        .into()
+                    );
+                } else {
+                    expected_soft_bundle_gas_price = Some(gas_price);
+                }
+            }
 
             let overload_check_res = state.check_system_overload(
                 consensus_adapter,
@@ -800,8 +821,7 @@ impl ValidatorService {
                 }
             };
 
-            let tx_digest = verified_transaction.tx().digest();
-            tx_digests.push(*tx_digest);
+            tx_digests.push(tx_digest);
 
             debug!(
                 ?tx_digest,
@@ -812,7 +832,7 @@ impl ValidatorService {
             // which could have been consumed.
             if let Some(effects) = state
                 .get_transaction_cache_reader()
-                .get_executed_effects(tx_digest)
+                .get_executed_effects(&tx_digest)
             {
                 let effects_digest = effects.digest();
                 if let Ok(executed_data) = self.complete_executed_data(effects, None).await {
@@ -830,10 +850,10 @@ impl ValidatorService {
             if self
                 .state
                 .get_transaction_cache_reader()
-                .transaction_executed_in_last_epoch(tx_digest, epoch_store.epoch())
+                .transaction_executed_in_last_epoch(&tx_digest, epoch_store.epoch())
             {
                 results[idx] = Some(SubmitTxResult::Rejected {
-                    error: UserInputError::TransactionAlreadyExecuted { digest: *tx_digest }.into(),
+                    error: UserInputError::TransactionAlreadyExecuted { digest: tx_digest }.into(),
                 });
                 debug!(
                     ?tx_digest,
@@ -866,7 +886,7 @@ impl ValidatorService {
                     // This is an edge case so checking executed effects twice is acceptable.
                     if let Some(effects) = state
                         .get_transaction_cache_reader()
-                        .get_executed_effects(tx_digest)
+                        .get_executed_effects(&tx_digest)
                     {
                         let effects_digest = effects.digest();
                         if let Ok(executed_data) = self.complete_executed_data(effects, None).await
