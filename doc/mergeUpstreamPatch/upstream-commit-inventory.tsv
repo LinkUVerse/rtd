@@ -999,56 +999,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 998	1f1866dc70f1a1800ca595ee2a805b45ff96127a	2026-03-31	[grpc] protocol gate balance object refs in simulate (#26082)	REVIEWED	EXCLUDE_POST_FORK		address-balance gRPC 模拟路径。
 999	ceb0bf788b8711eca37a448854db0421beb8d612	2026-03-31	[grpc] Fix tests and protocol gating around mainnet protocol overrides in simtest (#26084)	REVIEWED	EXCLUDE_POST_FORK		address-balance 协议 gate 与 simtest。
 1000	82942c59ebb94f4f4c8ae494fed945e5f8eb4ee5	2026-04-01	rpc-visitor: unwrap `TypeName` (#26070)	REVIEWED	EXCLUDE_FEATURE		RPC visitor 对 TypeName 的展示支持。
-1001	c4cd5380380746a937cdc0712052284188a4024f	2026-04-01	sui-core: index address balance recipients in jsonrpc index (#26087)	UNREVIEWED			
-1002	0ca12a576b134deee16eebf37524bc0c1da1041f	2026-04-01	[Block Streaming] broadcasting the accepted blocks (#25549)	UNREVIEWED			
-1003	5ce3eba9d21aea6f051be3c3306078d2bc572c41	2026-04-01	sui-indexer-alt-framework: reduce copied and pasted test code (#26080)	UNREVIEWED			
-1004	192a628cc56fcd901af4330d91c123fe8f493187	2026-04-01	cleanup: remove now unused fields and no-op flag (#26086)	UNREVIEWED			
-1005	52203ecc02e7a3fd810ed88c1fd24a3a99ba98db	2026-04-01	[consensus] probe before fetching commits and blocks from a peer (#26056)	UNREVIEWED			
-1006	58590a4883fa42cbe5f23941187c886c9ce36dd6	2026-04-01	[consensus] remove consensus inflight tracking and fastpath certified status (#25319)	UNREVIEWED			
-1007	3ac6f119a3ce41fccb9df0293a51e40ed6fadae3	2026-04-01	[move] disallow orphaned tables  (#26095)	UNREVIEWED			
-1008	1cc9377f4f6646c89e85e257ff8509e6df11e945	2026-04-01	indexer: remove unused function (#26092)	UNREVIEWED			
-1009	2bf0af8d8048b75d7d7e6e46cde1958c40e43481	2026-04-01	sui-indexer-alt-framework: replace futures::stream::Peekable with tokio_stream::adapters::Peekable (#26100)	UNREVIEWED			
-1010	08740a5fd4f46df33dc6dda8b34056ce9a54e3fd	2026-04-01	jsonrpc-alt: gate coin reservation obj refs (#26102)	UNREVIEWED			
-1011	896d11b841c6fec62221954dde1084a7277ccbe2	2026-04-01	Gate coin reservation JSON-RPC responses on protocol config (#26097)	UNREVIEWED			
-1012	2a6083bafec7a791806866cea60f03fd2e1beb65	2026-04-01	Skip address balance ToAddress test when accumulators disabled (#26099)	UNREVIEWED			
-1013	eb78ba29e6d62ee836f79de93b5c8346a9cd3d1a	2026-04-02	display: implicit `:json` transform (#26062)	UNREVIEWED			
-1014	bc2c02c9f621ce810b98e991028524f4cf46eba0	2026-04-02	[light client] remove sui-data-ingestion-core dependency (#26113)	UNREVIEWED			
-1015	0a1e37d9f99f6ebe30a527fb3ffd95b0a1f0dd9b	2026-04-02	docs: Technical Diagram Standards for Sui Docs (#26101)	UNREVIEWED			
-1016	2409c793c8f6092d665d28030cfc68967e5fc4dd	2026-04-02	feat: Update gamma prime aws cognito provider (#26093)	UNREVIEWED			
-1017	6a391733c6a07cda5d3c9939ef3ee306490d16bd	2026-04-02	[chore] Fix sui-framework UPDATE to not delete the existing files unless the build succeeds (#26106)	UNREVIEWED			
-1018	9ae4df2ec0416c7b051b128a8a8d3bd23efbfe1f	2026-04-02	sui-indexer-alt-framework: make transient_backoff, retry_transient_with_slow_monitor helper functions (#26042)	UNREVIEWED			
-1019	2aaedb4930089a7ba741b246a3f8377303267351	2026-04-03	Fix MISSING_DEPENDENCY panic for benchmarks that use Move stdlib (#26122)	UNREVIEWED			
-1020	97af7b9a44b0b62645f2b8c8222aa8a1be245ff8	2026-04-03	[indexer-alt-reader]: Batch checkpoint and transaction event fetches (#26118)	UNREVIEWED			
-1021	bafd093c8ab75e4dd16d1e574bb808d7fcd1a4e2	2026-04-03	[framework, chore] add proper deprecation notice in kiosk.move (#26124)	UNREVIEWED			
-1022	a9773b63b34983935554286a637dc8a62b2233c8	2026-04-06	test for coin res with shared object (#26123)	UNREVIEWED			
-1023	c457b39404511a02210a7b5a4dfe549670d8a498	2026-04-06	Update gaming.mdx (#26132)	UNREVIEWED			
-1024	ffbf699bc89e0d16fbcdefdd9d459b1ca0ddb88a	2026-04-06	chore: remove deadcode (#25566)	UNREVIEWED			
-1025	92cdfc7fe041bf824567e76995a5d5ef973bc6d6	2026-04-06	sui-indexer-alt-object-store: implement ConcurrentConnection for ObjectStoreConnection methods (#26133)	UNREVIEWED			
-1026	89286c8e52b8b358b3bd895e40ec4ee2f991c742	2026-04-06	Add state archive read config to validator.yaml (#26136)	UNREVIEWED			
-1027	404f123f44711212ac69f27762a49a57eb3454f0	2026-04-06	[move-unit-test] Fix linkage for unit test runner (#26137)	UNREVIEWED			
-1028	f620dfc7c8d05e828e8f63bc5466b10ed4979e6d	2026-04-06	Add test for denied address withdrawal (#26142)	UNREVIEWED			
-1029	340c2f6643730ca1693c1a74554cee3c06b198cf	2026-04-07	[consensus] remove block output channel from TransactionCertifier (#26143)	UNREVIEWED			
-1030	d3a41ea2e45d530ba87bebd05af439329f70b651	2026-04-07	[consensus] fail over to block sync when commit sync makes no progress (#26021)	UNREVIEWED			
-1031	715582d4e58d46aa7d7a5e7b153b0e9c99978f9e	2026-04-07	[gasless] Add gasless rate limiter (#25854)	UNREVIEWED			
-1032	3214ac42f2a0ecdf14676eee53a3b44613f4fd47	2026-04-07	Replace debug_assertions with testing feature gate for test-only code (#26025)	UNREVIEWED			
-1033	b11d7b977aab3ab79dc6f783555d1726c34b6ca7	2026-04-07	Fix simtest temp file cleanup to include dot-prefixed dirs (#26147)	UNREVIEWED			
-1034	4a9af930d043cc9f9bf7a9438ee3f25e4d26e741	2026-04-07	fix gasless transaction dryrun and simulate (#26148)	UNREVIEWED			
-1035	dd2cbb20741fc828b7d4ecbf0c1967271db8a982	2026-04-07	sui: ensure external keys files exist (#26107)	UNREVIEWED			
-1036	f16ab04b6597b9c175bfc8255777fc6dd0af0dd1	2026-04-07	sui-indexer-alt-framework: treat ingestion client deser errors as transient across impls (#26096)	UNREVIEWED			
-1037	d40b0d0711182de2605732a49cba1f07e007c5ee	2026-04-08	devx: add rules file for team style guidelines (#26153)	UNREVIEWED			
-1038	c6bf4049115d45c8c674c357f84f41fcc22c4f0e	2026-04-08	[consensus] enable fifo compaction for all networks (#26149)	UNREVIEWED			
-1039	7d6d5649236e05964cd7e1f2be28ed4b1783c392	2026-04-08	Improve `ExecutionTiming` for transactions with generated commands (#26125)	UNREVIEWED			
-1040	e2459aab75cdc0a57e26bbd060a191b10bcc58a9	2026-04-08	[chore] Update fastcrypto pointer (#26157)	UNREVIEWED			
-1041	53de0108098a9c041edc28ce4083f8dc9436a4d3	2026-04-08	[sui-analytics-indexer] Remove last usage of simple_deserialize (#26159)	UNREVIEWED			
-1042	3a3ac018177cf71cef28be3f21957b74c6bc45be	2026-04-08	[move][cleanup] Remove some unused deserialization functions (#26160)	UNREVIEWED			
-1043	69a93e4248e2c8363c06b2a8d1af4220183cf9b3	2026-04-08	Replace `zip` with new `zip_debug_eq` (#26126)	UNREVIEWED			
-1044	eca15586d5649e5d1611a4df1c4563b09105b4cc	2026-04-08	Add example sui CLI commands to address aliases page (#26162)	UNREVIEWED			
-1045	6670a46d6780b2dff005167436d5193440d6ccec	2026-04-08	[forking 1/n] basic skeleton + design docs (#26004)	UNREVIEWED			
-1046	408bbec25c27157aafd13fca31075962d2415242	2026-04-08	docs: fix sidebar for address-alias page (again)  (#26163)	UNREVIEWED			
-1047	63cb7f767409e0589a9d5265e55a727cb8a020b5	2026-04-08	docs: minor changes to Diagram Standards (#26164)	UNREVIEWED			
-1048	b9b9628b2040de6b8f02af1e59d7a119dd4bbc10	2026-04-08	[sui-framework][std] Added additional `option` macros (#26085)	UNREVIEWED			
-1049	b62e4bf94eaaf96cb2d42b643ba92847bbf57be8	2026-04-08	sui-indexer-alt: start indexing at network tip (#26116)	UNREVIEWED			
-1050	f6a774c2b71765b0bad451efe9b5ca171438eb72	2026-04-08	Re-enable benchmark smoke tests in CI (#26155)	UNREVIEWED			
+1001	c4cd5380380746a937cdc0712052284188a4024f	2026-04-01	sui-core: index address balance recipients in jsonrpc index (#26087)	REVIEWED	EXCLUDE_POST_FORK		address-balance JSON-RPC 索引。
+1002	0ca12a576b134deee16eebf37524bc0c1da1041f	2026-04-01	[Block Streaming] broadcasting the accepted blocks (#25549)	REVIEWED	EXCLUDE_FEATURE		新增 block streaming 服务。
+1003	5ce3eba9d21aea6f051be3c3306078d2bc572c41	2026-04-01	sui-indexer-alt-framework: reduce copied and pasted test code (#26080)	REVIEWED	EXCLUDE_NON_CODE		仅测试重构。
+1004	192a628cc56fcd901af4330d91c123fe8f493187	2026-04-01	cleanup: remove now unused fields and no-op flag (#26086)	REVIEWED	EXCLUDE_FEATURE		后续功能的清理。
+1005	52203ecc02e7a3fd810ed88c1fd24a3a99ba98db	2026-04-01	[consensus] probe before fetching commits and blocks from a peer (#26056)	REVIEWED	EXCLUDE_FEATURE		依赖后续 consensus probe/参数协议的同步扩展。
+1006	58590a4883fa42cbe5f23941187c886c9ce36dd6	2026-04-01	[consensus] remove consensus inflight tracking and fastpath certified status (#25319)	REVIEWED	EXCLUDE_FEATURE		大规模 consensus 状态模型重构。
+1007	3ac6f119a3ce41fccb9df0293a51e40ed6fadae3	2026-04-01	[move] disallow orphaned tables  (#26095)	REVIEWED	EXCLUDE_POST_FORK		协议 v121 verifier gate 与快照，不能独立移植。
+1008	1cc9377f4f6646c89e85e257ff8509e6df11e945	2026-04-01	indexer: remove unused function (#26092)	REVIEWED	EXCLUDE_FEATURE		Indexer 清理。
+1009	2bf0af8d8048b75d7d7e6e46cde1958c40e43481	2026-04-01	sui-indexer-alt-framework: replace futures::stream::Peekable with tokio_stream::adapters::Peekable (#26100)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt API 迁移。
+1010	08740a5fd4f46df33dc6dda8b34056ce9a54e3fd	2026-04-01	jsonrpc-alt: gate coin reservation obj refs (#26102)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation JSON-RPC gate。
+1011	896d11b841c6fec62221954dde1084a7277ccbe2	2026-04-01	Gate coin reservation JSON-RPC responses on protocol config (#26097)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation JSON-RPC gate。
+1012	2a6083bafec7a791806866cea60f03fd2e1beb65	2026-04-01	Skip address balance ToAddress test when accumulators disabled (#26099)	REVIEWED	EXCLUDE_NON_CODE		仅 address-balance 测试。
+1013	eb78ba29e6d62ee836f79de93b5c8346a9cd3d1a	2026-04-02	display: implicit `:json` transform (#26062)	REVIEWED	EXCLUDE_FEATURE		Display 转换功能。
+1014	bc2c02c9f621ce810b98e991028524f4cf46eba0	2026-04-02	[light client] remove sui-data-ingestion-core dependency (#26113)	REVIEWED	EXCLUDE_FEATURE		light-client 依赖清理。
+1015	0a1e37d9f99f6ebe30a527fb3ffd95b0a1f0dd9b	2026-04-02	docs: Technical Diagram Standards for Sui Docs (#26101)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1016	2409c793c8f6092d665d28030cfc68967e5fc4dd	2026-04-02	feat: Update gamma prime aws cognito provider (#26093)	REVIEWED	EXCLUDE_FEATURE		Cognito provider 功能更新。
+1017	6a391733c6a07cda5d3c9939ef3ee306490d16bd	2026-04-02	[chore] Fix sui-framework UPDATE to not delete the existing files unless the build succeeds (#26106)	REVIEWED	EXCLUDE_NON_CRITICAL		framework 更新命令的文件保护，非节点关键路径。
+1018	9ae4df2ec0416c7b051b128a8a8d3bd23efbfe1f	2026-04-02	sui-indexer-alt-framework: make transient_backoff, retry_transient_with_slow_monitor helper functions (#26042)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt helper 重构。
+1019	2aaedb4930089a7ba741b246a3f8377303267351	2026-04-03	Fix MISSING_DEPENDENCY panic for benchmarks that use Move stdlib (#26122)	REVIEWED	EXCLUDE_NON_CRITICAL		仅 benchmark Move stdlib 初始化路径。
+1020	97af7b9a44b0b62645f2b8c8222aa8a1be245ff8	2026-04-03	[indexer-alt-reader]: Batch checkpoint and transaction event fetches (#26118)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt batching 功能。
+1021	bafd093c8ab75e4dd16d1e574bb808d7fcd1a4e2	2026-04-03	[framework, chore] add proper deprecation notice in kiosk.move (#26124)	REVIEWED	EXCLUDE_NON_CODE		仅 deprecation 文案。
+1022	a9773b63b34983935554286a637dc8a62b2233c8	2026-04-06	test for coin res with shared object (#26123)	REVIEWED	EXCLUDE_NON_CODE		仅 coin-reservation 测试。
+1023	c457b39404511a02210a7b5a4dfe549670d8a498	2026-04-06	Update gaming.mdx (#26132)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1024	ffbf699bc89e0d16fbcdefdd9d459b1ca0ddb88a	2026-04-06	chore: remove deadcode (#25566)	REVIEWED	EXCLUDE_FEATURE		清理重构。
+1025	92cdfc7fe041bf824567e76995a5d5ef973bc6d6	2026-04-06	sui-indexer-alt-object-store: implement ConcurrentConnection for ObjectStoreConnection methods (#26133)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt ObjectStore API 扩展。
+1026	89286c8e52b8b358b3bd895e40ec4ee2f991c742	2026-04-06	Add state archive read config to validator.yaml (#26136)	REVIEWED	EXCLUDE_FEATURE		新增 archive 读取配置。
+1027	404f123f44711212ac69f27762a49a57eb3454f0	2026-04-06	[move-unit-test] Fix linkage for unit test runner (#26137)	REVIEWED	EXCLUDE_NON_CRITICAL		Move 单元测试 runner 链接修复，非节点运行时。
+1028	f620dfc7c8d05e828e8f63bc5466b10ed4979e6d	2026-04-06	Add test for denied address withdrawal (#26142)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+1029	340c2f6643730ca1693c1a74554cee3c06b198cf	2026-04-07	[consensus] remove block output channel from TransactionCertifier (#26143)	REVIEWED	EXCLUDE_FEATURE		consensus 内部通道重构。
+1030	d3a41ea2e45d530ba87bebd05af439329f70b651	2026-04-07	[consensus] fail over to block sync when commit sync makes no progress (#26021)	REVIEWED	EXCLUDE_FEATURE		依赖后续 periodic/block sync 机制的大规模同步重构。
+1031	715582d4e58d46aa7d7a5e7b153b0e9c99978f9e	2026-04-07	[gasless] Add gasless rate limiter (#25854)	REVIEWED	EXCLUDE_POST_FORK		gasless 路径。
+1032	3214ac42f2a0ecdf14676eee53a3b44613f4fd47	2026-04-07	Replace debug_assertions with testing feature gate for test-only code (#26025)	REVIEWED	EXCLUDE_FEATURE		测试 feature gate 重构。
+1033	b11d7b977aab3ab79dc6f783555d1726c34b6ca7	2026-04-07	Fix simtest temp file cleanup to include dot-prefixed dirs (#26147)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest 清理。
+1034	4a9af930d043cc9f9bf7a9438ee3f25e4d26e741	2026-04-07	fix gasless transaction dryrun and simulate (#26148)	REVIEWED	EXCLUDE_POST_FORK		gasless dry-run/simulate 路径。
+1035	dd2cbb20741fc828b7d4ecbf0c1967271db8a982	2026-04-07	sui: ensure external keys files exist (#26107)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI external-key bootstrap 文件修复，非节点关键路径。
+1036	f16ab04b6597b9c175bfc8255777fc6dd0af0dd1	2026-04-07	sui-indexer-alt-framework: treat ingestion client deser errors as transient across impls (#26096)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt transient retry 策略。
+1037	d40b0d0711182de2605732a49cba1f07e007c5ee	2026-04-08	devx: add rules file for team style guidelines (#26153)	REVIEWED	EXCLUDE_NON_CODE		开发规范文件。
+1038	c6bf4049115d45c8c674c357f84f41fcc22c4f0e	2026-04-08	[consensus] enable fifo compaction for all networks (#26149)	REVIEWED	EXCLUDE_FEATURE		依赖第 954 条 FIFO compaction 架构。
+1039	7d6d5649236e05964cd7e1f2be28ed4b1783c392	2026-04-08	Improve `ExecutionTiming` for transactions with generated commands (#26125)	REVIEWED	EXCLUDE_FEATURE		执行时序观测功能调整。
+1040	e2459aab75cdc0a57e26bbd060a191b10bcc58a9	2026-04-08	[chore] Update fastcrypto pointer (#26157)	REVIEWED	EXCLUDE_FEATURE		依赖指针更新，无独立修复 hunk。
+1041	53de0108098a9c041edc28ce4083f8dc9436a4d3	2026-04-08	[sui-analytics-indexer] Remove last usage of simple_deserialize (#26159)	REVIEWED	EXCLUDE_FEATURE		Analytics Indexer 重构。
+1042	3a3ac018177cf71cef28be3f21957b74c6bc45be	2026-04-08	[move][cleanup] Remove some unused deserialization functions (#26160)	REVIEWED	EXCLUDE_FEATURE		Move 清理重构。
+1043	69a93e4248e2c8363c06b2a8d1af4220183cf9b3	2026-04-08	Replace `zip` with new `zip_debug_eq` (#26126)	REVIEWED	EXCLUDE_FEATURE		全仓库基础库重构，依赖新 zip_debug_eq API。
+1044	eca15586d5649e5d1611a4df1c4563b09105b4cc	2026-04-08	Add example sui CLI commands to address aliases page (#26162)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1045	6670a46d6780b2dff005167436d5193440d6ccec	2026-04-08	[forking 1/n] basic skeleton + design docs (#26004)	REVIEWED	EXCLUDE_FEATURE		新增 forking 架构。
+1046	408bbec25c27157aafd13fca31075962d2415242	2026-04-08	docs: fix sidebar for address-alias page (again)  (#26163)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1047	63cb7f767409e0589a9d5265e55a727cb8a020b5	2026-04-08	docs: minor changes to Diagram Standards (#26164)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1048	b9b9628b2040de6b8f02af1e59d7a119dd4bbc10	2026-04-08	[sui-framework][std] Added additional `option` macros (#26085)	REVIEWED	EXCLUDE_FEATURE		新增 std option 宏。
+1049	b62e4bf94eaaf96cb2d42b643ba92847bbf57be8	2026-04-08	sui-indexer-alt: start indexing at network tip (#26116)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt 启动策略功能。
+1050	f6a774c2b71765b0bad451efe9b5ca171438eb72	2026-04-08	Re-enable benchmark smoke tests in CI (#26155)	REVIEWED	EXCLUDE_NON_CODE		仅 CI benchmark。
 1051	675a96058d86e7598c21de44d966080f28365a15	2026-04-08	Fix flaky benchmark smoke test: lower --min-tps threshold (#26167)	UNREVIEWED			
 1052	fc1bba9be45188caaa989d3928644cb62f0ab8da	2026-04-09	[chore] Update tidehunter to 7fddd55cf8cb27ee10803fb772d7618134a8d138 (#26169)	UNREVIEWED			
 1053	97dae8a2fb64fa9aee4bc3695e31af11934deda6	2026-04-09	[move-cli] adds lint command (#26059)	UNREVIEWED			
