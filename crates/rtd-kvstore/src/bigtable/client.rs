@@ -65,6 +65,7 @@ const EFFECTS_COLUMN_QUALIFIER: &str = "ef";
 const EVENTS_COLUMN_QUALIFIER: &str = "ev";
 const TIMESTAMP_COLUMN_QUALIFIER: &str = "ts";
 const CHECKPOINT_NUMBER_COLUMN_QUALIFIER: &str = "cn";
+const DEFAULT_MAX_DECODING_MESSAGE_SIZE: usize = 32 * 1024 * 1024;
 
 type Bytes = Vec<u8>;
 
@@ -439,7 +440,8 @@ impl BigTableClient {
         };
         Ok(Self {
             table_prefix: format!("projects/emulator/instances/{}/tables/", instance_id),
-            client: BigtableInternalClient::new(auth_channel),
+            client: BigtableInternalClient::new(auth_channel)
+                .max_decoding_message_size(DEFAULT_MAX_DECODING_MESSAGE_SIZE),
             client_name: "local".to_string(),
             metrics: None,
             app_profile_id: None,
@@ -483,7 +485,8 @@ impl BigTableClient {
         };
         Ok(Self {
             table_prefix,
-            client: BigtableInternalClient::new(auth_channel),
+            client: BigtableInternalClient::new(auth_channel)
+                .max_decoding_message_size(DEFAULT_MAX_DECODING_MESSAGE_SIZE),
             client_name,
             metrics: registry.map(KvMetrics::new),
             app_profile_id,

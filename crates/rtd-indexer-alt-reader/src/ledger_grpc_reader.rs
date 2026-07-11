@@ -12,6 +12,8 @@ use rtd_types::{
 };
 use tonic::transport::{Channel, ClientTlsConfig, Uri};
 
+const DEFAULT_MAX_DECODING_MESSAGE_SIZE: usize = 32 * 1024 * 1024;
+
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct LedgerGrpcArgs {
     /// Timeout for gRPC statements to the ledger service, in milliseconds.
@@ -53,7 +55,8 @@ impl LedgerGrpcReader {
         }
         let channel = endpoint.tls_config(tls_config)?.connect_lazy();
 
-        let client = LedgerServiceClient::new(channel.clone());
+        let client = LedgerServiceClient::new(channel.clone())
+            .max_decoding_message_size(DEFAULT_MAX_DECODING_MESSAGE_SIZE);
         Ok(Self(client))
     }
 
