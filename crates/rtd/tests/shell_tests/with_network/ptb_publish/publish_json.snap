@@ -9,13 +9,8 @@ chain_id=$(rtd client --client.config $CONFIG chain-identifier)
 echo "[environments]" >> test_pkg/Move.toml
 echo "localnet = \"$chain_id\"" >> test_pkg/Move.toml
 
-rtd client --client.config $CONFIG ptb \
- --move-call rtd::tx_context::sender \
- --assign sender \
- --publish "test_pkg" \
- --assign upgrade_cap \
- --transfer-objects "[upgrade_cap]" sender \
- > output.log 2>&1 || cat output.log
+rtd client --client.config $CONFIG publish test_pkg --dry-run --json > output.json
+jq -e . output.json >/dev/null
 
 ----- results -----
 success: true
@@ -23,3 +18,4 @@ exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
+BUILDING test_pkg
