@@ -1199,56 +1199,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1198	0848536e53349b9460e1c96274c2a3e3b72bd9cc	2026-04-25	Add timestamp-based epoch close (#26158)	REVIEWED	EXCLUDE_FEATURE		epoch close 语义。
 1199	80e03d76d2544fd3928bedfceef2fe5be8316b44	2026-04-26	Extend address deny list to also cover alias signing (#26368)	APPLIED	MERGE	b32ddf98195dbab9dada9182b8410812afb9b37a	将实际签名地址纳入 deny-list，防止 address alias 绕过。
 1200	b8f2d40f6d5ea25f63d79883f45e4639dc799948	2026-04-27	[Consensus] clean up unused broadcaster. (#26373)	REVIEWED	EXCLUDE_FEATURE		consensus 清理。
-1201	65e8b2fb13992272c48dc3f843f1915a18d40be4	2026-04-27	[graphql-stream] Add top-level transaction subscription [6/n] (#26202)	UNREVIEWED			
-1202	9d7a86c64fc2d72b6189975c9c8a8ccaaf563d86	2026-04-27	Update CLAUDE.md linting instructions (#26364)	UNREVIEWED			
-1203	0af885e0773536dff089d8cb7a72c59426df43d6	2026-04-27	[forking 10/n] add forking service grpc for interacting with the network (#26328)	UNREVIEWED			
-1204	6914bde36b712085badddaeae41b22553686ccf6	2026-04-27	Fix coin reservation panic during checkpoint replay (#26337)	UNREVIEWED			
-1205	77e3d2db48f2c89f61d403959fc891bd890f0504	2026-04-27	[move] Thread MoveFlavor instance through package pipeline (#26231)	UNREVIEWED			
-1206	c1d32ae3f1c0c39e18578b984621f51acfa9e60b	2026-04-27	[forking 11/n] add a CLI to start & interact with the forked network (#26336)	UNREVIEWED			
-1207	ac936736896c58d15b4c55ffb6fd99c6f578954e	2026-04-27	Cache permanent errors in CachingCoinReservationResolver (#26387)	UNREVIEWED			
-1208	019e3501575a46d5d2aaf3618cf444aeca243cfa	2026-04-28	[indexer] add requester-pays functionality for GCS buckets (#26384)	UNREVIEWED			
-1209	c37bcc2e87c0e6b91a6d900e133f596c0eaf0dad	2026-04-28	[ci] Run graphql_subscription e2e tests under --features staging (#26395)	UNREVIEWED			
-1210	255e614f4fd3faccb9812b90b29337c15c5e515a	2026-04-28	network: bump anemo version to 487f8bc (#26404)	UNREVIEWED			
-1211	5c044a3409a375eb65fdf9e415fdfb74b08c9571	2026-04-28	sync: update shared Docusaurus components (#26390)	UNREVIEWED			
-1212	ef4b975dfa5390f14dbe16ed54e8502824444297	2026-04-28	docs: remove fastpath comparison (#26406)	UNREVIEWED			
-1213	f3a0ae7eaf10f9ea1d7bb8a5e1df79676d247b84	2026-04-28	docs: put address balances live and fix gasless transactions (#26361)	UNREVIEWED			
-1214	f4e5dd577267624146a57b6916f71bd879479fe4	2026-04-28	Allow for custom replay graphql url (#26405)	UNREVIEWED			
-1215	a79c31d686d6ddfa821dd71beb5a5a0c32d2a1fc	2026-04-28	rpc-index: track coin and address balances separately (#26403)	UNREVIEWED			
-1216	0fde981ef01da0df4d2bf987ce893250c89305a6	2026-04-28	[consensus] refactor core.rs tests to use CoreTestFixture (#26345)	UNREVIEWED			
-1217	d0b6a5d9663a5e3e4cfe4a04fdc92130f8ed502c	2026-04-28	ci: fetch prebuilt sui binaries from S3 in release.yml on Linux (#26411)	UNREVIEWED			
-1218	8074c8e32e00a2d936d72d85b70e671db9ee001c	2026-04-29	Add send_funds workload to single-node benchmark (#26408)	UNREVIEWED			
-1219	3a4c51d8cc3fe451ec43db4f181435006496f704	2026-04-29	Avoid allocation in bcs-to-hasher patterns using serialize_into (#26415)	UNREVIEWED			
-1220	2e0da123b9a8d8f4bdd8088c3f10a1011059b429	2026-04-29	Optimize tracing overhead: global callsite filter, disable span latency layer (#26409)	UNREVIEWED			
-1221	cf6da6c56ddab018ff6b09f5d5085c92f9ba9c9c	2026-04-29	docs: more misc AF Docs fix (#26418)	UNREVIEWED			
-1222	a54f12939276348a378c71545fc7858b51d01715	2026-04-29	docker: add sui-node-th image (sui-node with tidehunter feature) (#26423)	UNREVIEWED			
-1223	60f7d45bccca9f93c690aed0afb3f8480efd7d18	2026-04-29	move store into its own top level mod (#26427)	UNREVIEWED			
-1224	e141911f148ce423c85566553e6ffc0ca88a173c	2026-04-29	Report zip_debug_eq caller as system_invariant_violations label (#26428)	UNREVIEWED			
-1225	855347fa2ff804ae000f8675f122ff60acb38941	2026-04-29	Include root package type origins in on-chain move summary (#26391)	UNREVIEWED			
-1226	16a65941aff64d718bba09c58fd21288c7238134	2026-04-29	Optimize within_alive_epoch: replace NotifyOnce with CancellationToken (#26430)	UNREVIEWED			
-1227	d5364733440fc66fee02ccfb1ee7b6e4b61bb1b0	2026-04-29	sui-node-th: bundle sui-th, sui-tool-th, stress-th into the same image (#26435)	UNREVIEWED			
-1228	2d611abbac5e0814651f94b1b0b9a06b13dcc04d	2026-04-30	[move] change print for vector in decompiler (#26432)	UNREVIEWED			
-1229	1eac2cc8ba01455b900de7fa45fca06bca37cadb	2026-04-30	rpc-index: gracefully handle db corruption (#26443)	UNREVIEWED			
-1230	bb9b61ef41bee498597cae808acb1729f296a026	2026-04-30	[core] tests/logs - clean up reachability assertions from v1 path, clarify log messages (#25656)	UNREVIEWED			
-1231	c3f051182fdaa121d3ec83f629f81cce522438c7	2026-04-30	[forking 12/n] Design doc for owned objects and how to `keep track` of them on disk (#26356)	UNREVIEWED			
-1232	9def5d5d4f5616e1f4c5f7ca72f1bf9f5b020524	2026-04-30	[move-ir] Mandatory `fun` (#26343)	UNREVIEWED			
-1233	d8bc119cced1315a326291103cfbff2592f9ab62	2026-04-30	[move-decompiler] better pretty print (#26444)	UNREVIEWED			
-1234	b857601eb5b26d0058bfe120d21b915fdcc17f0f	2026-04-30	[move][move-vm] Swap ordering in telemetry reporting for ~3% speedup (#26407)	UNREVIEWED			
-1235	5b9b34d2683df790d2bbfa14df4bb8355b8c4eb0	2026-04-30	graphql: support optional FEATURES build arg in Dockerfile (#26445)	UNREVIEWED			
-1236	9bcbd97b457104120ba7049eabd829a1c62bb597	2026-05-01	[move-decompiler] fix type tag printing (#26446)	UNREVIEWED			
-1237	e5a935797aa0f7fa3948505144a5b25a21084eeb	2026-04-30	[move-ir] Put `mvir` in MVIR (rename `module` to `mvir`) (#26451)	UNREVIEWED			
-1238	fae227652f47da3aabae9e88b60a394a1186b884	2026-04-30	[move][move-compiler] Fix bug #25790 (#26449)	UNREVIEWED			
-1239	bac0f0b0eb3c067ede97ba1d2cdd8b0d5e72ae75	2026-04-30	[move][move-compiler] Fix an issue with the use of subtype in match pattern type inference (#26398)	UNREVIEWED			
-1240	98a09f789436d2effa176eade3965bfdd5f59051	2026-04-30	[move][move-compiler] Fix an issue where we crashed while trying to compile error-containing  matches (#26393)	UNREVIEWED			
-1241	7c05585f5b80d24d749b33dbf8caeec9478adfce	2026-04-30	[graphql-stream] Recover from upstream gRPC gaps via kv-rpc [7/n] (#26414)	UNREVIEWED			
-1242	d5f6665194d7c7dd5e75f83706f21f4a129bd3e0	2026-04-30	Cache signed_effects_digests in memory to avoid disk reads (#26431)	UNREVIEWED			
-1243	9424262e62261e6591fa34982e2f400304126c9c	2026-05-01	[consensus] track block children and per-round info in dag state (#26396)	UNREVIEWED			
-1244	9aa45554d2f302ac0705ed3afb7e12c242253ef4	2026-05-01	[Block Streaming] introduce the BlockSyncService and implement the Observer client and server sync endpoints (#25997)	UNREVIEWED			
-1245	1f38777b438cdfd615ae8af02c379b6f629fedb3	2026-05-01	[Block Streaming] clean up API (#26377)	UNREVIEWED			
-1246	bf0da8ea51c4623157af50802b366d11581cbd33	2026-05-01	Fix native call double-pop in gas meter stack height tracking (#26203)	UNREVIEWED			
-1247	5e5a2e9da2ebd8260f2d02c873bffd7d2aba1826	2026-05-01	[forking 14/n] add checkpoint subscription service (#26402)	UNREVIEWED			
-1248	dd6ec39af0709ad859a70f811e6db84d8edb9600	2026-05-01	[typed-store] Fix safe_range_iter dropping the entry at an inclusive upper bound equal to the encoded max key (#26456)	UNREVIEWED			
-1249	d81e958a21fe8e41b2d4d574821212e38ccc6c09	2026-05-01	allow setting gcs project id on write path too (#26464)	UNREVIEWED			
-1250	2444691e4d0187526c516d625c109ce5d5bb07ad	2026-05-01	[move-ir] Require public on structs/enums (#26462)	UNREVIEWED			
+1201	65e8b2fb13992272c48dc3f843f1915a18d40be4	2026-04-27	[graphql-stream] Add top-level transaction subscription [6/n] (#26202)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1202	9d7a86c64fc2d72b6189975c9c8a8ccaaf563d86	2026-04-27	Update CLAUDE.md linting instructions (#26364)	REVIEWED	EXCLUDE_NON_CODE		开发文档。
+1203	0af885e0773536dff089d8cb7a72c59426df43d6	2026-04-27	[forking 10/n] add forking service grpc for interacting with the network (#26328)	REVIEWED	EXCLUDE_FEATURE		forking 服务。
+1204	6914bde36b712085badddaeae41b22553686ccf6	2026-04-27	Fix coin reservation panic during checkpoint replay (#26337)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation/MVCC 重放依赖 fork 后协议。
+1205	77e3d2db48f2c89f61d403959fc891bd890f0504	2026-04-27	[move] Thread MoveFlavor instance through package pipeline (#26231)	REVIEWED	EXCLUDE_FEATURE		MoveFlavor 管线功能。
+1206	c1d32ae3f1c0c39e18578b984621f51acfa9e60b	2026-04-27	[forking 11/n] add a CLI to start & interact with the forked network (#26336)	REVIEWED	EXCLUDE_FEATURE		forking CLI。
+1207	ac936736896c58d15b4c55ffb6fd99c6f578954e	2026-04-27	Cache permanent errors in CachingCoinReservationResolver (#26387)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation resolver 依赖 fork 后协议。
+1208	019e3501575a46d5d2aaf3618cf444aeca243cfa	2026-04-28	[indexer] add requester-pays functionality for GCS buckets (#26384)	REVIEWED	EXCLUDE_FEATURE		索引器 GCS 功能。
+1209	c37bcc2e87c0e6b91a6d900e133f596c0eaf0dad	2026-04-28	[ci] Run graphql_subscription e2e tests under --features staging (#26395)	REVIEWED	EXCLUDE_NON_CODE		CI 测试配置。
+1210	255e614f4fd3faccb9812b90b29337c15c5e515a	2026-04-28	network: bump anemo version to 487f8bc (#26404)	APPLIED	MERGE	d19591a831424bea820cd58224493d101a013829	仅回移基线 codec 的 Snappy 解压上限；anemo 升级和帧策略不合入。
+1211	5c044a3409a375eb65fdf9e415fdfb74b08c9571	2026-04-28	sync: update shared Docusaurus components (#26390)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1212	ef4b975dfa5390f14dbe16ed54e8502824444297	2026-04-28	docs: remove fastpath comparison (#26406)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1213	f3a0ae7eaf10f9ea1d7bb8a5e1df79676d247b84	2026-04-28	docs: put address balances live and fix gasless transactions (#26361)	REVIEWED	EXCLUDE_NON_CODE		文档及 fork 后功能说明。
+1214	f4e5dd577267624146a57b6916f71bd879479fe4	2026-04-28	Allow for custom replay graphql url (#26405)	REVIEWED	EXCLUDE_FEATURE		replay GraphQL 配置功能。
+1215	a79c31d686d6ddfa821dd71beb5a5a0c32d2a1fc	2026-04-28	rpc-index: track coin and address balances separately (#26403)	REVIEWED	EXCLUDE_FEATURE		RPC 索引 schema 功能演进。
+1216	0fde981ef01da0df4d2bf987ce893250c89305a6	2026-04-28	[consensus] refactor core.rs tests to use CoreTestFixture (#26345)	REVIEWED	EXCLUDE_NON_CODE		测试重构。
+1217	d0b6a5d9663a5e3e4cfe4a04fdc92130f8ed502c	2026-04-28	ci: fetch prebuilt sui binaries from S3 in release.yml on Linux (#26411)	REVIEWED	EXCLUDE_NON_CODE		CI 发布流程。
+1218	8074c8e32e00a2d936d72d85b70e671db9ee001c	2026-04-29	Add send_funds workload to single-node benchmark (#26408)	REVIEWED	EXCLUDE_NON_CODE		benchmark。
+1219	3a4c51d8cc3fe451ec43db4f181435006496f704	2026-04-29	Avoid allocation in bcs-to-hasher patterns using serialize_into (#26415)	REVIEWED	EXCLUDE_FEATURE		性能优化。
+1220	2e0da123b9a8d8f4bdd8088c3f10a1011059b429	2026-04-29	Optimize tracing overhead: global callsite filter, disable span latency layer (#26409)	REVIEWED	EXCLUDE_FEATURE		观测性能策略。
+1221	cf6da6c56ddab018ff6b09f5d5085c92f9ba9c9c	2026-04-29	docs: more misc AF Docs fix (#26418)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1222	a54f12939276348a378c71545fc7858b51d01715	2026-04-29	docker: add sui-node-th image (sui-node with tidehunter feature) (#26423)	REVIEWED	EXCLUDE_FEATURE		镜像功能。
+1223	60f7d45bccca9f93c690aed0afb3f8480efd7d18	2026-04-29	move store into its own top level mod (#26427)	REVIEWED	EXCLUDE_FEATURE		模块重构。
+1224	e141911f148ce423c85566553e6ffc0ca88a173c	2026-04-29	Report zip_debug_eq caller as system_invariant_violations label (#26428)	REVIEWED	EXCLUDE_NON_CRITICAL		诊断标签改进。
+1225	855347fa2ff804ae000f8675f122ff60acb38941	2026-04-29	Include root package type origins in on-chain move summary (#26391)	REVIEWED	EXCLUDE_FEATURE		链上 Move 摘要扩展。
+1226	16a65941aff64d718bba09c58fd21288c7238134	2026-04-29	Optimize within_alive_epoch: replace NotifyOnce with CancellationToken (#26430)	REVIEWED	EXCLUDE_FEATURE		生命周期实现优化。
+1227	d5364733440fc66fee02ccfb1ee7b6e4b61bb1b0	2026-04-29	sui-node-th: bundle sui-th, sui-tool-th, stress-th into the same image (#26435)	REVIEWED	EXCLUDE_FEATURE		镜像功能。
+1228	2d611abbac5e0814651f94b1b0b9a06b13dcc04d	2026-04-30	[move] change print for vector in decompiler (#26432)	REVIEWED	EXCLUDE_NON_CRITICAL		反编译显示。
+1229	1eac2cc8ba01455b900de7fa45fca06bca37cadb	2026-04-30	rpc-index: gracefully handle db corruption (#26443)	APPLIED	MERGE	db3ae21d1c8d6489d860358e6dfbd969b9ce9870	记录损坏数据并终止 merge，避免索引进程 panic。
+1230	bb9b61ef41bee498597cae808acb1729f296a026	2026-04-30	[core] tests/logs - clean up reachability assertions from v1 path, clarify log messages (#25656)	REVIEWED	EXCLUDE_NON_CODE		测试与日志。
+1231	c3f051182fdaa121d3ec83f629f81cce522438c7	2026-04-30	[forking 12/n] Design doc for owned objects and how to `keep track` of them on disk (#26356)	REVIEWED	EXCLUDE_FEATURE		forking 设计文档。
+1232	9def5d5d4f5616e1f4c5f7ca72f1bf9f5b020524	2026-04-30	[move-ir] Mandatory `fun` (#26343)	REVIEWED	EXCLUDE_FEATURE		Move IR 语法变更。
+1233	d8bc119cced1315a326291103cfbff2592f9ab62	2026-04-30	[move-decompiler] better pretty print (#26444)	REVIEWED	EXCLUDE_NON_CRITICAL		反编译显示。
+1234	b857601eb5b26d0058bfe120d21b915fdcc17f0f	2026-04-30	[move][move-vm] Swap ordering in telemetry reporting for ~3% speedup (#26407)	REVIEWED	EXCLUDE_FEATURE		性能优化。
+1235	5b9b34d2683df790d2bbfa14df4bb8355b8c4eb0	2026-04-30	graphql: support optional FEATURES build arg in Dockerfile (#26445)	REVIEWED	EXCLUDE_FEATURE		构建功能。
+1236	9bcbd97b457104120ba7049eabd829a1c62bb597	2026-05-01	[move-decompiler] fix type tag printing (#26446)	REVIEWED	EXCLUDE_NON_CRITICAL		反编译显示缺陷，非关键运行时路径。
+1237	e5a935797aa0f7fa3948505144a5b25a21084eeb	2026-04-30	[move-ir] Put `mvir` in MVIR (rename `module` to `mvir`) (#26451)	REVIEWED	EXCLUDE_FEATURE		Move IR 语法变更。
+1238	fae227652f47da3aabae9e88b60a394a1186b884	2026-04-30	[move][move-compiler] Fix bug #25790 (#26449)	APPLIED	MERGE	c10d089f915d8f8d69970befb29536d74beac02b	修复 guard wildcard arm 的绑定处理。
+1239	bac0f0b0eb3c067ede97ba1d2cdd8b0d5e72ae75	2026-04-30	[move][move-compiler] Fix an issue with the use of subtype in match pattern type inference (#26398)	APPLIED	MERGE	c10d089f915d8f8d69970befb29536d74beac02b	避免错误模式向 or-pattern 分支泄漏类型替换。
+1240	98a09f789436d2effa176eade3965bfdd5f59051	2026-04-30	[move][move-compiler] Fix an issue where we crashed while trying to compile error-containing  matches (#26393)	APPLIED	MERGE	c10d089f915d8f8d69970befb29536d74beac02b	错误 match 类型不再触发编译器 ICE/panic。
+1241	7c05585f5b80d24d749b33dbf8caeec9478adfce	2026-04-30	[graphql-stream] Recover from upstream gRPC gaps via kv-rpc [7/n] (#26414)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1242	d5f6665194d7c7dd5e75f83706f21f4a129bd3e0	2026-04-30	Cache signed_effects_digests in memory to avoid disk reads (#26431)	REVIEWED	EXCLUDE_FEATURE		缓存性能优化。
+1243	9424262e62261e6591fa34982e2f400304126c9c	2026-05-01	[consensus] track block children and per-round info in dag state (#26396)	REVIEWED	EXCLUDE_FEATURE		DAG state 功能。
+1244	9aa45554d2f302ac0705ed3afb7e12c242253ef4	2026-05-01	[Block Streaming] introduce the BlockSyncService and implement the Observer client and server sync endpoints (#25997)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 功能。
+1245	1f38777b438cdfd615ae8af02c379b6f629fedb3	2026-05-01	[Block Streaming] clean up API (#26377)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 功能。
+1246	bf0da8ea51c4623157af50802b366d11581cbd33	2026-05-01	Fix native call double-pop in gas meter stack height tracking (#26203)	REVIEWED	EXCLUDE_POST_FORK		依赖上游新增 gas model 12 与 protocol v123。
+1247	5e5a2e9da2ebd8260f2d02c873bffd7d2aba1826	2026-05-01	[forking 14/n] add checkpoint subscription service (#26402)	REVIEWED	EXCLUDE_FEATURE		forking 服务。
+1248	dd6ec39af0709ad859a70f811e6db84d8edb9600	2026-05-01	[typed-store] Fix safe_range_iter dropping the entry at an inclusive upper bound equal to the encoded max key (#26456)	APPLIED	MERGE	d73a8516919872ad0fc9f3c23162a1c193d5c776	保留 inclusive 最大编码键的迭代项。
+1249	d81e958a21fe8e41b2d4d574821212e38ccc6c09	2026-05-01	allow setting gcs project id on write path too (#26464)	REVIEWED	EXCLUDE_FEATURE		GCS 写路径配置。
+1250	2444691e4d0187526c516d625c109ce5d5bb07ad	2026-05-01	[move-ir] Require public on structs/enums (#26462)	REVIEWED	EXCLUDE_FEATURE		Move IR 语法变更。
 1251	2626e94f4c30a642ee4cc2f5204b5b3c2317eb7f	2026-05-01	[chore] Update tidehunter to 06520e9 (#26450)	UNREVIEWED			
 1252	c655581b79ba70d3398428330b573927b1e55568	2026-05-01	[graphql-stream] Add top-level events subscription [8/n] (#26453)	UNREVIEWED			
 1253	7fbdf456757093d211e4b0463cc9bfb38335c3b3	2026-05-02	[Graphql-alt] Graphql client sdk metric (#26437)	UNREVIEWED			
