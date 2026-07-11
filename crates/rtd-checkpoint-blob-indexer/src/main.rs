@@ -4,8 +4,12 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use object_store::{
-    ClientOptions, aws::AmazonS3Builder, azure::MicrosoftAzureBuilder,
-    gcp::GoogleCloudStorageBuilder, http::HttpBuilder, local::LocalFileSystem,
+    ClientOptions,
+    aws::{AmazonS3Builder, S3ConditionalPut},
+    azure::MicrosoftAzureBuilder,
+    gcp::GoogleCloudStorageBuilder,
+    http::HttpBuilder,
+    local::LocalFileSystem,
 };
 use rtd_checkpoint_blob_indexer::{CheckpointBlobPipeline, EpochsPipeline};
 use rtd_indexer_alt_framework::service::Error;
@@ -93,6 +97,7 @@ async fn main() -> anyhow::Result<()> {
             .with_client_options(client_options)
             .with_imdsv1_fallback()
             .with_bucket_name(bucket)
+            .with_conditional_put(S3ConditionalPut::ETagMatch)
             .build()
             .map(Arc::new)?
     } else if let Some(bucket) = args.gcs {
