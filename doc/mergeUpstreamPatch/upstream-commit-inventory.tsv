@@ -1549,56 +1549,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1548	d0a491bc3442c699da6861e9355d1190b34bdd78	2026-06-08	fix(ci): trigger-builds cache_family falls back to main when branch not cut (#26917)	REVIEWED	EXCLUDE_NON_CODE		CI。
 1549	a0710529342506d9846ad0da8d2ef2c058f9cc0c	2026-06-08	Enforce soft bundle gas price equality (#26882)	APPLIED	MERGE	500cdd811f360045fe5b8fb8e250f4b80f169245	拒绝不同燃料价格的软交易包，保证排序假设。
 1550	b3e08910af03c511f45974f730bedda2b488087b	2026-06-08	ci(setup-sccache): backward-compatible AWS OIDC support + role specs (#26922)	REVIEWED	EXCLUDE_NON_CODE		CI。
-1551	686a33f94189ad72205f4c8276a1ea44ed8e7360	2026-06-08	[decompiler] Extract local-name analysis into refinement::liveness module	UNREVIEWED			
-1552	6d43b521fa11a7c10d4463cd7a8bf1c5ab61bb93	2026-06-08	[decompiler] Inline let-bindings whose RHS is a single-use variable	UNREVIEWED			
-1553	dc291ebd175f7819ba4ffc8de52065e7efe089a9	2026-06-08	[decompiler] Collapse `*(&e)` to `e` in `simplify_borrow_deref`	UNREVIEWED			
-1554	5537e65be17036512142ab5196042346cfb5e821	2026-06-08	[decompiler] Add refinements/simplify_borrow_deref Move test	UNREVIEWED			
-1555	4a4b6d6728c6778c9c3fff0a1ae4c6cf289c63e0	2026-06-08	[decompiler] Refinements test: switch deref_in_guard to deref_in_arith	UNREVIEWED			
-1556	a5a48b9c524abd94928fd17529bc4437b51ffc4f	2026-06-08	[decompiler] Tighten `simplify_borrow_deref` shape check	UNREVIEWED			
-1557	82a6a2f9a455a40581a978bf1b1659802e264993	2026-06-08	ci(sccache): warm-cache via GitHub OIDC instead of static AWS keys (#26923)	UNREVIEWED			
-1558	0a78b083e43acfa84d4ff73cb750491cd5a8c4d0	2026-06-08	[decompiler] Generalize inline-let to immutable RHS in `inline_immutable_alias`	UNREVIEWED			
-1559	b777943881e04d24160fe4a05e81f09141fc8931	2026-06-08	[decompiler] Add refinements/inline_immutable_alias Move test	UNREVIEWED			
-1560	afbb508432f0371c58fac659bc2463cdac039baa	2026-06-08	[decompiler] Guard `inline_immutable_alias` against mut-borrowed slots	UNREVIEWED			
-1561	2d88b53369d25d06da23fde28daad3fe8d179da6	2026-06-08	simtest: add DKG failure regression to reconfig_with_crashes_and_delays (#26892)	UNREVIEWED			
-1562	c2a157a3778c2fc136be55dce32b26791fa63ba9	2026-06-08	docs(oidc): record provisioned release-s3 role; mark kms role blocked (#26924)	UNREVIEWED			
-1563	4d038786228ec8188d103f25ca9875eec6cee90f	2026-06-08	ci(sccache): nightly build via GitHub OIDC instead of static AWS keys (#26925)	UNREVIEWED			
-1564	fdb818008aa9c0a024d1d90f7d4052b8cd4631b9	2026-06-08	[decompiler] Fold boolean-literal if-arms in `bool_if_simplify`	UNREVIEWED			
-1565	411c90c07cb9f492b67e2f787f3916c596968366	2026-06-08	[decompiler] Add refinements/bool_if_simplify Move test	UNREVIEWED			
-1566	cf48a2997547b1e365e8bbe35a20dee64ff89a8f	2026-06-08	[decompiler] Push `!` through comparison ops in `negate_comparison`	UNREVIEWED			
-1567	866ab1fa852899aa36035db401f1783ee587ecc7	2026-06-08	[decompiler] Add refinements/negate_comparison Move test	UNREVIEWED			
-1568	8398bee9ac1bddc10c97231060d15b6761f8a902	2026-06-08	[decompiler] Tighten `negate_comparison` destructure	UNREVIEWED			
-1569	2bfbfb8fec226f1238d4c1068290347ec8519249	2026-06-08	[decompiler] Inline single-use let into its head-position consumer in `collapse_let_usage`	UNREVIEWED			
-1570	0f93ce6aa0218a2c61cb67aea6b75595ff59fc40	2026-06-08	[decompiler] Add refinements/collapse_let_usage Move test	UNREVIEWED			
-1571	b20465c0e023e374c0145b42a0ca8b98bc8ad015	2026-06-08	[decompiler] `collapse_let_usage`: use `Refine` trait walker	UNREVIEWED			
-1572	dd1641fa160f9ce0391f16faaf33d73120c01646	2026-06-08	feat(seed-search): add --error-regex flag for targeted seed discovery (#26920)	UNREVIEWED			
-1573	367c07d4409e582c2b225355ec2865b0c863a782	2026-06-08	[decompiler] Hoist a terminating arm out of `let X = if (...)` in `lift_terminating_arm`	UNREVIEWED			
-1574	9a5d4e8ba1cfa8612156d140b02064da016df0f0	2026-06-08	[decompiler] Add refinements/lift_terminating_arm Move test	UNREVIEWED			
-1575	12aa8956306b26eddd35797f29f7b750ee6e13e5	2026-06-08	[decompiler] Share `always_terminates` between `simplify_if` and `lift_terminating_arm`	UNREVIEWED			
-1576	c6535b5556631c73409c2d4f93d1fb344b59c230	2026-06-08	[decompiler] `lift_terminating_arm`: fold analyze+take into one fn	UNREVIEWED			
-1577	940491055557269c75bb473dd03783f2f1398de3	2026-06-08	composite workload: regression test for IFFW gas-smashing underflow (#26865)	UNREVIEWED			
-1578	7c0c78591d2b6aaa1f1d7be3ad5e1fffa06b66ca	2026-06-08	[decompiler] Canonicalize `literal op X` to `X op' literal` in `simplify_zero_compare`	UNREVIEWED			
-1579	8d3507cbb9fffb0b6cf5e6b1bfb13dbb79849dc2	2026-06-08	[decompiler] Add refinements/simplify_zero_compare Move test	UNREVIEWED			
-1580	097107e4c854692eb95268a408d455c28c310f2b	2026-06-08	[decompiler] Tighten `simplify_zero_compare` arity check	UNREVIEWED			
-1581	30a288737cf2fb505c154d92a52d8426d01e9e49	2026-06-08	[decompiler] `simplify_zero_compare`: comment literal check, defer op lookup	UNREVIEWED			
-1582	06ff93b5a1acbf7690e31e35a39afed48b44bb3a	2026-06-08	[decompiler] Strip redundant `freeze` wrappers in `dedupe_freeze`	UNREVIEWED			
-1583	26b87f9cfefdb5a8ca8ce45a5cdd2712e883391b	2026-06-08	[decompiler] Tighten `dedupe_freeze` shape check	UNREVIEWED			
-1584	cb75ea9d8668f438afd298a78de8a1ada5e4c005	2026-06-08	[decompiler] `dedupe_freeze`: per-arm rewrite, drop bool relay	UNREVIEWED			
-1585	ee66e49c2a6ff5c977557f6e2e29d6771236138d	2026-06-08	[decompiler] Add dedupe_freeze unit tests	UNREVIEWED			
-1586	7f2e4ba70b46383930d21c1ba6cdb698624cec46	2026-06-09	fix(sui-core): allow epoch to advance by >1 in submit_tx ValidatorHaltedAtEpochEnd retry (#26921)	UNREVIEWED			
-1587	44cbd478cffe1a939915add02e8d1fbfa1c3f6a5	2026-06-09	Unify validity_check and validity_check_no_gas_check for dry_run (#26794)	UNREVIEWED			
-1588	3104a6b5553107ff8f75ad582b03d383fcb31ae2	2026-06-09	add sui-tool db-shell: interactive shell for validator databases (#26854)	UNREVIEWED			
-1589	0697f92b1258ee1f910f2a96ca093061e7b624cd	2026-06-09	Adding dummy byte to ExtantEvent dimension (#26906)	UNREVIEWED			
-1590	e4f650c14f8e903f01447b8bb1ea33691b7ffed6	2026-06-10	Unanchored Negation (#26932)	UNREVIEWED			
-1591	a403e3c01d403381894fcc04cedc6ff3c9080aad	2026-06-10	ci(sccache): bridge.yml dual-pass OIDC (Phase 3 pilot) (#26927)	UNREVIEWED			
-1592	b7851baddb78f79e73eafc1a183a10b90f317d9e	2026-06-10	Harden private release download scripts (#26945)	UNREVIEWED			
-1593	004a12a0fe4808e2c640c98230769a76ad67215c	2026-06-11	Use serde_with::Bytes in Signature::Deserialize (#26753)	UNREVIEWED			
-1594	8bb44c781582c6be5a1a677de6f11312be2420cf	2026-06-11	docs(oidc): per-call-site setup-sccache caller inventory + classification (#26926)	UNREVIEWED			
-1595	bc467651ba191ae99e74522b7be4f51869b6b002	2026-06-11	Fall back to newest public version in protocol compatibility check (#26947)	UNREVIEWED			
-1596	c8f4a24ceeba07f517fc50cf65db9a2437d2506e	2026-06-11	Fix cargo-deny advisory failures (RUSTSEC-2026-0172/0173/0174) (#26948)	UNREVIEWED			
-1597	ceae355bd35ab83229b5dad21be57869750936f1	2026-06-11	ci(sccache): dual-pass OIDC for rust.yml and external.yml (Phase 3) (#26946)	UNREVIEWED			
-1598	719ac32d413bde983502e8ae3e5b36ff6aaa0989	2026-06-11	ci(release): split sui-releases S3 ops into an OIDC environment job (Phase 5) (#26951)	UNREVIEWED			
-1599	78c52318271bc4493c61e59a3bba28556b9768f6	2026-06-12	Fix accumulator and gasless metrics (#26949)	UNREVIEWED			
-1600	8c1a5dbc40b12b91e5ce79f8f0e259c69f63269c	2026-06-13	Split latest account amount reads (#26908)	UNREVIEWED			
+1551	686a33f94189ad72205f4c8276a1ea44ed8e7360	2026-06-08	[decompiler] Extract local-name analysis into refinement::liveness module	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1552	6d43b521fa11a7c10d4463cd7a8bf1c5ab61bb93	2026-06-08	[decompiler] Inline let-bindings whose RHS is a single-use variable	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1553	dc291ebd175f7819ba4ffc8de52065e7efe089a9	2026-06-08	[decompiler] Collapse `*(&e)` to `e` in `simplify_borrow_deref`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1554	5537e65be17036512142ab5196042346cfb5e821	2026-06-08	[decompiler] Add refinements/simplify_borrow_deref Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1555	4a4b6d6728c6778c9c3fff0a1ae4c6cf289c63e0	2026-06-08	[decompiler] Refinements test: switch deref_in_guard to deref_in_arith	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1556	a5a48b9c524abd94928fd17529bc4437b51ffc4f	2026-06-08	[decompiler] Tighten `simplify_borrow_deref` shape check	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1557	82a6a2f9a455a40581a978bf1b1659802e264993	2026-06-08	ci(sccache): warm-cache via GitHub OIDC instead of static AWS keys (#26923)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1558	0a78b083e43acfa84d4ff73cb750491cd5a8c4d0	2026-06-08	[decompiler] Generalize inline-let to immutable RHS in `inline_immutable_alias`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1559	b777943881e04d24160fe4a05e81f09141fc8931	2026-06-08	[decompiler] Add refinements/inline_immutable_alias Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1560	afbb508432f0371c58fac659bc2463cdac039baa	2026-06-08	[decompiler] Guard `inline_immutable_alias` against mut-borrowed slots	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1561	2d88b53369d25d06da23fde28daad3fe8d179da6	2026-06-08	simtest: add DKG failure regression to reconfig_with_crashes_and_delays (#26892)	REVIEWED	EXCLUDE_POST_FORK		DKG 后置路径测试。
+1562	c2a157a3778c2fc136be55dce32b26791fa63ba9	2026-06-08	docs(oidc): record provisioned release-s3 role; mark kms role blocked (#26924)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1563	4d038786228ec8188d103f25ca9875eec6cee90f	2026-06-08	ci(sccache): nightly build via GitHub OIDC instead of static AWS keys (#26925)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1564	fdb818008aa9c0a024d1d90f7d4052b8cd4631b9	2026-06-08	[decompiler] Fold boolean-literal if-arms in `bool_if_simplify`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1565	411c90c07cb9f492b67e2f787f3916c596968366	2026-06-08	[decompiler] Add refinements/bool_if_simplify Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1566	cf48a2997547b1e365e8bbe35a20dee64ff89a8f	2026-06-08	[decompiler] Push `!` through comparison ops in `negate_comparison`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1567	866ab1fa852899aa36035db401f1783ee587ecc7	2026-06-08	[decompiler] Add refinements/negate_comparison Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1568	8398bee9ac1bddc10c97231060d15b6761f8a902	2026-06-08	[decompiler] Tighten `negate_comparison` destructure	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1569	2bfbfb8fec226f1238d4c1068290347ec8519249	2026-06-08	[decompiler] Inline single-use let into its head-position consumer in `collapse_let_usage`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1570	0f93ce6aa0218a2c61cb67aea6b75595ff59fc40	2026-06-08	[decompiler] Add refinements/collapse_let_usage Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1571	b20465c0e023e374c0145b42a0ca8b98bc8ad015	2026-06-08	[decompiler] `collapse_let_usage`: use `Refine` trait walker	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1572	dd1641fa160f9ce0391f16faaf33d73120c01646	2026-06-08	feat(seed-search): add --error-regex flag for targeted seed discovery (#26920)	REVIEWED	EXCLUDE_FEATURE		测试工具功能。
+1573	367c07d4409e582c2b225355ec2865b0c863a782	2026-06-08	[decompiler] Hoist a terminating arm out of `let X = if (...)` in `lift_terminating_arm`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1574	9a5d4e8ba1cfa8612156d140b02064da016df0f0	2026-06-08	[decompiler] Add refinements/lift_terminating_arm Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1575	12aa8956306b26eddd35797f29f7b750ee6e13e5	2026-06-08	[decompiler] Share `always_terminates` between `simplify_if` and `lift_terminating_arm`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1576	c6535b5556631c73409c2d4f93d1fb344b59c230	2026-06-08	[decompiler] `lift_terminating_arm`: fold analyze+take into one fn	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1577	940491055557269c75bb473dd03783f2f1398de3	2026-06-08	composite workload: regression test for IFFW gas-smashing underflow (#26865)	REVIEWED	EXCLUDE_NON_CODE		已回移下溢修复的上游基准测试。
+1578	7c0c78591d2b6aaa1f1d7be3ad5e1fffa06b66ca	2026-06-08	[decompiler] Canonicalize `literal op X` to `X op' literal` in `simplify_zero_compare`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1579	8d3507cbb9fffb0b6cf5e6b1bfb13dbb79849dc2	2026-06-08	[decompiler] Add refinements/simplify_zero_compare Move test	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1580	097107e4c854692eb95268a408d455c28c310f2b	2026-06-08	[decompiler] Tighten `simplify_zero_compare` arity check	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1581	30a288737cf2fb505c154d92a52d8426d01e9e49	2026-06-08	[decompiler] `simplify_zero_compare`: comment literal check, defer op lookup	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1582	06ff93b5a1acbf7690e31e35a39afed48b44bb3a	2026-06-08	[decompiler] Strip redundant `freeze` wrappers in `dedupe_freeze`	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1583	26b87f9cfefdb5a8ca8ce45a5cdd2712e883391b	2026-06-08	[decompiler] Tighten `dedupe_freeze` shape check	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1584	cb75ea9d8668f438afd298a78de8a1ada5e4c005	2026-06-08	[decompiler] `dedupe_freeze`: per-arm rewrite, drop bool relay	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1585	ee66e49c2a6ff5c977557f6e2e29d6771236138d	2026-06-08	[decompiler] Add dedupe_freeze unit tests	REVIEWED	EXCLUDE_NON_CODE		反编译器测试。
+1586	7f2e4ba70b46383930d21c1ba6cdb698624cec46	2026-06-09	fix(sui-core): allow epoch to advance by >1 in submit_tx ValidatorHaltedAtEpochEnd retry (#26921)	APPLIED	MERGE	3082bd181e8fe5cc787ed8bd5bb6a527b1e6b684	多 epoch 重配后允许交易重试。
+1587	44cbd478cffe1a939915add02e8d1fbfa1c3f6a5	2026-06-09	Unify validity_check and validity_check_no_gas_check for dry_run (#26794)	REVIEWED	EXCLUDE_NON_CRITICAL		模拟执行 API 行为调整。
+1588	3104a6b5553107ff8f75ad582b03d383fcb31ae2	2026-06-09	add sui-tool db-shell: interactive shell for validator databases (#26854)	REVIEWED	EXCLUDE_FEATURE		运维 CLI 功能。
+1589	0697f92b1258ee1f910f2a96ca093061e7b624cd	2026-06-09	Adding dummy byte to ExtantEvent dimension (#26906)	REVIEWED	EXCLUDE_FEATURE		KV 索引维度功能。
+1590	e4f650c14f8e903f01447b8bb1ea33691b7ffed6	2026-06-10	Unanchored Negation (#26932)	REVIEWED	EXCLUDE_FEATURE		KV 查询功能。
+1591	a403e3c01d403381894fcc04cedc6ff3c9080aad	2026-06-10	ci(sccache): bridge.yml dual-pass OIDC (Phase 3 pilot) (#26927)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1592	b7851baddb78f79e73eafc1a183a10b90f317d9e	2026-06-10	Harden private release download scripts (#26945)	REVIEWED	EXCLUDE_NON_CODE		发布脚本。
+1593	004a12a0fe4808e2c640c98230769a76ad67215c	2026-06-11	Use serde_with::Bytes in Signature::Deserialize (#26753)	APPLIED	MERGE	c8bc33e861471c7e004505a62e71a2f9fba108ce	二进制签名序列化与反序列化字节路径一致。
+1594	8bb44c781582c6be5a1a677de6f11312be2420cf	2026-06-11	docs(oidc): per-call-site setup-sccache caller inventory + classification (#26926)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1595	bc467651ba191ae99e74522b7be4f51869b6b002	2026-06-11	Fall back to newest public version in protocol compatibility check (#26947)	REVIEWED	EXCLUDE_NON_CRITICAL		发布兼容性脚本。
+1596	c8f4a24ceeba07f517fc50cf65db9a2437d2506e	2026-06-11	Fix cargo-deny advisory failures (RUSTSEC-2026-0172/0173/0174) (#26948)	REVIEWED	EXCLUDE_POST_FORK		上游 diesel 2.3.9 升级路径不适用于现有 2.2.3 依赖。
+1597	ceae355bd35ab83229b5dad21be57869750936f1	2026-06-11	ci(sccache): dual-pass OIDC for rust.yml and external.yml (Phase 3)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1598	719ac32d413bde983502e8ae3e5b36ff6aaa0989	2026-06-11	ci(release): split sui-releases S3 ops into an OIDC environment job (Phase 5) (#26951)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1599	78c52318271bc4493c61e59a3bba28556b9768f6	2026-06-12	Fix accumulator and gasless metrics (#26949)	REVIEWED	EXCLUDE_NON_CRITICAL		监控指标。
+1600	8c1a5dbc40b12b91e5ce79f8f0e259c69f63269c	2026-06-13	Split latest account amount reads (#26908)	APPLIED	MERGE	b3a5c9314990c7fa55f49425a6672d60036e164b	结算中间态读取与根版本一致，避免错误余额。
 1601	911b66673ed2acf7358bbe4e1b87456ad200e9c5	2026-06-15	fix(graphql): unexpected unicode in SuiAddress (#26958)	UNREVIEWED			
 1602	ad6b04a4f2be1e9da9f5254134270471ddc4930b	2026-06-15	ci(release): pin checkout to the tag namespace and validate the tag prefix (#26953)	UNREVIEWED			
 1603	75a1e7923ae3cc3ef787c8fd8c6ade112aa6d995	2026-06-15	docs(oidc): correct Phase-4 fork-exclusion framing + release dispatch hazard (#26952)	UNREVIEWED			
