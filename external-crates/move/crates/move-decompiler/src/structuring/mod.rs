@@ -28,6 +28,11 @@ pub(crate) fn structure(
     mut input: BTreeMap<D::Label, D::Input>,
     entry_node: D::Label,
 ) -> D::Structured {
+    // Native functions have no basic blocks, so they have no control-flow graph to structure.
+    if input.is_empty() {
+        return D::Structured::Seq(vec![]);
+    }
+
     let mut graph = Graph::new(config, &input, entry_node);
 
     let mut structured_blocks: BTreeMap<D::Label, D::Structured> = BTreeMap::new();
@@ -523,5 +528,16 @@ mod tests {
         );
 
         assert!(matches!(output, D::Structured::Loop(_)));
+    }
+
+    #[test]
+    fn empty_input_returns_an_empty_sequence() {
+        let structured = structure(
+            &config::Config::default(),
+            BTreeMap::new(),
+            NodeIndex::new(0),
+        );
+
+        assert!(matches!(structured, D::Structured::Seq(ref nodes) if nodes.is_empty()));
     }
 }
