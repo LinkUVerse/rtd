@@ -799,56 +799,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 798	71167747ffaa6a3ab68938d8f357a5755f231259	2026-03-11	Normalize formula to be a more consistent shape and match the new VM  (#25798)	REVIEWED	EXCLUDE_FEATURE		新 VM formula 归一化。
 799	fc75182812cc6b0dab0ce0cd67820d6bed66200d	2026-03-11	Release kvstore image to dockerhub (#25797)	REVIEWED	EXCLUDE_NON_CODE		仅 Docker 发布。
 800	7f9b58a19efc7bc652c21415ad5912311a1dfc58	2026-03-12	[tidehunter] safe_drop_db: await LOCK file (#25794)	REVIEWED	EXCLUDE_POST_FORK		依赖上游新 Tidehunter LOCK 文件协议；RTD 当前依赖未提供该语义。
-801	39751ed24f825eede5a8f12d6ea1f92caf1d0337	2026-03-12	Update ingest-concurrency docs (#25803)	UNREVIEWED			
-802	401ad00eed8878383f64d2f9d7d6669f903cce9c	2026-03-12	docs: Enable Kapa MCP server (#25804)	UNREVIEWED			
-803	9eba66a3375e853a21561f70493e427519f6659e	2026-03-12	sui-analytics-indexer: rename ComitterWatermark to CommitterWatermark (#25802)	UNREVIEWED			
-804	6a4d8a97e745a41785adf6c433dd628822a2fd70	2026-03-12	docs: Display V2 (#25753)	UNREVIEWED			
-805	5cd8aaffe80ab847b2dea48cda8332029cb1767e	2026-03-12	[tidehunter] sui tool support (#25661)	UNREVIEWED			
-806	a9ffe23fae7097d1641644c1b59b2e2308320410	2026-03-12	ci: use app token for git push in branch cut script to trigger CI (#25813)	UNREVIEWED			
-807	a968cff1704429517f80f3b9195bd801ffeb2945	2026-03-12	Clean up /tmp between simtest phases to reduce disk usage (#25806)	UNREVIEWED			
-808	4754e3ca255ed00517ec3ba504087fadb1438a36	2026-03-12	sui-indexer-alt: init pipelines to checkpoint_hi_inclusive = reader_lo - 1 (#25774)	UNREVIEWED			
-809	f5452ecf5c8d5b2761d8b7f62e817c15615f0c3a	2026-03-12	[move][move-compiler] Remove IR prover ops (#25817)	UNREVIEWED			
-810	999bd3b8fa80a6ad5145f27fccc45db0516db739	2026-03-13	Refactor gRPC metrics path handling (#25788)	UNREVIEWED			
-811	3551a83b24e22d585737f6d8df62f80ef922cb33	2026-03-13	Sui v1.68.0 Framework Bytecode snapshot (#25820)	UNREVIEWED			
-812	c2c850c1abf3cf17c0ec7906f9cf933eb20fb034	2026-03-12	Sui v1.69.0 Version Bump (#25821)	UNREVIEWED			
-813	ec68d78170218545de19ee8a6785fcb8cff0e4a2	2026-03-13	Adds protocol configuration check sample code to the address balance migration guide (#25823)	UNREVIEWED			
-814	83a312cfae2d0b266606e416f6377790e65e65d6	2026-03-13	[sui system] stricter metadata validation, cleanup (#25792)	UNREVIEWED			
-815	9677f335ed5da52264355c61d750f0b75fe160f5	2026-03-13	Early exit for transactions that never entered execution (#25808)	UNREVIEWED			
-816	7366cd84154bde55eec30db918514c013d5a12f2	2026-03-13	Cut execution v3 (#25830)	UNREVIEWED			
-817	99aea43a51aae3053af33b7d382ae72150aede23	2026-03-13	Store trusted peer addresses received via discovery (#25765)	UNREVIEWED			
-818	243adfe8f233f405e74755960d336fcc9b8a78af	2026-03-13	docs: skill file for Sui Style Guide (#25833)	UNREVIEWED			
-819	5995b46b9222947458ccf1c2ea53fd9c5292613e	2026-03-13	sui-indexer-alt-framework: remove out of date comments (#25829)	UNREVIEWED			
-820	a015ded73f0e727a99766a1481512fac6f2fc416	2026-03-13	docs: initial batch of diagram standardization (#25835)	UNREVIEWED			
-821	a553aea7e45ced7e33b6cbcd13ac59fb826ae399	2026-03-13	docs: fix docs-cli-help.yml (#25836)	UNREVIEWED			
-822	95d4d09cc82987eedb5c6f4c5beb37628fd63c73	2026-03-13	docs: fix ci job (#25839)	UNREVIEWED			
-823	3ddee599a338ce50813605d9aeabbd88c18412d2	2026-03-13	docs: Replace CLI output with node script (#25840)	UNREVIEWED			
-824	e26398c83b1c2fe713c63faa918fcaa2e8abd340	2026-03-14	[state-sync] Disconnect continuously failing peers (#25357)	UNREVIEWED			
-825	2e6af369702eae6cdda606e9cb5af0ef03e1a260	2026-03-14	refactor(indexer-alt): use query! macro in prune handlers (#25824)	UNREVIEWED			
-826	7b09a5a9da45660b529d6bede8e8977490767e2a	2026-03-16	[move] Add and enable the new VM (#25838)	UNREVIEWED			
-827	9f57d2585cdc91b842dcf0d387aa38953b459d8e	2026-03-16	consistency: remove legacy `x-sui-checkpoint` header (#25847)	UNREVIEWED			
-828	70c1708d23e0248e9b78383bbdd8cc851f50ad50	2026-03-16	[graphql-alt] transaction contents return balance changes for kv readers too (#25411)	UNREVIEWED			
-829	71bc8caa45e3f0366e6b21b2599813379293f1d7	2026-03-16	[move-unit-test] Update default gas used for sui-move unit tests (#25853)	UNREVIEWED			
-830	d52225f7ce11f9534b39e9550c2503fb7d1facb9	2026-03-17	[Block Streaming] introduce the Observer service and the client (#25527)	UNREVIEWED			
-831	d38fa41e9b082bfe2b044ce37ec850650b84e859	2026-03-17	sdk: bump sui-rust-sdk crates to e5c53de (#25852)	UNREVIEWED			
-832	9b3ab24da1a5a2950c928d97949e1a8b3e41073b	2026-03-17	docs: Stage IA for new Coins/Tokens/Nft section (#25851)	UNREVIEWED			
-833	1a41c59c453162e3886e6b3f31de077e0d6039d5	2026-03-17	docs: Batch update March 16 (#25856)	UNREVIEWED			
-834	f9e37f5f2d3a69b7db87ae9c7da99f92c7d0c8de	2026-03-17	docs: fix grpc render (#25855)	UNREVIEWED			
-835	8a748ca4dfc1354bdd71695aa232fdda3b1087a1	2026-03-17	docs: Update DeepBook docs to match latest SDK and indexer APIs (#25864)	UNREVIEWED			
-836	67116b973a27681a51282d05774888d27e9127f9	2026-03-17	sui-indexer-alt-framework: rename fetch to checkpoint (#25834)	UNREVIEWED			
-837	8583c8a83f28ffbc2b73105c75bb99847880acf3	2026-03-17	Add ConsolidateAllStakedSuiToFungible construction operation (#25849)	UNREVIEWED			
-838	4dab2807aa5bcc8880a0d4a95cc208b1fc34d83a	2026-03-17	[sui-execution][chore] Simplify after execution cut (#25868)	UNREVIEWED			
-839	7c3ac9a118f75c6ef36b09e89320de8f48e6c2fb	2026-03-17	Add FungibleStakedSuiValue sub-account, epoch timing, and activation epoch (#25848)	UNREVIEWED			
-840	bdc7c6a97a204f4d7c6a2d8b27978c5b9e87c766	2026-03-17	docs: afdocs compliance (#25869)	UNREVIEWED			
-841	43cd04db4445e72faf3af65b7a1d325f105aba37	2026-03-18	Do not emit invariant violation when randomness update execution lags (#25872)	UNREVIEWED			
-842	8b519b9f1c42f2ae0a8b0b177d53612a620a26d6	2026-03-18	sui-indexer-alt-framework: add init_with_committer_watermark util function (#25814)	UNREVIEWED			
-843	999705a45034932bd887cbf50ab11e1412d4d2df	2026-03-18	Add MergeAndRedeemFungibleStakedSui construction operation (#25850)	UNREVIEWED			
-844	11d91935d43ae431d84ec750d7389fcfba59e275	2026-03-18	docs: More AFdocs fixes (#25876)	UNREVIEWED			
-845	138a043c39f93b6e579e9a785063a4cb87a09ee4	2026-03-18	[sui-transactional-test-runner] Add `view-funds` command (#25877)	UNREVIEWED			
-846	93f7ebef2eabedd06ba112a228645d4458dca5bd	2026-03-18	docs: More AF docs fixes (#25880)	UNREVIEWED			
-847	96ea9367e60d81658a596de212bfb2b79b046f74	2026-03-18	docs: Add SUIUSDE and USDSUI asset scalars to indexer docs (#25805)	UNREVIEWED			
-848	dcd4e5469c1dfbfae4d9bbf011a146913919a42b	2026-03-18	docs: More fixes for AF docs spec (#25883)	UNREVIEWED			
-849	89b58bc27a382a638babb21664cc063ecc8a934f	2026-03-18	Delete consistent pipelines code from sui-indexer-alt (#25679)	UNREVIEWED			
-850	f0db64979faa17bbbf22a69cc91b4c92aebd37aa	2026-03-18	[move] Introduce TraceType-based filtering for Move VM test traces (#25885)	UNREVIEWED			
+801	39751ed24f825eede5a8f12d6ea1f92caf1d0337	2026-03-12	Update ingest-concurrency docs (#25803)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+802	401ad00eed8878383f64d2f9d7d6669f903cce9c	2026-03-12	docs: Enable Kapa MCP server (#25804)	REVIEWED	EXCLUDE_NON_CODE		仅文档/MCP 配置。
+803	9eba66a3375e853a21561f70493e427519f6659e	2026-03-12	sui-analytics-indexer: rename ComitterWatermark to CommitterWatermark (#25802)	REVIEWED	EXCLUDE_FEATURE		analytics indexer 命名重构。
+804	6a4d8a97e745a41785adf6c433dd628822a2fd70	2026-03-12	docs: Display V2 (#25753)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+805	5cd8aaffe80ab847b2dea48cda8332029cb1767e	2026-03-12	[tidehunter] sui tool support (#25661)	REVIEWED	EXCLUDE_FEATURE		Tidehunter CLI/tool 支持。
+806	a9ffe23fae7097d1641644c1b59b2e2308320410	2026-03-12	ci: use app token for git push in branch cut script to trigger CI (#25813)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+807	a968cff1704429517f80f3b9195bd801ffeb2945	2026-03-12	Clean up /tmp between simtest phases to reduce disk usage (#25806)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest 脚本。
+808	4754e3ca255ed00517ec3ba504087fadb1438a36	2026-03-12	sui-indexer-alt: init pipelines to checkpoint_hi_inclusive = reader_lo - 1 (#25774)	REVIEWED	EXCLUDE_FEATURE		indexer-alt pipeline 初始化语义。
+809	f5452ecf5c8d5b2761d8b7f62e817c15615f0c3a	2026-03-12	[move][move-compiler] Remove IR prover ops (#25817)	REVIEWED	EXCLUDE_FEATURE		Move IR prover ops 移除。
+810	999bd3b8fa80a6ad5145f27fccc45db0516db739	2026-03-13	Refactor gRPC metrics path handling (#25788)	REVIEWED	EXCLUDE_FEATURE		gRPC metrics 路径重构。
+811	3551a83b24e22d585737f6d8df62f80ef922cb33	2026-03-13	Sui v1.68.0 Framework Bytecode snapshot (#25820)	REVIEWED	EXCLUDE_POST_FORK		fork 后 framework snapshot。
+812	c2c850c1abf3cf17c0ec7906f9cf933eb20fb034	2026-03-12	Sui v1.69.0 Version Bump (#25821)	REVIEWED	EXCLUDE_NON_CODE		版本更新。
+813	ec68d78170218545de19ee8a6785fcb8cff0e4a2	2026-03-13	Adds protocol configuration check sample code to the address balance migration guide (#25823)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+814	83a312cfae2d0b266606e416f6377790e65e65d6	2026-03-13	[sui system] stricter metadata validation, cleanup (#25792)	REVIEWED	EXCLUDE_POST_FORK		fork 后 system framework/protocol v117 验证。
+815	9677f335ed5da52264355c61d750f0b75fe160f5	2026-03-13	Early exit for transactions that never entered execution (#25808)	REVIEWED	EXCLUDE_NON_CRITICAL		仅 replay 工具的早退处理。
+816	7366cd84154bde55eec30db918514c013d5a12f2	2026-03-13	Cut execution v3 (#25830)	REVIEWED	EXCLUDE_FEATURE		execution v3 发布。
+817	99aea43a51aae3053af33b7d382ae72150aede23	2026-03-13	Store trusted peer addresses received via discovery (#25765)	REVIEWED	EXCLUDE_FEATURE		discovery trusted peer 地址功能。
+818	243adfe8f233f405e74755960d336fcc9b8a78af	2026-03-13	docs: skill file for Sui Style Guide (#25833)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+819	5995b46b9222947458ccf1c2ea53fd9c5292613e	2026-03-13	sui-indexer-alt-framework: remove out of date comments (#25829)	REVIEWED	EXCLUDE_NON_CODE		仅 indexer-alt 注释。
+820	a015ded73f0e727a99766a1481512fac6f2fc416	2026-03-13	docs: initial batch of diagram standardization (#25835)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+821	a553aea7e45ced7e33b6cbcd13ac59fb826ae399	2026-03-13	docs: fix docs-cli-help.yml (#25836)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+822	95d4d09cc82987eedb5c6f4c5beb37628fd63c73	2026-03-13	docs: fix ci job (#25839)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+823	3ddee599a338ce50813605d9aeabbd88c18412d2	2026-03-13	docs: Replace CLI output with node script (#25840)	REVIEWED	EXCLUDE_NON_CODE		仅文档生成脚本。
+824	e26398c83b1c2fe713c63faa918fcaa2e8abd340	2026-03-14	[state-sync] Disconnect continuously failing peers (#25357)	REVIEWED	EXCLUDE_FEATURE		state-sync peer resilience 架构功能。
+825	2e6af369702eae6cdda606e9cb5af0ef03e1a260	2026-03-14	refactor(indexer-alt): use query! macro in prune handlers (#25824)	REVIEWED	EXCLUDE_FEATURE		indexer-alt query 重构。
+826	7b09a5a9da45660b529d6bede8e8977490767e2a	2026-03-16	[move] Add and enable the new VM (#25838)	REVIEWED	EXCLUDE_FEATURE		新 Move VM。
+827	9f57d2585cdc91b842dcf0d387aa38953b459d8e	2026-03-16	consistency: remove legacy `x-sui-checkpoint` header (#25847)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 consistency header 语义。
+828	70c1708d23e0248e9b78383bbdd8cc851f50ad50	2026-03-16	[graphql-alt] transaction contents return balance changes for kv readers too (#25411)	REVIEWED	EXCLUDE_FEATURE		GraphQL KV reader balance changes API。
+829	71bc8caa45e3f0366e6b21b2599813379293f1d7	2026-03-16	[move-unit-test] Update default gas used for sui-move unit tests (#25853)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 Move unit test gas 配置。
+830	d52225f7ce11f9534b39e9550c2503fb7d1facb9	2026-03-17	[Block Streaming] introduce the Observer service and the client (#25527)	REVIEWED	EXCLUDE_FEATURE		Block Streaming observer 服务。
+831	d38fa41e9b082bfe2b044ce37ec850650b84e859	2026-03-17	sdk: bump sui-rust-sdk crates to e5c53de (#25852)	REVIEWED	EXCLUDE_FEATURE		SDK 版本更新。
+832	9b3ab24da1a5a2950c928d97949e1a8b3e41073b	2026-03-17	docs: Stage IA for new Coins/Tokens/Nft section (#25851)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+833	1a41c59c453162e3886e6b3f31de077e0d6039d5	2026-03-17	docs: Batch update March 16 (#25856)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+834	f9e37f5f2d3a69b7db87ae9c7da99f92c7d0c8de	2026-03-17	docs: fix grpc render (#25855)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+835	8a748ca4dfc1354bdd71695aa232fdda3b1087a1	2026-03-17	docs: Update DeepBook docs to match latest SDK and indexer APIs (#25864)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+836	67116b973a27681a51282d05774888d27e9127f9	2026-03-17	sui-indexer-alt-framework: rename fetch to checkpoint (#25834)	REVIEWED	EXCLUDE_FEATURE		indexer-alt framework 重命名。
+837	8583c8a83f28ffbc2b73105c75bb99847880acf3	2026-03-17	Add ConsolidateAllStakedSuiToFungible construction operation (#25849)	REVIEWED	EXCLUDE_FEATURE		staking construction operation。
+838	4dab2807aa5bcc8880a0d4a95cc208b1fc34d83a	2026-03-17	[sui-execution][chore] Simplify after execution cut (#25868)	REVIEWED	EXCLUDE_FEATURE		execution v3 后续清理。
+839	7c3ac9a118f75c6ef36b09e89320de8f48e6c2fb	2026-03-17	Add FungibleStakedSuiValue sub-account, epoch timing, and activation epoch (#25848)	REVIEWED	EXCLUDE_FEATURE		fungible staked token 功能。
+840	bdc7c6a97a204f4d7c6a2d8b27978c5b9e87c766	2026-03-17	docs: afdocs compliance (#25869)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+841	43cd04db4445e72faf3af65b7a1d325f105aba37	2026-03-18	Do not emit invariant violation when randomness update execution lags (#25872)	REVIEWED	EXCLUDE_ALREADY_FIXED		RTD 当前随机数更新超时已采用 debug-only panic 与非 debug 告警，不产生上游所修复的不变量上报。
+842	8b519b9f1c42f2ae0a8b0b177d53612a620a26d6	2026-03-18	sui-indexer-alt-framework: add init_with_committer_watermark util function (#25814)	REVIEWED	EXCLUDE_FEATURE		indexer-alt watermark 工具函数。
+843	999705a45034932bd887cbf50ab11e1412d4d2df	2026-03-18	Add MergeAndRedeemFungibleStakedSui construction operation (#25850)	REVIEWED	EXCLUDE_FEATURE		staking construction operation。
+844	11d91935d43ae431d84ec750d7389fcfba59e275	2026-03-18	docs: More AFdocs fixes (#25876)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+845	138a043c39f93b6e579e9a785063a4cb87a09ee4	2026-03-18	[sui-transactional-test-runner] Add `view-funds` command (#25877)	REVIEWED	EXCLUDE_FEATURE		transactional test view-funds 命令。
+846	93f7ebef2eabedd06ba112a228645d4458dca5bd	2026-03-18	docs: More AF docs fixes (#25880)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+847	96ea9367e60d81658a596de212bfb2b79b046f74	2026-03-18	docs: Add SUIUSDE and USDSUI asset scalars to indexer docs (#25805)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+848	dcd4e5469c1dfbfae4d9bbf011a146913919a42b	2026-03-18	docs: More fixes for AF docs spec (#25883)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+849	89b58bc27a382a638babb21664cc063ecc8a934f	2026-03-18	Delete consistent pipelines code from sui-indexer-alt (#25679)	REVIEWED	EXCLUDE_FEATURE		indexer-alt consistent pipelines 移除。
+850	f0db64979faa17bbbf22a69cc91b4c92aebd37aa	2026-03-18	[move] Introduce TraceType-based filtering for Move VM test traces (#25885)	REVIEWED	EXCLUDE_FEATURE		Move VM trace filtering。
 851	50d1482f322298c03c2c03d59d07b3e4f4628d5f	2026-03-18	[forking-stack] add APIs to simulacrum for forking 1/5 (#25841)	UNREVIEWED			
 852	f05ef1a758695d338d3102874d67f3e7c45a6e46	2026-03-18	Skip lock existence check during snapshot restore (#25888)	UNREVIEWED			
 853	afb0bd2eafd34050abf9b34bfaa283dcbd473db0	2026-03-19	[Block Streaming] introduce the Synchronizer & CommitSyncer clients (#25528)	UNREVIEWED			
