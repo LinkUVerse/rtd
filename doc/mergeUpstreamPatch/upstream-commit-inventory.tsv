@@ -1699,56 +1699,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1698	4bab257902a15b56d0ea316c397642100a9ed5ec	2026-06-26	Cancel pre-submission when a transaction is already processed by consensus (#27083)	APPLIED	MERGE	9974884c1c50ae907545bafeb35a1c7ae2da6bb5	已处理交易竞态返回可重试状态，避免伪造位置。
 1699	656377ff8814c788abf286d2bea6e2a56287a5f2	2026-06-29	Extract execution-layer invariant checks into a InvariantChecker module (#27051)	REVIEWED	EXCLUDE_NON_CRITICAL		执行层不变量重构。
 1700	254519b11609ae115c3360ca1b8c3e06c4bbc64d	2026-06-29	Add chain identifier to ProtocolConfig (#27090)	REVIEWED	EXCLUDE_FEATURE		协议配置功能。
-1701	cfa5527eb714f50a96cc10932617e6fcf5991853	2026-06-29	[telemetry-subscribers] add RUST_LOG_TAILS for per-target log file tails (#27026)	UNREVIEWED			
-1702	05d00c43f80ad03eb6ae1d92a35edf8eeed441b1	2026-06-29	Passing of accumulator_version should not be conditional on network (#27087)	UNREVIEWED			
-1703	6fdd192489210b146b13c0b922778fba5f53737e	2026-06-29	rpc-store: index object versions by checkpoint	UNREVIEWED			
-1704	c143feb7e83d7a0c9f53f65182c7d469b35d12ed	2026-06-29	rpc-store: resolve checkpoint-pinned reads below the restore anchor	UNREVIEWED			
-1705	0a8c7bdc3d260fcd6c79a1288adcf83413036112	2026-06-29	rpc-store: move object_version_by_checkpoint to the history cohort	UNREVIEWED			
-1706	7b71e7d3393d3f52ee2a7b1e1ab3dd1d217c10ee	2026-06-29	rpc-store: floor pre-window objects during the backfill window	UNREVIEWED			
-1707	00924e333a0cf3c044a5393a06b1fbe0fbd74ec7	2026-06-29	rpc-store: produce floor candidates only within the backfill window	UNREVIEWED			
-1708	202269270735836e22095230c68f43e062256890	2026-06-29	rpc-store: drop the live_objects CF in favor of an objects scan	UNREVIEWED			
-1709	c9e4683100a32de62d3c1facc4a49cdd100462ef	2026-06-29	[move] Tighten up some additional binary bounds (#27096)	UNREVIEWED			
-1710	aa9f060e929947e788e9d821c1bbccbdc95c9743	2026-06-29	[chore] enhance consensus handler metrics (#27093)	UNREVIEWED			
-1711	e1fd1f334767cf6114edf4edab88db8bbb1a009e	2026-06-29	sui: retain fullnode address from network config (#27094)	UNREVIEWED			
-1712	51cc0e2317748b483d70c704ec8dba1f24f7e2b8	2026-06-29	[move][move-decompiler] Massive improvements to acyclic structuring	UNREVIEWED			
-1713	44791e888f740d0d9390cebf43ce2a92577a65b3	2026-06-29	Reduce and pipeline consensus commit-handler hot-path work (#27052)	UNREVIEWED			
-1714	89f507b4df9fc8304607d6755a856acc21ce4329	2026-06-29	[simtest] Fix seed-search build when naming specific test targets (#27103)	UNREVIEWED			
-1715	3e844c500c233f01babe24e3260a3fa0d54ef0ad	2026-06-30	nickv/list checkpoints bugfix (#27106)	UNREVIEWED			
-1716	171e921a5bcdd0bc4c05359d46277ec3f2e6e7ec	2026-06-30	[lint] unused object with fields (#26386)	UNREVIEWED			
-1717	c0fc8bcc48cc655d2fc3bad809df0a268659d571	2026-06-30	[move-prompt] Initial sui-prompt implementation (#26864)	UNREVIEWED			
-1718	61a89d4bdf1f114f954de04d817b2333096bce83	2026-06-30	[autodebug] Fix flaky party_object_read test: drop duplicate tx submission (#27108)	UNREVIEWED			
-1719	3e0b5d426cfbd4de755688216b8bfb246bf21d59	2026-06-30	rpc-store: record package publish checkpoint for point-in-time reads	UNREVIEWED			
-1720	3d1f2afec6c75611fa6cdd2052f99b6eadd74bc6	2026-06-30	rpc-store: move package_versions to the history cohort	UNREVIEWED			
-1721	4c1d185f64b50e68013fd197ff5e3009dc0af7ea	2026-06-30	[consensus adapter] improve logging (#27100)	UNREVIEWED			
-1722	5f20508b3975399f9de24724f5700a6c9dff30ce	2026-06-30	[graphql] Migrate Transaction type to use gRPC cursor format (#27035)	UNREVIEWED			
-1723	2ca5c3c219e13fe715c466c1ac830ec69a010416	2026-06-30	[adapter] Add `PackagePayload` enum (#27009)	UNREVIEWED			
-1724	0c59b5109916f086ef53b53591051f1dc87dc89f	2026-06-30	ci(release): give the slow macos-latest-large sccache leg a 4h OIDC session (#27116)	UNREVIEWED			
-1725	0f97d1c481053eae05021e6f5772cf114c0a08cb	2026-06-30	Compute unchanged consensus objects outside the effects constructor (#27092)	UNREVIEWED			
-1726	6ee3bdaf286309eee0bf9d443304efa7a528c016	2026-06-30	Fix error propagation bug (#27117)	UNREVIEWED			
-1727	4f3496b88805899a5f43533a934245f6e6b35828	2026-07-01	Store epoch-start system object versions in a map (#27113)	UNREVIEWED			
-1728	47ec771a938b8a3244e347b8a4bc5b4ee72fbf60	2026-07-01	Add active address source metrics for discovery v3 rollout (#27031)	UNREVIEWED			
-1729	48c91ecc2d3ef9796b74f5a8de6b592fadb902b6	2026-07-01	refactor: get rid of sui-default-config (#27122)	UNREVIEWED			
-1730	3854cc738be7aafe73d0c565723b9524419c3d91	2026-07-01	sui-indexer-alt-framework: surface underlying source in ingestion fetch-retry log (#27114)	UNREVIEWED			
-1731	1b4217e440377a221e173595dc0d6e6d54fe207b	2026-07-01	Tidy existing gas code: thread gas coin through into_effects, abstract gas status (#27041)	UNREVIEWED			
-1732	07c3c64dda0f010b75f4808bc1a85eee3b3ccb48	2026-07-01	[typed-store] Adopt tidehunter keyspace reorder/remove + name-based handle API (#27126)	UNREVIEWED			
-1733	3ab366bc03818445e2334809d8da405e843dc2d8	2026-07-01	Batch per-transaction work in the consensus commit-handler filter stage (#27101)	UNREVIEWED			
-1734	378cbb2c643e53da59ee543d0533621f62667d07	2026-07-02	docs(indexer): mention address_balances consistent store pipeline (#27120)	UNREVIEWED			
-1735	9609c2b6a9a55e9c51c5e2284ae9a250bb922231	2026-07-02	Prioritize system messages over user transactions in consensus adapter (#27123)	UNREVIEWED			
-1736	fe20d4b8601535a36e4ec88aba0cd697dc47ed6a	2026-07-02	[adapter] Core unified linkage changes (#27032)	UNREVIEWED			
-1737	c0f85162bdd7040539accbf078a1b0f71cf5e3ff	2026-07-02	[graphql-stream] Resumable checkpoints subscription [14/n] (#26714)	UNREVIEWED			
-1738	5da24480a76b7b2b109990c17a2a00948fe00018	2026-07-02	Deduplicate transaction submissions in authority service handler (#27107)	UNREVIEWED			
-1739	e7dfba7343d59b67c7db909279affb30d57edc39	2026-07-02	Carve legacy gas/execution into `mod legacy` (#27042)	UNREVIEWED			
-1740	b9149cbf0b2cb9ae5ed830407a9b48c7ae3fd36c	2026-07-02	[refactor] update the processed message table for the dropped transactions (#27133)	UNREVIEWED			
-1741	44256f7e15ed21391eaa06ec47f89464c96f10bd	2026-07-03	Sui v1.75.0 Framework Bytecode snapshot (#27135)	UNREVIEWED			
-1742	640883e2a819ec3cc0aa2e75ef363bf448eebacf	2026-07-02	Sui v1.76.0 Version Bump (#27136)	UNREVIEWED			
-1743	78d7f5eaf0ca58ccf472dd0d532483122855fe06	2026-07-02	[typed-store] Update tidehunter, use native exists() for contains_key (#27132)	UNREVIEWED			
-1744	33d67fd5b8f48023685b1e1bf6349e2d8f0ee503	2026-07-03	Fix cargo-deny advisories failing CI on main (#27137)	UNREVIEWED			
-1745	6a2e653d11140058ed554dd5fc8313ece5e4de2b	2026-07-03	Fix nondeterministic fail-point registration in large consensus commit prologue test (#27143)	UNREVIEWED			
-1746	2afd397a2d118a22c4d793901a49e97333b95321	2026-07-05	rpc-store: make the embedded rpc-store the default backend	UNREVIEWED			
-1747	7d255b2261f813dcedfcc07867c15c7986948646	2026-07-05	rpc-store: remove the unused legacy rpc-index backend	UNREVIEWED			
-1748	e386c3d87e83f89d9381a156c920a35f25d9771e	2026-07-05	test-cluster: wait for the embedded rpc-store index in test reads	UNREVIEWED			
-1749	eda1326dd12570dfb52f144003e190672abb5100	2026-07-05	rpc-store: fix owned-objects cursor to not duplicate across pages	UNREVIEWED			
-1750	511167f9c46875d9a393d519e0b579ec98b33850	2026-07-05	rpc-store: bound the rpc-api tip to the live-indexed checkpoint	UNREVIEWED			
+1701	cfa5527eb714f50a96cc10932617e6fcf5991853	2026-06-29	[telemetry-subscribers] add RUST_LOG_TAILS for per-target log file tails (#27026)	REVIEWED	EXCLUDE_NON_CRITICAL		日志观测。
+1702	05d00c43f80ad03eb6ae1d92a35edf8eeed441b1	2026-06-29	Passing of accumulator_version should not be conditional on network (#27087)	REVIEWED	EXCLUDE_POST_FORK		执行参数模型已与上游路径分叉。
+1703	6fdd192489210b146b13c0b922778fba5f53737e	2026-06-29	rpc-store: index object versions by checkpoint	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1704	c143feb7e83d7a0c9f53f65182c7d469b35d12ed	2026-06-29	rpc-store: resolve checkpoint-pinned reads below the restore anchor	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1705	0a8c7bdc3d260fcd6c79a1288adcf83413036112	2026-06-29	rpc-store: move object_version_by_checkpoint to the history cohort	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1706	7b71e7d3393d3f52ee2a7b1e1ab3dd1d217c10ee	2026-06-29	rpc-store: floor pre-window objects during the backfill window	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1707	00924e333a0cf3c044a5393a06b1fbe0fbd74ec7	2026-06-29	rpc-store: produce floor candidates only within the backfill window	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1708	202269270735836e22095230c68f43e062256890	2026-06-29	rpc-store: drop the live_objects CF in favor of an objects scan	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1709	c9e4683100a32de62d3c1facc4a49cdd100462ef	2026-06-29	[move] Tighten up some additional binary bounds (#27096)	REVIEWED	EXCLUDE_FEATURE		后续协议版本与验证器功能。
+1710	aa9f060e929947e788e9d821c1bbccbdc95c9743	2026-06-29	[chore] enhance consensus handler metrics (#27093)	REVIEWED	EXCLUDE_NON_CRITICAL		监控指标。
+1711	e1fd1f334767cf6114edf4edab88db8bbb1a009e	2026-06-29	sui: retain fullnode address from network config (#27094)	REVIEWED	EXCLUDE_FEATURE		CLI 配置功能。
+1712	51cc0e2317748b483d70c704ec8dba1f24f7e2b8	2026-06-29	[move][move-decompiler] Massive improvements to acyclic structuring	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1713	44791e888f740d0d9390cebf43ce2a92577a65b3	2026-06-29	Reduce and pipeline consensus commit-handler hot-path work (#27052)	REVIEWED	EXCLUDE_NON_CRITICAL		共识热路径性能重构。
+1714	89f507b4df9fc8304607d6755a856acc21ce4329	2026-06-29	[simtest] Fix seed-search build when naming specific test targets (#27103)	REVIEWED	EXCLUDE_NON_CODE		测试工具。
+1715	3e844c500c233f01babe24e3260a3fa0d54ef0ad	2026-06-30	nickv/list checkpoints bugfix (#27106)	REVIEWED	EXCLUDE_POST_FORK		依赖后置 KV RPC 和 Bigtable 架构。
+1716	171e921a5bcdd0bc4c05359d46277ec3f2e6e7ec	2026-06-30	[lint] unused object with fields (#26386)	REVIEWED	EXCLUDE_FEATURE		编译器 lint 功能。
+1717	c0fc8bcc48cc655d2fc3bad809df0a268659d571	2026-06-30	[move-prompt] Initial sui-prompt implementation (#26864)	REVIEWED	EXCLUDE_FEATURE		提示工具功能。
+1718	61a89d4bdf1f114f954de04d817b2333096bce83	2026-06-30	[autodebug] Fix flaky party_object_read test: drop duplicate tx submission (#27108)	REVIEWED	EXCLUDE_NON_CODE		测试调整。
+1719	3e0b5d426cfbd4de755688216b8bfb246bf21d59	2026-06-30	rpc-store: record package publish checkpoint for point-in-time reads	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1720	3d1f2afec6c75611fa6cdd2052f99b6eadd74bc6	2026-06-30	rpc-store: move package_versions to the history cohort	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1721	4c1d185f64b50e68013fd197ff5e3009dc0af7ea	2026-06-30	[consensus adapter] improve logging (#27100)	REVIEWED	EXCLUDE_NON_CRITICAL		日志改进。
+1722	5f20508b3975399f9de24724f5700a6c9dff30ce	2026-06-30	[graphql] Migrate Transaction type to use gRPC cursor format (#27035)	REVIEWED	EXCLUDE_FEATURE		GraphQL API 迁移。
+1723	2ca5c3c219e13fe715c466c1ac830ec69a010416	2026-06-30	[adapter] Add `PackagePayload` enum (#27009)	REVIEWED	EXCLUDE_FEATURE		执行适配器功能。
+1724	0c59b5109916f086ef53b53591051f1dc87dc89f	2026-06-30	ci(release): give the slow macos-latest-large sccache leg a 4h OIDC session (#27116)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1725	0f97d1c481053eae05021e6f5772cf114c0a08cb	2026-06-30	Compute unchanged consensus objects outside the effects constructor (#27092)	REVIEWED	EXCLUDE_NON_CRITICAL		执行路径重构。
+1726	6ee3bdaf286309eee0bf9d443304efa7a528c016	2026-06-30	Fix error propagation bug (#27117)	REVIEWED	EXCLUDE_POST_FORK		依赖后置 KV RPC 与位图查询架构。
+1727	4f3496b88805899a5f43533a934245f6e6b35828	2026-07-01	Store epoch-start system object versions in a map (#27113)	REVIEWED	EXCLUDE_FEATURE		后续状态索引功能。
+1728	47ec771a938b8a3244e347b8a4bc5b4ee72fbf60	2026-07-01	Add active address source metrics for discovery v3 rollout (#27031)	REVIEWED	EXCLUDE_NON_CRITICAL		发现服务指标。
+1729	48c91ecc2d3ef9796b74f5a8de6b592fadb902b6	2026-07-01	refactor: get rid of sui-default-config (#27122)	REVIEWED	EXCLUDE_NON_CRITICAL		配置重构。
+1730	3854cc738be7aafe73d0c565723b9524419c3d91	2026-07-01	sui-indexer-alt-framework: surface underlying source in ingestion fetch-retry log (#27114)	REVIEWED	EXCLUDE_NON_CRITICAL		索引日志。
+1731	1b4217e440377a221e173595dc0d6e6d54fe207b	2026-07-01	Tidy existing gas code: thread gas coin through into_effects, abstract gas status (#27041)	REVIEWED	EXCLUDE_NON_CRITICAL		计费代码重构。
+1732	07c3c64dda0f010b75f4808bc1a85eee3b3ccb48	2026-07-01	[typed-store] Adopt tidehunter keyspace reorder/remove + name-based handle API (#27126)	REVIEWED	EXCLUDE_POST_FORK		依赖后置 TideHunter API。
+1733	3ab366bc03818445e2334809d8da405e843dc2d8	2026-07-01	Batch per-transaction work in the consensus commit-handler filter stage (#27101)	REVIEWED	EXCLUDE_NON_CRITICAL		共识热路径性能重构。
+1734	378cbb2c643e53da59ee543d0533621f62667d07	2026-07-02	docs(indexer): mention address_balances consistent store pipeline (#27120)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1735	9609c2b6a9a55e9c51c5e2284ae9a250bb922231	2026-07-02	Prioritize system messages over user transactions in consensus adapter (#27123)	APPLIED	MERGE	65e40b9a35415d9e26f4cbcb9ce3e62142b5ee76	系统消息不再被用户提交队列长期阻塞。
+1736	fe20d4b8601535a36e4ec88aba0cd697dc47ed6a	2026-07-02	[adapter] Core unified linkage changes (#27032)	REVIEWED	EXCLUDE_FEATURE		执行适配器功能。
+1737	c0f85162bdd7040539accbf078a1b0f71cf5e3ff	2026-07-02	[graphql-stream] Resumable checkpoints subscription [14/n] (#26714)	REVIEWED	EXCLUDE_FEATURE		GraphQL 流订阅功能。
+1738	5da24480a76b7b2b109990c17a2a00948fe00018	2026-07-02	Deduplicate transaction submissions in authority service handler (#27107)	APPLIED	MERGE	65e40b9a35415d9e26f4cbcb9ce3e62142b5ee76	原子防护并发重复提交，并在请求结束后短期抑制重投。
+1739	e7dfba7343d59b67c7db909279affb30d57edc39	2026-07-02	Carve legacy gas/execution into `mod legacy` (#27042)	REVIEWED	EXCLUDE_NON_CRITICAL		执行代码重构。
+1740	b9149cbf0b2cb9ae5ed830407a9b48c7ae3fd36c	2026-07-02	[refactor] update the processed message table for the dropped transactions (#27133)	REVIEWED	EXCLUDE_POST_FORK		当前过滤器没有对应的丢弃锁路径。
+1741	44256f7e15ed21391eaa06ec47f89464c96f10bd	2026-07-03	Sui v1.75.0 Framework Bytecode snapshot (#27135)	REVIEWED	EXCLUDE_NON_CODE		框架快照。
+1742	640883e2a819ec3cc0aa2e75ef363bf448eebacf	2026-07-02	Sui v1.76.0 Version Bump (#27136)	REVIEWED	EXCLUDE_NON_CODE		版本升级。
+1743	78d7f5eaf0ca58ccf472dd0d532483122855fe06	2026-07-02	[typed-store] Update tidehunter, use native exists() for contains_key (#27132)	REVIEWED	EXCLUDE_POST_FORK		当前 TideHunter fork 修订不同，不能直接替换。
+1744	33d67fd5b8f48023685b1e1bf6349e2d8f0ee503	2026-07-03	Fix cargo-deny advisories failing CI on main (#27137)	APPLIED	MERGE	608578aedacd6b2582b8814cf5bc143e44435097	升级 anyhow 并记录不可升级的 XML 公告处置。
+1745	6a2e653d11140058ed554dd5fc8313ece5e4de2b	2026-07-03	Fix nondeterministic fail-point registration in large consensus commit prologue test (#27143)	REVIEWED	EXCLUDE_NON_CODE		测试稳定性。
+1746	2afd397a2d118a22c4d793901a49e97333b95321	2026-07-05	rpc-store: make the embedded rpc-store the default backend	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1747	7d255b2261f813dcedfcc07867c15c7986948646	2026-07-05	rpc-store: remove the unused legacy rpc-index backend	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
+1748	e386c3d87e83f89d9381a156c920a35f25d9771e	2026-07-05	test-cluster: wait for the embedded rpc-store index in test reads	REVIEWED	EXCLUDE_NON_CODE		测试。
+1749	eda1326dd12570dfb52f144003e190672abb5100	2026-07-05	rpc-store: fix owned-objects cursor to not duplicate across pages	REVIEWED	EXCLUDE_POST_FORK		依赖后置 RPC 存储查询路径。
+1750	511167f9c46875d9a393d519e0b579ec98b33850	2026-07-05	rpc-store: bound the rpc-api tip to the live-indexed checkpoint	REVIEWED	EXCLUDE_FEATURE		RPC 存储功能。
 1751	ce12f3df1b7f8cccddc2b3e8e05ead15092d8a7b	2026-07-05	tests: stop racing the asynchronous embedded rpc-store index	UNREVIEWED			
 1752	530819001951a5d4aded30c054cfd9e19807b2d3	2026-07-05	rpc-store: fix dynamic-field and balance cursors duplicating pages	UNREVIEWED			
 1753	bae9819bc42817c626ef312ff884bbc7ff81cd7a	2026-07-05	rpc-store: seek owned-object and balance pagination to the cursor	UNREVIEWED			
