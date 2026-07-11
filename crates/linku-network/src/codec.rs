@@ -8,6 +8,25 @@ use tonic::{
     codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
 };
 
+/// Default upper bound on total decompressed payload size.
+const MAX_DECOMPRESSED_SIZE: u64 = 128 << 20;
+
+/// Decompress a snappy-framed stream, bounding output at
+/// [`MAX_DECOMPRESSED_SIZE`].
+fn decompress_snappy<R: Read>(src: R) -> std::io::Result<Vec<u8>> {
+    decompress_snappy_bounded(src, MAX_DECOMPRESSED_SIZE)
+}
+
+/// Decompress a snappy-framed stream, bounding total output at
+/// `max_allowed` bytes. Exposed separately from [`decompress_snappy`] so
+/// tests can exercise the bound directly.
+fn decompress_snappy_bounded<R: Read>(src: R, max_allowed: u64) -> std::io::Result<Vec<u8>> {
+    let mut snappy_decoder = snap::read::FrameDecoder::new(src).take(max_allowed);
+    let mut bytes = Vec::new();
+    snappy_decoder.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
 #[derive(Debug)]
 pub struct BcsEncoder<T>(PhantomData<T>);
 
@@ -92,13 +111,10 @@ impl<U: serde::de::DeserializeOwned> Decoder for BcsSnappyDecoder<U> {
     type Error = Status;
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-        let compressed_size = buf.remaining();
-        if compressed_size == 0 {
+        if !buf.has_remaining() {
             return Ok(None);
         }
-        let mut snappy_decoder = snap::read::FrameDecoder::new(buf.reader());
-        let mut bytes = Vec::with_capacity(compressed_size);
-        snappy_decoder.read_to_end(&mut bytes)?;
+        let bytes = decompress_snappy(buf.reader()).map_err(|e| Status::internal(e.to_string()))?;
         let item =
             bcs::from_bytes(bytes.as_slice()).map_err(|e| Status::internal(e.to_string()))?;
         Ok(Some(item))
@@ -139,7 +155,7 @@ where
 pub mod anemo {
     use ::anemo::rpc::codec::{Codec, Decoder, Encoder};
     use bytes::Buf;
-    use std::{io::Read, marker::PhantomData};
+    use std::marker::PhantomData;
 
     #[derive(Debug)]
     pub struct BcsSnappyEncoder<T>(PhantomData<T>);
@@ -165,10 +181,7 @@ pub mod anemo {
         type Error = bcs::Error;
 
         fn decode(&mut self, buf: bytes::Bytes) -> Result<Self::Item, Self::Error> {
-            let compressed_size = buf.len();
-            let mut snappy_decoder = snap::read::FrameDecoder::new(buf.reader()).take(1 << 30);
-            let mut bytes = Vec::with_capacity(compressed_size);
-            snappy_decoder.read_to_end(&mut bytes)?;
+            let bytes = super::decompress_snappy(buf.reader())?;
             bcs::from_bytes(bytes.as_slice())
         }
     }
@@ -204,5 +217,29 @@ pub mod anemo {
         fn format_name(&self) -> &'static str {
             "bcs"
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snappy_compress(raw: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut encoder = snap::write::FrameEncoder::new(&mut out);
+        std::io::Write::write_all(&mut encoder, raw).unwrap();
+        drop(encoder);
+        out
+    }
+
+    #[test]
+    fn bounded_snappy_decompression_respects_output_limit() {
+        let raw = vec![0u8; 2 * 1024 * 1024];
+        let compressed = snappy_compress(&raw);
+        let limit = 1024u64;
+        let output = decompress_snappy_bounded(&compressed[..], limit).unwrap();
+
+        assert_eq!(output.len() as u64, limit);
+        assert!((output.len() as u64) < raw.len() as u64);
     }
 }
