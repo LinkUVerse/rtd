@@ -7,7 +7,7 @@ use rtd_config::{
     transaction_deny_config::TransactionDenyConfig,
 };
 use rtd_types::{
-    base_types::ObjectRef,
+    base_types::{ObjectRef, RtdAddress},
     error::{RtdError, RtdErrorKind, RtdResult, UserInputError},
     signature::GenericSignature,
     storage::BackingPackageStore,
@@ -38,7 +38,7 @@ pub fn check_transaction_for_signing(
 ) -> RtdResult {
     check_disabled_features(filter_config, tx_data, tx_signatures)?;
 
-    check_signers(filter_config, tx_data)?;
+    check_signers(filter_config, tx_data, tx_signatures)?;
 
     check_input_objects(filter_config, input_object_kinds)?;
 
@@ -169,7 +169,11 @@ fn check_disabled_features(
     Ok(())
 }
 
-fn check_signers(filter_config: &TransactionDenyConfig, tx_data: &TransactionData) -> RtdResult {
+fn check_signers(
+    filter_config: &TransactionDenyConfig,
+    tx_data: &TransactionData,
+    tx_signatures: &[GenericSignature],
+) -> RtdResult {
     let deny_map = filter_config.get_address_deny_set();
     if deny_map.is_empty() {
         return Ok(());
@@ -182,6 +186,17 @@ fn check_signers(filter_config: &TransactionDenyConfig, tx_data: &TransactionDat
                 signer
             )
         );
+    }
+    for signature in tx_signatures {
+        if let Ok(address) = RtdAddress::try_from(signature) {
+            deny_if_true!(
+                deny_map.contains(&address),
+                format!(
+                    "Access to account address {:?} is temporarily disabled",
+                    address
+                )
+            );
+        }
     }
     Ok(())
 }
