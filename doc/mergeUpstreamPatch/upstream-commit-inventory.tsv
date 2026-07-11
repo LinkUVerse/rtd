@@ -1399,56 +1399,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1398	55e807fc162f6c0a9a69775e7e17542a042c48b5	2026-05-18	[move-compiler] errors review (#26458)	REVIEWED	EXCLUDE_NON_CRITICAL		编译器诊断编号调整。
 1399	a2ed2501161d2eedf13598df1a93e6e20f0b543f	2026-05-18	Update instruction for querying the stablecoin allowlist (#26671)	REVIEWED	EXCLUDE_NON_CODE		文档。
 1400	69382f5b07b009a23eb47e2d04dd287c8310347b	2026-05-18	sui-core: remove verify_indexes module (#26663)	REVIEWED	EXCLUDE_FEATURE		索引校验模块清理。
-1401	249640eefa2a82ea743bebd2c75ade5ee7854e58	2026-05-18	[move][move-decompiler] Capture types in the AST so the alias renamer rewrites them (#26662)	UNREVIEWED			
-1402	259b947bf5b07cded7481c0c1f5e88470939c930	2026-05-18	[sui-fork] add back `ConsensusAddressOwner` support for owned objects and seeding (#26635)	UNREVIEWED			
-1403	7aeac40b6982bf3146704d45d3cb3cb2b4fa61ff	2026-05-18	[consensus] add LeaderScheduleV3 sliding-window scorer (#26372)	UNREVIEWED			
-1404	3f5658adad18f91b57ebcda2c7ee009a783858f9	2026-05-18	sui-protocol-config: render to any Format (JSON, prost::Value, …) (#26665)	UNREVIEWED			
-1405	b9e72a70c843cdb4ad0b7ffdfdd624f714cbf8c3	2026-05-18	chore: sync shared Docusaurus components (#26681)	UNREVIEWED			
-1406	11a02c744110d7e96283f408bf0680ffe6f4de39	2026-05-18	fix: unclosed code block (#26685)	UNREVIEWED			
-1407	160c9085dd8e3841e532ed3406641f26a4491399	2026-05-18	invalid url (#26678)	UNREVIEWED			
-1408	e8fb2009c2c2842392b0fcc814a69b029aa1be42	2026-05-19	sui-indexer-alt-framework: harden streaming backoff bounds (#26229)	UNREVIEWED			
-1409	216eb890bae6acf6962a1c5bf1f93b722fa025ad	2026-05-19	chore: upgrade mysten-sim dependency (#26683)	UNREVIEWED			
-1410	b241d9263db4ece75066c37fa6868db8bf889b74	2026-05-19	use std::process::command in simtest when fetching move package dependency (#26612)	UNREVIEWED			
-1411	96f4c869219733f20432b1d41c794e43b656554b	2026-05-19	[chore] Update tidehunter to 8ca8eed (#26687)	UNREVIEWED			
-1412	cbc9f9b231c5bb66dc36eede40a26452dde50fe3	2026-05-19	docker/stress: switch runtime to debian-slim, drop bundled repo (#26696)	UNREVIEWED			
-1413	dad84a8a05be3481770ece5995dacbdd7d060f4f	2026-05-19	[sui-fork] reuse `latest` marker for object state (deleted, wrapped)  (#26672)	UNREVIEWED			
-1414	75222fb9bd9c94297381791f12d2aa632a6d83dc	2026-05-19	docs: add redirects for broken external links (#26699)	UNREVIEWED			
-1415	10b5e69663b996088031be901f6155c58e0d23d2	2026-05-19	[move][move-decompiler] Eliminate more gotos (#26664)	UNREVIEWED			
-1416	f3106dd33a617ff2095ec274289e158cf415ce80	2026-05-19	[sui-fork] simplify seeding and owned object index data (#26673)	UNREVIEWED			
-1417	5cd50577e523d68ff429dcd396e466b0788655d3	2026-05-19	[move][move-decompiler] Refine `if` and rewrite into `assert` when possible. (#26686)	UNREVIEWED			
-1418	632e55c744d43aa9657c6636690e0eff5b44cf26	2026-05-19	[simulate] Add more tests for simulate tx (1/2) (#26691)	UNREVIEWED			
-1419	c124d970289a8a800ff15d332a69e39765734a80	2026-05-19	[move][move-decompiler] Add block comments when emitting blocks. (#26684)	UNREVIEWED			
-1420	c1b60b610bb75ff722c1b666e79d497e1218c028	2026-05-19	ci(release): switch brew bump from mislav action to direct `brew bump-formula-pr` (#26706)	UNREVIEWED			
-1421	ac0bc47fb9407dd21476e604b4cecab987c599e4	2026-05-19	ci: add standalone homebrew-bump workflow for manual sui formula bumps (#26711)	UNREVIEWED			
-1422	2a66b1b163137b69f11ddba9e1976f56479016f5	2026-05-19	ci(release): make homebrew-bump.yml reusable, replace inline job in release.yml (#26713)	UNREVIEWED			
-1423	8c42809d919cf0ac9dd9b3214e6f56a30de22797	2026-05-19	[chore] Update tidehunter to f6b9ad0 (#26712)	UNREVIEWED			
-1424	dd9e7161e7d67443078107a5adecd65cb4b83965	2026-05-20	[graphql-alt] Add object json test for simulate transaction (#26669)	UNREVIEWED			
-1425	ffb23fc5ac712e06406617ae034ecd67c8c1871a	2026-05-20	Treat on-chain validators as trusted peers in discovery (#25950)	UNREVIEWED			
-1426	44bea77c912fba96bfcc798bdcea136d75dbd562	2026-05-20	[consensus] v3 Committee (#26693)	UNREVIEWED			
-1427	df134b20c06a634372fbb462ff57bae56643165e	2026-05-20	fix(faucet): make `sui start --with-faucet` shut down on Ctrl+C (#26697)	UNREVIEWED			
-1428	2cc1b040f375f45dcd367d2a9e123661cc12d789	2026-05-20	[graphql-stream] Add Address.asTransactionObject [12/n] (#26495)	UNREVIEWED			
-1429	4bfae7d7fcdbbe597493cb607a1357c9b490418c	2026-05-20	[traffic_controller] metrics improvements (#24574)	UNREVIEWED			
-1430	f488eb1025a8367efed6056244dbb4e4435abf10	2026-05-20	typed-store: add TH_AUTOSHARD env flag (#26715)	UNREVIEWED			
-1431	a010caf34181fe6ca29ab8cc52ad655213d48947	2026-05-20	build(docker): add sui-metric-checker to sui-tools, drop orphaned sui-tool (#26721)	UNREVIEWED			
-1432	69ff544c668426b2317038a25ba842bbe515a8d9	2026-05-20	build(docker): delete sui-services image (folded into sui-tools) (#26722)	UNREVIEWED			
-1433	8d75557faedade6a07708a72c3707a056e45b976	2026-05-20	[move][move-decompiler] Normalize continue-bearing IfElses inside loops (#26690)	UNREVIEWED			
-1434	6f028086e13ae60a631c428b4adef2200f74c860	2026-05-20	[consensus][tidehunter] Enable compressed batch WAL frames for consensus (#26718)	UNREVIEWED			
-1435	4fad04afa9c91e000836d9255a126483ed69bf8e	2026-05-20	Redo list api progress propagation (#26703)	UNREVIEWED			
-1436	98a639bf995a1d2995051614ee658f6c7637f92d	2026-05-20	[move-package-alt] absolutize PackagePath for stable dedup identity (DVX-2096) (#26607)	UNREVIEWED			
-1437	541925f5f61a20b6d13c9be609778d7d57b81487	2026-05-20	ci(release): build only packaged binaries, stop building sui twice (#26725)	UNREVIEWED			
-1438	4a2426e76920c887e2e00cea067fe6d2ea4ba215	2026-05-20	tx offset (#26709)	UNREVIEWED			
-1439	f8049925815d0ce3021c28648c27350076bc57b5	2026-05-20	[scripts] Add dual replay cut script + skill (#26688)	UNREVIEWED			
-1440	8a6e7295fb80d8ecccecc7d07680e879c0c63e8d	2026-05-21	[chore] gate staging-only streaming items to silence clippy warnings (#26719)	UNREVIEWED			
-1441	0625f734a418c80024f2ac03793e2f279426daa7	2026-05-21	[move] On-chain dependency pinning (v2: separate types) (#26552)	UNREVIEWED			
-1442	d07b8bda94be3b739f3315e61a9d21d22c115659	2026-05-21	[move] Make Vanilla a non-unit struct (#26562)	UNREVIEWED			
-1443	ac364a2082855db6a7b99050131886a009f62f97	2026-05-21	nickv/misc kv index (#26710)	UNREVIEWED			
-1444	e7cc476d455551668ec051972d1e4088ac0da03c	2026-05-21	protocol-config: simplify render function signature	UNREVIEWED			
-1445	751ba68ddb2dd04cfa16a0bee4b6d73a5f131c60	2026-05-21	rpc: populate lossless protocol_config.configs and stringify attributes	UNREVIEWED			
-1446	86200a2722c4e0434b2e5a04e7d1e87ee94f98b8	2026-05-21	jsonrpc: add lossless configs map to ProtocolConfigResponse	UNREVIEWED			
-1447	899f878923efa10f217836a8961f10e79cb0a5e8	2026-05-21	protocol-config: render unset fields as Format::null	UNREVIEWED			
-1448	95337667fa839e7ce61a7fb7242fca17d5f3bdf1	2026-05-21	kvstore: index lossless protocol configs as a prost-encoded Struct cell	UNREVIEWED			
-1449	bb4684278ac95af912f442efb4c5d832d4d07ec0	2026-05-21	Fullnode query apis (#26717)	UNREVIEWED			
-1450	5ee14d5314a82dee5aae423781faa22423eea690	2026-05-21	Simplify bitmap evaluation	UNREVIEWED			
+1401	249640eefa2a82ea743bebd2c75ade5ee7854e58	2026-05-18	[move][move-decompiler] Capture types in the AST so the alias renamer rewrites them (#26662)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1402	259b947bf5b07cded7481c0c1f5e88470939c930	2026-05-18	[sui-fork] add back `ConsensusAddressOwner` support for owned objects and seeding (#26635)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1403	7aeac40b6982bf3146704d45d3cb3cb2b4fa61ff	2026-05-18	[consensus] add LeaderScheduleV3 sliding-window scorer (#26372)	REVIEWED	EXCLUDE_FEATURE		共识功能。
+1404	3f5658adad18f91b57ebcda2c7ee009a783858f9	2026-05-18	sui-protocol-config: render to any Format (JSON, prost::Value, …) (#26665)	REVIEWED	EXCLUDE_FEATURE		protocol-config 输出功能。
+1405	b9e72a70c843cdb4ad0b7ffdfdd624f714cbf8c3	2026-05-18	chore: sync shared Docusaurus components (#26681)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1406	11a02c744110d7e96283f408bf0680ffe6f4de39	2026-05-18	fix: unclosed code block (#26685)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1407	160c9085dd8e3841e532ed3406641f26a4491399	2026-05-18	invalid url (#26678)	REVIEWED	EXCLUDE_NON_CODE		文档链接。
+1408	e8fb2009c2c2842392b0fcc814a69b029aa1be42	2026-05-19	sui-indexer-alt-framework: harden streaming backoff bounds (#26229)	REVIEWED	EXCLUDE_FEATURE		后续 indexer streaming 架构。
+1409	216eb890bae6acf6962a1c5bf1f93b722fa025ad	2026-05-19	chore: upgrade mysten-sim dependency (#26683)	REVIEWED	EXCLUDE_NON_CODE		测试依赖。
+1410	b241d9263db4ece75066c37fa6868db8bf889b74	2026-05-19	use std::process::command in simtest when fetching move package dependency (#26612)	REVIEWED	EXCLUDE_NON_CODE		测试工具。
+1411	96f4c869219733f20432b1d41c794e43b656554b	2026-05-19	[chore] Update tidehunter to 8ca8eed (#26687)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置依赖。
+1412	cbc9f9b231c5bb66dc36eede40a26452dde50fe3	2026-05-19	docker/stress: switch runtime to debian-slim, drop bundled repo (#26696)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1413	dad84a8a05be3481770ece5995dacbdd7d060f4f	2026-05-19	[sui-fork] reuse `latest` marker for object state (deleted, wrapped)  (#26672)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1414	75222fb9bd9c94297381791f12d2aa632a6d83dc	2026-05-19	docs: add redirects for broken external links (#26699)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1415	10b5e69663b996088031be901f6155c58e0d23d2	2026-05-19	[move][move-decompiler] Eliminate more gotos (#26664)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1416	f3106dd33a617ff2095ec274289e158cf415ce80	2026-05-19	[sui-fork] simplify seeding and owned object index data (#26673)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1417	5cd50577e523d68ff429dcd396e466b0788655d3	2026-05-19	[move][move-decompiler] Refine `if` and rewrite into `assert` when possible. (#26686)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1418	632e55c744d43aa9657c6636690e0eff5b44cf26	2026-05-19	[simulate] Add more tests for simulate tx (1/2) (#26691)	REVIEWED	EXCLUDE_NON_CODE		测试。
+1419	c124d970289a8a800ff15d332a69e39765734a80	2026-05-19	[move][move-decompiler] Add block comments when emitting blocks. (#26684)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1420	c1b60b610bb75ff722c1b666e79d497e1218c028	2026-05-19	ci(release): switch brew bump from mislav action to direct `brew bump-formula-pr` (#26706)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1421	ac0bc47fb9407dd21476e604b4cecab987c599e4	2026-05-19	ci: add standalone homebrew-bump workflow for manual sui formula bumps (#26711)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1422	2a66b1b163137b69f11ddba9e1976f56479016f5	2026-05-19	ci(release): make homebrew-bump.yml reusable, replace inline job in release.yml (#26713)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1423	8c42809d919cf0ac9dd9b3214e6f56a30de22797	2026-05-19	[chore] Update tidehunter to f6b9ad0 (#26712)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置依赖。
+1424	dd9e7161e7d67443078107a5adecd65cb4b83965	2026-05-20	[graphql-alt] Add object json test for simulate transaction (#26669)	REVIEWED	EXCLUDE_NON_CODE		测试。
+1425	ffb23fc5ac712e06406617ae034ecd67c8c1871a	2026-05-20	Treat on-chain validators as trusted peers in discovery (#25950)	REVIEWED	EXCLUDE_FEATURE		后续 discovery 地址优先级功能。
+1426	44bea77c912fba96bfcc798bdcea136d75dbd562	2026-05-20	[consensus] v3 Committee (#26693)	REVIEWED	EXCLUDE_FEATURE		共识功能。
+1427	df134b20c06a634372fbb462ff57bae56643165e	2026-05-20	fix(faucet): make `sui start --with-faucet` shut down on Ctrl+C (#26697)	REVIEWED	EXCLUDE_NON_CRITICAL		Faucet CLI 生命周期。
+1428	2cc1b040f375f45dcd367d2a9e123661cc12d789	2026-05-20	[graphql-stream] Add Address.asTransactionObject [12/n] (#26495)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1429	4bfae7d7fcdbbe597493cb607a1357c9b490418c	2026-05-20	[traffic_controller] metrics improvements (#24574)	REVIEWED	EXCLUDE_FEATURE		指标功能。
+1430	f488eb1025a8367efed6056244dbb4e4435abf10	2026-05-20	typed-store: add TH_AUTOSHARD env flag (#26715)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1431	a010caf34181fe6ca29ab8cc52ad655213d48947	2026-05-20	build(docker): add sui-metric-checker to sui-tools, drop orphaned sui-tool (#26721)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1432	69ff544c668426b2317038a25ba842bbe515a8d9	2026-05-20	build(docker): delete sui-services image (folded into sui-tools) (#26722)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1433	8d75557faedade6a07708a72c3707a056e45b976	2026-05-20	[move][move-decompiler] Normalize continue-bearing IfElses inside loops (#26690)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1434	6f028086e13ae60a631c428b4adef2200f74c860	2026-05-20	[consensus][tidehunter] Enable compressed batch WAL frames for consensus (#26718)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1435	4fad04afa9c91e000836d9255a126483ed69bf8e	2026-05-20	Redo list api progress propagation (#26703)	REVIEWED	EXCLUDE_FEATURE		列表 API 功能。
+1436	98a639bf995a1d2995051614ee658f6c7637f92d	2026-05-20	[move-package-alt] absolutize PackagePath for stable dedup identity (DVX-2096) (#26607)	REVIEWED	EXCLUDE_NON_CRITICAL		Move package 路径稳定性。
+1437	541925f5f61a20b6d13c9be609778d7d57b81487	2026-05-20	ci(release): build only packaged binaries, stop building sui twice (#26725)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1438	4a2426e76920c887e2e00cea067fe6d2ea4ba215	2026-05-20	tx offset (#26709)	REVIEWED	EXCLUDE_FEATURE		KV schema/API 扩展。
+1439	f8049925815d0ce3021c28648c27350076bc57b5	2026-05-20	[scripts] Add dual replay cut script + skill (#26688)	REVIEWED	EXCLUDE_NON_CODE		脚本与技能。
+1440	8a6e7295fb80d8ecccecc7d07680e879c0c63e8d	2026-05-21	[chore] gate staging-only streaming items to silence clippy warnings (#26719)	REVIEWED	EXCLUDE_NON_CODE		构建警告。
+1441	0625f734a418c80024f2ac03793e2f279426daa7	2026-05-21	[move] On-chain dependency pinning (v2: separate types) (#26552)	REVIEWED	EXCLUDE_FEATURE		Move 依赖功能。
+1442	d07b8bda94be3b739f3315e61a9d21d22c115659	2026-05-21	[move] Make Vanilla a non-unit struct (#26562)	REVIEWED	EXCLUDE_FEATURE		MoveFlavor 变更。
+1443	ac364a2082855db6a7b99050131886a009f62f97	2026-05-21	nickv/misc kv index (#26710)	REVIEWED	EXCLUDE_FEATURE		KV 索引功能。
+1444	e7cc476d455551668ec051972d1e4088ac0da03c	2026-05-21	protocol-config: simplify render function signature	REVIEWED	EXCLUDE_FEATURE		protocol-config API 重构。
+1445	751ba68ddb2dd04cfa16a0bee4b6d73a5f131c60	2026-05-21	rpc: populate lossless protocol_config.configs and stringify attributes	REVIEWED	EXCLUDE_FEATURE		RPC 配置输出功能。
+1446	86200a2722c4e0434b2e5a04e7d1e87ee94f98b8	2026-05-21	jsonrpc: add lossless configs map to ProtocolConfigResponse	REVIEWED	EXCLUDE_FEATURE		JSON-RPC 功能。
+1447	899f878923efa10f217836a8961f10e79cb0a5e8	2026-05-21	protocol-config: render unset fields as Format::null	REVIEWED	EXCLUDE_FEATURE		protocol-config 输出功能。
+1448	95337667fa839e7ce61a7fb7242fca17d5f3bdf1	2026-05-21	kvstore: index lossless protocol configs as a prost-encoded Struct cell	REVIEWED	EXCLUDE_FEATURE		KV schema 功能。
+1449	bb4684278ac95af912f442efb4c5d832d4d07ec0	2026-05-21	Fullnode query apis (#26717)	REVIEWED	EXCLUDE_FEATURE		Fullnode API 功能。
+1450	5ee14d5314a82dee5aae423781faa22423eea690	2026-05-21	Simplify bitmap evaluation	REVIEWED	EXCLUDE_FEATURE		KV bitmap 查询重构。
 1451	66b4e55178cf041eab398e76893552653bf06a65	2026-05-21	Let the streams flow! (#26728)	UNREVIEWED			
 1452	df2e714ca6019ac5ead76aa20d45e52beae40d07	2026-05-21	[consensus] propose at latest possible round after restart (#26720)	UNREVIEWED			
 1453	3be29b4ed2a1077d89a4c3c6c77c635b159efdc3	2026-05-21	sui-core: drop fastpath guard in object_funds_checker (#26610)	UNREVIEWED			
