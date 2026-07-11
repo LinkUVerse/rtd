@@ -398,7 +398,7 @@ impl ChannelPool {
             Some(network_keypair.private_key().into_inner()),
         );
         let endpoint = tonic_rustls::Channel::from_shared(address.clone())
-            .unwrap()
+            .map_err(|e| ConsensusError::NetworkConfig(format!("invalid URI '{address}': {e}")))?
             .connect_timeout(timeout)
             .initial_connection_window_size(Some(buffer_size as u32))
             .initial_stream_window_size(Some(buffer_size as u32 / 2))
@@ -922,7 +922,7 @@ fn to_host_port_str(addr: &Multiaddr) -> Result<String, String> {
             Ok(format!("{}:{}", ipaddr, port))
         }
         (Some(Protocol::Ip6(ipaddr)), Some(Protocol::Udp(port))) => {
-            Ok(format!("{}:{}", ipaddr, port))
+            Ok(format!("{}", SocketAddrV6::new(ipaddr, port, 0, 0)))
         }
         (Some(Protocol::Dns(hostname)), Some(Protocol::Udp(port))) => {
             Ok(format!("{}:{}", hostname, port))
@@ -1169,8 +1169,16 @@ fn chunk_blocks(blocks: Vec<Bytes>, chunk_limit: usize) -> Vec<Vec<Bytes>> {
 
 #[cfg(test)]
 mod tests {
-    use super::fetch_latest_blocks_error;
+    use super::{fetch_latest_blocks_error, to_host_port_str};
     use crate::error::ConsensusError;
+    use linku_network::multiaddr::Multiaddr;
+
+    #[test]
+    fn formats_ipv6_as_a_valid_uri_authority() {
+        let address: Multiaddr = "/ip6/2001:db8::1/udp/8080".parse().unwrap();
+
+        assert_eq!(to_host_port_str(&address).unwrap(), "[2001:db8::1]:8080");
+    }
 
     #[test]
     fn fetch_latest_blocks_error_uses_the_rpc_name() {
