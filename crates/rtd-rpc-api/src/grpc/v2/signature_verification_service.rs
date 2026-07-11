@@ -175,10 +175,10 @@ fn verify_signature(
     };
 
     let mut zklogin_verifier = match service.chain_id().chain() {
-        rtd_protocol_config::Chain::Mainnet => rtd_crypto::zklogin::ZkloginVerifier::new_mainnet(),
-        rtd_protocol_config::Chain::Testnet | rtd_protocol_config::Chain::Unknown => {
-            rtd_crypto::zklogin::ZkloginVerifier::new_dev()
+        rtd_protocol_config::Chain::Mainnet | rtd_protocol_config::Chain::Testnet => {
+            rtd_crypto::zklogin::ZkloginVerifier::new_mainnet()
         }
+        rtd_protocol_config::Chain::Unknown => rtd_crypto::zklogin::ZkloginVerifier::new_dev(),
     };
     *zklogin_verifier.jwks_mut() = jwks;
     let mut verifier = rtd_crypto::UserSignatureVerifier::new();
