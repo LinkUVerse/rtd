@@ -31,7 +31,7 @@ pub struct Args {
 
     /// Where to get checkpoint data from.
     #[clap(flatten)]
-    pub client_args: Option<ClientArgs>,
+    pub client_args: ClientArgs,
 
     /// How to expose metrics.
     #[clap(flatten)]
@@ -104,7 +104,7 @@ impl IndexerClusterBuilder {
     /// Set client arguments (where to get checkpoint data from).
     /// This overwrites any previously set client args.
     pub fn with_client_args(mut self, args: ClientArgs) -> Self {
-        self.args.client_args = Some(args);
+        self.args.client_args = args;
         self
     }
 
@@ -149,7 +149,7 @@ impl IndexerClusterBuilder {
 
         let registry = Registry::new();
         let metrics = MetricsService::new(self.args.metrics_args, registry);
-        let client_args = self.args.client_args.context("client_args is required")?;
+        let client_args = self.args.client_args;
 
         let indexer = Indexer::new_from_pg(
             database_url,
@@ -215,6 +215,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     use async_trait::async_trait;
+    use clap::Parser;
     use diesel::{Insertable, QueryDsl, Queryable};
     use diesel_async::RunQueryDsl;
     use rtd_synthetic_ingestion::synthetic_ingestion;
@@ -250,6 +251,25 @@ mod tests {
 
     /// Test concurrent pipeline for populating [tx_counts].
     struct TxCounts;
+
+    #[test]
+    fn test_client_args_are_parsed_from_cli() {
+        let args = Args::try_parse_from([
+            "indexer",
+            "--remote-store-url",
+            "https://checkpoints.testnet.rtd.io",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            args.client_args
+                .ingestion
+                .remote_store_url
+                .unwrap()
+                .as_str(),
+            "https://checkpoints.testnet.rtd.io/"
+        );
+    }
 
     #[async_trait]
     impl Processor for TxCounts {
@@ -317,13 +337,13 @@ mod tests {
             SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), get_available_port());
 
         let args = Args {
-            client_args: Some(ClientArgs {
+            client_args: ClientArgs {
                 ingestion: IngestionClientArgs {
                     local_ingestion_path: Some(checkpoint_dir.path().to_owned()),
                     ..Default::default()
                 },
                 ..Default::default()
-            }),
+            },
             indexer_args: IndexerArgs {
                 first_checkpoint: Some(0),
                 last_checkpoint: Some(9),
@@ -410,13 +430,13 @@ mod tests {
                     first_checkpoint: Some(100),
                     ..Default::default()
                 },
-                client_args: Some(ClientArgs {
+                client_args: ClientArgs {
                     ingestion: IngestionClientArgs {
                         local_ingestion_path: Some("/bundled".into()),
                         ..Default::default()
                     },
                     ..Default::default()
-                }),
+                },
                 metrics_args: MetricsArgs {
                     metrics_address: "127.0.0.1:8080".parse().unwrap(),
                 },
@@ -441,9 +461,9 @@ mod tests {
             builder
                 .args
                 .client_args
-                .unwrap()
                 .ingestion
                 .local_ingestion_path
+                .as_ref()
                 .unwrap()
                 .to_string_lossy(),
             "/individual"
@@ -476,13 +496,13 @@ mod tests {
                     first_checkpoint: Some(100),
                     ..Default::default()
                 },
-                client_args: Some(ClientArgs {
+                client_args: ClientArgs {
                     ingestion: IngestionClientArgs {
                         local_ingestion_path: Some("/bundled".into()),
                         ..Default::default()
                     },
                     ..Default::default()
-                }),
+                },
                 metrics_args: MetricsArgs {
                     metrics_address: "127.0.0.1:8080".parse().unwrap(),
                 },
@@ -493,9 +513,9 @@ mod tests {
             builder
                 .args
                 .client_args
-                .unwrap()
                 .ingestion
                 .local_ingestion_path
+                .as_ref()
                 .unwrap()
                 .to_string_lossy(),
             "/bundled"
