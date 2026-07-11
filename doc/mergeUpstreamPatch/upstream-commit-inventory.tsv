@@ -249,56 +249,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 248	ff5565a288498fa116c1113cf1c1d2ced4aa5284	2026-01-19	Expose address balances from consistent service up through graphql (#24963)	REVIEWED	EXCLUDE_POST_FORK		依赖第 159 条被排除的 consistent-store address-balance indexing feature
 249	b135ad3d47f72fe4be16a0e48cb71460e7c8bc90	2026-01-20	Deepbook Risk Ratio Docs (#25018)	REVIEWED	EXCLUDE_NON_CODE		仅新增 DeepBook risk-ratio 文档
 250	774bd6baf7e63e2eb1f789cd987a5dd90bafd334	2026-01-20	tonic_network: return error on invalid uri (#25020)	APPLIED	MERGE	446f281946463bc164e3bf9d5470b7d8ac5f4b5e	IPv6 peer host:port 缺少方括号且无效 URI 会 panic；已用 SocketAddrV6 格式化并传播 NetworkConfig 错误
-251	cc8e624a969eed2066ff5f25c64c42a34143b0a6	2026-01-20	docs: fix gRPC links (#25021)	UNREVIEWED			
-252	13526d01efc12a8ad81139bbd91819a2588d2abd	2026-01-20	docs: document GraphQL's rich queries (#24997)	UNREVIEWED			
-253	0daee96fca471ccd79066774a7704aa23b5e215c	2026-01-20	get_balance: fix parsing of shortened addresses (#25023)	UNREVIEWED			
-254	38a599ee10c9d4bf64fd46e833e3905909da8a05	2026-01-20	fix: link to sui-node binary (#25028)	UNREVIEWED			
-255	75d51d379d4d9ff7aafb5dcc7c1f7e48d4501186	2026-01-20	Migrate checkpoint bucket ingestion to proto files (#24066)	UNREVIEWED			
-256	9d4852537704b736c1f616f4f4e71b9acb1cd09e	2026-01-20	Added some tests for package-alt (#24950)	UNREVIEWED			
-257	8da01e61297bcca2e0eca8e8e201c330ba78a524	2026-01-20	Add EndpointManager for peer address updates (#24862)	UNREVIEWED			
-258	5ce2a8c246577d36160e296d6051c8f5e59f93b4	2026-01-20	[sui-e2e-tests] Change some assert!(..is_ok()` and `assert!(..is_err(……))` to equivalent unwraps (#24992)	UNREVIEWED			
-259	d810229ce9a9873cd7bd16fe4abc1fdfb8748ce7	2026-01-20	typo(sui-json-rpc-api): fix typos and redundant text in API docs (#25008)	UNREVIEWED			
-260	7cee6921a0b6eeef7c4f59b233077cea7cad3918	2026-01-21	fix: pg_isready error message (#25014)	UNREVIEWED			
-261	202e691eb17139ed1bbf4f6b5f541b14a466baeb	2026-01-21	futures: Avoid join_all allocation in Service shutdown (#25006)	UNREVIEWED			
-262	cbd9ca723334eb7865414c0a4e17c2a58ee74104	2026-01-21	docs: add Solana to Sui concepts doc (#24867)	UNREVIEWED			
-263	dfc263983872976a788ce4bd5b914e196403d17d	2026-01-21	Deepbook: Supply referral and indexer docs (#25034)	UNREVIEWED			
-264	b7b62b3458932d88f9cd0666372eb0c82ceef164	2026-01-21	docs: Add contract addresses to Oracles doc (#25035)	UNREVIEWED			
-265	e082c0b99d4b4bb77e50417f053aee96e6cf6f2d	2026-01-21	Fix --sender flag ignored in publish/upgrade commands (#25016)	UNREVIEWED			
-266	467f66f14f1d31a5bb89e9e6e2cec8fac499259a	2026-01-21	[cli] Fix sender to be correctly used in other commands (#25038)	UNREVIEWED			
-267	3ecb18a9ce7937b375a24291bc7cc48579ba4085	2026-01-21	[move-stlib] More tests for add/mul (#25002)	UNREVIEWED			
-268	e0924aea76937b51e3a992692cc49097b276b051	2026-01-21	fix: remove duplicate stack size tiers at 11500 (#25039)	UNREVIEWED			
-269	25dcf800ab47ad66955651f9873dc0a1d9711c40	2026-01-21	[sui-node] Add enable-db-sync-to-disk config option to NodeConfig (#25040)	UNREVIEWED			
-270	ee95d280bd54ba78b374d3a787ddd6edd586266c	2026-01-21	[antithesis] enable fsync for validators (#25045)	UNREVIEWED			
-271	90015b3a0915ec09b947124527d859b04ca57cb4	2026-01-21	indexer-alt: support remote ingestion from object store (#24991)	UNREVIEWED			
-272	6a5302a4494f7e1b16ec3ac6c855bed45ac7de2b	2026-01-21	[move-stlib] Checked and lossless helpers for << and >> (#25003)	UNREVIEWED			
-273	092c2389c385716a05c7a0e6fe6e02bf77f398e2	2026-01-21	[move-compiler] fix borrow checker invariant violation (#25000)	UNREVIEWED			
-274	5611559cad0db99ed844b6ad22356e2bf7b3f5d3	2026-01-21	chore(deps): remove use of unmaintained rustls-pemfile (#24841)	UNREVIEWED			
-275	d5245e982aa37ca859b16bdc3e4dfa1a7096caa3	2026-01-21	indexer-alt: clarify --help for --reader-interval-ms (#25047)	UNREVIEWED			
-276	e1ea6dc460edbd0262cc2547b12b336e36b8b8bb	2026-01-21	Track graphql error count by error code, and track number of graphql requests erroring out (#25049)	UNREVIEWED			
-277	1a27af4bf7ea29b0058c4d5b19ccc98f963f9b2e	2026-01-22	Report consistent service health status as NOT_SERVING until snapshots are available (#25029)	UNREVIEWED			
-278	225b8f649239cd78483da3ad161587be88b995bc	2026-01-22	Deepbook: Interest rate docs (#25058)	UNREVIEWED			
-279	8db97abc750aef0fe608f90f6f2b0cda3c012b14	2026-01-22	add alias versions to signed_data_cache key (#25061)	UNREVIEWED			
-280	83cf75b74f6ff5e62995a32eeacb2fc0484235a9	2026-01-22	[chore] bump to Rust 1.92.0  (#25031)	UNREVIEWED			
-281	402f5f6d8ff1e418444d7edef1529f9f496fc195	2026-01-22	sui-bridge-indexer: remove old bridge indexer (#25042)	UNREVIEWED			
-282	a7db92712e066fed63fe30abe8d5e2e8396a3c28	2026-01-22	chore: re-export sui_rpc crates from sui_sdk (#25065)	UNREVIEWED			
-283	ccf2f12b3218df41158f03a23b17572583670a1b	2026-01-22	[indexer-alt] Quick highlight of storage requirements for 30 and 90d retention  (#25067)	UNREVIEWED			
-284	9ca39edb3f3cc6ec24ac2ea141c66ae909e1be31	2026-01-22	Add reachability and sometimes assertion tracking for simtests (#25054)	UNREVIEWED			
-285	dd63bebe97e5df1c3f57117dd87d42f5d0113707	2026-01-22	[move-stdlib] Added type_name::datatype_string. Added enum tests (#25032)	UNREVIEWED			
-286	df6a549300639eae9b6bf6d8cd703bc6a6543b1f	2026-01-22	typo: fix some typos (#25053)	UNREVIEWED			
-287	91a76f9adcac69a3743c8d09d098fecc368e98f6	2026-01-23	fix(sui-pg-db): missing CryptoProvider (#25071)	UNREVIEWED			
-288	03f60599a5719ba1677272de85f956205ed42de6	2026-01-23	[move][move-compiler] Fix module name resolution crash, plus replace several unwraps with expect in the compiler (#24969)	UNREVIEWED			
-289	2a6355cfaaf80eca29ff933965043df8d389c3e8	2026-01-23	[move][move-compiler] Arc `ModuleIdent` inside of type names to reduce AST sizes (#24693)	UNREVIEWED			
-290	889cc95c1d5a6a410c63419dd7f6f6e3ee6cc249	2026-01-23	chore: enable mainnet for custom nonzero pcrs parsing (#24957)	UNREVIEWED			
-291	abda60e4466e4434c6dcf8e1a518206b9c9db3ad	2026-01-22	simtest workload improvements (#24999)	UNREVIEWED			
-292	40bc0815ff9f172431e50944aef3901a8a6759a7	2026-01-23	[tidehunter] disable objects compactor for full nodes (#25055)	UNREVIEWED			
-293	1e1c68e3059b9fd46b1d57fa9b6af49510627d14	2026-01-23	[light-client] authenticated events client (#24226)	UNREVIEWED			
-294	0c86987daf3f7e08218eab0bc533acc88482fd10	2026-01-23	docs: misc batch update 01/22/2026 (#25070)	UNREVIEWED			
-295	7542bf36651141e27a2124ad362d4f98073fbbc4	2026-01-23	Deepbook docs interest rate updates (#25075)	UNREVIEWED			
-296	e58b99f6ff34245ce9c12838576a46210b4c1640	2026-01-23	[move-ide] Temporary crash remedy (#25078)	UNREVIEWED			
-297	b60d42df6f0f377c9717147cf5406db2420bcefa	2026-01-23	grpc: enforce limits on max batch size (#25062)	UNREVIEWED			
-298	a08ac240a3cd5fc2b85561fa65d4c36b6fa1e680	2026-01-23	[consensus] fix randomized dag tests (#25033)	UNREVIEWED			
-299	d5273f5c9f59630347ba8be70aa5c7649025d15f	2026-01-23	[claude] claude skill for release branch cherry picks (#25077)	UNREVIEWED			
-300	c369fcf58b8a0fb1aa4150b1cee9a89e5ba9e060	2026-01-23	Retry all transaction submissions for at least 60 seconds (#25083)	UNREVIEWED			
+251	cc8e624a969eed2066ff5f25c64c42a34143b0a6	2026-01-20	docs: fix gRPC links (#25021)	REVIEWED	EXCLUDE_NON_CODE		仅文档链接与目录重组。
+252	13526d01efc12a8ad81139bbd91819a2588d2abd	2026-01-20	docs: document GraphQL's rich queries (#24997)	REVIEWED	EXCLUDE_NON_CODE		仅扩写 GraphQL 查询文档。
+253	0daee96fca471ccd79066774a7704aa23b5e215c	2026-01-20	get_balance: fix parsing of shortened addresses (#25023)	APPLIED	MERGE	a2925c0ef7aeee40c259ecf6684d8786697fd975	通过 SDK Address 解析缩短 owner 地址。
+254	38a599ee10c9d4bf64fd46e833e3905909da8a05	2026-01-20	fix: link to sui-node binary (#25028)	REVIEWED	EXCLUDE_NON_CODE		仅修正文档中的二进制链接。
+255	75d51d379d4d9ff7aafb5dcc7c1f7e48d4501186	2026-01-20	Migrate checkpoint bucket ingestion to proto files (#24066)	REVIEWED	EXCLUDE_FEATURE		将 checkpoint ingestion 迁移到 proto 文件格式。
+256	9d4852537704b736c1f616f4f4e71b9acb1cd09e	2026-01-20	Added some tests for package-alt (#24950)	REVIEWED	EXCLUDE_NON_CODE		仅新增 package-alt shell tests 与 fixtures。
+257	8da01e61297bcca2e0eca8e8e201c330ba78a524	2026-01-20	Add EndpointManager for peer address updates (#24862)	REVIEWED	EXCLUDE_FEATURE		新增动态 peer 地址 EndpointManager 架构。
+258	5ce2a8c246577d36160e296d6051c8f5e59f93b4	2026-01-20	[sui-e2e-tests] Change some assert!(..is_ok()` and `assert!(..is_err(……))` to equivalent unwraps (#24992)	REVIEWED	EXCLUDE_NON_CODE		仅重写 e2e 测试断言。
+259	d810229ce9a9873cd7bd16fe4abc1fdfb8748ce7	2026-01-20	typo(sui-json-rpc-api): fix typos and redundant text in API docs (#25008)	REVIEWED	EXCLUDE_NON_CODE		仅 API 文档措辞和生成 spec 文本。
+260	7cee6921a0b6eeef7c4f59b233077cea7cad3918	2026-01-21	fix: pg_isready error message (#25014)	REVIEWED	EXCLUDE_NON_CODE		仅修正 pg_isready 错误消息文字。
+261	202e691eb17139ed1bbf4f6b5f541b14a466baeb	2026-01-21	futures: Avoid join_all allocation in Service shutdown (#25006)	REVIEWED	EXCLUDE_FEATURE		Service shutdown 的分配优化。
+262	cbd9ca723334eb7865414c0a4e17c2a58ee74104	2026-01-21	docs: add Solana to Sui concepts doc (#24867)	REVIEWED	EXCLUDE_NON_CODE		仅新增 Solana 概念文档。
+263	dfc263983872976a788ce4bd5b914e196403d17d	2026-01-21	Deepbook: Supply referral and indexer docs (#25034)	REVIEWED	EXCLUDE_NON_CODE		仅 DeepBook 文档。
+264	b7b62b3458932d88f9cd0666372eb0c82ceef164	2026-01-21	docs: Add contract addresses to Oracles doc (#25035)	REVIEWED	EXCLUDE_NON_CODE		仅 Oracle 文档地址更新。
+265	e082c0b99d4b4bb77e50417f053aee96e6cf6f2d	2026-01-21	Fix --sender flag ignored in publish/upgrade commands (#25016)	APPLIED	MERGE	e9a53b8d0c8e3184d44f036e1d7cdbe75ec2aad9	publish/upgrade 现尊重显式 sender。
+266	467f66f14f1d31a5bb89e9e6e2cec8fac499259a	2026-01-21	[cli] Fix sender to be correctly used in other commands (#25038)	REVIEWED	ALREADY_PRESENT		共享 dry_run_or_execute_or_serialize 已用 processing.sender 覆盖推断 sender。
+267	3ecb18a9ce7937b375a24291bc7cc48579ba4085	2026-01-21	[move-stlib] More tests for add/mul (#25002)	REVIEWED	EXCLUDE_NON_CODE		仅新增 Move stdlib 算术测试。
+268	e0924aea76937b51e3a992692cc49097b276b051	2026-01-21	fix: remove duplicate stack size tiers at 11500 (#25039)	REVIEWED	EXCLUDE_FEATURE		删除被 BTreeMap 覆盖的死配置项，运行时行为不变。
+269	25dcf800ab47ad66955651f9873dc0a1d9711c40	2026-01-21	[sui-node] Add enable-db-sync-to-disk config option to NodeConfig (#25040)	REVIEWED	EXCLUDE_FEATURE		新增节点 fsync 配置选项。
+270	ee95d280bd54ba78b374d3a787ddd6edd586266c	2026-01-21	[antithesis] enable fsync for validators (#25045)	REVIEWED	EXCLUDE_FEATURE		仅 Antithesis validator 部署启用 fsync。
+271	90015b3a0915ec09b947124527d859b04ca57cb4	2026-01-21	indexer-alt: support remote ingestion from object store (#24991)	REVIEWED	EXCLUDE_FEATURE		新增 object-store remote ingestion。
+272	6a5302a4494f7e1b16ec3ac6c855bed45ac7de2b	2026-01-21	[move-stlib] Checked and lossless helpers for << and >> (#25003)	REVIEWED	EXCLUDE_FEATURE		新增 Move stdlib 位移 helper API。
+273	092c2389c385716a05c7a0e6fe6e02bf77f398e2	2026-01-21	[move-compiler] fix borrow checker invariant violation (#25000)	APPLIED	MERGE	7ca4d1d9bae27c03121940d70b286a4a5935e149	保留 borrow graph overflow 的 root borrows，避免编译器断言。
+274	5611559cad0db99ed844b6ad22356e2bf7b3f5d3	2026-01-21	chore(deps): remove use of unmaintained rustls-pemfile (#24841)	REVIEWED	EXCLUDE_NON_CODE		依赖维护：移除 rustls-pemfile 使用。
+275	d5245e982aa37ca859b16bdc3e4dfa1a7096caa3	2026-01-21	indexer-alt: clarify --help for --reader-interval-ms (#25047)	REVIEWED	EXCLUDE_NON_CODE		仅 CLI help 文案。
+276	e1ea6dc460edbd0262cc2547b12b336e36b8b8bb	2026-01-21	Track graphql error count by error code, and track number of graphql requests erroring out (#25049)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL error metrics。
+277	1a27af4bf7ea29b0058c4d5b19ccc98f963f9b2e	2026-01-22	Report consistent service health status as NOT_SERVING until snapshots are available (#25029)	APPLIED	MERGE	9238af193f7deabbd24e84ab57d48e14d435ca57	首个 snapshot 前 health 保持 NOT_SERVING。
+278	225b8f649239cd78483da3ad161587be88b995bc	2026-01-22	Deepbook: Interest rate docs (#25058)	REVIEWED	EXCLUDE_NON_CODE		仅 DeepBook 利率文档。
+279	8db97abc750aef0fe608f90f6f2b0cda3c012b14	2026-01-22	add alias versions to signed_data_cache key (#25061)	APPLIED	MERGE	a7b1c96dfcaf6270c716962b31e128a854aecfe3	alias version 纳入签名验证缓存键。
+280	83cf75b74f6ff5e62995a32eeacb2fc0484235a9	2026-01-22	[chore] bump to Rust 1.92.0  (#25031)	REVIEWED	EXCLUDE_NON_CODE		Rust toolchain 与机械兼容性更新。
+281	402f5f6d8ff1e418444d7edef1529f9f496fc195	2026-01-22	sui-bridge-indexer: remove old bridge indexer (#25042)	REVIEWED	EXCLUDE_FEATURE		删除旧 bridge indexer 并迁移架构。
+282	a7db92712e066fed63fe30abe8d5e2e8396a3c28	2026-01-22	chore: re-export sui_rpc crates from sui_sdk (#25065)	REVIEWED	EXCLUDE_FEATURE		扩展 SDK re-export API。
+283	ccf2f12b3218df41158f03a23b17572583670a1b	2026-01-22	[indexer-alt] Quick highlight of storage requirements for 30 and 90d retention  (#25067)	REVIEWED	EXCLUDE_NON_CODE		仅 indexer 存储需求文档。
+284	9ca39edb3f3cc6ec24ac2ea141c66ae909e1be31	2026-01-22	Add reachability and sometimes assertion tracking for simtests (#25054)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest reachability 基础设施。
+285	dd63bebe97e5df1c3f57117dd87d42f5d0113707	2026-01-22	[move-stdlib] Added type_name::datatype_string. Added enum tests (#25032)	REVIEWED	EXCLUDE_FEATURE		新增 Move stdlib datatype_string API。
+286	df6a549300639eae9b6bf6d8cd703bc6a6543b1f	2026-01-22	typo: fix some typos (#25053)	REVIEWED	EXCLUDE_NON_CODE		仅拼写、注释和错误文本修正。
+287	91a76f9adcac69a3743c8d09d098fecc368e98f6	2026-01-23	fix(sui-pg-db): missing CryptoProvider (#25071)	REVIEWED	ALREADY_PRESENT		RTD rustls 0.23 全 workspace 仅启用 ring，provider 可自动唯一选择；独立回归不复现。
+288	03f60599a5719ba1677272de85f956205ed42de6	2026-01-23	[move][move-compiler] Fix module name resolution crash, plus replace several unwraps with expect in the compiler (#24969)	APPLIED	MERGE	5f4694a150c3b185c75ec2e5f1287ab32de45953	address block 解析期间保留 named-address map，避免 unwrap panic。
+289	2a6355cfaaf80eca29ff933965043df8d389c3e8	2026-01-23	[move][move-compiler] Arc `ModuleIdent` inside of type names to reduce AST sizes (#24693)	REVIEWED	EXCLUDE_FEATURE		以 Arc 重构 ModuleIdent 以降低 AST 内存。
+290	889cc95c1d5a6a410c63419dd7f6f6e3ee6cc249	2026-01-23	chore: enable mainnet for custom nonzero pcrs parsing (#24957)	REVIEWED	EXCLUDE_FEATURE		协议/主网 PCR 解析 feature gate 变更。
+291	abda60e4466e4434c6dcf8e1a518206b9c9db3ad	2026-01-22	simtest workload improvements (#24999)	REVIEWED	EXCLUDE_FEATURE		大规模 simtest benchmark workload 改进。
+292	40bc0815ff9f172431e50944aef3901a8a6759a7	2026-01-23	[tidehunter] disable objects compactor for full nodes (#25055)	REVIEWED	EXCLUDE_FEATURE		fullnode objects compactor 运维策略变更。
+293	1e1c68e3059b9fd46b1d57fa9b6af49510627d14	2026-01-23	[light-client] authenticated events client (#24226)	REVIEWED	EXCLUDE_FEATURE		新增 authenticated events light client。
+294	0c86987daf3f7e08218eab0bc533acc88482fd10	2026-01-23	docs: misc batch update 01/22/2026 (#25070)	REVIEWED	EXCLUDE_NON_CODE		仅批量文档更新。
+295	7542bf36651141e27a2124ad362d4f98073fbbc4	2026-01-23	Deepbook docs interest rate updates (#25075)	REVIEWED	EXCLUDE_NON_CODE		仅 DeepBook 利率文档更新。
+296	e58b99f6ff34245ce9c12838576a46210b4c1640	2026-01-23	[move-ide] Temporary crash remedy (#25078)	APPLIED	MERGE	85707e7e38446ec4b0fd6211a3cb930a6dc34c2a	module extension 缺失 def_info 时 analyzer 返回而非 panic。
+297	b60d42df6f0f377c9717147cf5406db2420bcefa	2026-01-23	grpc: enforce limits on max batch size (#25062)	APPLIED	MERGE	96a5d8c994007931a059a629cf8767fb46a392fb	限制 object/transaction gRPC batch 大小。
+298	a08ac240a3cd5fc2b85561fa65d4c36b6fa1e680	2026-01-23	[consensus] fix randomized dag tests (#25033)	REVIEWED	EXCLUDE_NON_CODE		仅 randomized consensus test fixture 与 simtest 修复。
+299	d5273f5c9f59630347ba8be70aa5c7649025d15f	2026-01-23	[claude] claude skill for release branch cherry picks (#25077)	REVIEWED	EXCLUDE_NON_CODE		仅新增 Claude cherry-pick skill。
+300	c369fcf58b8a0fb1aa4150b1cee9a89e5ba9e060	2026-01-23	Retry all transaction submissions for at least 60 seconds (#25083)	REVIEWED	EXCLUDE_FEATURE		Antithesis benchmark 重试策略调优。
 301	6e075200356bfefd756ca70e91bcc545c0c2cf24	2026-01-26	[core] split checkpoints in consensus handler (#24736)	UNREVIEWED			
 302	0b653b5485fb62c552c63df9b0012db388df99b8	2026-01-26	[light-clients] docs: authenticated events (#24659)	UNREVIEWED			
 303	43552a1806a16162b9997607e9187b772b3d6bf3	2026-01-26	[config] Shift around where we set some values (#25100)	UNREVIEWED			
