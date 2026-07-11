@@ -47,13 +47,10 @@ use rtd_open_rpc::Module;
 use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use rtd_storage::key_value_store::TransactionKeyValueStore;
 use rtd_types::base_types::{ObjectID, SequenceNumber, TransactionDigest};
-use rtd_types::crypto::AggregateAuthoritySignature;
 use rtd_types::display::DisplayVersionUpdatedEvent;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents};
 use rtd_types::error::{RtdError, RtdObjectResponseError};
-use rtd_types::messages_checkpoint::{
-    CheckpointContents, CheckpointSequenceNumber, CheckpointSummary, CheckpointTimestamp,
-};
+use rtd_types::messages_checkpoint::{CheckpointSequenceNumber, CheckpointTimestamp};
 use rtd_types::object::{Object, ObjectRead, PastObjectRead};
 use rtd_types::rtd_serde::BigInt;
 use rtd_types::transaction::TransactionDataAPI;
@@ -187,36 +184,21 @@ impl ReadApi {
             .multi_get_checkpoints_summaries(&checkpoint_numbers)
             .await?;
 
-        let checkpoint_summaries_and_signatures: Vec<(
-            CheckpointSummary,
-            AggregateAuthoritySignature,
-        )> = verified_checkpoints
-            .into_iter()
-            .flatten()
-            .map(|check| {
-                (
-                    check.clone().into_summary_and_sequence().1,
-                    check.get_validator_signature(),
-                )
-            })
-            .collect();
-
         let checkpoint_contents = transaction_kv_store
             .multi_get_checkpoints_contents(&checkpoint_numbers)
             .await?;
-        let contents: Vec<CheckpointContents> = checkpoint_contents.into_iter().flatten().collect();
 
-        let mut checkpoints: Vec<Checkpoint> = vec![];
-
-        for (summary_and_sig, content) in checkpoint_summaries_and_signatures
+        let mut checkpoints = Vec::with_capacity(checkpoint_numbers.len());
+        for (maybe_summary, maybe_contents) in verified_checkpoints
             .into_iter()
-            .zip(contents.into_iter())
+            .zip(checkpoint_contents)
         {
-            checkpoints.push(Checkpoint::from((
-                summary_and_sig.0,
-                content,
-                summary_and_sig.1,
-            )));
+            let (Some(summary), Some(contents)) = (maybe_summary, maybe_contents) else {
+                continue;
+            };
+            let signature = summary.auth_sig().signature.clone();
+            let summary = summary.into_summary_and_sequence().1;
+            checkpoints.push(Checkpoint::from((summary, contents, signature)));
         }
 
         Ok(checkpoints)
