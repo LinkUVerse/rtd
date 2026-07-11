@@ -1349,56 +1349,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1348	7dd0be5aa807a615163033aca4ed66d799229144	2026-05-12	sui-rosetta: harden MergeAndRedeemFungibleStakedSui (chain guard, epoch binding) (#26489)	REVIEWED	EXCLUDE_POST_FORK		fungible stake 后置协议。
 1349	ba3c4a8a537b6912470da7af3a078bf9ebd1af48	2026-05-12	[Block Streaming] skip commit processing for Observer sync enabled nodes (#26498)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 功能。
 1350	fc75b00193e5069977c693e768b76e160cb90be4	2026-05-12	docs: update data access guidance (#26597)	REVIEWED	EXCLUDE_NON_CODE		文档。
-1351	e3f5ddcde4e61d62ddb8af9979fb6199a1e9723b	2026-05-12	docker: cache-friendly Dockerfile rewrites for Tier 1 images (#26601)	UNREVIEWED			
-1352	7c41cedd9dda50da88c2c226b70435bb39008daa	2026-05-12	[sui-fork] Fix the way object_by_key is handling deleted/wrapped objects (#26588)	UNREVIEWED			
-1353	27e8a310161ee2b1158bf6a1ba420beffdd4181b	2026-05-12	ci: thread cache_family into sui-operations tag-docker-images dispatch (#26602)	UNREVIEWED			
-1354	5f8f64f8f183fb5d21aea041713f40498be1f754	2026-05-12	kvstore: add bitmap index pipelines (#26497)	UNREVIEWED			
-1355	258168b3532580e75c6035f2b772848f1511f85b	2026-05-12	docs: revisions for kapa.ai action items (#26421)	UNREVIEWED			
-1356	ac7a16ba86ba05af07b511ad5e4cc845e595995a	2026-05-12	[chore] Update tidehunter to 48f0621 (#26599)	UNREVIEWED			
-1357	6ad1e8de999661d2dd389ff7b4a847f34618c801	2026-05-12	Add testnet DUSDC request link to DeepBook Predict docs (#26609)	UNREVIEWED			
-1358	5c373e5119ef5f03cde3316a6abc44d4a4135d45	2026-05-12	docker: cache-friendly Dockerfile rewrites for Tier 2 + Tier 3 images (#26611)	UNREVIEWED			
-1359	fab76d6a4935aae7861b2c5b7011905370b40ce5	2026-05-12	[graphql-stream] Resolve Event.transaction in streaming mode [10/n] (#26487)	UNREVIEWED			
-1360	8461ef937f0bbfd6bf6e30d0573022d3fc8e9f6c	2026-05-13	docs: add GraphQL typed object change examples (#26605)	UNREVIEWED			
-1361	a8bf7db7132a976aaa5948a3ba092b335ece584b	2026-05-13	docs: refresh object and PTB guidance (#26606)	UNREVIEWED			
-1362	2defa0ee2a3475e02e77ca9c1f6dd2692fa4c316	2026-05-13	Avoid intermediate Vec allocation in rejected_transactions_digest (#26575)	UNREVIEWED			
-1363	403c24762b4431fb2c200ca7778714df7ecda6ed	2026-05-13	docs: improve search result display and fix garbled titles (#26617)	UNREVIEWED			
-1364	9e131240acc6eda51a8826eb4df20f1f69ae2171	2026-05-13	[address balances][harderning] Added expensive invariant checks (#26582)	UNREVIEWED			
-1365	6e77b0b5435836cef3113bba56201fc6fe899912	2026-05-13	[chore] Update tidehunter to 9a0472f (#26620)	UNREVIEWED			
-1366	1ff47fc7ee4c6b851d1ab7e0205019c57383780e	2026-05-13	Remove unused batch_verify_certificates and async certificate batching (#26625)	UNREVIEWED			
-1367	d09ce1816dfd5913c0c8c53d3cee469db070343f	2026-05-13	[sui move format] Vibed windows test fix (#26623)	UNREVIEWED			
-1368	8351dab4f5aeac8ec56d0bfa82c94aeb60b2df8d	2026-05-13	[sui-fork ] Add `--version` flag and improve README (#26628)	UNREVIEWED			
-1369	91d92efd413ef97bcaf2957a4911a6dea7ba3ff2	2026-05-13	[move-ide] Generic macro type param processing fix (#26608)	UNREVIEWED			
-1370	241885114a623666347cadc51a7ad07e63bd9a78	2026-05-13	[chore] fix cargo-deny issue with `diesel-async` (#26629)	UNREVIEWED			
-1371	19db661bf18901aa22fc72af01c12ec237a96c36	2026-05-13	sui-tool: add tideconsole subcommand behind feature flag (#26627)	UNREVIEWED			
-1372	789e6c11087dbe3593cd069e1b6210528c24fcd0	2026-05-14	Remove dead CertifiedTransaction-related code (#26634)	UNREVIEWED			
-1373	317807c406ef200ea9d2b935cab6af169eb8b3e7	2026-05-13	[move][move-decompiler] Fix perf issue when building loop bodies (#26613)	UNREVIEWED			
-1374	f631b871e6186ced2052c0b06a8ba87bdcdc8796	2026-05-14	[move][move-decompiler] Support breaking out of external loops in addition to immediate loop (#26614)	UNREVIEWED			
-1375	b86e6e85d7faa3609bd79fc35ed41be25d3eb7db	2026-05-13	Vm error visibility execution and type (#26517)	UNREVIEWED			
-1376	11ea899f8b9a19417096b01c6c75df0a9a48c878	2026-05-14	[decompiler] Total post-dominators over divergent regions (#26615)	UNREVIEWED			
-1377	95f655aa377de85fe945f00c8bd64e536c248420	2026-05-14	docs: fix details dropdown arrow and expand animation (#26624)	UNREVIEWED			
-1378	8c6fbbb3fdce931c9b6cdfc4da3d19582aba4551	2026-05-14	Remove text that states gas is paid out of address balances (#26645)	UNREVIEWED			
-1379	81ea1e3e8974aa1ef57a3557a7f67e7a2193ba63	2026-05-14	sui-adapter-transactional-tests: expand address-balance gas-smashing coverage (#26631)	UNREVIEWED			
-1380	0266011aaa2f4da876d6dbadc4db8cc208f057a6	2026-05-14	[forking] Fix how the --data-dir stores the files 18/n (#26500)	UNREVIEWED			
-1381	4f9945d63bf6fd3a534dcbc182ff21a5e2e6546d	2026-05-14	fix: remove sentence (#26650)	UNREVIEWED			
-1382	6ef4ce716ea2890e8d1df7a24251dd25b7be3dd4	2026-05-14	[move][move-decompiler] Disable inline_immediates and normalize degenerate conditions (#26638)	UNREVIEWED			
-1383	d10a16f29e90596186b523414b96a79a7d611fae	2026-05-14	[move][move-decompiler] Fix let-declaration hoisting and fuse split let/assign pairs (#26639)	UNREVIEWED			
-1384	e7692e1b01a0b5955b5fe9403791103ca25f45e7	2026-05-14	[sui-fork] Update README.md (#26647)	UNREVIEWED			
-1385	8a96468c34e064a7dd955d6b73fdd3744e5b9f50	2026-05-14	[move][move-decompiler] Reconstruct match expressions from variant switches (#26640)	UNREVIEWED			
-1386	9d9c2b4f6e0f48c2eecf86bc7f2201933e06c1e9	2026-05-14	ci: scope arm64 prebuild to network branches only (#26653)	UNREVIEWED			
-1387	505b085279e9fb08cd5ece07441a105ded694c88	2026-05-14	ci: skip arm64 in trigger-builds tag-docker-images dispatch (#26656)	UNREVIEWED			
-1388	f1358b049b55f07c0f6a1261f191930f908f49a0	2026-05-14	[ci] Do not run CI on edits to markdown files only (#26652)	UNREVIEWED			
-1389	6c853b9cea2f6b0fcb85068ef57d34300d73c5be	2026-05-14	[move][move-decompiler] Collect module uses and rewrite paths to aliased form (#26641)	UNREVIEWED			
-1390	423f8e3d5363b6e88e086be044c9c59249c4d189	2026-05-14	Refactor dev-inspect and dry-run to use the same backend `simulate`  call (#26649)	UNREVIEWED			
-1391	fe8768c84bcb74bb8df55bd05b90a2cda579c5e7	2026-05-14	kv rpc: add bitmap query APIs (#26587)	UNREVIEWED			
-1392	b2f82f7091e3e3a827aee57eba95bc6b044a7c26	2026-05-15	[move][move-decompiler] Eliminate more gotos from conditional restructuring (#26643)	UNREVIEWED			
-1393	add9d4722104173186e78df5aac4b07b6e019b40	2026-05-15	[move][move-decompiler] Emit loop bodies in reverse post-order (#26644)	UNREVIEWED			
-1394	0689a8a09dfda6237ed9c35d299f812c79489a69	2026-05-15	[indexer-alt] Add kv_checkpoints_by_digest table and pipeline (#26590)	UNREVIEWED			
-1395	119e41f190ae47601a505dd2718c7d0158929c1f	2026-05-15	[graphql] Add Query.checkpoint(digest:) lookup (#26594)	UNREVIEWED			
-1396	af681b494d8b1f39cd35eb143d98724ec611f37b	2026-05-15	[easy][adapter] Remove a bunch of old dead code (#26668)	UNREVIEWED			
-1397	ca9d0e74251f5901ba29db89dcc71e79dd54fefd	2026-05-16	sui-types: convert ValidDuring TransactionExpiration from proto (#26670)	UNREVIEWED			
-1398	55e807fc162f6c0a9a69775e7e17542a042c48b5	2026-05-18	[move-compiler] errors review (#26458)	UNREVIEWED			
-1399	a2ed2501161d2eedf13598df1a93e6e20f0b543f	2026-05-18	Update instruction for querying the stablecoin allowlist (#26671)	UNREVIEWED			
-1400	69382f5b07b009a23eb47e2d04dd287c8310347b	2026-05-18	sui-core: remove verify_indexes module (#26663)	UNREVIEWED			
+1351	e3f5ddcde4e61d62ddb8af9979fb6199a1e9723b	2026-05-12	docker: cache-friendly Dockerfile rewrites for Tier 1 images (#26601)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1352	7c41cedd9dda50da88c2c226b70435bb39008daa	2026-05-12	[sui-fork] Fix the way object_by_key is handling deleted/wrapped objects (#26588)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1353	27e8a310161ee2b1158bf6a1ba420beffdd4181b	2026-05-12	ci: thread cache_family into sui-operations tag-docker-images dispatch (#26602)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1354	5f8f64f8f183fb5d21aea041713f40498be1f754	2026-05-12	kvstore: add bitmap index pipelines (#26497)	REVIEWED	EXCLUDE_FEATURE		KV pipeline 功能。
+1355	258168b3532580e75c6035f2b772848f1511f85b	2026-05-12	docs: revisions for kapa.ai action items (#26421)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1356	ac7a16ba86ba05af07b511ad5e4cc845e595995a	2026-05-12	[chore] Update tidehunter to 48f0621 (#26599)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置依赖。
+1357	6ad1e8de999661d2dd389ff7b4a847f34618c801	2026-05-12	Add testnet DUSDC request link to DeepBook Predict docs (#26609)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1358	5c373e5119ef5f03cde3316a6abc44d4a4135d45	2026-05-12	docker: cache-friendly Dockerfile rewrites for Tier 2 + Tier 3 images (#26611)	REVIEWED	EXCLUDE_NON_CODE		镜像构建。
+1359	fab76d6a4935aae7861b2c5b7011905370b40ce5	2026-05-12	[graphql-stream] Resolve Event.transaction in streaming mode [10/n] (#26487)	REVIEWED	EXCLUDE_FEATURE		GraphQL streaming 功能。
+1360	8461ef937f0bbfd6bf6e30d0573022d3fc8e9f6c	2026-05-13	docs: add GraphQL typed object change examples (#26605)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1361	a8bf7db7132a976aaa5948a3ba092b335ece584b	2026-05-13	docs: refresh object and PTB guidance (#26606)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1362	2defa0ee2a3475e02e77ca9c1f6dd2692fa4c316	2026-05-13	Avoid intermediate Vec allocation in rejected_transactions_digest (#26575)	REVIEWED	EXCLUDE_NON_CRITICAL		性能优化。
+1363	403c24762b4431fb2c200ca7778714df7ecda6ed	2026-05-13	docs: improve search result display and fix garbled titles (#26617)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1364	9e131240acc6eda51a8826eb4df20f1f69ae2171	2026-05-13	[address balances][harderning] Added expensive invariant checks (#26582)	REVIEWED	EXCLUDE_POST_FORK		address balance 后置协议。
+1365	6e77b0b5435836cef3113bba56201fc6fe899912	2026-05-13	[chore] Update tidehunter to 9a0472f (#26620)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置依赖。
+1366	1ff47fc7ee4c6b851d1ab7e0205019c57383780e	2026-05-13	Remove unused batch_verify_certificates and async certificate batching (#26625)	REVIEWED	EXCLUDE_FEATURE		共识清理重构。
+1367	d09ce1816dfd5913c0c8c53d3cee469db070343f	2026-05-13	[sui move format] Vibed windows test fix (#26623)	REVIEWED	EXCLUDE_NON_CODE		测试。
+1368	8351dab4f5aeac8ec56d0bfa82c94aeb60b2df8d	2026-05-13	[sui-fork ] Add `--version` flag and improve README (#26628)	REVIEWED	EXCLUDE_FEATURE		forking CLI。
+1369	91d92efd413ef97bcaf2957a4911a6dea7ba3ff2	2026-05-13	[move-ide] Generic macro type param processing fix (#26608)	REVIEWED	EXCLUDE_NON_CRITICAL		Move IDE。
+1370	241885114a623666347cadc51a7ad07e63bd9a78	2026-05-13	[chore] fix cargo-deny issue with `diesel-async` (#26629)	REVIEWED	EXCLUDE_NON_CODE		依赖审计配置。
+1371	19db661bf18901aa22fc72af01c12ec237a96c36	2026-05-13	sui-tool: add tideconsole subcommand behind feature flag (#26627)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1372	789e6c11087dbe3593cd069e1b6210528c24fcd0	2026-05-14	Remove dead CertifiedTransaction-related code (#26634)	REVIEWED	EXCLUDE_FEATURE		清理重构。
+1373	317807c406ef200ea9d2b935cab6af169eb8b3e7	2026-05-13	[move][move-decompiler] Fix perf issue when building loop bodies (#26613)	REVIEWED	EXCLUDE_NON_CRITICAL		反编译性能。
+1374	f631b871e6186ced2052c0b06a8ba87bdcdc8796	2026-05-14	[move][move-decompiler] Support breaking out of external loops in addition to immediate loop (#26614)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1375	b86e6e85d7faa3609bd79fc35ed41be25d3eb7db	2026-05-13	Vm error visibility execution and type (#26517)	REVIEWED	EXCLUDE_FEATURE		大规模 VM 执行错误可见性重构。
+1376	11ea899f8b9a19417096b01c6c75df0a9a48c878	2026-05-14	[decompiler] Total post-dominators over divergent regions (#26615)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1377	95f655aa377de85fe945f00c8bd64e536c248420	2026-05-14	docs: fix details dropdown arrow and expand animation (#26624)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1378	8c6fbbb3fdce931c9b6cdfc4da3d19582aba4551	2026-05-14	Remove text that states gas is paid out of address balances (#26645)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1379	81ea1e3e8974aa1ef57a3557a7f67e7a2193ba63	2026-05-14	sui-adapter-transactional-tests: expand address-balance gas-smashing coverage (#26631)	REVIEWED	EXCLUDE_POST_FORK		address balance 后置协议。
+1380	0266011aaa2f4da876d6dbadc4db8cc208f057a6	2026-05-14	[forking] Fix how the --data-dir stores the files 18/n (#26500)	REVIEWED	EXCLUDE_FEATURE		forking 功能。
+1381	4f9945d63bf6fd3a534dcbc182ff21a5e2e6546d	2026-05-14	fix: remove sentence (#26650)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1382	6ef4ce716ea2890e8d1df7a24251dd25b7be3dd4	2026-05-14	[move][move-decompiler] Disable inline_immediates and normalize degenerate conditions (#26638)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1383	d10a16f29e90596186b523414b96a79a7d611fae	2026-05-14	[move][move-decompiler] Fix let-declaration hoisting and fuse split let/assign pairs (#26639)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1384	e7692e1b01a0b5955b5fe9403791103ca25f45e7	2026-05-14	[sui-fork] Update README.md (#26647)	REVIEWED	EXCLUDE_NON_CODE		forking 文档。
+1385	8a96468c34e064a7dd955d6b73fdd3744e5b9f50	2026-05-14	[move][move-decompiler] Reconstruct match expressions from variant switches (#26640)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1386	9d9c2b4f6e0f48c2eecf86bc7f2201933e06c1e9	2026-05-14	ci: scope arm64 prebuild to network branches only (#26653)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1387	505b085279e9fb08cd5ece07441a105ded694c88	2026-05-14	ci: skip arm64 in trigger-builds tag-docker-images dispatch (#26656)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1388	f1358b049b55f07c0f6a1261f191930f908f49a0	2026-05-14	[ci] Do not run CI on edits to markdown files only (#26652)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1389	6c853b9cea2f6b0fcb85068ef57d34300d73c5be	2026-05-14	[move][move-decompiler] Collect module uses and rewrite paths to aliased form (#26641)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1390	423f8e3d5363b6e88e086be044c9c59249c4d189	2026-05-14	Refactor dev-inspect and dry-run to use the same backend `simulate`  call (#26649)	REVIEWED	EXCLUDE_FEATURE		模拟执行重构。
+1391	fe8768c84bcb74bb8df55bd05b90a2cda579c5e7	2026-05-14	kv rpc: add bitmap query APIs (#26587)	REVIEWED	EXCLUDE_FEATURE		KV RPC 功能。
+1392	b2f82f7091e3e3a827aee57eba95bc6b044a7c26	2026-05-15	[move][move-decompiler] Eliminate more gotos from conditional restructuring (#26643)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1393	add9d4722104173186e78df5aac4b07b6e019b40	2026-05-15	[move][move-decompiler] Emit loop bodies in reverse post-order (#26644)	REVIEWED	EXCLUDE_FEATURE		反编译器功能。
+1394	0689a8a09dfda6237ed9c35d299f812c79489a69	2026-05-15	[indexer-alt] Add kv_checkpoints_by_digest table and pipeline (#26590)	REVIEWED	EXCLUDE_FEATURE		索引器功能。
+1395	119e41f190ae47601a505dd2718c7d0158929c1f	2026-05-15	[graphql] Add Query.checkpoint(digest:) lookup (#26594)	REVIEWED	EXCLUDE_FEATURE		GraphQL 功能。
+1396	af681b494d8b1f39cd35eb143d98724ec611f37b	2026-05-15	[easy][adapter] Remove a bunch of old dead code (#26668)	REVIEWED	EXCLUDE_FEATURE		执行层清理。
+1397	ca9d0e74251f5901ba29db89dcc71e79dd54fefd	2026-05-16	sui-types: convert ValidDuring TransactionExpiration from proto (#26670)	REVIEWED	EXCLUDE_FEATURE		RPC proto 转换功能。
+1398	55e807fc162f6c0a9a69775e7e17542a042c48b5	2026-05-18	[move-compiler] errors review (#26458)	REVIEWED	EXCLUDE_NON_CRITICAL		编译器诊断编号调整。
+1399	a2ed2501161d2eedf13598df1a93e6e20f0b543f	2026-05-18	Update instruction for querying the stablecoin allowlist (#26671)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1400	69382f5b07b009a23eb47e2d04dd287c8310347b	2026-05-18	sui-core: remove verify_indexes module (#26663)	REVIEWED	EXCLUDE_FEATURE		索引校验模块清理。
 1401	249640eefa2a82ea743bebd2c75ade5ee7854e58	2026-05-18	[move][move-decompiler] Capture types in the AST so the alias renamer rewrites them (#26662)	UNREVIEWED			
 1402	259b947bf5b07cded7481c0c1f5e88470939c930	2026-05-18	[sui-fork] add back `ConsensusAddressOwner` support for owned objects and seeding (#26635)	UNREVIEWED			
 1403	7aeac40b6982bf3146704d45d3cb3cb2b4fa61ff	2026-05-18	[consensus] add LeaderScheduleV3 sliding-window scorer (#26372)	UNREVIEWED			
