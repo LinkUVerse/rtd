@@ -1599,56 +1599,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1598	719ac32d413bde983502e8ae3e5b36ff6aaa0989	2026-06-11	ci(release): split sui-releases S3 ops into an OIDC environment job (Phase 5) (#26951)	REVIEWED	EXCLUDE_NON_CODE		CI。
 1599	78c52318271bc4493c61e59a3bba28556b9768f6	2026-06-12	Fix accumulator and gasless metrics (#26949)	REVIEWED	EXCLUDE_NON_CRITICAL		监控指标。
 1600	8c1a5dbc40b12b91e5ce79f8f0e259c69f63269c	2026-06-13	Split latest account amount reads (#26908)	APPLIED	MERGE	b3a5c9314990c7fa55f49425a6672d60036e164b	结算中间态读取与根版本一致，避免错误余额。
-1601	911b66673ed2acf7358bbe4e1b87456ad200e9c5	2026-06-15	fix(graphql): unexpected unicode in SuiAddress (#26958)	UNREVIEWED			
-1602	ad6b04a4f2be1e9da9f5254134270471ddc4930b	2026-06-15	ci(release): pin checkout to the tag namespace and validate the tag prefix (#26953)	UNREVIEWED			
-1603	75a1e7923ae3cc3ef787c8fd8c6ade112aa6d995	2026-06-15	docs(oidc): correct Phase-4 fork-exclusion framing + release dispatch hazard (#26952)	UNREVIEWED			
-1604	5cdcf2c85ab4568ee6cc41005dd1cd3f476cd74a	2026-06-15	docs(oidc): record Phase-4 decision — option A (all PRs read-only) (#26960)	UNREVIEWED			
-1605	5ef0405b2f2d46aaf9662874c54861d5e45544fb	2026-06-15	ci: restrict heavy CI token permissions (#26766)	UNREVIEWED			
-1606	91b34b2ffe68f27f7bcbe458a8f752fdbd46b060	2026-06-15	[sui-adapter][easy] Skip collecting runtime telemetry for dry-run/dev-inspect (#26950)	UNREVIEWED			
-1607	c605814b1abca4e4a720fff8c5158ca78409afb2	2026-06-15	json-rpc: pair checkpoint summaries with their own contents (#26964)	UNREVIEWED			
-1608	f0f4ce96fb308cdda07191947cb68938b453b93d	2026-06-15	test-cluster: retry submit_and_execute on transient post-reconfiguration consensus timeouts (#26965)	UNREVIEWED			
-1609	0333f585c86c75bc214f8bf838fe006bbc572ba7	2026-06-15	json-rpc: add config flag to disable the JSON-RPC HTTP service (#26967)	UNREVIEWED			
-1610	14b389728a7f70c66b483ee487f266d90556684d	2026-06-15	ci(release): flip release-build sccache to the OIDC RW role (Phase 5) (#26963)	UNREVIEWED			
-1611	0a7d9d28b4ab061f5abe58363057087ef97149fd	2026-06-15	Bound accumulator amounts to representable limits before charging gas (#26955)	UNREVIEWED			
-1612	4ac25e815ee4290c462982687facfa1d17fda229	2026-06-15	ci(sccache): same-repo PRs assume the read-only OIDC role (Phase 4, option A) (#26962)	UNREVIEWED			
-1613	364300a6b4c3fe7a1ebddf521697da35578b1905	2026-06-15	fix(ci): release.yml startup failure (empty ${{ }} in a run-block comment) (#26969)	UNREVIEWED			
-1614	3ed924d833b23057bbb46c6b49dde62f5ff031ed	2026-06-15	docs: expand security, keytool, transaction-auth, logging, and zkLogin pages (#26701)	UNREVIEWED			
-1615	14c59d81505b738529ab7013b21cc2341adce79d	2026-06-15	Fix postgres DoS advisories (RUSTSEC-2026-0178/0179/0180) (#26968)	UNREVIEWED			
-1616	f636627563b38ef87ed0a84e675ac64c4cb5f641	2026-06-15	x: skip license-header check on codegen.rs scripts	UNREVIEWED			
-1617	43aa5086e87fda0cd625f2a1739e026be3eecd3e	2026-06-15	consistent-store: introduce sui-consistent-store crate	UNREVIEWED			
-1618	b8fbacfccb0d7c6dbdce6e52fbd977dfc0c0b355	2026-06-15	[easy][sui-transactional-test-runner] Add support for setting chain in `//# init` (#26971)	UNREVIEWED			
-1619	80db556fde510d8c641e5de05a0c47236c5c05de	2026-06-16	Update gas prices for range proofs and ristretto (#26901)	UNREVIEWED			
-1620	e5a1ebb17edc84fee7612df933f6bcf268ebe962	2026-06-16	Remove old checkpoint splitting path (#26954)	UNREVIEWED			
-1621	e7cb8684d119aec5d06c27247c16988f7406fa23	2026-06-16	send-pr: specify what a PR description should contain (#26977)	UNREVIEWED			
-1622	149a5734ce7005b2b3bb1cfcaf2a6cb22f4fdefb	2026-06-16	Assert settlement effects success in checkpoint builder to avoid race with persistence (#26860)	UNREVIEWED			
-1623	b81bf3c29a542196d908408cca1111195f2ff841	2026-06-16	Bump anemo version (#26981)	UNREVIEWED			
-1624	1e15e378c9cc92b842aa3eb11bb0b0bc9e7614a9	2026-06-16	Reliably report consistently-failing state-sync peers (#26973)	UNREVIEWED			
-1625	58f64fcf5c8dfcc5ff0b659d97c0fd9ab8a147a2	2026-06-16	chore: sync shared Docusaurus components (#26915)	UNREVIEWED			
-1626	669fe874cf457035fe12996a0d162eebfb251a41	2026-06-17	Don't panic when randomness receiver channel is closed during shutdown (#26989)	UNREVIEWED			
-1627	2cd8b7090dde292868137ee79d4e5438f9000062	2026-06-17	Add DST argument to Ristretto255 range proof verification (#26885)	UNREVIEWED			
-1628	8041b03cc1144f5810ec579e915914249ae5001c	2026-06-17	docs: align pages with security best practices guide (#26970)	UNREVIEWED			
-1629	370c4df0c696d4f02328c22e247025d9300aa5aa	2026-06-17	Remove deadcode from authority logic (#26988)	UNREVIEWED			
-1630	f2f1d0cb1179fbe5541a8463a399a6aaf482ce4e	2026-06-17	docs: Kapa.ai side modal and add CodeWalkthrough scroll-spy component (#26985)	UNREVIEWED			
-1631	1d52736e1baf6b35498c2b8c5271df9c0d40593d	2026-06-17	fix(test): wait for address-balance deposit to settle on all nodes (#26974)	UNREVIEWED			
-1632	ce0fe2653d7bf706e7a7a106fbf19d58316b824e	2026-06-17	Populate system state for archival (#26995)	UNREVIEWED			
-1633	6e92c30de27d08a64e5b80c634d04b8182dd5442	2026-06-17	Refactor archival resolution & rendering (#27001)	UNREVIEWED			
-1634	283500cd60e7763f570955b9732d810f2be97d7e	2026-06-17	docs: fix for style guide (#26987)	UNREVIEWED			
-1635	2e196df64878a6ee6786cf739474e8bf4a85f726	2026-06-18	Custom `TransactionConnection` to support partially-filled results from bitmap streaming 2/n (#26897)	UNREVIEWED			
-1636	d401109972516198871ae55975457d780ee5a9d7	2026-06-18	Enable Ristretto255 group ops and bulletproofs verification on testnet (#26998)	UNREVIEWED			
-1637	df241e8b91e717fd6868845511d4bcbc6974c254	2026-06-18	[cli] upstream move lint (#26991)	UNREVIEWED			
-1638	6637e9835b01464e9dfcda854754e9844f789ce2	2026-06-18	rpc-store: introduce sui-rpc-store crate (#26978)	UNREVIEWED			
-1639	774eca4b1bd4b1a6ae3a9eb5c6dacaf5a261b981	2026-06-18	Enable timestamp_based_epoch_close on mainnet (#26996)	UNREVIEWED			
-1640	b477e5a1440d48e4b331e921339781c4bdc9bc3b	2026-06-18	Return 404 on pruned epoch (#27006)	UNREVIEWED			
-1641	8f6c229f0a309747a5991561adf9c8246dcb3377	2026-06-18	Remove scope digest from cursor (#27005)	UNREVIEWED			
-1642	79585efd9e4a9ee85b90e37127e61c94ca6e4a2c	2026-06-18	Downgrade MVCC root-version stabilization check to non-invariant (#27007)	UNREVIEWED			
-1643	a3027aa9e505a7eda529238192d472a5555b9bdb	2026-06-18	New txn bitmap dimensions to support package history queries. (#26957)	UNREVIEWED			
-1644	d27ca8d3c524cb3d3782bf076556c57ab1b5145f	2026-06-18	Package write rpc support (#27010)	UNREVIEWED			
-1645	51cc99786b9dedd5325c0ae93e37f409c79ca035	2026-06-18	sui-node: embed the rpc-store into the fullnode behind a config flag (#26979)	UNREVIEWED			
-1646	9b9e32fb45184539911237ed06f16cbe4f0ca193	2026-06-19	[cli] Rename forking_mode to skip_signing (#27012)	UNREVIEWED			
-1647	b124567746b3a78a7e294ac2de265f693401ec9d	2026-06-19	[sui-fork] Fix child object reads to support bounded versions (#26966)	UNREVIEWED			
-1648	d034d564f84b901efe507ff8f6e4b5c8c0cb53bd	2026-06-19	Sui v1.74.0 Framework Bytecode snapshot (#27016)	UNREVIEWED			
-1649	66ece6024145b27de72995acd469e7ed911cae1e	2026-06-19	Sui v1.75.0 Version Bump (#27017)	UNREVIEWED			
-1650	860cf61397fb48cd80cf6bc1fa444fec3bdbbc34	2026-06-22	graphql: generalize Address.asTransactionObject (#27018)	UNREVIEWED			
+1601	911b66673ed2acf7358bbe4e1b87456ad200e9c5	2026-06-15	fix(graphql): unexpected unicode in SuiAddress (#26958)	REVIEWED	EXCLUDE_NON_CRITICAL		GraphQL 输入校验边缘路径。
+1602	ad6b04a4f2be1e9da9f5254134270471ddc4930b	2026-06-15	ci(release): pin checkout to the tag namespace and validate the tag prefix (#26953)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1603	75a1e7923ae3cc3ef787c8fd8c6ade112aa6d995	2026-06-15	docs(oidc): correct Phase-4 fork-exclusion framing + release dispatch hazard (#26952)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1604	5cdcf2c85ab4568ee6cc41005dd1cd3f476cd74a	2026-06-15	docs(oidc): record Phase-4 decision — option A (all PRs read-only) (#26960)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1605	5ef0405b2f2d46aaf9662874c54861d5e45544fb	2026-06-15	ci: restrict heavy CI token permissions (#26766)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1606	91b34b2ffe68f27f7bcbe458a8f752fdbd46b060	2026-06-15	[sui-adapter][easy] Skip collecting runtime telemetry for dry-run/dev-inspect (#26950)	REVIEWED	EXCLUDE_NON_CRITICAL		模拟执行遥测优化。
+1607	c605814b1abca4e4a720fff8c5158ca78409afb2	2026-06-15	json-rpc: pair checkpoint summaries with their own contents (#26964)	APPLIED	MERGE	4f7f53b15565e288d35fb0f4b66600907c5608d7	跳过内容被裁剪的检查点，避免摘要与另一检查点内容错配。
+1608	f0f4ce96fb308cdda07191947cb68938b453b93d	2026-06-15	test-cluster: retry submit_and_execute on transient post-reconfiguration consensus timeouts (#26965)	REVIEWED	EXCLUDE_NON_CODE		测试集群重试用例。
+1609	0333f585c86c75bc214f8bf838fe006bbc572ba7	2026-06-15	json-rpc: add config flag to disable the JSON-RPC HTTP service (#26967)	REVIEWED	EXCLUDE_FEATURE		服务开关功能。
+1610	14b389728a7f70c66b483ee487f266d90556684d	2026-06-15	ci(release): flip release-build sccache to the OIDC RW role (Phase 5) (#26963)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1611	0a7d9d28b4ab061f5abe58363057087ef97149fd	2026-06-15	Bound accumulator amounts to representable limits before charging gas (#26955)	APPLIED	MERGE	3d18f05b49ccfacd0f82c366b4457bb584446f73	结算前限制累加器总额，避免燃料阶段算术溢出。
+1612	4ac25e815ee4290c462982687facfa1d17fda229	2026-06-15	ci(sccache): same-repo PRs assume the read-only OIDC role (Phase 4, option A) (#26962)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1613	364300a6b4c3fe7a1ebddf521697da35578b1905	2026-06-15	fix(ci): release.yml startup failure (empty ${{ }} in a run-block comment) (#26969)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1614	3ed924d833b23057bbb46c6b49dde62f5ff031ed	2026-06-15	docs: expand security, keytool, transaction-auth, logging, and zkLogin pages (#26701)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1615	14c59d81505b738529ab7013b21cc2341adce79d	2026-06-15	Fix postgres DoS advisories (RUSTSEC-2026-0178/0179/0180) (#26968)	APPLIED	MERGE	a3ff35fcdcdfd16c7f4a1a6d77e19eb3b52bb22f	升级 PostgreSQL 客户端栈，修复 DoS 公告。
+1616	f636627563b38ef87ed0a84e675ac64c4cb5f641	2026-06-15	x: skip license-header check on codegen.rs scripts	REVIEWED	EXCLUDE_NON_CODE		代码生成工具配置。
+1617	43aa5086e87fda0cd625f2a1739e026be3eecd3e	2026-06-15	consistent-store: introduce sui-consistent-store crate	REVIEWED	EXCLUDE_FEATURE		新增一致性存储架构。
+1618	b8fbacfccb0d7c6dbdce6e52fbd977dfc0c0b355	2026-06-15	[easy][sui-transactional-test-runner] Add support for setting chain in `//# init` (#26971)	REVIEWED	EXCLUDE_FEATURE		测试工具功能。
+1619	80db556fde510d8c641e5de05a0c47236c5c05de	2026-06-16	Update gas prices for range proofs and ristretto (#26901)	REVIEWED	EXCLUDE_FEATURE		后续密码学与计费功能。
+1620	e5a1ebb17edc84fee7612df933f6bcf268ebe962	2026-06-16	Remove old checkpoint splitting path (#26954)	REVIEWED	EXCLUDE_FEATURE		检查点拆分架构重构。
+1621	e7cb8684d119aec5d06c27247c16988f7406fa23	2026-06-16	send-pr: specify what a PR description should contain (#26977)	REVIEWED	EXCLUDE_NON_CODE		流程文档。
+1622	149a5734ce7005b2b3bb1cfcaf2a6cb22f4fdefb	2026-06-16	Assert settlement effects success in checkpoint builder to avoid race with persistence (#26860)	REVIEWED	ALREADY_PRESENT		RTD 检查点构建器已在持久化前断言结算和 barrier effects 成功。
+1623	b81bf3c29a542196d908408cca1111195f2ff841	2026-06-16	Bump anemo version (#26981)	REVIEWED	EXCLUDE_POST_FORK		后置网络依赖升级。
+1624	1e15e378c9cc92b842aa3eb11bb0b0bc9e7614a9	2026-06-16	Reliably report consistently-failing state-sync peers (#26973)	REVIEWED	EXCLUDE_POST_FORK		依赖后置状态同步架构。
+1625	58f64fcf5c8dfcc5ff0b659d97c0fd9ab8a147a2	2026-06-16	chore: sync shared Docusaurus components (#26915)	REVIEWED	EXCLUDE_NON_CODE		文档站组件。
+1626	669fe874cf457035fe12996a0d162eebfb251a41	2026-06-17	Don't panic when randomness receiver channel is closed during shutdown (#26989)	REVIEWED	EXCLUDE_POST_FORK		依赖后置随机性网络架构。
+1627	2cd8b7090dde292868137ee79d4e5438f9000062	2026-06-17	Add DST argument to Ristretto255 range proof verification (#26885)	REVIEWED	EXCLUDE_FEATURE		新增密码学验证能力。
+1628	8041b03cc1144f5810ec579e915914249ae5001c	2026-06-17	docs: align pages with security best practices guide (#26970)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1629	370c4df0c696d4f02328c22e247025d9300aa5aa	2026-06-17	Remove deadcode from authority logic (#26988)	REVIEWED	EXCLUDE_NON_CRITICAL		死代码清理。
+1630	f2f1d0cb1179fbe5541a8463a399a6aaf482ce4e	2026-06-17	docs: Kapa.ai side modal and add CodeWalkthrough scroll-spy component (#26985)	REVIEWED	EXCLUDE_NON_CODE		文档站组件。
+1631	1d52736e1baf6b35498c2b8c5271df9c0d40593d	2026-06-17	fix(test): wait for address-balance deposit to settle on all nodes (#26974)	REVIEWED	EXCLUDE_NON_CODE		测试同步等待。
+1632	ce0fe2653d7bf706e7a7a106fbf19d58316b824e	2026-06-17	Populate system state for archival (#26995)	REVIEWED	EXCLUDE_FEATURE		归档功能。
+1633	6e92c30de27d08a64e5b80c634d04b8182dd5442	2026-06-17	Refactor archival resolution & rendering (#27001)	REVIEWED	EXCLUDE_FEATURE		归档功能重构。
+1634	283500cd60e7763f570955b9732d810f2be97d7e	2026-06-17	docs: fix for style guide (#26987)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1635	2e196df64878a6ee6786cf739474e8bf4a85f726	2026-06-18	Custom `TransactionConnection` to support partially-filled results from bitmap streaming 2/n (#26897)	REVIEWED	EXCLUDE_FEATURE		位图流查询功能。
+1636	d401109972516198871ae55975457d780ee5a9d7	2026-06-18	Enable Ristretto255 group ops and bulletproofs verification on testnet (#26998)	REVIEWED	EXCLUDE_FEATURE		测试网密码学功能。
+1637	df241e8b91e717fd6868845511d4bcbc6974c254	2026-06-18	[cli] upstream move lint (#26991)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1638	6637e9835b01464e9dfcda854754e9844f789ce2	2026-06-18	rpc-store: introduce sui-rpc-store crate (#26978)	REVIEWED	EXCLUDE_FEATURE		新增 RPC 存储架构。
+1639	774eca4b1bd4b1a6ae3a9eb5c6dacaf5a261b981	2026-06-18	Enable timestamp_based_epoch_close on mainnet (#26996)	REVIEWED	EXCLUDE_FEATURE		后续协议开关。
+1640	b477e5a1440d48e4b331e921339781c4bdc9bc3b	2026-06-18	Return 404 on pruned epoch (#27006)	REVIEWED	EXCLUDE_NON_CRITICAL		裁剪 epoch 的 HTTP 响应调整。
+1641	8f6c229f0a309747a5991561adf9c8246dcb3377	2026-06-18	Remove scope digest from cursor (#27005)	REVIEWED	EXCLUDE_FEATURE		游标 API 调整。
+1642	79585efd9e4a9ee85b90e37127e61c94ca6e4a2c	2026-06-18	Downgrade MVCC root-version stabilization check to non-invariant (#27007)	REVIEWED	EXCLUDE_NON_CRITICAL		指标与断言分类调整。
+1643	a3027aa9e505a7eda529238192d472a5555b9bdb	2026-06-18	New txn bitmap dimensions to support package history queries. (#26957)	REVIEWED	EXCLUDE_FEATURE		位图索引功能。
+1644	d27ca8d3c524cb3d3782bf076556c57ab1b5145f	2026-06-18	Package write rpc support (#27010)	REVIEWED	EXCLUDE_FEATURE		RPC 功能。
+1645	51cc99786b9dedd5325c0ae93e37f409c79ca035	2026-06-18	sui-node: embed the rpc-store into the fullnode behind a config flag (#26979)	REVIEWED	EXCLUDE_FEATURE		RPC 存储集成功能。
+1646	9b9e32fb45184539911237ed06f16cbe4f0ca193	2026-06-19	[cli] Rename forking_mode to skip_signing (#27012)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1647	b124567746b3a78a7e294ac2de265f693401ec9d	2026-06-19	[sui-fork] Fix child object reads to support bounded versions (#26966)	REVIEWED	EXCLUDE_POST_FORK		依赖后置分叉工具架构。
+1648	d034d564f84b901efe507ff8f6e4b5c8c0cb53bd	2026-06-19	Sui v1.74.0 Framework Bytecode snapshot (#27016)	REVIEWED	EXCLUDE_NON_CODE		框架快照。
+1649	66ece6024145b27de72995acd469e7ed911cae1e	2026-06-19	Sui v1.75.0 Version Bump (#27017)	REVIEWED	EXCLUDE_NON_CODE		版本升级。
+1650	860cf61397fb48cd80cf6bc1fa444fec3bdbbc34	2026-06-22	graphql: generalize Address.asTransactionObject (#27018)	REVIEWED	EXCLUDE_FEATURE		GraphQL 查询功能泛化。
 1651	88ca368d52653c501f309f1319eec4218c025ba9	2026-06-22	[Block Streaming] consensus sync full nodes to verify local checkpoints (#26842)	UNREVIEWED			
 1652	26088ad2382ceb24c143862614688e766c044268	2026-06-22	docs: fix self-referencing link in migration-strategies.mdx (#27021)	UNREVIEWED			
 1653	cf371176c61147260d8ef1105fd9a7426ab91251	2026-06-22	Log GraphQL requests at trace level for replay (#27004)	UNREVIEWED			
