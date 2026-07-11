@@ -649,56 +649,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 648	9c6f11ef03385a91c7f85c7be43ab3a202cec3cf	2026-02-23	[cli] Fix client ptb output format (#25587)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI PTB 展示格式。
 649	0697f4038f7093d115c9bd968c059ee710ccf66d	2026-02-23	Fix sequence_key key type (#25590)	APPLIED	MERGE	6d98c2a9c2ccc3817dafed5586cefc1d89f00d7e	修正 fork 基线已有 epoch 表的序列键前缀与 pending-signatures 缓存配置，避免键空间错误。
 650	67710b8a2b230eb87f3729b5b99ec5500bca3bad	2026-02-23	reducing ingestion concurrency and channel size (#25593)	REVIEWED	EXCLUDE_FEATURE		ingestion 并发/通道容量调参。
-651	699c2c28de6fdb1e88f3cf866d8949f8757fdc13	2026-02-24	[chore] better prettierrc override for Move (#25569)	UNREVIEWED			
-652	5fcbade49ca5b1b881dce95dde0872c595bcd385	2026-02-24	docs: directions to add new pipeline to indexer, reduce bloat (#25598)	UNREVIEWED			
-653	7a2216d0da798bf5e3a3d3b4a8524c6c1f44b1b0	2026-02-24	e (#25597)	UNREVIEWED			
-654	46311dfd970f15767f9cc28d0609b3f7cefa551c	2026-02-24	Skip alias testing in composite workload if disabled in protocol config (#25596)	UNREVIEWED			
-655	74caa27542f332c0145a0db1fd56ef377e4cb8ff	2026-02-24	Defer transactions with unpaid consensus amplification (#25496)	UNREVIEWED			
-656	2aaea19809586874172cf805411cdb9d7865c248	2026-02-24	Upgrade tidehunter to cfe208a25c348a170db82e7fcd1b1ebeeb409852 (#25602)	UNREVIEWED			
-657	61c2f725b748a2dde35dcdad98d27206cd3432fc	2026-02-24	[antithesis] randomize checkpoint split limit for reachability assert (#25364)	UNREVIEWED			
-658	d57dd1f54bb07e85af150b6a9fd47b3f42493ba3	2026-02-25	Fix safe_iter to return Err on deserialization failure (#25286)	UNREVIEWED			
-659	93c1960480d790083e55702e947e27cac9978c33	2026-02-24	Add protocol-config skill for safe protocol config changes (#25522)	UNREVIEWED			
-660	adeb47dc85191cb8a899c402407a97b15a168cd2	2026-02-25	Pass pending_checkpoint_signatures via memory channel (#25603)	UNREVIEWED			
-661	8622f95ef9b844177d0bb39515bf1a9fce15a10d	2026-02-25	remove max pending rows overrides (#25591)	UNREVIEWED			
-662	09ca4f61ac97873a084310efc67cb8fef26700a0	2026-02-25	Add discovery-shared address overrides to consensus (#25468)	UNREVIEWED			
-663	8daea0e2d0a4ca86687b0d1bc683975d5185e930	2026-02-25	[docs] add dev only section for nautilus (#25610)	UNREVIEWED			
-664	708e6c15799a66982b7d73867e0fed0527f16970	2026-02-25	Bump epoch time for per_epoch_config_stress_test (#25612)	UNREVIEWED			
-665	4b0d84569af550ce4bed65ea065236e3bfcaae7f	2026-02-25	Support object funds in simulate (#25544)	UNREVIEWED			
-666	7d2a6613f28b1228c0f706426ce13c3381f2a116	2026-02-25	[move-compiler] Fix more issues with decl field indicies (#25565)	UNREVIEWED			
-667	e3b765c494257aff63f15c9aae4b74a31f36226d	2026-02-25	Speed up release builds with sccache and trigger walrus dispatch earlier (#25609)	UNREVIEWED			
-668	05082b82dfae6b55044a0c5a7ee1cf41615ceb06	2026-02-25	Add daily sccache cache-warming workflow for release builds (#25617)	UNREVIEWED			
-669	9f5fa50da00a750e0a53335727a26c9ec849d0fd	2026-02-26	Add sccache with S3 backend to CI workflows (#25620)	UNREVIEWED			
-670	d842889c492f5bbbb5cc514dd8a36e7ee2dca854	2026-02-26	Fix network/status for pruned fullnodes (#25625)	UNREVIEWED			
-671	278cdc886736ef6fc36716a17d71b1c410be834a	2026-02-26	[move][move-compiler] Fix wildcard match bug (#25615)	UNREVIEWED			
-672	aced57c1985c624ce577cdf34fb821a85da6d462	2026-02-26	indexer level rate limiter (#25606)	UNREVIEWED			
-673	63ee2024677fd23396c84f05ac775ba2f4b593bf	2026-02-26	[test] disable alias test in composite with mainnet protocol config (#25621)	UNREVIEWED			
-674	1ad56a6b811dec8c7fc4409b77fd0a853f95825d	2026-02-26	Fix checkpoint queue drain-boundary commit logic (#25442)	UNREVIEWED			
-675	10a574262115b78c0e840f0bde561b5530587ea5	2026-02-26	Enforce 10s minimum epoch duration for simtests (#25613)	UNREVIEWED			
-676	6b9d51e46ed07e19a000972616892c0460812ffd	2026-02-26	[address-balances] reject Arg::GasCoin in validity_check (#25629)	UNREVIEWED			
-677	80ad90e31980c0fb31a444fea75c6ec3573aab67	2026-02-26	settle early in consensus handler (#25530)	UNREVIEWED			
-678	3ffadc8159ad9ffce9c65cbc720b2be9c88bf3c4	2026-02-26	Remove very slow test that is not doing much more us (#25633)	UNREVIEWED			
-679	9fbd81b755023502657c61852c39e5a847a8a402	2026-02-26	[light-clients] enable authenticated events in testnet (#25102)	UNREVIEWED			
-680	9256fbf2b41398ae5b0e4916a716d2d45fdb2f22	2026-02-26	docs: add auto-generated Awesome Sui Gaming doc (#25630)	UNREVIEWED			
-681	1d0981942bed8ce567163589b40d63a495c3ff76	2026-02-26	docs: Auto-generate llms.txt and add compliance checks (#25631)	UNREVIEWED			
-682	3ffa8cad3369caad2f5a8928766da5942bf88816	2026-02-26	Take the accumulator root as read-only in composite workload (#25614)	UNREVIEWED			
-683	b38bca86f0323b3fe8b6b7f4ca0cd7ae7faebe4b	2026-02-27	Add ObjectBalanceOverdraw benchmark operation and instrumentation (#25227)	UNREVIEWED			
-684	ecde3d1a966542bf0c0bd9a70aad2a6e3f956f18	2026-02-27	Sui v1.67.0 Framework Bytecode snapshot (#25635)	UNREVIEWED			
-685	48d0a9bce8d79caea13a8e6e899c5c538c32e18b	2026-02-27	Consolidate tx checking in signing and simulate (#25624)	UNREVIEWED			
-686	020318b7d33dc68bfa6abd6a54d9c655390c5527	2026-02-27	fix: update OpenRPC insta snapshot in version bump workflow (#25637)	UNREVIEWED			
-687	e23cc4bb0215ec065785a19772f22eda8ada14ae	2026-02-27	Sui v1.68.0 Version Bump (#25636)	UNREVIEWED			
-688	48877121671c0eef5b20eaea92b10cfdb6bba2e2	2026-02-27	Make system object input checks default-deny (#25627)	UNREVIEWED			
-689	b062bda6f322776c4c2bae01ff722afdc74a33c3	2026-02-27	Make sccache setup gracefully degrade on transient failures (#25640)	UNREVIEWED			
-690	e9223f73a82e610eb829694f7ef27aca61cf4f3f	2026-02-27	Fix some things for testnet expensive checks (#25639)	UNREVIEWED			
-691	9341dbb8fce76bcb22fce78dae52bb3d50cb4abd	2026-02-28	refactor: unify version bump into standalone script and workflow (#25654)	UNREVIEWED			
-692	7ae53892029b7a3d2588cfd14fc82641d6261a06	2026-02-28	ci: harden version-bump.yml input validation (#25655)	UNREVIEWED			
-693	86741b2d4bda4ef923813f6eac0b4bdab1d9cdfc	2026-03-02	fix migration mode initialization bug (#25662)	UNREVIEWED			
-694	107c5fcc3d9cb56e670d449855d189c490fd9426	2026-03-02	Disable defer unpaid amplification (#25663)	UNREVIEWED			
-695	f695f07600edf0f81b08739c8f36f566f9d61c7c	2026-03-02	ci: pre-build tidehunter binaries on release branch push (#25664)	UNREVIEWED			
-696	998b8f84c1348713c3849b33070b6870d4434d62	2026-03-02	Add MMR section to event streams docs (#25634)	UNREVIEWED			
-697	d053daef2b14681167279d2795ea0501641c56ed	2026-03-02	[address-balances] improve address balance validity test coverage (#25619)	UNREVIEWED			
-698	053dc7ebc05db137bb0a6b1ebb5fc4b75483640a	2026-03-02	ci: enable sccache in External crates workflow (#25667)	UNREVIEWED			
-699	1b50e041d8d9fc6b741ae889bd0ff197e9274089	2026-03-02	[light-clients] cleanup, harden tests (#25642)	UNREVIEWED			
-700	d7a46f4d91353dd703837448a5e161078c1ba644	2026-03-02	[light-client] put authenticated events on sui-docs site (#25638)	UNREVIEWED			
+651	699c2c28de6fdb1e88f3cf866d8949f8757fdc13	2026-02-24	[chore] better prettierrc override for Move (#25569)	REVIEWED	EXCLUDE_NON_CODE		Move formatter 配置。
+652	5fcbade49ca5b1b881dce95dde0872c595bcd385	2026-02-24	docs: directions to add new pipeline to indexer, reduce bloat (#25598)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+653	7a2216d0da798bf5e3a3d3b4a8524c6c1f44b1b0	2026-02-24	e (#25597)	REVIEWED	EXCLUDE_POST_FORK		依赖 kv-rpc 与 kvstore-alt 路径。
+654	46311dfd970f15767f9cc28d0609b3f7cefa551c	2026-02-24	Skip alias testing in composite workload if disabled in protocol config (#25596)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark workload 测试。
+655	74caa27542f332c0145a0db1fd56ef377e4cb8ff	2026-02-24	Defer transactions with unpaid consensus amplification (#25496)	REVIEWED	EXCLUDE_POST_FORK		fork 后引入的 consensus amplification deferral 功能。
+656	2aaea19809586874172cf805411cdb9d7865c248	2026-02-24	Upgrade tidehunter to cfe208a25c348a170db82e7fcd1b1ebeeb409852 (#25602)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter 版本更新。
+657	61c2f725b748a2dde35dcdad98d27206cd3432fc	2026-02-24	[antithesis] randomize checkpoint split limit for reachability assert (#25364)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 checkpoint split/protocol v114 路径。
+658	d57dd1f54bb07e85af150b6a9fd47b3f42493ba3	2026-02-25	Fix safe_iter to return Err on deserialization failure (#25286)	APPLIED	MERGE	dc590235f2e2f1d2377d1316d44e9a55f3dfe581	迭代器将 key/value 反序列化失败显式返回 TypedStoreError，不再静默跳过损坏条目。
+659	93c1960480d790083e55702e947e27cac9978c33	2026-02-24	Add protocol-config skill for safe protocol config changes (#25522)	REVIEWED	EXCLUDE_NON_CODE		仅开发技能文档。
+660	adeb47dc85191cb8a899c402407a97b15a168cd2	2026-02-25	Pass pending_checkpoint_signatures via memory channel (#25603)	REVIEWED	EXCLUDE_FEATURE		pending checkpoint signatures 的内存通道架构改造。
+661	8622f95ef9b844177d0bb39515bf1a9fce15a10d	2026-02-25	remove max pending rows overrides (#25591)	REVIEWED	EXCLUDE_FEATURE		pipeline 容量配置清理。
+662	09ca4f61ac97873a084310efc67cb8fef26700a0	2026-02-25	Add discovery-shared address overrides to consensus (#25468)	REVIEWED	EXCLUDE_FEATURE		discovery shared-address override 功能。
+663	8daea0e2d0a4ca86687b0d1bc683975d5185e930	2026-02-25	[docs] add dev only section for nautilus (#25610)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+664	708e6c15799a66982b7d73867e0fed0527f16970	2026-02-25	Bump epoch time for per_epoch_config_stress_test (#25612)	REVIEWED	EXCLUDE_NON_CODE		仅压力测试时长。
+665	4b0d84569af550ce4bed65ea065236e3bfcaae7f	2026-02-25	Support object funds in simulate (#25544)	REVIEWED	EXCLUDE_FEATURE		simulate 支持 object funds 的能力扩展。
+666	7d2a6613f28b1228c0f706426ce13c3381f2a116	2026-02-25	[move-compiler] Fix more issues with decl field indicies (#25565)	APPLIED	MERGE	3c5d943174fdc505f77896b735b96ac8c3727145	无效字段维持诊断与稳定顺序，避免 match/Pack lowering 中字段索引 ICE。
+667	e3b765c494257aff63f15c9aae4b74a31f36226d	2026-02-25	Speed up release builds with sccache and trigger walrus dispatch earlier (#25609)	REVIEWED	EXCLUDE_NON_CODE		仅 CI/release cache。
+668	05082b82dfae6b55044a0c5a7ee1cf41615ceb06	2026-02-25	Add daily sccache cache-warming workflow for release builds (#25617)	REVIEWED	EXCLUDE_NON_CODE		仅 CI workflow。
+669	9f5fa50da00a750e0a53335727a26c9ec849d0fd	2026-02-26	Add sccache with S3 backend to CI workflows (#25620)	REVIEWED	EXCLUDE_NON_CODE		仅 CI workflow。
+670	d842889c492f5bbbb5cc514dd8a36e7ee2dca854	2026-02-26	Fix network/status for pruned fullnodes (#25625)	REVIEWED	EXCLUDE_NON_CRITICAL		Rosetta pruned fullnode 状态展示修复。
+671	278cdc886736ef6fc36716a17d71b1c410be834a	2026-02-26	[move][move-compiler] Fix wildcard match bug (#25615)	APPLIED	MERGE	b22a60570b9447f9d8a0f35325a2ab6650b7808e	guarded wildcard 后遇到具体模式时继续特化，避免错误提前选择 wildcard 分支。
+672	aced57c1985c624ce577cdf34fb821a85da6d462	2026-02-26	indexer level rate limiter (#25606)	REVIEWED	EXCLUDE_FEATURE		indexer rate limiter 功能。
+673	63ee2024677fd23396c84f05ac775ba2f4b593bf	2026-02-26	[test] disable alias test in composite with mainnet protocol config (#25621)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+674	1ad56a6b811dec8c7fc4409b77fd0a853f95825d	2026-02-26	Fix checkpoint queue drain-boundary commit logic (#25442)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后的 split checkpoints in consensus handler 机制。
+675	10a574262115b78c0e840f0bde561b5530587ea5	2026-02-26	Enforce 10s minimum epoch duration for simtests (#25613)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest epoch 时长。
+676	6b9d51e46ed07e19a000972616892c0460812ffd	2026-02-26	[address-balances] reject Arg::GasCoin in validity_check (#25629)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 address-balances protocol v114。
+677	80ad90e31980c0fb31a444fea75c6ec3573aab67	2026-02-26	settle early in consensus handler (#25530)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 accumulator settlement scheduler/consensus 重构。
+678	3ffadc8159ad9ffce9c65cbc720b2be9c88bf3c4	2026-02-26	Remove very slow test that is not doing much more us (#25633)	REVIEWED	EXCLUDE_NON_CODE		仅移除测试。
+679	9fbd81b755023502657c61852c39e5a847a8a402	2026-02-26	[light-clients] enable authenticated events in testnet (#25102)	REVIEWED	EXCLUDE_FEATURE		light-client authenticated events 功能。
+680	9256fbf2b41398ae5b0e4916a716d2d45fdb2f22	2026-02-26	docs: add auto-generated Awesome Sui Gaming doc (#25630)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+681	1d0981942bed8ce567163589b40d63a495c3ff76	2026-02-26	docs: Auto-generate llms.txt and add compliance checks (#25631)	REVIEWED	EXCLUDE_NON_CODE		仅文档/CI。
+682	3ffa8cad3369caad2f5a8928766da5942bf88816	2026-02-26	Take the accumulator root as read-only in composite workload (#25614)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark workload。
+683	b38bca86f0323b3fe8b6b7f4ca0cd7ae7faebe4b	2026-02-27	Add ObjectBalanceOverdraw benchmark operation and instrumentation (#25227)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark/instrumentation。
+684	ecde3d1a966542bf0c0bd9a70aad2a6e3f956f18	2026-02-27	Sui v1.67.0 Framework Bytecode snapshot (#25635)	REVIEWED	EXCLUDE_POST_FORK		fork 后 framework snapshot。
+685	48d0a9bce8d79caea13a8e6e899c5c538c32e18b	2026-02-27	Consolidate tx checking in signing and simulate (#25624)	REVIEWED	EXCLUDE_ALREADY_FIXED		RTD 当前 dry-run 路径已无 process_funds_withdrawals_for_execution 调用，不存在该模拟 panic 点。
+686	020318b7d33dc68bfa6abd6a54d9c655390c5527	2026-02-27	fix: update OpenRPC insta snapshot in version bump workflow (#25637)	REVIEWED	EXCLUDE_NON_CODE		仅版本 workflow 快照。
+687	e23cc4bb0215ec065785a19772f22eda8ada14ae	2026-02-27	Sui v1.68.0 Version Bump (#25636)	REVIEWED	EXCLUDE_NON_CODE		版本更新。
+688	48877121671c0eef5b20eaea92b10cfdb6bba2e2	2026-02-27	Make system object input checks default-deny (#25627)	APPLIED	MERGE	b05e650da3a858b030a80d7dc466dcc8807a31e5	系统对象输入改为默认拒绝，仅允许显式列出的可变/只读系统对象组合。
+689	b062bda6f322776c4c2bae01ff722afdc74a33c3	2026-02-27	Make sccache setup gracefully degrade on transient failures (#25640)	REVIEWED	EXCLUDE_NON_CODE		仅 CI cache 降级。
+690	e9223f73a82e610eb829694f7ef27aca61cf4f3f	2026-02-27	Fix some things for testnet expensive checks (#25639)	REVIEWED	EXCLUDE_NON_CRITICAL		仅 testnet expensive conservation check 的容错处理。
+691	9341dbb8fce76bcb22fce78dae52bb3d50cb4abd	2026-02-28	refactor: unify version bump into standalone script and workflow (#25654)	REVIEWED	EXCLUDE_NON_CODE		仅版本 workflow 重构。
+692	7ae53892029b7a3d2588cfd14fc82641d6261a06	2026-02-28	ci: harden version-bump.yml input validation (#25655)	REVIEWED	EXCLUDE_NON_CODE		仅 CI 输入校验。
+693	86741b2d4bda4ef923813f6eac0b4bdab1d9cdfc	2026-03-02	fix migration mode initialization bug (#25662)	REVIEWED	EXCLUDE_POST_FORK		analytics indexer migration 路径不在 fork 基线。
+694	107c5fcc3d9cb56e670d449855d189c490fd9426	2026-03-02	Disable defer unpaid amplification (#25663)	REVIEWED	EXCLUDE_POST_FORK		回滚的是第 655 条 fork 后 amplification deferral 功能。
+695	f695f07600edf0f81b08739c8f36f566f9d61c7c	2026-03-02	ci: pre-build tidehunter binaries on release branch push (#25664)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+696	998b8f84c1348713c3849b33070b6870d4434d62	2026-03-02	Add MMR section to event streams docs (#25634)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+697	d053daef2b14681167279d2795ea0501641c56ed	2026-03-02	[address-balances] improve address balance validity test coverage (#25619)	REVIEWED	EXCLUDE_POST_FORK		address-balances protocol v114 测试/校验。
+698	053dc7ebc05db137bb0a6b1ebb5fc4b75483640a	2026-03-02	ci: enable sccache in External crates workflow (#25667)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+699	1b50e041d8d9fc6b741ae889bd0ff197e9274089	2026-03-02	[light-clients] cleanup, harden tests (#25642)	REVIEWED	EXCLUDE_NON_CODE		仅 light-client 测试。
+700	d7a46f4d91353dd703837448a5e161078c1ba644	2026-03-02	[light-client] put authenticated events on sui-docs site (#25638)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 701	d0df835a44b2933f8beed163b542b040322bae3d	2026-03-02	[antithesis] add auth events to composite wl (#25618)	UNREVIEWED			
 702	d02989e8ea88a9dbe8418e6c12af8ca513e631bf	2026-03-02	update anemo version (#25666)	UNREVIEWED			
 703	9ab1aaa258683ca155ac780d43cec36e1a431072	2026-03-02	Deepbook margin doc updates (#25669)	UNREVIEWED			
