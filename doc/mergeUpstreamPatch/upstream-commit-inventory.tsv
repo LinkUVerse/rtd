@@ -1449,56 +1449,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1448	95337667fa839e7ce61a7fb7242fca17d5f3bdf1	2026-05-21	kvstore: index lossless protocol configs as a prost-encoded Struct cell	REVIEWED	EXCLUDE_FEATURE		KV schema 功能。
 1449	bb4684278ac95af912f442efb4c5d832d4d07ec0	2026-05-21	Fullnode query apis (#26717)	REVIEWED	EXCLUDE_FEATURE		Fullnode API 功能。
 1450	5ee14d5314a82dee5aae423781faa22423eea690	2026-05-21	Simplify bitmap evaluation	REVIEWED	EXCLUDE_FEATURE		KV bitmap 查询重构。
-1451	66b4e55178cf041eab398e76893552653bf06a65	2026-05-21	Let the streams flow! (#26728)	UNREVIEWED			
+1451	66b4e55178cf041eab398e76893552653bf06a65	2026-05-21	Let the streams flow! (#26728)	REVIEWED	EXCLUDE_FEATURE		流式功能。
 1452	df2e714ca6019ac5ead76aa20d45e52beae40d07	2026-05-21	[consensus] propose at latest possible round after restart (#26720)	APPLIED	MERGE	a2e616a0c1a5b810a5a59243ebecc486c4264c9f	重启同步 round 落后本地持久化提议时，按 threshold clock round 继续提议。
-1453	3be29b4ed2a1077d89a4c3c6c77c635b159efdc3	2026-05-21	sui-core: drop fastpath guard in object_funds_checker (#26610)	UNREVIEWED			
-1454	ac4d046824e762ad554c848e6f0f40982c53550b	2026-05-21	Gate rpc and consolidate rpcs (#26735)	UNREVIEWED			
-1455	37de2da6b748a172154d08fb79e35ea360449612	2026-05-21	Enable gas priority tx admission queue by default (#26730)	UNREVIEWED			
-1456	de4cbdf63dedb1a7d0899b47f7f34e22fccf64ef	2026-05-21	[consensus] add BlockV3 (#26727)	UNREVIEWED			
-1457	b3b40534900e08d450f16ca5f9323998c13e624a	2026-05-21	sui-core: add address balances design docs (#26532)	UNREVIEWED			
-1458	407cb6ab3da557bad260a4ea42c3669099e494b4	2026-05-21	docs: validate gasless token table against lib.rs at build time (#26700)	UNREVIEWED			
-1459	ecf5558557e12604219e89b0a05da73029ca7208	2026-05-21	docs: fix redirect for /standards/deepbookv3 (#26739)	UNREVIEWED			
-1460	deb077b179edaca1e853bc6f2e738f6f65dc15e8	2026-05-21	Enable timestamp_based_epoch_close on testnet (#26740)	UNREVIEWED			
-1461	b4d23a7c16fa5293cec384849bd524501313c6d0	2026-05-21	[tidehunter] Enable objects compactor on full nodes when num_epochs_to_retain=0 (#26737)	UNREVIEWED			
-1462	28b4131345ee867474c78d9f12472237631729d8	2026-05-21	docs: add SuiVision note and example (#26743)	UNREVIEWED			
-1463	876e0ab4a11bf65e576314b2c92997b9edd2aa3f	2026-05-21	nickv/button up 2 (#26744)	UNREVIEWED			
-1464	ea52f2c67bb7f366b7a646b4f4f0fb89be280f6f	2026-05-21	[WIP] Party permissioned objects (#26246)	UNREVIEWED			
-1465	718ae563a42fb4ba0d055588f81c704dcef58c25	2026-05-21	[tidehunter] Call Bytes::into_owned on multi_get results (#26745)	UNREVIEWED			
-1466	72564bc1fb0b104c445785dd400375afe2fbfa06	2026-05-22	Sui v1.73.0 Framework Bytecode snapshot (#26750)	UNREVIEWED			
-1467	30a5e82d3ab54da307ce60c5e7b1a5eff8a7131b	2026-05-21	Sui v1.74.0 Version Bump (#26751)	UNREVIEWED			
-1468	9775bc65e6be771aa98db672cf89e860c729bf5e	2026-05-21	[sui-benchmark] Fix flaky cancellation_count threshold in test_composite_workload (#26748)	UNREVIEWED			
-1469	e09f31f7606bca023907740966b3bd8f8f5a4703	2026-05-22	Increase objects table max dirty keys (#26752)	UNREVIEWED			
-1470	43921284c81de0ce78b31faef4f6aa7dd9e2127b	2026-05-22	docs: rewrite Exchange Integration around gRPC and GraphQL (#26705)	UNREVIEWED			
-1471	62ee6ada958cd61b3c8a4466dd33c9aba3cdff8a	2026-05-22	[cli] Fix tree shake alg by using the pkg id instead of pkg display name (#26734)	UNREVIEWED			
-1472	f786dd7bcf5b1fd47cb365787d1f52a7bfb58add	2026-05-22	docs: Update gasless-stablecoin-transfers.mdx (#26760)	UNREVIEWED			
-1473	3849d83948bcf5900f949abd6b51888c5fe12bc0	2026-05-22	Gracefully handle freetier txns with no gas owner (#26756)	UNREVIEWED			
-1474	b1d8f66257df085d686df9df678b3eeb6379a9bf	2026-05-22	ci: enable sccache in bridge.yml (clippy + test jobs) (#26762)	UNREVIEWED			
-1475	ba7dabd228a319ded47173174311a59be4c90f71	2026-05-22	fix(simulate): accept explicit gas_price=0 for gasless-eligible transactions (#26763)	UNREVIEWED			
-1476	818f8d78f222b9279cb966a5754fb0a2c21d58b1	2026-05-22	ci: add simtest host disk guardrails (#26726)	UNREVIEWED			
-1477	d1b171a178bd995900102cee4e42f6b430cdeb43	2026-05-26	docs: remove outdated package management content from upgrade page (#26742)	UNREVIEWED			
-1478	ecfd8070f145bea93d835a9c3127500c74e77f07	2026-05-26	chore: sync shared Docusaurus components (#26777)	UNREVIEWED			
-1479	585d7a076f990fa1ba8760e39883ddfc99b9276e	2026-05-26	docs: add the Sui Agent Skills page (#26754)	UNREVIEWED			
-1480	94b94f2248268afbc0ff21b2c12806b7450e88c0	2026-05-26	docs: add AgentPrompt builder-prompt callouts (#26755)	UNREVIEWED			
-1481	5baf57fde3fb46c69a2a8006470d35fa83ccf828	2026-05-26	docs: Diagram standards update (#26747)	UNREVIEWED			
-1482	0fdc788f9e8d76cd47d20a840744741550b60a55	2026-05-26	docs: automated fixes from weekly audit (1 issues) (#26778)	UNREVIEWED			
-1483	fd19123f3d9610eb050fec59d1205f3f85776103	2026-05-26	ci(release): fix update-homebrew-formula gating on release events (#26782)	UNREVIEWED			
-1484	78aea9a321b07ac78819092d24c763f471989f84	2026-05-26	fix(tidehunter pruner): uncap checkpoint watermark when objects compactor is active (#26779)	UNREVIEWED			
-1485	6ded6577b57c6ef0c699fddf8d9fd4450d22cb42	2026-05-26	fix: expose Plausible track function so custom events fire (#26781)	UNREVIEWED			
-1486	1fd64849c11a130de450168e64e3913885a3bee4	2026-05-26	feat(accumulator): add create_for_testing for AccumulatorRoot (#26784)	UNREVIEWED			
-1487	17b7f032987e0156ee8ea0b82488a96ad681ba26	2026-05-27	[Block Streaming] support DKG generation as an Observer (#26646)	UNREVIEWED			
-1488	303c9da6c97d6dbd77dba056afafd5ee208b8475	2026-05-27	sui-kvstore: replace AbortOnDrop with TaskGuard (#26791)	UNREVIEWED			
-1489	9cb5dcf26b962b28f574ee461c71970850b51981	2026-05-27	docs: Update docs diagrams to align with new design system (#26783)	UNREVIEWED			
-1490	ec061781453c59241af928ea30eab05fb9428ed7	2026-05-27	docs: add canonical JSON-RPC migration guide under accessing-data (#26716)	UNREVIEWED			
-1491	df6f6962ed7979d4b50ae99734fa757164faba0e	2026-05-27	docs: add Sui completion CLI reference (#26767)	UNREVIEWED			
-1492	cfdf0d8762731378682569655ea575008a407681	2026-05-27	docs: add announcement banner for Sui Agent Skills page (#26792)	UNREVIEWED			
-1493	f78f7d94a2a1168a87a7f0064c8345e624b6c7a0	2026-05-27	fix: Plausible custom events silently dropped (#26787)	UNREVIEWED			
-1494	83804db71fd84796d3d5676ca625390f409a72a7	2026-05-27	Check formal snapshot genesis network (#26761)	UNREVIEWED			
-1495	da1b67bf9e6a8c4eec54f56b6456875707ca1033	2026-05-27	fix: switch Plausible custom events to CSS class-based tracking (#26793)	UNREVIEWED			
-1496	8eccec6ab750b1e558bc11b7e59ba096be9501ae	2026-05-27	sui-rpc-api: replace alpha proof/event services with v2alpha	UNREVIEWED			
-1497	63bfc970ef63aa63c7e54c6fa88217a9e9744513	2026-05-27	sui-light-client: bucket events by settlement for MMR verification	UNREVIEWED			
-1498	e81b9ab3d829effb88f4515a1e6ae0809ce64bd9	2026-05-27	sui-core: index rpc-index from `Checkpoint` instead of `CheckpointData`	UNREVIEWED			
-1499	5910cc10a60e15586ce362a351cfca346c44ba97	2026-05-27	sui-types: take `ObjectSet` in `derive_detailed_balance_changes_2`	UNREVIEWED			
-1500	9a52149a54c8c6d2511dd74c01f260ec2b8d6e0d	2026-05-27	[Block Streaming] broadcast randomness round signatures from Observer peer to client (#26679)	UNREVIEWED			
+1453	3be29b4ed2a1077d89a4c3c6c77c635b159efdc3	2026-05-21	sui-core: drop fastpath guard in object_funds_checker (#26610)	REVIEWED	EXCLUDE_POST_FORK		object-funds/fastpath 后置协议。
+1454	ac4d046824e762ad554c848e6f0f40982c53550b	2026-05-21	Gate rpc and consolidate rpcs (#26735)	REVIEWED	EXCLUDE_FEATURE		RPC 网关重构。
+1455	37de2da6b748a172154d08fb79e35ea360449612	2026-05-21	Enable gas priority tx admission queue by default (#26730)	REVIEWED	EXCLUDE_FEATURE		交易准入策略。
+1456	de4cbdf63dedb1a7d0899b47f7f34e22fccf64ef	2026-05-21	[consensus] add BlockV3 (#26727)	REVIEWED	EXCLUDE_FEATURE		共识协议功能。
+1457	b3b40534900e08d450f16ca5f9323998c13e624a	2026-05-21	sui-core: add address balances design docs (#26532)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1458	407cb6ab3da557bad260a4ea42c3669099e494b4	2026-05-21	docs: validate gasless token table against lib.rs at build time (#26700)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1459	ecf5558557e12604219e89b0a05da73029ca7208	2026-05-21	docs: fix redirect for /standards/deepbookv3 (#26739)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1460	deb077b179edaca1e853bc6f2e738f6f65dc15e8	2026-05-21	Enable timestamp_based_epoch_close on testnet (#26740)	REVIEWED	EXCLUDE_FEATURE		协议开关。
+1461	b4d23a7c16fa5293cec384849bd524501313c6d0	2026-05-21	[tidehunter] Enable objects compactor on full nodes when num_epochs_to_retain=0 (#26737)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1462	28b4131345ee867474c78d9f12472237631729d8	2026-05-21	docs: add SuiVision note and example (#26743)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1463	876e0ab4a11bf65e576314b2c92997b9edd2aa3f	2026-05-21	nickv/button up 2 (#26744)	REVIEWED	EXCLUDE_FEATURE		UI 功能。
+1464	ea52f2c67bb7f366b7a646b4f4f0fb89be280f6f	2026-05-21	[WIP] Party permissioned objects (#26246)	REVIEWED	EXCLUDE_FEATURE		对象模型功能。
+1465	718ae563a42fb4ba0d055588f81c704dcef58c25	2026-05-21	[tidehunter] Call Bytes::into_owned on multi_get results (#26745)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1466	72564bc1fb0b104c445785dd400375afe2fbfa06	2026-05-22	Sui v1.73.0 Framework Bytecode snapshot (#26750)	REVIEWED	EXCLUDE_NON_CODE		版本快照。
+1467	30a5e82d3ab54da307ce60c5e7b1a5eff8a7131b	2026-05-21	Sui v1.74.0 Version Bump (#26751)	REVIEWED	EXCLUDE_NON_CODE		版本更新。
+1468	9775bc65e6be771aa98db672cf89e860c729bf5e	2026-05-21	[sui-benchmark] Fix flaky cancellation_count threshold in test_composite_workload (#26748)	REVIEWED	EXCLUDE_NON_CRITICAL		基准测试稳定性。
+1469	e09f31f7606bca023907740966b3bd8f8f5a4703	2026-05-22	Increase objects table max dirty keys (#26752)	REVIEWED	EXCLUDE_NON_CRITICAL		存储调优。
+1470	43921284c81de0ce78b31faef4f6aa7dd9e2127b	2026-05-22	docs: rewrite Exchange Integration around gRPC and GraphQL (#26705)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1471	62ee6ada958cd61b3c8a4466dd33c9aba3cdff8a	2026-05-22	[cli] Fix tree shake alg by using the pkg id instead of pkg display name (#26734)	REVIEWED	EXCLUDE_NON_CRITICAL		非关键 CLI 修正。
+1472	f786dd7bcf5b1fd47cb365787d1f52a7bfb58add	2026-05-22	docs: Update gasless-stablecoin-transfers.mdx (#26760)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1473	3849d83948bcf5900f949abd6b51888c5fe12bc0	2026-05-22	Gracefully handle freetier txns with no gas owner (#26756)	REVIEWED	EXCLUDE_FEATURE		免 gas 交易功能。
+1474	b1d8f66257df085d686df9df678b3eeb6379a9bf	2026-05-22	ci: enable sccache in bridge.yml (clippy + test jobs) (#26762)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1475	ba7dabd228a319ded47173174311a59be4c90f71	2026-05-22	fix(simulate): accept explicit gas_price=0 for gasless-eligible transactions (#26763)	REVIEWED	EXCLUDE_FEATURE		免 gas 模拟功能。
+1476	818f8d78f222b9279cb966a5754fb0a2c21d58b1	2026-05-22	ci: add simtest host disk guardrails (#26726)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1477	d1b171a178bd995900102cee4e42f6b430cdeb43	2026-05-26	docs: remove outdated package management content from upgrade page (#26742)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1478	ecfd8070f145bea93d835a9c3127500c74e77f07	2026-05-26	chore: sync shared Docusaurus components (#26777)	REVIEWED	EXCLUDE_NON_CODE		文档站组件同步。
+1479	585d7a076f990fa1ba8760e39883ddfc99b9276e	2026-05-26	docs: add the Sui Agent Skills page (#26754)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1480	94b94f2248268afbc0ff21b2c12806b7450e88c0	2026-05-26	docs: add AgentPrompt builder-prompt callouts (#26755)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1481	5baf57fde3fb46c69a2a8006470d35fa83ccf828	2026-05-26	docs: Diagram standards update (#26747)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1482	0fdc788f9e8d76cd47d20a840744741550b60a55	2026-05-26	docs: automated fixes from weekly audit (1 issues) (#26778)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1483	fd19123f3d9610eb050fec59d1205f3f85776103	2026-05-26	ci(release): fix update-homebrew-formula gating on release events (#26782)	REVIEWED	EXCLUDE_NON_CODE		CI 发布流程。
+1484	78aea9a321b07ac78819092d24c763f471989f84	2026-05-26	fix(tidehunter pruner): uncap checkpoint watermark when objects compactor is active (#26779)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储路径。
+1485	6ded6577b57c6ef0c699fddf8d9fd4450d22cb42	2026-05-26	fix: expose Plausible track function so custom events fire (#26781)	REVIEWED	EXCLUDE_NON_CRITICAL		文档站分析事件。
+1486	1fd64849c11a130de450168e64e3913885a3bee4	2026-05-26	feat(accumulator): add create_for_testing for AccumulatorRoot (#26784)	REVIEWED	EXCLUDE_FEATURE		累加器功能测试辅助。
+1487	17b7f032987e0156ee8ea0b82488a96ad681ba26	2026-05-27	[Block Streaming] support DKG generation as an Observer (#26646)	REVIEWED	EXCLUDE_FEATURE		区块流功能。
+1488	303c9da6c97d6dbd77dba056afafd5ee208b8475	2026-05-27	sui-kvstore: replace AbortOnDrop with TaskGuard (#26791)	REVIEWED	EXCLUDE_POST_FORK		KV 后置任务架构。
+1489	9cb5dcf26b962b28f574ee461c71970850b51981	2026-05-27	docs: Update docs diagrams to align with new design system (#26783)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1490	ec061781453c59241af928ea30eab05fb9428ed7	2026-05-27	docs: add canonical JSON-RPC migration guide under accessing-data (#26716)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1491	df6f6962ed7979d4b50ae99734fa757164faba0e	2026-05-27	docs: add Sui completion CLI reference (#26767)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1492	cfdf0d8762731378682569655ea575008a407681	2026-05-27	docs: add announcement banner for Sui Agent Skills page (#26792)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1493	f78f7d94a2a1168a87a7f0064c8345e624b6c7a0	2026-05-27	fix: Plausible custom events silently dropped (#26787)	REVIEWED	EXCLUDE_NON_CRITICAL		文档站分析事件。
+1494	83804db71fd84796d3d5676ca625390f409a72a7	2026-05-27	Check formal snapshot genesis network (#26761)	REVIEWED	EXCLUDE_NON_CRITICAL		快照测试检查。
+1495	da1b67bf9e6a8c4eec54f56b6456875707ca1033	2026-05-27	fix: switch Plausible custom events to CSS class-based tracking (#26793)	REVIEWED	EXCLUDE_NON_CRITICAL		文档站分析事件。
+1496	8eccec6ab750b1e558bc11b7e59ba096be9501ae	2026-05-27	sui-rpc-api: replace alpha proof/event services with v2alpha	REVIEWED	EXCLUDE_FEATURE		RPC API 迁移。
+1497	63bfc970ef63aa63c7e54c6fa88217a9e9744513	2026-05-27	sui-light-client: bucket events by settlement for MMR verification	REVIEWED	EXCLUDE_FEATURE		轻客户端功能。
+1498	e81b9ab3d829effb88f4515a1e6ae0809ce64bd9	2026-05-27	sui-core: index rpc-index from `Checkpoint` instead of `CheckpointData`	REVIEWED	EXCLUDE_FEATURE		索引架构调整。
+1499	5910cc10a60e15586ce362a351cfca346c44ba97	2026-05-27	sui-types: take `ObjectSet` in `derive_detailed_balance_changes_2`	REVIEWED	EXCLUDE_FEATURE		索引 API 重构。
+1500	9a52149a54c8c6d2511dd74c01f260ec2b8d6e0d	2026-05-27	[Block Streaming] broadcast randomness round signatures from Observer peer to client (#26679)	REVIEWED	EXCLUDE_FEATURE		区块流功能。
 1501	b6ae551be8a7b6db68a7b6de8c3bbb2328bad52d	2026-05-27	docs: add custom properties to Plausible CSS class events (#26797)	UNREVIEWED			
 1502	d5493c7566fe1e17a9c8ab87d88fa0c0fee50b04	2026-05-28	sui-replay-2: add --skip-artifacts flag (#26800)	UNREVIEWED			
 1503	7966e59b7fbbca160945006729de46edeea742f7	2026-05-28	Deduplicate bitmap scans (#26799)	UNREVIEWED			
