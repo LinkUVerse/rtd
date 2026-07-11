@@ -1049,56 +1049,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1048	b9b9628b2040de6b8f02af1e59d7a119dd4bbc10	2026-04-08	[sui-framework][std] Added additional `option` macros (#26085)	REVIEWED	EXCLUDE_FEATURE		新增 std option 宏。
 1049	b62e4bf94eaaf96cb2d42b643ba92847bbf57be8	2026-04-08	sui-indexer-alt: start indexing at network tip (#26116)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt 启动策略功能。
 1050	f6a774c2b71765b0bad451efe9b5ca171438eb72	2026-04-08	Re-enable benchmark smoke tests in CI (#26155)	REVIEWED	EXCLUDE_NON_CODE		仅 CI benchmark。
-1051	675a96058d86e7598c21de44d966080f28365a15	2026-04-08	Fix flaky benchmark smoke test: lower --min-tps threshold (#26167)	UNREVIEWED			
-1052	fc1bba9be45188caaa989d3928644cb62f0ab8da	2026-04-09	[chore] Update tidehunter to 7fddd55cf8cb27ee10803fb772d7618134a8d138 (#26169)	UNREVIEWED			
-1053	97dae8a2fb64fa9aee4bc3695e31af11934deda6	2026-04-09	[move-cli] adds lint command (#26059)	UNREVIEWED			
-1054	72993bd09d161b832cd170ed856271c489d314ee	2026-04-09	devx: include test function order in team style guidelines (#26172)	UNREVIEWED			
-1055	412c8eca9612a87bc6f4592773ac5d46a3840883	2026-04-09	[sui-adapter][object-runtime] Fix Move abort for Receiving and mismatched type  (#26165)	UNREVIEWED			
-1056	309e94d4fac2ff47b472b8e5c000ec7083447b40	2026-04-09	Harden gRPC metrics response handler against unexpected header values (#26187)	UNREVIEWED			
-1057	c2428b3aaf9c24270b609001e56d96cb10c76d28	2026-04-10	sui-indexer-alt: revert #26096, #26116 (#26188)	UNREVIEWED			
-1058	cbb36b5c59993fd8c2f76ff869d662709fc2a90c	2026-04-10	Sui v1.70.0 Framework Bytecode snapshot (#26190)	UNREVIEWED			
-1059	5934ceca7dc8e16a1a0f8715632f704f7b9f18d4	2026-04-10	Sui v1.71.0 Version Bump (#26191)	UNREVIEWED			
-1060	730ed4b589e9b7c535217e829a33be2ce76f1ed0	2026-04-10	[execution] Introduce ExecutionMetrics and plumb through execution layer (#26177)	UNREVIEWED			
-1061	42f5be7a98f71397c55989dbbd36c65a10b405fc	2026-04-10	ci: prevent committing *.snap.new files (#26151)	UNREVIEWED			
-1062	be9e86521ef73cb77d9becf3cc22bfba18c5a011	2026-04-10	[move-ide] Support for renaming (#26168)	UNREVIEWED			
-1063	1b279692f0f94f72819560b227d9d6e52f72e34c	2026-04-10	sui-indexer-alt-framework: fix indexer startup during streaming hang (#26198)	UNREVIEWED			
-1064	db627fa1c0797b75d6d2bb9ab2ff626a3a19a939	2026-04-10	[address balances] Rewrite coin reservation inputs for simulate and dev inspect (#26193)	UNREVIEWED			
-1065	92989b44c3686c3017d2d95664e03c337cf4710a	2026-04-10	[move] Fix operator typos in safe_ops overflow error messages (#26131)	UNREVIEWED			
-1066	cfc934818ea3a3ed233ffe5cc576e942dcf3f8a2	2026-04-10	sui-rpc-api: handle coin reservation ObjectRefs in resolve (#26127)	UNREVIEWED			
-1067	7b29af4d801d8280cbdcee965c623b0ada1136af	2026-04-10	[rpc-alt] Use gRPC instead of JSON-RPC for Write API in sui-indexer-alt-jsonrpc (#25860)	UNREVIEWED			
-1068	d37c972d2b035f9e46cff9f088ee86179a4922ad	2026-04-10	[sui][transaction] Sort simtest results by creation order (#26034)	UNREVIEWED			
-1069	eccfad284a5508c1993e65b2c76ab4b7af9d4e28	2026-04-10	[chore] Update tidehunter to 44f3000, remove with_unloaded_iterator (#26189)	UNREVIEWED			
-1070	0d2a61cee5e9f123229608b5edbe497c332eed0a	2026-04-12	Adding criterion benchmark for interpreter (#26108)	UNREVIEWED			
-1071	496805de854f431b6de9d0b3cc644faf7f617472	2026-04-12	Fix double-counting of gas budget in select_gas (#26205)	UNREVIEWED			
-1072	0a5d4e252d844b5dec6f8682dbcf53a39db33126	2026-04-13	docs: typo fix (#26209)	UNREVIEWED			
-1073	e5a65b67e7f041f10567761149d93db5b3bcaf22	2026-04-13	[sui-tool] Fix validator connections in fetch-transaction (#26200)	UNREVIEWED			
-1074	6852d8d19bcafaf473612e2ee26b6dd314d3cd2a	2026-04-13	Restore Universal compaction for consensus BLOCKS_CF on mainnet (#26184)	UNREVIEWED			
-1075	9361d825b4695bac75952f815ae451a4f47108f2	2026-04-13	[forking 2/n] checkpoint querying in the data-store (#26134)	UNREVIEWED			
-1076	0ffa28e5de4c0031b32d0ddab1a8587b10f0d42b	2026-04-13	gas data tests across execution entry points (#26179)	UNREVIEWED			
-1077	712c7263297c01fce764e8f99c17150c9b8120f6	2026-04-13	sui-indexer-alt-consistent-store: implement accepts_chain_id (#26181)	UNREVIEWED			
-1078	00c358bf2e32c8da40f2d4b93e49e70fef6a8883	2026-04-13	[forking 3/n] forking data-store and querying objects and checkpoints (#26140)	UNREVIEWED			
-1079	845cccaa52477cabd5aed5303d248bf168c0b980	2026-04-13	[sui-framework] Macros for dynamic fields and dynamic object fields (#26166)	UNREVIEWED			
-1080	4d51396825915eb6da4cd1d8e88735870b3fdfd8	2026-04-13	sui-kvstore: fix BigTableConnection init_watermark to use committer_watermark (#26225)	UNREVIEWED			
-1081	f8e480a2a7acb2202ab35060b056dcb285b6bc92	2026-04-13	[graphql-stream] WebSocket subscription infrastructure [1/n] (#26019)	UNREVIEWED			
-1082	a53f7c1321d016d4e2c826d7c85e210c0a76051f	2026-04-13	[graphql-stream] Implement checkpoint subscription streaming [2/n] (#26094)	UNREVIEWED			
-1083	4942c476fb0a17ed1542026bca50cdeb6104e30b	2026-04-14	Implement verifySignature GraphQL query (#25863)	UNREVIEWED			
-1084	f7dd71cf050ccedeaed4ba8f415646d055ee4810	2026-04-14	[graphql-stream] Propagate transactions fields for checkpoint subscription streaming [3/n] (#26117)	UNREVIEWED			
-1085	d3c68da7dba2c383bfc56e4f3cf1d3a735d83bb3	2026-04-14	[move-stdlib] purge vector::empty and vector::singleton (#26196)	UNREVIEWED			
-1086	48a132646a40b7141e1f60861c275af548167745	2026-04-14	display: differentiate between scoped and latest object loads (#26208)	UNREVIEWED			
-1087	4e83aa63dcf7a9e0edebcf553e4b145df19772ab	2026-04-14	jsonrpc-alt: gate address balance object fallback (#26195)	UNREVIEWED			
-1088	a3d1c66f47a5e619b8fe332de822949c5a47298d	2026-04-14	Address Certora audit fixes feedback (#26213)	UNREVIEWED			
-1089	3544eced22dad8f140d5278ecdc04d2b669133ec	2026-04-14	[forking 4/n] wire up data store to simulacrum (#26154)	UNREVIEWED			
-1090	b326870191ea7589a99ebdd7fafaf8e89bd1c4c0	2026-04-14	Fix integer test type mismatches (#26204)	UNREVIEWED			
-1091	3882fcce7655c5962c73394785a33161c0edfda6	2026-04-14	[trace-view] Added support for reading large traces (#26223)	UNREVIEWED			
-1092	eca7083e3dc1c5a3e19cb92f74f87022ddcb1ec1	2026-04-14	[move] compressed type layouts (#26000)	UNREVIEWED			
-1093	e4436b250dc200934e14b395937477bc6c5d2d03	2026-04-14	[sui-framework] Clean up df/dof `exists_` and `remove_if_exists` (#26226)	UNREVIEWED			
-1094	1a402413dba1096cef8fe85e27f164d0fc022033	2026-04-14	[sui-replay] Fix double-save of tx effects causing errors if `--overwrite` is not passed (#26243)	UNREVIEWED			
-1095	2b92b8975890c42d4c766dc03840658150ef4595	2026-04-14	sui-analytics-indexer: implement accepts_chain_id (#26171)	UNREVIEWED			
-1096	4bbea07155f8022ab8444c341a9ca97b27c39ab7	2026-04-15	[graphql-stream] Add object resolution to checkpoint subscription transactions [4/n] (#26170)	UNREVIEWED			
-1097	a286fdb33b9aac12861bf7613d2b5659bbb5a04d	2026-04-15	Update fastcrypto to 5f87e04b (#26253)	UNREVIEWED			
-1098	1beda9a2883290c75a135eb8dbde2e4f39d06608	2026-04-15	[execution] Add Move VM telemetry reporting to ExecutionMetrics (#26178)	UNREVIEWED			
-1099	b4bd1f9f6dd50f9d5c98c23d362e18a3938cfdc3	2026-04-15	[indexer-alt-reader] Extract kv args to be shared by graphql and other readers (#26239)	UNREVIEWED			
-1100	4ee7d76c2fe7a7567f6a21a66d4446d1b9a4c5dd	2026-04-15	[test] Drop redundant enable_coin_reservation_for_testing in simulate tests (#26255)	UNREVIEWED			
+1051	675a96058d86e7598c21de44d966080f28365a15	2026-04-08	Fix flaky benchmark smoke test: lower --min-tps threshold (#26167)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 阈值。
+1052	fc1bba9be45188caaa989d3928644cb62f0ab8da	2026-04-09	[chore] Update tidehunter to 7fddd55cf8cb27ee10803fb772d7618134a8d138 (#26169)	REVIEWED	EXCLUDE_FEATURE		tidehunter 依赖更新。
+1053	97dae8a2fb64fa9aee4bc3695e31af11934deda6	2026-04-09	[move-cli] adds lint command (#26059)	REVIEWED	EXCLUDE_FEATURE		新增 Move CLI lint。
+1054	72993bd09d161b832cd170ed856271c489d314ee	2026-04-09	devx: include test function order in team style guidelines (#26172)	REVIEWED	EXCLUDE_NON_CODE		开发规范。
+1055	412c8eca9612a87bc6f4592773ac5d46a3840883	2026-04-09	[sui-adapter][object-runtime] Fix Move abort for Receiving and mismatched type  (#26165)	REVIEWED	EXCLUDE_POST_FORK		依赖协议 v121 的 Receiving 类型 gate。
+1056	309e94d4fac2ff47b472b8e5c000ec7083447b40	2026-04-09	Harden gRPC metrics response handler against unexpected header values (#26187)	APPLIED	MERGE	c47411de04551df89c853d456e8913b6c8fd61e0	响应缺失或非法 metrics 头时不再 panic。
+1057	c2428b3aaf9c24270b609001e56d96cb10c76d28	2026-04-10	sui-indexer-alt: revert #26096, #26116 (#26188)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt feature revert。
+1058	cbb36b5c59993fd8c2f76ff869d662709fc2a90c	2026-04-10	Sui v1.70.0 Framework Bytecode snapshot (#26190)	REVIEWED	EXCLUDE_POST_FORK		后续 framework 快照。
+1059	5934ceca7dc8e16a1a0f8715632f704f7b9f18d4	2026-04-10	Sui v1.71.0 Version Bump (#26191)	REVIEWED	EXCLUDE_NON_CODE		版本 bump。
+1060	730ed4b589e9b7c535217e829a33be2ce76f1ed0	2026-04-10	[execution] Introduce ExecutionMetrics and plumb through execution layer (#26177)	REVIEWED	EXCLUDE_FEATURE		ExecutionMetrics 功能。
+1061	42f5be7a98f71397c55989dbbd36c65a10b405fc	2026-04-10	ci: prevent committing *.snap.new files (#26151)	REVIEWED	EXCLUDE_NON_CODE		CI 保护。
+1062	be9e86521ef73cb77d9becf3cc22bfba18c5a011	2026-04-10	[move-ide] Support for renaming (#26168)	REVIEWED	EXCLUDE_FEATURE		Move IDE rename 功能。
+1063	1b279692f0f94f72819560b227d9d6e52f72e34c	2026-04-10	sui-indexer-alt-framework: fix indexer startup during streaming hang (#26198)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt streaming 启动策略。
+1064	db627fa1c0797b75d6d2bb9ab2ff626a3a19a939	2026-04-10	[address balances] Rewrite coin reservation inputs for simulate and dev inspect (#26193)	REVIEWED	EXCLUDE_POST_FORK		address-balance coin-reservation 路径。
+1065	92989b44c3686c3017d2d95664e03c337cf4710a	2026-04-10	[move] Fix operator typos in safe_ops overflow error messages (#26131)	REVIEWED	EXCLUDE_NON_CRITICAL		safe_ops 错误文案。
+1066	cfc934818ea3a3ed233ffe5cc576e942dcf3f8a2	2026-04-10	sui-rpc-api: handle coin reservation ObjectRefs in resolve (#26127)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation RPC resolver。
+1067	7b29af4d801d8280cbdcee965c623b0ada1136af	2026-04-10	[rpc-alt] Use gRPC instead of JSON-RPC for Write API in sui-indexer-alt-jsonrpc (#25860)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt Write API gRPC 迁移。
+1068	d37c972d2b035f9e46cff9f088ee86179a4922ad	2026-04-10	[sui][transaction] Sort simtest results by creation order (#26034)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest 结果顺序。
+1069	eccfad284a5508c1993e65b2c76ab4b7af9d4e28	2026-04-10	[chore] Update tidehunter to 44f3000, remove with_unloaded_iterator (#26189)	REVIEWED	EXCLUDE_FEATURE		tidehunter 依赖/API 更新。
+1070	0d2a61cee5e9f123229608b5edbe497c332eed0a	2026-04-12	Adding criterion benchmark for interpreter (#26108)	REVIEWED	EXCLUDE_NON_CODE		仅 interpreter benchmark。
+1071	496805de854f431b6de9d0b3cc644faf7f617472	2026-04-12	Fix double-counting of gas budget in select_gas (#26205)	REVIEWED	EXCLUDE_POST_FORK		address-balance gas selection 修复。
+1072	0a5d4e252d844b5dec6f8682dbcf53a39db33126	2026-04-13	docs: typo fix (#26209)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+1073	e5a65b67e7f041f10567761149d93db5b3bcaf22	2026-04-13	[sui-tool] Fix validator connections in fetch-transaction (#26200)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI fetch-transaction validator 连接。
+1074	6852d8d19bcafaf473612e2ee26b6dd314d3cd2a	2026-04-13	Restore Universal compaction for consensus BLOCKS_CF on mainnet (#26184)	REVIEWED	EXCLUDE_FEATURE		依赖 FIFO/Universal consensus compaction 架构。
+1075	9361d825b4695bac75952f815ae451a4f47108f2	2026-04-13	[forking 2/n] checkpoint querying in the data-store (#26134)	REVIEWED	EXCLUDE_FEATURE		forking data-store 功能。
+1076	0ffa28e5de4c0031b32d0ddab1a8587b10f0d42b	2026-04-13	gas data tests across execution entry points (#26179)	REVIEWED	EXCLUDE_NON_CODE		仅 gas-data 测试。
+1077	712c7263297c01fce764e8f99c17150c9b8120f6	2026-04-13	sui-indexer-alt-consistent-store: implement accepts_chain_id (#26181)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt consistent-store API。
+1078	00c358bf2e32c8da40f2d4b93e49e70fef6a8883	2026-04-13	[forking 3/n] forking data-store and querying objects and checkpoints (#26140)	REVIEWED	EXCLUDE_FEATURE		forking data-store 功能。
+1079	845cccaa52477cabd5aed5303d248bf168c0b980	2026-04-13	[sui-framework] Macros for dynamic fields and dynamic object fields (#26166)	REVIEWED	EXCLUDE_FEATURE		新增 framework dynamic-field 宏。
+1080	4d51396825915eb6da4cd1d8e88735870b3fdfd8	2026-04-13	sui-kvstore: fix BigTableConnection init_watermark to use committer_watermark (#26225)	REVIEWED	EXCLUDE_POST_FORK		RTD 不存在后续 BigTableConnection/store 抽象。
+1081	f8e480a2a7acb2202ab35060b056dcb285b6bc92	2026-04-13	[graphql-stream] WebSocket subscription infrastructure [1/n] (#26019)	REVIEWED	EXCLUDE_FEATURE		GraphQL stream 基础设施。
+1082	a53f7c1321d016d4e2c826d7c85e210c0a76051f	2026-04-13	[graphql-stream] Implement checkpoint subscription streaming [2/n] (#26094)	REVIEWED	EXCLUDE_FEATURE		GraphQL checkpoint subscription。
+1083	4942c476fb0a17ed1542026bca50cdeb6104e30b	2026-04-14	Implement verifySignature GraphQL query (#25863)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL verifySignature 查询。
+1084	f7dd71cf050ccedeaed4ba8f415646d055ee4810	2026-04-14	[graphql-stream] Propagate transactions fields for checkpoint subscription streaming [3/n] (#26117)	REVIEWED	EXCLUDE_FEATURE		GraphQL stream 字段传播。
+1085	d3c68da7dba2c383bfc56e4f3cf1d3a735d83bb3	2026-04-14	[move-stdlib] purge vector::empty and vector::singleton (#26196)	REVIEWED	EXCLUDE_FEATURE		Move stdlib API 清理。
+1086	48a132646a40b7141e1f60861c275af548167745	2026-04-14	display: differentiate between scoped and latest object loads (#26208)	REVIEWED	EXCLUDE_FEATURE		Display 加载模式功能。
+1087	4e83aa63dcf7a9e0edebcf553e4b145df19772ab	2026-04-14	jsonrpc-alt: gate address balance object fallback (#26195)	REVIEWED	EXCLUDE_POST_FORK		address-balance JSON-RPC fallback gate。
+1088	a3d1c66f47a5e619b8fe332de822949c5a47298d	2026-04-14	Address Certora audit fixes feedback (#26213)	APPLIED	MERGE	1146f2889f7edaf43eb0048d89315dbd72742b6b	Bridge URL 拼接与请求限制审计修复。
+1089	3544eced22dad8f140d5278ecdc04d2b669133ec	2026-04-14	[forking 4/n] wire up data store to simulacrum (#26154)	REVIEWED	EXCLUDE_FEATURE		forking/simulacrum 集成。
+1090	b326870191ea7589a99ebdd7fafaf8e89bd1c4c0	2026-04-14	Fix integer test type mismatches (#26204)	REVIEWED	EXCLUDE_NON_CODE		仅整数测试。
+1091	3882fcce7655c5962c73394785a33161c0edfda6	2026-04-14	[trace-view] Added support for reading large traces (#26223)	REVIEWED	EXCLUDE_FEATURE		trace-view 大 trace 支持。
+1092	eca7083e3dc1c5a3e19cb92f74f87022ddcb1ec1	2026-04-14	[move] compressed type layouts (#26000)	REVIEWED	EXCLUDE_FEATURE		compressed type layouts 功能。
+1093	e4436b250dc200934e14b395937477bc6c5d2d03	2026-04-14	[sui-framework] Clean up df/dof `exists_` and `remove_if_exists` (#26226)	REVIEWED	EXCLUDE_FEATURE		framework dynamic-field API 清理。
+1094	1a402413dba1096cef8fe85e27f164d0fc022033	2026-04-14	[sui-replay] Fix double-save of tx effects causing errors if `--overwrite` is not passed (#26243)	REVIEWED	EXCLUDE_NON_CRITICAL		sui-replay 工具覆盖写入行为。
+1095	2b92b8975890c42d4c766dc03840658150ef4595	2026-04-14	sui-analytics-indexer: implement accepts_chain_id (#26171)	REVIEWED	EXCLUDE_FEATURE		Analytics Indexer API。
+1096	4bbea07155f8022ab8444c341a9ca97b27c39ab7	2026-04-15	[graphql-stream] Add object resolution to checkpoint subscription transactions [4/n] (#26170)	REVIEWED	EXCLUDE_FEATURE		GraphQL stream 对象解析。
+1097	a286fdb33b9aac12861bf7613d2b5659bbb5a04d	2026-04-15	Update fastcrypto to 5f87e04b (#26253)	REVIEWED	EXCLUDE_FEATURE		fastcrypto 指针更新。
+1098	1beda9a2883290c75a135eb8dbde2e4f39d06608	2026-04-15	[execution] Add Move VM telemetry reporting to ExecutionMetrics (#26178)	REVIEWED	EXCLUDE_FEATURE		ExecutionMetrics telemetry。
+1099	b4bd1f9f6dd50f9d5c98c23d362e18a3938cfdc3	2026-04-15	[indexer-alt-reader] Extract kv args to be shared by graphql and other readers (#26239)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt reader 参数抽取。
+1100	4ee7d76c2fe7a7567f6a21a66d4446d1b9a4c5dd	2026-04-15	[test] Drop redundant enable_coin_reservation_for_testing in simulate tests (#26255)	REVIEWED	EXCLUDE_NON_CODE		仅测试清理。
 1101	399f54b4ee0a0b4737c19631ae667c641165f3e8	2026-04-15	[move-vm] Added additional unreachable reference tests (#26238)	UNREVIEWED			
 1102	a5695d65dfc2d902066a4ef7c6c0d803e09bf8ed	2026-04-15	[consensus] remove block certification (#26144)	UNREVIEWED			
 1103	ebac86fb5fd8e62f2fcecd359cc91a0ca90b3ecb	2026-04-15	docs: Sui IA restructure (#26241)	UNREVIEWED			
