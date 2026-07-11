@@ -299,56 +299,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 298	a08ac240a3cd5fc2b85561fa65d4c36b6fa1e680	2026-01-23	[consensus] fix randomized dag tests (#25033)	REVIEWED	EXCLUDE_NON_CODE		仅 randomized consensus test fixture 与 simtest 修复。
 299	d5273f5c9f59630347ba8be70aa5c7649025d15f	2026-01-23	[claude] claude skill for release branch cherry picks (#25077)	REVIEWED	EXCLUDE_NON_CODE		仅新增 Claude cherry-pick skill。
 300	c369fcf58b8a0fb1aa4150b1cee9a89e5ba9e060	2026-01-23	Retry all transaction submissions for at least 60 seconds (#25083)	REVIEWED	EXCLUDE_FEATURE		Antithesis benchmark 重试策略调优。
-301	6e075200356bfefd756ca70e91bcc545c0c2cf24	2026-01-26	[core] split checkpoints in consensus handler (#24736)	UNREVIEWED			
-302	0b653b5485fb62c552c63df9b0012db388df99b8	2026-01-26	[light-clients] docs: authenticated events (#24659)	UNREVIEWED			
-303	43552a1806a16162b9997607e9187b772b3d6bf3	2026-01-26	[config] Shift around where we set some values (#25100)	UNREVIEWED			
-304	24765181a39f35f39b206f50abd144a938b6d109	2026-01-26	[state-sync] adaptive timeouts and throughput-based peer selection (#24894)	UNREVIEWED			
-305	8b38457ce18291909559624268b5c1d89639d24f	2026-01-26	[sui-indexer-alt-e2e-tests][chore] Bump protocol versions to 108 in tests (#25080)	UNREVIEWED			
-306	7eb0585f6e0311734aa1892ed828cebeb380930c	2026-01-26	fix(sui-http): use explicit rustls::CryptoProvider (#25106)	UNREVIEWED			
-307	dabad4a4a49e1fbedadd8138efef8393af7971db	2026-01-26	[sui-indexer-alt] Update a couple more snaps (#25111)	UNREVIEWED			
-308	67a6ae48d8ec7329dd745f9b5b12587a8aa13799	2026-01-26	consistent-store add address-balances to restorer (#25107)	UNREVIEWED			
-309	e59d192e74d2ec990226bad8cf86fc76ac272073	2026-01-26	Fix `build_custom_clients` to accept genesis committee directly (#25104)	UNREVIEWED			
-310	94e89cd40b5c510938e9f6f606069ca7dbc2c49f	2026-01-26	[transaction] validate transaction serialization (#25081)	UNREVIEWED			
-311	77bebabad10235cc1e2e19af0eaca83a29092246	2026-01-27	Fix rare edge case in crash recovery (#24998)	UNREVIEWED			
-312	7c1258d5601fddeedc568bfc8c043dc4075c1114	2026-01-27	temporarily disable `cfg.feature_flags.split_checkpoints_in_consensus_handler` while debugging (#25118)	UNREVIEWED			
-313	5be086186cf4fcb7c0b78a481660fee861107536	2026-01-26	[GraphQL] wrap metrics around ledger grpc reader (#25026)	UNREVIEWED			
-314	893c5d608a580e8c8529ec6c0aeab21c7dec0399	2026-01-27	[chore] update fastcrypto (#25112)	UNREVIEWED			
-315	d6fe2dac30d656113799097fee2ea682a2a562c5	2026-01-27	Improvements to composite workload to trigger insufficient balance condition in scheduler (#25072)	UNREVIEWED			
-316	7fa05c78eee66a0728b5393d51b9365146223fdf	2026-01-27	add update-endpoint route to admin server (#25036)	UNREVIEWED			
-317	786d4fd90885d27f0a58c83278e53f8d669ff976	2026-01-27	seed-search.py fixes (#25125)	UNREVIEWED			
-318	0f7eeb3e792ff41c3ded9389dad10ced43e41872	2026-01-27	docs: Fix dev newsletter link (#25128)	UNREVIEWED			
-319	7b9b4490083c68b03635548cc010d20720139164	2026-01-27	[Docs] Updated Payment Kit URI Guidelines (#25131)	UNREVIEWED			
-320	6b184327bf55658f18776d1353cd0f98a92f920d	2026-01-27	sdk: add grpc client to WallectContext	UNREVIEWED			
-321	9362a131d6fb91b93a453c475ce9749fe9796a87	2026-01-27	grpc-client: add get_chain_identifier method	UNREVIEWED			
-322	4de846eb9b1f7fed2904af7c4d47f748df6ac113	2026-01-27	sdk: convert chain_id fetching methods to use grpc	UNREVIEWED			
-323	b7a2c6f6c50b9c57c0a9e757a05c1e74137aaf22	2026-01-27	sdk: convert WalletContext::get_object_ref to grpc	UNREVIEWED			
-324	a0297df1b4b7c62afa9af4139f237e85de10be83	2026-01-27	sdk: convert WalletContext::get_full_object_ref to grpc	UNREVIEWED			
-325	0699947d3c5f79f7cf8a393d35d4bd82c7550f51	2026-01-27	sdk: convert WalletContext::get_object_owner to grpc	UNREVIEWED			
-326	6bd300efa764d0a46cf76d38e1a6a28879db8415	2026-01-27	grpc-client: add get_owned_objects method	UNREVIEWED			
-327	41bdda0d4fe71edc1a0e19dbf502706faa5ddec1	2026-01-27	sdk: convert WalletContext::get_gas_objects_owned_by_address to grpc	UNREVIEWED			
-328	5644d780b0a82505464ef80e9da68a1d2b86e860	2026-01-27	grpc-client: add get_reference_gas_price method	UNREVIEWED			
-329	ea3691d1ecb4514af4cd24cdd63f3c5e7b7ff9b9	2026-01-27	sdk: convert WalletContext::get_reference_gas_price to grpc	UNREVIEWED			
-330	f2119272e4e08174b15120d6959da499489d7bd3	2026-01-27	grpc-client: add list_owned_objects method	UNREVIEWED			
-331	b647f36f146ab06886fba5e32d6acb156153818f	2026-01-27	grpc-client: add wait_for_transaction method	UNREVIEWED			
-332	3423339c2b7ba8ba4953271b9643455271416a20	2026-01-27	sdk: convert WalletContext::gas_objects to grpc	UNREVIEWED			
-333	b9ba1b5b1fa9e4cdda8c3dec522916d119404948	2026-01-27	Properly map user sigs to alias versions in checkpoint contents (#25093)	UNREVIEWED			
-334	6e2c2e0e79241584441726c4ad9906c974544418	2026-01-28	Separate settle and commit in object funds checker (#25069)	UNREVIEWED			
-335	c95bd1e128416b8d9545cd5810bb78c6ad443572	2026-01-27	[graphql-alt] Update ServiceConfig return types for partial error support [6/n] (#25108)	UNREVIEWED			
-336	ee26d1dda0b69a0d4c537068ae690909a0933532	2026-01-27	[consensus] test equivocations with randomized dag (#25113)	UNREVIEWED			
-337	421ad1099e2061b229650608b9c8af80b2bc28c3	2026-01-27	docs: update graphql data-access retention docs (#25122)	UNREVIEWED			
-338	0ae67177d5d3831dc76884993ae4abb22ec33e88	2026-01-28	[Consensus] some comments on the commit finaliser (#25123)	UNREVIEWED			
-339	bf8e9a4fdc4d0aafac4a9a6d53f7b544b5702575	2026-01-28	Fix crypto instalation (#25105)	UNREVIEWED			
-340	a470a9d2902a41bebda653f0b6d57cbda786f4fd	2026-01-28	Fix a randomized DAG test and a full node test (#25141)	UNREVIEWED			
-341	1d107bd91727a9ccbb373a85f94bfc47cfbc40a5	2026-01-28	Protocol guard transition from `AddressAliases` to `AddressAliasesV2` (#25139)	UNREVIEWED			
-342	e29aa76950dc4d77dbd42b8c5eff4ac7810eb320	2026-01-28	[jsonrpc-alt] port coins to consistent store (#24558)	UNREVIEWED			
-343	275aaef5586d5726977100448897b72c3aecfdb2	2026-01-28	docs: Add recommended indexer/graphql postgres requirements (#25138)	UNREVIEWED			
-344	1c7e556f627f419459739deb8e52f75b26ac540f	2026-01-28	docs: Revise `/guides/transactions` section for style guide + feedback (#25027)	UNREVIEWED			
-345	c47bbb72588c3a74f87d0cd26611b67930f30a9d	2026-01-28	[move-stdlib] Lossless div (#25051)	UNREVIEWED			
-346	9a88ac87053de9aa5fc1e8f7dfc6d7f3cb0ae093	2026-01-28	docs: dApp -> app (#25146)	UNREVIEWED			
-347	29ee924f1275b1069084b1ff3d43f41e15f4e03e	2026-01-28	docs: address Nautilus feedback (#25153)	UNREVIEWED			
-348	88935140b17155ed132b54f2dcea8c9c894a4237	2026-01-28	docs: Add Docusaurus subtree for shared components (#24827)	UNREVIEWED			
-349	35dff86f4e83d9011f3ae3628fae5e74c356ad75	2026-01-28	[move][chore] Convert file hashes to symbols internally to reduce size (#24800)	UNREVIEWED			
-350	b486205852707b2de41dfe62d76aa3299423cb02	2026-01-28	[move-ide] Fixed crash when module extension extends user module (#25154)	UNREVIEWED			
+301	6e075200356bfefd756ca70e91bcc545c0c2cf24	2026-01-26	[core] split checkpoints in consensus handler (#24736)	REVIEWED	EXCLUDE_FEATURE		新增协议 v110 checkpoint 拆分架构，fork 基线最高为 v105。
+302	0b653b5485fb62c552c63df9b0012db388df99b8	2026-01-26	[light-clients] docs: authenticated events (#24659)	REVIEWED	EXCLUDE_NON_CODE		仅新增 authenticated events 设计文档。
+303	43552a1806a16162b9997607e9187b772b3d6bf3	2026-01-26	[config] Shift around where we set some values (#25100)	REVIEWED	EXCLUDE_FEATURE		协议 v109 限制调整与 gated entry-function 限制。
+304	24765181a39f35f39b206f50abd144a938b6d109	2026-01-26	[state-sync] adaptive timeouts and throughput-based peer selection (#24894)	REVIEWED	EXCLUDE_FEATURE		新增 state-sync 自适应超时与 peer 吞吐选择策略。
+305	8b38457ce18291909559624268b5c1d89639d24f	2026-01-26	[sui-indexer-alt-e2e-tests][chore] Bump protocol versions to 108 in tests (#25080)	REVIEWED	EXCLUDE_NON_CODE		仅更新 indexer-alt e2e fixtures 与 snapshots。
+306	7eb0585f6e0311734aa1892ed828cebeb380930c	2026-01-26	fix(sui-http): use explicit rustls::CryptoProvider (#25106)	REVIEWED	ALREADY_PRESENT		RTD rustls 依赖图只启用 ring，不存在多个 provider panic。
+307	dabad4a4a49e1fbedadd8138efef8393af7971db	2026-01-26	[sui-indexer-alt] Update a couple more snaps (#25111)	REVIEWED	EXCLUDE_NON_CODE		仅更新 indexer-alt e2e query fixtures 与 snapshots。
+308	67a6ae48d8ec7329dd745f9b5b12587a8aa13799	2026-01-26	consistent-store add address-balances to restorer (#25107)	REVIEWED	EXCLUDE_POST_FORK		修复 post-fork AddressBalances restorer；基线和 RTD 均无该 handler。
+309	e59d192e74d2ec990226bad8cf86fc76ac272073	2026-01-26	Fix `build_custom_clients` to accept genesis committee directly (#25104)	APPLIED	MERGE	e5f0991d7eb7e442e6fac4f1e792177715669691	custom clients 用显式 genesis committee 初始化 CommitteeStore。
+310	94e89cd40b5c510938e9f6f606069ca7dbc2c49f	2026-01-26	[transaction] validate transaction serialization (#25081)	REVIEWED	EXCLUDE_FEATURE		新增协议 v110 gated 的 zkLogin public identifier 校验。
+311	77bebabad10235cc1e2e19af0eaca83a29092246	2026-01-27	Fix rare edge case in crash recovery (#24998)	APPLIED	MERGE	de8766071e39e2b314ada70359b514f878ff8c45	恢复清理保留已持久化 builder checkpoint state hash。
+312	7c1258d5601fddeedc568bfc8c043dc4075c1114	2026-01-27	temporarily disable `cfg.feature_flags.split_checkpoints_in_consensus_handler` while debugging (#25118)	REVIEWED	EXCLUDE_POST_FORK		仅禁用 row 301 新增的 post-fork checkpoint 拆分功能。
+313	5be086186cf4fcb7c0b78a481660fee861107536	2026-01-26	[GraphQL] wrap metrics around ledger grpc reader (#25026)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL ledger gRPC reader metrics。
+314	893c5d608a580e8c8529ec6c0aeab21c7dec0399	2026-01-27	[chore] update fastcrypto (#25112)	REVIEWED	EXCLUDE_NON_CODE		仅 fastcrypto 依赖版本更新。
+315	d6fe2dac30d656113799097fee2ea682a2a562c5	2026-01-27	Improvements to composite workload to trigger insufficient balance condition in scheduler (#25072)	REVIEWED	EXCLUDE_FEATURE		大规模 benchmark/composite workload 功能改进。
+316	7fa05c78eee66a0728b5393d51b9365146223fdf	2026-01-27	add update-endpoint route to admin server (#25036)	REVIEWED	EXCLUDE_FEATURE		新增依赖 post-fork EndpointManager 的 admin 路由。
+317	786d4fd90885d27f0a58c83278e53f8d669ff976	2026-01-27	seed-search.py fixes (#25125)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest seed-search 工具日志与 watchdog 配置。
+318	0f7eeb3e792ff41c3ded9389dad10ced43e41872	2026-01-27	docs: Fix dev newsletter link (#25128)	REVIEWED	EXCLUDE_NON_CODE		仅修正文档链接。
+319	7b9b4490083c68b03635548cc010d20720139164	2026-01-27	[Docs] Updated Payment Kit URI Guidelines (#25131)	REVIEWED	EXCLUDE_NON_CODE		仅重写 Payment Kit URI 文档。
+320	6b184327bf55658f18776d1353cd0f98a92f920d	2026-01-27	sdk: add grpc client to WallectContext	REVIEWED	EXCLUDE_FEATURE		为 WalletContext 新增缓存的 gRPC client。
+321	9362a131d6fb91b93a453c475ce9749fe9796a87	2026-01-27	grpc-client: add get_chain_identifier method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC get_chain_identifier API。
+322	4de846eb9b1f7fed2904af7c4d47f748df6ac113	2026-01-27	sdk: convert chain_id fetching methods to use grpc	REVIEWED	EXCLUDE_FEATURE		chain ID 查询从 JSON-RPC 迁移到 gRPC。
+323	b7a2c6f6c50b9c57c0a9e757a05c1e74137aaf22	2026-01-27	sdk: convert WalletContext::get_object_ref to grpc	REVIEWED	EXCLUDE_FEATURE		WalletContext get_object_ref 迁移到 gRPC。
+324	a0297df1b4b7c62afa9af4139f237e85de10be83	2026-01-27	sdk: convert WalletContext::get_full_object_ref to grpc	REVIEWED	EXCLUDE_FEATURE		WalletContext get_full_object_ref 迁移到 gRPC。
+325	0699947d3c5f79f7cf8a393d35d4bd82c7550f51	2026-01-27	sdk: convert WalletContext::get_object_owner to grpc	REVIEWED	EXCLUDE_FEATURE		WalletContext get_object_owner 迁移到 gRPC。
+326	6bd300efa764d0a46cf76d38e1a6a28879db8415	2026-01-27	grpc-client: add get_owned_objects method	REVIEWED	EXCLUDE_FEATURE		新增 paginated gRPC get_owned_objects API。
+327	41bdda0d4fe71edc1a0e19dbf502706faa5ddec1	2026-01-27	sdk: convert WalletContext::get_gas_objects_owned_by_address to grpc	REVIEWED	EXCLUDE_FEATURE		gas object 查询从 JSON-RPC 迁移到 gRPC。
+328	5644d780b0a82505464ef80e9da68a1d2b86e860	2026-01-27	grpc-client: add get_reference_gas_price method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC get_reference_gas_price API。
+329	ea3691d1ecb4514af4cd24cdd63f3c5e7b7ff9b9	2026-01-27	sdk: convert WalletContext::get_reference_gas_price to grpc	REVIEWED	EXCLUDE_FEATURE		WalletContext reference gas price 查询迁移到 gRPC。
+330	f2119272e4e08174b15120d6959da499489d7bd3	2026-01-27	grpc-client: add list_owned_objects method	REVIEWED	EXCLUDE_FEATURE		新增 streaming gRPC list_owned_objects API。
+331	b647f36f146ab06886fba5e32d6acb156153818f	2026-01-27	grpc-client: add wait_for_transaction method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC wait_for_transaction polling。
+332	3423339c2b7ba8ba4953271b9643455271416a20	2026-01-27	sdk: convert WalletContext::gas_objects to grpc	REVIEWED	EXCLUDE_FEATURE		WalletContext gas_objects 迁移到 gRPC object types。
+333	b9ba1b5b1fa9e4cdda8c3dec522916d119404948	2026-01-27	Properly map user sigs to alias versions in checkpoint contents (#25093)	APPLIED	MERGE	91c5f4d3803e31ce9a634177c3a6df5b3344e838	按实际签名顺序排列 alias versions。
+334	6e2c2e0e79241584441726c4ad9906c974544418	2026-01-28	Separate settle and commit in object funds checker (#25069)	APPLIED	MERGE	0b1eb0340e4f479a9893e9ba01c1f51a851583bd	checkpoint commitment 精确清理对应版本 object withdraw reservations。
+335	c95bd1e128416b8d9545cd5810bb78c6ad443572	2026-01-27	[graphql-alt] Update ServiceConfig return types for partial error support [6/n] (#25108)	REVIEWED	EXCLUDE_FEATURE		GraphQL partial-error API 返回类型迁移。
+336	ee26d1dda0b69a0d4c537068ae690909a0933532	2026-01-27	[consensus] test equivocations with randomized dag (#25113)	REVIEWED	EXCLUDE_NON_CODE		仅 randomized DAG/equivocation 测试基础设施。
+337	421ad1099e2061b229650608b9c8af80b2bc28c3	2026-01-27	docs: update graphql data-access retention docs (#25122)	REVIEWED	EXCLUDE_NON_CODE		仅扩写 GraphQL retention 文档。
+338	0ae67177d5d3831dc76884993ae4abb22ec33e88	2026-01-28	[Consensus] some comments on the commit finaliser (#25123)	REVIEWED	EXCLUDE_NON_CODE		仅 commit finalizer 注释修正。
+339	bf8e9a4fdc4d0aafac4a9a6d53f7b544b5702575	2026-01-28	Fix crypto instalation (#25105)	REVIEWED	EXCLUDE_POST_FORK		修复 post-fork sui-kvstore-alt binary，RTD 无对应实现。
+340	a470a9d2902a41bebda653f0b6d57cbda786f4fd	2026-01-28	Fix a randomized DAG test and a full node test (#25141)	REVIEWED	EXCLUDE_NON_CODE		仅 randomized DAG 与 full-node WAL 测试修正。
+341	1d107bd91727a9ccbb373a85f94bfc47cfbc40a5	2026-01-28	Protocol guard transition from `AddressAliases` to `AddressAliasesV2` (#25139)	REVIEWED	EXCLUDE_POST_FORK		修复 post-fork TransactionClaim/AddressAliasesV2 guard。
+342	e29aa76950dc4d77dbd42b8c5eff4ac7810eb320	2026-01-28	[jsonrpc-alt] port coins to consistent store (#24558)	REVIEWED	EXCLUDE_FEATURE		jsonrpc-alt coins 大规模迁移到 consistent store。
+343	275aaef5586d5726977100448897b72c3aecfdb2	2026-01-28	docs: Add recommended indexer/graphql postgres requirements (#25138)	REVIEWED	EXCLUDE_NON_CODE		仅数据库容量文档与 docs 配置。
+344	1c7e556f627f419459739deb8e52f75b26ac540f	2026-01-28	docs: Revise `/guides/transactions` section for style guide + feedback (#25027)	REVIEWED	EXCLUDE_NON_CODE		仅 transactions 文档重组。
+345	c47bbb72588c3a74f87d0cd26611b67930f30a9d	2026-01-28	[move-stdlib] Lossless div (#25051)	REVIEWED	EXCLUDE_FEATURE		新增 Move stdlib lossless_div public API。
+346	9a88ac87053de9aa5fc1e8f7dfc6d7f3cb0ae093	2026-01-28	docs: dApp -> app (#25146)	REVIEWED	EXCLUDE_NON_CODE		仅文档术语替换。
+347	29ee924f1275b1069084b1ff3d43f41e15f4e03e	2026-01-28	docs: address Nautilus feedback (#25153)	REVIEWED	EXCLUDE_NON_CODE		仅 Nautilus 文档修正。
+348	88935140b17155ed132b54f2dcea8c9c894a4237	2026-01-28	docs: Add Docusaurus subtree for shared components (#24827)	REVIEWED	EXCLUDE_NON_CODE		仅 Docusaurus/shared docs components 重组。
+349	35dff86f4e83d9011f3ae3628fae5e74c356ad75	2026-01-28	[move][chore] Convert file hashes to symbols internally to reduce size (#24800)	REVIEWED	EXCLUDE_FEATURE		Move compiler/analyzer FileHash 内存重构。
+350	b486205852707b2de41dfe62d76aa3299423cb02	2026-01-28	[move-ide] Fixed crash when module extension extends user module (#25154)	APPLIED	MERGE	c5f3fbe7830800a67fc4d1f0b4c3db73ff716c4c	刷新被 module extension 扩展的 user module。
 351	d016c44e337902034496be572d4bc6d5b2b3058c	2026-01-29	[move-ide] Extension version bump (#25155)	UNREVIEWED			
 352	411a2332872de2ee78dc13a9b1142d3e8d9e36fa	2026-01-28	grpc-client: add get_transaction and execute_transaction_and_wait_for_checkpoint methods	UNREVIEWED			
 353	2d3b135f93c1ffa646aff7196443d177f02ce37b	2026-01-28	grpc-client: return Checkpoint from get_full_checkpoint method	UNREVIEWED			
