@@ -149,56 +149,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 148	e91b58652a326939400c9ec801e3e32212d8d982	2026-01-13	[benchmark] add composite workload for exercising heterogeneous transaction types (#24885)	REVIEWED	EXCLUDE_FEATURE		新增 2000 余行 composite benchmark workload
 149	2ddbe44f8e518e6b16ca57bdc776630ab5390fe3	2026-01-13	Cache txn digest -> executed effects directly (#23022)	REVIEWED	EXCLUDE_FEATURE		缓存重设计在第 198 条因潜在 state-sync 问题被完整回滚，固定头不保留该实现
 150	b86c475b42187baea159d6ae03240edb9518d955	2026-01-13	 graphql: expose FundsWithdrawal PTB inputs (#24876)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL FundsWithdrawal PTB input 类型与字段
-151	6406a2f3df5ba791412cdb62ddeeb9c6c61944bb	2026-01-13	Add default of 0 for funds_in_address_balance (#24913)	UNREVIEWED			
-152	9b836a6fdfed0c3784ad7741fc85b913e62787c9	2026-01-13	[benchmark] add gas w/ address balances to composite probabalistic workload (#24910)	UNREVIEWED			
-153	6a634e7ee9a4addd5d1f4a8ad32b0c2a4d7ec971	2026-01-13	[consensus] improve randomized tests (#24892)	UNREVIEWED			
-154	edd3690ddd10aaada3613dd18bfa1d008a2ef736	2026-01-13	[benchmark] add composite workload to antithesis (#24917)	UNREVIEWED			
-155	9346405a6b45d232f73d2ec050846fe9aa5081be	2026-01-13	chore: update rust-sdk (#24919)	UNREVIEWED			
-156	bed2644429fe05bb48cfb66d0bbe514674d75edb	2026-01-13	BCS pipeline (#24915)	UNREVIEWED			
-157	a7a8a90335a7166b62112dd2cb0e7bb6709e37e5	2026-01-13	Include user signatures in proto conversion (#24924)	UNREVIEWED			
-158	7655a4afbc5238ebc8dcdd70bddfbcd46a8bd9ef	2026-01-13	Deepbook Docs Update (#24842)	UNREVIEWED			
-159	77808071d9eff1987cf2f2b375d9001ce94a3929	2026-01-13	[consistent-store] Index address balances (#24713)	UNREVIEWED			
-160	1f8f34d78116bb8805943a2486726dd46d9a86fa	2026-01-14	Check congestion mode in consensus handler so that epoch store can still be constructed for replay purposes (#24927)	UNREVIEWED			
-161	a52d72653a184f7c5d6e145b6b587cd6d61efada	2026-01-14	[static ptb] Automatically convert compatibility withdrawals to coins  (#24509)	UNREVIEWED			
-162	104d1713d3ac46776720ff9aade3c32bb6ffacca	2026-01-14	Offboarding Ambrus AWS auth provider support (#24928)	UNREVIEWED			
-163	b87a27391cea27bf737799f1f35abaeb044a6677	2026-01-13	[indexer-alt] support address balance changes in tx_balance_changes (#24668)	UNREVIEWED			
-164	d82f04c05779a10d63c64606dc35524b85c1c50c	2026-01-14	[prettier] bugfixes - format on save + tree-sitter nits (#24882)	UNREVIEWED			
-165	466f4fc6f157cd2e60acff22679a16b97e5d49a4	2026-01-14	[pkg-alt] more testing (#24839)	UNREVIEWED			
-166	fb5b0e3155130277c0169ec5c15b8c918fdf13f2	2026-01-14	display: option auto-dereference	UNREVIEWED			
-167	f899a9f704ed1986f190d0a7286d5defcba8dfdd	2026-01-14	display: track offset for invalid number errors	UNREVIEWED			
-168	784876d99a967a9c70c30004b7dd0adbda125799	2026-01-14	display: source offset for vector type mismatch errors	UNREVIEWED			
-169	7bda8da05e70ee7eaa12a5ed95b747df33b9ebcd	2026-01-14	display: expression offset for invalid transform error	UNREVIEWED			
-170	325d8c08dd050a2f354440755572b6dcf2896449	2026-01-14	display: evaluate expressions concurrently	UNREVIEWED			
-171	187827ff7ef4264a0ca24d90907baaeaf0392998	2026-01-14	display: errors mention 'byte offset'	UNREVIEWED			
-172	799d6c7ad9af9f72b5176cc3fed92afb54dade5b	2026-01-14	refactor(display): factor formatting out of interpreter	UNREVIEWED			
-173	ca7450b50abcafce6813423960d2aab3090fd0f6	2026-01-14	refactor(display): Interpreter caches dynamically loaded objects	UNREVIEWED			
-174	87bf932e2598a70714b25afacc2f2bcb66c81b08	2026-01-14	display: Extract entrypoint	UNREVIEWED			
-175	14c69fc55f0da663dc3367e174954208daf3837b	2026-01-14	fix: duplicate redirect (#24936)	UNREVIEWED			
-176	953b84a7499f8a1eaccdfd3b7310f744c74bfbdd	2026-01-14	chore(display): clean-up imports	UNREVIEWED			
-177	b9333a7ffa17cfdc8adad83422e2fdda2d725d16	2026-01-14	chore(display): lock down visibility	UNREVIEWED			
-178	04054415f829259367488b1660415f5e7a9d6b90	2026-01-14	chore(graphql): lock down visibility	UNREVIEWED			
-179	3a4df1c484b691b9532251c7327664a406ec1037	2026-01-14	reduce public interface to package-alt (#24912)	UNREVIEWED			
-180	3f64069c90c93a4e0c2706aa53e38b6f67d76926	2026-01-14	Add link to the package user guide from the package concepts page (#24920)	UNREVIEWED			
-181	b6d4c88210ea3fb5bee7cc2fef61845cbaef5b72	2026-01-14	Update Deepbook Docs (#24942)	UNREVIEWED			
-182	4ef2f5938319519f5e63ce36e3a7123811dd9f2e	2026-01-14	graphql: Display v2 configs	UNREVIEWED			
-183	4a60a766248de03d821e26e77b0b7442367e434d	2026-01-14	graphql: MoveValue.extract	UNREVIEWED			
-184	5a7dc69651f49e077f002f49a96285a295bd2ee8	2026-01-14	chore(display): clean-up stale allow directives	UNREVIEWED			
-185	93cbd068496087e65a7cb889e0dd47cc50d878d5	2026-01-14	refactor(graphql): Support MoveType built from MoveTypeLayout	UNREVIEWED			
-186	181061e70a41d25b5cf54d7b20878e527ac09a4f	2026-01-14	Add jitter to watermark interval (#24925)	UNREVIEWED			
-187	5ac57332ad5b61e03fd93223a366ee151f377ed1	2026-01-14	[cleanup][move-transactional-tests] Make `VMConfig` part of the simple test harness (#24933)	UNREVIEWED			
-188	553cbc8f7aea7362753907e2bdcb9d4618839543	2026-01-14	Fix s3 conditional puts (#24949)	UNREVIEWED			
-189	9efb981eb5df18f2e3b66e3cb9ae32cace0680b5	2026-01-14	graphql: MoveValue.asAddress	UNREVIEWED			
-190	923569a860d98b41199b2c77f8b26732f90fa658	2026-01-14	Margin contract docs (#24946)	UNREVIEWED			
-191	68e8eb95a3887e0db227618f0ad71e11992e07ed	2026-01-15	display: entrypoint for dynamic field names	UNREVIEWED			
-192	885aa3f518cc15b11978c83dbe8f6ece51bddf08	2026-01-15	graphql: Display field name literals	UNREVIEWED			
-193	ce7d1249190607aebd6c091dabf01c5917317961	2026-01-15	refactor(display): decouple Display v2 from VecMap	UNREVIEWED			
-194	e8fa322bc11364b10c9fffa35273eeb980bfd691	2026-01-15	refactor(graphql): generalize move_value::path_error	UNREVIEWED			
-195	427c62a7348dc60e1c814c0b8419f18974e1404d	2026-01-15	refactor(display): Rename Format to Display	UNREVIEWED			
-196	d7b6c822eeb1a3406122e250cfd8fac271f7fe0c	2026-01-15	display: entrypoint for individual format strings	UNREVIEWED			
-197	b0346200c8d2f4156286d97c60fca8021d8e2a41	2026-01-15	graphql: MoveValue.format	UNREVIEWED			
-198	6b0439b7bd0d8813210e51c6c71bd7aa3044a52e	2026-01-14	Revert "Cache txn digest -> executed effects directly" (#24954)	UNREVIEWED			
-199	f205eb2a43fa368d5920549cf0842d7c79467b44	2026-01-15	Fix object scheduler bug by reading exact versions (#24955)	UNREVIEWED			
-200	4b9fd343b9cf6614c3574550739cf1c2d99b072f	2026-01-15	graphql: Infer types for pure PTB call args	UNREVIEWED			
+151	6406a2f3df5ba791412cdb62ddeeb9c6c61944bb	2026-01-13	Add default of 0 for funds_in_address_balance (#24913)	REVIEWED	EXCLUDE_POST_FORK		fork 基线与 RTD 均无 funds_in_address_balance 字段；该默认值只修复 fork 后 address-balance API
+152	9b836a6fdfed0c3784ad7741fc85b913e62787c9	2026-01-13	[benchmark] add gas w/ address balances to composite probabalistic workload (#24910)	REVIEWED	EXCLUDE_FEATURE		扩展 composite benchmark 的 address-balance gas workload
+153	6a634e7ee9a4addd5d1f4a8ad32b0c2a4d7ec971	2026-01-13	[consensus] improve randomized tests (#24892)	REVIEWED	EXCLUDE_NON_CODE		仅重组并扩展 consensus randomized test fixture 与覆盖率
+154	edd3690ddd10aaada3613dd18bfa1d008a2ef736	2026-01-13	[benchmark] add composite workload to antithesis (#24917)	REVIEWED	EXCLUDE_FEATURE		为 Antithesis 压测接入 composite workload
+155	9346405a6b45d232f73d2ec050846fe9aa5081be	2026-01-13	chore: update rust-sdk (#24919)	REVIEWED	EXCLUDE_NON_CODE		仅更新 Rust SDK 依赖版本与 Cargo.lock
+156	bed2644429fe05bb48cfb66d0bbe514674d75edb	2026-01-13	BCS pipeline (#24915)	REVIEWED	EXCLUDE_FEATURE		新增 checkpoint BCS 输出 pipeline 与 handler
+157	a7a8a90335a7166b62112dd2cb0e7bb6709e37e5	2026-01-13	Include user signatures in proto conversion (#24924)	APPLIED	MERGE	cb5d15edbdc6fddc5824b0c9009f5aa8bc2b3dda	proto checkpoint 转换遗漏基线 contents 中的用户签名，已按交易恢复 signatures
+158	7655a4afbc5238ebc8dcdd70bddfbcd46a8bd9ef	2026-01-13	Deepbook Docs Update (#24842)	REVIEWED	EXCLUDE_NON_CODE		仅大规模更新 DeepBook 文档
+159	77808071d9eff1987cf2f2b375d9001ce94a3929	2026-01-13	[consistent-store] Index address balances (#24713)	REVIEWED	EXCLUDE_FEATURE		新增 consistent-store address-balance schema、handler、RPC 与测试
+160	1f8f34d78116bb8805943a2486726dd46d9a86fa	2026-01-14	Check congestion mode in consensus handler so that epoch store can still be constructed for replay purposes (#24927)	APPLIED	MERGE	f9bc619ccb0701c755a7add870ca5ae751d81f71	将 validator-only congestion mode 断言移到 consensus handler，使 replay 可构造历史 epoch store
+161	a52d72653a184f7c5d6e145b6b587cd6d61efada	2026-01-14	[static ptb] Automatically convert compatibility withdrawals to coins  (#24509)	REVIEWED	EXCLUDE_FEATURE		新增协议配置及 static PTB compatibility withdrawal 自动转 coin 语义
+162	104d1713d3ac46776720ff9aade3c32bb6ffacca	2026-01-14	Offboarding Ambrus AWS auth provider support (#24928)	REVIEWED	EXCLUDE_FEATURE		移除特定 AWS auth provider 支持，属于产品清理
+163	b87a27391cea27bf737799f1f35abaeb044a6677	2026-01-13	[indexer-alt] support address balance changes in tx_balance_changes (#24668)	REVIEWED	EXCLUDE_FEATURE		扩展 indexer/GraphQL transaction balance changes 的 address-balance 表示
+164	d82f04c05779a10d63c64606dc35524b85c1c50c	2026-01-14	[prettier] bugfixes - format on save + tree-sitter nits (#24882)	APPLIED	MERGE	41a9f1ec389d074c402fa9f82ec8e4315140191f	按 document URI 路由并发 formatter 响应，并更新已移植 spec 语法所需 WASM；排除 changelog churn
+165	466f4fc6f157cd2e60acff22679a16b97e5d49a4	2026-01-14	[pkg-alt] more testing (#24839)	REVIEWED	EXCLUDE_NON_CODE		仅新增 package-alt shell fixtures 与快照测试
+166	fb5b0e3155130277c0169ec5c15b8c918fdf13f2	2026-01-14	display: option auto-dereference	REVIEWED	EXCLUDE_FEATURE		新增 Display v2 Option 自动解引用行为并重构 visitor
+167	f899a9f704ed1986f190d0a7286d5defcba8dfdd	2026-01-14	display: track offset for invalid number errors	REVIEWED	EXCLUDE_FEATURE		扩展 Display v2 数字诊断的 offset 元数据
+168	784876d99a967a9c70c30004b7dd0adbda125799	2026-01-14	display: source offset for vector type mismatch errors	REVIEWED	EXCLUDE_FEATURE		扩展 Display v2 vector 类型诊断的 source offset
+169	7bda8da05e70ee7eaa12a5ed95b747df33b9ebcd	2026-01-14	display: expression offset for invalid transform error	REVIEWED	EXCLUDE_FEATURE		扩展 Display v2 transform 诊断的 expression offset
+170	325d8c08dd050a2f354440755572b6dcf2896449	2026-01-14	display: evaluate expressions concurrently	REVIEWED	EXCLUDE_FEATURE		将 Display v2 expression evaluation 改为并发执行，属于性能/架构变化
+171	187827ff7ef4264a0ca24d90907baaeaf0392998	2026-01-14	display: errors mention 'byte offset'	REVIEWED	EXCLUDE_FEATURE		仅统一 Display v2 错误文案为 byte offset
+172	799d6c7ad9af9f72b5176cc3fed92afb54dade5b	2026-01-14	refactor(display): factor formatting out of interpreter	REVIEWED	EXCLUDE_FEATURE		Display v2 interpreter/writer 格式化职责重构
+173	ca7450b50abcafce6813423960d2aab3090fd0f6	2026-01-14	refactor(display): Interpreter caches dynamically loaded objects	REVIEWED	EXCLUDE_FEATURE		Display v2 动态对象缓存与 interpreter 架构重构
+174	87bf932e2598a70714b25afacc2f2bcb66c81b08	2026-01-14	display: Extract entrypoint	REVIEWED	EXCLUDE_FEATURE		抽取 Display v2 对外 entrypoint 并大幅调整 parser/interpreter API
+175	14c69fc55f0da663dc3367e174954208daf3837b	2026-01-14	fix: duplicate redirect (#24936)	REVIEWED	EXCLUDE_NON_CODE		仅删除文档站点重复 redirect
+176	953b84a7499f8a1eaccdfd3b7310f744c74bfbdd	2026-01-14	chore(display): clean-up imports	REVIEWED	EXCLUDE_FEATURE		仅整理 Display v2 imports，行为不变
+177	b9333a7ffa17cfdc8adad83422e2fdda2d725d16	2026-01-14	chore(display): lock down visibility	REVIEWED	EXCLUDE_FEATURE		收窄 Display v1/v2 可见性，属于 API 清理
+178	04054415f829259367488b1660415f5e7a9d6b90	2026-01-14	chore(graphql): lock down visibility	REVIEWED	EXCLUDE_FEATURE		收窄 GraphQL available-range 可见性，行为不变
+179	3a4df1c484b691b9532251c7327664a406ec1037	2026-01-14	reduce public interface to package-alt (#24912)	REVIEWED	EXCLUDE_FEATURE		跨 73 个文件收窄 package-alt 公共接口并删除旧 CLI/API
+180	3f64069c90c93a4e0c2706aa53e38b6f67d76926	2026-01-14	Add link to the package user guide from the package concepts page (#24920)	REVIEWED	EXCLUDE_NON_CODE		仅更新 package concepts 文档链接
+181	b6d4c88210ea3fb5bee7cc2fef61845cbaef5b72	2026-01-14	Update Deepbook Docs (#24942)	REVIEWED	EXCLUDE_NON_CODE		仅修订 DeepBook 文档
+182	4ef2f5938319519f5e63ce36e3a7123811dd9f2e	2026-01-14	graphql: Display v2 configs	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL Display v2 service 配置与 schema
+183	4a60a766248de03d821e26e77b0b7442367e434d	2026-01-14	graphql: MoveValue.extract	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL MoveValue.extract API 与 schema
+184	5a7dc69651f49e077f002f49a96285a295bd2ee8	2026-01-14	chore(display): clean-up stale allow directives	REVIEWED	EXCLUDE_FEATURE		仅清理 Display v2 stale allow 与 dead code
+185	93cbd068496087e65a7cb889e0dd47cc50d878d5	2026-01-14	refactor(graphql): Support MoveType built from MoveTypeLayout	REVIEWED	EXCLUDE_FEATURE		重构 GraphQL MoveType 构造以支持 MoveTypeLayout
+186	181061e70a41d25b5cf54d7b20878e527ac09a4f	2026-01-14	Add jitter to watermark interval (#24925)	REVIEWED	EXCLUDE_FEATURE		为多个 indexer watermark 周期新增 jitter 配置和随机延迟
+187	5ac57332ad5b61e03fd93223a366ee151f377ed1	2026-01-14	[cleanup][move-transactional-tests] Make `VMConfig` part of the simple test harness (#24933)	REVIEWED	EXCLUDE_NON_CODE		仅重构 Move transactional test harness 的 VMConfig 传递
+188	553cbc8f7aea7362753907e2bdcb9d4618839543	2026-01-14	Fix s3 conditional puts (#24949)	APPLIED	MERGE	e2f4d3df7fe0254cbbf30ac99636a6362e28f77a	checkpoint blob indexer 的 S3 store 未启用 ETagMatch conditional put，已补齐
+189	9efb981eb5df18f2e3b66e3cb9ae32cace0680b5	2026-01-14	graphql: MoveValue.asAddress	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL MoveValue.asAddress API 并扩展对象 schema
+190	923569a860d98b41199b2c77f8b26732f90fa658	2026-01-14	Margin contract docs (#24946)	REVIEWED	EXCLUDE_NON_CODE		仅新增 margin contract 文档
+191	68e8eb95a3887e0db227618f0ad71e11992e07ed	2026-01-15	display: entrypoint for dynamic field names	REVIEWED	EXCLUDE_FEATURE		新增 Display v2 dynamic-field-name entrypoint
+192	885aa3f518cc15b11978c83dbe8f6ece51bddf08	2026-01-15	graphql: Display field name literals	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL Display dynamic field literal 支持
+193	ce7d1249190607aebd6c091dabf01c5917317961	2026-01-15	refactor(display): decouple Display v2 from VecMap	REVIEWED	EXCLUDE_FEATURE		Display v2 与 VecMap 解耦重构
+194	e8fa322bc11364b10c9fffa35273eeb980bfd691	2026-01-15	refactor(graphql): generalize move_value::path_error	REVIEWED	EXCLUDE_FEATURE		泛化 GraphQL MoveValue path_error helper
+195	427c62a7348dc60e1c814c0b8419f18974e1404d	2026-01-15	refactor(display): Rename Format to Display	REVIEWED	EXCLUDE_FEATURE		Display v2 纯命名重构
+196	d7b6c822eeb1a3406122e250cfd8fac271f7fe0c	2026-01-15	display: entrypoint for individual format strings	REVIEWED	EXCLUDE_FEATURE		新增 Display v2 单独 format string entrypoint
+197	b0346200c8d2f4156286d97c60fca8021d8e2a41	2026-01-15	graphql: MoveValue.format	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL MoveValue.format API 与 schema
+198	6b0439b7bd0d8813210e51c6c71bd7aa3044a52e	2026-01-14	Revert "Cache txn digest -> executed effects directly" (#24954)	REVIEWED	EXCLUDE_POST_FORK		完整回滚第 149 条已排除的 fork 后缓存重设计，本地无需再应用
+199	f205eb2a43fa368d5920549cf0842d7c79467b44	2026-01-15	Fix object scheduler bug by reading exact versions (#24955)	APPLIED	MERGE	4f4b06a57ef4704acb51813039ad5c2b0ff82147	object funds scheduler 错读最新余额；已按 assigned accumulator version 精确读取
+200	4b9fd343b9cf6614c3574550739cf1c2d99b072f	2026-01-15	graphql: Infer types for pure PTB call args	REVIEWED	EXCLUDE_FEATURE		扩展 GraphQL pure PTB input 的类型推断与 schema
 201	1cf6b6fea5169fe88dff10c53f1c09dae2a51be5	2026-01-15	chore(graphql): order impls of Epoch fields	UNREVIEWED			
 202	50ed91eaa262efa799b88541156de4aac5af3c72	2026-01-15	graphql: Epoch, Validator, ValidatorSet refactor to expose MoveValue	UNREVIEWED			
 203	f16f7dd58fa9bbb3fd7fed81e39c389469c90d2f	2026-01-15	move(visitor): visitor_default! macro	UNREVIEWED			
