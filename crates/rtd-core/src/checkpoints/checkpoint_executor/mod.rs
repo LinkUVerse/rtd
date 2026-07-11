@@ -405,10 +405,14 @@ impl CheckpointExecutor {
 
         let seq = ckpt_state.data.checkpoint.sequence_number;
 
-        let batch = self
+        let mut batch = self
             .state
             .get_cache_commit()
             .build_db_batch(self.epoch_store.epoch(), &ckpt_state.data.tx_digests);
+
+        self.state
+            .get_cache_commit()
+            .set_highest_committed_checkpoint_in_batch(&mut batch, seq);
 
         finish_stage!(pipeline_handle, BuildDbBatch);
 

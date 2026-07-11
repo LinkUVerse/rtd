@@ -541,8 +541,13 @@ impl IndexStoreTables {
     ) -> Result<(), StorageError> {
         info!("Initializing RPC indexes");
 
-        let highest_executed_checkpint =
-            checkpoint_store.get_highest_executed_checkpoint_seq_number()?;
+        // The live object set can be ahead of `highest_executed` after an
+        // unclean stop, so restore against the watermark committed atomically
+        // with those objects. Older databases fall back to the old watermark.
+        let restore_target = authority_store
+            .perpetual_tables
+            .get_highest_committed_checkpoint()?
+            .or(checkpoint_store.get_highest_executed_checkpoint_seq_number()?);
         let lowest_available_checkpoint = checkpoint_store
             .get_highest_pruned_checkpoint_seq_number()?
             .map(|c| c.saturating_add(1))
@@ -557,9 +562,8 @@ impl IndexStoreTables {
         let lowest_available_checkpoint =
             lowest_available_checkpoint.max(lowest_available_checkpoint_objects);
 
-        let checkpoint_range = highest_executed_checkpint.map(|highest_executed_checkpint| {
-            lowest_available_checkpoint..=highest_executed_checkpint
-        });
+        let checkpoint_range =
+            restore_target.map(|restore_target| lowest_available_checkpoint..=restore_target);
 
         if let Some(checkpoint_range) = checkpoint_range {
             self.index_existing_transactions(
@@ -575,7 +579,7 @@ impl IndexStoreTables {
         // Only index live objects if genesis checkpoint has been executed.
         // If genesis hasn't been executed yet, the objects will be properly indexed
         // as checkpoints are processed through the normal checkpoint execution path.
-        if highest_executed_checkpint.is_some() {
+        if restore_target.is_some() {
             let coin_index = Mutex::new(HashMap::new());
 
             let make_live_object_indexer = RpcParLiveObjectSetIndexer {
@@ -592,10 +596,10 @@ impl IndexStoreTables {
             self.coin.multi_insert(coin_index.into_inner().unwrap())?;
         }
 
-        self.watermark.insert(
-            &Watermark::Indexed,
-            &highest_executed_checkpint.unwrap_or(0),
-        )?;
+        if let Some(restore_target) = restore_target {
+            self.watermark
+                .insert(&Watermark::Indexed, &restore_target)?;
+        }
 
         self.meta.insert(
             &(),
@@ -1510,6 +1514,21 @@ impl RpcIndexStore {
             "commit_update_for_checkpoint must be called in order"
         );
 
+        let indexed = self.tables.watermark.get(&Watermark::Indexed)?;
+        let expected_next = indexed.map_or(0, |watermark| watermark + 1);
+        if checkpoint < expected_next {
+            debug!(
+                checkpoint,
+                expected_next, "dropping already-indexed checkpoint update"
+            );
+            return Ok(());
+        }
+        assert_eq!(
+            checkpoint, expected_next,
+            "rpc-index forward update is not contiguous: expected checkpoint {expected_next}, \
+             got {checkpoint}"
+        );
+
         Ok(batch.write()?)
     }
 
@@ -1871,8 +1890,33 @@ fn get_balance_and_type_if_coin(object: &Object) -> Result<Option<(StructTag, u6
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicU64;
     use rtd_types::base_types::RtdAddress;
+    use std::sync::atomic::AtomicU64;
+
+    #[test]
+    fn drops_pending_update_already_covered_by_index_watermark() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let store = RpcIndexStore::new_without_init(temp_dir.path());
+        store
+            .tables
+            .watermark
+            .insert(&Watermark::Indexed, &5)
+            .unwrap();
+
+        let mut batch = store.tables.watermark.batch();
+        batch
+            .insert_batch(&store.tables.watermark, [(Watermark::Pruned, 99)])
+            .unwrap();
+        store.pending_updates.lock().unwrap().insert(5, batch);
+
+        store.commit_update_for_checkpoint(5).unwrap();
+
+        assert_eq!(
+            store.tables.watermark.get(&Watermark::Pruned).unwrap(),
+            None,
+            "a checkpoint already present in a restored index must not be applied again"
+        );
+    }
 
     #[tokio::test]
     async fn test_events_compaction_filter() {

@@ -123,6 +123,9 @@ pub struct AuthorityPerpetualTables {
     /// A singleton table that stores latest pruned checkpoint. Used to keep objects pruner progress
     pub(crate) pruned_checkpoint: DBMap<(), CheckpointSequenceNumber>,
 
+    /// The highest checkpoint whose outputs were atomically committed to this store.
+    pub(crate) highest_committed_checkpoint: DBMap<(), CheckpointSequenceNumber>,
+
     /// Expected total amount of RTD in the network. This is expected to remain constant
     /// throughout the lifetime of the network. We check it at the end of each epoch if
     /// expensive checks are enabled. We cannot use 10B today because in tests we often
@@ -377,6 +380,10 @@ impl AuthorityPerpetualTables {
                 ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
             (
+                "highest_committed_checkpoint".to_string(),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
+            ),
+            (
                 "expected_network_rtd_amount".to_string(),
                 ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
@@ -597,6 +604,24 @@ impl AuthorityPerpetualTables {
         checkpoint_number: CheckpointSequenceNumber,
     ) -> RtdResult {
         wb.insert_batch(&self.pruned_checkpoint, [((), checkpoint_number)])?;
+        Ok(())
+    }
+
+    pub fn get_highest_committed_checkpoint(
+        &self,
+    ) -> Result<Option<CheckpointSequenceNumber>, TypedStoreError> {
+        self.highest_committed_checkpoint.get(&())
+    }
+
+    pub fn set_highest_committed_checkpoint(
+        &self,
+        wb: &mut DBBatch,
+        checkpoint_number: CheckpointSequenceNumber,
+    ) -> RtdResult {
+        wb.insert_batch(
+            &self.highest_committed_checkpoint,
+            [((), checkpoint_number)],
+        )?;
         Ok(())
     }
 
