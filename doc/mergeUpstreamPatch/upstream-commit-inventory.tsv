@@ -499,56 +499,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 498	076ba49a21924c76d7c5b18e70f48239b34a44a6	2026-02-05	fix(rpc): set default CryptoProvider (#25301)	APPLIED	MERGE	fab32a1a01fa686761a2f2f2d3015416fca0d8d2	两个既有 indexer-alt RPC 入口经 gcp_auth 调用 BigTable 时未选择 rustls provider；显式安装 ring provider。
 499	628675963351aefe79153bff7b5ceb677b4a8e19	2026-02-05	Make stress container more reliable in antithesis (#25287)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis/stress 容器脚本。
 500	b460276cf9a5bb2422bc824cdfa12c09876505d6	2026-02-05	Update arg names to match workflow (#25302)	REVIEWED	EXCLUDE_NON_CODE		仅 workflow 参数名同步。
-501	ecbbcb9fa08b1d7e9c2947b257a81d9134fda53a	2026-02-05	Install default rustls CryptoProvider in sui-kv-rpc (#25303)	UNREVIEWED			
-502	5cf7caaac3bdacc1a8b71758af59a869977bcda1	2026-02-05	docs: misc fixes (#25278)	UNREVIEWED			
-503	7099ee5af365269dbabd9ea9e76c13ba6e1ae2c9	2026-02-05	[release-notes] Auto-detect protocol version bump PR from git history (#25309)	UNREVIEWED			
-504	80a4c67964207f544edb72f21b39d5bae80a515e	2026-02-05	rpc: configure cors to expose all headers (#25311)	UNREVIEWED			
-505	0d350ad62e86f3db721cc4f417fee343d83c8af2	2026-02-05	nickv/kv project injection (#25313)	UNREVIEWED			
-506	e1e5a254cea1311873dde7637857505d8b4f9bb0	2026-02-06	Tidehunter CI checks for sui-core (#25315)	UNREVIEWED			
-507	4ea1f39ef7db32498d5d8e19b66dd34ea48d2599	2026-02-05	Add back Settlement finality latency outlier logging	UNREVIEWED			
-508	097d6c58b760aef1765b644256b7853afb981f0d	2026-02-05	Long long requests in transaction orchestrator	UNREVIEWED			
-509	9c0d6c99cc36611b142b020b501cbe6fea698596	2026-02-06	chore(graphql): standardize imports	UNREVIEWED			
-510	8f1c7fcabf4ec74b3660fd102d6c1191bc4723d9	2026-02-06	graphql: more detail in health check	UNREVIEWED			
-511	35277b8ea87b85a349960e215e83ae7d0f4a6aff	2026-02-06	graphql: warn if watermark rolls back	UNREVIEWED			
-512	9885bccc1e167c4fd1141fdad8b26727b080c833	2026-02-06	[docs] updates on blackjack documentation to include deeper explanation on randomness and codegen (#24752)	UNREVIEWED			
-513	1e93a32ea690d1c3ad10c1b41106b0632616f904	2026-02-06	[pruner] remove objects compaction filter (#25294)	UNREVIEWED			
-514	965fc3495c59ab67a5b3e4be37a384bf25eff440	2026-02-06	Revert "[docs] updates on blackjack documentation to include deeper explanation on randomness and codegen" (#25323)	UNREVIEWED			
-515	88f64d547174e7b077dc3bd8b74f59552f686394	2026-02-06	[antithesis] check commits exist and generate useful description (#25297)	UNREVIEWED			
-516	a0d0f22bdfaeb69edf9e920bb9f29516de3ad71e	2026-02-06	Disable object_store internal retries for all cloud backends (#25324)	UNREVIEWED			
-517	c1ae67b333b9c82e9764300b335fa425fe72f199	2026-02-06	Fix remaining stray arg (#25330)	UNREVIEWED			
-518	8b6c9369d401745e5491f35bf3ad741419409f40	2026-02-06	docs: fix .mdx to .md conversion in markdown export links (#25307)	UNREVIEWED			
-519	23d8b9bbc7b68108786d35a6e68ce17ba0bad3da	2026-02-06	remove migrated config image (#25332)	UNREVIEWED			
-520	cbaac2ed42252bf570f7361684f515329109277b	2026-02-06	[transactional-tests][regex reference safety] Added viewer for pre states (#25282)	UNREVIEWED			
-521	7298fd7904f7091b97d90df119120ac5bb1f7b7b	2026-02-06	[to & td] log retry delay and error category (#25333)	UNREVIEWED			
-522	6f8be71bb7b641bfb2b6de962371964770c8d05e	2026-02-06	Add address funds scheduler config	UNREVIEWED			
-523	fef689526595749a58240442a5eb0bc859047b25	2026-02-06	rpc: make GetEpoch return more info when requesting the current epoch (#25329)	UNREVIEWED			
-524	b993a805542bacc4ab5550c26f3e8701a2f9edf3	2026-02-07	Move broadcaster backpressure from task-level to stream-level (#25325)	UNREVIEWED			
-525	4200be76e545b977618499cbe9f02557973a4bde	2026-02-07	Concurrent pipelines participate in backpressure (#25334)	UNREVIEWED			
-526	0676e11409f87c38733863475d0819407b568a9d	2026-02-07	Decouple watermark advancement from DB writes (#25342)	UNREVIEWED			
-527	a7e23b9c96a66dfe97b3bac4eb5a47ea33e32c67	2026-02-08	Change assert to debug_fatal (#25351)	UNREVIEWED			
-528	ea5cd48b5f1b013cd71aad60f80aa3392914245b	2026-02-08	Instruct claude to add correct license to new files (#25280)	UNREVIEWED			
-529	c8d483f71775cd1d5ac7ea30ab22e090a047625d	2026-02-09	consistent error reporting across run-mode (#25361)	UNREVIEWED			
-530	362c4758db295f3f4baa54aaf50824af6bef3eff	2026-02-09	Update to tidehunter to c3b7be698ea035f18e5bae36554768ddf71e472f (#25365)	UNREVIEWED			
-531	4b097ddd0692f865f5ca182b30495b5567a10e67	2026-02-09	[pkg-alt] fix ephemeral publication data loading for git deps (#25238)	UNREVIEWED			
-532	b982fe6ccb60985c26bbd1ec5a820e2d1ee30a9e	2026-02-09	[chore] Update `time` dep to fix advisory (#25363)	UNREVIEWED			
-533	df0f05a75e934c4550d8428ddeae8f12e766b51b	2026-02-09	[compiler, nit] fix typo in a compiler message (#25362)	UNREVIEWED			
-534	e7f3c5c0c877c19ae1c9d65865030490beb9a2b4	2026-02-09	Use nexttest for tidehunter tests (#25370)	UNREVIEWED			
-535	0f97c43d8970ec5fc5487d5552274d7c425aeef9	2026-02-09	[move-compiler][sui-mode] Remove `entry` rules. Add warnings for uncallable functions (#25335)	UNREVIEWED			
-536	a31082390629c69f0b891aa7b3e092e8a18ee27a	2026-02-09	indexer: further simplify back-pressure (#25369)	UNREVIEWED			
-537	1392821fd651b64e9561a16699aeb6ad9587334d	2026-02-09	sui-indexer-alt: Add metrics for connection pool acquisition attempts (#25163)	UNREVIEWED			
-538	488610ad10a98d52ec1c5c55fda609918e8b27a5	2026-02-09	[consensus] use fifo compaction by default (#25314)	UNREVIEWED			
-539	ed04ad1fa9379e45faa98dd553366e6af7e36b78	2026-02-09	Remove sui-aws-orchestrator crate (#25347)	UNREVIEWED			
-540	7151e57817cfbcd4b0cb81e8ca981464fa9c920a	2026-02-09	Delete object type table (#25374)	UNREVIEWED			
-541	133f9428cff69f63fe1fe366050ed30105182a1f	2026-02-09	[hardening] Use safe_get and checked_as in PTBs (#25344)	UNREVIEWED			
-542	c775e0bda3c37508195a0237dc593ff64bfe242e	2026-02-09	docs: fix json for auto-gen'd docs (#25375)	UNREVIEWED			
-543	a347aa7cbb2a068fd603276f2d45c388be5e4781	2026-02-09	docs: fix JSON parsing  (#25379)	UNREVIEWED			
-544	64a0aef1839f595ff6f697f5ca64a0e4c22f8a08	2026-02-09	Reduce QUIC max_idle_timeout from 30s to 10s (#25373)	UNREVIEWED			
-545	78d79cf3c6e408deb17c4dcae92a6c55bec612e0	2026-02-09	[move-ide] Support for incremental compilation of dependent modules (#25234)	UNREVIEWED			
-546	055d75a4b23d4e474f15b9dba195d76848131511	2026-02-09	Fix gas coin leak in stress benchmark during epoch transitions (#25372)	UNREVIEWED			
-547	e4146b827fc1ceb26af5885acb3259c9fc193964	2026-02-10	[pruner] move grpc index pruning to objects section (#25350)	UNREVIEWED			
-548	f6a8e9a1ac1a7d77de0ca5ff60a265ebae962372	2026-02-10	rpc-index: deprecate and drop transaction info column (#25382)	UNREVIEWED			
-549	007b06a11fad0e7abb729c30f30297be0b63ae5b	2026-02-10	fix(consistency): update formal snapshot to read new checkpoint format (#25376)	UNREVIEWED			
-550	b4bece7094fef8ed0859583ef383db5ceb810630	2026-02-10	Add metrics for funds scheduler	UNREVIEWED			
+501	ecbbcb9fa08b1d7e9c2947b257a81d9134fda53a	2026-02-05	Install default rustls CryptoProvider in sui-kv-rpc (#25303)	APPLIED	MERGE	b55a13216d49e7e1f9738e0466cecf7945e46a13	修复基线已有 BigTable KV RPC 的 rustls provider 未初始化启动失败。
+502	5cf7caaac3bdacc1a8b71758af59a869977bcda1	2026-02-05	docs: misc fixes (#25278)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+503	7099ee5af365269dbabd9ea9e76c13ba6e1ae2c9	2026-02-05	[release-notes] Auto-detect protocol version bump PR from git history (#25309)	REVIEWED	EXCLUDE_NON_CODE		仅 release-notes workflow。
+504	80a4c67964207f544edb72f21b39d5bae80a515e	2026-02-05	rpc: configure cors to expose all headers (#25311)	REVIEWED	EXCLUDE_FEATURE		CORS 响应头暴露策略调整，非关键运行时缺陷。
+505	0d350ad62e86f3db721cc4f417fee343d83c8af2	2026-02-05	nickv/kv project injection (#25313)	REVIEWED	EXCLUDE_FEATURE		新增 KV project 注入配置。
+506	e1e5a254cea1311873dde7637857505d8b4f9bb0	2026-02-06	Tidehunter CI checks for sui-core (#25315)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+507	4ea1f39ef7db32498d5d8e19b66dd34ea48d2599	2026-02-05	Add back Settlement finality latency outlier logging	REVIEWED	EXCLUDE_NON_CODE		仅日志。
+508	097d6c58b760aef1765b644256b7853afb981f0d	2026-02-05	Long long requests in transaction orchestrator	REVIEWED	EXCLUDE_NON_CODE		仅长请求日志。
+509	9c0d6c99cc36611b142b020b501cbe6fea698596	2026-02-06	chore(graphql): standardize imports	REVIEWED	EXCLUDE_NON_CODE		仅 import 格式。
+510	8f1c7fcabf4ec74b3660fd102d6c1191bc4723d9	2026-02-06	graphql: more detail in health check	REVIEWED	EXCLUDE_FEATURE		扩展 health check 信息。
+511	35277b8ea87b85a349960e215e83ae7d0f4a6aff	2026-02-06	graphql: warn if watermark rolls back	REVIEWED	EXCLUDE_NON_CODE		仅诊断日志。
+512	9885bccc1e167c4fd1141fdad8b26727b080c833	2026-02-06	[docs] updates on blackjack documentation to include deeper explanation on randomness and codegen (#24752)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+513	1e93a32ea690d1c3ad10c1b41106b0632616f904	2026-02-06	[pruner] remove objects compaction filter (#25294)	REVIEWED	EXCLUDE_FEATURE		pruner/TideHunter 迁移清理，非最小缺陷补丁。
+514	965fc3495c59ab67a5b3e4be37a384bf25eff440	2026-02-06	Revert "[docs] updates on blackjack documentation to include deeper explanation on randomness and codegen" (#25323)	REVIEWED	EXCLUDE_NON_CODE		仅文档回滚。
+515	88f64d547174e7b077dc3bd8b74f59552f686394	2026-02-06	[antithesis] check commits exist and generate useful description (#25297)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis 脚本。
+516	a0d0f22bdfaeb69edf9e920bb9f29516de3ad71e	2026-02-06	Disable object_store internal retries for all cloud backends (#25324)	REVIEWED	EXCLUDE_FEATURE		为自适应并发引入新的 object store 重试模型。
+517	c1ae67b333b9c82e9764300b335fa425fe72f199	2026-02-06	Fix remaining stray arg (#25330)	REVIEWED	EXCLUDE_NON_CODE		仅 workflow 参数。
+518	8b6c9369d401745e5491f35bf3ad741419409f40	2026-02-06	docs: fix .mdx to .md conversion in markdown export links (#25307)	REVIEWED	EXCLUDE_NON_CODE		仅文档工具。
+519	23d8b9bbc7b68108786d35a6e68ce17ba0bad3da	2026-02-06	remove migrated config image (#25332)	REVIEWED	EXCLUDE_NON_CODE		仅配置镜像删除。
+520	cbaac2ed42252bf570f7361684f515329109277b	2026-02-06	[transactional-tests][regex reference safety] Added viewer for pre states (#25282)	REVIEWED	EXCLUDE_NON_CODE		仅测试工具。
+521	7298fd7904f7091b97d90df119120ac5bb1f7b7b	2026-02-06	[to & td] log retry delay and error category (#25333)	REVIEWED	EXCLUDE_NON_CODE		仅日志。
+522	6f8be71bb7b641bfb2b6de962371964770c8d05e	2026-02-06	Add address funds scheduler config	REVIEWED	EXCLUDE_FEATURE		新增 scheduler 配置。
+523	fef689526595749a58240442a5eb0bc859047b25	2026-02-06	rpc: make GetEpoch return more info when requesting the current epoch (#25329)	REVIEWED	EXCLUDE_FEATURE		扩展 RPC 响应。
+524	b993a805542bacc4ab5550c26f3e8701a2f9edf3	2026-02-07	Move broadcaster backpressure from task-level to stream-level (#25325)	APPLIED	MERGE	3ca5eacf58d04d05bac9ddabc18ec778fa2358f6	在 spawn 前阻塞 checkpoint 流，防止背压时无界任务累积 OOM。
+525	4200be76e545b977618499cbe9f02557973a4bde	2026-02-07	Concurrent pipelines participate in backpressure (#25334)	APPLIED	MERGE	3ca5eacf58d04d05bac9ddabc18ec778fa2358f6	并发 pipeline 回传 commit watermark，避免失去背压并 OOM。
+526	0676e11409f87c38733863475d0819407b568a9d	2026-02-07	Decouple watermark advancement from DB writes (#25342)	APPLIED	MERGE	3ca5eacf58d04d05bac9ddabc18ec778fa2358f6	每轮推进 watermark/背压并在关闭时 flush，避免定时写入导致停滞。
+527	a7e23b9c96a66dfe97b3bac4eb5a47ea33e32c67	2026-02-08	Change assert to debug_fatal (#25351)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 诊断。
+528	ea5cd48b5f1b013cd71aad60f80aa3392914245b	2026-02-08	Instruct claude to add correct license to new files (#25280)	REVIEWED	EXCLUDE_NON_CODE		仅开发说明。
+529	c8d483f71775cd1d5ac7ea30ab22e090a047625d	2026-02-09	consistent error reporting across run-mode (#25361)	REVIEWED	EXCLUDE_POST_FORK		依赖 protocol v111 与 run-mode 改造。
+530	362c4758db295f3f4baa54aaf50824af6bef3eff	2026-02-09	Update to tidehunter to c3b7be698ea035f18e5bae36554768ddf71e472f (#25365)	REVIEWED	EXCLUDE_NON_CODE		仅 TideHunter 依赖更新。
+531	4b097ddd0692f865f5ca182b30495b5567a10e67	2026-02-09	[pkg-alt] fix ephemeral publication data loading for git deps (#25238)	REVIEWED	EXCLUDE_POST_FORK		修复的是 fork 后新增的 ephemeral publication git-dependency 路径。
+532	b982fe6ccb60985c26bbd1ec5a820e2d1ee30a9e	2026-02-09	[chore] Update `time` dep to fix advisory (#25363)	REVIEWED	EXCLUDE_NON_CODE		依赖 advisory 更新。
+533	df0f05a75e934c4550d8428ddeae8f12e766b51b	2026-02-09	[compiler, nit] fix typo in a compiler message (#25362)	REVIEWED	EXCLUDE_NON_CODE		仅文案拼写。
+534	e7f3c5c0c877c19ae1c9d65865030490beb9a2b4	2026-02-09	Use nexttest for tidehunter tests (#25370)	REVIEWED	EXCLUDE_NON_CODE		仅测试运行器。
+535	0f97c43d8970ec5fc5487d5552274d7c425aeef9	2026-02-09	[move-compiler][sui-mode] Remove `entry` rules. Add warnings for uncallable functions (#25335)	REVIEWED	EXCLUDE_FEATURE		Move compiler 规则/告警功能调整。
+536	a31082390629c69f0b891aa7b3e092e8a18ee27a	2026-02-09	indexer: further simplify back-pressure (#25369)	REVIEWED	EXCLUDE_FEATURE		524–526 后续背压架构简化，非缺陷最小补丁。
+537	1392821fd651b64e9561a16699aeb6ad9587334d	2026-02-09	sui-indexer-alt: Add metrics for connection pool acquisition attempts (#25163)	REVIEWED	EXCLUDE_NON_CODE		仅指标。
+538	488610ad10a98d52ec1c5c55fda609918e8b27a5	2026-02-09	[consensus] use fifo compaction by default (#25314)	REVIEWED	EXCLUDE_FEATURE		存储 compaction 策略切换。
+539	ed04ad1fa9379e45faa98dd553366e6af7e36b78	2026-02-09	Remove sui-aws-orchestrator crate (#25347)	REVIEWED	EXCLUDE_FEATURE		移除上游 crate。
+540	7151e57817cfbcd4b0cb81e8ca981464fa9c920a	2026-02-09	Delete object type table (#25374)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后索引表迁移。
+541	133f9428cff69f63fe1fe366050ed30105182a1f	2026-02-09	[hardening] Use safe_get and checked_as in PTBs (#25344)	REVIEWED	EXCLUDE_FEATURE		上游确认当前不可达的预防性 hardening，非关键既有缺陷。
+542	c775e0bda3c37508195a0237dc593ff64bfe242e	2026-02-09	docs: fix json for auto-gen'd docs (#25375)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+543	a347aa7cbb2a068fd603276f2d45c388be5e4781	2026-02-09	docs: fix JSON parsing  (#25379)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+544	64a0aef1839f595ff6f697f5ca64a0e4c22f8a08	2026-02-09	Reduce QUIC max_idle_timeout from 30s to 10s (#25373)	APPLIED	MERGE	aa5fc837d10dfe429dfd58a89e14a857dc2eb791	缩短基线默认 QUIC idle timeout，恢复重启后尽快清理死连接避免 checkpoint 同步停滞。
+545	78d79cf3c6e408deb17c4dcae92a6c55bec612e0	2026-02-09	[move-ide] Support for incremental compilation of dependent modules (#25234)	REVIEWED	EXCLUDE_FEATURE		新增 Move IDE 增量编译。
+546	055d75a4b23d4e474f15b9dba195d76848131511	2026-02-09	Fix gas coin leak in stress benchmark during epoch transitions (#25372)	REVIEWED	EXCLUDE_NON_CODE		仅 stress benchmark 的 gas coin 回收。
+547	e4146b827fc1ceb26af5885acb3259c9fc193964	2026-02-10	[pruner] move grpc index pruning to objects section (#25350)	REVIEWED	EXCLUDE_FEATURE		pruner/gRPC index 迁移。
+548	f6a8e9a1ac1a7d77de0ca5ff60a265ebae962372	2026-02-10	rpc-index: deprecate and drop transaction info column (#25382)	REVIEWED	EXCLUDE_FEATURE		RPC index schema 迁移。
+549	007b06a11fad0e7abb729c30f30297be0b63ae5b	2026-02-10	fix(consistency): update formal snapshot to read new checkpoint format (#25376)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后的新 checkpoint 格式与 formal snapshot 路径。
+550	b4bece7094fef8ed0859583ef383db5ceb810630	2026-02-10	Add metrics for funds scheduler	REVIEWED	EXCLUDE_NON_CODE		仅指标。
 551	e137532aea4b6087202a103b4be4baafb9b47a6b	2026-02-10	Certora audit fix: L-03 (#25396)	UNREVIEWED			
 552	c03fabb7f91c19fa04036b63c2a3b4d06d6e43e2	2026-02-10	rpc: be more resilient in simulate and also expose suggested_gas_price (#25407)	UNREVIEWED			
 553	d1dae0a6d10499ae2cf96d2ea8a1f9cb99ed43f8	2026-02-10	Refactoring cli/config for indexers (#25394)	UNREVIEWED			
