@@ -949,56 +949,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 948	a6d32d34bb8e01047eca44e9e62001639090b9a7	2026-03-26	Allow consumption of input coins for gasless tx (#25859)	REVIEWED	EXCLUDE_POST_FORK		gasless 输入 coin 消费语义。
 949	8812c22233b30d8f48178af5e9d7ff2b2aab8f76	2026-03-26	[move] Update charging around receive to be more uniform (#26018)	REVIEWED	EXCLUDE_FEATURE		Move receive charging 语义。
 950	f8024baa75086db5a440d98247ecfd3d1ee90c73	2026-03-27	docs: Fix logo and remove office hours (#26014)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
-951	3cacbc7cdce3ef4a14a32b077a860394254364ce	2026-03-27	Panic if pipeline is an an unrecoverable state	UNREVIEWED			
-952	ce48b647670fbfba4f1ae801848f716594ea9f2e	2026-03-27	docs: add Dev Tooling page (#25967)	UNREVIEWED			
-953	37be7478af674671a6919a8dc7a82ae0174a9df2	2026-03-27	[effects] switch gas_object method to optional (#25974)	UNREVIEWED			
-954	7d37be86950a3b11c37392efb5d4095412005b30	2026-03-27	[consensus] use FIFO compaction outside of mainnet (#26010)	UNREVIEWED			
-955	c496d9fee91d8b71caded8468f7c96424bcf0976	2026-03-27	Enable coin reservation compatibility layer for testnet (#25971)	UNREVIEWED			
-956	85400e2bd37b490fcd057776e700d3fdca643396	2026-03-27	Restrict unused inputs in gasless transactions (#26008)	UNREVIEWED			
-957	75c6431f055df374e3422e43fa2492963b42edce	2026-03-27	docs: style guide updates (#26024)	UNREVIEWED			
-958	9eaf47af244a7e256dcf1cf81102365becccd9c8	2026-03-27	Sui v1.69.0 Framework Bytecode snapshot (#26026)	UNREVIEWED			
-959	08500756541c6fd66c81a59d1af1d819e997a189	2026-03-27	Sui v1.70.0 Version Bump (#26027)	UNREVIEWED			
-960	5eec71f40c7351652e51cd5200782378201f6225	2026-03-27	Improve &str to Digest error message (#26017)	UNREVIEWED			
-961	65c38a11f5ee2a2cf849b2c276d58483c6967bbd	2026-03-27	[adapter][hardening] move to `safe_unwrap/safe_assert` in natives (#26023)	UNREVIEWED			
-962	70e9e7b87f856af5766c2e630a30c0cde1116d38	2026-03-27	sui-indexer-alt: make Indexer field behavior consistent (#26007)	UNREVIEWED			
-963	92f612b4d8c68c3d442a5b71818f1aeede7aaf30	2026-03-27	docs: NFT doc revisions to support new IA (#25981)	UNREVIEWED			
-964	392e6448cdcbdc3ad2f46bfd01cb0d7dea187882	2026-03-27	[move][cleanup/easy] Macro hygiene cleanup across Move crates (#26030)	UNREVIEWED			
-965	2405958e1839011959fd8f85a386d3a46497f94b	2026-03-27	[std] mul_div + mul_div_round_up macro (#23295)	UNREVIEWED			
-966	b889b4d1bf1cdf15b6899eea6ce94ad3ca9985c7	2026-03-28	[core] enable defer unpaid amplification  (#25867)	UNREVIEWED			
-967	03abf91f474094afa6b51d713238b1588a264287	2026-03-30	[Block Streaming] observer client & tests for the observer service (#25477)	UNREVIEWED			
-968	b940e55f7c615fba5b3b2d63a710d94e59ab08f2	2026-03-30	[move] Remove `safe_unwrap_err` and make `safe_unwrap` generic over result type (#26031)	UNREVIEWED			
-969	591ac7c96a2877709479724edeea7038d01f064b	2026-03-30	[rpc-alt] add address balance backward compat layer (#25760)	UNREVIEWED			
-970	8a866b804e6b1008de776e12df7a5f629e0fdf41	2026-03-30	sui-rpc-resolver in Analytics Indexer (#26041)	UNREVIEWED			
-971	54e640f65d70ba7f1fa280c458671b381d687ec7	2026-03-30	Count gasless tx for DoS protection (#25866)	UNREVIEWED			
-972	54e968c16008f7fe0c10a91275f4f472ea483b84	2026-03-30	[e2e] fix test_alias_changes flake by waiting for enable tx settlement (#26043)	UNREVIEWED			
-973	44e12d2c78cf6724a80fc06828bfa89b98c8de8f	2026-03-30	Fix string parsing bug (#26047)	UNREVIEWED			
-974	43bb8b615ce645c611a63f0ebd4f2729c3ee1ba4	2026-03-30	[move] Add additional argument checking in move calls (#26049)	UNREVIEWED			
-975	92bc40908e2cd3a35255295fcde7d897f6e45910	2026-03-30	Fix pnpm audit high-severity vulnerabilities (#26053)	UNREVIEWED			
-976	47cc0bb95fba0d3dcdd38632a7f8d6e748f4b5ea	2026-03-30	[move-compiler] Fix byte string escape (#26032)	UNREVIEWED			
-977	3d600228564453e92a28369aa4b472528153d3f1	2026-03-30	[move-compiler] Fix temporary variable panic (#26033)	UNREVIEWED			
-978	a9b74cd4fdf637173337f441cb4ea9e89fe5ce87	2026-03-30	[sui-framework][std] Added div_ceil. Deprecated `divide_and_round_up` (#26051)	UNREVIEWED			
-979	59edc51ff2c18c07107e92aaf09acb9694acf717	2026-03-30	forking-store: land store architecture as a skeleton (#25917)	UNREVIEWED			
-980	68c51af9659ca40904234f1929b67552f225a9a9	2026-03-31	sui-indexer-alt-framework: split Connection and Store traits (#25881)	UNREVIEWED			
-981	7762131d328c3b8b49e9bf2040580e3663f32c95	2026-03-31	fix(docs): add lines prop support to ImportContent and fix OpenZeppelin code examples (#26057)	UNREVIEWED			
-982	0101607fc5ea512e9d06a3a9265038cf68d27197	2026-03-31	Enforce minimum deposit sizes for gasless tx (#25882)	UNREVIEWED			
-983	80dbe314274af3008be39808b245014494f3ce0a	2026-03-31	[sui-tool] remove sui-data-ingestion-core dependency (#26006)	UNREVIEWED			
-984	511fb7d34db55bae22ddfe68aacfdd7084e57e6a	2026-03-31	fix release build (#26064)	UNREVIEWED			
-985	73efc3be4ccf819cc5dfb38c10d301396ad75c94	2026-03-31	ci: add cargo problem matcher for structured build error annotations (#26068)	UNREVIEWED			
-986	812fef6896ffce29c5a9c1f352269a00f2d6e289	2026-03-31	sui-rpc-api: cap the number of signatures in execute transaction (#26067)	UNREVIEWED			
-987	718526a1a6db970e34b144a63cdd63948b396ab1	2026-03-31	Revert "[test] Add gRPC channel to TestCluster to deflake e2e tests #25943" (#26037)	UNREVIEWED			
-988	383a983d2b14715a4299227920188aa62089a723	2026-03-31	fix(graphql): fix Display v2 scoping issue (#26061)	UNREVIEWED			
-989	887d3a17f89ac367104cb4982ec0d93f4997611f	2026-03-31	[move-ide] Added activity indicator (#26054)	UNREVIEWED			
-990	80af79ea6b5e18a23042fc7bda481e07472c7a8d	2026-03-31	[lint]fix clippy for tests (#26072)	UNREVIEWED			
-991	137b12f337d790dcae827caa3dbbd56d22732716	2026-03-31	[sui-kv-rpc] remove sui-data-ingestion-core dependency (#26066)	UNREVIEWED			
-992	c310c100db71c4d4f55fce2145ef90e206424716	2026-03-31	Remove backwards compat support for non-TLS connections to validator server (#26069)	UNREVIEWED			
-993	46af964d7c2de243738d3553344e0ff18f19eda4	2026-03-31	fix(simtest): wait for tx settlement in party_object_read test (#26063)	UNREVIEWED			
-994	4f9e4e05d431c5de924620f44feb50f6b46401bd	2026-03-31	[move-ir] Add labels to source map (#25766)	UNREVIEWED			
-995	21a5ae30270cc67b3e331d7beb342be2d19c7e97	2026-03-31	sui-indexer-alt-e2e-tests: bump graphql_zklogin_tests graphql timeout (#26046)	UNREVIEWED			
-996	d28a20f2894543c0fff424e090d4bc8c5b3400d5	2026-03-31	sui-indexer-alt-framework: CheckpointStream peekable, timeout (#26050)	UNREVIEWED			
-997	984739397f9fc9f2891d9b82fd8c3bafb78db1c4	2026-03-31	docs: Enable new Digital Assets section (#26074)	UNREVIEWED			
-998	1f1866dc70f1a1800ca595ee2a805b45ff96127a	2026-03-31	[grpc] protocol gate balance object refs in simulate (#26082)	UNREVIEWED			
-999	ceb0bf788b8711eca37a448854db0421beb8d612	2026-03-31	[grpc] Fix tests and protocol gating around mainnet protocol overrides in simtest (#26084)	UNREVIEWED			
-1000	82942c59ebb94f4f4c8ae494fed945e5f8eb4ee5	2026-04-01	rpc-visitor: unwrap `TypeName` (#26070)	UNREVIEWED			
+951	3cacbc7cdce3ef4a14a32b077a860394254364ce	2026-03-27	Panic if pipeline is an an unrecoverable state	REVIEWED	EXCLUDE_NON_CRITICAL		Indexer-alt 不可恢复状态的 fail-fast 调整，非链执行关键路径。
+952	ce48b647670fbfba4f1ae801848f716594ea9f2e	2026-03-27	docs: add Dev Tooling page (#25967)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+953	37be7478af674671a6919a8dc7a82ae0174a9df2	2026-03-27	[effects] switch gas_object method to optional (#25974)	REVIEWED	EXCLUDE_POST_FORK		address-balance effects API 迁移。
+954	7d37be86950a3b11c37392efb5d4095412005b30	2026-03-27	[consensus] use FIFO compaction outside of mainnet (#26010)	REVIEWED	EXCLUDE_FEATURE		后续链类型与共识存储策略变更，不是既有缺陷的独立补丁。
+955	c496d9fee91d8b71caded8468f7c96424bcf0976	2026-03-27	Enable coin reservation compatibility layer for testnet (#25971)	REVIEWED	EXCLUDE_POST_FORK		coin-reservation 兼容层。
+956	85400e2bd37b490fcd057776e700d3fdca643396	2026-03-27	Restrict unused inputs in gasless transactions (#26008)	REVIEWED	EXCLUDE_POST_FORK		gasless 交易路径。
+957	75c6431f055df374e3422e43fa2492963b42edce	2026-03-27	docs: style guide updates (#26024)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+958	9eaf47af244a7e256dcf1cf81102365becccd9c8	2026-03-27	Sui v1.69.0 Framework Bytecode snapshot (#26026)	REVIEWED	EXCLUDE_POST_FORK		后续 framework 快照。
+959	08500756541c6fd66c81a59d1af1d819e997a189	2026-03-27	Sui v1.70.0 Version Bump (#26027)	REVIEWED	EXCLUDE_NON_CODE		版本 bump。
+960	5eec71f40c7351652e51cd5200782378201f6225	2026-03-27	Improve &str to Digest error message (#26017)	REVIEWED	EXCLUDE_NON_CRITICAL		仅改善解析错误文案。
+961	65c38a11f5ee2a2cf849b2c276d58483c6967bbd	2026-03-27	[adapter][hardening] move to `safe_unwrap/safe_assert` in natives (#26023)	APPLIED	MERGE	96ceddc3d4c09cd0519b74f3238e55226932a77d	将生产 native 的 unwrap/assert 转为 PartialVMError，避免无效输入触发节点 panic；测试场景专用路径未纳入关键运行时补丁。
+962	70e9e7b87f856af5766c2e630a30c0cde1116d38	2026-03-27	sui-indexer-alt: make Indexer field behavior consistent (#26007)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt API 行为统一。
+963	92f612b4d8c68c3d442a5b71818f1aeede7aaf30	2026-03-27	docs: NFT doc revisions to support new IA (#25981)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+964	392e6448cdcbdc3ad2f46bfd01cb0d7dea187882	2026-03-27	[move][cleanup/easy] Macro hygiene cleanup across Move crates (#26030)	REVIEWED	EXCLUDE_FEATURE		宏卫生重构，无独立缺陷修复。
+965	2405958e1839011959fd8f85a386d3a46497f94b	2026-03-27	[std] mul_div + mul_div_round_up macro (#23295)	REVIEWED	EXCLUDE_FEATURE		新增标准库宏。
+966	b889b4d1bf1cdf15b6899eea6ce94ad3ca9985c7	2026-03-28	[core] enable defer unpaid amplification  (#25867)	REVIEWED	EXCLUDE_FEATURE		协议配置启用变更。
+967	03abf91f474094afa6b51d713238b1588a264287	2026-03-30	[Block Streaming] observer client & tests for the observer service (#25477)	REVIEWED	EXCLUDE_FEATURE		新增 observer 服务。
+968	b940e55f7c615fba5b3b2d63a710d94e59ab08f2	2026-03-30	[move] Remove `safe_unwrap_err` and make `safe_unwrap` generic over result type (#26031)	REVIEWED	EXCLUDE_FEATURE		第 961 条后的 API 重构，不改变独立缺陷语义。
+969	591ac7c96a2877709479724edeea7038d01f064b	2026-03-30	[rpc-alt] add address balance backward compat layer (#25760)	REVIEWED	EXCLUDE_POST_FORK		address-balance RPC 兼容层。
+970	8a866b804e6b1008de776e12df7a5f629e0fdf41	2026-03-30	sui-rpc-resolver in Analytics Indexer (#26041)	REVIEWED	EXCLUDE_FEATURE		新增 Analytics Indexer resolver。
+971	54e640f65d70ba7f1fa280c458671b381d687ec7	2026-03-30	Count gasless tx for DoS protection (#25866)	REVIEWED	EXCLUDE_POST_FORK		gasless DoS 计数路径。
+972	54e968c16008f7fe0c10a91275f4f472ea483b84	2026-03-30	[e2e] fix test_alias_changes flake by waiting for enable tx settlement (#26043)	REVIEWED	EXCLUDE_NON_CODE		仅 e2e 稳定性测试。
+973	44e12d2c78cf6724a80fc06828bfa89b98c8de8f	2026-03-30	Fix string parsing bug (#26047)	REVIEWED	ALREADY_PRESENT		RTD Bigtable remote table_prefix 已采用单斜杠 projects/{}/instances/{}/tables/ 格式。
+974	43bb8b615ce645c611a63f0ebd4f2729c3ee1ba4	2026-03-30	[move] Add additional argument checking in move calls (#26049)	REVIEWED	EXCLUDE_ALREADY_FIXED		RTD 旧 Move VM 的 serialized_call 已在反序列化前检查参数数目；上游新增的 direct Value 入口不存在。
+975	92bc40908e2cd3a35255295fcde7d897f6e45910	2026-03-30	Fix pnpm audit high-severity vulnerabilities (#26053)	APPLIED	MERGE	312e84aa4992e8edac45df3a14644ad77c6e2bb5	为 path-to-regexp 与 picomatch 加入安全 overrides 并更新锁文件。
+976	47cc0bb95fba0d3dcdd38632a7f8d6e748f4b5ea	2026-03-30	[move-compiler] Fix byte string escape (#26032)	APPLIED	MERGE	4e87100cefb5ddddb48c090a38eb3a07e2b51863	修复多字节十六进制转义在 byte string 中的解析正确性。
+977	3d600228564453e92a28369aa4b472528153d3f1	2026-03-30	[move-compiler] Fix temporary variable panic (#26033)	APPLIED	MERGE	f226912cbf5954ce52e99e4da66dd124259cb99a	临时借用变量溢出/边界错误时改为诊断与恢复，避免 borrow analysis panic。
+978	a9b74cd4fdf637173337f441cb4ea9e89fe5ce87	2026-03-30	[sui-framework][std] Added div_ceil. Deprecated `divide_and_round_up` (#26051)	REVIEWED	EXCLUDE_FEATURE		新增 framework/stdlib API。
+979	59edc51ff2c18c07107e92aaf09acb9694acf717	2026-03-30	forking-store: land store architecture as a skeleton (#25917)	REVIEWED	EXCLUDE_FEATURE		新增 store 架构骨架。
+980	68c51af9659ca40904234f1929b67552f225a9a9	2026-03-31	sui-indexer-alt-framework: split Connection and Store traits (#25881)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt trait 重构。
+981	7762131d328c3b8b49e9bf2040580e3663f32c95	2026-03-31	fix(docs): add lines prop support to ImportContent and fix OpenZeppelin code examples (#26057)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+982	0101607fc5ea512e9d06a3a9265038cf68d27197	2026-03-31	Enforce minimum deposit sizes for gasless tx (#25882)	REVIEWED	EXCLUDE_POST_FORK		gasless 交易路径。
+983	80dbe314274af3008be39808b245014494f3ce0a	2026-03-31	[sui-tool] remove sui-data-ingestion-core dependency (#26006)	REVIEWED	EXCLUDE_FEATURE		工具依赖清理。
+984	511fb7d34db55bae22ddfe68aacfdd7084e57e6a	2026-03-31	fix release build (#26064)	REVIEWED	ALREADY_PRESENT		RTD transaction.rs 不存在该条件化 RwLock import，release 编译问题不复现。
+985	73efc3be4ccf819cc5dfb38c10d301396ad75c94	2026-03-31	ci: add cargo problem matcher for structured build error annotations (#26068)	REVIEWED	EXCLUDE_NON_CODE		仅 CI 注释。
+986	812fef6896ffce29c5a9c1f352269a00f2d6e289	2026-03-31	sui-rpc-api: cap the number of signatures in execute transaction (#26067)	APPLIED	MERGE	0657c57d3a2630d12e040b88705b83ffde694d2c	gRPC 执行交易请求最多允许发送者和赞助者两枚签名，限制资源消耗。
+987	718526a1a6db970e34b144a63cdd63948b396ab1	2026-03-31	Revert "[test] Add gRPC channel to TestCluster to deflake e2e tests #25943" (#26037)	REVIEWED	EXCLUDE_NON_CODE		仅撤回 e2e 测试基础设施。
+988	383a983d2b14715a4299227920188aa62089a723	2026-03-31	fix(graphql): fix Display v2 scoping issue (#26061)	REVIEWED	EXCLUDE_NON_CRITICAL		GraphQL Display v2 展示范围修正，非关键节点路径。
+989	887d3a17f89ac367104cb4982ec0d93f4997611f	2026-03-31	[move-ide] Added activity indicator (#26054)	REVIEWED	EXCLUDE_FEATURE		Move IDE UI 功能。
+990	80af79ea6b5e18a23042fc7bda481e07472c7a8d	2026-03-31	[lint]fix clippy for tests (#26072)	REVIEWED	EXCLUDE_NON_CODE		仅测试 lint。
+991	137b12f337d790dcae827caa3dbbd56d22732716	2026-03-31	[sui-kv-rpc] remove sui-data-ingestion-core dependency (#26066)	REVIEWED	EXCLUDE_FEATURE		KV RPC 依赖清理。
+992	c310c100db71c4d4f55fce2145ef90e206424716	2026-03-31	Remove backwards compat support for non-TLS connections to validator server (#26069)	REVIEWED	EXCLUDE_FEATURE		移除非 TLS 兼容行为，非缺陷补丁。
+993	46af964d7c2de243738d3553344e0ff18f19eda4	2026-03-31	fix(simtest): wait for tx settlement in party_object_read test (#26063)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest 稳定性测试。
+994	4f9e4e05d431c5de924620f44feb50f6b46401bd	2026-03-31	[move-ir] Add labels to source map (#25766)	REVIEWED	EXCLUDE_FEATURE		Move IR/source-map 功能扩展。
+995	21a5ae30270cc67b3e331d7beb342be2d19c7e97	2026-03-31	sui-indexer-alt-e2e-tests: bump graphql_zklogin_tests graphql timeout (#26046)	REVIEWED	EXCLUDE_NON_CODE		仅 e2e 超时。
+996	d28a20f2894543c0fff424e090d4bc8c5b3400d5	2026-03-31	sui-indexer-alt-framework: CheckpointStream peekable, timeout (#26050)	REVIEWED	EXCLUDE_FEATURE		Indexer-alt stream API 调整。
+997	984739397f9fc9f2891d9b82fd8c3bafb78db1c4	2026-03-31	docs: Enable new Digital Assets section (#26074)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+998	1f1866dc70f1a1800ca595ee2a805b45ff96127a	2026-03-31	[grpc] protocol gate balance object refs in simulate (#26082)	REVIEWED	EXCLUDE_POST_FORK		address-balance gRPC 模拟路径。
+999	ceb0bf788b8711eca37a448854db0421beb8d612	2026-03-31	[grpc] Fix tests and protocol gating around mainnet protocol overrides in simtest (#26084)	REVIEWED	EXCLUDE_POST_FORK		address-balance 协议 gate 与 simtest。
+1000	82942c59ebb94f4f4c8ae494fed945e5f8eb4ee5	2026-04-01	rpc-visitor: unwrap `TypeName` (#26070)	REVIEWED	EXCLUDE_FEATURE		RPC visitor 对 TypeName 的展示支持。
 1001	c4cd5380380746a937cdc0712052284188a4024f	2026-04-01	sui-core: index address balance recipients in jsonrpc index (#26087)	UNREVIEWED			
 1002	0ca12a576b134deee16eebf37524bc0c1da1041f	2026-04-01	[Block Streaming] broadcasting the accepted blocks (#25549)	UNREVIEWED			
 1003	5ce3eba9d21aea6f051be3c3306078d2bc572c41	2026-04-01	sui-indexer-alt-framework: reduce copied and pasted test code (#26080)	UNREVIEWED			
