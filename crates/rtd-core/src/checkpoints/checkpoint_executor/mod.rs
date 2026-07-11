@@ -412,6 +412,10 @@ impl CheckpointExecutor {
 
         finish_stage!(pipeline_handle, BuildDbBatch);
 
+        self.state
+            .execution_scheduler()
+            .commit_object_funds_effects(batch.0.iter().map(|output| &output.effects));
+
         let mut ckpt_state = tokio::task::spawn_blocking({
             let this = self.clone();
             move || {

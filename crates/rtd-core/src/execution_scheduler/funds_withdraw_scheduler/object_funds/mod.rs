@@ -34,6 +34,7 @@ pub(crate) trait ObjectFundsWithdrawSchedulerTrait: Send + Sync {
         accumulator_version: SequenceNumber,
     ) -> ObjectFundsWithdrawStatus;
     fn settle_accumulator_version(&self, next_accumulator_version: SequenceNumber);
+    fn commit_accumulator_versions(&self, committed_accumulator_versions: Vec<SequenceNumber>);
     fn close_epoch(&self);
     #[cfg(test)]
     fn get_current_accumulator_version(&self) -> SequenceNumber;

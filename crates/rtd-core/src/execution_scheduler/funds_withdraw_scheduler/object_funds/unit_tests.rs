@@ -261,3 +261,77 @@ async fn test_settle_ahead_of_schedule() {
     let result = receiver.await.unwrap();
     assert_eq!(result, FundsWithdrawStatus::Insufficient);
 }
+
+#[tokio::test]
+async fn test_schedule_out_of_order() {
+    let account1 = ObjectID::random();
+    let account2 = ObjectID::random();
+    let funds_read = Arc::new(MockFundsRead::new(
+        SequenceNumber::from_u64(0),
+        BTreeMap::from([(account1, 100), (account2, 100)]),
+    ));
+    let scheduler = NaiveObjectFundsWithdrawScheduler::new(funds_read, SequenceNumber::from_u64(0));
+
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account1), 100)]),
+        SequenceNumber::from_u64(0),
+    );
+    assert!(matches!(status, ObjectFundsWithdrawStatus::SufficientFunds));
+
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account2), 100)]),
+        SequenceNumber::from_u64(1),
+    );
+    assert!(matches!(status, ObjectFundsWithdrawStatus::Pending(_)));
+
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account1), 100)]),
+        SequenceNumber::from_u64(0),
+    );
+    let ObjectFundsWithdrawStatus::Pending(receiver) = status else {
+        panic!("Expected pending status");
+    };
+    assert_eq!(receiver.await.unwrap(), FundsWithdrawStatus::Insufficient);
+}
+
+#[tokio::test]
+async fn test_checkpoint_commit_clears_only_committed_version() {
+    let account = ObjectID::random();
+    let scheduler = NaiveObjectFundsWithdrawScheduler::new(
+        Arc::new(MockFundsRead::new(
+            SequenceNumber::from_u64(0),
+            BTreeMap::from([(account, 100)]),
+        )),
+        SequenceNumber::from_u64(0),
+    );
+
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account), 100)]),
+        SequenceNumber::from_u64(0),
+    );
+    assert!(matches!(status, ObjectFundsWithdrawStatus::SufficientFunds));
+
+    scheduler.settle_accumulator_version(SequenceNumber::from_u64(1));
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account), 100)]),
+        SequenceNumber::from_u64(1),
+    );
+    assert!(matches!(status, ObjectFundsWithdrawStatus::SufficientFunds));
+
+    scheduler.commit_accumulator_versions(vec![SequenceNumber::from_u64(0)]);
+
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account), 100)]),
+        SequenceNumber::from_u64(0),
+    );
+    assert!(matches!(status, ObjectFundsWithdrawStatus::SufficientFunds));
+
+    let status = scheduler.schedule(
+        BTreeMap::from([(AccumulatorObjId::new_unchecked(account), 1)]),
+        SequenceNumber::from_u64(1),
+    );
+    let ObjectFundsWithdrawStatus::Pending(receiver) = status else {
+        panic!("Expected pending status");
+    };
+    assert_eq!(receiver.await.unwrap(), FundsWithdrawStatus::Insufficient);
+}

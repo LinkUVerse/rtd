@@ -650,6 +650,29 @@ impl ExecutionScheduler {
         }
     }
 
+    pub fn commit_object_funds_effects<'a>(
+        &self,
+        committed_effects: impl Iterator<Item = &'a TransactionEffects>,
+    ) {
+        let committed_accumulator_versions = committed_effects
+            .filter_map(|effects| {
+                effects.object_changes().into_iter().find_map(|change| {
+                    if change.id == RTD_ACCUMULATOR_ROOT_OBJECT_ID {
+                        change.input_version
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+        if let Some(object_funds_withdraw_scheduler) =
+            self.object_funds_withdraw_scheduler.lock().as_ref()
+        {
+            object_funds_withdraw_scheduler
+                .commit_accumulator_versions(committed_accumulator_versions);
+        }
+    }
+
     /// Reconfigure internal state at epoch start. This resets the funds withdraw scheduler
     /// to the current accumulator root object version.
     pub fn reconfigure(
