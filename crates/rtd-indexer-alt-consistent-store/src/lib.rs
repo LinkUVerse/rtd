@@ -111,7 +111,14 @@ pub async fn start_service(
     let rpc = RpcService::new(rpc_args, version, registry)
         .await?
         .register_encoded_file_descriptor_set(proto::rpc::consistent::v1alpha::FILE_DESCRIPTOR_SET)
-        .add_service(ConsistentServiceServer::new(state.clone()));
+        .add_service(ConsistentServiceServer::new(state.clone()), {
+            let db = indexer.store().db().clone();
+            async move {
+                while db.snapshots() < 1 {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        });
 
     macro_rules! add_sequential {
         ($handler:expr, $config:expr) => {

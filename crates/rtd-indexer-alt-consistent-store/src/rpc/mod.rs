@@ -11,6 +11,7 @@ use axum::extract::Request;
 use axum::response::IntoResponse;
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
+use futures::future::BoxFuture;
 use linku_network::callback::CallbackLayer;
 use metrics::RpcMetrics;
 use middleware::metrics::MakeMetricsHandler;
@@ -78,8 +79,8 @@ pub(crate) struct RpcService<'d> {
     reflection_v1: tonic_reflection::server::Builder<'d>,
     reflection_v1alpha: tonic_reflection::server::Builder<'d>,
 
-    /// The names of gRPC services registered with this instance.
-    service_names: Vec<&'static str>,
+    /// Names of gRPC services and associated readiness futures registered with this instance.
+    service_futures: Vec<(&'static str, BoxFuture<'static, ()>)>,
 
     /// The axum router that wil handle incoming requests.
     router: Router,
@@ -124,7 +125,7 @@ impl<'d> RpcService<'d> {
             version,
             reflection_v1: tonic_reflection::server::Builder::configure(),
             reflection_v1alpha: tonic_reflection::server::Builder::configure(),
-            service_names: vec![],
+            service_futures: vec![],
             router: Router::new(),
             metrics: Arc::new(RpcMetrics::new(registry)),
         })
@@ -140,15 +141,16 @@ impl<'d> RpcService<'d> {
     }
 
     /// Register a new gRPC service.
-    pub(crate) fn add_service<S>(mut self, s: S) -> Self
+    pub(crate) fn add_service<S, F>(mut self, s: S, ready: F) -> Self
     where
         S: Clone + Send + Sync + 'static,
         S: NamedService,
         S: tower::Service<Request, Response: IntoResponse, Error = Infallible>,
         S::Future: Send + 'static,
         S::Error: Send + Into<BoxError>,
+        F: Future<Output = ()> + Send + 'static,
     {
-        self.service_names.push(S::NAME);
+        self.service_futures.push((S::NAME, Box::pin(ready)));
         self.router = add_service(self.router, s);
         self
     }
@@ -162,7 +164,7 @@ impl<'d> RpcService<'d> {
             version,
             reflection_v1,
             reflection_v1alpha,
-            mut service_names,
+            service_futures,
             mut router,
             metrics,
         } = self;
@@ -179,11 +181,11 @@ impl<'d> RpcService<'d> {
 
         let (health_reporter, health_service) = tonic_health::server::health_reporter();
 
-        service_names.extend([
+        let internal_services = [
             service_name(&reflection_v1),
             service_name(&reflection_v1alpha),
             service_name(&health_service),
-        ]);
+        ];
 
         router = add_service(router, reflection_v1);
         router = add_service(router, reflection_v1alpha);
@@ -196,13 +198,31 @@ impl<'d> RpcService<'d> {
             ))
             .layer(CatchPanicLayer::new(metrics));
 
-        for service_name in service_names {
+        for service_name in internal_services {
             health_reporter
                 .set_service_status(service_name, ServingStatus::Serving)
                 .await;
         }
 
+        let mut readiness_checks = Service::new();
+        for (name, ready) in service_futures {
+            health_reporter
+                .set_service_status(name, ServingStatus::NotServing)
+                .await;
+
+            let reporter = health_reporter.clone();
+            readiness_checks = readiness_checks.spawn(async move {
+                ready.await;
+                reporter
+                    .set_service_status(name, ServingStatus::Serving)
+                    .await;
+                info!("gRPC service {name} is now SERVING");
+                Ok(())
+            });
+        }
+
         let mut service = Service::new();
+        service = service.attach(readiness_checks);
 
         // Start HTTPS server if TLS is configured
         if let (Some(listen_address), Some(config)) = (rpc_tls_listen_address, tls_config) {
