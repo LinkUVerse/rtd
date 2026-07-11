@@ -849,56 +849,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 848	dcd4e5469c1dfbfae4d9bbf011a146913919a42b	2026-03-18	docs: More fixes for AF docs spec (#25883)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 849	89b58bc27a382a638babb21664cc063ecc8a934f	2026-03-18	Delete consistent pipelines code from sui-indexer-alt (#25679)	REVIEWED	EXCLUDE_FEATURE		indexer-alt consistent pipelines 移除。
 850	f0db64979faa17bbbf22a69cc91b4c92aebd37aa	2026-03-18	[move] Introduce TraceType-based filtering for Move VM test traces (#25885)	REVIEWED	EXCLUDE_FEATURE		Move VM trace filtering。
-851	50d1482f322298c03c2c03d59d07b3e4f4628d5f	2026-03-18	[forking-stack] add APIs to simulacrum for forking 1/5 (#25841)	UNREVIEWED			
-852	f05ef1a758695d338d3102874d67f3e7c45a6e46	2026-03-18	Skip lock existence check during snapshot restore (#25888)	UNREVIEWED			
-853	afb0bd2eafd34050abf9b34bfaa283dcbd473db0	2026-03-19	[Block Streaming] introduce the Synchronizer & CommitSyncer clients (#25528)	UNREVIEWED			
-854	b92076e71ae32119bfe5e6f062d8dfb2439dddf2	2026-03-19	docs: fix excluded pages from llms.txt (#25886)	UNREVIEWED			
-855	f7f18ad6ca4f7e8b61c678884a06679f1c3419e5	2026-03-19	docs: Permissioned Asset Standard docs  (#25773)	UNREVIEWED			
-856	05211ac1d397cd1c4680782d374428c3c0eddf88	2026-03-19	Extend --gas-payment to support object() and withdraw() syntax (#25837)	UNREVIEWED			
-857	8105a02cbdb78ceabd341cadc41b48e5454e76bf	2026-03-19	docs: remove slug frontmatter for AF docs redirect test pass (#25892)	UNREVIEWED			
-858	a1f7032dd6ca2fe39549177ad99746a170850e6b	2026-03-19	[move][move-compiler] Add tests around index syntax in extensions (#25871)	UNREVIEWED			
-859	6e34fcd31f963d97f6e77dfd694bf5bed983c6f1	2026-03-19	docs: add links to OZ packages (#25897)	UNREVIEWED			
-860	c5990320ab2d32053b1bd317571969485c5f236c	2026-03-19	[sui-exploration] Unify address payment and gas smashing logic (#25728)	UNREVIEWED			
-861	d4a4404632877f54b38255b103e3ab72247d0b81	2026-03-19	docs: Fix redirects (#25894)	UNREVIEWED			
-862	598ec60ec22fed37ebf3fe5713f9469cbe3628f4	2026-03-19	Merge randomness transactions into regular checkpoints (#25889)	UNREVIEWED			
-863	5d633be1b3347d521587e5f7feb85d902e6b46e3	2026-03-20	sui-indexer-alt-framework: add chain_id to IngestionClient (#25895)	UNREVIEWED			
-864	a8b4775b33b2654f75296dd6c2933ca4bfa4c95e	2026-03-20	[sdk] update interface for verify_personal_message_signature (#25891)	UNREVIEWED			
-865	86118c002aedc46cbb150c0638f490815b1d22e0	2026-03-20	Better bigtable connection pool. (#25887)	UNREVIEWED			
-866	bb9b84dab7ab5bf67a4663b8959e88384ec2da80	2026-03-20	docs: fix content length for last afdocs test (#25902)	UNREVIEWED			
-867	9d2ef282676f9f331078bcd1a985a090f996101c	2026-03-20	grpc: fix X_SUI_CHAIN_ID header to return full 32-byte id (#25908)	UNREVIEWED			
-868	4822c2a953923208715a5fcfe8acaae4c98f0850	2026-03-20	cherry-pick the fixes from 1.68 release branch (#25911)	UNREVIEWED			
-869	4ff696883dc5a6d03eb534f20fbf05061e36c46d	2026-03-20	docs: fix truncate for auto-gen release notes/awesome sui (#25912)	UNREVIEWED			
-870	73ca96e6eb5d1914ab6c1268659472ebe4a31454	2026-03-20	fix: trailing code block (#25915)	UNREVIEWED			
-871	b684ddc64518c59a423f4cbc908288890eabff26	2026-03-20	docs: Add Wallet docs to support Coins, Tokens, NFTs IA revision (#25878)	UNREVIEWED			
-872	8eadf0119287c5c439f5244da9de9f94b78486ff	2026-03-20	invert v3 execution engine to match from_balance_change semantic (#25910)	UNREVIEWED			
-873	528a2ec0711ed9dd2ba0a2a11b22394c9f869157	2026-03-20	docs: document Display v2 $self access (#25920)	UNREVIEWED			
-874	7592347b39f9c4d23b391e5a7deaf50bd80d36d2	2026-03-20	[move-ide] Windows path handling fix (#25903)	UNREVIEWED			
-875	db714f9fd8fd471318ac8ebff1b639a4842847df	2026-03-20	indexer: track skipped and out-of-order checkpoints during streaming (#25924)	UNREVIEWED			
-876	3de77debbe839d251647482026be27928ab174cb	2026-03-20	test-cluster: deflake wait_for_authenticator_state_update (#25914)	UNREVIEWED			
-877	5a43536ab147574ecc385dfa205f39d37bab401d	2026-03-20	sui-indexer-alt-framework: add chain_id to CheckpointStreamingClient (#25905)	UNREVIEWED			
-878	3e263e01ff537cb97357f3c633b572ab8f05612c	2026-03-20	[test] fix checkpoint rate test flakiness (#25926)	UNREVIEWED			
-879	007a1c639f0dc48f62ff022debaa6376c1d1e468	2026-03-20	Delete fallback reader code (#25927)	UNREVIEWED			
-880	bc800745500795ddebe615913af99b2ccbe3b12a	2026-03-20	Stop writing (most) legacy kvstore data (#25931)	UNREVIEWED			
-881	c86d1843db547cd919b88a11661ff05218c0c774	2026-03-20	[grpc] Fix LINKER_ERROR when rendering JSON for newly published packages (#25923)	UNREVIEWED			
-882	5db3efd7ec8e7aa2fd7c46b9a3ba4d03329acb42	2026-03-20	Call force_rebuild_control_region after snapshot restore (tidehunter) (#25899)	UNREVIEWED			
-883	f4fd5118673c1ed5672bfc46c64823249f1d5f7a	2026-03-21	refactor(display): RpcVisitor Writer -> Format + Meter (#25919)	UNREVIEWED			
-884	24b8801b331f191c2419ce0fe2b962c8dc7dba88	2026-03-21	tidehunter: tuning improvements (#25932)	UNREVIEWED			
-885	0ae285b8a4a00ecece16f179d2c3cb36e236afb1	2026-03-21	add additional no-op tidehunter check (#25934)	UNREVIEWED			
-886	31bc1e1dc450753b91baba1b5c20fab1652c2848	2026-03-20	[chore] Fix cargo-deny issue. (#25936)	UNREVIEWED			
-887	cc7fa41e51ada93dc241a999870e4f3cbbff5d51	2026-03-21	display: support fetching derived objects (#25921)	UNREVIEWED			
-888	e9d05465de8e10944546b40d8c2c64d4f812f885	2026-03-23	docs: Nautilus dev tools page (#25928)	UNREVIEWED			
-889	4ede66971dd0ff5885136ac4ba9b05b0d4ee1a9a	2026-03-23	[simulacrum] cleanup (#25933)	UNREVIEWED			
-890	09c832a8707f2c5dc39b6abe61fcbab8a813b69c	2026-03-23	docs: Graphql GA (#25949)	UNREVIEWED			
-891	7c7e923e6b547bc4caea2e7ab4d0b2518048f0f8	2026-03-23	Fix for party owned coins (#25947)	UNREVIEWED			
-892	ffb0c2f4c128bd24eb1865bbfd945c9380c258a7	2026-03-23	Index V2 bridge events with message_timestamp_ms (#25421)	UNREVIEWED			
-893	7e2672a14349b20f0ff35775969d43edb5932db0	2026-03-23	docs: Fungible tokens docs (#25929)	UNREVIEWED			
-894	d5e5898a627573115af43895cf468a6eace54812	2026-03-23	docs: fix link (#25951)	UNREVIEWED			
-895	eb7b34884ec9d1cba05c9f16f0a76b26484174b3	2026-03-23	docs: Add SDK link (#25952)	UNREVIEWED			
-896	1ec8959dc1c505fea2f83c63a8d0e0c57510e2b8	2026-03-23	fix(eth-bridge-indexer): shrink block query range on RPC -32005 error (#25944)	UNREVIEWED			
-897	04fab8f2f096537887aa593194264f4f3acde322	2026-03-23	[benchmark] Merge gas coins on startup to prevent fragmentation exhaustion (#25954)	UNREVIEWED			
-898	fd1dd6139d5d97058d71789dfc72dea9cd37e6f6	2026-03-24	Parallelize bulk_insert_live_objects during snapshot restore (#25904)	UNREVIEWED			
-899	e6d26d495af1ce35b9b3e2c42a088dd79ce28587	2026-03-23	Coin reservation / address balance backward compatibility layer (#25818)	UNREVIEWED			
-900	ddf2a8d0214bfa8a06e540bad681027b26fea7b5	2026-03-24	graphql-alt: add tls config to FN client and enforce URL validation (#25963)	UNREVIEWED			
+851	50d1482f322298c03c2c03d59d07b3e4f4628d5f	2026-03-18	[forking-stack] add APIs to simulacrum for forking 1/5 (#25841)	REVIEWED	EXCLUDE_FEATURE		simulacrum forking API。
+852	f05ef1a758695d338d3102874d67f3e7c45a6e46	2026-03-18	Skip lock existence check during snapshot restore (#25888)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 snapshot restore 锁处理。
+853	afb0bd2eafd34050abf9b34bfaa283dcbd473db0	2026-03-19	[Block Streaming] introduce the Synchronizer & CommitSyncer clients (#25528)	REVIEWED	EXCLUDE_FEATURE		Block Streaming 客户端。
+854	b92076e71ae32119bfe5e6f062d8dfb2439dddf2	2026-03-19	docs: fix excluded pages from llms.txt (#25886)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+855	f7f18ad6ca4f7e8b61c678884a06679f1c3419e5	2026-03-19	docs: Permissioned Asset Standard docs  (#25773)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+856	05211ac1d397cd1c4680782d374428c3c0eddf88	2026-03-19	Extend --gas-payment to support object() and withdraw() syntax (#25837)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 object/address balance gas payment 语法。
+857	8105a02cbdb78ceabd341cadc41b48e5454e76bf	2026-03-19	docs: remove slug frontmatter for AF docs redirect test pass (#25892)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+858	a1f7032dd6ca2fe39549177ad99746a170850e6b	2026-03-19	[move][move-compiler] Add tests around index syntax in extensions (#25871)	REVIEWED	EXCLUDE_NON_CODE		仅 Move 编译器测试。
+859	6e34fcd31f963d97f6e77dfd694bf5bed983c6f1	2026-03-19	docs: add links to OZ packages (#25897)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+860	c5990320ab2d32053b1bd317571969485c5f236c	2026-03-19	[sui-exploration] Unify address payment and gas smashing logic (#25728)	REVIEWED	EXCLUDE_POST_FORK		依赖 address payment/gas smashing 新路径。
+861	d4a4404632877f54b38255b103e3ab72247d0b81	2026-03-19	docs: Fix redirects (#25894)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+862	598ec60ec22fed37ebf3fe5713f9469cbe3628f4	2026-03-19	Merge randomness transactions into regular checkpoints (#25889)	REVIEWED	EXCLUDE_FEATURE		随机数交易合并到常规 checkpoint 的架构变更。
+863	5d633be1b3347d521587e5f7feb85d902e6b46e3	2026-03-20	sui-indexer-alt-framework: add chain_id to IngestionClient (#25895)	REVIEWED	EXCLUDE_FEATURE		indexer-alt IngestionClient chain_id API。
+864	a8b4775b33b2654f75296dd6c2933ca4bfa4c95e	2026-03-20	[sdk] update interface for verify_personal_message_signature (#25891)	REVIEWED	EXCLUDE_FEATURE		SDK 签名验证接口更新。
+865	86118c002aedc46cbb150c0638f490815b1d22e0	2026-03-20	Better bigtable connection pool. (#25887)	REVIEWED	EXCLUDE_NON_CRITICAL		BigTable 连接池调优。
+866	bb9b84dab7ab5bf67a4663b8959e88384ec2da80	2026-03-20	docs: fix content length for last afdocs test (#25902)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+867	9d2ef282676f9f331078bcd1a985a090f996101c	2026-03-20	grpc: fix X_SUI_CHAIN_ID header to return full 32-byte id (#25908)	APPLIED	MERGE	f2a1e33e742d122718fb4345dbe93c509d73ffe7	X_RTD_CHAIN_ID 以完整 32 字节 digest 编码，避免返回简写链 ID。
+868	4822c2a953923208715a5fcfe8acaae4c98f0850	2026-03-20	cherry-pick the fixes from 1.68 release branch (#25911)	REVIEWED	EXCLUDE_NON_CODE		release branch cherry-pick。
+869	4ff696883dc5a6d03eb534f20fbf05061e36c46d	2026-03-20	docs: fix truncate for auto-gen release notes/awesome sui (#25912)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+870	73ca96e6eb5d1914ab6c1268659472ebe4a31454	2026-03-20	fix: trailing code block (#25915)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+871	b684ddc64518c59a423f4cbc908288890eabff26	2026-03-20	docs: Add Wallet docs to support Coins, Tokens, NFTs IA revision (#25878)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+872	8eadf0119287c5c439f5244da9de9f94b78486ff	2026-03-20	invert v3 execution engine to match from_balance_change semantic (#25910)	REVIEWED	EXCLUDE_FEATURE		execution v3 语义调整。
+873	528a2ec0711ed9dd2ba0a2a11b22394c9f869157	2026-03-20	docs: document Display v2 $self access (#25920)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+874	7592347b39f9c4d23b391e5a7deaf50bd80d36d2	2026-03-20	[move-ide] Windows path handling fix (#25903)	REVIEWED	EXCLUDE_NON_CRITICAL		Move IDE Windows 路径展示修复。
+875	db714f9fd8fd471318ac8ebff1b639a4842847df	2026-03-20	indexer: track skipped and out-of-order checkpoints during streaming (#25924)	REVIEWED	EXCLUDE_FEATURE		indexer streaming 指标。
+876	3de77debbe839d251647482026be27928ab174cb	2026-03-20	test-cluster: deflake wait_for_authenticator_state_update (#25914)	REVIEWED	EXCLUDE_NON_CODE		仅测试去抖。
+877	5a43536ab147574ecc385dfa205f39d37bab401d	2026-03-20	sui-indexer-alt-framework: add chain_id to CheckpointStreamingClient (#25905)	REVIEWED	EXCLUDE_FEATURE		indexer-alt CheckpointStreamingClient chain_id API。
+878	3e263e01ff537cb97357f3c633b572ab8f05612c	2026-03-20	[test] fix checkpoint rate test flakiness (#25926)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+879	007a1c639f0dc48f62ff022debaa6376c1d1e468	2026-03-20	Delete fallback reader code (#25927)	REVIEWED	EXCLUDE_FEATURE		删除 fallback reader 路径。
+880	bc800745500795ddebe615913af99b2ccbe3b12a	2026-03-20	Stop writing (most) legacy kvstore data (#25931)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 legacy kvstore schema 迁移。
+881	c86d1843db547cd919b88a11661ff05218c0c774	2026-03-20	[grpc] Fix LINKER_ERROR when rendering JSON for newly published packages (#25923)	REVIEWED	EXCLUDE_POST_FORK		依赖后续 gRPC 渲染/存储接口重构。
+882	5db3efd7ec8e7aa2fd7c46b9a3ba4d03329acb42	2026-03-20	Call force_rebuild_control_region after snapshot restore (tidehunter) (#25899)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后 Tidehunter snapshot restore control region。
+883	f4fd5118673c1ed5672bfc46c64823249f1d5f7a	2026-03-21	refactor(display): RpcVisitor Writer -> Format + Meter (#25919)	REVIEWED	EXCLUDE_FEATURE		Display RPC writer 架构重构。
+884	24b8801b331f191c2419ce0fe2b962c8dc7dba88	2026-03-21	tidehunter: tuning improvements (#25932)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter 版本/调优更新。
+885	0ae285b8a4a00ecece16f179d2c3cb36e236afb1	2026-03-21	add additional no-op tidehunter check (#25934)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter 后续 no-op 检查。
+886	31bc1e1dc450753b91baba1b5c20fab1652c2848	2026-03-20	[chore] Fix cargo-deny issue. (#25936)	REVIEWED	EXCLUDE_NON_CODE		cargo-deny 配置。
+887	cc7fa41e51ada93dc241a999870e4f3cbbff5d51	2026-03-21	display: support fetching derived objects (#25921)	REVIEWED	EXCLUDE_FEATURE		Display derived object 功能。
+888	e9d05465de8e10944546b40d8c2c64d4f812f885	2026-03-23	docs: Nautilus dev tools page (#25928)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+889	4ede66971dd0ff5885136ac4ba9b05b0d4ee1a9a	2026-03-23	[simulacrum] cleanup (#25933)	REVIEWED	EXCLUDE_NON_CODE		simulacrum cleanup。
+890	09c832a8707f2c5dc39b6abe61fcbab8a813b69c	2026-03-23	docs: Graphql GA (#25949)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+891	7c7e923e6b547bc4caea2e7ab4d0b2518048f0f8	2026-03-23	Fix for party owned coins (#25947)	REVIEWED	EXCLUDE_POST_FORK		依赖 protocol v118+ party-owned coin 语义。
+892	ffb0c2f4c128bd24eb1865bbfd945c9380c258a7	2026-03-23	Index V2 bridge events with message_timestamp_ms (#25421)	REVIEWED	EXCLUDE_FEATURE		V2 bridge event 索引字段。
+893	7e2672a14349b20f0ff35775969d43edb5932db0	2026-03-23	docs: Fungible tokens docs (#25929)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+894	d5e5898a627573115af43895cf468a6eace54812	2026-03-23	docs: fix link (#25951)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+895	eb7b34884ec9d1cba05c9f16f0a76b26484174b3	2026-03-23	docs: Add SDK link (#25952)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+896	1ec8959dc1c505fea2f83c63a8d0e0c57510e2b8	2026-03-23	fix(eth-bridge-indexer): shrink block query range on RPC -32005 error (#25944)	APPLIED	MERGE	b72f713bfd653327e3e6c35ebc7054751814a6d3	RPC -32005/结果过多时减半区块查询窗口并保留游标重试，避免桥同步永久失败。
+897	04fab8f2f096537887aa593194264f4f3acde322	2026-03-23	[benchmark] Merge gas coins on startup to prevent fragmentation exhaustion (#25954)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark。
+898	fd1dd6139d5d97058d71789dfc72dea9cd37e6f6	2026-03-24	Parallelize bulk_insert_live_objects during snapshot restore (#25904)	REVIEWED	EXCLUDE_FEATURE		snapshot restore 并行化。
+899	e6d26d495af1ce35b9b3e2c42a088dd79ce28587	2026-03-23	Coin reservation / address balance backward compatibility layer (#25818)	REVIEWED	EXCLUDE_POST_FORK		coin reservation/address balance 兼容层。
+900	ddf2a8d0214bfa8a06e540bad681027b26fea7b5	2026-03-24	graphql-alt: add tls config to FN client and enforce URL validation (#25963)	REVIEWED	EXCLUDE_FEATURE		GraphQL-alt TLS/client 配置。
 901	dd227a9182a89a3d1921d87175fd31c937263b37	2026-03-24	[light-clients] index authenticated events using counter (#25946)	UNREVIEWED			
 902	82b30eb87141f5e9daf4a31d8fc5a67f77dd053d	2026-03-24	 fix(kvstore): decode balance_changes and unchanged_loaded_runtime_objects from KV store (#25828)	UNREVIEWED			
 903	efd31cd30ccf1ee57f566a74684401e272202e37	2026-03-24	[test] Add gRPC channel to TestCluster to deflake e2e tests (#25943)	UNREVIEWED			
