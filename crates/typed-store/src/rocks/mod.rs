@@ -16,8 +16,10 @@ use crate::rocks::safe_iter::{SafeIter, SafeRevIter};
 use crate::tidehunter_util::{
     apply_range_bounds, transform_th_iterator, transform_th_key, typed_store_error_from_th_error,
 };
-use crate::util::{be_fix_int_ser, iterator_bounds, iterator_bounds_with_range};
-use crate::{DbIterator, TypedStoreError};
+use crate::util::{
+    be_fix_int_ser, ensure_database_type, iterator_bounds, iterator_bounds_with_range,
+};
+use crate::{DbIterator, StorageType, TypedStoreError};
 use crate::{
     metrics::{DBMetrics, RocksDBPerfContext, SamplingInterval},
     traits::{Map, TableSummary},
@@ -25,6 +27,7 @@ use crate::{
 use backoff::backoff::Backoff;
 use fastcrypto::hash::{Digest, HashFunction};
 use linku_common::debug_fatal;
+use linku_metrics::RegistryID;
 use prometheus::{Histogram, HistogramTimer};
 use rocksdb::properties::num_files_at_level;
 use rocksdb::{
@@ -32,6 +35,7 @@ use rocksdb::{
     properties,
 };
 use rocksdb::{DBPinnableSlice, LiveFile, checkpoint::Checkpoint};
+use rtd_macros::{fail_point, nondeterministic};
 use serde::{Serialize, de::DeserializeOwned};
 use std::ops::{Bound, Deref};
 use std::{
@@ -43,7 +47,6 @@ use std::{
     time::Duration,
 };
 use std::{collections::HashSet, ffi::CStr};
-use rtd_macros::{fail_point, nondeterministic};
 #[cfg(tidehunter)]
 use tidehunter::{db::Db as TideHunterDb, key_shape::KeySpace};
 use tokio::sync::oneshot;
@@ -121,11 +124,16 @@ impl std::fmt::Debug for Storage {
 pub struct Database {
     storage: Storage,
     metric_conf: MetricConf,
+    registry_id: Option<RegistryID>,
 }
 
 impl Drop for Database {
     fn drop(&mut self) {
-        DBMetrics::get().decrement_num_active_dbs(&self.metric_conf.db_name);
+        let metrics = DBMetrics::get();
+        metrics.decrement_num_active_dbs(&self.metric_conf.db_name);
+        if let Some(registry_id) = self.registry_id {
+            metrics.registry_serivce.remove(registry_id);
+        }
     }
 }
 
@@ -149,11 +157,12 @@ impl Deref for GetResult<'_> {
 }
 
 impl Database {
-    pub fn new(storage: Storage, metric_conf: MetricConf) -> Self {
+    pub fn new(storage: Storage, metric_conf: MetricConf, registry_id: Option<RegistryID>) -> Self {
         DBMetrics::get().increment_num_active_dbs(&metric_conf.db_name);
         Self {
             storage,
             metric_conf,
+            registry_id,
         }
     }
 
@@ -1756,6 +1765,8 @@ pub fn open_cf_opts<P: AsRef<Path>>(
     opt_cfs: &[(&str, rocksdb::Options)],
 ) -> Result<Arc<Database>, TypedStoreError> {
     let path = path.as_ref();
+    ensure_database_type(path, StorageType::Rocks)
+        .map_err(|error| TypedStoreError::RocksDBError(error.to_string()))?;
     // In the simulator, we intercept the wall clock in the test thread only. This causes problems
     // because rocksdb uses the simulated clock when creating its background threads, but then
     // those threads see the real wall clock (because they are not the test thread), which causes
@@ -1783,6 +1794,7 @@ pub fn open_cf_opts<P: AsRef<Path>>(
                 underlying: rocksdb,
             }),
             metric_conf,
+            None,
         )))
     })
 }
@@ -1827,6 +1839,11 @@ pub fn open_cf_opts_secondary<P: AsRef<Path>>(
             s.as_path().to_path_buf()
         });
 
+        ensure_database_type(&primary_path, StorageType::Rocks)
+            .map_err(|error| TypedStoreError::RocksDBError(error.to_string()))?;
+        ensure_database_type(&secondary_path, StorageType::Rocks)
+            .map_err(|error| TypedStoreError::RocksDBError(error.to_string()))?;
+
         let rocksdb = {
             options.create_if_missing(true);
             options.create_missing_column_families(true);
@@ -1848,6 +1865,7 @@ pub fn open_cf_opts_secondary<P: AsRef<Path>>(
                 underlying: rocksdb,
             }),
             metric_conf,
+            None,
         )))
     })
 }

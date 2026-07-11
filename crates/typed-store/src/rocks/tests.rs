@@ -9,6 +9,24 @@ fn temp_dir() -> std::path::PathBuf {
         .keep()
 }
 
+#[tokio::test]
+async fn refuses_to_open_a_tidehunter_directory_as_rocksdb() {
+    let path = temp_dir();
+    std::fs::write(path.join("wal_000001"), []).expect("Failed to create TideHunter WAL marker");
+
+    let panic = std::panic::catch_unwind(|| {
+        open_cf_opts(path, None, MetricConf::default(), &[]).unwrap();
+    })
+    .expect_err("Opening a TideHunter directory as RocksDB must be rejected");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or_default();
+
+    assert!(message.contains("DB type mismatch: expected Rocks, found TideHunter"));
+}
+
 fn get_iter<K, V>(db: &DBMap<K, V>) -> impl Iterator<Item = (K, V)> + use<'_, K, V>
 where
     K: Serialize + DeserializeOwned,

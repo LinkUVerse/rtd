@@ -310,4 +310,26 @@ mod tidehunter_tests {
         let result = db.table1.get(&key).unwrap();
         assert_eq!(result, Some(value));
     }
+
+    #[tokio::test]
+    async fn dropping_tidehunter_tables_removes_their_metrics_registry() {
+        let registry_service = &typed_store::DBMetrics::get().registry_serivce;
+        let before = registry_service.get_all().len();
+
+        {
+            let configs = BTreeMap::from_iter(vec![
+                ("table1".to_string(), ThConfig::new(11, 1, 1)),
+                ("table2".to_string(), ThConfig::new(11, 1, 1)),
+            ]);
+            let _db = ThTable::open_tables_read_write(
+                temp_dir(),
+                MetricConf::new("test_th_registry_cleanup"),
+                configs,
+            );
+
+            assert_eq!(registry_service.get_all().len(), before + 1);
+        }
+
+        assert_eq!(registry_service.get_all().len(), before);
+    }
 }

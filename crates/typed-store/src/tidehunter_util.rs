@@ -1,8 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::DBMetrics;
+use crate::{DBMetrics, StorageType, util::ensure_database_type};
 use bincode::Options;
+use linku_metrics::RegistryID;
 use prometheus::{HistogramTimer, Registry};
 use serde::de::DeserializeOwned;
 use std::env;
@@ -29,16 +30,17 @@ pub struct ThConfig {
     pub prefix: Option<Vec<u8>>,
 }
 
-pub fn open(path: &Path, key_shape: KeyShape, db_name: String) -> Arc<Db> {
+pub fn open(path: &Path, key_shape: KeyShape, db_name: String) -> (Arc<Db>, RegistryID) {
     std::fs::create_dir_all(path).expect("failed to open tidehunter db");
     let registry_service = &DBMetrics::get().registry_serivce;
     let registry = new_db_registry(db_name);
-    registry_service.add(registry.clone());
+    let registry_id = registry_service.add(registry.clone());
     let metrics = Metrics::new_in(&registry);
+    ensure_database_type(path, StorageType::TideHunter).expect("failed to open tidehunter db");
     let db = Db::open(path, key_shape, Arc::new(thdb_config()), metrics)
         .expect("failed to open tidehunter db");
     db.start_periodic_snapshot();
-    db
+    (db, registry_id)
 }
 
 fn new_db_registry(name: String) -> Registry {
