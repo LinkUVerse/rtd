@@ -1499,56 +1499,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 1498	e81b9ab3d829effb88f4515a1e6ae0809ce64bd9	2026-05-27	sui-core: index rpc-index from `Checkpoint` instead of `CheckpointData`	REVIEWED	EXCLUDE_FEATURE		索引架构调整。
 1499	5910cc10a60e15586ce362a351cfca346c44ba97	2026-05-27	sui-types: take `ObjectSet` in `derive_detailed_balance_changes_2`	REVIEWED	EXCLUDE_FEATURE		索引 API 重构。
 1500	9a52149a54c8c6d2511dd74c01f260ec2b8d6e0d	2026-05-27	[Block Streaming] broadcast randomness round signatures from Observer peer to client (#26679)	REVIEWED	EXCLUDE_FEATURE		区块流功能。
-1501	b6ae551be8a7b6db68a7b6de8c3bbb2328bad52d	2026-05-27	docs: add custom properties to Plausible CSS class events (#26797)	UNREVIEWED			
-1502	d5493c7566fe1e17a9c8ab87d88fa0c0fee50b04	2026-05-28	sui-replay-2: add --skip-artifacts flag (#26800)	UNREVIEWED			
-1503	7966e59b7fbbca160945006729de46edeea742f7	2026-05-28	Deduplicate bitmap scans (#26799)	UNREVIEWED			
-1504	2bf0b96032a77ec8c8d523a6d58c0f37217d0021	2026-05-28	[cli]: add more specific jsonrpc error code for external signers ledger fallback (#26789)	UNREVIEWED			
-1505	44e3b8a379735d744a9efed44b6d3f191968cb4e	2026-05-28	ci(sccache-warmup): broaden macOS disk cleanup to x86_64 runner (#26815)	UNREVIEWED			
-1506	05dfe63824cd73353f28d443cd24ddc45ea1e2a0	2026-05-28	docs: fix GraphQL generated pages missing from references sidebar (#26821)	UNREVIEWED			
-1507	a874e97a29d0d2ad55b3f0f4044df79822803156	2026-05-28	[typed-store] Route contains_key through backend-native exists API (#26585)	UNREVIEWED			
-1508	c0c9b9f18fd28b05847b934673281018223e55be	2026-05-28	[chore] Update tidehunter to 2e0cd56 and set relocation_max_reclaim_pct=100 (#26785)	UNREVIEWED			
-1509	53ac9eff53c8307e1a745d20352d33aa771b3b17	2026-05-28	Revert "[typed-store] Route contains_key through backend-native exist… (#26826)	UNREVIEWED			
-1510	124c64e643a2fea059cb369cc6b96b565fadea7d	2026-05-28	Land #26816 gas-underflow fix in main (#26828)	UNREVIEWED			
-1511	7ea30dc61b4b4f1f55d629f1c9e8660099ff3398	2026-05-29	[graphql-alt] Allowlist client SDK version metric label (#26674)	UNREVIEWED			
-1512	6c1a36f8b54114947572b7e57120199ebcf70abf	2026-05-29	[consensus] clean up stale allow(dead_code) and allow(unused) attributes (#26780)	UNREVIEWED			
-1513	197452c564debb797067e390543718537c9cfbad	2026-05-29	Gate #26816 gas-underflow fix for safe rollout (mainnet replay correctness) (#26829)	UNREVIEWED			
-1514	2c6061af6ecc08adbb521196f6bb87ce097172d5	2026-05-29	allow deserializing bigger checkpoints (#26841)	UNREVIEWED			
-1515	027024d7f6a91a4cf5701b7e2f17d837cd6d09c3	2026-05-29	[consensus] remove FIFO compaction option (#26736)	UNREVIEWED			
-1516	54659bd464991a12547b23cd0dd66fd2b2e65fb2	2026-05-29	[indexer-alt-framework] feature-gate diesel deps behind postgres (#26844)	UNREVIEWED			
-1517	9ffd9c0f2cb4812fde03e0af60a59a74cd74db49	2026-05-29	Update instructions for coding agents (#26850)	UNREVIEWED			
-1518	680ca90782c09c79bb6a2f94e6157de1a4f6a13e	2026-05-29	Protocol gate and add unit tests for hotfix in #26832 (#26843)	UNREVIEWED			
-1519	7094aa994180af4dad33c347a276d6a55f713606	2026-06-01	ci: stop warming macOS sccache daily (#26858)	UNREVIEWED			
-1520	c60fc0165031b76ab2b7e646b034361fd2f116ff	2026-06-01	docs: fix MystenLabs GitHub URL casing (#26836)	UNREVIEWED			
-1521	f617b0cdd80cd7189189adeb1660cee27f72a275	2026-06-01	[iffw] Fix protocol gating (#26862)	UNREVIEWED			
-1522	e0a6a5790b0ab9edd4dd5eb37b9b6fa3921922c7	2026-06-01	cli: `sui start` improvements (#26861)	UNREVIEWED			
-1523	55164acd7c065fa6c1d69c17b55676517cbc63a0	2026-06-01	[iffw] a bit more cleanup/hardening (#26866)	UNREVIEWED			
-1524	b4634a5ee363b4029856308bea03b43af3bed96d	2026-06-01	Backport DKG failure recovery fixes (#26856)	UNREVIEWED			
-1525	3ed857d98ee2cdb915694332665d5033e9180924	2026-06-01	[consensus] add LeaderSlotDecider for v3 commit rule (#26723)	UNREVIEWED			
-1526	26196fe8db43a3f646b3d9b4331813228accf4bb	2026-06-01	[move-ir] vector pack/unpack refactor (#26524)	UNREVIEWED			
-1527	52b5e48fd208303d8efecaa64e6ba18604eede69	2026-06-02	docs: add client CLI examples for shipped commands (#26837)	UNREVIEWED			
-1528	286f8a7454a6af620e963dacefb833f3cd8118cb	2026-06-02	indexer-alt-framework: generalize ingenstion client  (#26869)	UNREVIEWED			
-1529	e92adbfb028acb40e36a77d2eff963b8ff0e4a5e	2026-06-03	chore: sync shared Docusaurus components (#26872)	UNREVIEWED			
-1530	54f34ddc0cc412d0f5052252b2c1e972df657f27	2026-06-03	docs: integrate Messaging SDK docs from sui-stack-messaging repo (#26796)	UNREVIEWED			
-1531	1ca4d4eb59215672c9bdb69e09fc6db1294df7c7	2026-06-03	docs: clarify testnet snapshot buckets (#26877)	UNREVIEWED			
-1532	49eb0ade2ce311deefbda0ad5edc72edfee23d4f	2026-06-03	Move dkg_output_v2 Tidehunter keyspace to the end (#26881)	UNREVIEWED			
-1533	697107bf87532cf337497a9a3dc9f33bb77d40f0	2026-06-03	Remove sui-tool DB snapshot downloader (#26878)	UNREVIEWED			
-1534	31537d4d9235b9f61dc07a3a71b05ed61a2bda7b	2026-06-04	[system] more cleanup (#25960)	UNREVIEWED			
-1535	eced02468444d429a4e9a2b9622b7bd30a1710d4	2026-06-04	fix(sui): `sui start` resumes the embedded fullnode (index over the fullnode gRPC) (#26884)	UNREVIEWED			
-1536	91f9d310a50ae63843dcd9fd1aa972fa4232f44c	2026-06-04	fix(ci): derive release cache_family from the .0 minor branch (#26895)	UNREVIEWED			
-1537	1dd02e4261841fefd60f3a42e6b06e9ed6a653c7	2026-06-04	docs: add high-level SDK comparison page (#26890)	UNREVIEWED			
-1538	5244f8f2c5c73d523add3ad1c19247f40b57110d	2026-06-04	Remove unnecessary async from AuthorityState methods (#26889)	UNREVIEWED			
-1539	1b9e2d324ca5d80ecb8dd0b70e3a79ea9b1a59ae	2026-06-05	docs: remove testnet-only notices from PAS documentation (#26902)	UNREVIEWED			
-1540	4bdc0a4c486696a6e170e0fed963e2811a5aabc6	2026-06-05	Refactor rosetta auxillary data handling	UNREVIEWED			
-1541	9220309ea9267f517920510dc5f6e0cb788a0c61	2026-06-05	gasless rosetta (#26900)	UNREVIEWED			
-1542	4f5ae6295080c9ca75fe2cd9041d0ac091606d57	2026-06-05	Support extra grpc headers in Rosetta (#26904)	UNREVIEWED			
-1543	5406f210c81bd5c7a3078be0c3d4507c0d674973	2026-06-05	fix(protocol-config): move always_advance_dkg_to_resolution to version 127 (#26896)	UNREVIEWED			
-1544	9c33cc6d4c6d5de120ca0e149d17b35e6020c5d5	2026-06-07	fix(mysten-network): apply connect_timeout to lazy gRPC channels (#26911)	UNREVIEWED			
-1545	94bfdb24ad71371ccf7c1247fc09534e04b3d1a8	2026-06-07	core: record a highest-committed-checkpoint watermark atomic with outputs	UNREVIEWED			
-1546	d36a363774682992219e2141947c18d4c6f02317	2026-06-07	core: stop rpc-index double-counting checkpoints after a rebuild	UNREVIEWED			
-1547	5c392a5a6a94bd31def84676c2b2158814c00db7	2026-06-08	fix(sui-benchmark): prevent duplicate tx digests in benchmark workloads (#26913)	UNREVIEWED			
-1548	d0a491bc3442c699da6861e9355d1190b34bdd78	2026-06-08	fix(ci): trigger-builds cache_family falls back to main when branch not cut (#26917)	UNREVIEWED			
-1549	a0710529342506d9846ad0da8d2ef2c058f9cc0c	2026-06-08	Enforce soft bundle gas price equality (#26882)	UNREVIEWED			
-1550	b3e08910af03c511f45974f730bedda2b488087b	2026-06-08	ci(setup-sccache): backward-compatible AWS OIDC support + role specs (#26922)	UNREVIEWED			
+1501	b6ae551be8a7b6db68a7b6de8c3bbb2328bad52d	2026-05-27	docs: add custom properties to Plausible CSS class events (#26797)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1502	d5493c7566fe1e17a9c8ab87d88fa0c0fee50b04	2026-05-28	sui-replay-2: add --skip-artifacts flag (#26800)	REVIEWED	EXCLUDE_FEATURE		回放工具功能。
+1503	7966e59b7fbbca160945006729de46edeea742f7	2026-05-28	Deduplicate bitmap scans (#26799)	REVIEWED	EXCLUDE_FEATURE		KV bitmap 查询优化。
+1504	2bf0b96032a77ec8c8d523a6d58c0f37217d0021	2026-05-28	[cli]: add more specific jsonrpc error code for external signers ledger fallback (#26789)	REVIEWED	EXCLUDE_NON_CRITICAL		非关键 CLI 诊断。
+1505	44e3b8a379735d744a9efed44b6d3f191968cb4e	2026-05-28	ci(sccache-warmup): broaden macOS disk cleanup to x86_64 runner (#26815)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1506	05dfe63824cd73353f28d443cd24ddc45ea1e2a0	2026-05-28	docs: fix GraphQL generated pages missing from references sidebar (#26821)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1507	a874e97a29d0d2ad55b3f0f4044df79822803156	2026-05-28	[typed-store] Route contains_key through backend-native exists API (#26585)	REVIEWED	EXCLUDE_NON_CRITICAL		性能路径，后续已回退。
+1508	c0c9b9f18fd28b05847b934673281018223e55be	2026-05-28	[chore] Update tidehunter to 2e0cd56 and set relocation_max_reclaim_pct=100 (#26785)	REVIEWED	EXCLUDE_POST_FORK		tidehunter 后置存储。
+1509	53ac9eff53c8307e1a745d20352d33aa771b3b17	2026-05-28	Revert "[typed-store] Route contains_key through backend-native exist… (#26826)	REVIEWED	EXCLUDE_NON_CRITICAL		回退非关键性能改动。
+1510	124c64e643a2fea059cb369cc6b96b565fadea7d	2026-05-28	Land #26816 gas-underflow fix in main (#26828)	APPLIED	MERGE	b9fc24e621d361a58eb299f4143fe5218ffdaf70	地址余额燃料结算下溢；以 RTD 协议 106 开关安全启用。
+1511	7ea30dc61b4b4f1f55d629f1c9e8660099ff3398	2026-05-29	[graphql-alt] Allowlist client SDK version metric label (#26674)	REVIEWED	EXCLUDE_POST_FORK		GraphQL 后置路径。
+1512	6c1a36f8b54114947572b7e57120199ebcf70abf	2026-05-29	[consensus] clean up stale allow(dead_code) and allow(unused) attributes (#26780)	REVIEWED	EXCLUDE_NON_CRITICAL		代码清理。
+1513	197452c564debb797067e390543718537c9cfbad	2026-05-29	Gate #26816 gas-underflow fix for safe rollout (mainnet replay correctness)	APPLIED	MERGE	b9fc24e621d361a58eb299f4143fe5218ffdaf70	与 1510 配套；改为 RTD 协议 106 开关，无上游网络硬编码。
+1514	2c6061af6ecc08adbb521196f6bb87ce097172d5	2026-05-29	allow deserializing bigger checkpoints (#26841)	REVIEWED	EXCLUDE_NON_CRITICAL		Rosetta 端点容量调整。
+1515	027024d7f6a91a4cf5701b7e2f17d837cd6d09c3	2026-05-29	[consensus] remove FIFO compaction option (#26736)	REVIEWED	EXCLUDE_NON_CRITICAL		存储选项清理。
+1516	54659bd464991a12547b23cd0dd66fd2b2e65fb2	2026-05-29	[indexer-alt-framework] feature-gate diesel deps behind postgres (#26844)	REVIEWED	EXCLUDE_FEATURE		索引框架功能。
+1517	9ffd9c0f2cb4812fde03e0af60a59a74cd74db49	2026-05-29	Update instructions for coding agents (#26850)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1518	680ca90782c09c79bb6a2f94e6157de1a4f6a13e	2026-05-29	Protocol gate and add unit tests for hotfix in #26832 (#26843)	REVIEWED	EXCLUDE_NON_CRITICAL		后续早退出语义；关键下溢已由 1510/1513 修复。
+1519	7094aa994180af4dad33c347a276d6a55f713606	2026-06-01	ci: stop warming macOS sccache daily (#26858)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1520	c60fc0165031b76ab2b7e646b034361fd2f116ff	2026-06-01	docs: fix MystenLabs GitHub URL casing (#26836)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1521	f617b0cdd80cd7189189adeb1660cee27f72a275	2026-06-01	[iffw] Fix protocol gating (#26862)	REVIEWED	EXCLUDE_NON_CRITICAL		依赖未回移的早退出语义。
+1522	e0a6a5790b0ab9edd4dd5eb37b9b6fa3921922c7	2026-06-01	cli: `sui start` improvements (#26861)	REVIEWED	EXCLUDE_FEATURE		CLI 功能。
+1523	55164acd7c065fa6c1d69c17b55676517cbc63a0	2026-06-01	[iffw] a bit more cleanup/hardening (#26866)	REVIEWED	EXCLUDE_NON_CRITICAL		依赖未回移的早退出语义。
+1524	b4634a5ee363b4029856308bea03b43af3bed96d	2026-06-01	Backport DKG failure recovery fixes (#26856)	REVIEWED	EXCLUDE_POST_FORK		协议 126 DKG 路径。
+1525	3ed857d98ee2cdb915694332665d5033e9180924	2026-06-01	[consensus] add LeaderSlotDecider for v3 commit rule (#26723)	REVIEWED	EXCLUDE_FEATURE		共识 v3 功能。
+1526	26196fe8db43a3f646b3d9b4331813228accf4bb	2026-06-01	[move-ir] vector pack/unpack refactor (#26524)	REVIEWED	EXCLUDE_FEATURE		Move IR 重构。
+1527	52b5e48fd208303d8efecaa64e6ba18604eede69	2026-06-02	docs: add client CLI examples for shipped commands (#26837)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1528	286f8a7454a6af620e963dacefb833f3cd8118cb	2026-06-02	indexer-alt-framework: generalize ingenstion client  (#26869)	REVIEWED	EXCLUDE_FEATURE		索引框架功能。
+1529	e92adbfb028acb40e36a77d2eff963b8ff0e4a5e	2026-06-03	chore: sync shared Docusaurus components (#26872)	REVIEWED	EXCLUDE_NON_CODE		文档站组件同步。
+1530	54f34ddc0cc412d0f5052252b2c1e972df657f27	2026-06-03	docs: integrate Messaging SDK docs from sui-stack-messaging repo (#26796)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1531	1ca4d4eb59215672c9bdb69e09fc6db1294df7c7	2026-06-03	docs: clarify testnet snapshot buckets (#26877)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1532	49eb0ade2ce311deefbda0ad5edc72edfee23d4f	2026-06-03	Move dkg_output_v2 Tidehunter keyspace to the end (#26881)	REVIEWED	EXCLUDE_POST_FORK		tidehunter DKG keyspace。
+1533	697107bf87532cf337497a9a3dc9f33bb77d40f0	2026-06-03	Remove sui-tool DB snapshot downloader (#26878)	REVIEWED	EXCLUDE_NON_CRITICAL		运维工具清理。
+1534	31537d4d9235b9f61dc07a3a71b05ed61a2bda7b	2026-06-04	[system] more cleanup (#25960)	REVIEWED	EXCLUDE_FEATURE		系统框架调整。
+1535	eced02468444d429a4e9a2b9622b7bd30a1710d4	2026-06-04	fix(sui): `sui start` resumes the embedded fullnode (index over the fullnode gRPC) (#26884)	REVIEWED	EXCLUDE_NON_CRITICAL		非关键 CLI 行为。
+1536	91f9d310a50ae63843dcd9fd1aa972fa4232f44c	2026-06-04	fix(ci): derive release cache_family from the .0 minor branch (#26895)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1537	1dd02e4261841fefd60f3a42e6b06e9ed6a653c7	2026-06-04	docs: add high-level SDK comparison page (#26890)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1538	5244f8f2c5c73d523add3ad1c19247f40b57110d	2026-06-04	Remove unnecessary async from AuthorityState methods (#26889)	REVIEWED	EXCLUDE_NON_CRITICAL		性能与代码重构。
+1539	1b9e2d324ca5d80ecb8dd0b70e3a79ea9b1a59ae	2026-06-05	docs: remove testnet-only notices from PAS documentation (#26902)	REVIEWED	EXCLUDE_NON_CODE		文档。
+1540	4bdc0a4c486696a6e170e0fed963e2811a5aabc6	2026-06-05	Refactor rosetta auxillary data handling	REVIEWED	EXCLUDE_NON_CRITICAL		Rosetta 重构。
+1541	9220309ea9267f517920510dc5f6e0cb788a0c61	2026-06-05	gasless rosetta (#26900)	REVIEWED	EXCLUDE_FEATURE		免 gas Rosetta 功能。
+1542	4f5ae6295080c9ca75fe2cd9041d0ac091606d57	2026-06-05	Support extra grpc headers in Rosetta (#26904)	REVIEWED	EXCLUDE_FEATURE		Rosetta API 功能。
+1543	5406f210c81bd5c7a3078be0c3d4507c0d674973	2026-06-05	fix(protocol-config): move always_advance_dkg_to_resolution to version 127 (#26896)	REVIEWED	EXCLUDE_POST_FORK		协议 127 DKG 路径。
+1544	9c33cc6d4c6d5de120ca0e149d17b35e6020c5d5	2026-06-07	fix(mysten-network): apply connect_timeout to lazy gRPC channels (#26911)	APPLIED	MERGE	7681287da948042638267f9f9648fecf6cd312d6	懒 gRPC 连接遵从连接超时，避免分区永久阻塞。
+1545	94bfdb24ad71371ccf7c1247fc09534e04b3d1a8	2026-06-07	core: record a highest-committed-checkpoint watermark atomic with outputs	APPLIED	MERGE	008b53dddd08c21a6290747bd519eca6e7af9e3e	输出与提交 checkpoint watermark 原子持久化。
+1546	d36a363774682992219e2141947c18d4c6f02317	2026-06-07	core: stop rpc-index double-counting checkpoints after a rebuild	APPLIED	MERGE	008b53dddd08c21a6290747bd519eca6e7af9e3e	异常重启恢复后避免 RPC 索引重复累计余额。
+1547	5c392a5a6a94bd31def84676c2b2158814c00db7	2026-06-08	fix(sui-benchmark): prevent duplicate tx digests in benchmark workloads (#26913)	REVIEWED	EXCLUDE_NON_CRITICAL		基准测试。
+1548	d0a491bc3442c699da6861e9355d1190b34bdd78	2026-06-08	fix(ci): trigger-builds cache_family falls back to main when branch not cut (#26917)	REVIEWED	EXCLUDE_NON_CODE		CI。
+1549	a0710529342506d9846ad0da8d2ef2c058f9cc0c	2026-06-08	Enforce soft bundle gas price equality (#26882)	APPLIED	MERGE	500cdd811f360045fe5b8fb8e250f4b80f169245	拒绝不同燃料价格的软交易包，保证排序假设。
+1550	b3e08910af03c511f45974f730bedda2b488087b	2026-06-08	ci(setup-sccache): backward-compatible AWS OIDC support + role specs (#26922)	REVIEWED	EXCLUDE_NON_CODE		CI。
 1551	686a33f94189ad72205f4c8276a1ea44ed8e7360	2026-06-08	[decompiler] Extract local-name analysis into refinement::liveness module	UNREVIEWED			
 1552	6d43b521fa11a7c10d4463cd7a8bf1c5ab61bb93	2026-06-08	[decompiler] Inline let-bindings whose RHS is a single-use variable	UNREVIEWED			
 1553	dc291ebd175f7819ba4ffc8de52065e7efe089a9	2026-06-08	[decompiler] Collapse `*(&e)` to `e` in `simplify_borrow_deref`	UNREVIEWED			
