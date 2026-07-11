@@ -147,7 +147,7 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 146	57ec9220318e5a8b413d8163367f48d74e7fcb44	2026-01-13	Fix unit test note to reference #[random_test] (#24908)	APPLIED	MERGE	bc090924850ecf5b2dd6b924ac5780a25f0294b2	Move compiler 用户提示引用不存在的 #[rand_test]，改为实际属性 #[random_test]
 147	b46e479c54b667b1ebc0349b7eff5aba64ab3ac9	2026-01-13	[graphql-alt] Add TransactionEffect BalanceChangeJson field (#24836)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL BalanceChangeJson 字段、pipeline 与 schema
 148	e91b58652a326939400c9ec801e3e32212d8d982	2026-01-13	[benchmark] add composite workload for exercising heterogeneous transaction types (#24885)	REVIEWED	EXCLUDE_FEATURE		新增 2000 余行 composite benchmark workload
-149	2ddbe44f8e518e6b16ca57bdc776630ab5390fe3	2026-01-13	Cache txn digest -> executed effects directly (#23022)	APPLIED	MERGE	a8de77ecdc4b1ad21b2464aca09447ee57487248	digest 通知唤醒后 effects 内容可能已被 prune；改为原子缓存并通知完整 effects
+149	2ddbe44f8e518e6b16ca57bdc776630ab5390fe3	2026-01-13	Cache txn digest -> executed effects directly (#23022)	REVIEWED	EXCLUDE_FEATURE		缓存重设计在第 198 条因潜在 state-sync 问题被完整回滚，固定头不保留该实现
 150	b86c475b42187baea159d6ae03240edb9518d955	2026-01-13	 graphql: expose FundsWithdrawal PTB inputs (#24876)	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL FundsWithdrawal PTB input 类型与字段
 151	6406a2f3df5ba791412cdb62ddeeb9c6c61944bb	2026-01-13	Add default of 0 for funds_in_address_balance (#24913)	UNREVIEWED			
 152	9b836a6fdfed0c3784ad7741fc85b913e62787c9	2026-01-13	[benchmark] add gas w/ address balances to composite probabalistic workload (#24910)	UNREVIEWED			
