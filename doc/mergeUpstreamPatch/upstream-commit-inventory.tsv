@@ -899,56 +899,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 898	fd1dd6139d5d97058d71789dfc72dea9cd37e6f6	2026-03-24	Parallelize bulk_insert_live_objects during snapshot restore (#25904)	REVIEWED	EXCLUDE_FEATURE		snapshot restore 并行化。
 899	e6d26d495af1ce35b9b3e2c42a088dd79ce28587	2026-03-23	Coin reservation / address balance backward compatibility layer (#25818)	REVIEWED	EXCLUDE_POST_FORK		coin reservation/address balance 兼容层。
 900	ddf2a8d0214bfa8a06e540bad681027b26fea7b5	2026-03-24	graphql-alt: add tls config to FN client and enforce URL validation (#25963)	REVIEWED	EXCLUDE_FEATURE		GraphQL-alt TLS/client 配置。
-901	dd227a9182a89a3d1921d87175fd31c937263b37	2026-03-24	[light-clients] index authenticated events using counter (#25946)	UNREVIEWED			
-902	82b30eb87141f5e9daf4a31d8fc5a67f77dd053d	2026-03-24	 fix(kvstore): decode balance_changes and unchanged_loaded_runtime_objects from KV store (#25828)	UNREVIEWED			
-903	efd31cd30ccf1ee57f566a74684401e272202e37	2026-03-24	[test] Add gRPC channel to TestCluster to deflake e2e tests (#25943)	UNREVIEWED			
-904	7c8aea40ba6fef081c20ea3346d97a9301abb348	2026-03-24	fix: redirects for coin-mgt + dev-tools (#25965)	UNREVIEWED			
-905	2547379124e2235a96cee108b6ea82f2a929c205	2026-03-24	fix(cli): display decoded fields in sui client object instead of raw BCS bytes (#25862)	UNREVIEWED			
-906	f9f541ccfcd164ae57e092aa5e82afb0b6fb16b2	2026-03-24	fix(sui-bridge-indexer-alt): derive token_transfer status from event type (#25958)	UNREVIEWED			
-907	2defe01e8b80f5e08ef892669ca9b0216b2203b5	2026-03-24	[consensus]  Decouple consensus config from core sui crates (#25938)	UNREVIEWED			
-908	a9e9a9ee9c9fffae8c005e8a6a62264ea8b6d435	2026-03-24	Parallelize flush_transactions_from_dirty_to_cached in writeback cache (#25937)	UNREVIEWED			
-909	108d93a3aa4804b7709648921e7cf2e8c4672e2a	2026-03-24	docs: Coins/tokens example patterns (#25953)	UNREVIEWED			
-910	d573477a1ff4c45ddfb8e759293f0780575fb705	2026-03-24	[sui-cli] Add send-funds command with address balance support (#25962)	UNREVIEWED			
-911	2265f3d6f881912e018140c35c3ef7b94c746b78	2026-03-24	[bella-ciao][hardening] Bound a number of recursive callsites (#25941)	UNREVIEWED			
-912	bb43cdb168729d3224820026254862ca91bdeeb7	2026-03-25	Wire up transaction read masks to Bigtable Client (#25966)	UNREVIEWED			
-913	3f64b763617b9a1e1dbb582c43c42862652ebb63	2026-03-25	feat(tidehunter): EpochMarkerKey with cfg-gated fixed-length serialization for object_per_epoch_marker_table_v2 (#25970)	UNREVIEWED			
-914	a48275f7952f4891d9e25051348dad926307f6b9	2026-03-25	[move][tracing] Update tracing to support not generating unneeded values internally for sparse traces (#25900)	UNREVIEWED			
-915	258b5eb1198bcb32a2329576774e7f963db72fc9	2026-03-25	Introduce ExecutionErrorTrait into sui-execution (#25509)	UNREVIEWED			
-916	48bd935a0ef289d388586e9df9ded41c619c515d	2026-03-25	Wire up object-types (#25976)	UNREVIEWED			
-917	aad474dea116a5a541a134125fb277988510e7f1	2026-03-25	[tidehunter] Use Db::drop_db in safe_drop_db, skip force-delete when tidehunter configured (#25978)	UNREVIEWED			
-918	8041b18362e2e0458f0fd4975e41a7dcdf008e81	2026-03-25	[move][move-core] Bump binary version minimum to 7. (#25857)	UNREVIEWED			
-919	d48fd053d4c87e2083aebe97ef6245de7cd2d71a	2026-03-25	feat(sui-bridge-indexer-alt): add gRPC streaming support (#25983)	UNREVIEWED			
-920	daf9511c8339490cd65f820ae57b3df27b63ec93	2026-03-25	feat(sui-bridge-indexer-alt): flatten IngestionClientArgs for GCS support (#25987)	UNREVIEWED			
-921	583c80237dd26d71bf3b27df8ef8e3255722d8c0	2026-03-25	[move][coverage] Improve performance of coverage map generation (#25901)	UNREVIEWED			
-922	6f787be69f1d7bcc8ca27844fba981d84a03241b	2026-03-25	Update rpc provider indexer stack setup docs  (#25968)	UNREVIEWED			
-923	55760061f43cb1d5115c8f7081ce62f44148c089	2026-03-25	[docs] Fix non-public entry docs. Various improvements to PTB docs. (#25913)	UNREVIEWED			
-924	4698f4c07af4d4b4877f58f4bae4d753fe087871	2026-03-25	JSON-RPC support for serving fake coins (#25916)	UNREVIEWED			
-925	4d6f8de17b2937a9395592fd601dbf8de047c2ef	2026-03-26	sui-indexer-alt-framework: verify indexer uses a single chain_id (#25875)	UNREVIEWED			
-926	2b873ee66a321d8b3e4af6ca63e86b29fb0991c8	2026-03-26	Use seeded RNG for validator selection in TestCluster (#25990)	UNREVIEWED			
-927	2533f2ee8d460875dafb90bd2b146b85ceb80187	2026-03-26	[state sync] migrate to new bucket format (#25925)	UNREVIEWED			
-928	49997589c8d901be70453b225876e1ad205fc9d1	2026-03-26	[docs] fix derived object example (#25992)	UNREVIEWED			
-929	9dfd5467cd1c12a95f5a2833182c697d6b6c8f64	2026-03-26	docs: remove 2024 (#25982)	UNREVIEWED			
-930	f0b1157db16249e460b1e7fbd2c2a038e1c20ab2	2026-03-26	Add sui-kvstore and sui-kv-rpc to CI cluster	UNREVIEWED			
-931	e141348e101c4ce94928ba5a3970864413eadd92	2026-03-26	Render event/object json in archival	UNREVIEWED			
-932	7d7b5a4a862cf68f8c3b96bed78d274c32bb41d8	2026-03-26	Wire up more archival read masks to the bigtable requests (#25989)	UNREVIEWED			
-933	1d145863da7d619d555b649f340a9c6acd5dcdb9	2026-03-26	docs: add SVG diagrams to PAS architecture page (#25993)	UNREVIEWED			
-934	8af98c51c4d68269d5c54dc834a7566b4c98f035	2026-03-26	implicit gas and coin reservations in get_funds_withdrawals() (#25984)	UNREVIEWED			
-935	a2cb9b3288d07e96b01715fc60de9a276d525511	2026-03-26	Spawn node for new validator in voting power decrease tests (#25995)	UNREVIEWED			
-936	20d905208acddee28110b6aa320c3aacfe101262	2026-03-26	docs: PAS change restricted diagram (#26002)	UNREVIEWED			
-937	6db3f7f086d74eb17776e76723ac1896c2dc6d1e	2026-03-26	GRPC simulate: prepend coin reservation when GasCoin used with address balance (#25957)	UNREVIEWED			
-938	ac08beaf9da4b2eea159095e9aff066df40c410b	2026-03-26	[address balances][ptb] Allow the gas coin to be sent via `sui::coin::send_funds` (#25956)	UNREVIEWED			
-939	62d30c0650b85ae5ab88d723b633cbdbcec8cec5	2026-03-26	[chore] adds prettier-move tests for tree-sitter changes (#25999)	UNREVIEWED			
-940	f40e850c3916e6219ef41a7dfce624487783527b	2026-03-26	fixed external resolver parsing (#26003)	UNREVIEWED			
-941	abafb7fc737aa99df460186fea10b9e74eaca737	2026-03-26	fixed issue with git commands on windows (#26005)	UNREVIEWED			
-942	89667441f40273e072dc5cdf091cfdfad902c2b5	2026-03-26	Fix error message that is reported when building if the active environment isn't defined (#25444)	UNREVIEWED			
-943	ab8f83b30b582615c99f873f84992fd2c563233b	2026-03-26	[move][docgen] Add support for nested bullet points in doc comments (#25870)	UNREVIEWED			
-944	e7f744bb4437ff1daa0caa67d4069fb8f3b155f2	2026-03-26	[gasless] support gasless transfers of balance (#25356)	UNREVIEWED			
-945	11f03c853cbec9a9142df31721702a0865cf26d6	2026-03-26	Fix coin reservation panic during checkpoint replay with MVCC (#26011)	UNREVIEWED			
-946	9ca3d0f12bf261aab327bd14dfa060bd14495c9f	2026-03-27	Fix gasless test helpers compilation in release builds (#26016)	UNREVIEWED			
-947	3ad0ff00af03003ea46d1e7b7fed714371c927f3	2026-03-26	Update party objects simtests (#26015)	UNREVIEWED			
-948	a6d32d34bb8e01047eca44e9e62001639090b9a7	2026-03-26	Allow consumption of input coins for gasless tx (#25859)	UNREVIEWED			
-949	8812c22233b30d8f48178af5e9d7ff2b2aab8f76	2026-03-26	[move] Update charging around receive to be more uniform (#26018)	UNREVIEWED			
-950	f8024baa75086db5a440d98247ecfd3d1ee90c73	2026-03-27	docs: Fix logo and remove office hours (#26014)	UNREVIEWED			
+901	dd227a9182a89a3d1921d87175fd31c937263b37	2026-03-24	[light-clients] index authenticated events using counter (#25946)	REVIEWED	EXCLUDE_FEATURE		light-client authenticated event 索引功能。
+902	82b30eb87141f5e9daf4a31d8fc5a67f77dd053d	2026-03-24	 fix(kvstore): decode balance_changes and unchanged_loaded_runtime_objects from KV store (#25828)	REVIEWED	EXCLUDE_POST_FORK		KV store balance_changes/运行时对象 schema 路径。
+903	efd31cd30ccf1ee57f566a74684401e272202e37	2026-03-24	[test] Add gRPC channel to TestCluster to deflake e2e tests (#25943)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+904	7c8aea40ba6fef081c20ea3346d97a9301abb348	2026-03-24	fix: redirects for coin-mgt + dev-tools (#25965)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+905	2547379124e2235a96cee108b6ea82f2a929c205	2026-03-24	fix(cli): display decoded fields in sui client object instead of raw BCS bytes (#25862)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI object 展示。
+906	f9f541ccfcd164ae57e092aa5e82afb0b6fb16b2	2026-03-24	fix(sui-bridge-indexer-alt): derive token_transfer status from event type (#25958)	REVIEWED	EXCLUDE_POST_FORK		bridge-indexer-alt 事件状态路径。
+907	2defe01e8b80f5e08ef892669ca9b0216b2203b5	2026-03-24	[consensus]  Decouple consensus config from core sui crates (#25938)	REVIEWED	EXCLUDE_FEATURE		consensus 配置架构解耦。
+908	a9e9a9ee9c9fffae8c005e8a6a62264ea8b6d435	2026-03-24	Parallelize flush_transactions_from_dirty_to_cached in writeback cache (#25937)	REVIEWED	EXCLUDE_FEATURE		writeback cache 并行化。
+909	108d93a3aa4804b7709648921e7cf2e8c4672e2a	2026-03-24	docs: Coins/tokens example patterns (#25953)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+910	d573477a1ff4c45ddfb8e759293f0780575fb705	2026-03-24	[sui-cli] Add send-funds command with address balance support (#25962)	REVIEWED	EXCLUDE_POST_FORK		address-balance send-funds CLI。
+911	2265f3d6f881912e018140c35c3ef7b94c746b78	2026-03-24	[bella-ciao][hardening] Bound a number of recursive callsites (#25941)	REVIEWED	EXCLUDE_POST_FORK		bella-ciao 后续硬化分支。
+912	bb43cdb168729d3224820026254862ca91bdeeb7	2026-03-25	Wire up transaction read masks to Bigtable Client (#25966)	REVIEWED	EXCLUDE_FEATURE		BigTable read mask API。
+913	3f64b763617b9a1e1dbb582c43c42862652ebb63	2026-03-25	feat(tidehunter): EpochMarkerKey with cfg-gated fixed-length serialization for object_per_epoch_marker_table_v2 (#25970)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter 新 EpochMarkerKey schema。
+914	a48275f7952f4891d9e25051348dad926307f6b9	2026-03-25	[move][tracing] Update tracing to support not generating unneeded values internally for sparse traces (#25900)	REVIEWED	EXCLUDE_FEATURE		Move trace 稀疏化优化。
+915	258b5eb1198bcb32a2329576774e7f963db72fc9	2026-03-25	Introduce ExecutionErrorTrait into sui-execution (#25509)	REVIEWED	EXCLUDE_FEATURE		ExecutionErrorTrait 执行接口。
+916	48bd935a0ef289d388586e9df9ded41c619c515d	2026-03-25	Wire up object-types (#25976)	REVIEWED	EXCLUDE_FEATURE		object types API。
+917	aad474dea116a5a541a134125fb277988510e7f1	2026-03-25	[tidehunter] Use Db::drop_db in safe_drop_db, skip force-delete when tidehunter configured (#25978)	REVIEWED	EXCLUDE_POST_FORK		Tidehunter Db::drop_db 新 API。
+918	8041b18362e2e0458f0fd4975e41a7dcdf008e81	2026-03-25	[move][move-core] Bump binary version minimum to 7. (#25857)	REVIEWED	EXCLUDE_FEATURE		Move binary version v7。
+919	d48fd053d4c87e2083aebe97ef6245de7cd2d71a	2026-03-25	feat(sui-bridge-indexer-alt): add gRPC streaming support (#25983)	REVIEWED	EXCLUDE_FEATURE		bridge-indexer-alt gRPC streaming。
+920	daf9511c8339490cd65f820ae57b3df27b63ec93	2026-03-25	feat(sui-bridge-indexer-alt): flatten IngestionClientArgs for GCS support (#25987)	REVIEWED	EXCLUDE_FEATURE		bridge-indexer-alt GCS 配置。
+921	583c80237dd26d71bf3b27df8ef8e3255722d8c0	2026-03-25	[move][coverage] Improve performance of coverage map generation (#25901)	REVIEWED	EXCLUDE_FEATURE		Move coverage 性能优化。
+922	6f787be69f1d7bcc8ca27844fba981d84a03241b	2026-03-25	Update rpc provider indexer stack setup docs  (#25968)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+923	55760061f43cb1d5115c8f7081ce62f44148c089	2026-03-25	[docs] Fix non-public entry docs. Various improvements to PTB docs. (#25913)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+924	4698f4c07af4d4b4877f58f4bae4d753fe087871	2026-03-25	JSON-RPC support for serving fake coins (#25916)	REVIEWED	EXCLUDE_FEATURE		fake coins JSON-RPC 功能。
+925	4d6f8de17b2937a9395592fd601dbf8de047c2ef	2026-03-26	sui-indexer-alt-framework: verify indexer uses a single chain_id (#25875)	REVIEWED	EXCLUDE_FEATURE		indexer-alt chain_id 校验。
+926	2b873ee66a321d8b3e4af6ca63e86b29fb0991c8	2026-03-26	Use seeded RNG for validator selection in TestCluster (#25990)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+927	2533f2ee8d460875dafb90bd2b146b85ceb80187	2026-03-26	[state sync] migrate to new bucket format (#25925)	REVIEWED	EXCLUDE_FEATURE		state-sync bucket 格式迁移。
+928	49997589c8d901be70453b225876e1ad205fc9d1	2026-03-26	[docs] fix derived object example (#25992)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+929	9dfd5467cd1c12a95f5a2833182c697d6b6c8f64	2026-03-26	docs: remove 2024 (#25982)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+930	f0b1157db16249e460b1e7fbd2c2a038e1c20ab2	2026-03-26	Add sui-kvstore and sui-kv-rpc to CI cluster	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+931	e141348e101c4ce94928ba5a3970864413eadd92	2026-03-26	Render event/object json in archival	REVIEWED	EXCLUDE_FEATURE		archival JSON 渲染。
+932	7d7b5a4a862cf68f8c3b96bed78d274c32bb41d8	2026-03-26	Wire up more archival read masks to the bigtable requests (#25989)	REVIEWED	EXCLUDE_FEATURE		archival BigTable read mask。
+933	1d145863da7d619d555b649f340a9c6acd5dcdb9	2026-03-26	docs: add SVG diagrams to PAS architecture page (#25993)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+934	8af98c51c4d68269d5c54dc834a7566b4c98f035	2026-03-26	implicit gas and coin reservations in get_funds_withdrawals() (#25984)	REVIEWED	EXCLUDE_POST_FORK		address-balance/coin reservation 兼容语义。
+935	a2cb9b3288d07e96b01715fc60de9a276d525511	2026-03-26	Spawn node for new validator in voting power decrease tests (#25995)	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+936	20d905208acddee28110b6aa320c3aacfe101262	2026-03-26	docs: PAS change restricted diagram (#26002)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+937	6db3f7f086d74eb17776e76723ac1896c2dc6d1e	2026-03-26	GRPC simulate: prepend coin reservation when GasCoin used with address balance (#25957)	REVIEWED	EXCLUDE_POST_FORK		GRPC simulate address-balance 兼容路径。
+938	ac08beaf9da4b2eea159095e9aff066df40c410b	2026-03-26	[address balances][ptb] Allow the gas coin to be sent via `sui::coin::send_funds` (#25956)	REVIEWED	EXCLUDE_POST_FORK		address-balance PTB 功能。
+939	62d30c0650b85ae5ab88d723b633cbdbcec8cec5	2026-03-26	[chore] adds prettier-move tests for tree-sitter changes (#25999)	REVIEWED	EXCLUDE_NON_CODE		仅 prettier-move 测试。
+940	f40e850c3916e6219ef41a7dfce624487783527b	2026-03-26	fixed external resolver parsing (#26003)	APPLIED	MERGE	75d144e1dd5d6ef91e03306e1c4214bfa297db40	外部 resolver 名称拒绝路径分隔符，避免不安全地传给 Command::new。
+941	abafb7fc737aa99df460186fea10b9e74eaca737	2026-03-26	fixed issue with git commands on windows (#26005)	REVIEWED	EXCLUDE_NON_CRITICAL		Windows git 命令兼容。
+942	89667441f40273e072dc5cdf091cfdfad902c2b5	2026-03-26	Fix error message that is reported when building if the active environment isn't defined (#25444)	REVIEWED	EXCLUDE_NON_CRITICAL		CLI 活动环境错误文案。
+943	ab8f83b30b582615c99f873f84992fd2c563233b	2026-03-26	[move][docgen] Add support for nested bullet points in doc comments (#25870)	REVIEWED	EXCLUDE_FEATURE		Move docgen 嵌套列表功能。
+944	e7f744bb4437ff1daa0caa67d4069fb8f3b155f2	2026-03-26	[gasless] support gasless transfers of balance (#25356)	REVIEWED	EXCLUDE_POST_FORK		gasless balance transfer 功能。
+945	11f03c853cbec9a9142df31721702a0865cf26d6	2026-03-26	Fix coin reservation panic during checkpoint replay with MVCC (#26011)	REVIEWED	EXCLUDE_POST_FORK		修复依赖上游后续 transaction_rewriting 的 MVCC replay 路径；RTD 当前无该模块或调用点。
+946	9ca3d0f12bf261aab327bd14dfa060bd14495c9f	2026-03-27	Fix gasless test helpers compilation in release builds (#26016)	REVIEWED	EXCLUDE_POST_FORK		gasless 测试 helper。
+947	3ad0ff00af03003ea46d1e7b7fed714371c927f3	2026-03-26	Update party objects simtests (#26015)	REVIEWED	EXCLUDE_NON_CODE		仅 party object simtest。
+948	a6d32d34bb8e01047eca44e9e62001639090b9a7	2026-03-26	Allow consumption of input coins for gasless tx (#25859)	REVIEWED	EXCLUDE_POST_FORK		gasless 输入 coin 消费语义。
+949	8812c22233b30d8f48178af5e9d7ff2b2aab8f76	2026-03-26	[move] Update charging around receive to be more uniform (#26018)	REVIEWED	EXCLUDE_FEATURE		Move receive charging 语义。
+950	f8024baa75086db5a440d98247ecfd3d1ee90c73	2026-03-27	docs: Fix logo and remove office hours (#26014)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 951	3cacbc7cdce3ef4a14a32b077a860394254364ce	2026-03-27	Panic if pipeline is an an unrecoverable state	UNREVIEWED			
 952	ce48b647670fbfba4f1ae801848f716594ea9f2e	2026-03-27	docs: add Dev Tooling page (#25967)	UNREVIEWED			
 953	37be7478af674671a6919a8dc7a82ae0174a9df2	2026-03-27	[effects] switch gas_object method to optional (#25974)	UNREVIEWED			
