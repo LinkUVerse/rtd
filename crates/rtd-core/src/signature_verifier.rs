@@ -663,6 +663,28 @@ pub fn batch_verify_certificates(
     }
 }
 
+fn batch_verify(
+    committee: &Committee,
+    certs: &[&CertifiedTransaction],
+    checkpoints: &[&SignedCheckpointSummary],
+) -> RtdResult {
+    let mut obligation = VerificationObligation::default();
+
+    for cert in certs {
+        let idx = obligation.add_message(cert.data(), cert.epoch(), Intent::rtd_app(cert.scope()));
+        cert.auth_sig()
+            .add_to_verification_obligation(committee, &mut obligation, idx)?;
+    }
+
+    for ckpt in checkpoints {
+        let idx = obligation.add_message(ckpt.data(), ckpt.epoch(), Intent::rtd_app(ckpt.scope()));
+        ckpt.auth_sig()
+            .add_to_verification_obligation(committee, &mut obligation, idx)?;
+    }
+
+    obligation.verify_all()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -739,26 +761,4 @@ mod tests {
         );
         assert_eq!(verifier.metrics.signed_data_cache_hits.get(), 1);
     }
-}
-
-fn batch_verify(
-    committee: &Committee,
-    certs: &[&CertifiedTransaction],
-    checkpoints: &[&SignedCheckpointSummary],
-) -> RtdResult {
-    let mut obligation = VerificationObligation::default();
-
-    for cert in certs {
-        let idx = obligation.add_message(cert.data(), cert.epoch(), Intent::rtd_app(cert.scope()));
-        cert.auth_sig()
-            .add_to_verification_obligation(committee, &mut obligation, idx)?;
-    }
-
-    for ckpt in checkpoints {
-        let idx = obligation.add_message(ckpt.data(), ckpt.epoch(), Intent::rtd_app(ckpt.scope()));
-        ckpt.auth_sig()
-            .add_to_verification_obligation(committee, &mut obligation, idx)?;
-    }
-
-    obligation.verify_all()
 }
