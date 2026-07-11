@@ -62,7 +62,7 @@ impl BridgeClient {
                 e.rtd_tx_digest, e.rtd_tx_event_index
             ),
             BridgeAction::RtdToEthTokenTransfer(_action) => format!(
-                "/sign/bridge_action/rtd/eth/{source_chain}/{message_type}/{bridge_seq_num}",
+                "sign/bridge_action/rtd/eth/{source_chain}/{message_type}/{bridge_seq_num}",
                 source_chain = event.chain_id() as u8,
                 message_type = event.action_type() as u8,
                 bridge_seq_num = event.seq_number(),
