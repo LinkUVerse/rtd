@@ -302,6 +302,9 @@ pub enum UserInputError {
 
     #[error("Transaction chain ID {provided} does not match network chain ID {expected}.")]
     InvalidChainId { provided: String, expected: String },
+
+    #[error("Transaction {digest} appears more than once in the soft bundle")]
+    RepeatedTransactionInSoftBundle { digest: TransactionDigest },
 }
 
 #[derive(
@@ -364,6 +367,12 @@ pub enum RtdErrorKind {
 
     #[error("There are too many transactions pending in consensus")]
     TooManyTransactionsPendingConsensus,
+
+    #[error("Transaction {digest} is being processed: {status}")]
+    TransactionProcessing {
+        digest: TransactionDigest,
+        status: String,
+    },
 
     #[error(
         "Input {object_id} already has {queue_len} transactions pending, above threshold of {threshold}"
@@ -956,6 +965,7 @@ impl RtdErrorKind {
             RtdErrorKind::TooOldTransactionPendingOnObject { .. } => true,
             RtdErrorKind::TooManyTransactionsPendingConsensus => true,
             RtdErrorKind::ValidatorOverloadedRetryAfter { .. } => true,
+            RtdErrorKind::TransactionProcessing { .. } => true,
 
             // Non retryable error
             RtdErrorKind::ExecutionError(..) => false,

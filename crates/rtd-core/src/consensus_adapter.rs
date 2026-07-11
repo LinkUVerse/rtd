@@ -41,7 +41,7 @@ use rtd_simulator::anemo::PeerId;
 use rtd_types::base_types::AuthorityName;
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::committee::Committee;
-use rtd_types::error::{RtdErrorKind, RtdResult};
+use rtd_types::error::{RtdError, RtdErrorKind, RtdResult};
 use rtd_types::fp_ensure;
 use rtd_types::messages_consensus::ConsensusPosition;
 use rtd_types::messages_consensus::ConsensusTransactionKind;
@@ -622,7 +622,7 @@ impl ConsensusAdapter {
         transaction: ConsensusTransaction,
         lock: Option<&RwLockReadGuard<ReconfigState>>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
-        tx_consensus_position: Option<oneshot::Sender<Vec<ConsensusPosition>>>,
+        tx_consensus_position: Option<oneshot::Sender<RtdResult<Vec<ConsensusPosition>>>>,
         submitter_client_addr: Option<IpAddr>,
     ) -> RtdResult<JoinHandle<()>> {
         self.submit_batch(
@@ -641,7 +641,7 @@ impl ConsensusAdapter {
         transactions: &[ConsensusTransaction],
         lock: Option<&RwLockReadGuard<ReconfigState>>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
-        tx_consensus_position: Option<oneshot::Sender<Vec<ConsensusPosition>>>,
+        tx_consensus_position: Option<oneshot::Sender<RtdResult<Vec<ConsensusPosition>>>>,
         submitter_client_addr: Option<IpAddr>,
     ) -> RtdResult<JoinHandle<()>> {
         if transactions.len() > 1 {
@@ -701,7 +701,7 @@ impl ConsensusAdapter {
     fn check_limits(&self) -> bool {
         // First check total transactions (waiting and in submission)
         if self.num_inflight_transactions.load(Ordering::Relaxed) as usize
-            > self.max_pending_transactions
+            >= self.max_pending_transactions
         {
             return false;
         }
@@ -713,7 +713,7 @@ impl ConsensusAdapter {
         self: &Arc<Self>,
         transactions: &[ConsensusTransaction],
         epoch_store: &Arc<AuthorityPerEpochStore>,
-        tx_consensus_position: Option<oneshot::Sender<Vec<ConsensusPosition>>>,
+        tx_consensus_position: Option<oneshot::Sender<RtdResult<Vec<ConsensusPosition>>>>,
         submitter_client_addr: Option<IpAddr>,
     ) -> JoinHandle<()> {
         // Reconfiguration lock is dropped when pending_consensus_transactions is persisted, before it is handled by consensus
@@ -736,7 +736,7 @@ impl ConsensusAdapter {
         self: Arc<Self>,
         transactions: Vec<ConsensusTransaction>,
         epoch_store: Arc<AuthorityPerEpochStore>,
-        tx_consensus_position: Option<oneshot::Sender<Vec<ConsensusPosition>>>,
+        tx_consensus_position: Option<oneshot::Sender<RtdResult<Vec<ConsensusPosition>>>>,
         submitter_client_addr: Option<IpAddr>,
     ) {
         // When epoch_terminated signal is received all pending submit_and_wait_inner are dropped.
@@ -769,7 +769,7 @@ impl ConsensusAdapter {
         self: Arc<Self>,
         transactions: Vec<ConsensusTransaction>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
-        mut tx_consensus_positions: Option<oneshot::Sender<Vec<ConsensusPosition>>>,
+        mut tx_consensus_positions: Option<oneshot::Sender<RtdResult<Vec<ConsensusPosition>>>>,
         submitter_client_addr: Option<IpAddr>,
     ) {
         if transactions.is_empty() {
@@ -783,7 +783,7 @@ impl ConsensusAdapter {
                 .await;
 
             if let Some(tx_consensus_positions) = tx_consensus_positions.take() {
-                let _ = tx_consensus_positions.send(consensus_positions);
+                let _ = tx_consensus_positions.send(Ok(consensus_positions));
             } else {
                 debug_fatal!("Ping check must have a consensus position channel");
             }
@@ -805,11 +805,6 @@ impl ConsensusAdapter {
                 }
             }
         }
-
-        // If tx_consensus_positions channel is provided, the caller is looking for a
-        // consensus position for mfp. Therefore we will skip shortcutting submission
-        // if txes have already been processed.
-        let skip_processed_checks = tx_consensus_positions.is_some();
 
         // Current code path ensures:
         // - If transactions.len() > 1, it is a soft bundle. System transactions should have been submitted individually.
@@ -837,20 +832,35 @@ impl ConsensusAdapter {
         tracing::Span::current().record("tx_type", tx_type);
         tracing::Span::current().record("tx_keys", tracing::field::debug(&transaction_keys));
 
-        let mut guard = InflightDropGuard::acquire(&self, tx_type);
+        let mut guard = InflightDropGuard::acquire(&self, tx_type, transactions.len() as u64);
+
+        let make_processing_error = |method: ProcessedMethod| -> RtdError {
+            let digest = transactions
+                .iter()
+                .find_map(|transaction| {
+                    transaction
+                        .kind
+                        .as_user_transaction()
+                        .map(|transaction| *transaction.digest())
+                })
+                .unwrap_or_default();
+            RtdErrorKind::TransactionProcessing {
+                digest,
+                status: match method {
+                    ProcessedMethod::Consensus => "sequenced by consensus".to_string(),
+                    ProcessedMethod::Checkpoint => "executed via checkpoint".to_string(),
+                },
+            }
+            .into()
+        };
 
         // Create the waiter until the node's turn comes to submit to consensus
         let (await_submit, position, positions_moved, preceding_disconnected, amplification_factor) =
             self.await_submit_delay(epoch_store, &transactions[..]);
 
-        let processed_via_consensus_or_checkpoint = if skip_processed_checks {
-            // If we need to get consensus position, don't bypass consensus submission
-            // for tx digest returned from consensus/checkpoint processing
-            future::pending().boxed()
-        } else {
-            self.await_consensus_or_checkpoint(transaction_keys.clone(), epoch_store)
-                .boxed()
-        };
+        let processed_via_consensus_or_checkpoint = self
+            .await_consensus_or_checkpoint(transaction_keys.clone(), epoch_store)
+            .boxed();
         pin_mut!(processed_via_consensus_or_checkpoint);
 
         let processed_waiter = tokio::select! {
@@ -864,7 +874,11 @@ impl ConsensusAdapter {
             }
 
             // If transaction is received by consensus or checkpoint while we wait, we are done.
-            _ = &mut processed_via_consensus_or_checkpoint => {
+            processed_method = &mut processed_via_consensus_or_checkpoint => {
+                guard.processed_method = processed_method;
+                if let Some(tx_consensus_positions) = tx_consensus_positions.take() {
+                    let _ = tx_consensus_positions.send(Err(make_processing_error(processed_method)));
+                }
                 None
             }
         };
@@ -940,7 +954,7 @@ impl ConsensusAdapter {
                         // consensus adapter due to an error or GC. They can handle retries
                         // as needed if the consensus position does not return the desired
                         // results (e.g. not sequenced due to garbage collection).
-                        let _ = tx_consensus_positions.send(consensus_positions);
+                        let _ = tx_consensus_positions.send(Ok(consensus_positions));
                     }
 
                     match status_waiter.await {
@@ -985,17 +999,16 @@ impl ConsensusAdapter {
                 }
             };
 
-            guard.processed_method = if skip_processed_checks {
-                // When getting consensus positions, we only care about submit_inner completing
-                submit_inner.await;
-                ProcessedMethod::Consensus
-            } else {
-                match select(processed_waiter, submit_inner.boxed()).await {
-                    Either::Left((observed_via_consensus, _submit_inner)) => observed_via_consensus,
-                    Either::Right(((), processed_waiter)) => {
-                        debug!("Submitted {transaction_keys:?} to consensus");
-                        processed_waiter.await
+            guard.processed_method = match select(processed_waiter, submit_inner.boxed()).await {
+                Either::Left((observed, _submit_inner)) => {
+                    if let Some(tx_consensus_positions) = tx_consensus_positions.take() {
+                        let _ = tx_consensus_positions.send(Err(make_processing_error(observed)));
                     }
+                    observed
+                }
+                Either::Right(((), processed_waiter)) => {
+                    debug!("Submitted {transaction_keys:?} to consensus");
+                    processed_waiter.await
                 }
             };
         }
@@ -1310,19 +1323,24 @@ struct InflightDropGuard<'a> {
     amplification_factor: Option<usize>,
     tx_type: &'static str,
     processed_method: ProcessedMethod,
+    inflight_count: u64,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum ProcessedMethod {
     Consensus,
     Checkpoint,
 }
 
 impl<'a> InflightDropGuard<'a> {
-    pub fn acquire(adapter: &'a ConsensusAdapter, tx_type: &'static str) -> Self {
+    pub fn acquire(
+        adapter: &'a ConsensusAdapter,
+        tx_type: &'static str,
+        inflight_count: u64,
+    ) -> Self {
         adapter
             .num_inflight_transactions
-            .fetch_add(1, Ordering::SeqCst);
+            .fetch_add(inflight_count, Ordering::SeqCst);
         adapter
             .metrics
             .sequencing_certificate_inflight
@@ -1342,6 +1360,7 @@ impl<'a> InflightDropGuard<'a> {
             amplification_factor: None,
             tx_type,
             processed_method: ProcessedMethod::Consensus,
+            inflight_count,
         }
     }
 }
@@ -1350,7 +1369,7 @@ impl Drop for InflightDropGuard<'_> {
     fn drop(&mut self) {
         self.adapter
             .num_inflight_transactions
-            .fetch_sub(1, Ordering::SeqCst);
+            .fetch_sub(self.inflight_count, Ordering::SeqCst);
         self.adapter
             .metrics
             .sequencing_certificate_inflight

@@ -9,20 +9,22 @@ use futures::{TryFutureExt, future};
 use itertools::Itertools as _;
 use linku_common::{assert_reachable, debug_fatal};
 use linku_metrics::spawn_monitored_task;
+use moka::sync::Cache;
 use prometheus::{
-    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, Registry,
+    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, Registry,
     register_gauge_with_registry, register_histogram_vec_with_registry,
     register_histogram_with_registry, register_int_counter_vec_with_registry,
-    register_int_counter_with_registry,
+    register_int_counter_with_registry, register_int_gauge_with_registry,
 };
 use std::{
     cmp::Ordering,
+    collections::HashSet,
     future::Future,
     io,
     net::{IpAddr, SocketAddr},
     pin::Pin,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 use rtd_network::{
     api::{Validator, ValidatorServer},
@@ -30,8 +32,9 @@ use rtd_network::{
     validator::server::RTD_TLS_SERVER_NAME,
 };
 use rtd_types::message_envelope::Message;
-use rtd_types::messages_consensus::ConsensusPosition;
-use rtd_types::messages_consensus::{ConsensusTransaction, ConsensusTransactionKind};
+use rtd_types::messages_consensus::{
+    ConsensusPosition, ConsensusTransaction, ConsensusTransactionKey, ConsensusTransactionKind,
+};
 use rtd_types::messages_grpc::{
     HandleCertificateRequestV3, HandleCertificateResponseV3, RawSubmitTxResponse,
 };
@@ -78,6 +81,7 @@ use crate::consensus_adapter::ConnectionMonitorStatusForTests;
 use crate::{
     authority::{AuthorityState, consensus_tx_status_cache::ConsensusTxStatus},
     consensus_adapter::{ConsensusAdapter, ConsensusAdapterMetrics},
+    consensus_handler::SequencedConsensusTransactionKey,
     traffic_controller::{TrafficController, parse_ip, policies::TrafficTally},
 };
 use crate::{
@@ -227,6 +231,10 @@ pub struct ValidatorServiceMetrics {
     num_rejected_tx_during_overload: IntCounterVec,
     num_rejected_cert_during_overload: IntCounterVec,
     submission_rejected_transactions: IntCounterVec,
+    submission_suppressed_already_processed: IntCounterVec,
+    submission_suppressed_recently_submitted: IntCounterVec,
+    recently_submitted_cache_size: IntGauge,
+    recently_submitted_resubmission_interval: Histogram,
     connection_ip_not_found: IntCounter,
     forwarded_header_parse_error: IntCounter,
     forwarded_header_invalid: IntCounter,
@@ -394,6 +402,33 @@ impl ValidatorServiceMetrics {
                 registry,
             )
             .unwrap(),
+            submission_suppressed_already_processed: register_int_counter_vec_with_registry!(
+                "validator_service_submission_suppressed_already_processed",
+                "Number of submissions suppressed after consensus already processed them",
+                &["req_type"],
+                registry,
+            )
+            .unwrap(),
+            submission_suppressed_recently_submitted: register_int_counter_vec_with_registry!(
+                "validator_service_submission_suppressed_recently_submitted",
+                "Number of submissions suppressed within the duplicate-submission window",
+                &["req_type"],
+                registry,
+            )
+            .unwrap(),
+            recently_submitted_cache_size: register_int_gauge_with_registry!(
+                "validator_service_recently_submitted_cache_size",
+                "Approximate transaction count in the duplicate-submission cache",
+                registry,
+            )
+            .unwrap(),
+            recently_submitted_resubmission_interval: register_histogram_with_registry!(
+                "validator_service_recently_submitted_resubmission_interval_seconds",
+                "Time between a recorded transaction and a suppressed duplicate submission",
+                linku_metrics::SUBSECOND_LATENCY_SEC_BUCKETS.to_vec(),
+                registry,
+            )
+            .unwrap(),
             connection_ip_not_found: register_int_counter_with_registry!(
                 "validator_service_connection_ip_not_found",
                 "Number of times connection IP was not extractable from request",
@@ -446,7 +481,11 @@ pub struct ValidatorService {
     metrics: Arc<ValidatorServiceMetrics>,
     traffic_controller: Option<Arc<TrafficController>>,
     client_id_source: Option<ClientIdSource>,
+    recently_submitted: Cache<TransactionDigest, Instant>,
+    recent_submission_window: Duration,
 }
+
+const RECENT_SUBMISSION_PEAK_TPS: u64 = 50_000;
 
 impl ValidatorService {
     pub fn new(
@@ -456,13 +495,23 @@ impl ValidatorService {
         client_id_source: Option<ClientIdSource>,
     ) -> Self {
         let traffic_controller = state.traffic_controller.clone();
+        let recent_submission_window = state.config.recent_submission_dedup_window();
         Self {
             state,
             consensus_adapter,
             metrics: validator_metrics,
             traffic_controller,
             client_id_source,
+            recently_submitted: Self::new_recently_submitted_cache(recent_submission_window),
+            recent_submission_window,
         }
+    }
+
+    fn new_recently_submitted_cache(window: Duration) -> Cache<TransactionDigest, Instant> {
+        Cache::builder()
+            .time_to_live(window)
+            .max_capacity(window.as_secs().max(1) * RECENT_SUBMISSION_PEAK_TPS)
+            .build()
     }
 
     pub fn new_for_tests(
@@ -470,12 +519,15 @@ impl ValidatorService {
         consensus_adapter: Arc<ConsensusAdapter>,
         metrics: Arc<ValidatorServiceMetrics>,
     ) -> Self {
+        let recent_submission_window = state.config.recent_submission_dedup_window();
         Self {
             state,
             consensus_adapter,
             metrics,
             traffic_controller: None,
             client_id_source: None,
+            recently_submitted: Self::new_recently_submitted_cache(recent_submission_window),
+            recent_submission_window,
         }
     }
 
@@ -511,6 +563,8 @@ impl ValidatorService {
             metrics,
             traffic_controller: _,
             client_id_source: _,
+            recently_submitted: _,
+            recent_submission_window: _,
         } = self.clone();
         let transaction = request.into_inner();
         let epoch_store = state.load_epoch_store_one_call_per_task();
@@ -734,6 +788,7 @@ impl ValidatorService {
         // Total size of all transactions in the request.
         let mut total_size_bytes = 0;
         let mut expected_soft_bundle_gas_price = None;
+        let mut soft_bundle_digests = HashSet::new();
 
         let req_type = if is_ping_request {
             "ping"
@@ -765,6 +820,18 @@ impl ValidatorService {
             // Ok to fail the request when any transaction is invalid.
             let tx_size = transaction.validity_check(&epoch_store.tx_validity_check_context())?;
             let tx_digest = *transaction.digest();
+
+            if is_soft_bundle_request {
+                fp_ensure!(
+                    soft_bundle_digests.insert(tx_digest),
+                    RtdErrorKind::UserInputError {
+                        error: UserInputError::RepeatedTransactionInSoftBundle {
+                            digest: tx_digest,
+                        },
+                    }
+                    .into()
+                );
+            }
 
             if is_soft_bundle_request {
                 let gas_price = transaction.data().transaction_data().gas_price();
@@ -861,6 +928,53 @@ impl ValidatorService {
                 );
                 continue;
             }
+
+            let consensus_key = SequencedConsensusTransactionKey::External(
+                ConsensusTransactionKey::Certificate(tx_digest),
+            );
+            if epoch_store.is_consensus_message_processed(&consensus_key)? {
+                metrics
+                    .submission_suppressed_already_processed
+                    .with_label_values(&[req_type])
+                    .inc();
+                results[idx] = Some(SubmitTxResult::Rejected {
+                    error: RtdErrorKind::TransactionProcessing {
+                        digest: tx_digest,
+                        status: "sequenced by consensus".to_string(),
+                    }
+                    .into(),
+                });
+                debug!(
+                    ?tx_digest,
+                    "handle_submit_transaction: consensus message already processed"
+                );
+                continue;
+            }
+
+            if let Some(recorded_at) = self.recently_submitted.get(&tx_digest)
+                && recorded_at.elapsed() < self.recent_submission_window
+            {
+                metrics
+                    .submission_suppressed_recently_submitted
+                    .with_label_values(&[req_type])
+                    .inc();
+                metrics
+                    .recently_submitted_resubmission_interval
+                    .observe(recorded_at.elapsed().as_secs_f64());
+                results[idx] = Some(SubmitTxResult::Rejected {
+                    error: RtdErrorKind::TransactionProcessing {
+                        digest: tx_digest,
+                        status: "recently submitted".to_string(),
+                    }
+                    .into(),
+                });
+                debug!(?tx_digest, "handle_submit_transaction: recently submitted");
+                continue;
+            }
+            self.recently_submitted.insert(tx_digest, Instant::now());
+            metrics
+                .recently_submitted_cache_size
+                .set(self.recently_submitted.entry_count() as i64);
 
             debug!(
                 ?tx_digest,
@@ -969,7 +1083,20 @@ impl ValidatorService {
             .with_label_values(&[req_type])
             .start_timer();
 
-        let consensus_positions = if is_soft_bundle_request || is_ping_request {
+        let group_tx_meta = if is_soft_bundle_request {
+            vec![transaction_indexes
+                .into_iter()
+                .zip(tx_digests)
+                .collect::<Vec<_>>();]
+        } else {
+            transaction_indexes
+                .into_iter()
+                .zip(tx_digests)
+                .map(|pair| vec![pair])
+                .collect::<Vec<_>>()
+        };
+
+        let group_results = if is_soft_bundle_request || is_ping_request {
             // We only allow the `consensus_transactions` to be empty for ping requests. This is how it should and is be treated from the downstream components.
             // For any other case, having an empty `consensus_transactions` vector is an invalid state and we should have never reached at this point.
             assert!(
@@ -984,12 +1111,14 @@ impl ValidatorService {
                     .map(|t| t.local_display())
                     .join(", ")
             );
-            self.handle_submit_to_consensus_for_position(
-                consensus_transactions,
-                &epoch_store,
-                submitter_client_addr,
-            )
-            .await?
+            vec![
+                self.handle_submit_to_consensus_for_position(
+                    consensus_transactions,
+                    &epoch_store,
+                    submitter_client_addr,
+                )
+                .await,
+            ]
         } else {
             let futures = consensus_transactions.into_iter().map(|t| {
                 debug!(
@@ -1003,32 +1132,55 @@ impl ValidatorService {
                     submitter_client_addr,
                 )
             });
-            future::try_join_all(futures)
-                .await?
-                .into_iter()
-                .flatten()
-                .collect()
+            future::join_all(futures).await
         };
 
         if is_ping_request {
             // For ping requests, return the special consensus position.
+            let consensus_positions = group_results
+                .into_iter()
+                .next()
+                .expect("ping request must have one submission group")?;
             assert_eq!(consensus_positions.len(), 1);
             results.push(Some(SubmitTxResult::Submitted {
                 consensus_position: consensus_positions[0],
             }));
         } else {
-            // Otherwise, return the consensus position for each transaction.
-            for ((idx, tx_digest), consensus_position) in transaction_indexes
-                .into_iter()
-                .zip(tx_digests)
-                .zip(consensus_positions)
-            {
-                debug!(
-                    ?tx_digest,
-                    "handle_submit_transaction: submitted consensus transaction at {}",
-                    consensus_position,
-                );
-                results[idx] = Some(SubmitTxResult::Submitted { consensus_position });
+            for (group_result, txns_meta) in group_results.into_iter().zip(group_tx_meta) {
+                match group_result {
+                    Ok(consensus_positions) => {
+                        for ((idx, tx_digest), consensus_position) in
+                            txns_meta.into_iter().zip(consensus_positions)
+                        {
+                            debug!(
+                                ?tx_digest,
+                                "handle_submit_transaction: submitted consensus transaction at {}",
+                                consensus_position,
+                            );
+                            results[idx] = Some(SubmitTxResult::Submitted { consensus_position });
+                        }
+                    }
+                    Err(error) => {
+                        let RtdErrorKind::TransactionProcessing { status, .. } =
+                            error.as_inner().clone()
+                        else {
+                            return Err(error);
+                        };
+                        for (idx, tx_digest) in txns_meta {
+                            metrics
+                                .submission_suppressed_already_processed
+                                .with_label_values(&[req_type])
+                                .inc();
+                            results[idx] = Some(SubmitTxResult::Rejected {
+                                error: RtdErrorKind::TransactionProcessing {
+                                    digest: tx_digest,
+                                    status: status.clone(),
+                                }
+                                .into(),
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -1218,7 +1370,7 @@ impl ValidatorService {
         consensus_transactions: Vec<ConsensusTransaction>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
         submitter_client_addr: Option<IpAddr>,
-    ) -> Result<Vec<ConsensusPosition>, tonic::Status> {
+    ) -> RtdResult<Vec<ConsensusPosition>> {
         let (tx_consensus_positions, rx_consensus_positions) = oneshot::channel();
 
         {
@@ -1229,9 +1381,8 @@ impl ValidatorService {
                 return Err(RtdErrorKind::ValidatorHaltedAtEpochEnd.into());
             }
 
-            // Submit to consensus and wait for position, we do not check if tx
-            // has been processed by consensus already as this method is called
-            // to get back a consensus position.
+            // Submit to consensus and wait for a position. A transaction already
+            // processed by consensus returns a retriable processing error instead.
             let _metrics_guard = self.metrics.consensus_latency.start_timer();
 
             self.consensus_adapter.submit_batch(
@@ -1243,11 +1394,12 @@ impl ValidatorService {
             )?;
         }
 
-        Ok(rx_consensus_positions.await.map_err(|e| {
+        rx_consensus_positions.await.map_err(|e| {
             RtdErrorKind::FailedToSubmitToConsensus(format!(
                 "Failed to get consensus position: {e}"
             ))
-        })?)
+            .into()
+        })?
     }
 
     async fn handle_submit_to_consensus(

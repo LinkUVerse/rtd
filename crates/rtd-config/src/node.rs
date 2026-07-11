@@ -207,6 +207,10 @@ pub struct NodeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_time_observer_config: Option<ExecutionTimeObserverConfig>,
 
+    /// Window in milliseconds during which a transaction enters consensus at most once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recent_submission_dedup_window_ms: Option<u64>,
+
     /// Allow overriding the chain for testing purposes. For instance, it allows you to
     /// create a test network that believes it is mainnet or testnet. Attempting to
     /// override this value on production networks will result in an error.
@@ -812,6 +816,11 @@ impl Config for NodeConfig {}
 impl NodeConfig {
     pub fn protocol_key_pair(&self) -> &AuthorityKeyPair {
         self.protocol_key_pair.authority_keypair()
+    }
+
+    /// Duplicate transaction submissions are suppressed for this duration.
+    pub fn recent_submission_dedup_window(&self) -> Duration {
+        Duration::from_millis(self.recent_submission_dedup_window_ms.unwrap_or(1_000))
     }
 
     pub fn worker_key_pair(&self) -> &NetworkKeyPair {

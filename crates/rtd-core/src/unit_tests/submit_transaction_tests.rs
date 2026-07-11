@@ -44,6 +44,23 @@ struct TestContext {
 
 impl TestContext {
     async fn new() -> Self {
+        Self::new_with_consensus(
+            true,
+            vec![
+                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
+                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
+                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
+                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
+                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
+            ],
+        )
+        .await
+    }
+
+    async fn new_with_consensus(
+        execute: bool,
+        block_status_receivers: Vec<crate::consensus_adapter::BlockStatusReceiver>,
+    ) -> Self {
         telemetry_subscribers::init_for_testing();
         let (sender, keypair) = get_account_key_pair();
         let gas_object = Object::with_owner_for_testing(sender);
@@ -53,20 +70,11 @@ impl TestContext {
             .build()
             .await;
 
-        // Create a server with mocked consensus.
-        // This ensures transactions submitted to consensus will get processed.
-        // We add extra mock responses to handle multiple transactions in tests
         let adapter = make_consensus_adapter_for_test(
             authority.clone(),
             HashSet::new(),
-            true,
-            vec![
-                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
-                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
-                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
-                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
-                with_block_status(BlockStatus::Sequenced(BlockRef::MIN)),
-            ],
+            execute,
+            block_status_receivers,
         );
         let server =
             AuthorityServer::new_for_test_with_consensus_adapter(authority.clone(), adapter);
@@ -129,6 +137,35 @@ async fn test_submit_transaction_success() {
         }
         _ => panic!("Expected Submitted response"),
     };
+}
+
+#[tokio::test]
+async fn test_duplicate_submission_suppressed_within_window() {
+    let test_context = TestContext::new_with_consensus(
+        false,
+        vec![with_block_status(BlockStatus::Sequenced(BlockRef::MIN))],
+    )
+    .await;
+    let transaction = test_context.build_test_transaction();
+
+    let first = test_context
+        .client
+        .submit_transaction(test_context.build_submit_request(transaction.clone()), None)
+        .await
+        .unwrap();
+    assert!(matches!(first.results[0], SubmitTxResult::Submitted { .. }));
+
+    let second = test_context
+        .client
+        .submit_transaction(test_context.build_submit_request(transaction), None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        second.results[0],
+        SubmitTxResult::Rejected { ref error }
+            if matches!(error.as_inner(), RtdErrorKind::TransactionProcessing { status, .. }
+                if status == "recently submitted")
+    ));
 }
 
 #[tokio::test]
@@ -287,6 +324,30 @@ async fn test_submit_transaction_already_executed() {
 }
 
 #[tokio::test]
+async fn test_submit_transaction_consensus_message_processed() {
+    let test_context = TestContext::new().await;
+    let transaction = test_context.build_test_transaction();
+    let tx_digest = *transaction.digest();
+    let request = test_context.build_submit_request(transaction);
+    test_context
+        .state
+        .epoch_store_for_testing()
+        .test_insert_user_signature(tx_digest, vec![]);
+
+    let response = test_context
+        .client
+        .submit_transaction(request, None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.results[0],
+        SubmitTxResult::Rejected { ref error }
+            if matches!(error.as_inner(), RtdErrorKind::TransactionProcessing { digest, .. }
+                if *digest == tx_digest)
+    ));
+}
+
+#[tokio::test]
 async fn test_submit_transaction_wrong_epoch() {
     let test_context = TestContext::new().await;
     test_context.state.reconfigure_for_testing().await;
@@ -374,7 +435,22 @@ async fn test_submit_batched_transactions() {
     let test_context = TestContext::new().await;
 
     let tx1 = test_context.build_test_transaction();
-    let tx2 = test_context.build_test_transaction();
+    let gas_object2 = Object::with_owner_for_testing(test_context.sender);
+    let gas_object_ref2 = gas_object2.compute_object_reference();
+    test_context.state.insert_genesis_object(gas_object2).await;
+    let tx2 = to_sender_signed_transaction(
+        TestTransactionBuilder::new(
+            test_context.sender,
+            gas_object_ref2,
+            test_context
+                .state
+                .reference_gas_price_for_testing()
+                .unwrap(),
+        )
+        .transfer_rtd(None, test_context.sender)
+        .build(),
+        &test_context.keypair,
+    );
 
     // Build request with batched transactions.
     let request = RawSubmitTxRequest {
@@ -491,7 +567,22 @@ async fn test_submit_soft_bundle_transactions() {
     let test_context = TestContext::new().await;
 
     let tx1 = test_context.build_test_transaction();
-    let tx2 = test_context.build_test_transaction();
+    let gas_object2 = Object::with_owner_for_testing(test_context.sender);
+    let gas_object_ref2 = gas_object2.compute_object_reference();
+    test_context.state.insert_genesis_object(gas_object2).await;
+    let tx2 = to_sender_signed_transaction(
+        TestTransactionBuilder::new(
+            test_context.sender,
+            gas_object_ref2,
+            test_context
+                .state
+                .reference_gas_price_for_testing()
+                .unwrap(),
+        )
+        .transfer_rtd(None, test_context.sender)
+        .build(),
+        &test_context.keypair,
+    );
 
     // Build request with batched transactions.
     let request = RawSubmitTxRequest {
@@ -524,6 +615,35 @@ async fn test_submit_soft_bundle_transactions() {
             _ => panic!("Expected Submitted status for all transactions"),
         }
     }
+}
+
+#[tokio::test]
+async fn test_submit_soft_bundle_with_repeated_transaction() {
+    let test_context = TestContext::new().await;
+    let tx = test_context.build_test_transaction();
+    let tx_digest = *tx.digest();
+    let request = RawSubmitTxRequest {
+        transactions: vec![
+            bcs::to_bytes(&tx).unwrap().into(),
+            bcs::to_bytes(&tx).unwrap().into(),
+        ],
+        submit_type: SubmitTxType::SoftBundle.into(),
+    };
+
+    let response = test_context
+        .client
+        .client()
+        .unwrap()
+        .submit_transaction(request)
+        .await;
+    assert!(response.is_err());
+    let error: RtdError = response.unwrap_err().into();
+    assert!(matches!(
+        error.into_inner(),
+        RtdErrorKind::UserInputError {
+            error: UserInputError::RepeatedTransactionInSoftBundle { digest }
+        } if digest == tx_digest
+    ));
 }
 
 #[tokio::test]
@@ -598,4 +718,57 @@ async fn test_submit_soft_bundle_transactions_with_already_executed() {
         }
         _ => panic!("Expected Submitted status for second transaction"),
     }
+}
+
+#[tokio::test]
+async fn test_submit_soft_bundle_with_consensus_processed_transaction() {
+    let test_context = TestContext::new().await;
+
+    let tx1 = test_context.build_test_transaction();
+    let tx1_digest = *tx1.digest();
+    test_context
+        .state
+        .epoch_store_for_testing()
+        .test_insert_user_signature(tx1_digest, vec![]);
+
+    let gas_object2 = Object::with_owner_for_testing(test_context.sender);
+    let gas_object_ref2 = gas_object2.compute_object_reference();
+    test_context.state.insert_genesis_object(gas_object2).await;
+    let tx2 = to_sender_signed_transaction(
+        TestTransactionBuilder::new(
+            test_context.sender,
+            gas_object_ref2,
+            test_context
+                .state
+                .reference_gas_price_for_testing()
+                .unwrap(),
+        )
+        .transfer_rtd(None, test_context.sender)
+        .build(),
+        &test_context.keypair,
+    );
+
+    let response = test_context
+        .client
+        .client()
+        .unwrap()
+        .submit_transaction(RawSubmitTxRequest {
+            transactions: vec![
+                bcs::to_bytes(&tx1).unwrap().into(),
+                bcs::to_bytes(&tx2).unwrap().into(),
+            ],
+            submit_type: SubmitTxType::SoftBundle.into(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert!(matches!(
+        response.results[0].inner,
+        Some(rtd_types::messages_grpc::RawValidatorSubmitStatus::Rejected(_))
+    ));
+    assert!(matches!(
+        response.results[1].inner,
+        Some(rtd_types::messages_grpc::RawValidatorSubmitStatus::Submitted(_))
+    ));
 }
