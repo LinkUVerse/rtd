@@ -550,55 +550,55 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 549	007b06a11fad0e7abb729c30f30297be0b63ae5b	2026-02-10	fix(consistency): update formal snapshot to read new checkpoint format (#25376)	REVIEWED	EXCLUDE_POST_FORK		依赖 fork 后的新 checkpoint 格式与 formal snapshot 路径。
 550	b4bece7094fef8ed0859583ef383db5ceb810630	2026-02-10	Add metrics for funds scheduler	REVIEWED	EXCLUDE_NON_CODE		仅指标。
 551	e137532aea4b6087202a103b4be4baafb9b47a6b	2026-02-10	Certora audit fix: L-03 (#25396)	APPLIED	MERGE	088efe7bfc5f5499d58b4c944adbd909fed7d3cb	修复多地址 blocklist payload 的偏移累加错误，避免名单被错误解码。
-552	c03fabb7f91c19fa04036b63c2a3b4d06d6e43e2	2026-02-10	rpc: be more resilient in simulate and also expose suggested_gas_price (#25407)	UNREVIEWED			
-553	d1dae0a6d10499ae2cf96d2ea8a1f9cb99ed43f8	2026-02-10	Refactoring cli/config for indexers (#25394)	UNREVIEWED			
-554	eae3c89034d736bde54cdeaee12bc2ebe0206863	2026-02-10	Print tx digest when missing	UNREVIEWED			
-555	77e74b01af6217c7c867a00d0f05a09237efcd92	2026-02-10	Do not panic when missing effects	UNREVIEWED			
-556	ac69424631d334edc647e89be4230d75b09a860c	2026-02-10	cli(ptb): pure type inference looks through references (#25405)	UNREVIEWED			
-557	7c010d4978940bcf47c087a4f6b02a10904e944f	2026-02-10	rpc: standardize on a single lower checkpoint watermark (#25397)	UNREVIEWED			
-558	89d40ca4fdedd933ec7cd643dc1b1608e42e6ab0	2026-02-11	Reduce transaction submission jitters (#25348)	UNREVIEWED			
-559	d922b2e08e7eecba8be14c8e5274f4fc133754fc	2026-02-11	docs: properly enable indexer pruning in config (#25326)	UNREVIEWED			
-560	6ac0a5343e4056107d97038c76556178fd3b89ba	2026-02-11	fix: skip docs-change-notify dispatch on push events (#25416)	UNREVIEWED			
-561	2d1485c6c856a4aecbd8162761853dc1b9bb72b0	2026-02-11	[move-compiler] Fix unbound module in unit test generation (#25381)	UNREVIEWED			
-562	a8a3e92a5d48fe096030e3d1aa63c86a3e43a402	2026-02-11	sdk: update sdk to include revert for 9b29d604 (#25420)	UNREVIEWED			
-563	56fbfa6cacf913d26fccc503e8f7a043d57ff031	2026-02-11	[move-unit-tests] Kill move unit test extension hook (#25418)	UNREVIEWED			
+552	c03fabb7f91c19fa04036b63c2a3b4d06d6e43e2	2026-02-10	rpc: be more resilient in simulate and also expose suggested_gas_price (#25407)	REVIEWED	EXCLUDE_FEATURE		模拟 RPC/SDK 更新并新增 suggested gas price 字段。
+553	d1dae0a6d10499ae2cf96d2ea8a1f9cb99ed43f8	2026-02-10	Refactoring cli/config for indexers (#25394)	REVIEWED	EXCLUDE_FEATURE		indexer CLI/config 重构。
+554	eae3c89034d736bde54cdeaee12bc2ebe0206863	2026-02-10	Print tx digest when missing	REVIEWED	EXCLUDE_NON_CODE		仅日志。
+555	77e74b01af6217c7c867a00d0f05a09237efcd92	2026-02-10	Do not panic when missing effects	REVIEWED	EXCLUDE_POST_FORK		依赖上游已移除 fast-path/preconsensus 路径的 execution-cache 改造。
+556	ac69424631d334edc647e89be4230d75b09a860c	2026-02-10	cli(ptb): pure type inference looks through references (#25405)	REVIEWED	EXCLUDE_FEATURE		CLI PTB type inference 能力扩展。
+557	7c010d4978940bcf47c087a4f6b02a10904e944f	2026-02-10	rpc: standardize on a single lower checkpoint watermark (#25397)	REVIEWED	EXCLUDE_FEATURE		RPC watermark 语义/API 迁移。
+558	89d40ca4fdedd933ec7cd643dc1b1608e42e6ab0	2026-02-11	Reduce transaction submission jitters (#25348)	REVIEWED	EXCLUDE_FEATURE		TransactionDriver 调度/退避架构调整。
+559	d922b2e08e7eecba8be14c8e5274f4fc133754fc	2026-02-11	docs: properly enable indexer pruning in config (#25326)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+560	6ac0a5343e4056107d97038c76556178fd3b89ba	2026-02-11	fix: skip docs-change-notify dispatch on push events (#25416)	REVIEWED	EXCLUDE_NON_CODE		仅 workflow。
+561	2d1485c6c856a4aecbd8162761853dc1b9bb72b0	2026-02-11	[move-compiler] Fix unbound module in unit test generation (#25381)	REVIEWED	EXCLUDE_NON_CODE		仅 Move 单测生成诊断。
+562	a8a3e92a5d48fe096030e3d1aa63c86a3e43a402	2026-02-11	sdk: update sdk to include revert for 9b29d604 (#25420)	REVIEWED	EXCLUDE_FEATURE		SDK 版本/行为更新。
+563	56fbfa6cacf913d26fccc503e8f7a043d57ff031	2026-02-11	[move-unit-tests] Kill move unit test extension hook (#25418)	REVIEWED	EXCLUDE_FEATURE		Move 单测接口调整。
 564	3d6eb7ba5a3d0015ef7bc13559669822b6fb5fa8	2026-02-11	Certora audit fix: L-04 (#25399)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	禁用 bridge authority HTTP 重定向，防止请求越界转发。
 565	f531d4321f0210add6e5796d53a8b0018841f9f7	2026-02-11	Certora audit fix: L-05 (#25401)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	先读取 finalized head 再读取 receipt，避免 reorg finality 竞态。
 566	e79ff6eed1076fc4232f35e9e56c269b1a9f7d96	2026-02-11	Certora audit fix: L-14 (#25404)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	脱敏 bridge HTTP 错误响应并返回正确状态码，避免泄露内部详情。
 567	a329bf07338628c491f3dbb29fb8bdf13e90f16b	2026-02-11	Certora audit fix: L-11 (#25403)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	限制 authority 响应体至 1 MiB，避免过大响应耗尽客户端资源。
 568	07719b68bfac94bd7481b190329010c487997ad7	2026-02-11	Certora audit fix: L-10 (#25402)	APPLIED	MERGE	937a08296afcb9fd5f0399b5e9065472172f25a1	限制 bridge HTTP URI/body 声明长度，避免 oversized request 资源耗尽。
-569	2adf3845064a4f612073c86e9c3331833d1452c9	2026-02-11	rpc: remove dead code in reader (#25400)	UNREVIEWED			
-570	3d2c959a2c49c6f5313db481b99bb578d274968e	2026-02-11	Fix error message matching in tests	UNREVIEWED			
-571	28c2dc551a04f8a25c97e954f2d23e2b8568282d	2026-02-11	Split failure count	UNREVIEWED			
-572	b16a5e2d6aa0045acbbfe527412d52c599fd4de7	2026-02-12	Update Deepbook Docs (#25424)	UNREVIEWED			
-573	6a6046e81f9e91864b55e71f8d12e1ca9d67018b	2026-02-12	docs: Misc site fixes (#25426)	UNREVIEWED			
-574	23e0e495fdb83196d6f966776b4145abbca3583c	2026-02-12	[move][cleanup] Fix some release build warnings (#25437)	UNREVIEWED			
-575	e5b13459e4a6d3a99361c5c49751bc4ed2824f3a	2026-02-12	impl Tracer for &mut Tracer (#25410)	UNREVIEWED			
-576	b250096b4e71d45d27d1aef1c79f3766931b5711	2026-02-12	Enable ephemeral --dump-bytecode-as-base64 (#25082)	UNREVIEWED			
-577	602a46a46d3b612fb519f8bc0597ea962c699ebf	2026-02-12	sui-indexer-alt: add timeout error tracing (#25219)	UNREVIEWED			
-578	df75a84c17959dae26313631aa49290c9a446f54	2026-02-12	[Move] Ristretto255 group ops (#25321)	UNREVIEWED			
-579	515ed5897355859563409ef14099d18647c00517	2026-02-12	Set watchdog timeout to 60s (#25447)	UNREVIEWED			
-580	fe46d1438f248cecb3af654270825f483613001c	2026-02-13	Don't overwrite MSIM_WATCHDOG_TIMEOUT_MS (#25448)	UNREVIEWED			
-581	6ae3ef05d360177e693a7f46cc4fc74e55c3b690	2026-02-13	Fix simtest build with tidehunter (#25446)	UNREVIEWED			
-582	b26b71b23a0649bda59a432bb63c18d684f3d5c0	2026-02-13	Move post_process_one_tx off critical path and batch index writes (#25346)	UNREVIEWED			
-583	68db897d77a197e1b3cddbd7a295fedd5cc11797	2026-02-13	Add per-commit binary logging for congestion control (#25398)	UNREVIEWED			
-584	655576caa3d7faaed39ebbc15d1bcc91d0761aee	2026-02-13	Move ristretto to v112 (#25449)	UNREVIEWED			
-585	3ee7423ad00efcb3b42893b7603a5a30c2db6cf9	2026-02-13	Sui v1.66.0 Framework Bytecode snapshot (#25461)	UNREVIEWED			
-586	253e76c16142c42fc7c6d8979cc19886ac2ab451	2026-02-13	Add support for multiple address types to discovery protocol (#25306)	UNREVIEWED			
-587	e3406bd4d9fda99ab28bb014e88f9778bec13cd8	2026-02-13	Sui v1.67.0 Version Bump (#25462)	UNREVIEWED			
-588	e9c5d59ee86e3f854c96232fc1b7733998bee251	2026-02-13	fix(indexer): improve ingestion client arg validation (#25434)	UNREVIEWED			
-589	9a6d1bc9925ade12f0778005489d02738300d67d	2026-02-13	docs: Add additional build error checking + fix all misc build warnings  (#25441)	UNREVIEWED			
-590	21c7520a08a795880f9530eb05871a0330d78d77	2026-02-13	docs: remove unnecessary spelling CI check (#25466)	UNREVIEWED			
-591	cd7adf3ac9f1bbbd4a98c30ddd962ffae9140307	2026-02-13	Additional schema changes per pull/25143 (#25438)	UNREVIEWED			
-592	1a48bedd78292113431bb05f8ef40eda9d3b5107	2026-02-13	Add V2 bridge CLI commands (deposit-on-eth, deposit-on-sui) (#25378)	UNREVIEWED			
+569	2adf3845064a4f612073c86e9c3331833d1452c9	2026-02-11	rpc: remove dead code in reader (#25400)	REVIEWED	EXCLUDE_NON_CODE		仅 dead-code 清理。
+570	3d2c959a2c49c6f5313db481b99bb578d274968e	2026-02-11	Fix error message matching in tests	REVIEWED	EXCLUDE_NON_CODE		仅测试。
+571	28c2dc551a04f8a25c97e954f2d23e2b8568282d	2026-02-11	Split failure count	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark 指标。
+572	b16a5e2d6aa0045acbbfe527412d52c599fd4de7	2026-02-12	Update Deepbook Docs (#25424)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+573	6a6046e81f9e91864b55e71f8d12e1ca9d67018b	2026-02-12	docs: Misc site fixes (#25426)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+574	23e0e495fdb83196d6f966776b4145abbca3583c	2026-02-12	[move][cleanup] Fix some release build warnings (#25437)	REVIEWED	EXCLUDE_NON_CODE		仅编译告警清理。
+575	e5b13459e4a6d3a99361c5c49751bc4ed2824f3a	2026-02-12	impl Tracer for &mut Tracer (#25410)	REVIEWED	EXCLUDE_FEATURE		Tracer API 扩展。
+576	b250096b4e71d45d27d1aef1c79f3766931b5711	2026-02-12	Enable ephemeral --dump-bytecode-as-base64 (#25082)	REVIEWED	EXCLUDE_FEATURE		新增 ephemeral CLI 功能。
+577	602a46a46d3b612fb519f8bc0597ea962c699ebf	2026-02-12	sui-indexer-alt: add timeout error tracing (#25219)	REVIEWED	EXCLUDE_NON_CODE		仅超时诊断 tracing。
+578	df75a84c17959dae26313631aa49290c9a446f54	2026-02-12	[Move] Ristretto255 group ops (#25321)	REVIEWED	EXCLUDE_FEATURE		新增 Move 加密群运算。
+579	515ed5897355859563409ef14099d18647c00517	2026-02-12	Set watchdog timeout to 60s (#25447)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest watchdog 配置。
+580	fe46d1438f248cecb3af654270825f483613001c	2026-02-13	Don't overwrite MSIM_WATCHDOG_TIMEOUT_MS (#25448)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest 环境变量。
+581	6ae3ef05d360177e693a7f46cc4fc74e55c3b690	2026-02-13	Fix simtest build with tidehunter (#25446)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest 构建。
+582	b26b71b23a0649bda59a432bb63c18d684f3d5c0	2026-02-13	Move post_process_one_tx off critical path and batch index writes (#25346)	REVIEWED	EXCLUDE_FEATURE		大规模异步 post-processing/index 写入架构改造。
+583	68db897d77a197e1b3cddbd7a295fedd5cc11797	2026-02-13	Add per-commit binary logging for congestion control (#25398)	REVIEWED	EXCLUDE_NON_CODE		仅日志。
+584	655576caa3d7faaed39ebbc15d1bcc91d0761aee	2026-02-13	Move ristretto to v112 (#25449)	REVIEWED	EXCLUDE_POST_FORK		protocol v112 功能。
+585	3ee7423ad00efcb3b42893b7603a5a30c2db6cf9	2026-02-13	Sui v1.66.0 Framework Bytecode snapshot (#25461)	REVIEWED	EXCLUDE_POST_FORK		fork 后 framework/protocol 快照。
+586	253e76c16142c42fc7c6d8979cc19886ac2ab451	2026-02-13	Add support for multiple address types to discovery protocol (#25306)	REVIEWED	EXCLUDE_FEATURE		discovery 协议功能扩展。
+587	e3406bd4d9fda99ab28bb014e88f9778bec13cd8	2026-02-13	Sui v1.67.0 Version Bump (#25462)	REVIEWED	EXCLUDE_NON_CODE		版本更新。
+588	e9c5d59ee86e3f854c96232fc1b7733998bee251	2026-02-13	fix(indexer): improve ingestion client arg validation (#25434)	REVIEWED	EXCLUDE_POST_FORK		配置校验针对 fork 后新增多 remote-source 参数。
+589	9a6d1bc9925ade12f0778005489d02738300d67d	2026-02-13	docs: Add additional build error checking + fix all misc build warnings  (#25441)	REVIEWED	EXCLUDE_NON_CODE		文档/告警。
+590	21c7520a08a795880f9530eb05871a0330d78d77	2026-02-13	docs: remove unnecessary spelling CI check (#25466)	REVIEWED	EXCLUDE_NON_CODE		仅 CI。
+591	cd7adf3ac9f1bbbd4a98c30ddd962ffae9140307	2026-02-13	Additional schema changes per pull/25143 (#25438)	REVIEWED	EXCLUDE_POST_FORK		依赖 464 的 fork 后 KV schema。
+592	1a48bedd78292113431bb05f8ef40eda9d3b5107	2026-02-13	Add V2 bridge CLI commands (deposit-on-eth, deposit-on-sui) (#25378)	REVIEWED	EXCLUDE_FEATURE		新增 bridge V2 CLI。
 593	87665b0614ff7f3d0d443e386a6d03b0e380ae0a	2026-02-13	reader: increase bigtable/kv client max decoding size (#25465)	APPLIED	MERGE	8a6966dba24a9df5da3d28f16873fa799161d60f	仅采用 32 MiB 默认解码上限以修复大响应失败；未带入上游新增 CLI 配置参数。
-594	2ff70117ac00a1093a69403b3c34dff4d4508ed9	2026-02-13	[graphql-alt] Handle transaction execution/simulation errors as BAD_USER_INPUT (#25261)	UNREVIEWED			
-595	a5f471eb7099d6178daf02f162ab19c6e3b1af49	2026-02-16	Add default timeout to sim_tests (#25483)	UNREVIEWED			
-596	ca2d6aa0a66bfd73774260d08921299c5fc6efaa	2026-02-16	Fix EventServiceClient connection hang in authenticated_events tests (#25482)	UNREVIEWED			
-597	36fe351327d23dddf08b9e160a9f6eb20dd75c9b	2026-02-17	removed unused .gitmodules entry (#25063)	UNREVIEWED			
-598	0653df00711b95319c3e340703f86ef12c0e2899	2026-02-17	[cli] Fixes pretty printing for tx output (#25480)	UNREVIEWED			
-599	5b84642b11f5c97ee185362c1e049a4774ea0434	2026-02-17	add protocol config to kv store (#25467)	UNREVIEWED			
-600	fc8be700f021a5def82b8d397a272206bc4a314c	2026-02-17	[docs] chore: update hello world frontend page (#25493)	UNREVIEWED			
+594	2ff70117ac00a1093a69403b3c34dff4d4508ed9	2026-02-13	[graphql-alt] Handle transaction execution/simulation errors as BAD_USER_INPUT (#25261)	REVIEWED	EXCLUDE_FEATURE		GraphQL error/API 语义调整。
+595	a5f471eb7099d6178daf02f162ab19c6e3b1af49	2026-02-16	Add default timeout to sim_tests (#25483)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest。
+596	ca2d6aa0a66bfd73774260d08921299c5fc6efaa	2026-02-16	Fix EventServiceClient connection hang in authenticated_events tests (#25482)	REVIEWED	EXCLUDE_NON_CODE		仅 authenticated-events simtest 连接重试。
+597	36fe351327d23dddf08b9e160a9f6eb20dd75c9b	2026-02-17	removed unused .gitmodules entry (#25063)	REVIEWED	EXCLUDE_NON_CODE		仅 git 配置。
+598	0653df00711b95319c3e340703f86ef12c0e2899	2026-02-17	[cli] Fixes pretty printing for tx output (#25480)	REVIEWED	EXCLUDE_NON_CODE		CLI 展示格式。
+599	5b84642b11f5c97ee185362c1e049a4774ea0434	2026-02-17	add protocol config to kv store (#25467)	REVIEWED	EXCLUDE_FEATURE		KV store protocol config 功能。
+600	fc8be700f021a5def82b8d397a272206bc4a314c	2026-02-17	[docs] chore: update hello world frontend page (#25493)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
 601	08d5d54c4fa14077c2b633984f91d420910f8e16	2026-02-17	Skip wait for settment tx key if already executed (#25408)	UNREVIEWED			
 602	1fe80ff91198d2d44b409db59608b71fe0ce5ec0	2026-02-17	bigtable connection pool (#25495)	UNREVIEWED			
 603	77206e08eb2c0929d57e4daa91cdc9d5e5ea1a61	2026-02-18	[move-ide] Fixed diagnostics display on first open (#25500)	UNREVIEWED			
