@@ -32,9 +32,13 @@ pub(crate) struct WithdrawReservations {
     pub senders: Vec<oneshot::Sender<ScheduleResult>>,
 }
 
+type Innards = BTreeMap<String, Arc<dyn FundsWithdrawSchedulerTrait>>;
+
 #[derive(Clone)]
 pub(crate) struct FundsWithdrawScheduler {
-    innards: BTreeMap<String, Arc<dyn FundsWithdrawSchedulerTrait>>,
+    // Keep task state separate from the channel senders so the receivers close when this
+    // scheduler is dropped.
+    innards: Arc<Innards>,
     /// Use channels to process withdraws and settlements asynchronously without blocking the caller.
     withdraw_sender: UnboundedSender<WithdrawReservations>,
     settlement_sender: UnboundedSender<FundsSettlement>,
@@ -90,7 +94,7 @@ impl FundsWithdrawScheduler {
         // TODO: Currently, scheduling will be as slow as the slowest scheduler (i.e., the naive scheduler).
         // Once we ensure that the eager scheduler is correct, it will become the only scheduler needed here,
         // and we would only run the naive scheduler in tests for correctness verification.
-        let innards = BTreeMap::from([
+        let innards = Arc::new(BTreeMap::from([
             (
                 "naive".to_string(),
                 NaiveFundsWithdrawScheduler::new(funds_read.clone(), starting_accumulator_version)
@@ -101,23 +105,24 @@ impl FundsWithdrawScheduler {
                 EagerFundsWithdrawScheduler::new(funds_read, starting_accumulator_version)
                     as Arc<dyn FundsWithdrawSchedulerTrait>,
             ),
-        ]);
+        ]));
         let (withdraw_sender, withdraw_receiver) =
             unbounded_channel("withdraw_scheduler_withdraws");
         let (settlement_sender, settlement_receiver) =
             unbounded_channel("withdraw_scheduler_settlements");
-        let scheduler = Self {
+        tokio::spawn(Self::process_withdraw_task(
+            innards.clone(),
+            withdraw_receiver,
+        ));
+        tokio::spawn(Self::process_settlement_task(
+            innards.clone(),
+            settlement_receiver,
+        ));
+        Self {
             innards,
             withdraw_sender,
             settlement_sender,
-        };
-        tokio::spawn(scheduler.clone().process_withdraw_task(withdraw_receiver));
-        tokio::spawn(
-            scheduler
-                .clone()
-                .process_settlement_task(settlement_receiver),
-        );
-        scheduler
+        }
     }
 
     /// This function will be called at most once per consensus commit batch that all reads the same root accumulator version.
@@ -145,7 +150,7 @@ impl FundsWithdrawScheduler {
     }
 
     pub fn close_epoch(&self) {
-        for (name, scheduler) in &self.innards {
+        for (name, scheduler) in self.innards.iter() {
             debug!("Closing epoch for scheduler: {}", name);
             scheduler.close_epoch();
         }
@@ -172,7 +177,7 @@ impl FundsWithdrawScheduler {
     }
 
     async fn process_withdraw_task(
-        self,
+        innards: Arc<Innards>,
         mut withdraw_receiver: UnboundedReceiver<WithdrawReservations>,
     ) {
         while let Some(event) = withdraw_receiver.recv().await {
@@ -188,7 +193,7 @@ impl FundsWithdrawScheduler {
 
             // Create intermediate channels for each scheduler
             let mut scheduler_receivers = BTreeMap::new();
-            for (name, scheduler) in &self.innards {
+            for (name, scheduler) in innards.iter() {
                 let (intermediate_senders, receivers): (Vec<_>, Vec<_>) =
                     withdraws.iter().map(|_| oneshot::channel()).unzip();
                 scheduler_receivers.insert(name.clone(), receivers);
@@ -268,7 +273,7 @@ impl FundsWithdrawScheduler {
     }
 
     async fn process_settlement_task(
-        self,
+        innards: Arc<Innards>,
         mut settlement_receiver: UnboundedReceiver<FundsSettlement>,
     ) {
         while let Some(settlement) = settlement_receiver.recv().await {
@@ -277,7 +282,7 @@ impl FundsWithdrawScheduler {
                 "Settling funds changes: {:?}",
                 settlement.funds_changes,
             );
-            for scheduler in self.innards.values() {
+            for scheduler in innards.values() {
                 scheduler.settle_funds(settlement.clone()).await;
             }
         }
