@@ -296,6 +296,7 @@ where
             commit_vote_monitor.clone(),
             block_verifier.clone(),
             transaction_certifier.clone(),
+            round_tracker.clone(),
             dag_state.clone(),
             sync_last_known_own_block,
         );
@@ -307,6 +308,7 @@ where
             commit_consumer_monitor.clone(),
             block_verifier.clone(),
             transaction_certifier.clone(),
+            round_tracker.clone(),
             network_client.clone(),
             dag_state.clone(),
         )
