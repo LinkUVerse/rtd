@@ -21,8 +21,9 @@ mod checked {
         TransactionDataAPI, TransactionKind,
     };
     use rtd_types::{
-        RTD_AUTHENTICATOR_STATE_OBJECT_ID, RTD_CLOCK_OBJECT_ID, RTD_CLOCK_OBJECT_SHARED_VERSION,
-        RTD_RANDOMNESS_STATE_OBJECT_ID,
+        RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, RTD_BRIDGE_OBJECT_ID,
+        RTD_CLOCK_OBJECT_ID, RTD_COIN_REGISTRY_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID,
+        RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
     };
     use rtd_types::{
         base_types::{SequenceNumber, RtdAddress},
@@ -508,56 +509,43 @@ mod checked {
                 };
             }
             InputObjectKind::SharedMoveObject {
-                id: RTD_CLOCK_OBJECT_ID,
-                initial_shared_version: RTD_CLOCK_OBJECT_SHARED_VERSION,
-                mutability: SharedObjectMutability::Mutable,
-            } => {
-                // Only system transactions can accept the Clock
-                // object as a mutable parameter.
-                if system_transaction {
-                    return Ok(());
-                } else {
-                    return Err(UserInputError::ImmutableParameterExpectedError {
-                        object_id: RTD_CLOCK_OBJECT_ID,
-                    });
-                }
-            }
-            InputObjectKind::SharedMoveObject {
-                id: RTD_AUTHENTICATOR_STATE_OBJECT_ID,
-                ..
-            } => {
-                if system_transaction {
-                    return Ok(());
-                } else {
-                    return Err(UserInputError::InaccessibleSystemObject {
-                        object_id: RTD_AUTHENTICATOR_STATE_OBJECT_ID,
-                    });
-                }
-            }
-            InputObjectKind::SharedMoveObject {
-                id: RTD_RANDOMNESS_STATE_OBJECT_ID,
-                mutability: SharedObjectMutability::Mutable,
-                ..
-            } => {
-                // Only system transactions can accept the Random
-                // object as a mutable parameter.
-                if system_transaction {
-                    return Ok(());
-                } else {
-                    return Err(UserInputError::ImmutableParameterExpectedError {
-                        object_id: RTD_RANDOMNESS_STATE_OBJECT_ID,
-                    });
-                }
-            }
-            InputObjectKind::SharedMoveObject {
                 id: object_id,
                 initial_shared_version: input_initial_shared_version,
-                ..
+                mutability,
             } => {
                 fp_ensure!(
                     object.version() < SequenceNumber::MAX,
                     UserInputError::InvalidSequenceNumber
                 );
+
+                if object_id.is_system_object() {
+                    // System transactions can access system objects without further validation
+                    // (e.g., AuthenticatorStateUpdate uses a placeholder initial_shared_version).
+                    if system_transaction {
+                        return Ok(());
+                    }
+
+                    match (object_id, mutability) {
+                        // System objects that can be taken mutably
+                        (RTD_SYSTEM_STATE_OBJECT_ID, _)
+                        | (RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, _)
+                        | (RTD_COIN_REGISTRY_OBJECT_ID, _)
+                        | (RTD_DENY_LIST_OBJECT_ID, _)
+                        | (RTD_BRIDGE_OBJECT_ID, _)
+
+                        // System objects that can only be taken immutably
+                        | (RTD_CLOCK_OBJECT_ID, SharedObjectMutability::Immutable)
+                        | (RTD_RANDOMNESS_STATE_OBJECT_ID, SharedObjectMutability::Immutable)
+                        | (RTD_ACCUMULATOR_ROOT_OBJECT_ID, SharedObjectMutability::Immutable) => (),
+
+                        // All other system objects: cannot be used as input at all
+                        _ => {
+                            return Err(UserInputError::ImmutableParameterExpectedError {
+                                object_id,
+                            });
+                        }
+                    }
+                }
 
                 match &object.owner {
                     Owner::AddressOwner(_) | Owner::ObjectOwner(_) | Owner::Immutable => {
