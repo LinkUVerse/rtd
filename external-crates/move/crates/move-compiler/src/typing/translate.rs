@@ -20,6 +20,7 @@ use crate::{
         Ability_, BinOp, BinOp_, ConstantName, DatatypeName, DocComment, Field, FunctionName,
         TargetKind, UnaryOp_, VariantName,
     },
+    rtd_mode,
     shared::{
         ide::{DotAutocompleteInfo, IDEAnnotation, MacroCallInfo},
         known_attributes::{
@@ -31,7 +32,6 @@ use crate::{
         unique_map::UniqueMap,
         *,
     },
-    rtd_mode,
     typing::{
         ast::{self as T},
         core::{
@@ -2557,6 +2557,12 @@ fn match_pattern_(
         P::Binder(mut_, x, /* unused binding */ false) => {
             let x_ty = context.get_local_type(&x);
             T::pat(x_ty, sp(loc, TP::Binder(mut_, x)))
+        }
+        P::Literal(sp!(_, Value_::InferredString(_))) => {
+            let msg = "String literals are not currently supported in match patterns";
+            context.add_diag(diag!(TypeSafety::InvalidString, (loc, msg)));
+            let ty = context.error_type(loc);
+            T::pat(ty, sp(loc, TP::ErrorPat))
         }
         P::Literal(v) => {
             let ty = match &v.value {
