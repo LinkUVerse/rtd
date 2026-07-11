@@ -202,7 +202,7 @@ impl Db {
         let i = self.0.read().expect("poisoned");
         let p = key::encode(pipeline.as_bytes());
         batch.put_cf(i.borrow_watermark_cf(), &p, checkpoint);
-        i.borrow_db().write(batch)?;
+        i.borrow_db().write_opt(batch, &sync_write_options())?;
         Ok(())
     }
 
@@ -219,7 +219,9 @@ impl Db {
             }
 
             let Some(existing) = f.db.get_pinned_cf(f.restore_cf, &p)? else {
-                f.db.put_cf(f.restore_cf, &p, bcs::to_bytes(&watermark)?)?;
+                let mut batch = rocksdb::WriteBatch::default();
+                batch.put_cf(f.restore_cf, &p, bcs::to_bytes(&watermark)?);
+                f.db.write_opt(batch, &sync_write_options())?;
                 return Ok(());
             };
 
@@ -251,7 +253,7 @@ impl Db {
 
         let i = self.0.read().expect("poisoned");
         batch.put_cf(i.borrow_restore_cf(), key, []);
-        i.borrow_db().write(batch)?;
+        i.borrow_db().write_opt(batch, &sync_write_options())?;
         Ok(())
     }
 
@@ -303,7 +305,7 @@ impl Db {
             batch.put_cf(f.watermark_cf, &p, &existing);
             batch.delete_range_cf(f.restore_cf, &p[..], q);
 
-            Ok(f.db.write(batch)?)
+            Ok(f.db.write_opt(batch, &sync_write_options())?)
         })
     }
 
@@ -812,6 +814,13 @@ impl Default for RocksMetrics {
             num_running_flushes: METRICS_ERROR,
         }
     }
+}
+
+/// Returns write options with sync (fsync) enabled for durability.
+fn sync_write_options() -> rocksdb::WriteOptions {
+    let mut opts = rocksdb::WriteOptions::default();
+    opts.set_sync(true);
+    opts
 }
 
 #[cfg(test)]
