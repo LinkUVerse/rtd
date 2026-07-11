@@ -120,13 +120,14 @@ impl MyEndpoint {
             info!("DISABLE_CACHING_RESOLVER: {disable_caching_resolver}");
             disable_caching_resolver
         });
+        let connect_timeout = self.endpoint.get_connect_timeout();
 
         if disable_caching_resolver {
             let mut http = HttpConnector::new();
             http.enforce_http(false);
             http.set_nodelay(true);
             http.set_keepalive(None);
-            http.set_connect_timeout(None);
+            http.set_connect_timeout(connect_timeout);
 
             Channel::new(
                 hyper_rustls::HttpsConnectorBuilder::new()
@@ -141,7 +142,7 @@ impl MyEndpoint {
             http.enforce_http(false);
             http.set_nodelay(true);
             http.set_keepalive(None);
-            http.set_connect_timeout(None);
+            http.set_connect_timeout(connect_timeout);
 
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config(self.tls_config)
