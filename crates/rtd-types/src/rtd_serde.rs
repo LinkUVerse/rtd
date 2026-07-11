@@ -21,6 +21,7 @@ use serde_with::{Bytes, DeserializeAs, SerializeAs};
 
 use rtd_protocol_config::ProtocolVersion;
 
+use crate::governance::MAX_VALIDATOR_COUNT;
 use crate::{
     DEEPBOOK_ADDRESS, RTD_CLOCK_ADDRESS, RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_ADDRESS,
     RTD_SYSTEM_STATE_ADDRESS, parse_rtd_struct_tag, parse_rtd_type_tag,
@@ -343,6 +344,19 @@ impl<'de> DeserializeAs<'de, roaring::RoaringBitmap> for RtdBitmap {
 // So this function is needed to sanitize the bitmap to ensure unique entries.
 pub(crate) fn deserialize_rtd_bitmap(bytes: &[u8]) -> std::io::Result<roaring::RoaringBitmap> {
     let orig_bitmap = roaring::RoaringBitmap::deserialize_from(bytes)?;
+
+    // Check cardinality before iteration.
+    if orig_bitmap.len() > MAX_VALIDATOR_COUNT {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "bitmap cardinality {} exceeds max {}",
+                orig_bitmap.len(),
+                MAX_VALIDATOR_COUNT
+            ),
+        ));
+    }
+
     // Ensure there is no duplicated entries in the bitmap.
     let mut seen = std::collections::BTreeSet::new();
     let mut new_bitmap = roaring::RoaringBitmap::new();
@@ -376,5 +390,17 @@ mod test {
         assert_eq!(rtd_bitmap.len(), 1);
         let bitmap_values: Vec<u32> = rtd_bitmap.iter().collect();
         assert_eq!(bitmap_values, vec![1]);
+    }
+
+    #[test]
+    fn test_rtd_bitmap_rejects_excessive_cardinality() {
+        let bitmap: roaring::RoaringBitmap =
+            (0..=crate::governance::MAX_VALIDATOR_COUNT as u32).collect();
+        let mut bytes = Vec::new();
+        bitmap.serialize_into(&mut bytes).unwrap();
+
+        let error = deserialize_rtd_bitmap(&bytes).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
 }
