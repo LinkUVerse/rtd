@@ -449,56 +449,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 448	6080661beaf3bc533a205b1fe5814e0b4e1fcb60	2026-02-02	Do not panic on deprecated `RandomnessStateUpdate` message (#25205)	REVIEWED	EXCLUDE_POST_FORK		RTD 仍将该消息用于现有共识和 checkpoint 路径；上游“废弃并拒收”语义依赖 fork 后协议改造。
 449	89b39a384b539109c4a1328c386bdefecc9340ad	2026-02-03	Remove S3 employee lookup, use PagerDuty email + Slack API (#25224)	REVIEWED	EXCLUDE_NON_CODE		仅 CI/workflow 联系人查找方式调整。
 450	de97e292c9d2b884a03e9b5c0aa2bf59b44a9801	2026-02-03	Enable object balance on testnet (#25223)	REVIEWED	EXCLUDE_POST_FORK		仅启用 protocol v110 testnet object balance 配置与 snapshot；RTD 不具备该协议版本。
-451	8b077c59f5a52d60cafb5d29157960fdda83e863	2026-02-03	change inputs to strings (#25235)	UNREVIEWED			
-452	8c637bb8d687c162d9a6bc43471e1c485e971252	2026-02-03	[bridge] Handle storage layout mismatch during EVM contract upgrades (#25228)	UNREVIEWED			
-453	b0f61e9d9ce740e49b91130465d7e330923c564b	2026-02-03	[cargo-deny] Bump bytes crate to avoid deny issue (#25244)	UNREVIEWED			
-454	f58ad53ec731f7b2e12b6351fad57962792c2ee5	2026-02-03	[sui][cli] Add support for shell completion in CLI using clap_complete (#24469)	UNREVIEWED			
-455	faa33a61f350bc0ed6587b458652ae05a68c9216	2026-02-03	[sui move test] Use Sui's VM Conifg, Verifier Config, and Gas Meter in Unit Tests  (#25226)	UNREVIEWED			
-456	ee0b41f1bf92445b579b435e62171663b838ae3e	2026-02-03	[workflows] Migrate notifications to sui-operations via dispatch (#25249)	UNREVIEWED			
-457	1eff94414090a452aa1f0928a2f3a38b3c6f8f2d	2026-02-03	Spawn admin server in Swarm for `force-close-epoch` support (#25229)	UNREVIEWED			
-458	e6551f001ca92f18ef28f4ab91da97ef00464dd5	2026-02-03	fix: use correct SHA for peter-evans/repository-dispatch@v4.0.1	UNREVIEWED			
-459	a675d404d51358dbf7d1e5755cc93121aefeddf8	2026-02-03	fix: use DOCKER_BINARY_BUILDS_DISPATCH token for sui-operations dispatch	UNREVIEWED			
-460	4ccc647c9c4d328db41ad1b2435800521b8e519d	2026-02-03	Revert "benchmark: migrate to use grpc" (#25254)	UNREVIEWED			
-461	86f052d678880a2d519d9643e17d73c059e8ec23	2026-02-03	Pin mystenlabs tidehunter commit for sui (#25256)	UNREVIEWED			
-462	e6f047cdb28aa431745cc1e6d6293a413ad1a831	2026-02-03	antithesis: enable grpc indexing on fullnode (#25258)	UNREVIEWED			
-463	3efc82c5c1a32d347759efe9892336b91d91a071	2026-02-03	Discovery: Add support for trusted `AccessType` (#25251)	UNREVIEWED			
-464	02ad5c35d557d56d0f4a94a46bb8e08c5a1acef2	2026-02-03	KV Store / Archival indexer refactor + schema changes (#25143)	UNREVIEWED			
-465	f039a2150fa26ef8c9319e550df16b03882c12a6	2026-02-03	Update kv-store readers to read the new schema with fallback (#25191)	UNREVIEWED			
-466	3fd85b70368fefc17d840f96c8436c8bed679d5f	2026-02-03	[move] Small improvements for PartialVMError and VMError  (#25253)	UNREVIEWED			
-467	12e7af8e82fd5fc226b007052aaf49d99153fdf3	2026-02-04	[antithesis] use branch name as description when unspecified (#25267)	UNREVIEWED			
-468	8789fcf1f27ce7b02e00ad8ef8fc9f6325807a67	2026-02-04	fix typo in register_subscription (#25270)	UNREVIEWED			
-469	aed78d27b07cbf1e50158ae30fd79f3b4e3b27b7	2026-02-04	docs: Revise on-chain primitive pages for style guide (#25262)	UNREVIEWED			
-470	74c82941ad332c4e3e820c1bd3e34ce5dc35f64e	2026-02-04	docs: Revisions to misc Sui Essentials pages (#25255)	UNREVIEWED			
-471	e80ea01d88f40e1e35c0953373320bcbe928d20a	2026-02-04	bridge: use checkpoint subscription for monitor	UNREVIEWED			
-472	f08a8791279ebb36bcc1f0acb9521dc83f0da2cc	2026-02-04	bridge: use grpc for get_gas_data_panic_if_not_gas	UNREVIEWED			
-473	349f42246ca33b13cfc4692afa8f907c677f1796	2026-02-04	bridge-cli: convert to grpc	UNREVIEWED			
-474	588d525ff40a9863de8ed8ef13957c3cf810a98b	2026-02-04	bridge-watchdog: remove unused crate	UNREVIEWED			
-475	2e5ae1e2314e89232b7ce13a82cde75de5e7f77e	2026-02-04	bridge: use sui_rpc_api::Client	UNREVIEWED			
-476	4da033814fbd394a8875ba1870cf76121be3c222	2026-02-04	bridge: remove jsonrpc client	UNREVIEWED			
-477	1300b26e1c9d4d001f50d80a0bfdbdf8ace45b2d	2026-02-04	bridge: fetch events from checkpoints in tests	UNREVIEWED			
-478	7d85e4c702907a7aad6af489a68fba948891980c	2026-02-04	benchmark: migrate to use grpc (#25259)	UNREVIEWED			
-479	14b623f1a40272f738461e0b09b8da7438dba4a1	2026-02-04	Fix simtest failure notification missing commit_sha (#25272)	UNREVIEWED			
-480	eccd76eac76bd8b676b9d14e9babf09e36150603	2026-02-04	[Consensus] update peer address via EndpointManager (#25162)	UNREVIEWED			
-481	a20c9f6f851d4c3ae965b4384d60aa688a9e9177	2026-02-04	Don't read legacy watermark for tasks (#25275)	UNREVIEWED			
-482	27ee82ed7668426c365748c96cbce2b79f9d958c	2026-02-04	docs: add supported sdks (#25271)	UNREVIEWED			
-483	784f6508d7db85e4b37b3c1a393f9ad61c87f82e	2026-02-04	Fix benchmark committee store creation (#25277)	UNREVIEWED			
-484	10436c976a91e9a493c1c6ba8be8b63102535aa4	2026-02-04	Remove logic unused after removing disable_preconsensus_locking flag (#25150)	UNREVIEWED			
-485	035b511ae9264cb90e995fc02ca3f799a1d048db	2026-02-04	Rewrite run-antithesis-tests in Python with long argument names (#25279)	UNREVIEWED			
-486	027a6540beea9442e3b636fb337b483393e71ae5	2026-02-04	[cli] add external signer support and subcommand (#23146)	UNREVIEWED			
-487	37bdcb80eb8e09996a1b51b6397d41caf60e265b	2026-02-04	docs: standalone SuiLink doc and Wallet category creation for future docs (#25079)	UNREVIEWED			
-488	e727e4dd59e032905fe6666d86c901c2090d151e	2026-02-04	update tonic to v0.14.3 (#25140)	UNREVIEWED			
-489	8916ecf99f84f8d09bbc189f845d52144d32b4aa	2026-02-04	[move][reference-safety] Example tests (#25263)	UNREVIEWED			
-490	bb5775be80018ecb4b3663f8c03c2d98f936a219	2026-02-04	Preserve serialized format for `deferred_transactions_with_aliases_v2` (#25274)	UNREVIEWED			
-491	45e7916ec2f373e8c9de9bf0a14fc3075470a643	2026-02-04	docs: add markdown export feature for LLM-ready documentation (#25284)	UNREVIEWED			
-492	01012b364f23994a66a56c91039cb00e96fabbd0	2026-02-05	Add debug_fatal! logging for safe_iter deserialization failures (#25288)	UNREVIEWED			
-493	c0af136bd0896a15df8e9c272ece6b17b77e30e4	2026-02-04	indexer-alt: track ConsensusAddressOwner for tx_affected_addresses and blooms pipelines (#25194)	UNREVIEWED			
-494	d433bd58fa2034587f14befe6bd6be564f597afd	2026-02-05	tidehunter: add `deferred_transactions_with_aliases_v3` table (#25291)	UNREVIEWED			
-495	5bf6eaf82503c35f877ac360d96906f5ad6d7448	2026-02-04	Fix release tag creation to use correct token and error handling (#25293)	UNREVIEWED			
-496	03b0c8377ce64223e1a099ca0fb9f513b811b61f	2026-02-05	[TransactionDriver] clean up latency checks after fast path removal (#25142)	UNREVIEWED			
-497	c38edb67ab51d6ac12a560f4051c64a4f8d0fa63	2026-02-05	[alloy][sui-bridge] Integrate Alloy multiprovider in sui bridge (#25257)	UNREVIEWED			
-498	076ba49a21924c76d7c5b18e70f48239b34a44a6	2026-02-05	fix(rpc): set default CryptoProvider (#25301)	UNREVIEWED			
-499	628675963351aefe79153bff7b5ceb677b4a8e19	2026-02-05	Make stress container more reliable in antithesis (#25287)	UNREVIEWED			
-500	b460276cf9a5bb2422bc824cdfa12c09876505d6	2026-02-05	Update arg names to match workflow (#25302)	UNREVIEWED			
+451	8b077c59f5a52d60cafb5d29157960fdda83e863	2026-02-03	change inputs to strings (#25235)	REVIEWED	EXCLUDE_NON_CODE		仅 pre-build workflow 输入格式调整。
+452	8c637bb8d687c162d9a6bc43471e1c485e971252	2026-02-03	[bridge] Handle storage layout mismatch during EVM contract upgrades (#25228)	REVIEWED	EXCLUDE_POST_FORK		EVM 升级布局与 bridge V2 路径均为 fork 后新增；基线没有对应模块。
+453	b0f61e9d9ce740e49b91130465d7e330923c564b	2026-02-03	[cargo-deny] Bump bytes crate to avoid deny issue (#25244)	REVIEWED	EXCLUDE_NON_CODE		仅为上游 cargo-deny 策略更新 bytes 版本，未包含 RTD 既有运行时缺陷修复。
+454	f58ad53ec731f7b2e12b6351fad57962792c2ee5	2026-02-03	[sui][cli] Add support for shell completion in CLI using clap_complete (#24469)	REVIEWED	EXCLUDE_FEATURE		新增 CLI shell completion 功能。
+455	faa33a61f350bc0ed6587b458652ae05a68c9216	2026-02-03	[sui move test] Use Sui's VM Conifg, Verifier Config, and Gas Meter in Unit Tests  (#25226)	REVIEWED	EXCLUDE_FEATURE		大规模替换 Move 单测 VM/gas 接口，改变 CLI 单测模型，非关键运行时补丁。
+456	ee0b41f1bf92445b579b435e62171663b838ae3e	2026-02-03	[workflows] Migrate notifications to sui-operations via dispatch (#25249)	REVIEWED	EXCLUDE_NON_CODE		仅 GitHub workflow 通知迁移。
+457	1eff94414090a452aa1f0928a2f3a38b3c6f8f2d	2026-02-03	Spawn admin server in Swarm for `force-close-epoch` support (#25229)	REVIEWED	EXCLUDE_FEATURE		为 Swarm 新增 admin server 及 force-close-epoch 支持。
+458	e6551f001ca92f18ef28f4ab91da97ef00464dd5	2026-02-03	fix: use correct SHA for peter-evans/repository-dispatch@v4.0.1	REVIEWED	EXCLUDE_NON_CODE		仅 workflow action SHA。
+459	a675d404d51358dbf7d1e5755cc93121aefeddf8	2026-02-03	fix: use DOCKER_BINARY_BUILDS_DISPATCH token for sui-operations dispatch	REVIEWED	EXCLUDE_NON_CODE		仅 workflow token。
+460	4ccc647c9c4d328db41ad1b2435800521b8e519d	2026-02-03	Revert "benchmark: migrate to use grpc" (#25254)	REVIEWED	EXCLUDE_FEATURE		仅 benchmark 的 gRPC 迁移回滚。
+461	86f052d678880a2d519d9643e17d73c059e8ec23	2026-02-03	Pin mystenlabs tidehunter commit for sui (#25256)	REVIEWED	EXCLUDE_NON_CODE		仅切换 TideHunter git 源与版本，无缺陷说明；不以未验证依赖升级替代最小补丁。
+462	e6f047cdb28aa431745cc1e6d6293a413ad1a831	2026-02-03	antithesis: enable grpc indexing on fullnode (#25258)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis 配置。
+463	3efc82c5c1a32d347759efe9892336b91d91a071	2026-02-03	Discovery: Add support for trusted `AccessType` (#25251)	REVIEWED	EXCLUDE_FEATURE		新增 discovery trusted AccessType 能力。
+464	02ad5c35d557d56d0f4a94a46bb8e08c5a1acef2	2026-02-03	KV Store / Archival indexer refactor + schema changes (#25143)	REVIEWED	EXCLUDE_FEATURE		新增 KV schema 并重构 archival indexer。
+465	f039a2150fa26ef8c9319e550df16b03882c12a6	2026-02-03	Update kv-store readers to read the new schema with fallback (#25191)	REVIEWED	EXCLUDE_POST_FORK		依赖 464 引入的新 schema 与 fallback 路径；基线无对应代码。
+466	3fd85b70368fefc17d840f96c8436c8bed679d5f	2026-02-03	[move] Small improvements for PartialVMError and VMError  (#25253)	REVIEWED	EXCLUDE_FEATURE		Move VM error API 调整，不是 RTD 既有缺陷的最小修复。
+467	12e7af8e82fd5fc226b007052aaf49d99153fdf3	2026-02-04	[antithesis] use branch name as description when unspecified (#25267)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis 脚本。
+468	8789fcf1f27ce7b02e00ad8ef8fc9f6325807a67	2026-02-04	fix typo in register_subscription (#25270)	REVIEWED	EXCLUDE_NON_CODE		仅局部变量拼写，行为未变。
+469	aed78d27b07cbf1e50158ae30fd79f3b4e3b27b7	2026-02-04	docs: Revise on-chain primitive pages for style guide (#25262)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+470	74c82941ad332c4e3e820c1bd3e34ce5dc35f64e	2026-02-04	docs: Revisions to misc Sui Essentials pages (#25255)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+471	e80ea01d88f40e1e35c0953373320bcbe928d20a	2026-02-04	bridge: use checkpoint subscription for monitor	REVIEWED	EXCLUDE_FEATURE		bridge monitor 架构迁移到 checkpoint subscription。
+472	f08a8791279ebb36bcc1f0acb9521dc83f0da2cc	2026-02-04	bridge: use grpc for get_gas_data_panic_if_not_gas	REVIEWED	EXCLUDE_FEATURE		bridge gRPC 客户端迁移。
+473	349f42246ca33b13cfc4692afa8f907c677f1796	2026-02-04	bridge-cli: convert to grpc	REVIEWED	EXCLUDE_FEATURE		bridge CLI gRPC 迁移。
+474	588d525ff40a9863de8ed8ef13957c3cf810a98b	2026-02-04	bridge-watchdog: remove unused crate	REVIEWED	EXCLUDE_FEATURE		上游 bridge gRPC 迁移链中的 crate 删除，不是独立缺陷补丁。
+475	2e5ae1e2314e89232b7ce13a82cde75de5e7f77e	2026-02-04	bridge: use sui_rpc_api::Client	REVIEWED	EXCLUDE_FEATURE		bridge RPC client 迁移。
+476	4da033814fbd394a8875ba1870cf76121be3c222	2026-02-04	bridge: remove jsonrpc client	REVIEWED	EXCLUDE_FEATURE		移除 JSON-RPC client，依赖上游 gRPC 迁移。
+477	1300b26e1c9d4d001f50d80a0bfdbdf8ace45b2d	2026-02-04	bridge: fetch events from checkpoints in tests	REVIEWED	EXCLUDE_FEATURE		仅上述桥接架构迁移的测试更新。
+478	7d85e4c702907a7aad6af489a68fba948891980c	2026-02-04	benchmark: migrate to use grpc (#25259)	REVIEWED	EXCLUDE_FEATURE		benchmark gRPC 迁移。
+479	14b623f1a40272f738461e0b09b8da7438dba4a1	2026-02-04	Fix simtest failure notification missing commit_sha (#25272)	REVIEWED	EXCLUDE_NON_CODE		仅 CI 通知字段。
+480	eccd76eac76bd8b676b9d14e9babf09e36150603	2026-02-04	[Consensus] update peer address via EndpointManager (#25162)	REVIEWED	EXCLUDE_FEATURE		新增 consensus endpoint 动态更新与 admin API。
+481	a20c9f6f851d4c3ae965b4384d60aa688a9e9177	2026-02-04	Don't read legacy watermark for tasks (#25275)	REVIEWED	EXCLUDE_POST_FORK		修复依赖 464/465 新 KV schema 的 legacy watermark 路径；RTD 无该方法/开关。
+482	27ee82ed7668426c365748c96cbce2b79f9d958c	2026-02-04	docs: add supported sdks (#25271)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+483	784f6508d7db85e4b37b3c1a393f9ad61c87f82e	2026-02-04	Fix benchmark committee store creation (#25277)	REVIEWED	EXCLUDE_NON_CODE		仅 benchmark/simtest 初始化修复，非关键运行时补丁。
+484	10436c976a91e9a493c1c6ba8be8b63102535aa4	2026-02-04	Remove logic unused after removing disable_preconsensus_locking flag (#25150)	REVIEWED	EXCLUDE_POST_FORK		依赖上游已移除的 preconsensus locking/fast-path 路径；RTD 仍保留该路径。
+485	035b511ae9264cb90e995fc02ca3f799a1d048db	2026-02-04	Rewrite run-antithesis-tests in Python with long argument names (#25279)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis 脚本重写。
+486	027a6540beea9442e3b636fb337b483393e71ae5	2026-02-04	[cli] add external signer support and subcommand (#23146)	REVIEWED	EXCLUDE_FEATURE		新增 external signer CLI 功能。
+487	37bdcb80eb8e09996a1b51b6397d41caf60e265b	2026-02-04	docs: standalone SuiLink doc and Wallet category creation for future docs (#25079)	REVIEWED	EXCLUDE_NON_CODE		仅文档。
+488	e727e4dd59e032905fe6666d86c901c2090d151e	2026-02-04	update tonic to v0.14.3 (#25140)	REVIEWED	EXCLUDE_NON_CODE		依赖版本更新，未包含 RTD 既有关键缺陷修复。
+489	8916ecf99f84f8d09bbc189f845d52144d32b4aa	2026-02-04	[move][reference-safety] Example tests (#25263)	REVIEWED	EXCLUDE_NON_CODE		仅 Move reference-safety 示例测试。
+490	bb5775be80018ecb4b3663f8c03c2d98f936a219	2026-02-04	Preserve serialized format for `deferred_transactions_with_aliases_v2` (#25274)	REVIEWED	EXCLUDE_POST_FORK		保护上游 v110 引入的 u8 alias 序列化格式；RTD 仍为基线 Address alias 格式。
+491	45e7916ec2f373e8c9de9bf0a14fc3075470a643	2026-02-04	docs: add markdown export feature for LLM-ready documentation (#25284)	REVIEWED	EXCLUDE_NON_CODE		仅文档工具。
+492	01012b364f23994a66a56c91039cb00e96fabbd0	2026-02-05	Add debug_fatal! logging for safe_iter deserialization failures (#25288)	REVIEWED	EXCLUDE_NON_CODE		仅为既有跳过反序列化失败的行为增加诊断日志，行为不变。
+493	c0af136bd0896a15df8e9c272ece6b17b77e30e4	2026-02-04	indexer-alt: track ConsensusAddressOwner for tx_affected_addresses and blooms pipelines (#25194)	REVIEWED	EXCLUDE_FEATURE		新增 indexer-alt pipeline 和测试数据。
+494	d433bd58fa2034587f14befe6bd6be564f597afd	2026-02-05	tidehunter: add `deferred_transactions_with_aliases_v3` table (#25291)	REVIEWED	EXCLUDE_POST_FORK		依赖 490 所针对的 fork 后 v3 序列化格式。
+495	5bf6eaf82503c35f877ac360d96906f5ad6d7448	2026-02-04	Fix release tag creation to use correct token and error handling (#25293)	REVIEWED	EXCLUDE_NON_CODE		仅 release workflow。
+496	03b0c8377ce64223e1a099ca0fb9f513b811b61f	2026-02-05	[TransactionDriver] clean up latency checks after fast path removal (#25142)	REVIEWED	EXCLUDE_POST_FORK		清理依赖上游已移除 fast path 的逻辑；RTD 仍使用 fast path。
+497	c38edb67ab51d6ac12a560f4051c64a4f8d0fa63	2026-02-05	[alloy][sui-bridge] Integrate Alloy multiprovider in sui bridge (#25257)	REVIEWED	EXCLUDE_FEATURE		新增 Alloy bridge multiprovider。
+498	076ba49a21924c76d7c5b18e70f48239b34a44a6	2026-02-05	fix(rpc): set default CryptoProvider (#25301)	APPLIED	MERGE	fab32a1a01fa686761a2f2f2d3015416fca0d8d2	两个既有 indexer-alt RPC 入口经 gcp_auth 调用 BigTable 时未选择 rustls provider；显式安装 ring provider。
+499	628675963351aefe79153bff7b5ceb677b4a8e19	2026-02-05	Make stress container more reliable in antithesis (#25287)	REVIEWED	EXCLUDE_NON_CODE		仅 antithesis/stress 容器脚本。
+500	b460276cf9a5bb2422bc824cdfa12c09876505d6	2026-02-05	Update arg names to match workflow (#25302)	REVIEWED	EXCLUDE_NON_CODE		仅 workflow 参数名同步。
 501	ecbbcb9fa08b1d7e9c2947b257a81d9134fda53a	2026-02-05	Install default rustls CryptoProvider in sui-kv-rpc (#25303)	UNREVIEWED			
 502	5cf7caaac3bdacc1a8b71758af59a869977bcda1	2026-02-05	docs: misc fixes (#25278)	UNREVIEWED			
 503	7099ee5af365269dbabd9ea9e76c13ba6e1ae2c9	2026-02-05	[release-notes] Auto-detect protocol version bump PR from git history (#25309)	UNREVIEWED			
