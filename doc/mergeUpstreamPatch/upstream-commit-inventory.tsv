@@ -591,7 +591,7 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 590	21c7520a08a795880f9530eb05871a0330d78d77	2026-02-13	docs: remove unnecessary spelling CI check (#25466)	UNREVIEWED			
 591	cd7adf3ac9f1bbbd4a98c30ddd962ffae9140307	2026-02-13	Additional schema changes per pull/25143 (#25438)	UNREVIEWED			
 592	1a48bedd78292113431bb05f8ef40eda9d3b5107	2026-02-13	Add V2 bridge CLI commands (deposit-on-eth, deposit-on-sui) (#25378)	UNREVIEWED			
-593	87665b0614ff7f3d0d443e386a6d03b0e380ae0a	2026-02-13	reader: increase bigtable/kv client max decoding size (#25465)	UNREVIEWED			
+593	87665b0614ff7f3d0d443e386a6d03b0e380ae0a	2026-02-13	reader: increase bigtable/kv client max decoding size (#25465)	APPLIED	MERGE	8a6966dba24a9df5da3d28f16873fa799161d60f	仅采用 32 MiB 默认解码上限以修复大响应失败；未带入上游新增 CLI 配置参数。
 594	2ff70117ac00a1093a69403b3c34dff4d4508ed9	2026-02-13	[graphql-alt] Handle transaction execution/simulation errors as BAD_USER_INPUT (#25261)	UNREVIEWED			
 595	a5f471eb7099d6178daf02f162ab19c6e3b1af49	2026-02-16	Add default timeout to sim_tests (#25483)	UNREVIEWED			
 596	ca2d6aa0a66bfd73774260d08921299c5fc6efaa	2026-02-16	Fix EventServiceClient connection hang in authenticated_events tests (#25482)	UNREVIEWED			
