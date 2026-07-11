@@ -3129,6 +3129,22 @@ pub struct CheckpointService {
     state: Mutex<CheckpointServiceState>,
 }
 
+fn last_checkpoint_to_preserve_state_hashes(
+    epoch_store: &AuthorityPerEpochStore,
+    checkpoint_store: &CheckpointStore,
+) -> Option<CheckpointSequenceNumber> {
+    let last_persisted_builder_seq = epoch_store
+        .last_persisted_checkpoint_builder_summary()
+        .expect("epoch should not have ended")
+        .map(|summary| summary.summary.sequence_number);
+    let last_executed_seq = checkpoint_store
+        .get_highest_executed_checkpoint()
+        .expect("Failed to get highest executed checkpoint")
+        .map(|checkpoint| *checkpoint.sequence_number());
+
+    last_persisted_builder_seq.max(last_executed_seq)
+}
+
 impl CheckpointService {
     /// Constructs a new CheckpointService in an un-started state.
     pub fn build(
@@ -3232,13 +3248,14 @@ impl CheckpointService {
     ) {
         let (builder, aggregator, state_hasher) = self.state.lock().take_unstarted();
 
-        // Clean up state hashes computed after the last committed checkpoint
+        // Clean up state hashes computed after the last built checkpoint
         // This prevents ECMH divergence after fork recovery restarts
-        if let Some(last_committed_seq) = self
-            .tables
-            .get_highest_executed_checkpoint()
-            .expect("Failed to get highest executed checkpoint")
-            .map(|checkpoint| *checkpoint.sequence_number())
+
+        // A crash can occur after the builder summary is persisted but before the highest
+        // executed checkpoint advances. A persisted builder summary is certified and unforked,
+        // so its state hash must be preserved for checkpoint executor recovery.
+        if let Some(last_committed_seq) =
+            last_checkpoint_to_preserve_state_hashes(&epoch_store, &self.tables)
         {
             if let Err(e) = builder
                 .epoch_store
@@ -3475,6 +3492,24 @@ mod tests {
     use std::collections::HashMap;
     use std::ops::Deref;
     use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn state_hash_cleanup_preserves_persisted_builder_checkpoint() {
+        let state = TestAuthorityBuilder::new().build().await;
+        let epoch_store = state.epoch_store_for_testing();
+        let checkpoint = TestCheckpointBuilder::new(0).build_checkpoint();
+        epoch_store
+            .put_genesis_checkpoint_in_builder(checkpoint.summary.data(), &checkpoint.contents)
+            .unwrap();
+        let directory = linku_common::tempdir().unwrap();
+        let checkpoint_store =
+            CheckpointStore::new(directory.path(), Arc::new(PrunerWatermarks::default()));
+
+        assert_eq!(
+            last_checkpoint_to_preserve_state_hashes(&epoch_store, &checkpoint_store),
+            Some(0),
+        );
+    }
 
     #[tokio::test]
     async fn readonly_inspection_returns_chain_and_highest_executed_checkpoint() {

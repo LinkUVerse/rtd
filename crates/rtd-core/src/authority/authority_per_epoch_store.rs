@@ -3532,6 +3532,12 @@ impl AuthorityPerEpochStore {
             return Ok(Some(summary.clone()));
         }
 
+        self.last_persisted_checkpoint_builder_summary()
+    }
+
+    pub fn last_persisted_checkpoint_builder_summary(
+        &self,
+    ) -> RtdResult<Option<BuilderCheckpointSummary>> {
         Ok(self
             .tables()?
             .builder_checkpoint_summary_v2
