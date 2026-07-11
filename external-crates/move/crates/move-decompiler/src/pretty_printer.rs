@@ -429,10 +429,7 @@ fn data_op_doc(context: &Context, op: &DataOp, args: &[Exp]) -> Doc {
             .concat(exp(context, &args[1]))
             .concat(D::text(")")),
 
-        DataOp::VecPopBack(_) => maybe_parens(context, &args[0])
-            .concat(D::text(".pop_back("))
-            .concat(exp(context, &args[1]))
-            .concat(D::text(")")),
+        DataOp::VecPopBack(_) => maybe_parens(context, &args[0]).concat(D::text(".pop_back()")),
 
         DataOp::VecSwap(_) => maybe_parens(context, &args[0])
             .concat(D::text(".swap("))
@@ -549,5 +546,27 @@ fn value(v: &Value) -> Doc {
             ))
             .concat(D::text("]")),
         Value::Struct(_) | Value::Signer(_) | Value::Variant(_) => unreachable!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use move_binary_format::normalized::Type;
+
+    use super::*;
+
+    #[test]
+    fn vec_pop_back_uses_its_single_argument() {
+        let context = Context {
+            constant_table: IndexMap::new(),
+        };
+        let op = DataOp::VecPopBack(Rc::new(Type::U8));
+        let args = [Exp::Variable("values".to_owned())];
+
+        let rendered = data_op_doc(&context, &op, &args).render(80);
+
+        assert_eq!(rendered, "values.pop_back()");
     }
 }
