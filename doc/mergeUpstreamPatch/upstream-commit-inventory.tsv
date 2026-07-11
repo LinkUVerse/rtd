@@ -199,56 +199,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 198	6b0439b7bd0d8813210e51c6c71bd7aa3044a52e	2026-01-14	Revert "Cache txn digest -> executed effects directly" (#24954)	REVIEWED	EXCLUDE_POST_FORK		完整回滚第 149 条已排除的 fork 后缓存重设计，本地无需再应用
 199	f205eb2a43fa368d5920549cf0842d7c79467b44	2026-01-15	Fix object scheduler bug by reading exact versions (#24955)	APPLIED	MERGE	4f4b06a57ef4704acb51813039ad5c2b0ff82147	object funds scheduler 错读最新余额；已按 assigned accumulator version 精确读取
 200	4b9fd343b9cf6614c3574550739cf1c2d99b072f	2026-01-15	graphql: Infer types for pure PTB call args	REVIEWED	EXCLUDE_FEATURE		扩展 GraphQL pure PTB input 的类型推断与 schema
-201	1cf6b6fea5169fe88dff10c53f1c09dae2a51be5	2026-01-15	chore(graphql): order impls of Epoch fields	UNREVIEWED			
-202	50ed91eaa262efa799b88541156de4aac5af3c72	2026-01-15	graphql: Epoch, Validator, ValidatorSet refactor to expose MoveValue	UNREVIEWED			
-203	f16f7dd58fa9bbb3fd7fed81e39c389469c90d2f	2026-01-15	move(visitor): visitor_default! macro	UNREVIEWED			
-204	14f4948dc18bcefd3a4a542b1e2d3bdac30535a7	2026-01-15	graphql: allow seeking ahead of checkpoint viewed at	UNREVIEWED			
-205	bbcf2dda050efb5b22280a8239246fd8790b44a4	2026-01-15	graphql: checkpoint bounded root objects in Scope	UNREVIEWED			
-206	22028a50b477001af55c1a52b212b9616df63381	2026-01-15	docs(graphql): Explain the concept of scopes for GraphQL	UNREVIEWED			
-207	91cff4996b61defb4043770be7c4d8d2f3093041	2026-01-15	sui-indexer-alt-graphql: consolidate response logs, add pid to query logs (#24751)	UNREVIEWED			
-208	c22d01d8df9c87e1a69bb8cce85dfc9eceb03a57	2026-01-15	graphql(suins): Query.nameRecord	UNREVIEWED			
-209	687fedd1448a4f2fc980deeb22b4980f6e98d779	2026-01-15	graphql(suins): IAddressable.defaultNameRecord	UNREVIEWED			
-210	a90319cc4c2d857b91dc04a9362ad116a702b2e3	2026-01-15	graphql(suins): remove deprecated SuiNS integration	UNREVIEWED			
-211	5b1116d82181a2efe66859548a10d6abea1418b3	2026-01-15	graphql(suins): Add (back) support for fetching `Address` by SuiNS Name	UNREVIEWED			
-212	bc42b853d2e958f2a9de2f382e72197b3460b320	2026-01-15	graphql: partial errors for Display-related fields	UNREVIEWED			
-213	0ca816aea3b14d0a8ff20b4e1ed1b4ca8e17f7fd	2026-01-15	[bench] fix stress test in antithesis (#24948)	UNREVIEWED			
-214	86d57439b7177fa859bbbacce9ce4ff32ce8af2c	2026-01-15	[bench] fix & prevent incorrect transactions; add reachability assert (#24956)	UNREVIEWED			
-215	ce2327583894bc2ac66b3e9522d16df01b746c3a	2026-01-15	cli args for ingestion concurrency (#24961)	UNREVIEWED			
-216	5328c8890193d199a6e4923b4f4c409fcfe7d2d4	2026-01-15	fix url bug (#24962)	UNREVIEWED			
-217	960c0309d4725926b4f37b6fc2128c2d4dba84a7	2026-01-15	[consensus] add RandomDag and RandomDagIterator for testing commit logic (#24929)	UNREVIEWED			
-218	e53af3f671e63acb904bbeddbba14a30fad84403	2026-01-15	docs: Dissolve "Sui Essentials" and "Advanced" categories (#24944)	UNREVIEWED			
-219	7f5cfbcae442ab49e670f252f8d3640eabe8a071	2026-01-15	increase concurrency (#24967)	UNREVIEWED			
-220	0c7598a55b29ab2c6a9736dd621d06a578fa0c66	2026-01-15	No default checkpoint bucket (#24968)	UNREVIEWED			
-221	1a5392e9585045144756c3ebc5d39b5d4929d34b	2026-01-15	[move] Run bytecode verifier transactional tests with the new regex reference safety verifier (#24952)	UNREVIEWED			
-222	4f8cc20b42184fc4374c6d5ba95f6a3c29400c97	2026-01-16	Enable address balances on testnet (#24966)	UNREVIEWED			
-223	ba82dea7ed2d99eda8443ae8f6fb85a7e9d752c7	2026-01-16	Sui v1.64.0 Framework Bytecode snapshot (#24971)	UNREVIEWED			
-224	234a515f0baef37bde9f4e1153ba3ad3f17696b0	2026-01-15	Sui v1.65.0 Version Bump (#24972)	UNREVIEWED			
-225	407cbaa3c4af698d30a29cbff6c3e2d4ac5c9876	2026-01-16	chore(common): fix ExponentialBackoff default backoff test (#24861)	UNREVIEWED			
-226	76deb4dedbf6294b1e2c355ae722259eeea9c580	2026-01-16	fix(framework): correct documentation typos in Move stdlib and sui-framework (#24976)	UNREVIEWED			
-227	4ba6c1fe30a78be877812cf6619f4a2534cd496d	2026-01-16	[tree-sitter, prettier] adds support for string literal (#24937)	UNREVIEWED			
-228	7023691f77fe5c907a3d1f0ceb4b52da81483e3c	2026-01-16	fix(docs): remove duplicate section on "Scope" (#24982)	UNREVIEWED			
-229	40781b6b3964485643a8be1fba5315669bdccd38	2026-01-16	Fix object fund withdraw settle ahead of schedule issues (#24973)	UNREVIEWED			
-230	a2c77229e1cb8a3ce19224e17c90c12243cd38ac	2026-01-16	jsonrpc: add index to track existence of address balance for a coin type (#24981)	UNREVIEWED			
-231	3fed97cfbc8e4200d65b76f7a4bb12f2a2978e14	2026-01-16	Enable composite workload in simtest; add reachable assertions (#24975)	UNREVIEWED			
-232	86d962b74f4b52334d6e3223bd5b902e3340827d	2026-01-16	app-profile-id flag (#24985)	UNREVIEWED			
-233	880a4416a33e8a022e3db6c3f0492010de5b525c	2026-01-16	chore: release notes script always looks up PRs. (#24987)	UNREVIEWED			
-234	7804324fa09211164ba7782e4223820acab999a0	2026-01-16	chore: update rust sdk (#24993)	UNREVIEWED			
-235	564acd701771934d016ac0c270d44dc41a8624f6	2026-01-16	[move-stdlib] saturating arithmetic  (#24907)	UNREVIEWED			
-236	71e4cf0204cb7d94c470c3439c5a80ec493ff657	2026-01-16	Remove accumulator metadata system (#24988)	UNREVIEWED			
-237	5e856378b0876fc31353a43078b61d7d8c4c02a9	2026-01-16	Deleting sui-data-ingestion crate (#24970)	UNREVIEWED			
-238	83d88d58017d0b2055ee3494709d2864cba6005c	2026-01-16	Remove sui-data-ingestion from builds (#24995)	UNREVIEWED			
-239	daf526c69a3bf5954f08ef8b1b9c9eb431faee00	2026-01-16	Deleting legacy kv indexer binary (#24994)	UNREVIEWED			
-240	c26bcfa7f0091b6fef103076aea0c1a39dcb2870	2026-01-16	Refactor release notes workflow to use shared Python script (#24989)	UNREVIEWED			
-241	7ebaecc69bb590916863234c5056bfbe20f3fe64	2026-01-16	Fix React Router XSS vulnerability (GHSA-2w69-qvjg-hvjx) (#24996)	UNREVIEWED			
-242	658ff31cf95c78106d6760b1a3791314b6e593ae	2026-01-17	[chore] use prettier-plugin-move 0.3.5 (#24978)	UNREVIEWED			
-243	3ae6da3a39b3110783197ff2236ccbf56ee48005	2026-01-17	snapshots: fix 108 to match 1.64 release branch (#25005)	UNREVIEWED			
-244	18ee88642f6e209d2cfdecd95d315ff2d6239a80	2026-01-18	Restore the environment variable to enable write sync (#24974)	UNREVIEWED			
-245	5f8ef44b9be4f74802ffff7692660468853b1460	2026-01-19	[pkg-system] fix `--json` outputs (#24979)	UNREVIEWED			
-246	efa995b281d1915708718b32bea7aac4807603e6	2026-01-19	Increase wait_for_effects delay in antithesis (#25013)	UNREVIEWED			
-247	dbab11d24553b13829a949f6f181729b1eb705d8	2026-01-19	clean up duplicated arg (#25015)	UNREVIEWED			
-248	ff5565a288498fa116c1113cf1c1d2ced4aa5284	2026-01-19	Expose address balances from consistent service up through graphql (#24963)	UNREVIEWED			
-249	b135ad3d47f72fe4be16a0e48cb71460e7c8bc90	2026-01-20	Deepbook Risk Ratio Docs (#25018)	UNREVIEWED			
-250	774bd6baf7e63e2eb1f789cd987a5dd90bafd334	2026-01-20	tonic_network: return error on invalid uri (#25020)	UNREVIEWED			
+201	1cf6b6fea5169fe88dff10c53f1c09dae2a51be5	2026-01-15	chore(graphql): order impls of Epoch fields	REVIEWED	EXCLUDE_FEATURE		仅按字母顺序重排 GraphQL Epoch field impl 与快照，行为不变
+202	50ed91eaa262efa799b88541156de4aac5af3c72	2026-01-15	graphql: Epoch, Validator, ValidatorSet refactor to expose MoveValue	REVIEWED	EXCLUDE_FEATURE		大规模 GraphQL schema/API 重构，以 MoveValue 替代专用 system-state fields
+203	f16f7dd58fa9bbb3fd7fed81e39c389469c90d2f	2026-01-15	move(visitor): visitor_default! macro	REVIEWED	EXCLUDE_FEATURE		新增 visitor_default 宏并机械重构多个 visitor，行为不变
+204	14f4948dc18bcefd3a4a542b1e2d3bdac30535a7	2026-01-15	graphql: allow seeking ahead of checkpoint viewed at	REVIEWED	EXCLUDE_FEATURE		扩展 GraphQL scope 和 *At 查询语义及 API
+205	bbcf2dda050efb5b22280a8239246fd8790b44a4	2026-01-15	graphql: checkpoint bounded root objects in Scope	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL checkpoint-bounded root object scope 模型
+206	22028a50b477001af55c1a52b212b9616df63381	2026-01-15	docs(graphql): Explain the concept of scopes for GraphQL	REVIEWED	EXCLUDE_NON_CODE		仅扩写 GraphQL scope 文档
+207	91cff4996b61defb4043770be7c4d8d2f3093041	2026-01-15	sui-indexer-alt-graphql: consolidate response logs, add pid to query logs (#24751)	REVIEWED	EXCLUDE_FEATURE		重构 GraphQL/PG logging 并为连接增加 backend PID，仅提升诊断能力
+208	c22d01d8df9c87e1a69bb8cce85dfc9eceb03a57	2026-01-15	graphql(suins): Query.nameRecord	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL nameRecord API、scalar、type 与 schema
+209	687fedd1448a4f2fc980deeb22b4980f6e98d779	2026-01-15	graphql(suins): IAddressable.defaultNameRecord	REVIEWED	EXCLUDE_FEATURE		新增 GraphQL defaultNameRecord API 并替换旧 type
+210	a90319cc4c2d857b91dc04a9362ad116a702b2e3	2026-01-15	graphql(suins): remove deprecated SuiNS integration	REVIEWED	EXCLUDE_FEATURE		删除已弃用 GraphQL name-service API，属于产品清理
+211	5b1116d82181a2efe66859548a10d6abea1418b3	2026-01-15	graphql(suins): Add (back) support for fetching `Address` by SuiNS Name	REVIEWED	EXCLUDE_FEATURE		重新扩展 GraphQL Address 按 name 查询 API
+212	bc42b853d2e958f2a9de2f382e72197b3460b320	2026-01-15	graphql: partial errors for Display-related fields	REVIEWED	EXCLUDE_POST_FORK		只调整第 166-197 条 Display v2/GraphQL feature 新增字段的 partial-error 语义
+213	0ca816aea3b14d0a8ff20b4e1ed1b4ca8e17f7fd	2026-01-15	[bench] fix stress test in antithesis (#24948)	REVIEWED	EXCLUDE_POST_FORK		修复第 148/152/154 条被排除的 composite benchmark 在 Antithesis 中使用 tokio RwLock 的问题
+214	86d57439b7177fa859bbbacce9ce4ff32ce8af2c	2026-01-15	[bench] fix & prevent incorrect transactions; add reachability assert (#24956)	REVIEWED	EXCLUDE_POST_FORK		主要修复并检测被排除的 composite benchmark 生成无效交易
+215	ce2327583894bc2ac66b3e9522d16df01b746c3a	2026-01-15	cli args for ingestion concurrency (#24961)	REVIEWED	EXCLUDE_FEATURE		为 checkpoint blob indexer 新增 pipeline channel/batch CLI tuning 参数
+216	5328c8890193d199a6e4923b4f4c409fcfe7d2d4	2026-01-15	fix url bug (#24962)	APPLIED	MERGE	876bf74a991b5a02af0426701f65e7d38fa65bcd	移除 Url::join 的绝对路径前缀，保留 remote checkpoint bucket 子路径，并新增回归测试
+217	960c0309d4725926b4f37b6fc2128c2d4dba84a7	2026-01-15	[consensus] add RandomDag and RandomDagIterator for testing commit logic (#24929)	REVIEWED	EXCLUDE_NON_CODE		新增/重构 consensus RandomDag 测试基础设施和 simtests
+218	e53af3f671e63acb904bbeddbba14a30fad84403	2026-01-15	docs: Dissolve "Sui Essentials" and "Advanced" categories (#24944)	REVIEWED	EXCLUDE_NON_CODE		大规模文档目录重组与 redirect 更新
+219	7f5cfbcae442ab49e670f252f8d3640eabe8a071	2026-01-15	increase concurrency (#24967)	REVIEWED	EXCLUDE_FEATURE		将 checkpoint blob pipeline FANOUT 设为 100，属于吞吐优化
+220	0c7598a55b29ab2c6a9736dd621d06a578fa0c66	2026-01-15	No default checkpoint bucket (#24968)	REVIEWED	EXCLUDE_FEATURE		改变 analytics indexer remote-store 默认配置和 fallback 策略
+221	1a5392e9585045144756c3ebc5d39b5d4929d34b	2026-01-15	[move] Run bytecode verifier transactional tests with the new regex reference safety verifier (#24952)	REVIEWED	EXCLUDE_NON_CODE		仅新增 regex reference-safety verifier 测试快照与 harness
+222	4f8cc20b42184fc4374c6d5ba95f6a3c29400c97	2026-01-16	Enable address balances on testnet (#24966)	REVIEWED	EXCLUDE_FEATURE		协议 108 testnet address-balance feature gate 变更
+223	ba82dea7ed2d99eda8443ae8f6fb85a7e9d752c7	2026-01-16	Sui v1.64.0 Framework Bytecode snapshot (#24971)	REVIEWED	EXCLUDE_NON_CODE		仅新增上游 1.64/protocol 108 framework bytecode snapshot
+224	234a515f0baef37bde9f4e1153ba3ad3f17696b0	2026-01-15	Sui v1.65.0 Version Bump (#24972)	REVIEWED	EXCLUDE_NON_CODE		仅版本号、OpenRPC 与 lockfile bump
+225	407cbaa3c4af698d30a29cbff6c3e2d4ac5c9876	2026-01-16	chore(common): fix ExponentialBackoff default backoff test (#24861)	APPLIED	MERGE	16a5b98d52d5e56839581d63eb64963338301f6d	修复基线测试 zip 单个 Option 导致只验证第一次 backoff，现验证连续两次 delay
+226	76deb4dedbf6294b1e2c355ae722259eeea9c580	2026-01-16	fix(framework): correct documentation typos in Move stdlib and sui-framework (#24976)	REVIEWED	EXCLUDE_NON_CODE		仅修正 framework/stdlib 注释与生成文档拼写
+227	4ba6c1fe30a78be877812cf6619f4a2534cd496d	2026-01-16	[tree-sitter, prettier] adds support for string literal (#24937)	REVIEWED	EXCLUDE_FEATURE		为 tree-sitter/prettier 新增 Move string literal 语法支持
+228	7023691f77fe5c907a3d1f0ceb4b52da81483e3c	2026-01-16	fix(docs): remove duplicate section on "Scope" (#24982)	REVIEWED	EXCLUDE_POST_FORK		删除第 206 条 fork 后新增 GraphQL scope 文档的重复段落
+229	40781b6b3964485643a8be1fba5315669bdccd38	2026-01-16	Fix object fund withdraw settle ahead of schedule issues (#24973)	APPLIED	MERGE	161f14e5c8ba051d3bc9a772bc3859b7116c0248	barrier 执行后立即结算 object funds，并以 last scheduled version 清理 pending withdraw，避免 epoch 边界失活/提前结算 panic
+230	a2c77229e1cb8a3ce19224e17c90c12243cd38ac	2026-01-16	jsonrpc: add index to track existence of address balance for a coin type (#24981)	REVIEWED	EXCLUDE_FEATURE		新增 JSON-RPC address-balance coin-type existence index
+231	3fed97cfbc8e4200d65b76f7a4bb12f2a2978e14	2026-01-16	Enable composite workload in simtest; add reachable assertions (#24975)	REVIEWED	EXCLUDE_FEATURE		默认启用被排除的 composite workload 并增加测试 reachability assertions
+232	86d962b74f4b52334d6e3223bd5b902e3340827d	2026-01-16	app-profile-id flag (#24985)	REVIEWED	EXCLUDE_FEATURE		为 kvstore-alt 新增 app-profile-id CLI 参数
+233	880a4416a33e8a022e3db6c3f0492010de5b525c	2026-01-16	chore: release notes script always looks up PRs. (#24987)	REVIEWED	EXCLUDE_NON_CODE		重构 release-notes GitHub PR 查询脚本和 workflow
+234	7804324fa09211164ba7782e4223820acab999a0	2026-01-16	chore: update rust sdk (#24993)	REVIEWED	EXCLUDE_POST_FORK		更新 Rust SDK，并只补齐 fork 后 ProgrammableSystemTransaction/accumulator storage-cost proto variants
+235	564acd701771934d016ac0c270d44dc41a8624f6	2026-01-16	[move-stdlib] saturating arithmetic  (#24907)	REVIEWED	EXCLUDE_FEATURE		新增 Move stdlib saturating arithmetic API、协议 109 和 framework snapshot
+236	71e4cf0204cb7d94c470c3439c5a80ec493ff657	2026-01-16	Remove accumulator metadata system (#24988)	REVIEWED	EXCLUDE_FEATURE		删除 accumulator metadata 协议/框架系统，属于架构清理
+237	5e856378b0876fc31353a43078b61d7d8c4c02a9	2026-01-16	Deleting sui-data-ingestion crate (#24970)	REVIEWED	EXCLUDE_FEATURE		删除仍存在于 RTD 的 legacy ingestion 工具，非缺陷修复
+238	83d88d58017d0b2055ee3494709d2864cba6005c	2026-01-16	Remove sui-data-ingestion from builds (#24995)	REVIEWED	EXCLUDE_FEATURE		配合第 237 条从 binary build list 删除 legacy ingestion
+239	daf526c69a3bf5954f08ef8b1b9c9eb431faee00	2026-01-16	Deleting legacy kv indexer binary (#24994)	REVIEWED	EXCLUDE_FEATURE		删除 legacy kv indexer dead code，属于仓库清理
+240	c26bcfa7f0091b6fef103076aea0c1a39dcb2870	2026-01-16	Refactor release notes workflow to use shared Python script (#24989)	REVIEWED	EXCLUDE_NON_CODE		重构 release-notes workflow/script 并增加脚本单测
+241	7ebaecc69bb590916863234c5056bfbe20f3fe64	2026-01-16	Fix React Router XSS vulnerability (GHSA-2w69-qvjg-hvjx) (#24996)	APPLIED	MERGE	956156c695bd78a0c0500dcd66c3631b30483308	RTD 基线锁定易受 open-redirect XSS 影响的 router 1.23.0；已 override 到 1.23.2
+242	658ff31cf95c78106d6760b1a3791314b6e593ae	2026-01-17	[chore] use prettier-plugin-move 0.3.5 (#24978)	REVIEWED	EXCLUDE_NON_CODE		仅更新 formatter CI 版本并清理 framework 注释尾随空格
+243	3ae6da3a39b3110783197ff2236ccbf56ee48005	2026-01-17	snapshots: fix 108 to match 1.64 release branch (#25005)	REVIEWED	EXCLUDE_NON_CODE		仅同步上游 protocol 108 framework snapshot
+244	18ee88642f6e209d2cfdecd95d315ff2d6239a80	2026-01-18	Restore the environment variable to enable write sync (#24974)	REVIEWED	EXCLUDE_FEATURE		运维策略回滚：把 fork 点明确启用的默认 fsync 改回默认关闭并加环境变量，不是缺陷修复
+245	5f8ef44b9be4f74802ffff7692660468853b1460	2026-01-19	[pkg-system] fix `--json` outputs (#24979)	APPLIED	MERGE	d1047c962b9f2b797cdf8e22e0190da628ef19af	package compiler 日志污染 CLI stdout JSON；已改写 stderr，并增加基线可运行的 JSON 回归用例
+246	efa995b281d1915708718b32bea7aac4807603e6	2026-01-19	Increase wait_for_effects delay in antithesis (#25013)	REVIEWED	EXCLUDE_NON_CODE		仅在 Antithesis 将测试/诊断 timeout 从 5 秒增至 15 秒以减少 false positive
+247	dbab11d24553b13829a949f6f181729b1eb705d8	2026-01-19	clean up duplicated arg (#25015)	REVIEWED	EXCLUDE_POST_FORK		修复迁移到新 analytics framework 时引入的重复 RPC URL 配置字段
+248	ff5565a288498fa116c1113cf1c1d2ced4aa5284	2026-01-19	Expose address balances from consistent service up through graphql (#24963)	REVIEWED	EXCLUDE_POST_FORK		依赖第 159 条被排除的 consistent-store address-balance indexing feature
+249	b135ad3d47f72fe4be16a0e48cb71460e7c8bc90	2026-01-20	Deepbook Risk Ratio Docs (#25018)	REVIEWED	EXCLUDE_NON_CODE		仅新增 DeepBook risk-ratio 文档
+250	774bd6baf7e63e2eb1f789cd987a5dd90bafd334	2026-01-20	tonic_network: return error on invalid uri (#25020)	APPLIED	MERGE	446f281946463bc164e3bf9d5470b7d8ac5f4b5e	IPv6 peer host:port 缺少方括号且无效 URI 会 panic；已用 SocketAddrV6 格式化并传播 NetworkConfig 错误
 251	cc8e624a969eed2066ff5f25c64c42a34143b0a6	2026-01-20	docs: fix gRPC links (#25021)	UNREVIEWED			
 252	13526d01efc12a8ad81139bbd91819a2588d2abd	2026-01-20	docs: document GraphQL's rich queries (#24997)	UNREVIEWED			
 253	0daee96fca471ccd79066774a7704aa23b5e215c	2026-01-20	get_balance: fix parsing of shortened addresses (#25023)	UNREVIEWED			
