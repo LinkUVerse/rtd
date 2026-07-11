@@ -132,13 +132,25 @@ fn structure_loop(
             .all_children()
             .any(|child| child == succ_node)
     {
-        if let Some(succ_structured) = structured_blocks.remove(&succ_node) {
-            result = D::Structured::Seq(vec![result, succ_structured]);
-        } else if config.debug_print.structuring {
-            println!("  failed to find successor node {succ_node:?} in structured blocks");
-        }
+        result = append_loop_successor(config, structured_blocks, succ_node, result);
     }
     structured_blocks.insert(loop_head, result);
+}
+
+fn append_loop_successor(
+    config: &config::Config,
+    structured_blocks: &mut BTreeMap<NodeIndex, D::Structured>,
+    succ_node: NodeIndex,
+    result: D::Structured,
+) -> D::Structured {
+    if let Some(succ_structured) = structured_blocks.remove(&succ_node) {
+        D::Structured::Seq(vec![result, succ_structured])
+    } else {
+        if config.debug_print.structuring {
+            println!("  failed to find successor node {succ_node:?} in structured blocks");
+        }
+        result
+    }
 }
 
 fn insert_breaks(
@@ -493,4 +505,23 @@ fn flatten_sequence(seq: D::Structured) -> D::Structured {
     }
 
     DS::Seq(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_loop_successor_keeps_structured_loop() {
+        let result = D::Structured::Loop(Box::new(D::Structured::Seq(vec![])));
+
+        let output = append_loop_successor(
+            &config::Config::default(),
+            &mut BTreeMap::new(),
+            NodeIndex::new(1),
+            result,
+        );
+
+        assert!(matches!(output, D::Structured::Loop(_)));
+    }
 }
