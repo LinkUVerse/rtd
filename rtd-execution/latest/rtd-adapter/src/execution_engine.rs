@@ -52,6 +52,7 @@ mod checked {
         BridgeChainId,
     };
     use rtd_types::clock::{CLOCK_MODULE_NAME, CONSENSUS_COMMIT_PROLOGUE_FUNCTION_NAME};
+    use rtd_types::coin_reservation::ParsedDigest;
     use rtd_types::committee::EpochId;
     use rtd_types::deny_list_v1::{DENY_LIST_CREATE_FUNC, DENY_LIST_MODULE};
     use rtd_types::digests::{
@@ -88,7 +89,7 @@ mod checked {
     pub fn execute_transaction_to_effects<Mode: ExecutionMode>(
         store: &dyn BackingStore,
         input_objects: CheckedInputObjects,
-        gas_data: GasData,
+        mut gas_data: GasData,
         gas_status: RtdGasStatus,
         transaction_kind: TransactionKind,
         transaction_signer: RtdAddress,
@@ -126,6 +127,18 @@ mod checked {
             protocol_config,
             *epoch_id,
         );
+
+        if matches!(
+            &execution_params,
+            ExecutionOrEarlyError::Err(ExecutionErrorKind::InsufficientFundsForWithdraw)
+        ) && protocol_config.prune_address_balance_gas_payment_on_iffw()
+            && gas_data.payment.len() > 1
+            && ParsedDigest::try_from(gas_data.payment[0].2).is_err()
+        {
+            gas_data
+                .payment
+                .retain(|entry| ParsedDigest::try_from(entry.2).is_err());
+        }
 
         let sponsor = {
             let gas_owner = gas_data.owner;

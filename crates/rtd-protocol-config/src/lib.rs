@@ -23,7 +23,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 105;
+const MAX_PROTOCOL_VERSION: u64 = 106;
 
 // Record history of protocol version allocations here:
 //
@@ -283,6 +283,8 @@ const MAX_PROTOCOL_VERSION: u64 = 105;
 //              Enable multi-epoch transaction expiration.
 //              Enable always include required PCRs (0-4 & 8) parsing even if they are zeros for
 //              nitro attestation native function in Devnet and Testnet.
+// Version 106: Prune address-balance gas payments before gas smashing on
+//              InsufficientFundsForWithdraw failures.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -791,6 +793,10 @@ struct FeatureFlags {
     // Enable address balance gas payments
     #[serde(skip_serializing_if = "is_false")]
     enable_address_balance_gas_payments: bool,
+
+    // Prevent address-balance gas settlement from underflowing on early withdrawal failures.
+    #[serde(skip_serializing_if = "is_false")]
+    prune_address_balance_gas_payment_on_iffw: bool,
 
     // Enable multi-epoch transaction expiration (max 1 epoch difference)
     #[serde(skip_serializing_if = "is_false")]
@@ -2061,6 +2067,10 @@ impl ProtocolConfig {
 
     pub fn enable_address_balance_gas_payments(&self) -> bool {
         self.feature_flags.enable_address_balance_gas_payments
+    }
+
+    pub fn prune_address_balance_gas_payment_on_iffw(&self) -> bool {
+        self.feature_flags.prune_address_balance_gas_payment_on_iffw
     }
 
     pub fn enable_multi_epoch_transaction_expiration(&self) -> bool {
@@ -4367,6 +4377,9 @@ impl ProtocolConfig {
                             .enable_nitro_attestation_always_include_required_pcrs_parsing = true;
                     }
                 }
+                106 => {
+                    cfg.feature_flags.prune_address_balance_gas_payment_on_iffw = true;
+                }
                 // Use this template when making changes:
                 //
                 //     // modify an existing constant.
@@ -4880,6 +4893,18 @@ mod test {
         assert_eq!(
             prot.max_arguments(),
             prot.max_arguments_as_option().unwrap()
+        );
+    }
+
+    #[test]
+    fn version_106_enables_iffw_gas_payment_pruning() {
+        assert!(
+            !ProtocolConfig::get_for_version(ProtocolVersion::new(105), Chain::Unknown)
+                .prune_address_balance_gas_payment_on_iffw()
+        );
+        assert!(
+            ProtocolConfig::get_for_version(ProtocolVersion::new(106), Chain::Unknown)
+                .prune_address_balance_gas_payment_on_iffw()
         );
     }
 
