@@ -643,7 +643,7 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 642	a37744b208b7f7e5af25c617df13a180f8c05cef	2026-02-23	Reduce CI test output verbosity (#25557)	UNREVIEWED			
 643	4393c7645e94c6b13c4008d8c74e7defb605b5c5	2026-02-23	Bump to protocol v113 and clean up some execution paths (#25585)	UNREVIEWED			
 644	05d92edfbfa98131e692f1aa598e786bcf28687d	2026-02-23	dial down fanout (#25586)	UNREVIEWED			
-645	b8d8cadb925848f8fc0077f81f17069f3aa16dac	2026-02-23	[move-compiler] Fix two crashes with macros (#25546)	UNREVIEWED			
+645	b8d8cadb925848f8fc0077f81f17069f3aa16dac	2026-02-23	[move-compiler] Fix two crashes with macros (#25546)	APPLIED	MERGE	8f8439dfae6903c0cdc7f22a23b53773fd3377bf	MacroFuns 错误输入不再触发 tuple type/lvalue ICE，改为继续输出编译诊断。
 646	83f49f719306dfa31d648fb791065aa70fa7057d	2026-02-23	[move][move-compiler] Fix #25451, #25452, #25454 (#25502)	UNREVIEWED			
 647	45d4937faa509aae619b2af3af70a6e97741aa17	2026-02-23	[move][move-compiler] Fix #25349 (#25501)	APPLIED	MERGE	f35e627e3f077c58e0f8fd16327bb40fdbecb3f0	把 string literal match 从 compiler crash 转为明确的 InvalidString 诊断。
 648	9c6f11ef03385a91c7f85c7be43ab3a202cec3cf	2026-02-23	[cli] Fix client ptb output format (#25587)	UNREVIEWED			
