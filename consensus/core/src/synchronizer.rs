@@ -1931,7 +1931,7 @@ mod tests {
         let own_block = VerifiedBlock::new_for_test(TestBlock::new(60, 0).build());
         let own_block_ref = own_block.reference();
         let mut expected_blocks = vec![own_block];
-        expected_blocks.extend((30..=59).map(|round| {
+        expected_blocks.extend((61..=90).map(|round| {
             VerifiedBlock::new_for_test(
                 TestBlock::new(round, 1)
                     .set_ancestors(vec![own_block_ref])
@@ -1939,7 +1939,7 @@ mod tests {
             )
         }));
         expected_blocks.push(VerifiedBlock::new_for_test(
-            TestBlock::new(60, 2)
+            TestBlock::new(91, 2)
                 .set_ancestors(vec![own_block_ref])
                 .build(),
         ));
