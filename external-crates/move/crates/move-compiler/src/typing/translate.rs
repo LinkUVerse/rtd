@@ -2338,15 +2338,15 @@ fn match_arm(
     let ploc = pattern.loc;
     let mut pattern = match_pattern(context, pattern, ref_mut, &rhs_binders);
 
-    if subtype_opt(
+    if let Some(pat_ty) = subtype_opt(
         context,
         ploc,
         || "Invalid pattern",
         &pattern.ty,
         subject_type,
-    )
-    .is_none()
-    {
+    ) {
+        pattern.ty = pat_ty;
+    } else {
         pattern.ty = context.error_type(ploc);
         pattern.pat.value = T::UnannotatedPat_::ErrorPat;
     }
@@ -2412,6 +2412,29 @@ fn match_pattern(
     )
 }
 
+// Wraps `subtype_opt` for use during pattern typing. Returns `None` (without
+// emitting a diagnostic) when either side is a top-level `UnresolvedError`, so
+// no unification is attempted. `UnresolvedError` is absorbing in the type
+// substitution: once a metavariable is bound to it, no further unification can
+// re-bind it. Or-pattern branches share binder metavariables via
+// `make_expr_list_tvars` in `match_arm`, so letting one malformed branch bind
+// `tvar_x := UnresolvedError` would silently corrupt typing in the other
+// branches.
+fn pattern_subtype_opt<T: ToString, F: FnOnce() -> T>(
+    context: &mut Context,
+    loc: Loc,
+    msg: F,
+    lhs: &Type,
+    rhs: &Type,
+) -> Option<Type> {
+    if matches!(lhs.value.inner(), TI::UnresolvedError)
+        || matches!(rhs.value.inner(), TI::UnresolvedError)
+    {
+        return None;
+    }
+    subtype_opt(context, loc, msg, lhs, rhs)
+}
+
 fn match_pattern_(
     context: &mut Context,
     sp!(loc, pat_): N::MatchPattern,
@@ -2463,7 +2486,7 @@ fn match_pattern_(
                     match_pattern_(context, tpat, mut_ref, rhs_binders, wildcard_needs_drop);
                 // This double-clone should not be necessary, but the borrow checker is unhappy.
                 let fty_ref = rtype!(tpat.pat.loc, fty.clone());
-                if let Some(pat_ty) = subtype_opt(
+                if let Some(pat_ty) = pattern_subtype_opt(
                     context,
                     f.loc(),
                     || "Invalid pattern field type",
@@ -2519,7 +2542,7 @@ fn match_pattern_(
                     match_pattern_(context, tpat, mut_ref, rhs_binders, wildcard_needs_drop);
                 // This double-clone should not be necessary, but the borrow checker is unhappy.
                 let fty_ref = rtype!(tpat.pat.loc, fty.clone());
-                if let Some(pat_ty) = subtype_opt(
+                if let Some(pat_ty) = pattern_subtype_opt(
                     context,
                     f.loc(),
                     || "Invalid pattern field type",
@@ -2696,13 +2719,17 @@ fn match_pattern_(
                 inner_wildcards_need_drop,
             );
             let x_ty = context.get_local_type(&x);
-            let ty = subtype(
+            // If unification is skipped (one side is `UnresolvedError`), keep the at-pattern
+            // structure with `x_ty` as the type so binders downstream remain typed via `x_ty`'s
+            // metavariable rather than being lost to a top-level `ErrorPat` rewrite.
+            let ty = pattern_subtype_opt(
                 context,
                 inner.pat.loc,
                 || "Invalid inner pattern type".to_string(),
                 &inner.ty,
                 &x_ty,
-            );
+            )
+            .unwrap_or(x_ty);
             if type_needs_copy && mut_ref.is_none() {
                 context.add_ability_constraint(
                     loc,
@@ -2726,7 +2753,7 @@ fn match_pattern_(
             );
             let x_ty = context.get_local_type(&x);
             // ensure subtype for posterity
-            subtype(
+            pattern_subtype_opt(
                 context,
                 inner.pat.loc,
                 || "Invalid inner pattern type".to_string(),
