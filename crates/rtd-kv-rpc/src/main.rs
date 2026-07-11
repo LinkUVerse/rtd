@@ -7,9 +7,9 @@ use axum::routing::get;
 use clap::Parser;
 use linku_network::callback::CallbackLayer;
 use prometheus::Registry;
-use std::sync::Arc;
 use rtd_kv_rpc::KvRpcServer;
 use rtd_rpc_api::{RpcMetrics, RpcMetricsMakeCallbackHandler, ServerVersion};
+use std::sync::Arc;
 use telemetry_subscribers::TelemetryConfig;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 
@@ -42,6 +42,9 @@ async fn health_check() -> &'static str {
 #[tokio::main]
 async fn main() -> Result<()> {
     let _guard = TelemetryConfig::new().with_env().init();
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install CryptoProvider");
     let app = App::parse();
     unsafe {
         std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", app.credentials.clone());

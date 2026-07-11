@@ -13848,6 +13848,7 @@ dependencies = [
  "rtd-rpc-api",
  "rtd-sdk-types",
  "rtd-types",
+ "rustls 0.23.25",
  "telemetry-subscribers",
  "tokio",
  "tonic 0.14.2",
