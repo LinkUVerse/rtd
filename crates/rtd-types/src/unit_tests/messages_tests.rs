@@ -638,6 +638,24 @@ fn test_user_signature_committed_in_transactions() {
 }
 
 #[test]
+fn test_alias_versions_committed_in_full_message_digest() {
+    let transaction = crate::utils::create_fake_transaction();
+    let signed_data = transaction.data();
+    let signer = signed_data.intent_message().value.sender();
+
+    let digest_at_version_1 = signed_data.full_message_digest_with_alias_versions(&vec![(
+        signer,
+        Some(SequenceNumber::from_u64(1)),
+    )]);
+    let digest_at_version_2 = signed_data.full_message_digest_with_alias_versions(&vec![(
+        signer,
+        Some(SequenceNumber::from_u64(2)),
+    )]);
+
+    assert_ne!(digest_at_version_1, digest_at_version_2);
+}
+
+#[test]
 fn test_user_signature_committed_in_signed_transactions() {
     // TODO: refactor this test to not reuse the same keys for user and authority signing
     let (_a1, sec1): (_, AuthorityKeyPair) = get_key_pair();
