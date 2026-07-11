@@ -86,7 +86,9 @@ pub enum Exp {
     Value(Value),
     Variable(String),
     Constant(std::rc::Rc<Constant<Symbol>>),
-    // TODO should we add specific exps for unpacks?
+    // Placeholder for structured control flow we cannot yet decompile. Ideally this would not be
+    // needed, but it avoids failing an entire module because one function is not structurizable.
+    Unstructured(Vec<UnstructuredNode>),
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -120,6 +122,12 @@ impl Exp {
             Exp::Unpack(_, _, exp) => exp.contains_break(),
             Exp::UnpackVariant(_, _, _, exp) => exp.contains_break(),
             Exp::VecUnpack(_, exp) => exp.contains_break(),
+            Exp::Unstructured(nodes) => nodes.iter().any(|node| match node {
+                UnstructuredNode::Labeled(_, body) | UnstructuredNode::Statement(body) => {
+                    body.contains_break()
+                }
+                UnstructuredNode::Goto(_) => false,
+            }),
         }
     }
 
@@ -151,6 +159,12 @@ impl Exp {
             Exp::Unpack(_, _, exp) => exp.contains_continue(),
             Exp::UnpackVariant(_, _, _, exp) => exp.contains_continue(),
             Exp::VecUnpack(_, exp) => exp.contains_continue(),
+            Exp::Unstructured(nodes) => nodes.iter().any(|node| match node {
+                UnstructuredNode::Labeled(_, body) | UnstructuredNode::Statement(body) => {
+                    body.contains_continue()
+                }
+                UnstructuredNode::Goto(_) => false,
+            }),
         }
     }
 
@@ -343,6 +357,28 @@ impl std::fmt::Display for Exp {
                     }
                     writeln!(f, "] = {};", exp)
                 }
+                Exp::Unstructured(nodes) => {
+                    indent(f, level)?;
+                    writeln!(f, "unstructured {{")?;
+                    for node in nodes {
+                        match node {
+                            UnstructuredNode::Labeled(label, body) => {
+                                indent(f, level + 1)?;
+                                writeln!(f, "'label_{}:", label)?;
+                                fmt_exp(f, body, level + 1)?;
+                            }
+                            UnstructuredNode::Statement(exp) => {
+                                fmt_exp(f, exp, level + 1)?;
+                            }
+                            UnstructuredNode::Goto(label) => {
+                                indent(f, level + 1)?;
+                                writeln!(f, "goto 'label_{};", label)?;
+                            }
+                        }
+                    }
+                    indent(f, level)?;
+                    writeln!(f, "}}")
+                }
             }
         }
 
@@ -419,4 +455,20 @@ fn write_primitive_op(
         PrimitiveOp::ShiftLeft => todo!(),
         PrimitiveOp::ShiftRight => todo!(),
     }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Unstructured Control Flow Types
+// -------------------------------------------------------------------------------------------------
+
+pub type Label = u64;
+
+#[derive(Debug, Clone)]
+pub enum UnstructuredNode {
+    /// Labeled block: 'label_N: { ... }
+    Labeled(Label, Box<Exp>),
+    /// Unlabeled statement.
+    Statement(Box<Exp>),
+    /// Goto statement: goto 'label_N;
+    Goto(Label),
 }
