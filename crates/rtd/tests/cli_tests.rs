@@ -25,9 +25,9 @@ use rtd_sdk::RtdClient;
 use rtd_test_transaction_builder::batch_make_transfer_transactions;
 use rtd_types::object::Owner;
 use rtd_types::transaction::{
-    TEST_ONLY_GAS_UNIT_FOR_GENERIC, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS,
+    CallArg, TEST_ONLY_GAS_UNIT_FOR_GENERIC, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS,
     TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TEST_ONLY_GAS_UNIT_FOR_SPLIT_COIN,
-    TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData, TransactionDataAPI,
+    TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData, TransactionDataAPI, TransactionKind,
 };
 use tokio::time::sleep;
 
@@ -5598,5 +5598,60 @@ async fn test_move_build_dump_bytecode_as_base64_with_unpublished_deps() -> Resu
     );
 
     temp_dir.close()?;
+    Ok(())
+}
+
+#[sim_test]
+async fn test_publish_sender_flag_respected_in_serialized_transaction() -> Result<(), anyhow::Error>
+{
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let active_address = test_cluster.get_address_0();
+    let specified_sender = test_cluster.get_address_1();
+    let context = &mut test_cluster.wallet;
+
+    assert_ne!(active_address, specified_sender);
+
+    let client = context.get_client().await?;
+    let chain_id = client.read_api().get_chain_identifier().await?;
+    let (_tmp, package_path) =
+        create_temp_dir_with_framework_packages("dummy_modules_publish", Some(chain_id))?;
+
+    let response = RtdClientCommands::TestPublish(TestPublishArgs {
+        publish_args: PublishArgs {
+            package_path,
+            build_config: BuildConfig::new_for_testing().config,
+            skip_dependency_verification: false,
+            verify_deps: true,
+            with_unpublished_dependencies: false,
+            payment: PaymentArgs::default(),
+            gas_data: GasDataArgs::default(),
+            processing: TxProcessingArgs {
+                serialize_unsigned_transaction: true,
+                sender: Some(specified_sender),
+                ..Default::default()
+            },
+        },
+        build_env: Some("testnet".to_string()),
+        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+    })
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::SerializedUnsignedTransaction(tx_data) = response else {
+        panic!("Expected SerializedUnsignedTransaction result");
+    };
+
+    assert_eq!(tx_data.sender(), specified_sender);
+
+    let TransactionKind::ProgrammableTransaction(pt) = tx_data.kind() else {
+        panic!("Expected ProgrammableTransaction kind");
+    };
+    let CallArg::Pure(address_bytes) = &pt.inputs[0] else {
+        panic!("Expected first input to be an address");
+    };
+    let recipient: RtdAddress = bcs::from_bytes(address_bytes)?;
+
+    assert_eq!(recipient, specified_sender);
+
     Ok(())
 }
