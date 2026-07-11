@@ -24,6 +24,35 @@ use tap::Pipe;
 
 mod simulate;
 
+async fn run_simulation<T>(
+    simulation: impl FnOnce() -> Result<T, RpcError> + Send + 'static,
+) -> Result<T, tonic::Status>
+where
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(simulation)
+        .await
+        .map_err(|error| {
+            tonic::Status::internal(format!("simulate_transaction task failed: {error}"))
+        })?
+        .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_simulation;
+
+    #[tokio::test]
+    async fn simulation_work_uses_the_blocking_pool() {
+        let async_thread = std::thread::current().id();
+        let blocking_thread = run_simulation(|| Ok(std::thread::current().id()))
+            .await
+            .unwrap();
+
+        assert_ne!(async_thread, blocking_thread);
+    }
+}
+
 #[tonic::async_trait]
 impl TransactionExecutionService for RpcService {
     async fn execute_transaction(
@@ -45,9 +74,11 @@ impl TransactionExecutionService for RpcService {
         &self,
         request: tonic::Request<SimulateTransactionRequest>,
     ) -> Result<tonic::Response<SimulateTransactionResponse>, tonic::Status> {
-        simulate::simulate_transaction(self, request.into_inner())
+        let service = self.clone();
+        let request = request.into_inner();
+        run_simulation(move || simulate::simulate_transaction(&service, request))
+            .await
             .map(tonic::Response::new)
-            .map_err(Into::into)
     }
 }
 
