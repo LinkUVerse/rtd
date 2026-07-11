@@ -645,7 +645,7 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 644	05d92edfbfa98131e692f1aa598e786bcf28687d	2026-02-23	dial down fanout (#25586)	UNREVIEWED			
 645	b8d8cadb925848f8fc0077f81f17069f3aa16dac	2026-02-23	[move-compiler] Fix two crashes with macros (#25546)	UNREVIEWED			
 646	83f49f719306dfa31d648fb791065aa70fa7057d	2026-02-23	[move][move-compiler] Fix #25451, #25452, #25454 (#25502)	UNREVIEWED			
-647	45d4937faa509aae619b2af3af70a6e97741aa17	2026-02-23	[move][move-compiler] Fix #25349 (#25501)	UNREVIEWED			
+647	45d4937faa509aae619b2af3af70a6e97741aa17	2026-02-23	[move][move-compiler] Fix #25349 (#25501)	APPLIED	MERGE	f35e627e3f077c58e0f8fd16327bb40fdbecb3f0	把 string literal match 从 compiler crash 转为明确的 InvalidString 诊断。
 648	9c6f11ef03385a91c7f85c7be43ab3a202cec3cf	2026-02-23	[cli] Fix client ptb output format (#25587)	UNREVIEWED			
 649	0697f4038f7093d115c9bd968c059ee710ccf66d	2026-02-23	Fix sequence_key key type (#25590)	UNREVIEWED			
 650	67710b8a2b230eb87f3729b5b99ec5500bca3bad	2026-02-23	reducing ingestion concurrency and channel size (#25593)	UNREVIEWED			
