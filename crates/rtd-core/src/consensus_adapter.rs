@@ -1005,18 +1005,24 @@ impl ConsensusAdapter {
                 }
             };
 
+            let processed_via_notify;
             guard.processed_method = match select(processed_waiter, submit_inner.boxed()).await {
                 Either::Left((observed, _submit_inner)) => {
-                    if let Some(tx_consensus_positions) = tx_consensus_positions.take() {
-                        let _ = tx_consensus_positions.send(Err(make_processing_error(observed)));
-                    }
+                    processed_via_notify = true;
                     observed
                 }
                 Either::Right(((), processed_waiter)) => {
                     debug!("Submitted {transaction_keys:?} to consensus");
+                    processed_via_notify = false;
                     processed_waiter.await
                 }
             };
+            if processed_via_notify
+                && let Some(tx_consensus_positions) = tx_consensus_positions.take()
+            {
+                let _ =
+                    tx_consensus_positions.send(Err(make_processing_error(guard.processed_method)));
+            }
         }
         debug!("{transaction_keys:?} processed by consensus");
 

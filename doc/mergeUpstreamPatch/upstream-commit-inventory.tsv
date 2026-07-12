@@ -349,56 +349,56 @@ index	upstream_sha	commit_date	subject	review_status	decision	rtd_commit	notes
 348	88935140b17155ed132b54f2dcea8c9c894a4237	2026-01-28	docs: Add Docusaurus subtree for shared components (#24827)	REVIEWED	EXCLUDE_NON_CODE		仅 Docusaurus/shared docs components 重组。
 349	35dff86f4e83d9011f3ae3628fae5e74c356ad75	2026-01-28	[move][chore] Convert file hashes to symbols internally to reduce size (#24800)	REVIEWED	EXCLUDE_FEATURE		Move compiler/analyzer FileHash 内存重构。
 350	b486205852707b2de41dfe62d76aa3299423cb02	2026-01-28	[move-ide] Fixed crash when module extension extends user module (#25154)	APPLIED	MERGE	c5f3fbe7830800a67fc4d1f0b4c3db73ff716c4c	刷新被 module extension 扩展的 user module。
-351	d016c44e337902034496be572d4bc6d5b2b3058c	2026-01-29	[move-ide] Extension version bump (#25155)	UNREVIEWED			
-352	411a2332872de2ee78dc13a9b1142d3e8d9e36fa	2026-01-28	grpc-client: add get_transaction and execute_transaction_and_wait_for_checkpoint methods	UNREVIEWED			
-353	2d3b135f93c1ffa646aff7196443d177f02ce37b	2026-01-28	grpc-client: return Checkpoint from get_full_checkpoint method	UNREVIEWED			
-354	6d05b3a1b806344c8ff85a65475e4c56fca81262	2026-01-28	sdk: convert WalletContext::execute_transaction_may_fail to grpc"	UNREVIEWED			
-355	5c2fd3d4019ed2947e3b327ca14bb63cf42a9a82	2026-01-29	[core] checkpoint syncing - only pass relevant effects to settle (#25144)	UNREVIEWED			
-356	aa28a13dc84aa6bc771450efbc0349bc1257559b	2026-01-29	fix(graphql): detect transaction payloads (#25152)	UNREVIEWED			
-357	6023ccd1db7b147211eefeea1172c06dd42d6523	2026-01-29	[decompiler] Fix VecPopBack pretty printing index out of bounds error	UNREVIEWED			
-358	c91bd39bd4db6f529bec20cb5f35c48aaccde031	2026-01-29	[consensus] track peer accepted block rounds during block and commit sync (#25158)	UNREVIEWED			
-359	4b29bc17030c9be81754099eb167bc4122e30b38	2026-01-29	docs: fix Nautilus wording (#25161)	UNREVIEWED			
-360	d72d91f23082bf723715645932f62949b20cbab4	2026-01-29	Add a skill for simtest debugging (#25156)	UNREVIEWED			
-361	1c5e133e68aa8e25cfac15fdd9e9d8f8a3bef1bf	2026-01-29	Upgrade checkout actions to v6.0.2 (#25167)	UNREVIEWED			
-362	0100c29b8d185348b6171d46937150dbdb1b4268	2026-01-29	Upgrade python setup action to `v6.2.0` (#25168)	UNREVIEWED			
-363	1cc424789f07bfeace65857c9a71dca0f03bfdec	2026-01-29	Always accept system transactions (#25001)	UNREVIEWED			
-364	f365cd4f19d965d346c7918044fe268075faff85	2026-01-29	Upgrade google-github-actions auth action (#25170)	UNREVIEWED			
-365	c9ac596e6a8fad51c13f397dfb25be04fe0e95d5	2026-01-29	Upgrade GH actions to latest versions (#25171)	UNREVIEWED			
-366	5ad52088afdfdf28bb56ac9f7cc025c3f7d3ef2a	2026-01-29	test-cluster: add grpc client to FullNodeHandle	UNREVIEWED			
-367	f1197b6c15c5caad35e202ad25be5cb8ea11e189	2026-01-29	rosetta: remove unused jsonrpc client from tests	UNREVIEWED			
-368	82ef67efffdfe06fc969d8f06dbdf377ef4b6355	2026-01-29	bridge: migrate publish_and_register_coins_return_add_coins_on_sui_action to grpc	UNREVIEWED			
-369	36a8c10b61d7f0871951d8f1cf6ec6053d095bfa	2026-01-29	grpc-client: add get_protocol_config method	UNREVIEWED			
-370	2d8bddaac77f75f693548386152d29a05b1dcf0b	2026-01-29	cluster-test: migrate is_beacon_enabled to grpc	UNREVIEWED			
-371	dd6a7d5dd62b30d322dbb0a96df9f065a43c3846	2026-01-29	full_node_tests: migrate publish_init_events_without_local_execution to grpc	UNREVIEWED			
-372	28b40a95552da0217b6986ccbd148455431939e6	2026-01-29	grpc-client: add get_system_state method	UNREVIEWED			
-373	d7d4b81cee13ed570d538445c33b677f1e5d19c8	2026-01-29	transaction_orchestrator_tests: migrate execute_transaction_v3_staking_transaction to grpc	UNREVIEWED			
-374	9c4fe9a60ecb890ed5ccdf1fd5ec580cbdf8518e	2026-01-29	faucet: migrate local_faucet to grpc	UNREVIEWED			
-375	9f0e1276a46a7bae6bdca5e13e2043261b91a441	2026-01-29	json-rpc-tests: get client from TestCluster	UNREVIEWED			
-376	84233e149c6c29aa972671fbc2903625ef6b498c	2026-01-29	oracle: migrate to grpc	UNREVIEWED			
-377	6866408007f040a908a08f720bdb3d0f51bb0fee	2026-01-29	test-transaction-builder: remove use of WalletContext::get_client	UNREVIEWED			
-378	14d17ae5d1e7e6b6216585ec1e70b522e174859d	2026-01-29	source-validation: migrate to grpc	UNREVIEWED			
-379	638f19bcb2344e2c5b3a925688a11351c072d019	2026-01-29	sui-transaction-builder: change DataReader api to fetch full object	UNREVIEWED			
-380	2b6d9121fe4fde6810fc10c0258ce6ae9e4fdfff	2026-01-29	grpc-client: impl sui_transaction_builder::DataReader	UNREVIEWED			
-381	80920138705e61348351df78918fcbe2ae434950	2026-01-29	Upgrade depricated cargo actions (#25169)	UNREVIEWED			
-382	c99b620e482521b49cdedd128817407236131c35	2026-01-29	Fix Tagging workflow (#25172)	UNREVIEWED			
-383	bd827149868a3a5495968cb98850c285a3d24e43	2026-01-29	docs: update TypeScript SDK v2 documentation examples (#25115)	UNREVIEWED			
-384	868c226359ef914f1f3b080518f27eb13d8967f5	2026-01-30	[move] Add Result to ValueVisitor (#25174)	UNREVIEWED			
-385	88e795d1a410d6f5a850f28035ff964deb21e2cf	2026-01-30	Sui v1.65.0 Framework Bytecode snapshot (#25184)	UNREVIEWED			
-386	db642a106a6eb1c88c67574aa2c7e229324aac15	2026-01-30	Sui v1.66.0 Version Bump (#25185)	UNREVIEWED			
-387	e29815c18893f514f81e126ddfb263ec7a3672da	2026-01-29	[graphql-alt] Update IMoveObject/MoveObject/CoinMetadata/DynamicField return types for partial error support [7/n] (#25109)	UNREVIEWED			
-388	89be7daa9096e56384915f89569b9fa6e0448a7d	2026-01-30	[graphql-alt] Update Query return types for partial error support [8/n] (#25110)	UNREVIEWED			
-389	9dfec3925875ec40eb7431aa3250c82425b1d148	2026-01-30	[2/n][sui-bridge] [JSON RPC -> gRPC Migration] Switch to gRPC based event event syncing (#24639)	UNREVIEWED			
-390	14510cd955ac7d6ddc3aac694a4c4a82b9ef5747	2026-01-30	gh 3rd party actions upgrade (part 2) (#25180)	UNREVIEWED			
-391	9a5a7c308942fb4ed992947b3d3cac8fc8a66ad2	2026-01-30	Upgrade 3rd party gh actions (#25179)	UNREVIEWED			
-392	5132f7490ac7004868c900682991e94935eb3985	2026-01-30	docs: Add Kapa.ai chatbot / remove Cookbook chatbot (#25176)	UNREVIEWED			
-393	eac00a6419c79eb86b013ec05309592225e2b9af	2026-01-30	Allow multiple address groups of different priority in EndpointManager (#25132)	UNREVIEWED			
-394	19158a9471c7bb6dd6a77830fb7eb5bf958749ae	2026-01-30	[consensus] track received round in RoundTracker (#25166)	UNREVIEWED			
-395	e0c653e709f45e8707f1cd52e07053e07ba2e64b	2026-01-30	Make seed-search progress prettier (#25183)	UNREVIEWED			
-396	938247f1c139d910854fab201168c68f500b39b3	2026-01-30	[decompiler] Add unstructured control flow fallback with goto statements	UNREVIEWED			
-397	696fdeea3157e4e05eac2ff030afbc2f200704ea	2026-01-30	Adapt Chain Identifier to return full 32 byte digest (#25186)	UNREVIEWED			
-398	b50e5f0dc02041d40fa2339d89ed471eb4e63987	2026-01-30	Add support for peer address overrides in P2pConfig (#25187)	UNREVIEWED			
-399	364431782bcee01be3649f12a01a4277b85d85a0	2026-01-30	[fix] improve handling of roaring bitmap (#25165)	UNREVIEWED			
-400	5428f2feccc058ce18b9c37d5b71d8ab4b080673	2026-01-30	Upgrade 3rd party gh actions (Part 3) (#25181)	UNREVIEWED			
+351	d016c44e337902034496be572d4bc6d5b2b3058c	2026-01-29	[move-ide] Extension version bump (#25155)	REVIEWED	EXCLUDE_NON_CODE		仅 Move VS Code extension 版本号发布变更。
+352	411a2332872de2ee78dc13a9b1142d3e8d9e36fa	2026-01-28	grpc-client: add get_transaction and execute_transaction_and_wait_for_checkpoint methods	REVIEWED	EXCLUDE_FEATURE		新增 gRPC transaction API 与 wait-for-checkpoint 行为。
+353	2d3b135f93c1ffa646aff7196443d177f02ce37b	2026-01-28	grpc-client: return Checkpoint from get_full_checkpoint method	REVIEWED	EXCLUDE_FEATURE		变更 gRPC checkpoint 返回类型与 field-mask API。
+354	6d05b3a1b806344c8ff85a65475e4c56fca81262	2026-01-28	sdk: convert WalletContext::execute_transaction_may_fail to grpc"	REVIEWED	EXCLUDE_FEATURE		WalletContext 与大量调用方迁移至 gRPC。
+355	5c2fd3d4019ed2947e3b327ca14bb63cf42a9a82	2026-01-29	[core] checkpoint syncing - only pass relevant effects to settle (#25144)	REVIEWED	EXCLUDE_POST_FORK		修复 row 301 新增的 checkpoint split v2 路径，基线不存在。
+356	aa28a13dc84aa6bc771450efbc0349bc1257559b	2026-01-29	fix(graphql): detect transaction payloads (#25152)	APPLIED	MERGE	f4bc40940e9be97150552346f6a16c475408eaa0	修正 GraphQL transaction payload 参数名与 schema 的大小写/命名漂移。
+357	6023ccd1db7b147211eefeea1172c06dd42d6523	2026-01-29	[decompiler] Fix VecPopBack pretty printing index out of bounds error	APPLIED	MERGE	299e025219cc53d2d725cc0b9c2b7975ede24d89	避免一元 VecPopBack pretty-printer 访问不存在的第二参数。
+358	c91bd39bd4db6f529bec20cb5f35c48aaccde031	2026-01-29	[consensus] track peer accepted block rounds during block and commit sync (#25158)	APPLIED	MERGE	4700771ba46c9ffb9de2b66694a12cc8cc921f21	block/commit sync 验证块后更新 PeerRoundTracker。
+359	4b29bc17030c9be81754099eb167bc4122e30b38	2026-01-29	docs: fix Nautilus wording (#25161)	REVIEWED	EXCLUDE_NON_CODE		仅 Nautilus 文档措辞。
+360	d72d91f23082bf723715645932f62949b20cbab4	2026-01-29	Add a skill for simtest debugging (#25156)	REVIEWED	EXCLUDE_NON_CODE		仅新增 simtest 调试技能说明。
+361	1c5e133e68aa8e25cfac15fdd9e9d8f8a3bef1bf	2026-01-29	Upgrade checkout actions to v6.0.2 (#25167)	REVIEWED	EXCLUDE_NON_CODE		仅 GitHub Actions checkout 版本升级。
+362	0100c29b8d185348b6171d46937150dbdb1b4268	2026-01-29	Upgrade python setup action to `v6.2.0` (#25168)	REVIEWED	EXCLUDE_NON_CODE		仅 GitHub Actions setup-python 版本升级。
+363	1cc424789f07bfeace65857c9a71dca0f03bfdec	2026-01-29	Always accept system transactions (#25001)	REVIEWED	EXCLUDE_FEATURE		协议确定性行为变更仅在 v110 启用；RTD 最高 v105，不能回填激活。
+364	f365cd4f19d965d346c7918044fe268075faff85	2026-01-29	Upgrade google-github-actions auth action (#25170)	REVIEWED	EXCLUDE_NON_CODE		仅 Google auth GitHub Action 升级。
+365	c9ac596e6a8fad51c13f397dfb25be04fe0e95d5	2026-01-29	Upgrade GH actions to latest versions (#25171)	REVIEWED	EXCLUDE_NON_CODE		仅第三方 GitHub Actions 版本与配置升级。
+366	5ad52088afdfdf28bb56ac9f7cc025c3f7d3ef2a	2026-01-29	test-cluster: add grpc client to FullNodeHandle	REVIEWED	EXCLUDE_NON_CODE		仅测试工具暴露 gRPC client。
+367	f1197b6c15c5caad35e202ad25be5cb8ea11e189	2026-01-29	rosetta: remove unused jsonrpc client from tests	REVIEWED	EXCLUDE_NON_CODE		仅删除测试中的未使用变量。
+368	82ef67efffdfe06fc969d8f06dbdf377ef4b6355	2026-01-29	bridge: migrate publish_and_register_coins_return_add_coins_on_sui_action to grpc	REVIEWED	EXCLUDE_FEATURE		bridge coin 发布/注册流程迁移至 gRPC。
+369	36a8c10b61d7f0871951d8f1cf6ec6053d095bfa	2026-01-29	grpc-client: add get_protocol_config method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC get_protocol_config API。
+370	2d8bddaac77f75f693548386152d29a05b1dcf0b	2026-01-29	cluster-test: migrate is_beacon_enabled to grpc	REVIEWED	EXCLUDE_NON_CODE		仅 cluster test 调用迁移。
+371	dd6a7d5dd62b30d322dbb0a96df9f065a43c3846	2026-01-29	full_node_tests: migrate publish_init_events_without_local_execution to grpc	REVIEWED	EXCLUDE_NON_CODE		仅 full-node 测试调用迁移。
+372	28b40a95552da0217b6986ccbd148455431939e6	2026-01-29	grpc-client: add get_system_state method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC get_system_state API。
+373	d7d4b81cee13ed570d538445c33b677f1e5d19c8	2026-01-29	transaction_orchestrator_tests: migrate execute_transaction_v3_staking_transaction to grpc	REVIEWED	EXCLUDE_NON_CODE		仅 transaction orchestrator 测试迁移。
+374	9c4fe9a60ecb890ed5ccdf1fd5ec580cbdf8518e	2026-01-29	faucet: migrate local_faucet to grpc	REVIEWED	EXCLUDE_FEATURE		LocalFaucet 生产接口迁移至 gRPC。
+375	9f0e1276a46a7bae6bdca5e13e2043261b91a441	2026-01-29	json-rpc-tests: get client from TestCluster	REVIEWED	EXCLUDE_NON_CODE		仅 JSON-RPC 测试复用 TestCluster client。
+376	84233e149c6c29aa972671fbc2903625ef6b498c	2026-01-29	oracle: migrate to grpc	REVIEWED	EXCLUDE_FEATURE		Oracle 全面迁移至 gRPC API。
+377	6866408007f040a908a08f720bdb3d0f51bb0fee	2026-01-29	test-transaction-builder: remove use of WalletContext::get_client	REVIEWED	EXCLUDE_NON_CODE		仅测试 transaction builder 调用迁移。
+378	14d17ae5d1e7e6b6216585ec1e70b522e174859d	2026-01-29	source-validation: migrate to grpc	REVIEWED	EXCLUDE_FEATURE		source validation 客户端与 DTO 迁移至 gRPC。
+379	638f19bcb2344e2c5b3a925688a11351c072d019	2026-01-29	sui-transaction-builder: change DataReader api to fetch full object	REVIEWED	EXCLUDE_FEATURE		DataReader 公共 API 重构为返回完整 Object。
+380	2b6d9121fe4fde6810fc10c0258ce6ae9e4fdfff	2026-01-29	grpc-client: impl sui_transaction_builder::DataReader	REVIEWED	EXCLUDE_FEATURE		为 gRPC client 新增 TransactionBuilder/DataReader 实现。
+381	80920138705e61348351df78918fcbe2ae434950	2026-01-29	Upgrade depricated cargo actions (#25169)	REVIEWED	EXCLUDE_NON_CODE		仅 GitHub workflow cargo action 替换。
+382	c99b620e482521b49cdedd128817407236131c35	2026-01-29	Fix Tagging workflow (#25172)	REVIEWED	EXCLUDE_NON_CODE		仅 tagging workflow 调整。
+383	bd827149868a3a5495968cb98850c285a3d24e43	2026-01-29	docs: update TypeScript SDK v2 documentation examples (#25115)	REVIEWED	EXCLUDE_NON_CODE		仅 TypeScript SDK v2 文档示例。
+384	868c226359ef914f1f3b080518f27eb13d8967f5	2026-01-30	[move] Add Result to ValueVisitor (#25174)	REVIEWED	EXCLUDE_FEATURE		ValueVisitor 全链路错误返回 API 重构。
+385	88e795d1a410d6f5a850f28035ff964deb21e2cf	2026-01-30	Sui v1.65.0 Framework Bytecode snapshot (#25184)	REVIEWED	EXCLUDE_POST_FORK		仅协议 v110 framework bytecode snapshot。
+386	db642a106a6eb1c88c67574aa2c7e229324aac15	2026-01-30	Sui v1.66.0 Version Bump (#25185)	REVIEWED	EXCLUDE_NON_CODE		仅 release version、lockfile 与 metadata bump。
+387	e29815c18893f514f81e126ddfb263ec7a3672da	2026-01-29	[graphql-alt] Update IMoveObject/MoveObject/CoinMetadata/DynamicField return types for partial error support [7/n] (#25109)	REVIEWED	EXCLUDE_FEATURE		GraphQL partial-error schema/API 迁移。
+388	89be7daa9096e56384915f89569b9fa6e0448a7d	2026-01-30	[graphql-alt] Update Query return types for partial error support [8/n] (#25110)	REVIEWED	EXCLUDE_FEATURE		GraphQL Query partial-error 返回类型迁移。
+389	9dfec3925875ec40eb7431aa3250c82425b1d148	2026-01-30	[2/n][sui-bridge] [JSON RPC -> gRPC Migration] Switch to gRPC based event event syncing (#24639)	REVIEWED	EXCLUDE_FEATURE		Bridge event syncing 从 JSON-RPC 迁移至 gRPC。
+390	14510cd955ac7d6ddc3aac694a4c4a82b9ef5747	2026-01-30	gh 3rd party actions upgrade (part 2) (#25180)	REVIEWED	EXCLUDE_NON_CODE		仅第三方 GitHub Actions 版本升级。
+391	9a5a7c308942fb4ed992947b3d3cac8fc8a66ad2	2026-01-30	Upgrade 3rd party gh actions (#25179)	REVIEWED	EXCLUDE_NON_CODE		仅第三方 GitHub Actions pin/版本升级。
+392	5132f7490ac7004868c900682991e94935eb3985	2026-01-30	docs: Add Kapa.ai chatbot / remove Cookbook chatbot (#25176)	REVIEWED	EXCLUDE_NON_CODE		仅文档站 chatbot 替换。
+393	eac00a6419c79eb86b013ec05309592225e2b9af	2026-01-30	Allow multiple address groups of different priority in EndpointManager (#25132)	REVIEWED	EXCLUDE_FEATURE		依赖 post-fork EndpointManager 的多地址优先级功能。
+394	19158a9471c7bb6dd6a77830fb7eb5bf958749ae	2026-01-30	[consensus] track received round in RoundTracker (#25166)	APPLIED	MERGE	54095579a61cf769c81f167b2be1ea3b527e523f	移植验证即记录 received/accepted rounds、commit-sync votes 与订阅空窗口 fallback。
+395	e0c653e709f45e8707f1cd52e07053e07ba2e64b	2026-01-30	Make seed-search progress prettier (#25183)	REVIEWED	EXCLUDE_NON_CODE		仅 simtest seed-search 命令行 UI。
+396	938247f1c139d910854fab201168c68f500b39b3	2026-01-30	[decompiler] Add unstructured control flow fallback with goto statements	APPLIED	MERGE	b26631dbf2b7efe2300a58fa8f5506ccb9d46145	不可结构化 CFG 降级为 pseudo-goto AST，避免 decompiler panic。
+397	696fdeea3157e4e05eac2ff030afbc2f200704ea	2026-01-30	Adapt Chain Identifier to return full 32 byte digest (#25186)	REVIEWED	EXCLUDE_FEATURE		GraphQL chainIdentifier 公共格式从短 hex 改为完整 Base58。
+398	b50e5f0dc02041d40fa2339d89ed471eb4e63987	2026-01-30	Add support for peer address overrides in P2pConfig (#25187)	REVIEWED	EXCLUDE_FEATURE		新增 P2pConfig peer address override 功能。
+399	364431782bcee01be3649f12a01a4277b85d85a0	2026-01-30	[fix] improve handling of roaring bitmap (#25165)	APPLIED	MERGE	9c6e53d78fad91ac016144ab1b5073f83268dfc1	限制 bitmap cardinality 并避免 legacy multisig 预先无界收集。
+400	5428f2feccc058ce18b9c37d5b71d8ab4b080673	2026-01-30	Upgrade 3rd party gh actions (Part 3) (#25181)	REVIEWED	EXCLUDE_NON_CODE		仅 GitHub Actions、lint 配置与文档拼写。
 401	e984ad82b6dcd0f693f8e6f21250d8b6e9a98eb5	2026-01-30	graphql-alt: scanning api bloom filter pipelines (#24788)	REVIEWED	EXCLUDE_FEATURE		新增 indexer-alt checkpoint bloom 扫描表、schema 与 pipeline。
 402	5675fb27c5dd4a02dc6b4c77b4163e7be8256828	2026-01-30	grpc-client: add get_dynamic_fields method	REVIEWED	EXCLUDE_FEATURE		新增 gRPC dynamic fields API。
 403	059b8c0ee7207d81c918b04dec6c3bd231e0dd96	2026-01-30	sui: migrate DynamicFieldQuery to grpc	REVIEWED	EXCLUDE_FEATURE		CLI DynamicFieldQuery 从 JSON-RPC 迁移到新 gRPC API。

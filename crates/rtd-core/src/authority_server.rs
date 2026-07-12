@@ -1117,10 +1117,12 @@ impl ValidatorService {
             .start_timer();
 
         let group_tx_meta = if is_soft_bundle_request {
-            vec![transaction_indexes
-                .into_iter()
-                .zip(tx_digests)
-                .collect::<Vec<_>>();]
+            vec![
+                transaction_indexes
+                    .into_iter()
+                    .zip(tx_digests)
+                    .collect::<Vec<_>>(),
+            ]
         } else {
             transaction_indexes
                 .into_iter()
@@ -1428,10 +1430,9 @@ impl ValidatorService {
         }
 
         rx_consensus_positions.await.map_err(|e| {
-            RtdErrorKind::FailedToSubmitToConsensus(format!(
+            RtdError::from(RtdErrorKind::FailedToSubmitToConsensus(format!(
                 "Failed to get consensus position: {e}"
-            ))
-            .into()
+            )))
         })?
     }
 

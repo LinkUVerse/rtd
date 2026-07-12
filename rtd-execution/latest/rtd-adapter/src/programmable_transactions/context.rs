@@ -53,10 +53,11 @@ mod checked {
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::{
         accumulator_event::AccumulatorEvent,
+        accumulator_root::AccumulatorObjId,
         balance::Balance,
         base_types::{MoveObjectType, ObjectID, RtdAddress, TxContext},
         coin::Coin,
-        effects::{AccumulatorAddress, AccumulatorValue},
+        effects::{AccumulatorAddress, AccumulatorValue, AccumulatorWriteV1},
         error::{ExecutionError, ExecutionErrorKind, RtdError, command_argument_error},
         event::Event,
         execution::{ExecutionResults, ExecutionResultsV2},

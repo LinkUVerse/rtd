@@ -10,9 +10,7 @@ use crate::{
     },
 };
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
-use move_binary_format::{
-    partial_vm_error, safe_assert, safe_assert_eq, safe_unwrap, safe_unwrap_err,
-};
+use move_binary_format::{safe_assert, safe_assert_eq, safe_unwrap, safe_unwrap_err};
 use move_core_types::{
     account_address::AccountAddress,
     gas_algebra::InternalGas,
@@ -318,9 +316,8 @@ pub fn borrow_child_object(
     let child_ref = global_value.borrow_global().map_err(|err| {
         if err.major_status() == StatusCode::MISSING_DATA {
             debug_assert!(false);
-            partial_vm_error!(
-                UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                "borrow_global returned MISSING_DATA after exists() was true"
+            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+                "borrow_global returned MISSING_DATA after exists() was true".to_owned(),
             )
         } else {
             err
@@ -412,10 +409,8 @@ pub fn remove_child_object(
     let child = global_value.move_from().map_err(|err| {
         if err.major_status() == StatusCode::MISSING_DATA {
             debug_assert!(false);
-            partial_vm_error!(
-                UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                "move_from returned MISSING_DATA after exists() was true"
-            )
+            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                .with_message("move_from returned MISSING_DATA after exists() was true".to_owned())
         } else {
             err
         }

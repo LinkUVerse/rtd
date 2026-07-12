@@ -889,7 +889,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::URI_TOO_LONG);
+        assert_eq!(
+            response.status().as_u16(),
+            StatusCode::URI_TOO_LONG.as_u16()
+        );
     }
 
     fn setup() -> BridgeClient {
