@@ -1355,16 +1355,31 @@ impl CheckpointBuilder {
     /// It is optional to pass in consensus_replay_waiter, to make it easier to attribute
     /// if slow recovery of previously built checkpoints is due to consensus replay or
     /// checkpoint building.
-    async fn run(mut self, consensus_replay_waiter: Option<ReplayWaiter>) {
+    async fn run(
+        mut self,
+        consensus_replay_waiter: Option<ReplayWaiter>,
+        checkpoint_builder_startup_tx: watch::Sender<Option<CheckpointSequenceNumber>>,
+    ) {
         if let Some(replay_waiter) = consensus_replay_waiter {
             info!("Waiting for consensus commits to replay ...");
             replay_waiter.wait_for_replay().await;
             info!("Consensus commits finished replaying");
         }
         info!("Starting CheckpointBuilder");
+        let mut startup_complete = false;
         loop {
             match self.maybe_build_checkpoints().await {
-                Ok(()) => {}
+                Ok(()) => {
+                    if !startup_complete {
+                        let recovery_checkpoint = *self.last_built.borrow();
+                        checkpoint_builder_startup_tx.send_replace(Some(recovery_checkpoint));
+                        startup_complete = true;
+                        info!(
+                            recovery_checkpoint,
+                            "CheckpointBuilder startup backlog processed"
+                        );
+                    }
+                }
                 err @ Err(
                     CheckpointBuilderError::ChangeEpochTxAlreadyExecuted
                     | CheckpointBuilderError::SystemPackagesMissing,
@@ -3090,6 +3105,7 @@ enum CheckpointServiceState {
             CheckpointBuilder,
             CheckpointAggregator,
             CheckpointStateHasher,
+            watch::Sender<Option<CheckpointSequenceNumber>>,
         ),
     ),
     Started,
@@ -3102,13 +3118,14 @@ impl CheckpointServiceState {
         CheckpointBuilder,
         CheckpointAggregator,
         CheckpointStateHasher,
+        watch::Sender<Option<CheckpointSequenceNumber>>,
     ) {
         let mut state = CheckpointServiceState::Started;
         std::mem::swap(self, &mut state);
 
         match state {
-            CheckpointServiceState::Unstarted((builder, aggregator, hasher)) => {
-                (builder, aggregator, hasher)
+            CheckpointServiceState::Unstarted((builder, aggregator, hasher, startup_tx)) => {
+                (builder, aggregator, hasher, startup_tx)
             }
             CheckpointServiceState::Started => panic!("CheckpointServiceState is already started"),
         }
@@ -3125,6 +3142,9 @@ pub struct CheckpointService {
     // The highest sequence number that had already been built at the time CheckpointService
     // was constructed
     highest_previously_built_seq: CheckpointSequenceNumber,
+    // Only the builder owns the sender once the service is spawned. If it stops before
+    // announcing recovery, subscribers observe channel closure instead of waiting forever.
+    checkpoint_builder_startup_rx: watch::Receiver<Option<CheckpointSequenceNumber>>,
     metrics: Arc<CheckpointMetrics>,
     state: Mutex<CheckpointServiceState>,
 }
@@ -3179,6 +3199,7 @@ impl CheckpointService {
                 .unwrap_or(0);
 
         let (highest_currently_built_seq_tx, _) = watch::channel(highest_currently_built_seq);
+        let (checkpoint_builder_startup_tx, checkpoint_builder_startup_rx) = watch::channel(None);
 
         let aggregator = CheckpointAggregator::new(
             checkpoint_store.clone(),
@@ -3225,11 +3246,13 @@ impl CheckpointService {
             last_signature_index,
             highest_currently_built_seq_tx,
             highest_previously_built_seq,
+            checkpoint_builder_startup_rx,
             metrics,
             state: Mutex::new(CheckpointServiceState::Unstarted((
                 builder,
                 aggregator,
                 ckpt_state_hasher,
+                checkpoint_builder_startup_tx,
             ))),
         })
     }
@@ -3246,7 +3269,8 @@ impl CheckpointService {
         epoch_store: Arc<AuthorityPerEpochStore>,
         consensus_replay_waiter: Option<ReplayWaiter>,
     ) {
-        let (builder, aggregator, state_hasher) = self.state.lock().take_unstarted();
+        let (builder, aggregator, state_hasher, checkpoint_builder_startup_tx) =
+            self.state.lock().take_unstarted();
 
         // Clean up state hashes computed after the last built checkpoint
         // This prevents ECMH divergence after fork recovery restarts
@@ -3274,14 +3298,15 @@ impl CheckpointService {
         }
 
         let (builder_finished_tx, builder_finished_rx) = tokio::sync::oneshot::channel();
-
         let state_hasher_task = spawn_monitored_task!(state_hasher.run());
         let aggregator_task = spawn_monitored_task!(aggregator.run());
 
         spawn_monitored_task!(async move {
             epoch_store
                 .within_alive_epoch(async move {
-                    builder.run(consensus_replay_waiter).await;
+                    builder
+                        .run(consensus_replay_waiter, checkpoint_builder_startup_tx)
+                        .await;
                     builder_finished_tx.send(()).ok();
                 })
                 .await
@@ -3314,6 +3339,12 @@ impl CheckpointService {
         {
             debug_fatal!("Timed out waiting for checkpoints to be rebuilt");
         }
+    }
+
+    pub fn checkpoint_builder_startup_receiver(
+        &self,
+    ) -> watch::Receiver<Option<CheckpointSequenceNumber>> {
+        self.checkpoint_builder_startup_rx.clone()
     }
 }
 

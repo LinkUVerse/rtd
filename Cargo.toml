@@ -234,6 +234,12 @@ members = [
 # This version string will be inherited by rtd-core, rtd-faucet, rtd-node, rtd-tools, rtd-sdk, rtd-move-build, and rtd crates.
 version = "1.63.0"
 
+[profile.dev]
+# Local validators and fullnodes continuously execute checkpoints. With Cargo's unoptimized
+# default dev profile, a persisted fullnode cannot catch a running validator after restart.
+# Level 1 keeps debug assertions and debug symbols while making target/debug usable as a dev chain.
+opt-level = 1
+
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
 debug = 1

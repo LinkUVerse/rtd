@@ -21,6 +21,7 @@ tap.workspace = true
 prometheus.workspace = true
 
 rtd-config.workspace = true
+rtd-core.workspace = true
 rtd-swarm-config.workspace = true
 rtd-macros.workspace = true
 rtd-node.workspace = true

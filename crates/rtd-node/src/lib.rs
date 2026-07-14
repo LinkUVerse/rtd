@@ -165,6 +165,7 @@ pub struct ValidatorComponents {
     consensus_adapter: Arc<ConsensusAdapter>,
     checkpoint_metrics: Arc<CheckpointMetrics>,
     rtd_tx_validator_metrics: Arc<RtdTxValidatorMetrics>,
+    checkpoint_builder_startup_receiver: watch::Receiver<Option<u64>>,
 }
 pub struct P2pComponents {
     p2p_network: Network,
@@ -710,6 +711,7 @@ impl RtdNode {
                 checkpoint_store.clone(),
                 rpc_index.clone(),
                 index_store.is_some(),
+                startup_target.is_some(),
                 run_with_range.is_none(),
             ))
         });
@@ -1001,6 +1003,23 @@ impl RtdNode {
 
     pub fn startup_executed_checkpoint(&self) -> u64 {
         self.startup_executed_checkpoint
+    }
+
+    pub fn highest_executed_checkpoint(&self) -> u64 {
+        self.checkpoint_store
+            .get_highest_executed_checkpoint_seq_number()
+            .expect("checkpoint store read cannot fail")
+            .unwrap_or(0)
+    }
+
+    pub async fn checkpoint_builder_startup_receiver(
+        &self,
+    ) -> Option<watch::Receiver<Option<u64>>> {
+        self.validator_components
+            .lock()
+            .await
+            .as_ref()
+            .map(|components| components.checkpoint_builder_startup_receiver.clone())
     }
 
     pub fn fullnode_readiness(&self) -> Option<&Arc<FullnodeReadiness>> {
@@ -1415,6 +1434,8 @@ impl RtdNode {
             state_hasher,
             checkpoint_metrics.clone(),
         );
+        let checkpoint_builder_startup_receiver =
+            checkpoint_service.checkpoint_builder_startup_receiver();
 
         // create a new map that gets injected into both the consensus handler and the consensus adapter
         // the consensus handler will write values forwarded from consensus, and the consensus adapter
@@ -1526,6 +1547,7 @@ impl RtdNode {
             consensus_adapter,
             checkpoint_metrics,
             rtd_tx_validator_metrics,
+            checkpoint_builder_startup_receiver,
         })
     }
 
@@ -1999,6 +2021,7 @@ impl RtdNode {
                 consensus_adapter,
                 checkpoint_metrics,
                 rtd_tx_validator_metrics,
+                checkpoint_builder_startup_receiver: _,
             }) = validator_components_lock_guard.take()
             {
                 info!("Reconfiguring the validator.");

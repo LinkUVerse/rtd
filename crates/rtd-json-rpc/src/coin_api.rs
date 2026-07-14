@@ -662,6 +662,7 @@ mod tests {
             None,
             false,
             false,
+            false,
         ));
         let api = CoinReadApi {
             internal: Box::new(MockCoinReadInternal::new()),

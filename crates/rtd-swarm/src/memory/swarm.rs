@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::Node;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::future::try_join_all;
 use rand::rngs::OsRng;
+use rtd_core::checkpoints::inspect_readonly_checkpoint_store;
 use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -34,6 +35,8 @@ use rtd_types::object::Object;
 use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
 use tempfile::TempDir;
 use tracing::info;
+
+const SWARM_RECOVERY_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub struct SwarmBuilder<R = OsRng> {
     rng: R,
@@ -549,19 +552,267 @@ impl Swarm {
 
     /// Start all nodes associated with this Swarm
     pub async fn launch(&mut self) -> Result<()> {
-        try_join_all(self.validator_nodes().map(|node| node.start())).await?;
-        let startup_target = self
-            .validator_node_handles()
-            .into_iter()
-            .map(|handle| handle.with(|node| node.startup_executed_checkpoint()))
-            .max()
-            .unwrap_or(0);
-        for fullnode in self.fullnodes() {
-            fullnode.set_startup_target(startup_target);
+        let has_network_startup_fullnodes = self.network_startup_fullnodes().next().is_some();
+        if has_network_startup_fullnodes {
+            let startup_target = self.validator_startup_target()?;
+            for fullnode in self.network_startup_fullnodes() {
+                fullnode.set_startup_target(startup_target);
+            }
         }
+
+        // A persisted debug fullnode can spend tens of seconds opening RocksDB. Starting it at
+        // the same time as consensus recovery starves validator replay. The old validator-first
+        // order also created a checkpoint backlog while the fullnode was still opening, so open
+        // fullnode storage first and then recover validators with state sync already available.
         try_join_all(self.fullnodes().map(|node| node.start())).await?;
+        try_join_all(self.validator_nodes().map(|node| node.start())).await?;
+
+        // Validator-only and run-with-range swarms do not serve transaction RPC and keep their
+        // historical launch semantics. Only normal fullnodes need the coordinated recovery gate.
+        if has_network_startup_fullnodes {
+            tokio::time::timeout(SWARM_RECOVERY_TIMEOUT, async {
+                let recovery_target = self.wait_for_checkpoint_builder_startup().await?;
+                self.wait_for_fullnodes_to_catch_validators(recovery_target)
+                    .await
+            })
+            .await
+            .context(
+                "timed out waiting for validators and fullnodes to recover during startup",
+            )??;
+            self.mark_fullnode_network_startup_complete()?;
+        }
+
         tracing::info!("Successfully launched Swarm");
         Ok(())
+    }
+
+    async fn wait_for_checkpoint_builder_startup(&self) -> Result<u64> {
+        loop {
+            let completed = try_join_all(
+                self.validator_nodes()
+                    .map(|node| self.wait_for_validator_checkpoint_builder_recovery(node)),
+            )
+            .await?
+            .into_iter()
+            .flatten()
+            .map(|(name, epoch, target)| (name, (epoch, target)))
+            .collect::<HashMap<_, _>>();
+
+            let active_epochs = self
+                .active_validators()
+                .map(|node| {
+                    anyhow::ensure!(
+                        node.is_running(),
+                        "active validator {} stopped during swarm startup",
+                        node.name()
+                    );
+                    let handle = node
+                        .get_node_handle()
+                        .context("active validator stopped during swarm startup")?;
+                    Ok((
+                        node.name(),
+                        handle.with(|node| node.current_epoch_for_testing()),
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            anyhow::ensure!(
+                !active_epochs.is_empty(),
+                "no active validators are available during swarm startup"
+            );
+
+            if active_epochs.iter().all(|(name, epoch)| {
+                completed
+                    .get(name)
+                    .is_some_and(|(completed_epoch, _)| completed_epoch == epoch)
+            }) {
+                return Ok(active_epochs
+                    .iter()
+                    .filter_map(|(name, _)| completed.get(name).map(|(_, target)| *target))
+                    .max()
+                    .expect("active validator set is non-empty"));
+            }
+
+            info!(
+                ?active_epochs,
+                "Validator set changed while checkpoint builders recovered; retrying"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    async fn wait_for_validator_checkpoint_builder_recovery(
+        &self,
+        node: &Node,
+    ) -> Result<Option<(AuthorityName, u64, u64)>> {
+        let mut closed_receiver_polls = 0u64;
+        loop {
+            anyhow::ensure!(
+                node.is_running(),
+                "configured validator {} stopped during swarm startup",
+                node.name()
+            );
+            let handle = node
+                .get_node_handle()
+                .context("configured validator stopped during swarm startup")?;
+            let epoch = handle.with(|node| node.current_epoch_for_testing());
+            let Some(receiver) = handle
+                .with_async(|node| node.checkpoint_builder_startup_receiver())
+                .await
+            else {
+                // A configured validator can be outside the current validator set.
+                return Ok(None);
+            };
+
+            match Self::wait_for_checkpoint_builder_recovery(receiver).await {
+                Ok(target) => return Ok(Some((node.name(), epoch, target))),
+                Err(error) => {
+                    anyhow::ensure!(
+                        node.is_running(),
+                        "configured validator {} stopped during checkpoint recovery",
+                        node.name()
+                    );
+                    let current_epoch = node
+                        .get_node_handle()
+                        .context("configured validator stopped during checkpoint recovery")?
+                        .with(|node| node.current_epoch_for_testing());
+                    if current_epoch != epoch {
+                        closed_receiver_polls = 0;
+                        info!(
+                            validator = %node.name(),
+                            previous_epoch = epoch,
+                            current_epoch,
+                            "Validator epoch changed during checkpoint recovery; resubscribing"
+                        );
+                    } else if closed_receiver_polls.is_multiple_of(50) {
+                        // Epoch reconfiguration closes the old builder before the node swaps its
+                        // epoch store and ValidatorComponents. Retry until the outer launch
+                        // timeout instead of treating that normal hand-off window as fatal.
+                        info!(
+                            validator = %node.name(),
+                            epoch,
+                            %error,
+                            "Checkpoint builder stopped before startup recovery; waiting for reconfiguration"
+                        );
+                    }
+                    closed_receiver_polls += 1;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+    }
+
+    async fn wait_for_checkpoint_builder_recovery(
+        mut receiver: tokio::sync::watch::Receiver<Option<u64>>,
+    ) -> Result<u64> {
+        loop {
+            if let Some(recovery_target) = *receiver.borrow_and_update() {
+                return Ok(recovery_target);
+            }
+            receiver
+                .changed()
+                .await
+                .context("validator checkpoint builder stopped during startup")?;
+        }
+    }
+
+    async fn wait_for_fullnodes_to_catch_validators(&self, recovery_target: u64) -> Result<()> {
+        let mut polls = 0u64;
+
+        loop {
+            for validator in self.validator_nodes() {
+                anyhow::ensure!(
+                    validator.is_running(),
+                    "configured validator {} stopped while fullnodes were catching up",
+                    validator.name()
+                );
+            }
+
+            let validator_checkpoints = self
+                .active_validators()
+                .map(|node| {
+                    node.get_node_handle()
+                        .context("active validator stopped while fullnodes were catching up")
+                        .map(|handle| handle.with(|node| node.highest_executed_checkpoint()))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            anyhow::ensure!(
+                !validator_checkpoints.is_empty(),
+                "no active validators are available while fullnodes are catching up"
+            );
+            let validator_checkpoint = validator_checkpoints
+                .into_iter()
+                .max()
+                .expect("active validator set is non-empty");
+            let target = recovery_target.max(validator_checkpoint);
+            let fullnode_checkpoints = self
+                .network_startup_fullnodes()
+                .map(|node| {
+                    anyhow::ensure!(
+                        node.is_running(),
+                        "fullnode {} stopped while catching up during swarm startup",
+                        node.name()
+                    );
+                    node.get_node_handle()
+                        .context("fullnode stopped while catching up during swarm startup")
+                        .map(|handle| handle.with(|node| node.highest_executed_checkpoint()))
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            if fullnode_checkpoints
+                .iter()
+                .all(|checkpoint| *checkpoint >= target)
+            {
+                info!(
+                    target,
+                    recovery_target,
+                    ?fullnode_checkpoints,
+                    "Fullnodes caught up after validator recovery"
+                );
+                return Ok(());
+            }
+
+            if polls.is_multiple_of(50) {
+                info!(
+                    target,
+                    recovery_target,
+                    ?fullnode_checkpoints,
+                    "Waiting for fullnodes to catch validators after recovery"
+                );
+            }
+            polls += 1;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    fn mark_fullnode_network_startup_complete(&self) -> Result<()> {
+        for fullnode in self.network_startup_fullnodes() {
+            fullnode
+                .get_node_handle()
+                .context("fullnode stopped during swarm startup")?
+                .with(|node| {
+                    node.fullnode_readiness()
+                        .expect("fullnode must have readiness state")
+                        .mark_network_startup_complete();
+                });
+        }
+        Ok(())
+    }
+
+    fn validator_startup_target(&self) -> Result<u64> {
+        self.validator_nodes()
+            .map(|node| node.config().db_path.join("live/checkpoints"))
+            .filter(|checkpoint_path| checkpoint_path.exists())
+            .try_fold(0, |startup_target, checkpoint_path| {
+                let inspection =
+                    inspect_readonly_checkpoint_store(&checkpoint_path).with_context(|| {
+                        format!(
+                            "failed to inspect validator checkpoint store at {}",
+                            checkpoint_path.display()
+                        )
+                    })?;
+                Ok(startup_target.max(inspection.highest_executed_checkpoint))
+            })
     }
 
     /// Return the path to the directory where this Swarm's on-disk data is kept.
@@ -624,6 +875,11 @@ impl Swarm {
             .filter(|node| node.config().consensus_config.is_none())
     }
 
+    fn network_startup_fullnodes(&self) -> impl Iterator<Item = &Node> {
+        self.fullnodes()
+            .filter(|node| node.config().run_with_range.is_none())
+    }
+
     pub async fn spawn_new_node(&mut self, config: NodeConfig) -> RtdNodeHandle {
         let name = config.protocol_public_key();
         let node = Node::new(config);
@@ -673,7 +929,14 @@ impl AsRef<Path> for SwarmDirectory {
 #[cfg(test)]
 mod test {
     use super::Swarm;
+    use rtd_config::node::RunWithRange;
+    use rtd_core::authority::authority_store_pruner::PrunerWatermarks;
+    use rtd_core::checkpoints::CheckpointStore;
+    use rtd_types::messages_checkpoint::VerifiedCheckpoint;
+    use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use std::num::NonZeroUsize;
+    use std::sync::Arc;
+    use tokio::sync::watch;
 
     #[test]
     fn prebuilt_fullnode_config_preserves_identity_and_db_path() {
@@ -690,6 +953,71 @@ mod test {
 
         assert_eq!(resumed_fullnode.name(), expected_name);
         assert_eq!(resumed_fullnode.config().db_path, expected_db_path);
+    }
+
+    #[tokio::test]
+    async fn persisted_validator_startup_target_is_available_before_launch() {
+        let swarm = Swarm::builder().build();
+        assert!(
+            swarm
+                .validator_nodes()
+                .all(|node| node.get_node_handle().is_none())
+        );
+
+        let checkpoint_path = swarm
+            .validator_nodes()
+            .next()
+            .unwrap()
+            .config()
+            .db_path
+            .join("live/checkpoints");
+        let store = CheckpointStore::new(&checkpoint_path, Arc::new(PrunerWatermarks::default()));
+        let mut builder = TestCheckpointBuilder::new(0);
+
+        for expected_sequence_number in 0..=1 {
+            let checkpoint = VerifiedCheckpoint::new_unchecked(builder.build_checkpoint().summary);
+            assert_eq!(*checkpoint.sequence_number(), expected_sequence_number);
+            store.insert_verified_checkpoint(&checkpoint).unwrap();
+            store
+                .update_highest_executed_checkpoint(&checkpoint)
+                .unwrap();
+        }
+        drop(store);
+
+        assert_eq!(swarm.validator_startup_target().unwrap(), 1);
+    }
+
+    #[test]
+    fn fresh_validator_startup_target_is_zero_before_launch() {
+        let swarm = Swarm::builder().build();
+
+        assert_eq!(swarm.validator_startup_target().unwrap(), 0);
+    }
+
+    #[test]
+    fn run_with_range_fullnode_is_not_network_startup_gated() {
+        let swarm = Swarm::builder()
+            .with_fullnode_count(1)
+            .with_fullnode_run_with_range(Some(RunWithRange::Checkpoint(5)))
+            .build();
+
+        assert_eq!(swarm.fullnodes().count(), 1);
+        assert_eq!(swarm.network_startup_fullnodes().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn checkpoint_builder_shutdown_before_recovery_is_reported() {
+        let (sender, receiver) = watch::channel(None);
+        drop(sender);
+
+        let error = Swarm::wait_for_checkpoint_builder_recovery(receiver)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("checkpoint builder stopped during startup")
+        );
     }
 
     #[tokio::test]
@@ -735,7 +1063,7 @@ mod test {
             .map(|handle| handle.with(|node| node.startup_executed_checkpoint()))
             .max()
             .unwrap();
-        let fullnode_handle = swarm.fullnodes().next().unwrap().get_node_handle().unwrap();
+        let mut fullnode_handle = swarm.fullnodes().next().unwrap().get_node_handle().unwrap();
         let readiness = fullnode_handle.with(|node| node.fullnode_readiness().unwrap().clone());
 
         assert_eq!(readiness.startup_target(), expected_target);
@@ -746,5 +1074,22 @@ mod test {
         })
         .await
         .unwrap();
+
+        let fullnode_name = swarm.fullnodes().next().unwrap().name();
+        drop(readiness);
+        swarm.node(&fullnode_name).unwrap().stop();
+        fullnode_handle.release_for_testing();
+        swarm.node(&fullnode_name).unwrap().start().await.unwrap();
+
+        let restarted_readiness = swarm
+            .node(&fullnode_name)
+            .unwrap()
+            .get_node_handle()
+            .unwrap()
+            .with(|node| node.fullnode_readiness().unwrap().clone());
+        assert!(
+            restarted_readiness.status().network_startup_complete,
+            "a standalone fullnode restart must not retain the one-shot swarm startup gate"
+        );
     }
 }

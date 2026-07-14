@@ -15275,6 +15275,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rtd-config",
+ "rtd-core",
  "rtd-macros",
  "rtd-node",
  "rtd-protocol-config",

@@ -428,6 +428,7 @@ mod tests {
             None,
             false,
             false,
+            false,
         ));
         let api = TransactionBuilderApi::new_with_data_reader_and_readiness(
             Arc::new(PanicDataReader),

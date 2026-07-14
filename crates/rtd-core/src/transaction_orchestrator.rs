@@ -1286,7 +1286,7 @@ mod tests {
             &directory.path().join("checkpoints"),
             Arc::new(PrunerWatermarks::default()),
         );
-        let readiness = FullnodeReadiness::new(0, checkpoint_store, None, false, true);
+        let readiness = FullnodeReadiness::new(0, checkpoint_store, None, false, false, true);
         assert!(!readiness.status().pending_recovery_started);
 
         let pending =
@@ -1323,6 +1323,7 @@ mod tests {
             42,
             CheckpointStore::new(directory.path(), Arc::new(PrunerWatermarks::default())),
             None,
+            false,
             false,
             false,
         );

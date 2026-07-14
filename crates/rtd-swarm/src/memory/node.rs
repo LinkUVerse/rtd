@@ -62,7 +62,9 @@ impl Node {
     pub async fn spawn(&self) -> Result<()> {
         info!(name =% self.name().concise(), "starting in-memory node");
         let config = self.config().clone();
-        let startup_target = *self.startup_target.lock().unwrap();
+        // A target injected by Swarm::launch gates only that coordinated network startup. A
+        // later standalone node restart must derive readiness from its own persisted state.
+        let startup_target = self.startup_target.lock().unwrap().take();
         *self.container.lock().unwrap() =
             Some(Container::spawn(config, self.runtime_type, startup_target).await);
         Ok(())

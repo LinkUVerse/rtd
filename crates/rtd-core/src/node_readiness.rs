@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum FullnodeReadinessLag {
+    #[error("embedded validator network startup has not completed")]
+    NetworkStartup,
     #[error("pending transaction recovery has not started")]
     PendingRecovery,
     #[error("executed checkpoint is behind the startup target")]
@@ -22,6 +24,7 @@ pub enum FullnodeReadinessLag {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FullnodeReadinessStatus {
+    pub network_startup_complete: bool,
     pub startup_target: u64,
     pub highest_executed_checkpoint: Option<u64>,
     pub object_state_checkpoint: Option<u64>,
@@ -41,7 +44,9 @@ pub struct FullnodeCatchingUp {
 
 impl FullnodeReadinessStatus {
     pub fn ensure_ready(self) -> Result<(), FullnodeCatchingUp> {
-        let lag = if !self.pending_recovery_started {
+        let lag = if !self.network_startup_complete {
+            Some(FullnodeReadinessLag::NetworkStartup)
+        } else if !self.pending_recovery_started {
             Some(FullnodeReadinessLag::PendingRecovery)
         } else if !checkpoint_reached(self.highest_executed_checkpoint, self.startup_target) {
             Some(FullnodeReadinessLag::ExecutedCheckpoint)
@@ -75,6 +80,7 @@ pub struct FullnodeReadiness {
     checkpoint_store: Arc<CheckpointStore>,
     rpc_index: Option<Arc<RpcIndexStore>>,
     secondary_index_required: bool,
+    network_startup_complete: AtomicBool,
     pending_recovery_started: AtomicBool,
 }
 
@@ -84,6 +90,7 @@ impl FullnodeReadiness {
         checkpoint_store: Arc<CheckpointStore>,
         rpc_index: Option<Arc<RpcIndexStore>>,
         secondary_index_required: bool,
+        network_startup_required: bool,
         pending_recovery_required: bool,
     ) -> Self {
         Self {
@@ -91,6 +98,7 @@ impl FullnodeReadiness {
             checkpoint_store,
             rpc_index,
             secondary_index_required,
+            network_startup_complete: AtomicBool::new(!network_startup_required),
             pending_recovery_started: AtomicBool::new(!pending_recovery_required),
         }
     }
@@ -101,6 +109,10 @@ impl FullnodeReadiness {
 
     pub fn mark_pending_recovery_started(&self) {
         self.pending_recovery_started.store(true, Ordering::Release);
+    }
+
+    pub fn mark_network_startup_complete(&self) {
+        self.network_startup_complete.store(true, Ordering::Release);
     }
 
     pub fn status(&self) -> FullnodeReadinessStatus {
@@ -119,6 +131,7 @@ impl FullnodeReadiness {
         // HighestExecuted is bumped only after object writes, synchronous secondary indexing,
         // and the RPC-index checkpoint commit have completed.
         FullnodeReadinessStatus {
+            network_startup_complete: self.network_startup_complete.load(Ordering::Acquire),
             startup_target: self.startup_target,
             highest_executed_checkpoint,
             object_state_checkpoint: highest_executed_checkpoint,
@@ -153,6 +166,7 @@ mod tests {
 
     fn ready_status() -> FullnodeReadinessStatus {
         FullnodeReadinessStatus {
+            network_startup_complete: true,
             startup_target: 42,
             highest_executed_checkpoint: Some(42),
             object_state_checkpoint: Some(42),
@@ -162,6 +176,16 @@ mod tests {
             rpc_index_required: true,
             pending_recovery_started: true,
         }
+    }
+
+    #[test]
+    fn embedded_validator_network_must_start_before_fullnode_is_ready() {
+        let mut status = ready_status();
+        status.network_startup_complete = false;
+
+        let error = status.ensure_ready().unwrap_err();
+
+        assert_eq!(error.lag, FullnodeReadinessLag::NetworkStartup);
     }
 
     #[test]
@@ -232,7 +256,8 @@ mod tests {
         checkpoint_store
             .update_highest_executed_checkpoint(&genesis)
             .unwrap();
-        let readiness = FullnodeReadiness::new(1, checkpoint_store.clone(), None, false, true);
+        let readiness =
+            FullnodeReadiness::new(1, checkpoint_store.clone(), None, false, false, true);
 
         assert_eq!(
             readiness.ensure_ready().unwrap_err().lag,
