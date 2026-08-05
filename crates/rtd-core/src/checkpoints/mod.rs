@@ -25,6 +25,7 @@ use crate::global_state_hasher::GlobalStateHasher;
 use crate::stake_aggregator::{InsertResult, MultiStakeAggregator};
 use consensus_core::CommitRef;
 use diffy::create_patch;
+use futures::FutureExt as _;
 use itertools::Itertools;
 use linku_common::random::get_rng;
 use linku_common::sync::notify_read::{CHECKPOINT_BUILDER_NOTIFY_READ_TASK_NAME, NotifyRead};
@@ -1360,23 +1361,55 @@ impl CheckpointBuilder {
         consensus_replay_waiter: Option<ReplayWaiter>,
         checkpoint_builder_startup_tx: watch::Sender<Option<CheckpointSequenceNumber>>,
     ) {
-        if let Some(replay_waiter) = consensus_replay_waiter {
-            info!("Waiting for consensus commits to replay ...");
-            replay_waiter.wait_for_replay().await;
-            info!("Consensus commits finished replaying");
-        }
-        info!("Starting CheckpointBuilder");
+        let consensus_recovery_monitor = if let Some(replay_waiter) = consensus_replay_waiter {
+            info!(
+                target: "rtd_startup",
+                "Startup stage 1/2: waiting for consensus replay to reach the previous crash-safe cursor"
+            );
+            let monitor = replay_waiter.wait_for_replay().await;
+            info!(
+                target: "rtd_startup",
+                "Startup stage 1/2: previous crash-safe consensus cursor replayed; checkpoint recovery is now running concurrently"
+            );
+            Some(monitor)
+        } else {
+            None
+        };
+        info!(
+            target: "rtd_startup",
+            "Startup stage 1/2: processing validator checkpoint backlog"
+        );
         let mut startup_complete = false;
+        let mut post_recovery_drain_started = false;
         loop {
             match self.maybe_build_checkpoints().await {
                 Ok(()) => {
                     if !startup_complete {
+                        if let Some(monitor) = consensus_recovery_monitor.as_ref() {
+                            if !monitor.is_recovery_complete() {
+                                tokio::select! {
+                                    _ = self.notify.notified() => {}
+                                    _ = monitor.wait_for_recovery_complete() => {}
+                                }
+                                continue;
+                            }
+
+                            // The handler marks a commit handled only after publishing its
+                            // checkpoint notification. Run one complete builder pass after the
+                            // recovered stream reaches that barrier before announcing readiness.
+                            if !post_recovery_drain_started {
+                                post_recovery_drain_started = true;
+                                continue;
+                            }
+                        }
+
                         let recovery_checkpoint = *self.last_built.borrow();
                         checkpoint_builder_startup_tx.send_replace(Some(recovery_checkpoint));
                         startup_complete = true;
                         info!(
+                            target: "rtd_startup",
                             recovery_checkpoint,
-                            "CheckpointBuilder startup backlog processed"
+                            "Startup stage 1/2: validator checkpoint backlog processed"
                         );
                     }
                 }
@@ -1389,7 +1422,7 @@ impl CheckpointBuilder {
                 }
                 Err(CheckpointBuilderError::Retry(inner)) => {
                     let msg = format!("{:?}", inner);
-                    debug_fatal!("Error while making checkpoint, will retry in 1s: {}", msg);
+                    error!("Error while making checkpoint, will retry in 1s: {}", msg);
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     self.metrics.checkpoint_errors.inc();
                     continue;
@@ -2581,6 +2614,7 @@ async fn wait_for_effects_with_retry(
     digests: &[TransactionDigest],
     tx_key: TransactionKey,
 ) -> Vec<TransactionEffects> {
+    let mut waited_seconds = 0u64;
     loop {
         match tokio::time::timeout(Duration::from_secs(5), async {
             effects_store
@@ -2591,9 +2625,11 @@ async fn wait_for_effects_with_retry(
         {
             Ok(effects) => break effects,
             Err(_) => {
-                debug_fatal!(
-                    "Timeout waiting for transactions to be executed {:?}, retrying...",
-                    tx_key
+                waited_seconds += 5;
+                warn!(
+                    ?tx_key,
+                    waited_seconds,
+                    "Checkpoint construction is waiting for transaction effects; execution is still in progress"
                 );
             }
         }
@@ -3145,6 +3181,10 @@ pub struct CheckpointService {
     // Only the builder owns the sender once the service is spawned. If it stops before
     // announcing recovery, subscribers observe channel closure instead of waiting forever.
     checkpoint_builder_startup_rx: watch::Receiver<Option<CheckpointSequenceNumber>>,
+    // Any panic in the checkpoint pipeline is surfaced to the node supervisor. A detached task
+    // must never fail silently while consensus continues persisting commits.
+    checkpoint_service_failure_tx: watch::Sender<Option<String>>,
+    checkpoint_service_failure_rx: watch::Receiver<Option<String>>,
     metrics: Arc<CheckpointMetrics>,
     state: Mutex<CheckpointServiceState>,
 }
@@ -3200,6 +3240,7 @@ impl CheckpointService {
 
         let (highest_currently_built_seq_tx, _) = watch::channel(highest_currently_built_seq);
         let (checkpoint_builder_startup_tx, checkpoint_builder_startup_rx) = watch::channel(None);
+        let (checkpoint_service_failure_tx, checkpoint_service_failure_rx) = watch::channel(None);
 
         let aggregator = CheckpointAggregator::new(
             checkpoint_store.clone(),
@@ -3247,6 +3288,8 @@ impl CheckpointService {
             highest_currently_built_seq_tx,
             highest_previously_built_seq,
             checkpoint_builder_startup_rx,
+            checkpoint_service_failure_tx,
+            checkpoint_service_failure_rx,
             metrics,
             state: Mutex::new(CheckpointServiceState::Unstarted((
                 builder,
@@ -3298,16 +3341,51 @@ impl CheckpointService {
         }
 
         let (builder_finished_tx, builder_finished_rx) = tokio::sync::oneshot::channel();
-        let state_hasher_task = spawn_monitored_task!(state_hasher.run());
-        let aggregator_task = spawn_monitored_task!(aggregator.run());
+        let state_hasher_failure_tx = self.checkpoint_service_failure_tx.clone();
+        let state_hasher_task = spawn_monitored_task!(async move {
+            if std::panic::AssertUnwindSafe(state_hasher.run())
+                .catch_unwind()
+                .await
+                .is_err()
+            {
+                report_checkpoint_service_failure(
+                    &state_hasher_failure_tx,
+                    "checkpoint state hasher panicked",
+                );
+            }
+        });
+        let aggregator_failure_tx = self.checkpoint_service_failure_tx.clone();
+        let aggregator_task = spawn_monitored_task!(async move {
+            if std::panic::AssertUnwindSafe(aggregator.run())
+                .catch_unwind()
+                .await
+                .is_err()
+            {
+                report_checkpoint_service_failure(
+                    &aggregator_failure_tx,
+                    "checkpoint aggregator panicked",
+                );
+            }
+        });
+        let builder_failure_tx = self.checkpoint_service_failure_tx.clone();
 
         spawn_monitored_task!(async move {
             epoch_store
                 .within_alive_epoch(async move {
-                    builder
-                        .run(consensus_replay_waiter, checkpoint_builder_startup_tx)
-                        .await;
-                    builder_finished_tx.send(()).ok();
+                    if std::panic::AssertUnwindSafe(
+                        builder.run(consensus_replay_waiter, checkpoint_builder_startup_tx),
+                    )
+                    .catch_unwind()
+                    .await
+                    .is_err()
+                    {
+                        report_checkpoint_service_failure(
+                            &builder_failure_tx,
+                            "checkpoint builder panicked",
+                        );
+                    } else {
+                        builder_finished_tx.send(()).ok();
+                    }
                 })
                 .await
                 .ok();
@@ -3328,16 +3406,26 @@ impl CheckpointService {
         // crash would occur because we may be missing transactions that are below the
         // highest_synced_checkpoint watermark, which can cause a crash in
         // `CheckpointExecutor::extract_randomness_rounds`.
+        let mut checkpoint_service_failure_rx = self.checkpoint_service_failure_rx.clone();
         if tokio::time::timeout(Duration::from_secs(120), async move {
             tokio::select! {
                 _ = builder_finished_rx => { debug!("CheckpointBuilder finished"); }
                 _ = self.wait_for_rebuilt_checkpoints() => (),
+                result = checkpoint_service_failure_rx.changed() => {
+                    if result.is_ok()
+                        && let Some(failure) = checkpoint_service_failure_rx.borrow().as_ref()
+                    {
+                        error!(%failure, "Checkpoint service failed during startup");
+                    }
+                }
             }
         })
         .await
         .is_err()
         {
-            debug_fatal!("Timed out waiting for checkpoints to be rebuilt");
+            warn!(
+                "Checkpoint rebuild exceeded the 120-second diagnostic interval; recovery continues in the supervised builder task"
+            );
         }
     }
 
@@ -3346,6 +3434,25 @@ impl CheckpointService {
     ) -> watch::Receiver<Option<CheckpointSequenceNumber>> {
         self.checkpoint_builder_startup_rx.clone()
     }
+
+    pub fn checkpoint_service_failure_receiver(&self) -> watch::Receiver<Option<String>> {
+        self.checkpoint_service_failure_rx.clone()
+    }
+}
+
+fn report_checkpoint_service_failure(
+    sender: &watch::Sender<Option<String>>,
+    failure: &'static str,
+) {
+    error!(%failure, "Critical checkpoint service task failure");
+    sender.send_if_modified(|current| {
+        if current.is_none() {
+            *current = Some(failure.to_owned());
+            true
+        } else {
+            false
+        }
+    });
 }
 
 impl CheckpointService {
@@ -3508,7 +3615,6 @@ mod tests {
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
     use crate::transaction_outputs::TransactionOutputs;
     use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
-    use futures::FutureExt as _;
     use futures::future::BoxFuture;
     use rtd_macros::sim_test;
     use rtd_protocol_config::{Chain, ProtocolConfig};

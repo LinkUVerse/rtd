@@ -166,6 +166,7 @@ pub struct ValidatorComponents {
     checkpoint_metrics: Arc<CheckpointMetrics>,
     rtd_tx_validator_metrics: Arc<RtdTxValidatorMetrics>,
     checkpoint_builder_startup_receiver: watch::Receiver<Option<u64>>,
+    checkpoint_service_failure_receiver: watch::Receiver<Option<String>>,
 }
 pub struct P2pComponents {
     p2p_network: Network,
@@ -950,6 +951,13 @@ impl RtdNode {
             None
         };
 
+        let checkpoint_service_failure_monitor = validator_components.as_ref().map(|components| {
+            (
+                epoch_store.epoch(),
+                components.checkpoint_service_failure_receiver.clone(),
+            )
+        });
+
         // setup shutdown channel
         let (shutdown_channel, _) = broadcast::channel::<Option<RunWithRange>>(1);
 
@@ -990,6 +998,9 @@ impl RtdNode {
 
         info!("RtdNode started!");
         let node = Arc::new(node);
+        if let Some((epoch, receiver)) = checkpoint_service_failure_monitor {
+            node.spawn_checkpoint_service_failure_monitor(epoch, receiver);
+        }
         let node_copy = node.clone();
         spawn_monitored_task!(async move {
             let result = Self::monitor_reconfiguration(node_copy, epoch_store).await;
@@ -1020,6 +1031,35 @@ impl RtdNode {
             .await
             .as_ref()
             .map(|components| components.checkpoint_builder_startup_receiver.clone())
+    }
+
+    fn spawn_checkpoint_service_failure_monitor(
+        self: &Arc<Self>,
+        epoch: EpochId,
+        mut receiver: watch::Receiver<Option<String>>,
+    ) {
+        let node = Arc::downgrade(self);
+        spawn_monitored_task!(async move {
+            loop {
+                let failure = receiver.borrow_and_update().clone();
+                if let Some(failure) = failure {
+                    error!(
+                        target: "rtd_startup",
+                        epoch,
+                        %failure,
+                        "Checkpoint service failed; stopping the node before consensus can build an unbounded crash-recovery tail"
+                    );
+                    if let Some(node) = node.upgrade() {
+                        let _ = node.shutdown_channel_tx.send(None);
+                    }
+                    return;
+                }
+
+                if receiver.changed().await.is_err() {
+                    return;
+                }
+            }
+        });
     }
 
     pub fn fullnode_readiness(&self) -> Option<&Arc<FullnodeReadiness>> {
@@ -1436,6 +1476,8 @@ impl RtdNode {
         );
         let checkpoint_builder_startup_receiver =
             checkpoint_service.checkpoint_builder_startup_receiver();
+        let checkpoint_service_failure_receiver =
+            checkpoint_service.checkpoint_service_failure_receiver();
 
         // create a new map that gets injected into both the consensus handler and the consensus adapter
         // the consensus handler will write values forwarded from consensus, and the consensus adapter
@@ -1495,6 +1537,11 @@ impl RtdNode {
 
         info!("Starting consensus manager asynchronously");
 
+        // Subscribe before consensus startup can publish its monitor. Tokio broadcast channels do
+        // not retain values for future subscribers, and replay is now intentionally published
+        // before the potentially long consensus-DB scan.
+        let replay_waiter = consensus_manager.replay_waiter();
+
         // Spawn consensus startup asynchronously to avoid blocking other components
         tokio::spawn({
             let config = config.clone();
@@ -1517,7 +1564,6 @@ impl RtdNode {
                     .await;
             }
         });
-        let replay_waiter = consensus_manager.replay_waiter();
 
         info!("Spawning checkpoint service");
         let replay_waiter = if std::env::var("DISABLE_REPLAY_WAITER").is_ok() {
@@ -1548,6 +1594,7 @@ impl RtdNode {
             checkpoint_metrics,
             rtd_tx_validator_metrics,
             checkpoint_builder_startup_receiver,
+            checkpoint_service_failure_receiver,
         })
     }
 
@@ -2022,6 +2069,7 @@ impl RtdNode {
                 checkpoint_metrics,
                 rtd_tx_validator_metrics,
                 checkpoint_builder_startup_receiver: _,
+                checkpoint_service_failure_receiver: _,
             }) = validator_components_lock_guard.take()
             {
                 info!("Reconfiguring the validator.");
@@ -2113,7 +2161,18 @@ impl RtdNode {
                     None
                 }
             };
+            let checkpoint_service_failure_monitor =
+                new_validator_components.as_ref().map(|components| {
+                    (
+                        new_epoch_store.epoch(),
+                        components.checkpoint_service_failure_receiver.clone(),
+                    )
+                });
             *validator_components_lock_guard = new_validator_components;
+            drop(validator_components_lock_guard);
+            if let Some((epoch, receiver)) = checkpoint_service_failure_monitor {
+                self.spawn_checkpoint_service_failure_monitor(epoch, receiver);
+            }
 
             // Force releasing current epoch store DB handle, because the
             // Arc<AuthorityPerEpochStore> may linger.

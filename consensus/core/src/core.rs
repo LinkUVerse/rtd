@@ -459,6 +459,18 @@ impl Core {
         if !self.should_propose() {
             return Ok(None);
         }
+        let consensus_head = self.dag_state.read().last_commit_index();
+        if self
+            .commit_observer
+            .remaining_durable_commit_capacity(consensus_head, consensus_head)
+            == 0
+        {
+            tracing::debug!(
+                consensus_head,
+                "Pausing block proposals until checkpoint output becomes crash-safe"
+            );
+            return Ok(None);
+        }
         if let Some(extended_block) = self.try_new_block(force) {
             self.signals.new_block(extended_block.clone())?;
 
@@ -770,6 +782,23 @@ impl Core {
         let mut committed_sub_dags = Vec::new();
         // TODO: Add optimization to abort early without quorum for a round.
         loop {
+            let consensus_head = self.dag_state.read().last_commit_index();
+            let highest_pending_consensus_head = certified_commits
+                .last()
+                .map(|commit| commit.index())
+                .unwrap_or(consensus_head)
+                .max(consensus_head);
+            let remaining_durable_capacity = self
+                .commit_observer
+                .remaining_durable_commit_capacity(consensus_head, highest_pending_consensus_head);
+            if remaining_durable_capacity == 0 && certified_commits.is_empty() {
+                tracing::debug!(
+                    consensus_head,
+                    "Pausing local consensus commits until checkpoint output becomes crash-safe"
+                );
+                break;
+            }
+
             // LeaderSchedule has a limit to how many sequenced leaders can be committed
             // before a change is triggered. Calling into leader schedule will get you
             // how many commits till next leader change. We will loop back and recalculate
@@ -804,6 +833,16 @@ impl Core {
                 fail_point!("consensus-after-leader-schedule-change");
             }
             assert!(commits_until_update > 0);
+
+            // Locally decided commits can always be retried from the DAG, so keep them strictly
+            // inside the durable consumer window. Certified commits have already been fetched as
+            // a contiguous batch and are capacity-gated by CommitSyncer before reaching Core.
+            if certified_commits.is_empty() {
+                commits_until_update = commits_until_update.min(
+                    usize::try_from(remaining_durable_capacity)
+                        .expect("commit capacity must fit in usize"),
+                );
+            }
 
             // If there are certified commits to process, find out which leaders and commits from them
             // are decided and use them as the next commits.

@@ -299,6 +299,21 @@ impl CheckpointExecutor {
             .checkpoint_exec_epoch
             .set(self.epoch_store.epoch() as i64);
 
+        if let Some(highest_executed) = self
+            .checkpoint_store
+            .get_highest_executed_checkpoint()
+            .expect("Failed to get highest executed checkpoint")
+            && highest_executed.epoch() == self.epoch_store.epoch()
+            && !highest_executed.is_last_checkpoint_of_epoch()
+        {
+            self.global_state_hasher
+                .rebuild_running_root_to_checkpoint(
+                    &self.epoch_store,
+                    *highest_executed.sequence_number(),
+                )
+                .expect("Failed to rebuild running root state hashes for checkpoint recovery");
+        }
+
         let Some(next_to_schedule) = self.get_next_to_schedule() else {
             return StopReason::EpochComplete;
         };

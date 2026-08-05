@@ -36,7 +36,7 @@ use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
 use tempfile::TempDir;
 use tracing::info;
 
-const SWARM_RECOVERY_TIMEOUT: Duration = Duration::from_secs(300);
+const SWARM_RECOVERY_PROGRESS_INTERVAL: Duration = Duration::from_secs(5);
 
 pub struct SwarmBuilder<R = OsRng> {
     rng: R,
@@ -553,12 +553,15 @@ impl Swarm {
     /// Start all nodes associated with this Swarm
     pub async fn launch(&mut self) -> Result<()> {
         let has_network_startup_fullnodes = self.network_startup_fullnodes().next().is_some();
-        if has_network_startup_fullnodes {
+        let startup_target = if has_network_startup_fullnodes {
             let startup_target = self.validator_startup_target()?;
             for fullnode in self.network_startup_fullnodes() {
                 fullnode.set_startup_target(startup_target);
             }
-        }
+            Some(startup_target)
+        } else {
+            None
+        };
 
         // A persisted debug fullnode can spend tens of seconds opening RocksDB. Starting it at
         // the same time as consensus recovery starves validator replay. The old validator-first
@@ -569,17 +572,33 @@ impl Swarm {
 
         // Validator-only and run-with-range swarms do not serve transaction RPC and keep their
         // historical launch semantics. Only normal fullnodes need the coordinated recovery gate.
-        if has_network_startup_fullnodes {
-            tokio::time::timeout(SWARM_RECOVERY_TIMEOUT, async {
-                let recovery_target = self.wait_for_checkpoint_builder_startup().await?;
-                self.wait_for_fullnodes_to_catch_validators(recovery_target)
-                    .await
-            })
-            .await
-            .context(
-                "timed out waiting for validators and fullnodes to recover during startup",
-            )??;
+        if let Some(startup_target) = startup_target {
+            info!(
+                target: "rtd_startup",
+                startup_target,
+                "Startup stage 1/2: waiting for validator checkpoint recovery"
+            );
+            // Recovery is progress-driven and resumable. A fixed wall-clock deadline can kill a
+            // healthy one-time replay just before it commits its next durable batch, causing the
+            // following restart to repeat the same work.
+            let recovery_target = self.wait_for_checkpoint_builder_startup().await?;
+            info!(
+                target: "rtd_startup",
+                recovery_target,
+                "Startup stage 1/2 complete: validator checkpoint recovery finished"
+            );
+            info!(
+                target: "rtd_startup",
+                recovery_target,
+                "Startup stage 2/2: waiting for fullnode checkpoint catch-up"
+            );
+            self.wait_for_fullnodes_to_catch_validators(recovery_target)
+                .await?;
             self.mark_fullnode_network_startup_complete()?;
+            info!(
+                target: "rtd_startup",
+                "RTD internal startup recovery complete"
+            );
         }
 
         tracing::info!("Successfully launched Swarm");
@@ -664,9 +683,14 @@ impl Swarm {
                 return Ok(None);
             };
 
-            match Self::wait_for_checkpoint_builder_recovery(receiver).await {
-                Ok(target) => return Ok(Some((node.name(), epoch, target))),
-                Err(error) => {
+            match tokio::time::timeout(
+                SWARM_RECOVERY_PROGRESS_INTERVAL,
+                Self::wait_for_checkpoint_builder_recovery(receiver),
+            )
+            .await
+            {
+                Ok(Ok(target)) => return Ok(Some((node.name(), epoch, target))),
+                Ok(Err(error)) => {
                     anyhow::ensure!(
                         node.is_running(),
                         "configured validator {} stopped during checkpoint recovery",
@@ -697,6 +721,13 @@ impl Swarm {
                     }
                     closed_receiver_polls += 1;
                     tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                Err(_) => {
+                    info!(
+                        target: "rtd_startup",
+                        epoch,
+                        "Startup stage 1/2: validator checkpoint recovery is still in progress"
+                    );
                 }
             }
         }
@@ -758,26 +789,34 @@ impl Swarm {
                         .map(|handle| handle.with(|node| node.highest_executed_checkpoint()))
                 })
                 .collect::<Result<Vec<_>>>()?;
+            let slowest_fullnode_checkpoint = fullnode_checkpoints
+                .iter()
+                .copied()
+                .min()
+                .expect("network startup fullnode set is non-empty");
 
             if fullnode_checkpoints
                 .iter()
                 .all(|checkpoint| *checkpoint >= target)
             {
                 info!(
+                    target: "rtd_startup",
                     target,
                     recovery_target,
-                    ?fullnode_checkpoints,
-                    "Fullnodes caught up after validator recovery"
+                    slowest_fullnode_checkpoint,
+                    "Startup stage 2/2 complete: fullnodes reached the validator recovery target"
                 );
                 return Ok(());
             }
 
             if polls.is_multiple_of(50) {
                 info!(
+                    target: "rtd_startup",
                     target,
                     recovery_target,
-                    ?fullnode_checkpoints,
-                    "Waiting for fullnodes to catch validators after recovery"
+                    slowest_fullnode_checkpoint,
+                    remaining_checkpoints = target.saturating_sub(slowest_fullnode_checkpoint),
+                    "Startup stage 2/2: fullnode checkpoint catch-up is still in progress"
                 );
             }
             polls += 1;

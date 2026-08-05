@@ -345,6 +345,14 @@ impl<C: NetworkClient> CommitSyncer<C> {
                     .join(","),
             );
 
+            // Core persists a fetched range before RTD consumes it. Gate the range on the
+            // consumer's crash-safe watermark so commit sync cannot create an unbounded replay
+            // tail while checkpoint processing is stalled.
+            self.inner
+                .commit_consumer_monitor
+                .wait_for_durable_commit_capacity(fetched_commit_range.end())
+                .await;
+
             // If core thread cannot handle the incoming blocks, it is ok to block here
             // to slow down the commit syncer.
             match self

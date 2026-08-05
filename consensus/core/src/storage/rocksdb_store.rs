@@ -148,6 +148,31 @@ impl RocksDBStore {
             configs.into_iter().collect(),
         )
     }
+
+    /// Reads only the persisted consensus head, without starting consensus or replaying commits.
+    pub fn read_last_commit_index_readonly(path: &str) -> ConsensusResult<CommitIndex> {
+        if std::fs::read_dir(path)
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(true)
+        {
+            return Ok(0);
+        }
+        let store = Self::get_read_only_handle(
+            path.into(),
+            None,
+            None,
+            MetricConf::new("consensus_head_readonly"),
+        );
+        let Some(result) = store
+            .commits
+            .reversed_safe_iter_with_bounds(None, None)?
+            .next()
+        else {
+            return Ok(0);
+        };
+        let ((commit_index, _digest), _serialized) = result?;
+        Ok(commit_index)
+    }
 }
 
 impl Store for RocksDBStore {

@@ -56,21 +56,45 @@ pub struct Threshold {
     /// If not provided, the server will be considered healthy if it can simply fetch the latest
     /// checkpoint from its store.
     pub threshold_seconds: Option<u32>,
+
+    /// Include the failed readiness condition in an unhealthy response body.
+    ///
+    /// The default response remains `down` for compatibility with existing health check clients.
+    pub verbose: Option<bool>,
+}
+
+fn unhealthy_response_body(error: crate::RpcError, verbose: bool) -> String {
+    if !verbose {
+        return "down".to_owned();
+    }
+
+    let message = error.into_status_proto().message;
+    if message.starts_with("Fullnode is catching up:") {
+        format!("down: {message}")
+    } else {
+        "down".to_owned()
+    }
 }
 
 pub async fn health(
-    Query(Threshold { threshold_seconds }): Query<Threshold>,
+    Query(Threshold {
+        threshold_seconds,
+        verbose,
+    }): Query<Threshold>,
     State(state): State<RpcService>,
 ) -> impl axum::response::IntoResponse {
     match state.health_check(threshold_seconds) {
-        Ok(()) => (axum::http::StatusCode::OK, "up"),
-        Err(_) => (axum::http::StatusCode::SERVICE_UNAVAILABLE, "down"),
+        Ok(()) => (axum::http::StatusCode::OK, "up".to_owned()),
+        Err(error) => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            unhealthy_response_body(error, verbose.unwrap_or_default()),
+        ),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ReadinessCheck, check_node_readiness};
+    use super::{ReadinessCheck, check_node_readiness, unhealthy_response_body};
     use std::sync::Arc;
 
     #[test]
@@ -82,5 +106,32 @@ mod tests {
             .into_status_proto();
 
         assert!(error.message.contains("catching up"));
+    }
+
+    #[test]
+    fn default_health_failure_body_remains_compatible() {
+        let error = anyhow::anyhow!("network startup is incomplete").into();
+
+        assert_eq!(unhealthy_response_body(error, false), "down");
+    }
+
+    #[test]
+    fn verbose_health_failure_body_includes_readiness_reason() {
+        let error = anyhow::anyhow!(
+            "Fullnode is catching up: validator network recovery is still in progress"
+        )
+        .into();
+
+        assert_eq!(
+            unhealthy_response_body(error, true),
+            "down: Fullnode is catching up: validator network recovery is still in progress"
+        );
+    }
+
+    #[test]
+    fn verbose_health_failure_does_not_expose_unrelated_internal_error() {
+        let error = anyhow::anyhow!("database path and internal failure details").into();
+
+        assert_eq!(unhealthy_response_body(error, true), "down");
     }
 }

@@ -27,8 +27,9 @@ use crate::{
 ///   gets subdags for each leader via the commit interpreter (linearizer)
 /// - The committed subdags are sent as consensus output via an unbounded tokio channel.
 ///
-/// There is no flow control on sending output. Consensus backpressure is applied earlier
-/// at consensus input level, and on commit sync.
+/// The channel itself is unbounded so the synchronous core thread never blocks on a send. Live
+/// local decisions, block proposals, and commit sync are bounded by the consumer's crash-safe
+/// durable watermark. Startup still replays an existing persisted tail in strict order.
 ///
 /// Commit is persisted in store before the CommittedSubDag is sent to the commit handler.
 /// When Rtd recovers, it blocks until the commits it knows about are recovered. So consensus
@@ -44,6 +45,9 @@ pub(crate) struct CommitObserver {
     commit_interpreter: Linearizer,
     /// Handle to an unbounded channel to send output commits.
     commit_finalizer_handle: CommitFinalizerHandle,
+    /// Tracks both in-process handling and crash-safe consumer progress. Live consensus output is
+    /// throttled against the latter so a healthy node cannot create another unbounded tail.
+    commit_consumer_monitor: Arc<crate::CommitConsumerMonitor>,
 }
 
 impl CommitObserver {
@@ -62,6 +66,7 @@ impl CommitObserver {
             transaction_certifier.clone(),
             commit_consumer.commit_sender.clone(),
         );
+        let commit_consumer_monitor = commit_consumer.monitor();
 
         let mut observer = Self {
             context,
@@ -71,6 +76,7 @@ impl CommitObserver {
             leader_schedule,
             commit_interpreter,
             commit_finalizer_handle,
+            commit_consumer_monitor,
         };
         observer.recover_and_send_commits(&commit_consumer).await;
 
@@ -162,12 +168,17 @@ impl CommitObserver {
                 replay_after_commit_index, 0,
                 "Commit replay should start at the beginning if there is no commit history"
             );
+            self.commit_consumer_monitor.start_recovery(0);
+            self.commit_consumer_monitor.finish_recovery_scan();
             info!("Nothing to recover for commit observer - starting new epoch");
             return;
         };
 
         let last_commit_index = last_commit.index();
+        self.commit_consumer_monitor
+            .start_recovery(last_commit_index);
         if last_commit_index == replay_after_commit_index {
+            self.commit_consumer_monitor.finish_recovery_scan();
             info!(
                 "Nothing to recover for commit observer - replay is requested immediately after last commit index {last_commit_index}"
             );
@@ -178,6 +189,13 @@ impl CommitObserver {
         info!(
             "Recovering commit observer in the range [{}..={last_commit_index}]",
             replay_after_commit_index + 1,
+        );
+        info!(
+            target: "rtd_startup",
+            replay_from_commit = replay_after_commit_index + 1,
+            replay_target_commit = last_commit_index,
+            replay_commits = last_commit_index.saturating_sub(replay_after_commit_index),
+            "Startup consensus replay range discovered"
         );
 
         // To avoid scanning too many commits at once and load in memory,
@@ -287,12 +305,24 @@ impl CommitObserver {
             last_commit_index
         );
 
+        self.commit_consumer_monitor.finish_recovery_scan();
+
         info!(
             "Commit observer recovery [{}..={}] completed, took {:?}",
             replay_after_commit_index + 1,
             last_commit_index,
             now.elapsed()
         );
+    }
+
+    /// Remaining room before consensus would exceed the consumer's crash-safe replay bound.
+    pub(crate) fn remaining_durable_commit_capacity(
+        &self,
+        consensus_head: crate::CommitIndex,
+        highest_pending_consensus_head: crate::CommitIndex,
+    ) -> crate::CommitIndex {
+        self.commit_consumer_monitor
+            .remaining_durable_commit_capacity(consensus_head, highest_pending_consensus_head)
     }
 
     fn report_metrics(&self, committed: &[CommittedSubDag]) {

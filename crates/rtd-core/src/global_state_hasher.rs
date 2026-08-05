@@ -12,7 +12,7 @@ use rtd_types::committee::EpochId;
 use rtd_types::digests::{ObjectDigest, TransactionDigest};
 use rtd_types::in_memory_storage::InMemoryStorage;
 use rtd_types::storage::{ObjectKey, ObjectStore};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -575,6 +575,107 @@ impl GlobalStateHasher {
         Ok(())
     }
 
+    pub fn rebuild_running_root_to_checkpoint(
+        &self,
+        epoch_store: &AuthorityPerEpochStore,
+        target_checkpoint: CheckpointSequenceNumber,
+    ) -> RtdResult<usize> {
+        if epoch_store
+            .get_running_root_state_hash(target_checkpoint)?
+            .is_some()
+        {
+            return Ok(0);
+        }
+
+        let (first_checkpoint, mut running_root) = if let Some((checkpoint, root)) =
+            epoch_store.get_highest_running_root_state_hash_at_or_before(target_checkpoint)?
+        {
+            let first_checkpoint = checkpoint.checked_add(1).ok_or_else(|| {
+                format!(
+                    "Cannot rebuild running root after maximum checkpoint sequence number {checkpoint}"
+                )
+            })?;
+            (first_checkpoint, root)
+        } else if epoch_store.epoch() == 0 {
+            (0, GlobalStateHash::default())
+        } else {
+            let previous_epoch = epoch_store.epoch() - 1;
+            let Some((last_checkpoint, root)) =
+                self.store.get_root_state_hash_for_epoch(previous_epoch)?
+            else {
+                return Err(format!(
+                    "Cannot rebuild running root for epoch {} through checkpoint {}: \
+                     permanent root for previous epoch {} is missing",
+                    epoch_store.epoch(),
+                    target_checkpoint,
+                    previous_epoch,
+                )
+                .into());
+            };
+            let first_checkpoint = last_checkpoint.checked_add(1).ok_or_else(|| {
+                format!(
+                    "Cannot rebuild running root after maximum checkpoint sequence number \
+                     {last_checkpoint}"
+                )
+            })?;
+            (first_checkpoint, root)
+        };
+
+        if first_checkpoint > target_checkpoint {
+            return Err(format!(
+                "Cannot rebuild running root for checkpoint {target_checkpoint}: \
+                 recovery base starts at checkpoint {first_checkpoint}"
+            )
+            .into());
+        }
+
+        let checkpoint_accumulators = epoch_store
+            .get_accumulators_in_checkpoint_range(first_checkpoint, target_checkpoint)?;
+        let expected_count = usize::try_from(target_checkpoint - first_checkpoint + 1).map_err(
+            |_| {
+                format!(
+                    "Cannot rebuild running root through checkpoint {target_checkpoint}: \
+                     checkpoint range does not fit in memory"
+                )
+            },
+        )?;
+        if checkpoint_accumulators.len() != expected_count {
+            return Err(format!(
+                "Cannot rebuild running root through checkpoint {target_checkpoint}: expected \
+                 {expected_count} checkpoint accumulators starting at {first_checkpoint}, found {}",
+                checkpoint_accumulators.len(),
+            )
+            .into());
+        }
+
+        for (expected_checkpoint, (checkpoint, _)) in
+            (first_checkpoint..=target_checkpoint).zip(&checkpoint_accumulators)
+        {
+            if *checkpoint != expected_checkpoint {
+                return Err(format!(
+                    "Cannot rebuild running root through checkpoint {target_checkpoint}: \
+                     checkpoint accumulator {expected_checkpoint} is missing; next stored \
+                     accumulator is {checkpoint}"
+                )
+                .into());
+            }
+        }
+
+        for (checkpoint, checkpoint_accumulator) in checkpoint_accumulators {
+            running_root.union(&checkpoint_accumulator);
+            epoch_store.insert_running_root_state_hash(&checkpoint, &running_root)?;
+        }
+
+        warn!(
+            epoch = epoch_store.epoch(),
+            first_checkpoint,
+            target_checkpoint,
+            rebuilt_checkpoints = expected_count,
+            "Rebuilt missing running root state hashes during checkpoint recovery"
+        );
+        Ok(expected_count)
+    }
+
     pub fn accumulate_epoch(
         &self,
         epoch_store: Arc<AuthorityPerEpochStore>,
@@ -604,5 +705,121 @@ impl GlobalStateHasher {
         protocol_config: &ProtocolConfig,
     ) -> GlobalStateHash {
         accumulate_effects(&*self.store, effects, protocol_config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::authority::test_authority_builder::TestAuthorityBuilder;
+    use fastcrypto::hash::MultisetHash;
+    use rtd_types::digests::ObjectDigest;
+
+    fn checkpoint_accumulator() -> GlobalStateHash {
+        let mut accumulator = GlobalStateHash::default();
+        accumulator.insert(ObjectDigest::random());
+        accumulator
+    }
+
+    #[tokio::test]
+    async fn rebuilds_missing_running_roots_from_checkpoint_accumulators() {
+        let state = TestAuthorityBuilder::new().build().await;
+        let epoch_store = state.epoch_store_for_testing();
+        let hasher = GlobalStateHasher::new_for_tests(state.get_global_state_hash_store().clone());
+        let checkpoint_accumulators = (0..=2)
+            .map(|checkpoint| (checkpoint, checkpoint_accumulator()))
+            .collect::<Vec<_>>();
+
+        for (checkpoint, accumulator) in &checkpoint_accumulators {
+            epoch_store
+                .insert_state_hash_for_checkpoint(checkpoint, accumulator)
+                .unwrap();
+        }
+
+        assert_eq!(
+            hasher
+                .rebuild_running_root_to_checkpoint(&epoch_store, 2)
+                .unwrap(),
+            3
+        );
+
+        let mut expected_root = GlobalStateHash::default();
+        for (checkpoint, accumulator) in checkpoint_accumulators {
+            expected_root.union(&accumulator);
+            assert_eq!(
+                epoch_store.get_running_root_state_hash(checkpoint).unwrap(),
+                Some(expected_root.clone())
+            );
+        }
+        assert_eq!(
+            hasher
+                .rebuild_running_root_to_checkpoint(&epoch_store, 2)
+                .unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn rebuilds_running_roots_from_latest_persisted_root() {
+        let state = TestAuthorityBuilder::new().build().await;
+        let epoch_store = state.epoch_store_for_testing();
+        let hasher = GlobalStateHasher::new_for_tests(state.get_global_state_hash_store().clone());
+        let checkpoint_accumulators = (0..=2)
+            .map(|checkpoint| (checkpoint, checkpoint_accumulator()))
+            .collect::<Vec<_>>();
+
+        for (checkpoint, accumulator) in &checkpoint_accumulators {
+            epoch_store
+                .insert_state_hash_for_checkpoint(checkpoint, accumulator)
+                .unwrap();
+        }
+        hasher
+            .accumulate_running_root(
+                &epoch_store,
+                0,
+                Some(checkpoint_accumulators[0].1.clone()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            hasher
+                .rebuild_running_root_to_checkpoint(&epoch_store, 2)
+                .unwrap(),
+            2
+        );
+
+        let mut expected_root = GlobalStateHash::default();
+        for (_, accumulator) in checkpoint_accumulators {
+            expected_root.union(&accumulator);
+        }
+        assert_eq!(
+            epoch_store.get_running_root_state_hash(2).unwrap(),
+            Some(expected_root)
+        );
+    }
+
+    #[tokio::test]
+    async fn refuses_to_rebuild_running_root_across_missing_checkpoint_accumulator() {
+        let state = TestAuthorityBuilder::new().build().await;
+        let epoch_store = state.epoch_store_for_testing();
+        let hasher = GlobalStateHasher::new_for_tests(state.get_global_state_hash_store().clone());
+
+        epoch_store
+            .insert_state_hash_for_checkpoint(&0, &checkpoint_accumulator())
+            .unwrap();
+        epoch_store
+            .insert_state_hash_for_checkpoint(&2, &checkpoint_accumulator())
+            .unwrap();
+
+        let error = hasher
+            .rebuild_running_root_to_checkpoint(&epoch_store, 2)
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("expected 3 checkpoint accumulators")
+        );
+        assert_eq!(epoch_store.get_running_root_state_hash(0).unwrap(), None);
     }
 }

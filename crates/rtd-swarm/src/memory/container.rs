@@ -109,10 +109,17 @@ impl Container {
                 )
                 .await
                 .unwrap();
+                let mut node_shutdown_receiver = server.subscribe_to_shutdown_channel();
                 // Notify that we've successfully started the node
                 let _ = startup_sender.send(Arc::downgrade(&server));
-                // run until canceled
-                cancel_receiver.map(|_| ()).await;
+                // Run until the owner cancels the container or an internally supervised critical
+                // task requests node shutdown.
+                tokio::select! {
+                    _ = cancel_receiver.map(|_| ()) => {}
+                    _ = node_shutdown_receiver.recv() => {
+                        info!("Node requested shutdown after a critical service failure");
+                    }
+                }
 
                 trace!("cancellation received; shutting down thread");
             });

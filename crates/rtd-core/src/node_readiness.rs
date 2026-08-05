@@ -3,6 +3,7 @@
 
 use crate::checkpoints::CheckpointStore;
 use crate::rpc_index::RpcIndexStore;
+use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -35,11 +36,65 @@ pub struct FullnodeReadinessStatus {
     pub pending_recovery_started: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("Fullnode is catching up: {lag}; status: {status:?}")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FullnodeCatchingUp {
     pub lag: FullnodeReadinessLag,
     pub status: FullnodeReadinessStatus,
+}
+
+impl fmt::Display for FullnodeCatchingUp {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Fullnode is catching up: ")?;
+        match self.lag {
+            FullnodeReadinessLag::NetworkStartup => {
+                formatter.write_str("validator network recovery is still in progress")
+            }
+            FullnodeReadinessLag::PendingRecovery => {
+                formatter.write_str("pending transaction recovery has not started")
+            }
+            FullnodeReadinessLag::ExecutedCheckpoint => write_checkpoint_progress(
+                formatter,
+                "executed checkpoint",
+                self.status.highest_executed_checkpoint,
+                self.status.startup_target,
+            ),
+            FullnodeReadinessLag::ObjectState => write_checkpoint_progress(
+                formatter,
+                "object state checkpoint",
+                self.status.object_state_checkpoint,
+                self.status.startup_target,
+            ),
+            FullnodeReadinessLag::SecondaryIndex => write_checkpoint_progress(
+                formatter,
+                "secondary index checkpoint",
+                self.status.secondary_index_checkpoint,
+                self.status.startup_target,
+            ),
+            FullnodeReadinessLag::RpcIndex => write_checkpoint_progress(
+                formatter,
+                "RPC index checkpoint",
+                self.status.rpc_index_checkpoint,
+                self.status.startup_target,
+            ),
+        }
+    }
+}
+
+impl std::error::Error for FullnodeCatchingUp {}
+
+fn write_checkpoint_progress(
+    formatter: &mut fmt::Formatter<'_>,
+    checkpoint_name: &str,
+    current: Option<u64>,
+    target: u64,
+) -> fmt::Result {
+    match current {
+        Some(current) => write!(formatter, "{checkpoint_name} is at {current}/{target}"),
+        None => write!(
+            formatter,
+            "{checkpoint_name} is unavailable; startup target is {target}"
+        ),
+    }
 }
 
 impl FullnodeReadinessStatus {
@@ -186,6 +241,10 @@ mod tests {
         let error = status.ensure_ready().unwrap_err();
 
         assert_eq!(error.lag, FullnodeReadinessLag::NetworkStartup);
+        assert_eq!(
+            error.to_string(),
+            "Fullnode is catching up: validator network recovery is still in progress"
+        );
     }
 
     #[test]
@@ -241,6 +300,21 @@ mod tests {
     #[test]
     fn fullnode_is_ready_when_all_required_watermarks_reach_target() {
         ready_status().ensure_ready().unwrap();
+    }
+
+    #[test]
+    fn catching_up_error_uses_human_readable_checkpoint_progress() {
+        let mut status = ready_status();
+        status.rpc_index_checkpoint = None;
+
+        let message = status.ensure_ready().unwrap_err().to_string();
+
+        assert_eq!(
+            message,
+            "Fullnode is catching up: RPC index checkpoint is unavailable; startup target is 42"
+        );
+        assert!(!message.contains("FullnodeReadinessStatus"));
+        assert!(!message.contains("Some("));
     }
 
     #[tokio::test]

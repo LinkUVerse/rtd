@@ -103,6 +103,28 @@ const DEFAULT_FAUCET_PORT: u16 = 9123;
 const DEFAULT_CONSISTENT_STORE_PORT: u16 = 9124;
 const DEFAULT_GRAPHQL_PORT: u16 = 9125;
 
+#[cfg(not(unix))]
+async fn wait_for_termination_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to listen for Ctrl+C");
+}
+
+#[cfg(unix)]
+async fn wait_for_termination_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut sigterm = signal(SignalKind::terminate()).expect("Failed to listen for SIGTERM");
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            result.expect("Failed to listen for Ctrl+C");
+        }
+        signal = sigterm.recv() => {
+            assert!(signal.is_some(), "SIGTERM signal stream closed unexpectedly");
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct RpcArgs {
     /// Start an indexer with a PostgreSQL database.
@@ -1274,14 +1296,16 @@ async fn start(
         start_faucet(app_state).await?;
     }
 
-    // Run health check loop until Ctrl+C or failure
+    // Keep the owning Swarm alive until termination or a validator health-check failure.
     let mut interval = interval(Duration::from_secs(3));
     let mut unhealthy = 0;
+    let termination_signal = wait_for_termination_signal();
+    tokio::pin!(termination_signal);
 
     loop {
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                info!("Received Ctrl+C, shutting down...");
+            _ = &mut termination_signal => {
+                info!("Received termination signal, shutting down...");
                 break;
             }
             _ = interval.tick() => {}

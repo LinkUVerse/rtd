@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwapOption;
+use consensus_core::{CommitConsumerMonitor, CommitIndex, MAX_PENDING_DURABLE_COMMITS};
 use enum_dispatch::enum_dispatch;
 use fastcrypto::groups::bls12381;
 use fastcrypto_tbls::dkg_v1;
@@ -130,6 +131,8 @@ use rtd_types::execution::ExecutionTimeObservationChunkKey;
 /// The key where the latest consensus index is stored in the database.
 // TODO: Make a single table (e.g., called `variables`) storing all our lonely variables in one place.
 const LAST_CONSENSUS_STATS_ADDR: u64 = 0;
+const CONSENSUS_RECOVERY_DRAIN_ANCHOR_ADDR: u64 = 0;
+const CONSENSUS_RECOVERY_DRAIN_CEILING_ADDR: u64 = 0;
 const RECONFIG_STATE_INDEX: u64 = 0;
 const OVERRIDE_PROTOCOL_UPGRADE_BUFFER_STAKE_INDEX: u64 = 0;
 pub const EPOCH_DB_PREFIX: &str = "epoch_";
@@ -336,6 +339,9 @@ pub struct AuthorityPerEpochStore {
     /// Holds the outputs of both consensus handler and checkpoint builder in memory
     /// until they are proven not to have forked by a certified checkpoint.
     pub(crate) consensus_quarantine: RwLock<ConsensusOutputQuarantine>,
+    /// The active consensus consumer monitor. Quarantine commits advance its durable watermark
+    /// only after the database batch succeeds, making it safe for crash recovery and flow control.
+    consensus_commit_monitor: ArcSwapOption<CommitConsumerMonitor>,
     /// Holds variouis data from consensus_quarantine in a more easily accessible form.
     pub(crate) consensus_output_cache: ConsensusOutputCache,
 
@@ -592,6 +598,14 @@ pub struct AuthorityEpochTables {
         DBMap<(u64, AuthorityIndex), Vec<(ExecutionTimeObservationKey, Duration)>>,
     deferred_transactions_with_aliases_v2:
         DBMap<DeferralKey, Vec<TrustedExecutableTransactionWithAliases>>,
+
+    /// Fixed consensus head used to bound recovery-drain commits for databases which already had
+    /// an oversized non-durable tail before the runtime guard was introduced.
+    consensus_recovery_drain_anchor: DBMap<u64, CommitIndex>,
+
+    /// Fixed maximum consensus head allowed while draining a pre-existing oversized tail. This is
+    /// stored separately from the anchor so interrupted restarts cannot recalculate and extend it.
+    consensus_recovery_drain_ceiling: DBMap<u64, CommitIndex>,
 }
 
 fn signed_transactions_table_default_config() -> DBOptions {
@@ -871,6 +885,14 @@ impl AuthorityEpochTables {
             (
                 "execution_time_observations".to_string(),
                 ThConfig::new(8 + 4, mutexes, uniform_key),
+            ),
+            (
+                "consensus_recovery_drain_anchor".to_string(),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
+            ),
+            (
+                "consensus_recovery_drain_ceiling".to_string(),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
         ];
         Self::open_tables_read_write(
@@ -1199,6 +1221,7 @@ impl AuthorityPerEpochStore {
                 highest_executed_checkpoint,
                 metrics.clone(),
             )),
+            consensus_commit_monitor: ArcSwapOption::empty(),
             parent_path: parent_path.to_path_buf(),
             db_options,
             reconfig_state_mem: RwLock::new(reconfig_state),
@@ -1498,6 +1521,18 @@ impl AuthorityPerEpochStore {
             .tables()?
             .running_root_state_hash
             .reversed_safe_iter_with_bounds(None, None)?
+            .next()
+            .transpose()?)
+    }
+
+    pub fn get_highest_running_root_state_hash_at_or_before(
+        &self,
+        checkpoint: CheckpointSequenceNumber,
+    ) -> RtdResult<Option<(CheckpointSequenceNumber, GlobalStateHash)>> {
+        Ok(self
+            .tables()?
+            .running_root_state_hash
+            .reversed_safe_iter_with_bounds(None, Some(checkpoint))?
             .next()
             .transpose()?)
     }
@@ -2102,6 +2137,90 @@ impl AuthorityPerEpochStore {
         }
     }
 
+    pub(crate) fn set_consensus_commit_monitor(&self, monitor: Arc<CommitConsumerMonitor>) {
+        self.consensus_commit_monitor.store(Some(monitor));
+    }
+
+    pub(crate) fn record_durable_consensus_commit(&self, commit_index: CommitIndex) {
+        if let Some(monitor) = self.consensus_commit_monitor.load_full() {
+            monitor.set_highest_durable_commit(commit_index);
+        }
+    }
+
+    pub(crate) fn prepare_consensus_recovery_drain_state(
+        &self,
+        durable_commit: CommitIndex,
+        startup_consensus_head: CommitIndex,
+    ) -> RtdResult<Option<(CommitIndex, CommitIndex)>> {
+        let tables = self.tables()?;
+        let existing_anchor = tables
+            .consensus_recovery_drain_anchor
+            .get(&CONSENSUS_RECOVERY_DRAIN_ANCHOR_ADDR)?;
+        let existing_ceiling = tables
+            .consensus_recovery_drain_ceiling
+            .get(&CONSENSUS_RECOVERY_DRAIN_CEILING_ADDR)?;
+        let oversized_tail =
+            startup_consensus_head.saturating_sub(durable_commit) > MAX_PENDING_DURABLE_COMMITS;
+
+        let new_recovery_state = || {
+            let legacy_tail = startup_consensus_head.saturating_sub(durable_commit);
+            // A legacy checkpoint backlog needs consensus commits to sequence its signatures.
+            // Allow twice the observed legacy tail as a conservative, finite migration budget:
+            // the first part drains the existing outputs and the second part lets the resulting
+            // signature commits themselves become checkpointed. The resulting absolute ceiling
+            // is persisted and never recalculated merely because the process restarts.
+            let migration_budget = legacy_tail
+                .saturating_mul(2)
+                .max(MAX_PENDING_DURABLE_COMMITS);
+            (
+                startup_consensus_head,
+                startup_consensus_head.saturating_add(migration_budget),
+            )
+        };
+
+        let recovery_state = match (existing_anchor, existing_ceiling) {
+            (Some(anchor), Some(ceiling)) if oversized_tail || durable_commit < anchor => {
+                Some((anchor, ceiling))
+            }
+            // Upgrade the initial anchor-only implementation without discarding its progress.
+            // This branch can execute only once because the computed ceiling is persisted below.
+            (Some(anchor), None)
+                if durable_commit < anchor && startup_consensus_head >= anchor =>
+            {
+                let (_, ceiling) = new_recovery_state();
+                Some((anchor, ceiling))
+            }
+            _ if oversized_tail => Some(new_recovery_state()),
+            _ => None,
+        };
+
+        if recovery_state != existing_anchor.zip(existing_ceiling) {
+            let mut batch = tables.consensus_recovery_drain_anchor.batch();
+            if let Some((anchor, ceiling)) = recovery_state {
+                batch.insert_batch(
+                    &tables.consensus_recovery_drain_anchor,
+                    [(CONSENSUS_RECOVERY_DRAIN_ANCHOR_ADDR, anchor)],
+                )?;
+                batch.insert_batch(
+                    &tables.consensus_recovery_drain_ceiling,
+                    [(CONSENSUS_RECOVERY_DRAIN_CEILING_ADDR, ceiling)],
+                )?;
+            } else {
+                batch.delete_batch(
+                    &tables.consensus_recovery_drain_anchor,
+                    [CONSENSUS_RECOVERY_DRAIN_ANCHOR_ADDR],
+                )?;
+                batch.delete_batch(
+                    &tables.consensus_recovery_drain_ceiling,
+                    [CONSENSUS_RECOVERY_DRAIN_CEILING_ADDR],
+                )?;
+            }
+            batch.write()?;
+        }
+
+        Ok(recovery_state)
+    }
+
     pub fn get_accumulators_in_checkpoint_range(
         &self,
         from_checkpoint: CheckpointSequenceNumber,
@@ -2175,8 +2294,12 @@ impl AuthorityPerEpochStore {
         let seq = *checkpoint.sequence_number();
 
         let mut quarantine = self.consensus_quarantine.write();
-        quarantine.update_highest_executed_checkpoint(seq, self, &mut batch)?;
+        let highest_durable_commit =
+            quarantine.update_highest_executed_checkpoint(seq, self, &mut batch)?;
         batch.write()?;
+        if let Some(commit_index) = highest_durable_commit {
+            self.record_durable_consensus_commit(commit_index);
+        }
 
         self.consensus_output_cache
             .remove_executed_in_epoch(digests);
