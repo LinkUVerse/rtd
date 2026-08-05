@@ -235,6 +235,10 @@ impl ReadApiServer for ReadApi {
         self.get_chain_identifier().await.map(|id| id.to_string())
     }
 
+    async fn get_full_chain_identifier(&self) -> RpcResult<String> {
+        self.get_chain_identifier().await.map(|id| id.full_id())
+    }
+
     async fn verify_zklogin_signature(
         &self,
         _bytes: String,
