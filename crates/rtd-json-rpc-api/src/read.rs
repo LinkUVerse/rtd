@@ -11,7 +11,7 @@ use rtd_json_rpc_types::{
 };
 use rtd_json_rpc_types::{ProtocolConfigResponse, ZkLoginIntentScope, ZkLoginVerifyResult};
 use rtd_open_rpc_macros::open_rpc;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress, TransactionDigest};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber, TransactionDigest};
 use rtd_types::rtd_serde::BigInt;
 
 #[open_rpc(namespace = "rtd", tag = "Read API")]
@@ -148,6 +148,10 @@ pub trait ReadApi {
     /// Return the first four bytes of the chain's genesis checkpoint digest.
     #[method(name = "getChainIdentifier")]
     async fn get_chain_identifier(&self) -> RpcResult<String>;
+
+    /// Return the complete genesis checkpoint digest for lifecycle-sensitive integrations.
+    #[method(name = "getFullChainIdentifier")]
+    async fn get_full_chain_identifier(&self) -> RpcResult<String>;
 
     /// Verify a zklogin signature for the given bytes, intent scope and author.
     #[method(name = "verifyZkLoginSignature")]

@@ -25,16 +25,16 @@ use rtd_json_rpc_types::{
     DevInspectResults, DynamicFieldPage, EventFilter, EventPage, MoveCallParams,
     MoveFunctionArgType, ObjectChange, ObjectValueKind::ByImmutableReference,
     ObjectValueKind::ByMutableReference, ObjectValueKind::ByValue, ObjectsPage, OwnedObjectRef,
-    Page, ProtocolConfigResponse, RPCTransactionRequestParams, Stake, StakeStatus, RtdCoinMetadata,
-    RtdCommittee, RtdData, RtdEvent, RtdExecutionStatus, RtdGetPastObjectRequest, RtdMoveAbility,
+    Page, ProtocolConfigResponse, RPCTransactionRequestParams, RtdCoinMetadata, RtdCommittee,
+    RtdData, RtdEvent, RtdExecutionStatus, RtdGetPastObjectRequest, RtdMoveAbility,
     RtdMoveAbilitySet, RtdMoveNormalizedFunction, RtdMoveNormalizedModule, RtdMoveNormalizedStruct,
     RtdMoveNormalizedType, RtdMoveVisibility, RtdObjectData, RtdObjectDataFilter,
     RtdObjectDataOptions, RtdObjectRef, RtdObjectResponse, RtdObjectResponseQuery, RtdParsedData,
     RtdPastObjectResponse, RtdTransactionBlock, RtdTransactionBlockData,
     RtdTransactionBlockEffects, RtdTransactionBlockEffectsV1, RtdTransactionBlockEvents,
     RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
-    RtdTransactionBlockResponseQuery, TransactionBlockBytes, TransactionBlocksPage,
-    TransactionFilter, TransferObjectParams,
+    RtdTransactionBlockResponseQuery, Stake, StakeStatus, TransactionBlockBytes,
+    TransactionBlocksPage, TransactionFilter, TransferObjectParams,
 };
 use rtd_json_rpc_types::{RtdTypeTag, ValidatorApy, ValidatorApys};
 use rtd_open_rpc::ExamplePairing;
@@ -43,7 +43,7 @@ use rtd_protocol_config::ProtocolConfig;
 use rtd_types::balance::Supply;
 use rtd_types::base_types::random_object_ref;
 use rtd_types::base_types::{
-    FullObjectRef, MoveObjectType, ObjectDigest, ObjectID, ObjectType, SequenceNumber, RtdAddress,
+    FullObjectRef, MoveObjectType, ObjectDigest, ObjectID, ObjectType, RtdAddress, SequenceNumber,
     TransactionDigest,
 };
 use rtd_types::committee::Committee;
@@ -132,6 +132,7 @@ impl RpcExampleProvider {
             self.rtdx_get_latest_rtd_system_state(),
             self.get_protocol_config(),
             self.rtd_get_chain_identifier(),
+            self.rtd_get_full_chain_identifier(),
             self.rtdx_get_stakes(),
             self.rtdx_get_stakes_by_ids(),
             self.rtdx_resolve_name_service_address(),
@@ -1369,6 +1370,18 @@ impl RpcExampleProvider {
             "rtd_getChainIdentifier",
             vec![ExamplePairing::new(
                 "Gets the identifier for the chain receiving the POST.",
+                vec![],
+                json!(result),
+            )],
+        )
+    }
+
+    fn rtd_get_full_chain_identifier(&mut self) -> Examples {
+        let result = "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S".to_string();
+        Examples::new(
+            "rtd_getFullChainIdentifier",
+            vec![ExamplePairing::new(
+                "Gets the complete genesis checkpoint digest for the chain receiving the POST.",
                 vec![],
                 json!(result),
             )],

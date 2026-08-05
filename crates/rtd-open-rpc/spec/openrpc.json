@@ -807,6 +807,33 @@
       ]
     },
     {
+      "name": "rtd_getFullChainIdentifier",
+      "tags": [
+        {
+          "name": "Read API"
+        }
+      ],
+      "description": "Return the complete genesis checkpoint digest for lifecycle-sensitive integrations.",
+      "params": [],
+      "result": {
+        "name": "String",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "examples": [
+        {
+          "name": "Gets the complete genesis checkpoint digest for the chain receiving the POST.",
+          "params": [],
+          "result": {
+            "name": "Result",
+            "value": "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S"
+          }
+        }
+      ]
+    },
+    {
       "name": "rtd_getLatestCheckpointSequenceNumber",
       "tags": [
         {
@@ -1294,7 +1321,7 @@
             "name": "Result",
             "value": {
               "minSupportedProtocolVersion": "1",
-              "maxSupportedProtocolVersion": "105",
+              "maxSupportedProtocolVersion": "106",
               "protocolVersion": "6",
               "featureFlags": {
                 "abstract_size_in_object_runtime": false,
@@ -1396,6 +1423,7 @@
                 "per_command_shared_object_transfer_rules": false,
                 "prepend_prologue_tx_in_consensus_commit_in_checkpoints": false,
                 "private_generics_verifier_v2": false,
+                "prune_address_balance_gas_payment_on_iffw": false,
                 "random_beacon": false,
                 "receive_objects": false,
                 "recompute_has_public_transfer_in_execution": false,
@@ -8171,7 +8199,7 @@
           }
         }
       },
-      "Page_for_String_and_ObjectID": {
+      "Page_for_RtdObjectResponse_and_ObjectID": {
         "description": "`next_cursor` points to the last item in the page; Reading with `next_cursor` will start from the next item after `next_cursor` if `next_cursor` is `Some`, otherwise it will start from the first item.",
         "type": "object",
         "required": [
@@ -8182,7 +8210,7 @@
           "data": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RtdObjectResponse"
             }
           },
           "hasNextPage": {
@@ -8200,7 +8228,7 @@
           }
         }
       },
-      "Page_for_RtdObjectResponse_and_ObjectID": {
+      "Page_for_String_and_ObjectID": {
         "description": "`next_cursor` points to the last item in the page; Reading with `next_cursor` will start from the next item after `next_cursor` if `next_cursor` is `Some`, otherwise it will start from the first item.",
         "type": "object",
         "required": [
@@ -8211,7 +8239,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RtdObjectResponse"
+              "type": "string"
             }
           },
           "hasNextPage": {
@@ -8559,136 +8587,6 @@
             }
           }
         ]
-      },
-      "Secp256k1RtdSignature": {
-        "$ref": "#/components/schemas/Base64"
-      },
-      "Secp256r1RtdSignature": {
-        "$ref": "#/components/schemas/Base64"
-      },
-      "SequenceNumber": {
-        "type": "integer",
-        "format": "uint64",
-        "minimum": 0.0
-      },
-      "SequenceNumber2": {
-        "$ref": "#/components/schemas/BigInt_for_uint64"
-      },
-      "Signature": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "Ed25519RtdSignature"
-            ],
-            "properties": {
-              "Ed25519RtdSignature": {
-                "$ref": "#/components/schemas/Ed25519RtdSignature"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "Secp256k1RtdSignature"
-            ],
-            "properties": {
-              "Secp256k1RtdSignature": {
-                "$ref": "#/components/schemas/Secp256k1RtdSignature"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "Secp256r1RtdSignature"
-            ],
-            "properties": {
-              "Secp256r1RtdSignature": {
-                "$ref": "#/components/schemas/Secp256r1RtdSignature"
-              }
-            },
-            "additionalProperties": false
-          }
-        ]
-      },
-      "Stake": {
-        "type": "object",
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "status"
-            ],
-            "properties": {
-              "status": {
-                "type": "string",
-                "enum": [
-                  "Pending"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "estimatedReward",
-              "status"
-            ],
-            "properties": {
-              "estimatedReward": {
-                "$ref": "#/components/schemas/BigInt_for_uint64"
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "Active"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "status"
-            ],
-            "properties": {
-              "status": {
-                "type": "string",
-                "enum": [
-                  "Unstaked"
-                ]
-              }
-            }
-          }
-        ],
-        "required": [
-          "principal",
-          "stakeActiveEpoch",
-          "stakeRequestEpoch",
-          "stakedRtdId"
-        ],
-        "properties": {
-          "principal": {
-            "$ref": "#/components/schemas/BigInt_for_uint64"
-          },
-          "stakeActiveEpoch": {
-            "$ref": "#/components/schemas/BigInt_for_uint64"
-          },
-          "stakeRequestEpoch": {
-            "$ref": "#/components/schemas/BigInt_for_uint64"
-          },
-          "stakedRtdId": {
-            "description": "ID of the StakedRtd receipt object.",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ObjectID"
-              }
-            ]
-          }
-        }
       },
       "RtdActiveJwk": {
         "type": "object",
@@ -10356,9 +10254,9 @@
           "proofOfPossessionBytes",
           "protocolPubkeyBytes",
           "rewardsPool",
+          "rtdAddress",
           "stakingPoolId",
           "stakingPoolRtdBalance",
-          "rtdAddress",
           "votingPower",
           "workerAddress",
           "workerPubkeyBytes"
@@ -10536,6 +10434,9 @@
               }
             ]
           },
+          "rtdAddress": {
+            "$ref": "#/components/schemas/RtdAddress"
+          },
           "stakingPoolActivationEpoch": {
             "description": "The epoch at which this pool became active.",
             "default": null,
@@ -10576,9 +10477,6 @@
               }
             ]
           },
-          "rtdAddress": {
-            "$ref": "#/components/schemas/RtdAddress"
-          },
           "votingPower": {
             "$ref": "#/components/schemas/BigInt_for_uint64"
           },
@@ -10612,6 +10510,136 @@
             "additionalProperties": false
           }
         ]
+      },
+      "Secp256k1RtdSignature": {
+        "$ref": "#/components/schemas/Base64"
+      },
+      "Secp256r1RtdSignature": {
+        "$ref": "#/components/schemas/Base64"
+      },
+      "SequenceNumber": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "SequenceNumber2": {
+        "$ref": "#/components/schemas/BigInt_for_uint64"
+      },
+      "Signature": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "Ed25519RtdSignature"
+            ],
+            "properties": {
+              "Ed25519RtdSignature": {
+                "$ref": "#/components/schemas/Ed25519RtdSignature"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "Secp256k1RtdSignature"
+            ],
+            "properties": {
+              "Secp256k1RtdSignature": {
+                "$ref": "#/components/schemas/Secp256k1RtdSignature"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "Secp256r1RtdSignature"
+            ],
+            "properties": {
+              "Secp256r1RtdSignature": {
+                "$ref": "#/components/schemas/Secp256r1RtdSignature"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Stake": {
+        "type": "object",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "Pending"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "estimatedReward",
+              "status"
+            ],
+            "properties": {
+              "estimatedReward": {
+                "$ref": "#/components/schemas/BigInt_for_uint64"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "Active"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "Unstaked"
+                ]
+              }
+            }
+          }
+        ],
+        "required": [
+          "principal",
+          "stakeActiveEpoch",
+          "stakeRequestEpoch",
+          "stakedRtdId"
+        ],
+        "properties": {
+          "principal": {
+            "$ref": "#/components/schemas/BigInt_for_uint64"
+          },
+          "stakeActiveEpoch": {
+            "$ref": "#/components/schemas/BigInt_for_uint64"
+          },
+          "stakeRequestEpoch": {
+            "$ref": "#/components/schemas/BigInt_for_uint64"
+          },
+          "stakedRtdId": {
+            "description": "ID of the StakedRtd receipt object.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectID"
+              }
+            ]
+          }
+        }
       },
       "Supply": {
         "type": "object",

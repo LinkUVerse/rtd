@@ -10,10 +10,10 @@ use crate::{
 use fastcrypto::encoding::{Base58, Encoding, Hex};
 use fastcrypto::hash::{Blake2b256, HashFunction};
 use once_cell::sync::{Lazy, OnceCell};
+use rtd_protocol_config::Chain;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::{Bytes, serde_as};
-use rtd_protocol_config::Chain;
 use tracing::info;
 
 /// A representation of a 32 byte digest
@@ -226,6 +226,11 @@ impl ChainIdentifier {
 
     pub fn as_bytes(&self) -> &[u8; 32] {
         self.0.inner()
+    }
+
+    /// Return the complete genesis checkpoint digest used to identify this chain lifecycle.
+    pub fn full_id(&self) -> String {
+        self.0.to_string()
     }
 
     pub fn random() -> Self {
@@ -1171,7 +1176,7 @@ impl fmt::Display for CheckpointArtifactsDigest {
 
 #[cfg(test)]
 mod test {
-    use crate::digests::{ChainIdentifier, RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE};
+    use crate::digests::{ChainIdentifier, CheckpointDigest, RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE};
 
     fn has_env_override() -> bool {
         RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE.is_some()
@@ -1209,5 +1214,14 @@ mod test {
         }
         let chain_id = ChainIdentifier::from_chain_short_id(&String::from("unknown"));
         assert_eq!(chain_id, None);
+    }
+
+    #[test]
+    fn full_chain_id_preserves_the_complete_genesis_digest() {
+        let digest = CheckpointDigest::new([7; 32]);
+        let chain_id = ChainIdentifier::from(digest);
+
+        assert_eq!(chain_id.full_id(), digest.to_string());
+        assert_ne!(chain_id.full_id(), chain_id.to_string());
     }
 }

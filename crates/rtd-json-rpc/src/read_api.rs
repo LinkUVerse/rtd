@@ -21,13 +21,13 @@ use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::annotated_value::{MoveStructLayout, MoveTypeLayout};
 use move_core_types::language_storage::StructTag;
 use once_cell::sync::Lazy;
-use shared_crypto::intent::{IntentMessage, PersonalMessage};
 use rtd_display::v1::Format;
 use rtd_json_rpc_types::ZkLoginIntentScope;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::signature::{GenericSignature, VerifyParams};
 use rtd_types::signature_verification::VerifiedDigestCache;
 use rtd_types::storage::ObjectKey;
+use shared_crypto::intent::{IntentMessage, PersonalMessage};
 use tap::TapFallible;
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -64,9 +64,9 @@ use crate::{
 };
 use fastcrypto::encoding::Encoding;
 use fastcrypto::traits::ToFromBytes;
-use shared_crypto::intent::Intent;
 use rtd_json_rpc_types::ZkLoginVerifyResult;
 use rtd_types::authenticator_state::{ActiveJwk, get_authenticator_state};
+use shared_crypto::intent::Intent;
 
 /// A field access in a  Display string cannot exceed this level of nesting.
 const MAX_DISPLAY_NESTED_LEVEL: usize = 10;
@@ -189,9 +189,8 @@ impl ReadApi {
             .await?;
 
         let mut checkpoints = Vec::with_capacity(checkpoint_numbers.len());
-        for (maybe_summary, maybe_contents) in verified_checkpoints
-            .into_iter()
-            .zip(checkpoint_contents)
+        for (maybe_summary, maybe_contents) in
+            verified_checkpoints.into_iter().zip(checkpoint_contents)
         {
             let (Some(summary), Some(contents)) = (maybe_summary, maybe_contents) else {
                 continue;
@@ -1047,6 +1046,15 @@ impl ReadApiServer for ReadApi {
             Ok(ci.to_string())
         })
     }
+
+    #[instrument(skip(self))]
+    async fn get_full_chain_identifier(&self) -> RpcResult<String> {
+        with_tracing!(async move {
+            let ci = self.state.get_chain_identifier()?;
+            Ok(ci.full_id())
+        })
+    }
+
     #[instrument(skip(self))]
     async fn verify_zklogin_signature(
         &self,
