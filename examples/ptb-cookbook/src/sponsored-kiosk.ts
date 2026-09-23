@@ -1,15 +1,15 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
-const client = new SuiGrpcClient({ baseUrl: 'https://fullnode.testnet.sui.io:443', network: 'testnet' });
+const client = new RtdGrpcClient({ baseUrl: 'https://fullnode.testnet.rtd.io:443', network: 'testnet' });
 const buyerKeypair = new Ed25519Keypair();
 const sponsorKeypair = new Ed25519Keypair();
-const buyerAddress = buyerKeypair.toSuiAddress();
-const sponsorAddress = sponsorKeypair.toSuiAddress();
+const buyerAddress = buyerKeypair.toRtdAddress();
+const sponsorAddress = sponsorKeypair.toRtdAddress();
 const sponsorGasCoins = [{ objectId: '0x...', version: '1', digest: '...' }];
 
 // docs::#sponsored-kiosk
@@ -20,15 +20,15 @@ const tx = new Transaction();
 const itemType = '0xPACKAGE::module::MyItem';
 const kioskId = '0xSellerKioskId';
 const itemId = '0xItemObjectId';
-const price = 5_000_000_000n; // 5 SUI
+const price = 5_000_000_000n; // 5 RTD
 const buyerKioskId = '0xBuyerKioskId';
 const transferPolicyId = '0xTransferPolicyId';
 
-// Withdraw from the buyer's address balance, then redeem to get a Coin<SUI>.
+// Withdraw from the buyer's address balance, then redeem to get a Coin<RTD>.
 // Do NOT use tx.gas — after sponsorship, the gas coin belongs to the sponsor.
 const [paymentCoin] = tx.moveCall({
 	target: '0x2::coin::redeem_funds',
-	typeArguments: ['0x2::sui::SUI'],
+	typeArguments: ['0x2::rtd::RTD'],
 	arguments: [tx.withdrawal({ amount: price })],
 });
 

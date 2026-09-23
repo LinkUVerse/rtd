@@ -1,7 +1,7 @@
 ---
 title: Gas Smashing
 description: >-
-  Gas smashing lets you pay transaction fees using multiple coins, which Sui
+  Gas smashing lets you pay transaction fees using multiple coins, which Rtd
   combines into a single coin. Learn how gas smashing works, its interaction
   with address balance gas payment, and how to use it with programmable
   transaction blocks.
@@ -21,7 +21,7 @@ keywords:
   - compatibility coin reservation
 goal:
   description: >-
-    Reader understands sui optimizes coin management by combining multiple coins
+    Reader understands rtd optimizes coin management by combining multiple coins
     into a single object to pay for gas fees
   requires:
     - has_frontmatter:
@@ -48,8 +48,8 @@ builder_paths:
     step: Gas smashing
     stage: Authorization
 questions:
-  - What is Gas Smashing in Sui?
-  - How does gas smashing work on Sui?
+  - What is Gas Smashing in Rtd?
+  - How does gas smashing work on Rtd?
   - How do I optimize gas smashing performance?
 answer: >-
   If you are using the address balances feature, then you do not need to use gas
@@ -67,9 +67,9 @@ If you are using the address balances feature, then you do not need to use gas s
 
 :::
 
-Every transaction on Sui has a gas fee that must be paid for successful execution. Gas smashing lets you pay this fee using multiple coins instead of a single one. This is useful when you have many smaller denomination coins or want to reduce the number of coins in your account. Gas smashing is most powerful when paired with the `GasCoin` [programmable transaction block (PTB)](/develop/transactions/ptbs/prog-txn-blocks) argument.
+Every transaction on Rtd has a gas fee that must be paid for successful execution. Gas smashing lets you pay this fee using multiple coins instead of a single one. This is useful when you have many smaller denomination coins or want to reduce the number of coins in your account. Gas smashing is most powerful when paired with the `GasCoin` [programmable transaction block (PTB)](/develop/transactions/ptbs/prog-txn-blocks) argument.
 
-Gas smashing happens automatically in a transaction if you provide multiple coins to pay for the gas fee. When Sui executes the transaction, the network combines, or smashes, all of the provided coins into a single coin. Smashing occurs regardless of coin amounts or the gas budget provided with the transaction, as long as it is within the minimum and maximum gas budgets. Sui deducts the gas fee from the single coin regardless of the execution status of the transaction. This means that even if the transaction fails to execute for some reason, such as an execution error, the provided gas coins remain smashed after the transaction's execution.
+Gas smashing happens automatically in a transaction if you provide multiple coins to pay for the gas fee. When Rtd executes the transaction, the network combines, or smashes, all of the provided coins into a single coin. Smashing occurs regardless of coin amounts or the gas budget provided with the transaction, as long as it is within the minimum and maximum gas budgets. Rtd deducts the gas fee from the single coin regardless of the execution status of the transaction. This means that even if the transaction fails to execute for some reason, such as an execution error, the provided gas coins remain smashed after the transaction's execution.
 
 This design makes gas smashing a practical way to both manage coins and pay gas in the same transaction, as you can combine many small coins while simultaneously executing unrelated operations in one PTB.
 
@@ -77,16 +77,16 @@ You can smash at most 256 coins in a single PTB. Transactions with more than 256
 
 ## Gas smashing and address balance gas payment
 
-In the basic case, gas smashing merges the real `Coin<SUI>` objects that you supply as gas payment. When you provide multiple `Coin<SUI>` objects, the network merges them into a single coin and deducts the gas fee from that coin.
+In the basic case, gas smashing merges the real `Coin<RTD>` objects that you supply as gas payment. When you provide multiple `Coin<RTD>` objects, the network merges them into a single coin and deducts the gas fee from that coin.
 
 Address balance gas payment is different. When you pay gas from an address balance, you do not select or provide any coin objects. The network resolves the gas fee as a withdrawal from your reserved address balance funds, so there is no gas coin selection or merge workflow, and gas smashing is not needed.
 
-The compatibility layer can present compatibility coin reservations to older clients. A compatibility coin reservation is a synthetic object reference that reserves address balance funds, not a persisted `Coin<SUI>` object. These reservations still participate in gas smashing, and the outcome depends on which gas payment you list first:
+The compatibility layer can present compatibility coin reservations to older clients. A compatibility coin reservation is a synthetic object reference that reserves address balance funds, not a persisted `Coin<RTD>` object. These reservations still participate in gas smashing, and the outcome depends on which gas payment you list first:
 
-- If the first payment is a real `Coin<SUI>`, the network smashes every payment into that coin. Any coin reservation is fully withdrawn from the address balance into the resulting coin.
+- If the first payment is a real `Coin<RTD>`, the network smashes every payment into that coin. Any coin reservation is fully withdrawn from the address balance into the resulting coin.
 - If the first payment is a coin reservation, the network smashes all of the real coins and sends the combined balance to your address balance.
 
-You can also use a coin reservation deliberately, even when you do not need the compatibility layer. If you pay gas from an address balance but want extra `SUI` available within the PTB, you have two options:
+You can also use a coin reservation deliberately, even when you do not need the compatibility layer. If you pay gas from an address balance but want extra `RTD` available within the PTB, you have two options:
 
 - Add additional fund withdrawals as input arguments.
 - Use a coin reservation larger than the gas budget. The excess amount is available through the `GasCoin` argument in the PTB, just as it is with `Coin`-based gas payments. This is helpful for PTB templates and similar cases.

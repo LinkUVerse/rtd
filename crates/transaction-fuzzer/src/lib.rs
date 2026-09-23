@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod account_universe;
@@ -13,13 +13,13 @@ use proptest::collection::vec;
 use proptest::test_runner::TestRunner;
 use rand::Rng;
 use std::fmt::Debug;
-use sui_protocol_config::ProtocolConfig;
-use sui_types::base_types::{ObjectID, SuiAddress};
-use sui_types::crypto::AccountKeyPair;
-use sui_types::crypto::get_key_pair;
-use sui_types::digests::TransactionDigest;
-use sui_types::object::{MoveObject, OBJECT_START_VERSION, Object, Owner};
-use sui_types::{gas_coin::TOTAL_SUPPLY_MIST, transaction::GasData};
+use rtd_protocol_config::ProtocolConfig;
+use rtd_types::base_types::{ObjectID, RtdAddress};
+use rtd_types::crypto::AccountKeyPair;
+use rtd_types::crypto::get_key_pair;
+use rtd_types::digests::TransactionDigest;
+use rtd_types::object::{MoveObject, OBJECT_START_VERSION, Object, Owner};
+use rtd_types::{gas_coin::TOTAL_SUPPLY_MIST, transaction::GasData};
 
 use proptest::prelude::*;
 use rand::{SeedableRng, rngs::StdRng};
@@ -42,7 +42,7 @@ fn generate_random_gas_data(
     force_all_sender_owned: bool, // whether to force ALL gas coins to be owned by the sender
     allow_address_balance: bool, // whether to sometimes generate address-balance gas payments
 ) -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let mut rng = StdRng::from_seed(seed);
 
     // When allowed, randomly choose address-balance gas payment (empty payment vector)

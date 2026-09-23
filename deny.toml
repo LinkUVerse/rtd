@@ -22,7 +22,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # output a note when they are encountered.
 ignore = [
     # "RUSTSEC-0000-0000",
-    # we don't do RSA signing on Sui (only verifying for zklogin)
+    # we don't do RSA signing on Rtd (only verifying for zklogin)
     "RUSTSEC-2023-0071",
     # allow yaml-rust being unmaintained
     "RUSTSEC-2024-0320",
@@ -44,22 +44,22 @@ ignore = [
     "RUSTSEC-2025-0056",
     # fxhash not maintained
     "RUSTSEC-2025-0057",
-    # bincode unmaintained - maintainers consider 1.3.3 complete, used by anemo and sui crates
+    # bincode unmaintained - maintainers consider 1.3.3 complete, used by anemo and rtd crates
     "RUSTSEC-2025-0141",
     # rand 0.8.5 unsoundness when a custom logger invokes rand reentrantly during
-    # thread-local RNG init. Not triggerable in Sui: logging uses tracing/tracing-subscriber
+    # thread-local RNG init. Not triggerable in Rtd: logging uses tracing/tracing-subscriber
     # which never calls rand during setup. Migrating rand 0.8 -> 0.9 would require ~316
-    # call-site edits across ~143 files in Sui alone, plus cascading updates in fastcrypto,
+    # call-site edits across ~143 files in Rtd alone, plus cascading updates in fastcrypto,
     # walrus, seal, and other downstream consumers. Deferred pending a coordinated
     # ecosystem-wide bump (likely driven by fastcrypto first).
     "RUSTSEC-2026-0097",
     # `proc-macro-error2` is unmaintained, no safe upgrade — transitive via
-    # alloy-sol-macro (sui-bridge ethereum stack); waiting for alloy to migrate
+    # alloy-sol-macro (rtd-bridge ethereum stack); waiting for alloy to migrate
     "RUSTSEC-2026-0173",
     # quick-xml 0.38: quadratic duplicate-attribute check (0194) and unbounded
     # namespace-declaration allocation DoS (0195). Fixed only in quick-xml >= 0.41,
     # but quick-xml is transitive via object_store, whose latest release (0.14.0)
-    # still requires ^0.40 — no upgrade path yet. In Sui, quick-xml only parses
+    # still requires ^0.40 — no upgrade path yet. In Rtd, quick-xml only parses
     # XML API responses from cloud storage providers (S3/GCS/Azure) via
     # object_store, not attacker-controlled input. Remove once object_store
     # releases with quick-xml >= 0.41.
@@ -224,8 +224,8 @@ allow-git = [
 
 [sources.allow-org]
 github = [
-    "mystenmark",
+    "linkumark",
     "bmwill",
-    "mystenlabs",
+    "linkuverse",
     "nextest-rs",
 ]

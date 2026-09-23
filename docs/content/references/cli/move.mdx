@@ -1,15 +1,15 @@
 ---
-title: Sui Move CLI
+title: Rtd Move CLI
 description: >-
-  The Sui CLI move command provides commands for working with Move source code
+  The Rtd CLI move command provides commands for working with Move source code
   directly from a terminal or console.
 keywords:
-  - sui move
-  - sui move help
+  - rtd move
+  - rtd move help
   - move
   - move reference
   - move commands
-  - sui move commands
+  - rtd move commands
   - use move cli
   - cli move
   - create a move project
@@ -26,7 +26,7 @@ goal:
     - pattern: '```'
       min: 1
       label: Has command examples
-    - pattern: 'sui '
+    - pattern: 'rtd '
       min: 2
       label: Shows CLI command usage
     - has_questions: true
@@ -34,25 +34,25 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Sui Move CLI in Sui?
-  - What are the available sui move cli commands?
-  - What flags does sui move cli support?
+  - What is Rtd Move CLI in Rtd?
+  - What are the available rtd move cli commands?
+  - What flags does rtd move cli support?
 answer: >-
-  The Sui CLI move command provides commands for working with Move source code
+  The Rtd CLI move command provides commands for working with Move source code
   directly from a terminal or console.
 ---
 
-The Sui CLI `move` command provides several commands for working with Move source code. A typical usage of `sui move` is to compile and test the Move code, or to generate a new Move project by using `sui move new project_name`, which creates the needed directories and the `Move.toml` file.
+The Rtd CLI `move` command provides several commands for working with Move source code. A typical usage of `rtd move` is to compile and test the Move code, or to generate a new Move project by using `rtd move new project_name`, which creates the needed directories and the `Move.toml` file.
 
 <ImportContent source="cli-check-install" mode="snippet" />
 
 ## Commands
 
 ```sh
-$ sui move --help
+$ rtd move --help
 ```
 
-<ImportContent source="console-output/sui-move-help" mode="snippet" />
+<ImportContent source="console-output/rtd-move-help" mode="snippet" />
 
 ## Examples
 
@@ -60,10 +60,10 @@ The following examples demonstrate some of the most often used commands.
 
 ### Create a new Move project
 
-To create a new Move project that automatically adds the necessary dependencies in a `Move.toml` file, run `sui move new [<PROJECT-NAME>]`.
+To create a new Move project that automatically adds the necessary dependencies in a `Move.toml` file, run `rtd move new [<PROJECT-NAME>]`.
 
 ```sh
-$ sui move new smart_contract_test
+$ rtd move new smart_contract_test
 ```
 ```sh
 $ ls -l smart_contract_test
@@ -89,26 +89,26 @@ edition = "2024"
 
 ### Build a Move project
 
-Use `sui move build` at the root of your Move project to build the package.
+Use `rtd move build` at the root of your Move project to build the package.
 
 ```sh
-$ sui move build
+$ rtd move build
 ```
 ```sh
-INCLUDING DEPENDENCY Sui
+INCLUDING DEPENDENCY Rtd
 INCLUDING DEPENDENCY MoveStdlib
 BUILDING smart_contract_test
 ```
 
 ### Run tests in a Move project
 
-Use `sui move test` to run the tests in a Move package.
+Use `rtd move test` to run the tests in a Move package.
 
 ```sh
-$ sui move test
+$ rtd move test
 ```
 ```sh
-INCLUDING DEPENDENCY Sui
+INCLUDING DEPENDENCY Rtd
 INCLUDING DEPENDENCY MoveStdlib
 BUILDING smart_contract_test
 Running Move unit tests
@@ -117,23 +117,23 @@ Test result: OK. Total tests: 0; passed: 0; failed: 0
 
 ### Lint a Move project
 
-Use `sui move lint` to run the Move linter on a package and check for potential issues. The linter runs both generic Move lints and Sui-specific object-model lints.
+Use `rtd move lint` to run the Move linter on a package and check for potential issues. The linter runs both generic Move lints and Rtd-specific object-model lints.
 
 ```sh
-$ sui move lint
+$ rtd move lint
 ```
 
 ### Get test coverage for a module
 
-This example uses [`first_package`](https://github.com/MystenLabs/sui/tree/main/examples/move/first_package) Move package.
+This example uses [`first_package`](https://github.com/LinkUVerse/rtd/tree/main/examples/move/first_package) Move package.
 
-To get a summary of the test coverage, you must first run the `sui move test --coverage` command, and then the `sui move coverage summary --test` to get a summary of the test coverage in the example project.
+To get a summary of the test coverage, you must first run the `rtd move test --coverage` command, and then the `rtd move coverage summary --test` to get a summary of the test coverage in the example project.
 
 ```sh
-$ sui move test --coverage
+$ rtd move test --coverage
 ```
 ```sh
-INCLUDING DEPENDENCY Sui
+INCLUDING DEPENDENCY Rtd
 INCLUDING DEPENDENCY MoveStdlib
 BUILDING first_package
 Running Move unit tests
@@ -141,7 +141,7 @@ Running Move unit tests
 [ PASS    ] 0x0::example::test_sword_transactions
 Test result: OK. Total tests: 2; passed: 2; failed: 0
 
-$ sui move coverage summary --test
+$ rtd move coverage summary --test
 +-------------------------+
 | Move Coverage Summary   |
 +-------------------------+
@@ -157,7 +157,7 @@ Module 0000000000000000000000000000000000000000000000000000000000000000::example
 Each command has its own help section. For example:
 
 ```sh
-$ sui move build --help
+$ rtd move build --help
 ```
 
-<ImportContent source="console-output/sui-move-build-help" mode="snippet" />
+<ImportContent source="console-output/rtd-move-build-help" mode="snippet" />

@@ -28,12 +28,12 @@ package-lock.json
 .vercel
 .env*.local
 
-# Generated awesome-sui files
-static/awesome-sui/
-src/static/awesome-sui/
-static/awesome-sui-gaming/
-src/static/awesome-sui-gaming/
-static/awesome-sui/
+# Generated awesome-rtd files
+static/awesome-rtd/
+src/static/awesome-rtd/
+static/awesome-rtd-gaming/
+src/static/awesome-rtd-gaming/
+static/awesome-rtd/
 
 scripts/.cache/
 

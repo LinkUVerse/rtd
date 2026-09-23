@@ -49,7 +49,7 @@ questions:
   - How do I switch DeepBook Predict between Testnet and Mainnet?
 answer: >-
   A full DeepBook Predict flow runs through the predict subpath of the
-  @mysten/deepbook-v3 SDK, which carries the Mainnet and Testnet deployments and
+  @linku/deepbook-v3 SDK, which carries the Mainnet and Testnet deployments and
   selects one by network name. You create a shared account wrapper, preview a
   mint with read.quoteMint, mint a directional or two-sided range position under
   a maxCost and maxProbability cap, close it live or claim it after the
@@ -63,7 +63,7 @@ import TabItem from '@theme/TabItem';
 
 A complete DeepBook Predict flow covers pricing a market board, creating an account, quoting and minting directional and two-sided range positions, closing before and after settlement, and running the queued liquidity provider flow. It continues from the [DeepBook Predict quickstart](/onchain-finance/deepbook/deepbook-predict), which covers install, funding, and a first mint.
 
-The walkthrough sends every transaction and every read through the `/predict` subpath of `@mysten/deepbook-v3`, version 2.5.0 or later. The SDK carries both the `deepbook-predict-mainnet` and `deepbook-predict-testnet` deployments, and the samples select one with a single `NETWORK` constant that defaults to `'testnet'`. The walkthrough runs on Testnet, where the quote coin is a mintable test coin. Set `NETWORK` to `'mainnet'` to point the same code at Mainnet, where the quote coin is native USDC. The SDK builds transactions and never signs them, and every read it exposes runs against the Sui client core API, so no indexer or server sits on the critical path. The samples live in the `examples/deepbook-predict` package, which type-checks with `npm run build` (`tsc --noEmit`). This document does not execute them, so run the [manual verification steps](#verify-on-testnet) before you rely on the write paths.
+The walkthrough sends every transaction and every read through the `/predict` subpath of `@linku/deepbook-v3`, version 2.5.0 or later. The SDK carries both the `deepbook-predict-mainnet` and `deepbook-predict-testnet` deployments, and the samples select one with a single `NETWORK` constant that defaults to `'testnet'`. The walkthrough runs on Testnet, where the quote coin is a mintable test coin. Set `NETWORK` to `'mainnet'` to point the same code at Mainnet, where the quote coin is native USDC. The SDK builds transactions and never signs them, and every read it exposes runs against the Rtd client core API, so no indexer or server sits on the critical path. The samples live in the `examples/deepbook-predict` package, which type-checks with `npm run build` (`tsc --noEmit`). This document does not execute them, so run the [manual verification steps](#verify-on-testnet) before you rely on the write paths.
 
 :::caution
 
@@ -73,9 +73,9 @@ Both deployments went live on 2026-09-12. As of 2026-09-14 the markets created a
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
-- [x] Node.js 22 or later, with `@mysten/deepbook-v3` 2.5.0 or later and its `@mysten/sui` 2.30.0 or later peer dependency installed. See the [Sui TypeScript SDK](https://sdk.mystenlabs.com/typescript) for client setup.
-- [x] A Testnet address funded with SUI for gas from a [Sui Testnet faucet](/getting-started/onboarding/get-coins). Hold at least 1 SUI as a working reserve.
-- [x] Test USDC from the [DeepBook Predict Testnet token request form](https://tally.so/r/Xx102L). Wallets display it as DUSDC. It never pays gas, so you need SUI as well. On Mainnet the quote asset is native USDC and there is no faucet.
+- [x] Node.js 22 or later, with `@linku/deepbook-v3` 2.5.0 or later and its `@linku/rtd` 2.30.0 or later peer dependency installed. See the [Rtd TypeScript SDK](https://sdk.linkuverse.com/typescript) for client setup.
+- [x] A Testnet address funded with RTD for gas from a [Rtd Testnet faucet](/getting-started/onboarding/get-coins). Hold at least 1 RTD as a working reserve.
+- [x] Test USDC from the [DeepBook Predict Testnet token request form](https://tally.so/r/Xx102L). Wallets display it as DUSDC. It never pays gas, so you need RTD as well. On Mainnet the quote asset is native USDC and there is no faucet.
 - [x] The deployment identifiers from [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information).
 </TabItem>
 </Tabs>
@@ -181,7 +181,7 @@ Each owner has exactly one Predict account: a shared `AccountWrapper` object hol
 
 The wrapper address derives from the account registry root, so you do not need a transaction result to know it. `client.predict.wrapperIdFor(owner)` computes it offchain with no chain read, and that ID is the argument every Move call takes. After execution, `decode.createManager(result)` reads the same `wrapperId` out of the events alongside `accountId`, `owner`, and `selfOwned`.
 
-One owner derives 2 addresses from that registry, and they are not interchangeable. The wrapper is the shared object every Move call takes. The canonical account is the identity that app data hangs off, that events report as `account_id`, and that indexed read services key on. `client.predict` derives only the wrapper, through `wrapperIdFor`. You have 3 routes to the account ID: `new SessionsContract(getSessionsConfig(network)).deriveAccountId(owner)` on the `@mysten/deepbook-v3/sessions` subpath, the `accountId` field on `decode.createManager(result)`, or the `account_id` field on any order event. [Sessions](/onchain-finance/deepbook/deepbook-predict/contract-information/sessions#enumerate) covers both derivations and the dynamic field that hangs off the account.
+One owner derives 2 addresses from that registry, and they are not interchangeable. The wrapper is the shared object every Move call takes. The canonical account is the identity that app data hangs off, that events report as `account_id`, and that indexed read services key on. `client.predict` derives only the wrapper, through `wrapperIdFor`. You have 3 routes to the account ID: `new SessionsContract(getSessionsConfig(network)).deriveAccountId(owner)` on the `@linku/deepbook-v3/sessions` subpath, the `accountId` field on `decode.createManager(result)`, or the `account_id` field on any order event. [Sessions](/onchain-finance/deepbook/deepbook-predict/contract-information/sessions#enumerate) covers both derivations and the dynamic field that hangs off the account.
 
 Creating a second account for the same owner aborts. To create and fund in a single transaction, `tx.deposit(owner, amountUsdc, { create: true })` composes the creation, the deposit, and the share. That form runs no pre-check, so it aborts when the account already exists, and `owner` must be the signing address because the registry derives the wrapper from the transaction sender.
 
@@ -212,34 +212,34 @@ As of 2026-09-14 no indexed read service exists for `deepbook-predict-testnet` o
 
 | **Service** | **Base URL** | **Primary data** |
 |---------|----------|--------------|
-| Predict | `https://predict-server-v4.testnet.mystenlabs.com` | Markets, market state, positions, vault state, protocol events, indexed configuration |
-| Propbook | `https://propbook-server-v4.testnet.mystenlabs.com` | Oracle bindings, Pyth observations, and Block Scholes spot, forward, and SVI observations |
-| Account | `https://account-server-v4.testnet.mystenlabs.com` | Account custody state, balances, activity, portfolio, and app authorizations |
+| Predict | `https://predict-server-v4.testnet.linkuverse.com` | Markets, market state, positions, vault state, protocol events, indexed configuration |
+| Propbook | `https://propbook-server-v4.testnet.linkuverse.com` | Oracle bindings, Pyth observations, and Block Scholes spot, forward, and SVI observations |
+| Account | `https://account-server-v4.testnet.linkuverse.com` | Account custody state, balances, activity, portfolio, and app authorizations |
 
 Every service exposes `/status`, which reports the latest onchain checkpoint and one entry per indexed pipeline with its indexed checkpoint and time lag. Treat a non-`OK` status, or an unexpectedly old pipeline your feature depends on, as incomplete recent data rather than as an empty application state:
 
 ```bash
-$ curl https://predict-server-v4.testnet.mystenlabs.com/status
+$ curl https://predict-server-v4.testnet.linkuverse.com/status
 ```
 
 Market discovery returns future, unsettled market-creation records ordered by expiry. Use `expiry_market_id` for market-scoped reads, `pool_vault_id` for vault reads, and `propbook_underlying_id` to join the market to propbook:
 
 ```bash
-$ curl 'https://predict-server-v4.testnet.mystenlabs.com/markets?active=true&limit=50'
+$ curl 'https://predict-server-v4.testnet.linkuverse.com/markets?active=true&limit=50'
 $ MARKET_ID=0x...
-$ curl "https://predict-server-v4.testnet.mystenlabs.com/markets/${MARKET_ID}/state"
-$ curl "https://predict-server-v4.testnet.mystenlabs.com/markets/${MARKET_ID}/open-interest"
+$ curl "https://predict-server-v4.testnet.linkuverse.com/markets/${MARKET_ID}/state"
+$ curl "https://predict-server-v4.testnet.linkuverse.com/markets/${MARKET_ID}/open-interest"
 ```
 
 Market state returns the creation record plus the latest reference tick, the mint-pause state, and the settlement once those components exist. Oracle observations key on the propbook object IDs that `GET /oracle-bindings` returns for that deployment:
 
 ```bash
-$ curl "https://propbook-server-v4.testnet.mystenlabs.com/oracle-bindings"
+$ curl "https://propbook-server-v4.testnet.linkuverse.com/oracle-bindings"
 $ PYTH=0x... VALUES=0x... SVI=0x...
-$ curl "https://propbook-server-v4.testnet.mystenlabs.com/oracles/${PYTH}/pyth/latest"
-$ curl "https://propbook-server-v4.testnet.mystenlabs.com/oracles/${VALUES}/block-scholes/spot?limit=10"
-$ curl "https://propbook-server-v4.testnet.mystenlabs.com/oracles/${VALUES}/block-scholes/forward?limit=10"
-$ curl "https://propbook-server-v4.testnet.mystenlabs.com/oracles/${SVI}/block-scholes/svi?limit=10"
+$ curl "https://propbook-server-v4.testnet.linkuverse.com/oracles/${PYTH}/pyth/latest"
+$ curl "https://propbook-server-v4.testnet.linkuverse.com/oracles/${VALUES}/block-scholes/spot?limit=10"
+$ curl "https://propbook-server-v4.testnet.linkuverse.com/oracles/${VALUES}/block-scholes/forward?limit=10"
+$ curl "https://propbook-server-v4.testnet.linkuverse.com/oracles/${SVI}/block-scholes/svi?limit=10"
 ```
 
 Judge vendor freshness from each observation's source timestamp and landing time from its checkpoint timestamp. Do not sort observations by source timestamp alone, because an older source observation can land later.
@@ -248,10 +248,10 @@ Account and position paths key on the canonical account ID, not on the shared `A
 
 ```bash
 $ ACCOUNT_ID=0x...
-$ curl "https://account-server-v4.testnet.mystenlabs.com/accounts/${ACCOUNT_ID}/portfolio"
-$ curl "https://account-server-v4.testnet.mystenlabs.com/accounts/${ACCOUNT_ID}/balances"
-$ curl "https://account-server-v4.testnet.mystenlabs.com/accounts/${ACCOUNT_ID}/activity"
-$ curl "https://predict-server-v4.testnet.mystenlabs.com/accounts/${ACCOUNT_ID}/positions?status=open&limit=100"
+$ curl "https://account-server-v4.testnet.linkuverse.com/accounts/${ACCOUNT_ID}/portfolio"
+$ curl "https://account-server-v4.testnet.linkuverse.com/accounts/${ACCOUNT_ID}/balances"
+$ curl "https://account-server-v4.testnet.linkuverse.com/accounts/${ACCOUNT_ID}/activity"
+$ curl "https://predict-server-v4.testnet.linkuverse.com/accounts/${ACCOUNT_ID}/positions?status=open&limit=100"
 ```
 
 :::caution
@@ -442,11 +442,11 @@ For the accounting model behind these limits, see [Design](/onchain-finance/deep
 
 The write paths above type-check but this document does not execute them. To confirm the flow end to end, with `NETWORK` set to `'testnet'`:
 
-1. Fund a Testnet address with SUI, then confirm the balance with `sui client gas`.
-1. Request test USDC, then confirm the balance with `sui client balance`, where it appears as DUSDC.
+1. Fund a Testnet address with RTD, then confirm the balance with `rtd client gas`.
+1. Request test USDC, then confirm the balance with `rtd client balance`, where it appears as DUSDC.
 1. Confirm the configuration block resolves: `getDeployment('testnet').deployment` is `deepbook-predict-testnet` on chain `4c78adac`, and `getConfig('testnet').quoteCoinType` names the `usdc::USDC` type under package `0xc028557a…`.
 1. Call `read.markets()`. Confirm at least one market returns with `mintPaused` false, a non-null `referencePrice`, and at least 30 seconds left before its expiry.
-1. Create the account, then confirm `client.predict.wrapperIdFor(owner)` resolves with `sui client object WRAPPER_ID`.
+1. Create the account, then confirm `client.predict.wrapperIdFor(owner)` resolves with `rtd client object WRAPPER_ID`.
 1. Deposit test USDC, then confirm `read.balance(owner)` reports the deposit.
 1. Call `read.quoteMint` with a quantity whose premium clears 1 USDC, which means `quantity` multiplied by `entryProbability` above 1. Mint with `maxCost` derived from the quote's `cost`. Confirm an `OrderMinted` event, and record both the `orderId` and the event's `account_id`.
 1. Confirm `read.positions(owner)` lists that `orderId`, and that `deriveAccountId(owner)` equals the event's `account_id`, which proves you can key an indexed service on the right ID when one exists.

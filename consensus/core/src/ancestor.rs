@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::sync::Arc;
 
 use consensus_config::{AuthorityIndex, Stake};
-use mysten_common::ZipDebugEqIteratorExt;
+use linku_common::ZipDebugEqIteratorExt;
 use parking_lot::RwLock;
 use tracing::{debug, info};
 

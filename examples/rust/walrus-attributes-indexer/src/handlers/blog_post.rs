@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::btree_map::Entry;
@@ -11,14 +11,14 @@ use diesel::query_dsl::methods::FilterDsl;
 use diesel::upsert::excluded;
 use diesel_async::RunQueryDsl;
 use move_core_types::language_storage::StructTag;
-use sui_indexer_alt_framework::FieldCount;
-use sui_indexer_alt_framework::pipeline::{Processor, sequential::Handler};
-use sui_indexer_alt_framework::postgres;
-use sui_indexer_alt_framework::types::base_types::{ObjectID, SequenceNumber, SuiAddress};
-use sui_indexer_alt_framework::types::effects::TransactionEffectsAPI;
-use sui_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
-use sui_indexer_alt_framework::types::object::Object;
-use sui_indexer_alt_framework::types::parse_sui_struct_tag;
+use rtd_indexer_alt_framework::FieldCount;
+use rtd_indexer_alt_framework::pipeline::{Processor, sequential::Handler};
+use rtd_indexer_alt_framework::postgres;
+use rtd_indexer_alt_framework::types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use rtd_indexer_alt_framework::types::effects::TransactionEffectsAPI;
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_framework::types::object::Object;
+use rtd_indexer_alt_framework::types::parse_rtd_struct_tag;
 
 use crate::schema::blog_post;
 use crate::storage::StoredBlogPost;
@@ -40,10 +40,10 @@ pub enum ProcessedWalrusMetadata {
         /// The version of the Metadata dynamic field.
         df_version: u64,
         blog_post_metadata: BlogPostMetadata,
-        /// ID of the Blob object on Sui, used during reads to fetch the actual blob content. If
+        /// ID of the Blob object on Rtd, used during reads to fetch the actual blob content. If
         /// this object has been wrapped or deleted, it will not be present on the live object set,
         /// which means the corresponding content on Walrus is also not accessible.
-        blob_obj_id: SuiAddress,
+        blob_obj_id: RtdAddress,
     },
     /// Tracks the deletion of a Metadata dynamic field. When committing, this will delete the
     /// existing row.
@@ -187,7 +187,7 @@ impl FieldCount for ProcessedWalrusMetadata {
 
 impl BlogPostPipeline {
     pub fn new(type_string: &str) -> Result<Self> {
-        let metadata_type = parse_sui_struct_tag(type_string)?;
+        let metadata_type = parse_rtd_struct_tag(type_string)?;
         Ok(BlogPostPipeline { metadata_type })
     }
 }
@@ -211,7 +211,7 @@ impl ProcessedWalrusMetadata {
                 blog_post_metadata,
                 blob_obj_id,
             } => Ok(StoredBlogPost {
-                // This is meant to validate that the publisher address stored is a valid SuiAddress
+                // This is meant to validate that the publisher address stored is a valid RtdAddress
                 publisher: blog_post_metadata.publisher.clone(),
                 dynamic_field_id: dynamic_field_id.to_vec(),
                 df_version: *df_version as i64,

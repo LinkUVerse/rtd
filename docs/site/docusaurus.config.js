@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { fileURLToPath } from "url";
@@ -25,9 +25,9 @@ require("dotenv").config();
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Sui Documentation",
+  title: "Rtd Documentation",
   tagline:
-    "Sui is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by Move",
+    "Rtd is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by Move",
   favicon: "/img/favicon.ico",
   headTags: [
     {
@@ -50,8 +50,8 @@ const config = {
       tagName: "link",
       attributes: {
         rel: "service-doc",
-        href: "/references/sui-api",
-        title: "Sui API Reference",
+        href: "/references/rtd-api",
+        title: "Rtd API Reference",
       },
     },
     {
@@ -72,7 +72,7 @@ const config = {
     },
   ],
   // Set the production url of your site here
-  url: "https://docs.sui.io",
+  url: "https://docs.rtd.io",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: "/",
@@ -214,7 +214,7 @@ const config = {
     [
       require.resolve("./src/shared/plugins/plausible"),
       {
-        domain: "docs.sui.io",
+        domain: "docs.rtd.io",
         enableInDev: false,
         trackOutboundLinks: true,
         hashMode: false,
@@ -266,9 +266,9 @@ const config = {
       "@graphql-markdown/docusaurus",
       {
         id: "beta",
-        schema: "../../crates/sui-indexer-alt-graphql/schema.graphql",
+        schema: "../../crates/rtd-indexer-alt-graphql/schema.graphql",
         rootPath: "../content",
-        baseURL: "references/sui-api/sui-graphql/beta/reference",
+        baseURL: "references/rtd-api/rtd-graphql/beta/reference",
         homepage: false,
         docOptions: {
           frontMatter: {
@@ -309,7 +309,7 @@ const config = {
           routeBasePath: "/",
           sidebarPath: SIDEBARS_PATH,
           // the double docs below is a fix for having the path set to ../content
-          editUrl: "https://github.com/MystenLabs/sui/tree/main/docs/docs",
+          editUrl: "https://github.com/LinkUVerse/rtd/tree/main/docs/docs",
           exclude: [
             "**/snippets/**",
             "**/standards/deepbook-ref/**",
@@ -350,20 +350,20 @@ const config = {
     {
       src: "https://widget.kapa.ai/kapa-widget.bundle.js",
       "data-website-id": "b05d8d86-0b10-4eb2-acfe-e9012d75d9db",
-      "data-project-name": "Sui Knowledge",
+      "data-project-name": "Rtd Knowledge",
       "data-project-color": "#298DFF",
       "data-button-hide": "true",
       "data-view-mode": "sidebar",
-      "data-modal-title": "Ask Sui AI",
-      "data-modal-ask-ai-input-placeholder": "Ask me anything about Sui!",
-      "data-modal-example-questions":"How do I deploy to Sui?,What is Mysticeti?,What are object ownership types for Sui Move?,What are programmable transaction blocks (PTBs)?",
+      "data-modal-title": "Ask Rtd AI",
+      "data-modal-ask-ai-input-placeholder": "Ask me anything about Rtd!",
+      "data-modal-example-questions":"How do I deploy to Rtd?,What is Mysticeti?,What are object ownership types for Rtd Move?,What are programmable transaction blocks (PTBs)?",
       "data-modal-overlay-hidden": "true",
       "data-modal-lock-scroll": "false",
       "data-modal-image": "/img/logo.svg",
       "data-mcp-enabled": "true",
-      "data-mcp-server-url": "https://sui.mcp.kapa.ai",
-      "data-mcp-button-text": "Use Sui MCP Server",
-      "data-chat-disclaimer": "**New:** Install [Sui Agent Skills](https://docs.sui.io/skills) to supercharge your AI coding agent with Sui expertise.",
+      "data-mcp-server-url": "https://rtd.mcp.kapa.ai",
+      "data-mcp-button-text": "Use Rtd MCP Server",
+      "data-chat-disclaimer": "**New:** Install [Rtd Agent Skills](https://docs.rtd.io/skills) to supercharge your AI coding agent with Rtd expertise.",
       async: true,
     },
   ],
@@ -388,7 +388,7 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      image: "img/sui-doc-og.png",
+      image: "img/rtd-doc-og.png",
       mermaid: {
         theme: {
           light: "base",
@@ -430,10 +430,10 @@ const config = {
       },
 
       navbar: {
-        title: "Sui Documentation",
+        title: "Rtd Documentation",
         logo: {
-          alt: "Sui Docs Logo",
-          src: "img/sui-logo.svg",
+          alt: "Rtd Docs Logo",
+          src: "img/rtd-logo.svg",
         },
         items: [
           {
@@ -442,13 +442,13 @@ const config = {
             to: "getting-started",
             items: [
               { to: "/skills", label: "Skills" },
-              { type: "doc", docId: "getting-started/sui-mcp-server", label: "Sui MCP Server" },
+              { type: "doc", docId: "getting-started/rtd-mcp-server", label: "Rtd MCP Server" },
               { type: "doc", docId: "getting-started/onboarding/index", label: "Hello, World!" },
               { type: "doc", docId: "getting-started/examples/index", label: "Example Apps" },
               { type: "doc", docId: "getting-started/tooling", label: "Developer Tools" },
               { type: "doc", docId: "getting-started/dev-cheat-sheet", label: "Developer Cheat Sheet" },
-              { type: "doc", docId: "getting-started/sui-for-ethereum", label: "Ethereum -> Sui" },
-              { type: "doc", docId: "getting-started/sui-for-solana", label: "Solana -> Sui" },
+              { type: "doc", docId: "getting-started/rtd-for-ethereum", label: "Ethereum -> Rtd" },
+              { type: "doc", docId: "getting-started/rtd-for-solana", label: "Solana -> Rtd" },
             ],
           },
           {
@@ -456,7 +456,7 @@ const config = {
             label: "Develop",
             to: "develop",
             items: [
-              { type: "doc", docId: "develop/sui-architecture/index", label: "Sui Architecture" },
+              { type: "doc", docId: "develop/rtd-architecture/index", label: "Rtd Architecture" },
               { type: "doc", docId: "develop/objects/index", label: "Using Objects" },
               { type: "doc", docId: "develop/write-move/index", label: "Writing Move Packages" },
               { type: "doc", docId: "develop/publish-upgrade-packages/index", label: "Deploying and Upgrading Packages" },
@@ -489,19 +489,19 @@ const config = {
           },
           {
             type: "dropdown",
-            label: "Sui Stack",
-            to: "sui-stack",
+            label: "Rtd Stack",
+            to: "rtd-stack",
             items: [
-              { type: "doc", docId: "sui-stack/on-chain-primitives/access-time", label: "Onchain Time" },
-              { type: "doc", docId: "sui-stack/on-chain-primitives/randomness-onchain", label: "Onchain Randomness" },
-              { type: "doc", docId: "sui-stack/sagat", label: "Sagat" },
-              { type: "doc", docId: "sui-stack/walrus/index", label: "Walrus" },
-              { type: "doc", docId: "sui-stack/seal/index", label: "Seal" },
-              { type: "doc", docId: "sui-stack/suins/index", label: "SuiNS" },
-              { type: "doc", docId: "sui-stack/enoki/solitaire", label: "Enoki" },
-              { type: "doc", docId: "sui-stack/nautilus/index", label: "Nautilus" },
-              { type: "doc", docId: "sui-stack/zklogin-integration/index", label: "zkLogin" },
-              { type: "doc", docId: "sui-stack/suiplay0x1/index", label: "SuiPlay0X1" },
+              { type: "doc", docId: "rtd-stack/on-chain-primitives/access-time", label: "Onchain Time" },
+              { type: "doc", docId: "rtd-stack/on-chain-primitives/randomness-onchain", label: "Onchain Randomness" },
+              { type: "doc", docId: "rtd-stack/sagat", label: "Sagat" },
+              { type: "doc", docId: "rtd-stack/walrus/index", label: "Walrus" },
+              { type: "doc", docId: "rtd-stack/seal/index", label: "Seal" },
+              { type: "doc", docId: "rtd-stack/rtdns/index", label: "RtdNS" },
+              { type: "doc", docId: "rtd-stack/enoki/solitaire", label: "Enoki" },
+              { type: "doc", docId: "rtd-stack/nautilus/index", label: "Nautilus" },
+              { type: "doc", docId: "rtd-stack/zklogin-integration/index", label: "zkLogin" },
+              { type: "doc", docId: "rtd-stack/suiplay0x1/index", label: "RtdPlay0X1" },
             ],
           },
           {
@@ -509,27 +509,27 @@ const config = {
             label: "References",
             to: "references",
             items: [
-              { type: "doc", docId: "references/sui-api", label: "Sui RPC" },
-              { type: "doc", docId: "references/cli", label: "Sui CLI" },
+              { type: "doc", docId: "references/rtd-api", label: "Rtd RPC" },
+              { type: "doc", docId: "references/cli", label: "Rtd CLI" },
               { type: "doc", docId: "references/ide/index", label: "IDE Support" },
-              { type: "doc", docId: "references/sui-sdks", label: "Sui SDKs" },             
+              { type: "doc", docId: "references/rtd-sdks", label: "Rtd SDKs" },             
               { type: "doc", docId: "references/ptb-commands", label: "PTB Commands" },
               { type: "doc", docId: "references/framework", label: "Move Framework" },
               { type: "doc", docId: "references/object-display-syntax", label: "Object Display V2 Syntax" },
               { type: "doc", docId: "references/release-notes", label: "Release Notes" },
-              { type: "doc", docId: "references/sui-glossary", label: "Glossary" },
+              { type: "doc", docId: "references/rtd-glossary", label: "Glossary" },
             ],
           },
         ],
       },
       footer: {
         logo: {
-          alt: "Sui Logo",
-          src: "img/sui-logo-footer.svg",
-          href: "https://sui.io",
+          alt: "Rtd Logo",
+          src: "img/rtd-logo-footer.svg",
+          href: "https://rtd.io",
         },
         style: "dark",
-        copyright: `© ${new Date().getFullYear()} Sui Foundation | Documentation distributed under <a href="https://github.com/MystenLabs/sui/blob/main/docs/site/LICENSE">CC BY 4.0</a>`,
+        copyright: `© ${new Date().getFullYear()} Rtd Foundation | Documentation distributed under <a href="https://github.com/LinkUVerse/rtd/blob/main/docs/site/LICENSE">CC BY 4.0</a>`,
       },
       codeblock: {
         showGithubLink: true,

@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const fs = require("fs");
 const path = require("path");
 
 const SPECS = [
-  { network: "mainnet", relPath: "../../crates/sui-open-rpc/spec/openrpc.json", strictJson: true },
-  { network: "testnet", relPath: "../../crates/sui-open-rpc/spec/openrpc.json", strictJson: true },
-  { network: "devnet", relPath: "../../crates/sui-open-rpc/spec/openrpc.json", strictJson: true },
+  { network: "mainnet", relPath: "../../crates/rtd-open-rpc/spec/openrpc.json", strictJson: true },
+  { network: "testnet", relPath: "../../crates/rtd-open-rpc/spec/openrpc.json", strictJson: true },
+  { network: "devnet", relPath: "../../crates/rtd-open-rpc/spec/openrpc.json", strictJson: true },
 ];
 
 // Treat these as "expected non-JSON stubs".

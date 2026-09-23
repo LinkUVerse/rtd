@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Plugin copies files from specified directories into the
@@ -11,23 +11,23 @@ import fs from "fs";
 
 const BRIDGE_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/bridge",
+  "../../../../../crates/rtd-framework/docs/bridge",
 );
 const FRAMEWORK_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/sui",
+  "../../../../../crates/rtd-framework/docs/rtd",
 );
 const STDLIB_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/std",
+  "../../../../../crates/rtd-framework/docs/std",
 );
 // const DEEPBOOK_PATH = path.join(
 //   __dirname,
-//   "../../../../../crates/sui-framework/docs/deepbook",
+//   "../../../../../crates/rtd-framework/docs/deepbook",
 // );
 const SUISYS_PATH = path.join(
   __dirname,
-  "../../../../../crates/sui-framework/docs/sui_system",
+  "../../../../../crates/rtd-framework/docs/rtd_system",
 );
 const DOCS_PATH = path.join(
   __dirname,
@@ -35,21 +35,21 @@ const DOCS_PATH = path.join(
 );
 
 // prefix helper for the first path segment only
-const prefixRootDir = (seg) => `sui_${seg}`;
+const prefixRootDir = (seg) => `rtd_${seg}`;
 
 // map of crate dir -> prefixed dir, used to rewrite hrefs in HTML
 const CRATE_PREFIX_MAP = {
-  bridge: "sui_bridge",
-  sui: "sui_sui",
-  std: "sui_std",
-  sui_system: "sui_sui_system",
+  bridge: "rtd_bridge",
+  rtd: "rtd_rtd",
+  std: "rtd_std",
+  rtd_system: "rtd_rtd_system",
 };
 
 const CRATE_PACKAGES_PATH = {
-  bridge: "sui/crates/sui-framework/packages/bridge",
-  sui: "sui/crates/sui-framework/packages/sui",
-  std: "sui/crates/sui-framework/packages/std",
-  sui_system: "sui/crates/sui-framework/packages/sui_system",
+  bridge: "rtd/crates/rtd-framework/packages/bridge",
+  rtd: "rtd/crates/rtd-framework/packages/rtd",
+  std: "rtd/crates/rtd-framework/packages/std",
+  rtd_system: "rtd/crates/rtd-framework/packages/rtd_system",
 };
 
 const SKIP_INDEX_AT = new Set([DOCS_PATH]);
@@ -71,14 +71,14 @@ function shouldSkipIndex(absDir) {
 const pjoin = path.posix.join;
 
 const toLowerTitleText = (s) =>
-  s.replace(/^sui_/, "").replace(/[-_]+/g, " ").toLowerCase();
+  s.replace(/^rtd_/, "").replace(/[-_]+/g, " ").toLowerCase();
 
 /* ----------------- Validation helpers ---------------------- */
 
 function validateSourcePath(srcPath, label) {
   if (!fs.existsSync(srcPath)) {
     console.warn(
-      `[sui-framework-plugin] WARNING: Source path for "${label}" does not exist: ${srcPath}`,
+      `[rtd-framework-plugin] WARNING: Source path for "${label}" does not exist: ${srcPath}`,
     );
     return false;
   }
@@ -86,13 +86,13 @@ function validateSourcePath(srcPath, label) {
     const stat = fs.statSync(srcPath);
     if (!stat.isDirectory()) {
       console.warn(
-        `[sui-framework-plugin] WARNING: Source path for "${label}" is not a directory: ${srcPath}`,
+        `[rtd-framework-plugin] WARNING: Source path for "${label}" is not a directory: ${srcPath}`,
       );
       return false;
     }
   } catch (err) {
     console.warn(
-      `[sui-framework-plugin] WARNING: Cannot stat source path for "${label}": ${err.message}`,
+      `[rtd-framework-plugin] WARNING: Cannot stat source path for "${label}": ${err.message}`,
     );
     return false;
   }
@@ -105,7 +105,7 @@ function safeWriteFile(filePath, content) {
     fs.writeFileSync(filePath, content, "utf8");
   } catch (err) {
     console.error(
-      `[sui-framework-plugin] ERROR: Failed to write ${filePath}: ${err.message}`,
+      `[rtd-framework-plugin] ERROR: Failed to write ${filePath}: ${err.message}`,
     );
   }
 }
@@ -115,7 +115,7 @@ function safeReadFile(filePath) {
     return fs.readFileSync(filePath, "utf8");
   } catch (err) {
     console.error(
-      `[sui-framework-plugin] ERROR: Failed to read ${filePath}: ${err.message}`,
+      `[rtd-framework-plugin] ERROR: Failed to read ${filePath}: ${err.message}`,
     );
     return null;
   }
@@ -141,8 +141,8 @@ function stripToc(md) {
 
   // 2. Strip markdown-style TOC lines that appear before the first real
   //    content section. These are lines like:
-  //      -  [Struct `ValidatorSet`](#sui_system_validator_set_ValidatorSet)
-  //      -  [Function `new`](#sui_system_validator_set_new)
+  //      -  [Struct `ValidatorSet`](#rtd_system_validator_set_ValidatorSet)
+  //      -  [Function `new`](#rtd_system_validator_set_new)
   //      -  [Constants](#@Constants_0)
   //
   //    They always appear as a block of consecutive `- [...]( #...)` lines
@@ -744,7 +744,7 @@ function truncateToCharLimit(md, sourcePath) {
   if (budget <= 0) {
     // Frontmatter alone exceeds the limit – unlikely but handle gracefully
     console.warn(
-      `[sui-framework-plugin] WARNING: Frontmatter alone exceeds ${MAX_CHAR_LIMIT} chars; truncating raw.`,
+      `[rtd-framework-plugin] WARNING: Frontmatter alone exceeds ${MAX_CHAR_LIMIT} chars; truncating raw.`,
     );
     return md.slice(0, MAX_CHAR_LIMIT);
   }
@@ -772,7 +772,7 @@ function truncateToCharLimit(md, sourcePath) {
   }
 
   const sourceUrl = sourcePath
-    ? `https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/${sourcePath}`
+    ? `https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/${sourcePath}`
     : null;
 
   const sourceLink = sourceUrl
@@ -787,7 +787,7 @@ function truncateToCharLimit(md, sourcePath) {
   const result = frontmatter + truncatedBody + notice;
 
   console.warn(
-    `[sui-framework-plugin] WARNING: Truncated from ${md.length} to ${result.length} chars (limit ${MAX_CHAR_LIMIT}).`,
+    `[rtd-framework-plugin] WARNING: Truncated from ${md.length} to ${result.length} chars (limit ${MAX_CHAR_LIMIT}).`,
   );
 
   return result;
@@ -797,16 +797,16 @@ function truncateToCharLimit(md, sourcePath) {
 
 const frameworkPlugin = (_context, _options) => {
   return {
-    name: "sui-framework-plugin",
+    name: "rtd-framework-plugin",
 
     async loadContent() {
       if (fs.existsSync(DOCS_PATH)) {
         try {
           fs.rmSync(DOCS_PATH, { recursive: true, force: true });
-          console.log("[sui-framework-plugin] Removed existing framework docs directory.");
+          console.log("[rtd-framework-plugin] Removed existing framework docs directory.");
         } catch (err) {
           console.error(
-            `[sui-framework-plugin] ERROR: Cannot remove existing directory ${DOCS_PATH}: ${err.message}`,
+            `[rtd-framework-plugin] ERROR: Cannot remove existing directory ${DOCS_PATH}: ${err.message}`,
           );
           return;
         }
@@ -816,7 +816,7 @@ const frameworkPlugin = (_context, _options) => {
         fs.mkdirSync(DOCS_PATH, { recursive: true });
       } catch (err) {
         console.error(
-          `[sui-framework-plugin] ERROR: Cannot create output directory ${DOCS_PATH}: ${err.message}`,
+          `[rtd-framework-plugin] ERROR: Cannot create output directory ${DOCS_PATH}: ${err.message}`,
         );
         return;
       }
@@ -827,7 +827,7 @@ const frameworkPlugin = (_context, _options) => {
           entries = fs.readdirSync(dirPath, { withFileTypes: true });
         } catch (err) {
           console.warn(
-            `[sui-framework-plugin] WARNING: Cannot read directory ${dirPath}: ${err.message}`,
+            `[rtd-framework-plugin] WARNING: Cannot read directory ${dirPath}: ${err.message}`,
           );
           return files;
         }
@@ -844,10 +844,10 @@ const frameworkPlugin = (_context, _options) => {
 
       const sourceDirs = [
         { path: BRIDGE_PATH, label: "bridge" },
-        { path: FRAMEWORK_PATH, label: "sui" },
+        { path: FRAMEWORK_PATH, label: "rtd" },
         { path: STDLIB_PATH, label: "std" },
         // { path: DEEPBOOK_PATH, label: "deepbook" },
-        { path: SUISYS_PATH, label: "sui_system" },
+        { path: SUISYS_PATH, label: "rtd_system" },
       ];
 
       const allFiles = [];
@@ -860,7 +860,7 @@ const frameworkPlugin = (_context, _options) => {
             validSources++;
           } else {
             console.warn(
-              `[sui-framework-plugin] WARNING: No .md files found in "${src.label}" at ${src.path}`,
+              `[rtd-framework-plugin] WARNING: No .md files found in "${src.label}" at ${src.path}`,
             );
           }
         }
@@ -868,7 +868,7 @@ const frameworkPlugin = (_context, _options) => {
 
       if (validSources === 0) {
         console.error(
-          "[sui-framework-plugin] ERROR: No valid source directories found. " +
+          "[rtd-framework-plugin] ERROR: No valid source directories found. " +
             "Ensure cargo docs have been generated before building.",
         );
         return;
@@ -911,12 +911,12 @@ const frameworkPlugin = (_context, _options) => {
           // crate-relative link rewriting
           reMarkdown = reMarkdown
             .replace(
-              /href=(["'])(\.\.\/)(bridge|sui|std|sui_system)\/([^"']*)\1/g,
+              /href=(["'])(\.\.\/)(bridge|rtd|std|rtd_system)\/([^"']*)\1/g,
               (_m, q, up, seg, tail) =>
                 `href=${q}${up}${CRATE_PREFIX_MAP[seg]}/${tail}${q}`,
             )
             .replace(
-              /href='(\.\.\/)(bridge|sui|std|sui_system)\//g,
+              /href='(\.\.\/)(bridge|rtd|std|rtd_system)\//g,
               (m, up, seg) =>
                 `href='${up}${CRATE_PREFIX_MAP[seg]}/"`.replace(/"$/, "'"),
             );
@@ -990,7 +990,7 @@ const frameworkPlugin = (_context, _options) => {
                   "index",
                 );
 
-                const unprefixed = part.replace(/^sui_/, "");
+                const unprefixed = part.replace(/^rtd_/, "");
                 const label = unprefixed.toLowerCase();
 
                 const category = {
@@ -1009,7 +1009,7 @@ const frameworkPlugin = (_context, _options) => {
                   );
                 } catch (err) {
                   console.error(
-                    `[sui-framework-plugin] ERROR: Failed to create category file ${catfile}: ${err.message}`,
+                    `[rtd-framework-plugin] ERROR: Failed to create category file ${catfile}: ${err.message}`,
                   );
                 }
               }
@@ -1020,7 +1020,7 @@ const frameworkPlugin = (_context, _options) => {
           reMarkdown = truncateToCharLimit(reMarkdown, filename);
 
           console.log(
-            `[sui-framework-plugin] ${targetRel}: ${reMarkdown.length} chars`,
+            `[rtd-framework-plugin] ${targetRel}: ${reMarkdown.length} chars`,
           );
           safeWriteFile(fileWrite, reMarkdown);
           processedCount++;
@@ -1028,7 +1028,7 @@ const frameworkPlugin = (_context, _options) => {
       });
 
       console.log(
-        `[sui-framework-plugin] Processed ${processedCount} files` +
+        `[rtd-framework-plugin] Processed ${processedCount} files` +
           (errorCount > 0 ? ` (${errorCount} errors)` : ""),
       );
 
@@ -1045,21 +1045,21 @@ const frameworkPlugin = (_context, _options) => {
         const dirName = relParts.length
           ? relParts[relParts.length - 1]
           : "framework";
-        const titleText = `sui:${toLowerTitleText(dirName)}`;
+        const titleText = `rtd:${toLowerTitleText(dirName)}`;
 
         let entries;
         try {
           entries = fs.readdirSync(absDir, { withFileTypes: true });
         } catch (err) {
           console.error(
-            `[sui-framework-plugin] ERROR: Cannot read directory for index: ${absDir}: ${err.message}`,
+            `[rtd-framework-plugin] ERROR: Cannot read directory for index: ${absDir}: ${err.message}`,
           );
           return;
         }
 
         const children = [];
         const topDir = relParts[0] || "";
-        const frameworkName = topDir.replace(/^sui_/, "");
+        const frameworkName = topDir.replace(/^rtd_/, "");
         const norm = (s) =>
           s
             .replace(/\.mdx?$/i, "")
@@ -1098,7 +1098,7 @@ const frameworkPlugin = (_context, _options) => {
           }),
         );
 
-        const topUnprefixed = topDir?.replace(/^sui_/, "") ?? "";
+        const topUnprefixed = topDir?.replace(/^rtd_/, "") ?? "";
         const cratePath = CRATE_PACKAGES_PATH[topUnprefixed];
         const crateDescription = cratePath
           ? `Documentation for the modules in the ${cratePath} crate. Select a module from the list to see its details.`
@@ -1153,7 +1153,7 @@ const frameworkPlugin = (_context, _options) => {
           );
         } catch (err) {
           console.error(
-            `[sui-framework-plugin] ERROR: Failed to create index.md in ${absDir}: ${err.message}`,
+            `[rtd-framework-plugin] ERROR: Failed to create index.md in ${absDir}: ${err.message}`,
           );
         }
       }
@@ -1167,7 +1167,7 @@ const frameworkPlugin = (_context, _options) => {
             entries = fs.readdirSync(dir, { withFileTypes: true });
           } catch (err) {
             console.error(
-              `[sui-framework-plugin] ERROR: Cannot read directory ${dir}: ${err.message}`,
+              `[rtd-framework-plugin] ERROR: Cannot read directory ${dir}: ${err.message}`,
             );
             continue;
           }

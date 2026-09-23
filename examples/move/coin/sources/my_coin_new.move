@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module examples::my_coin_new;
 
-use sui::coin_registry;
+use rtd::coin_registry;
 
 // The type identifier of coin. The coin will have a type
 // tag of kind: `Coin<package_object::mycoin::MYCOIN>`

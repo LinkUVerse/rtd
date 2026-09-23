@@ -2,7 +2,7 @@
 title: Integrate a Custom Indexer
 description: >-
   Add a custom indexer to an existing Rust service using the
-  `sui-indexer-alt-framework` module. Implement the `Processor` and `Handler`
+  `rtd-indexer-alt-framework` module. Implement the `Processor` and `Handler`
   traits, register a pipeline, and point the indexer at a checkpoint source.
 keywords:
   - indexer
@@ -13,7 +13,7 @@ keywords:
 goal:
   description: >-
     Reader can add a custom indexer to an existing service using the
-    `sui-indexer-alt-framework` module.
+    `rtd-indexer-alt-framework` module.
   requires:
     - has_frontmatter:
         - title
@@ -33,21 +33,21 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I add a custom Sui indexer to my service?
-  - What is the sui-indexer-alt-framework?
+  - How do I add a custom Rtd indexer to my service?
+  - What is the rtd-indexer-alt-framework?
   - How do I implement the Processor and Handler traits?
   - Where can I find custom indexer examples?
 answer: >-
-  Add the `sui-indexer-alt-framework` crate to your Rust service, define a
+  Add the `rtd-indexer-alt-framework` crate to your Rust service, define a
   struct for the rows you want to write, implement the `Processor` trait to
   extract data from each checkpoint and the `Handler` trait to commit batches
   to your store, then register the pipeline on an `IndexerCluster` and point it
   at a checkpoint source.
 ---
 
-The `sui-indexer-alt-framework` crate handles checkpoint ingestion, batching, watermarks, and crash recovery, so your service only implements 2 traits: `Processor` extracts the data you care about from each checkpoint, and `Handler` writes it to your store.
+The `rtd-indexer-alt-framework` crate handles checkpoint ingestion, batching, watermarks, and crash recovery, so your service only implements 2 traits: `Processor` extracts the data you care about from each checkpoint, and `Handler` writes it to your store.
 
-The steps below cover the Sui-specific work of adding that pipeline to a service you already have. For the conceptual background, read [Custom Indexing Framework](/develop/accessing-data/custom-indexer/custom-indexers) and [Indexer Pipeline Architecture](/develop/accessing-data/custom-indexer/pipeline-architecture) first.
+The steps below cover the Rtd-specific work of adding that pipeline to a service you already have. For the conceptual background, read [Custom Indexing Framework](/develop/accessing-data/custom-indexer/custom-indexers) and [Indexer Pipeline Architecture](/develop/accessing-data/custom-indexer/pipeline-architecture) first.
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
@@ -66,21 +66,21 @@ Starting from nothing rather than an existing service? [Build a Custom Indexer](
 To follow a complete runnable project instead of building by hand, clone the example:
 
 ```sh
-$ git clone https://github.com/MystenLabs/sui.git
-$ cd sui/examples/rust/basic-sui-indexer
+$ git clone https://github.com/LinkUVerse/rtd.git
+$ cd rtd/examples/rust/basic-rtd-indexer
 ```
 
-That project contains the `Cargo.toml`, Diesel migrations, and every source file this guide imports code from. Its README covers database creation and migration setup. The [framework source](https://github.com/MystenLabs/sui/tree/main/crates/sui-indexer-alt-framework) lives in the same repo.
+That project contains the `Cargo.toml`, Diesel migrations, and every source file this guide imports code from. Its README covers database creation and migration setup. The [framework source](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-indexer-alt-framework) lives in the same repo.
 
 ## Add the framework dependency
 
 Add the following to your `Cargo.toml`:
 
-<ImportContent source="examples/rust/basic-sui-indexer/Cargo.toml" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/Cargo.toml" mode="code" />
 
 Each dependency serves a distinct purpose:
 
-- `sui-indexer-alt-framework`: Core framework providing pipeline infrastructure.
+- `rtd-indexer-alt-framework`: Core framework providing pipeline infrastructure.
 - `diesel/diesel-async`: Type-safe database ORM with asynchronous support.
 - `tokio`: Async runtime the framework requires.
 - `clap`: Command-line argument parsing for configuration.
@@ -93,13 +93,13 @@ If your service already pulls in `tokio`, `clap`, or `anyhow`, reconcile the ver
 
 Your pipeline needs somewhere to write. The example indexer stores transaction digests in a `transaction_digests` table, created through a Diesel migration:
 
-<ImportContent source="examples/rust/basic-sui-indexer/migrations/YYYY-MM-DD-HHMMSS_transaction_digests/up.sql" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/migrations/YYYY-MM-DD-HHMMSS_transaction_digests/up.sql" mode="code" />
 
 :::tip
 
 This example uses the `TEXT` data type for `tx_digest`, but a production indexer should use `BYTEA`.
 
-`TEXT` keeps the digest readable and directly usable with external tools. Digests are `Base58` encoded, and because PostgreSQL cannot natively display `BYTEA` data in that format, storing it as `TEXT` lets you copy a digest from a query and paste it into an explorer like [SuiScan](https://suiscan.xyz/testnet/home).
+`TEXT` keeps the digest readable and directly usable with external tools. Digests are `Base58` encoded, and because PostgreSQL cannot natively display `BYTEA` data in that format, storing it as `TEXT` lets you copy a digest from a query and paste it into an explorer like [RtdScan](https://suiscan.xyz/testnet/home).
 
 `BYTEA` stores the raw byte representation, which is more compact and significantly faster to compare than a string. Refer to [Binary data performance in PostgreSQL](https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/) on the CYBERTEC website for more information.
 
@@ -107,13 +107,13 @@ This example uses the `TEXT` data type for `tx_digest`, but a production indexer
 
 Generate the matching Rust schema with `diesel print-schema --database-url $DATABASE_URL > src/schema.rs`. The example project's schema looks like this:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/schema.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/schema.rs" mode="code" />
 
 ## Define your row type
 
 Define a struct that represents 1 record in your destination table:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/models.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/models.rs" mode="code" />
 
 3 annotations matter here:
 
@@ -127,15 +127,15 @@ Define a struct that represents 1 record in your destination table:
 
 Declare a concrete struct to hang both trait implementations on:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" struct="TransactionDigestHandler" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" struct="TransactionDigestHandler" />
 
 Import the dependencies the trait needs:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="processordeps" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="processordeps" />
 
 Then implement the trait:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="processor" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="processor" />
 
 3 members carry the configuration:
 
@@ -151,7 +151,7 @@ Processor trait definition
 
 </summary>
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/processor.rs" mode="code" trait="Processor" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/processor.rs" mode="code" trait="Processor" />
 
 </details>
 
@@ -159,11 +159,11 @@ Processor trait definition
 
 `Handler` defines how your indexer commits data to your store. Append its dependencies to the imports you added previously:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="handlerdeps" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="handlerdeps" />
 
 Then implement the trait:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" tag="handler" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" tag="handler" />
 
 Sequential batching moves through 3 stages:
 
@@ -171,7 +171,7 @@ Sequential batching moves through 3 stages:
 1. `batch()` accumulates values across multiple checkpoints.
 1. `commit()` writes the batch once the framework reaches its limits (`H::MAX_BATCH_CHECKPOINTS`).
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/sequential/collector.rs" mode="code" tag="batch" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/sequential/collector.rs" mode="code" tag="batch" />
 
 :::tip
 
@@ -187,7 +187,7 @@ Complete `handlers.rs` file
 
 </summary>
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/handlers.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/handlers.rs" mode="code" />
 
 </details>
 
@@ -199,7 +199,7 @@ Handler trait definition
 
 </summary>
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/sequential/mod.rs" mode="code" trait="Handler" />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/sequential/mod.rs" mode="code" trait="Handler" />
 
 </details>
 
@@ -207,7 +207,7 @@ Handler trait definition
 
 Build an `IndexerCluster` and register your pipeline on it. The example project does this in `main.rs`, but the same calls work anywhere in your service that owns an async runtime:
 
-<ImportContent source="examples/rust/basic-sui-indexer/src/main.rs" mode="code" />
+<ImportContent source="examples/rust/basic-rtd-indexer/src/main.rs" mode="code" />
 
 The key components:
 
@@ -222,12 +222,12 @@ The example reads `DATABASE_URL` from the environment and passes it to `with_dat
 
 ## Choose a checkpoint source
 
-Sui serves checkpoint data from several sources, and production indexers use different ones for backfill and steady state. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources) for the full comparison.
+Rtd serves checkpoint data from several sources, and production indexers use different ones for backfill and steady state. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources) for the full comparison.
 
-- **GCS buckets (production backfill and recovery):** `gs://mysten-testnet-checkpoints-use4` for Testnet or `gs://mysten-mainnet-checkpoints-use4` for Mainnet. These buckets have full checkpoint retention and are Requester Pays enabled, so configure GCS credentials and a billing project before using them.
+- **GCS buckets (production backfill and recovery):** `gs://linku-testnet-checkpoints-use4` for Testnet or `gs://linku-mainnet-checkpoints-use4` for Mainnet. These buckets have full checkpoint retention and are Requester Pays enabled, so configure GCS credentials and a billing project before using them.
 - **Fullnode gRPC (production steady state):** Use a production-grade endpoint from an [RPC provider](/develop/accessing-data/rpc-providers) for polling and streaming after the historical backfill reaches the network tip.
-- **Public-good fullnode gRPC (testing only):** `https://fullnode.testnet.sui.io:443`, `https://fullnode.mainnet.sui.io:443`, and `https://fullnode.devnet.sui.io:443`. Do not use these endpoints for production ingestion.
-- **Public HTTPS checkpoint stores (testing only, most recent 30 days):** `https://checkpoints.testnet.sui.io` for Testnet or `https://checkpoints.mainnet.sui.io` for Mainnet. Do not use these public-good endpoints for production ingestion.
+- **Public-good fullnode gRPC (testing only):** `https://fullnode.testnet.rtd.io:443`, `https://fullnode.mainnet.rtd.io:443`, and `https://fullnode.devnet.rtd.io:443`. Do not use these endpoints for production ingestion.
+- **Public HTTPS checkpoint stores (testing only, most recent 30 days):** `https://checkpoints.testnet.rtd.io` for Testnet or `https://checkpoints.mainnet.rtd.io` for Mainnet. Do not use these public-good endpoints for production ingestion.
 
 Before reading from a Requester Pays GCS bucket, configure credentials and a billing project, then pass the billing project in the `x-goog-user-project` header:
 
@@ -240,7 +240,7 @@ $ export GOOGLE_CLOUD_PROJECT=your-billing-project
 
 ```sh
 $ cargo run -- \
-    --remote-store-gcs mysten-testnet-checkpoints-use4 \
+    --remote-store-gcs linku-testnet-checkpoints-use4 \
     --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}"
 ```
 
@@ -260,7 +260,7 @@ For testing only, you can point at the public HTTPS checkpoint store instead:
 
 ```sh
 $ cargo run -- \
-    --remote-store-url https://checkpoints.testnet.sui.io \
+    --remote-store-url https://checkpoints.testnet.rtd.io \
     --first-checkpoint RECENT_CHECKPOINT
 ```
 
@@ -281,6 +281,6 @@ SELECT COUNT(*) FROM transaction_digests;
 SELECT * FROM transaction_digests LIMIT 5;
 ```
 
-To confirm the data is accurate, copy any transaction digest from your database and look it up on [SuiScan](https://suiscan.xyz/testnet/home).
+To confirm the data is accurate, copy any transaction digest from your database and look it up on [RtdScan](https://suiscan.xyz/testnet/home).
 
 The shape stays the same for any custom indexer: define your row type, implement `Processor` and `Handler`, register the pipeline, and let the framework handle ingestion and recovery.

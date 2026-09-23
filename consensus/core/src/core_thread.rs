@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
 use consensus_types::block::{BlockRef, Round};
-use mysten_metrics::{
+use linku_metrics::{
     monitored_mpsc::{Receiver, Sender, WeakSender, channel},
     monitored_scope, spawn_logged_monitored_task,
 };
@@ -15,6 +15,7 @@ use tokio::sync::{oneshot, watch};
 use tracing::warn;
 
 use crate::{
+    CommitIndex,
     block::VerifiedBlock,
     commit::CertifiedCommits,
     context::Context,
@@ -96,6 +97,7 @@ struct CoreThread {
     receiver: Receiver<CoreThreadCommand>,
     rx_propagation_delay: watch::Receiver<Round>,
     rx_last_known_proposed_round: watch::Receiver<Round>,
+    rx_durable_commit: watch::Receiver<CommitIndex>,
     context: Arc<Context>,
 }
 
@@ -108,6 +110,9 @@ impl CoreThread {
 
     async fn run_inner(&mut self) -> ConsensusResult<()> {
         tracing::debug!("Started core thread");
+
+        // Durable progress may have arrived between Core recovery and this receiver starting.
+        self.core.on_durable_commit_progress()?;
 
         loop {
             tokio::select! {
@@ -164,6 +169,10 @@ impl CoreThread {
                         self.core.new_block(Round::MAX, true)?;
                     }
                 }
+                result = self.rx_durable_commit.changed() => {
+                    result.expect("commit consumer durable-progress sender cannot be dropped while Core is running");
+                    self.core.on_durable_commit_progress()?;
+                }
             }
         }
 
@@ -191,11 +200,14 @@ impl ChannelCoreThreadDispatcher {
         let (tx_last_known_proposed_round, mut rx_last_known_proposed_round) = watch::channel(0);
         rx_propagation_delay.mark_unchanged();
         rx_last_known_proposed_round.mark_unchanged();
+        let mut rx_durable_commit = core.subscribe_highest_durable_commit();
+        rx_durable_commit.mark_unchanged();
         let core_thread = CoreThread {
             core,
             receiver,
             rx_propagation_delay,
             rx_last_known_proposed_round,
+            rx_durable_commit,
             context: context.clone(),
         };
 

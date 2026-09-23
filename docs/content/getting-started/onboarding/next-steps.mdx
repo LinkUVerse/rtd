@@ -1,12 +1,12 @@
 ---
 title: Next Steps
 description: >-
-  To continue your journey building on Sui, you can review other documentation,
-  join the community of other Sui builders, or check out the Awesome Sui repo.
+  To continue your journey building on Rtd, you can review other documentation,
+  join the community of other Rtd builders, or check out the Awesome Rtd repo.
 keywords:
   - next steps
   - now what
-  - sui community
+  - rtd community
   - developer help
   - builder help
 goal:
@@ -22,7 +22,7 @@ goal:
         - description
         - keywords
       label: Has required frontmatter fields
-    - pattern: sui --version|sui -V
+    - pattern: rtd --version|rtd -V
       min: 1
       label: Shows how to verify installation
     - min_words: 300
@@ -32,16 +32,16 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What should I learn after the Sui onboarding tutorial?
-  - Where can I find Sui examples and advanced guides?
-  - What are the recommended next steps for new Sui developers?
+  - What should I learn after the Rtd onboarding tutorial?
+  - Where can I find Rtd examples and advanced guides?
+  - What are the recommended next steps for new Rtd developers?
 answer: >-
   If you have followed the Getting Started path, you should be ready to continue
-  your journey on Sui. This page details how to continue learning, additional
+  your journey on Rtd. This page details how to continue learning, additional
   resources, and ways to join the developer community.
 ---
 
-If you have followed the Getting Started path, you should be ready to continue your journey on Sui. This page details how to continue learning, additional resources, and ways to join the developer community. 
+If you have followed the Getting Started path, you should be ready to continue your journey on Rtd. This page details how to continue learning, additional resources, and ways to join the developer community. 
 
 <details>
 
@@ -50,20 +50,20 @@ If you have followed the Getting Started path, you should be ready to continue y
 To make sure you have everything you need, paste the following commands into a console in your local environment:
 
 ```sh
-$ sui --version
-$ sui client active-address
-$ sui client active-env
-$ sui client gas
+$ rtd --version
+$ rtd client active-address
+$ rtd client active-env
+$ rtd client gas
 ```
 
 If all commands are successful, your console displays output similar to the following:
 
 ```sh
-sui [version_number]-[commit_hash]
+rtd [version_number]-[commit_hash]
 0x6543...7241
 testnet
 ╭───────────────┬────────────────────┬──────────────────╮
-│ gasCoinId     │ mistBalance (MIST) │ suiBalance (SUI) │
+│ gasCoinId     │ mistBalance (MIST) │ rtdBalance (RTD) │
 ├───────────────┼────────────────────┼──────────────────┤
 │ 0x1e86...63b2 │ 5041161576         │ 5.04             │
 ╰───────────────┴────────────────────┴──────────────────╯
@@ -73,40 +73,40 @@ If you receive an error, revisit the content relevant to the command that caused
 
 | Command | Successful if |
 | ------- | -------------- |
-| `sui --version` | You [installed Sui](/getting-started/onboarding/sui-install) correctly. |
-| `sui client active-address` | You have a [Sui address](/getting-started/onboarding/get-address) that is currently active. |
-| `sui client active-env` | You have set up a [connection to Testnet](/getting-started/onboarding/configure-sui-client) that is currently active. |
-| `sui client objects` | You address owns [SUI for testing](/getting-started/onboarding/get-coins). |
+| `rtd --version` | You [installed Rtd](/getting-started/onboarding/rtd-install) correctly. |
+| `rtd client active-address` | You have a [Rtd address](/getting-started/onboarding/get-address) that is currently active. |
+| `rtd client active-env` | You have set up a [connection to Testnet](/getting-started/onboarding/configure-rtd-client) that is currently active. |
+| `rtd client objects` | You address owns [RTD for testing](/getting-started/onboarding/get-coins). |
 
 </details>
 
 
 ## Build a consumer app
 
-If your next project is a consumer app, the [Consumer App Cookbook](/sui-stack/zklogin-integration/consumer-app-zklogin) covers the onboarding pattern most of them need: [zkLogin](/sui-stack/zklogin-integration) so users sign in with an account they already have, [Enoki](https://docs.enoki.mystenlabs.com/) to sponsor their gas, and Seal for data only they can read. Together those remove the wallet install, the seed phrase, and the funding step that a first-time user would otherwise hit before doing anything.
+If your next project is a consumer app, the [Consumer App Cookbook](/rtd-stack/zklogin-integration/consumer-app-zklogin) covers the onboarding pattern most of them need: [zkLogin](/rtd-stack/zklogin-integration) so users sign in with an account they already have, [Enoki](https://docs.enoki.linkuverse.com/) to sponsor their gas, and Seal for data only they can read. Together those remove the wallet install, the seed phrase, and the funding step that a first-time user would otherwise hit before doing anything.
 
 ## Additional documentation
 
-The rest of the documentation on this site contains important concepts, guides, and examples for you to continue your Sui journey. There are also resources beyond this documentation that you can reference, as well as a large and growing community whose experience and knowledge you can leverage to get the most out of Sui. 
+The rest of the documentation on this site contains important concepts, guides, and examples for you to continue your Rtd journey. There are also resources beyond this documentation that you can reference, as well as a large and growing community whose experience and knowledge you can leverage to get the most out of Rtd. 
 
 ### SDK documentation
 
-Mysten Labs, the company that initiated the creation of Sui, provides SDKs to interact with the network and associated assets. Visit the [SDK docs](https://sdk.mystenlabs.com/typescript) to learn more.
+LinkU Labs, the company that initiated the creation of Rtd, provides SDKs to interact with the network and associated assets. Visit the [SDK docs](https://sdk.linkuverse.com/typescript) to learn more.
 
 ### The Move Book
 
-Move is the language of smart contracts on Sui. [The Move Book](https://move-book.com/) details the language.
+Move is the language of smart contracts on Rtd. [The Move Book](https://move-book.com/) details the language.
 
-## Connect with the Sui community
+## Connect with the Rtd community
 
-- Join the [Sui Discord](https://discord.gg/sui) 
-- Check out the [Sui Developer Forum](https://forums.sui.io/)
-- Follow [@SuiFoundation](https://x.com/SuiNetwork) on X
-- Follow [@SuiDevelopers](https://x.com/suidevelopers) on X
+- Join the [Rtd Discord](https://discord.gg/rtd) 
+- Check out the [Rtd Developer Forum](https://forums.rtd.io/)
+- Follow [@RtdFoundation](https://x.com/RtdNetwork) on X
+- Follow [@RtdDevelopers](https://x.com/suidevelopers) on X
 
-### Awesome Sui
+### Awesome Rtd
 
-The [Awesome Sui](/references/awesome-sui) repo is a curated list of developer tools and infrastructure projects within the Sui ecosystem. 
+The [Awesome Rtd](/references/awesome-rtd) repo is a curated list of developer tools and infrastructure projects within the Rtd ecosystem. 
 
 ### Upcoming hackathons 
 
@@ -114,4 +114,4 @@ Check out [upcoming hackathon events](https://www.deepsurge.xyz/) to build appli
 
 ### Developer portal
 
-Visit the [Sui Developer Portal](https://sui.io/developers) to find links to courses, videos, and other learning resources.
+Visit the [Rtd Developer Portal](https://rtd.io/developers) to find links to courses, videos, and other learning resources.

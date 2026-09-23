@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -23,7 +23,7 @@ const FeatureList: FeatureItem[] = [
     description: <></>,
   },
   {
-    title: "Built on Sui Move",
+    title: "Built on Rtd Move",
     Svg: require("@site/static/img/undraw_docusaurus_react.svg").default,
     description: <></>,
   },

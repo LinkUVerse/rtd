@@ -1,20 +1,20 @@
 ---
 title: Indexer Pipeline Architecture
 description: >-
-  The `sui-indexer-alt-framework` provides two distinct pipeline architectures.
+  The `rtd-indexer-alt-framework` provides two distinct pipeline architectures.
   Understand the differences between the sequential and concurrent pipelines
-  that the `sui-indexer-alt-framework` provides to decide which best suits your
+  that the `rtd-indexer-alt-framework` provides to decide which best suits your
   project needs.
 keywords:
   - indexer
   - index data
-  - sui-indexer
+  - rtd-indexer
   - custom indexer
   - sequential pipeline
   - concurrent pipeline
 goal:
   description: >-
-    Reader understands the `sui-indexer-alt-framework` provides two distinct
+    Reader understands the `rtd-indexer-alt-framework` provides two distinct
     pipeline architectures
   requires:
     - has_frontmatter:
@@ -32,15 +32,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Indexer Pipeline Architecture in Sui?
+  - What is Indexer Pipeline Architecture in Rtd?
   - When to use each pipeline?
-  - How does indexer pipeline architecture work on Sui?
+  - How does indexer pipeline architecture work on Rtd?
 answer: >-
-  The `sui-indexer-alt-framework` provides two distinct pipeline architectures.
+  The `rtd-indexer-alt-framework` provides two distinct pipeline architectures.
   Understand their differences to choose the right approach.
 ---
 
-The `sui-indexer-alt-framework` provides two distinct pipeline architectures. Understand their differences to choose the right approach.
+The `rtd-indexer-alt-framework` provides two distinct pipeline architectures. Understand their differences to choose the right approach.
 
 ## Sequential versus concurrent pipelines
 
@@ -57,10 +57,10 @@ Both pipeline types can handle updates in place, aggregations, and complex busin
 Start here for most use cases. Provides more straightforward implementation and maintenance.
 
 <ul className="list-none pl-2">
-<li><span className="text-sui-success-dark">✓</span> You want straightforward implementation with direct commits and basic queries.</li>
-<li><span className="text-sui-success-dark">✓</span> Team prefers predictable, easy-to-debug behavior.</li>
-<li><span className="text-sui-success-dark">✓</span> Current performance meets your requirements.</li>
-<li><span className="text-sui-success-dark">✓</span> Operational simplicity is valued.</li>
+<li><span className="text-rtd-success-dark">✓</span> You want straightforward implementation with direct commits and basic queries.</li>
+<li><span className="text-rtd-success-dark">✓</span> Team prefers predictable, easy-to-debug behavior.</li>
+<li><span className="text-rtd-success-dark">✓</span> Current performance meets your requirements.</li>
+<li><span className="text-rtd-success-dark">✓</span> Operational simplicity is valued.</li>
 </ul>
 
 ### Concurrent pipeline
@@ -68,9 +68,9 @@ Start here for most use cases. Provides more straightforward implementation and 
 Consider implementing a concurrent pipeline when:
 
 <ul className="list-none pl-2">
-<li><span className="text-sui-success-dark">✓</span> You need performance optimization.</li>
-<li><span className="text-sui-success-dark">✓</span> Sequential processing does not keep up with your data volume.</li>
-<li><span className="text-sui-success-dark">✓</span> Your team is willing to handle the additional implementation complexity for the performance benefits.</li>
+<li><span className="text-rtd-success-dark">✓</span> You need performance optimization.</li>
+<li><span className="text-rtd-success-dark">✓</span> Sequential processing does not keep up with your data volume.</li>
+<li><span className="text-rtd-success-dark">✓</span> Your team is willing to handle the additional implementation complexity for the performance benefits.</li>
 </ul>
 
 Out-of-order commits introduce a few additional complexities to your pipeline:
@@ -268,7 +268,7 @@ The sequential `Collector` receives out-of-order processed data from the `Proces
 
 `batch()`: Data merging logic.
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/sequential/mod.rs" mode="code" fun="batch" noComments />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/sequential/mod.rs" mode="code" fun="batch" noComments />
 
 #### `Committer` {#seq-committer}
 
@@ -276,7 +276,7 @@ The sequential `Committer` receives fully-assembled batches from the `Collector`
 
 `commit()`: Database write logic.
 
-<ImportContent source="crates/sui-indexer-alt-framework/src/pipeline/sequential/mod.rs" mode="code" fun="commit" noComments />
+<ImportContent source="crates/rtd-indexer-alt-framework/src/pipeline/sequential/mod.rs" mode="code" fun="commit" noComments />
 
 ### Sequential pipeline backpressure mechanisms
 
@@ -299,7 +299,7 @@ Downstream pressure propagates backward: the committer slows, the collector-to-c
 Sequential pipelines have a more basic configuration but do require critical tuning parameters:
 
 ```rust
-use sui_indexer_alt_framework::config::ConcurrencyConfig;
+use rtd_indexer_alt_framework::config::ConcurrencyConfig;
 
 let config = SequentialConfig {
     committer: CommitterConfig {
@@ -373,11 +373,11 @@ The primary responsibility of the `Collector` is to buffer processed data and cr
 
 The `Collector` receives out-of-order processed data from multiple `Processor` workers. It then buffers data until reaching optimal batch size (`MIN_EAGER_ROWS`) or until a timeout is met (to preserve forward progress for quiet pipelines).
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/mod.rs" variable="MIN_EAGER_ROWS" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/mod.rs" variable="MIN_EAGER_ROWS" />
     
 The `Collector` combines data from multiple checkpoints into single database write batches and applies backpressure when too much data is pending (`MAX_PENDING_ROWS`).
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/mod.rs" variable="MAX_PENDING_ROWS" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/mod.rs" variable="MAX_PENDING_ROWS" />
     
 Database writes are expensive; batching dramatically improves throughput by reducing the number of database round trips.
 
@@ -385,7 +385,7 @@ Database writes are expensive; batching dramatically improves throughput by redu
 
 The `Committer` primarily writes batched data to the database using parallel connections with retry logic. It does this by receiving optimized batches from `Collector`, then spawns up parallel database writers to `write_concurrency`.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/mod.rs" struct="CommitterConfig" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/mod.rs" struct="CommitterConfig" />
 
 - Each writer calls your `Handler::commit()` method with exponential backoff retry.
 - Reports successful writes to the `CommitterWatermark` component.
@@ -402,7 +402,7 @@ The primary responsibility of the `CommitterWatermark` is to track which checkpo
 
 The `CommitterWatermark` receives `WatermarkParts` from successful `Committer` writes.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/mod.rs" struct="WatermarkPart"/>
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/mod.rs" struct="WatermarkPart"/>
     
 The `CommitterWatermark` maintains an in-memory map of checkpoint completion status, advancing `checkpoint_hi_inclusive` only when there are no gaps in the sequence. Periodically, it writes the new `checkpoint_hi_inclusive` to the `Watermark` database.
 
@@ -410,7 +410,7 @@ This component enforces the critical rule that `checkpoint_hi_inclusive` can adv
 
 By using polling, updates happen on a configurable interval (`watermark_interval_ms`) rather than immediately, balancing consistency with performance.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/mod.rs" struct="CommitterConfig" highlight="watermark_interval_ms" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/mod.rs" struct="CommitterConfig" highlight="watermark_interval_ms" />
 
 #### `ReaderWatermark` {#con-reader-watermark}
 
@@ -426,11 +426,11 @@ The primary responsibility of the `Pruner` is to remove old data based on retent
 
 The `Pruner` waits for the safety delay (`delay_ms`) after `reader_lo` updates.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/mod.rs" struct="PrunerConfig" highlight="delay_ms" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/mod.rs" struct="PrunerConfig" highlight="delay_ms" />
     
 The `Pruner` then calculates which checkpoints can be safely deleted and spawns up to `prune_concurrency` parallel cleanup tasks.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/mod.rs" struct="PrunerConfig" highlight="prune_concurrency" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/mod.rs" struct="PrunerConfig" highlight="prune_concurrency" />
     
 Each task calls your `Handler::prune()` method for specific checkpoint ranges and updates `pruner_hi` as cleanup completes.
 
@@ -475,7 +475,7 @@ The framework automatically creates and manages a `Watermark` table in your data
 
 `Watermark` schema:
 
-<ImportContent mode="code" source="crates/sui-pg-db/src/schema.rs" />
+<ImportContent mode="code" source="crates/rtd-pg-db/src/schema.rs" />
 
 ###  Concurrent pipeline backpressure mechanisms {#concurrent-backpressure}
 
@@ -489,15 +489,15 @@ Each channel has a fixed buffer size that automatically blocks when full:
 
 **`Broadcaster` to `Processor`**: `subscriber_channel_size` slots → `Broadcaster` blocks, upstream pressure.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/mod.rs" struct="IngestionConfig" highlight="subscriber_channel_size" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/mod.rs" struct="IngestionConfig" highlight="subscriber_channel_size" />
 
 **`Processor` to `Collector`**: `processor_channel_size` slots (defaults to `num_cpus / 2`) → All workers block on `send()`.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/mod.rs" variable="processor_tx" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/mod.rs" variable="processor_tx" />
     
 **`Collector` to `Committer`**: `collector_channel_size` slots (defaults to `num_cpus / 2`) → `Collector` stops accepting.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/mod.rs" tag="buff" />
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/mod.rs" tag="buff" />
 
 When any channel fills, pressure automatically propagates backward through the entire pipeline.
 
@@ -505,7 +505,7 @@ When any channel fills, pressure automatically propagates backward through the e
 
 At the component level, the `Collector` respects memory limits and stops accepting when `pending_rows ≥ MAX_PENDING_ROWS`.
 
-<ImportContent mode="code" source="crates/sui-indexer-alt-framework/src/pipeline/concurrent/collector.rs" tag="collector" /> 
+<ImportContent mode="code" source="crates/rtd-indexer-alt-framework/src/pipeline/concurrent/collector.rs" tag="collector" /> 
     
 Database connection limits are also in place. The `Committer` blocks when all connections are busy.
 
@@ -559,7 +559,7 @@ impl concurrent::Handler for MyHandler {
 These constants can also be overridden at runtime through `ConcurrentConfig`, without recompiling. Config values take precedence over trait constants when present.
 
 ```rust
-use sui_indexer_alt_framework::config::ConcurrencyConfig;
+use rtd_indexer_alt_framework::config::ConcurrencyConfig;
 
 let config = ConcurrentConfig {
     committer: committer_config,

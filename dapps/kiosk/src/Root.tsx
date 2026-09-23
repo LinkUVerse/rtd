@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { createNetworkConfig, SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
-import { getFullnodeUrl } from '@mysten/sui/client';
+import { createNetworkConfig, RtdClientProvider, WalletProvider } from '@linku/dapp-kit';
+import { getFullnodeUrl } from '@linku/rtd/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Outlet } from 'react-router-dom';
@@ -22,7 +22,7 @@ const { networkConfig } = createNetworkConfig({
 export default function Root() {
 	return (
 		<QueryClientProvider client={queryClient}>
-			<SuiClientProvider defaultNetwork="testnet" networks={networkConfig}>
+			<RtdClientProvider defaultNetwork="testnet" networks={networkConfig}>
 				<WalletProvider>
 					<KioskClientProvider>
 						<Header />
@@ -30,12 +30,12 @@ export default function Root() {
 							<Outlet />
 						</div>
 						<div className="mt-6 border-t border-primary text-center py-6">
-							Copyright © Mysten Labs, Inc.
+							Copyright © LinkU Labs, Inc.
 						</div>
 						<Toaster position="bottom-center" />
 					</KioskClientProvider>
 				</WalletProvider>
-			</SuiClientProvider>
+			</RtdClientProvider>
 		</QueryClientProvider>
 	);
 }

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -13,10 +13,10 @@ use consensus_config::{AuthorityIndex, Stake, local_committee_and_keys};
 use consensus_types::block::{BlockRef, Round};
 use itertools::Itertools as _;
 #[cfg(test)]
-use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-use mysten_metrics::monitored_scope;
+use linku_metrics::monitored_mpsc::UnboundedReceiver;
+use linku_metrics::monitored_scope;
 use parking_lot::RwLock;
-use sui_macros::fail_point;
+use rtd_macros::fail_point;
 use tokio::sync::{broadcast, watch};
 use tracing::{debug, info, trace, warn};
 
@@ -85,6 +85,8 @@ pub(crate) struct Core {
     /// Block proposal engine for Validator nodes only.
     /// Validators have a proposer to create blocks, Observers have None (they only receive blocks).
     proposer: Option<Box<dyn Proposer>>,
+    /// Core must retry after durable progress if a full replay window paused local work.
+    durable_backpressure_active: bool,
 }
 
 impl Core {
@@ -198,6 +200,7 @@ impl Core {
             signals,
             dag_state,
             proposer,
+            durable_backpressure_active: false,
         };
 
         // Initialize propagation scores for the proposer before recovery.
@@ -264,6 +267,7 @@ impl Core {
             signals,
             dag_state,
             proposer: None,
+            durable_backpressure_active: false,
         }
         .recover_observer()
     }
@@ -519,6 +523,36 @@ impl Core {
             .set(new_clock_round as i64);
     }
 
+    pub(crate) fn subscribe_highest_durable_commit(&self) -> watch::Receiver<crate::CommitIndex> {
+        self.commit_observer.subscribe_highest_durable_commit()
+    }
+
+    /// Durable checkpoint progress can reopen a replay window after the leader timer for the
+    /// current round has already fired. Retry local work only if backpressure stopped it.
+    pub(crate) fn on_durable_commit_progress(&mut self) -> ConsensusResult<()> {
+        if !self.durable_backpressure_active {
+            return Ok(());
+        }
+        let consensus_head = self.dag_state.read().last_commit_index();
+        if self
+            .commit_observer
+            .remaining_durable_commit_capacity(consensus_head, consensus_head)
+            == 0
+        {
+            return Ok(());
+        }
+
+        self.durable_backpressure_active = false;
+        // Proposal first: the newly available slot may be needed for checkpoint-signature
+        // traffic. Committing a local leader before proposing could consume it immediately.
+        self.try_propose(true)?;
+        self.try_commit_local()?;
+        // A local commit can advance the threshold clock, so retry proposal at the new round.
+        self.try_propose(true)?;
+        self.try_signal_new_round();
+        Ok(())
+    }
+
     /// Creating a new block for the dictated round. This is used when a leader timeout occurs, either
     /// when the min timeout expires or max. When `force = true` , then any checks like previous round
     /// leader existence will get skipped.
@@ -593,6 +627,21 @@ impl Core {
     // When force is true, ignore if leader from the last round exists among ancestors and if
     // the minimum round delay has passed.
     fn try_propose(&mut self, force: bool) -> ConsensusResult<Option<VerifiedBlock>> {
+        if self.proposer.is_some() {
+            let consensus_head = self.dag_state.read().last_commit_index();
+            if self
+                .commit_observer
+                .remaining_durable_commit_capacity(consensus_head, consensus_head)
+                == 0
+            {
+                self.durable_backpressure_active = true;
+                tracing::debug!(
+                    consensus_head,
+                    "Pausing block proposals until checkpoint output becomes crash-safe"
+                );
+                return Ok(None);
+            }
+        }
         if let Some(proposer) = &mut self.proposer
             && let Some(extended_block) = proposer.try_new_block(force)
         {
@@ -641,6 +690,24 @@ impl Core {
         let mut committed_sub_dags = Vec::new();
         // TODO: Add optimization to abort early without quorum for a round.
         loop {
+            let consensus_head = self.dag_state.read().last_commit_index();
+            let highest_pending_consensus_head = certified_commits
+                .last()
+                .map(|commit| commit.index())
+                .unwrap_or(consensus_head)
+                .max(consensus_head);
+            let remaining_durable_capacity = self
+                .commit_observer
+                .remaining_durable_commit_capacity(consensus_head, highest_pending_consensus_head);
+            if remaining_durable_capacity == 0 && certified_commits.is_empty() {
+                self.durable_backpressure_active = true;
+                tracing::debug!(
+                    consensus_head,
+                    "Pausing local consensus commits until checkpoint output becomes crash-safe"
+                );
+                break;
+            }
+
             // LeaderSchedule has a limit to how many sequenced leaders can be committed
             // before a change is triggered. Calling into leader schedule will get you
             // how many commits till next leader change. We will loop back and recalculate
@@ -671,6 +738,15 @@ impl Core {
                 fail_point!("consensus-after-leader-schedule-change");
             }
             assert!(commits_until_update > 0);
+
+            // Locally decided commits can be retried from the DAG. Certified ranges
+            // are capacity-gated by CommitSyncer before they reach Core.
+            if certified_commits.is_empty() {
+                commits_until_update = commits_until_update.min(
+                    usize::try_from(remaining_durable_capacity)
+                        .expect("commit capacity must fit in usize"),
+                );
+            }
 
             // If there are certified commits to process, find out which leaders and commits from them
             // are decided and use them as the next commits.
@@ -896,6 +972,19 @@ impl Core {
 
         let mut committed_sub_dags = Vec::new();
         loop {
+            let consensus_head = self.dag_state.read().last_commit_index();
+            if self
+                .commit_observer
+                .remaining_durable_commit_capacity(consensus_head, consensus_head)
+                == 0
+            {
+                self.durable_backpressure_active = true;
+                tracing::debug!(
+                    consensus_head,
+                    "Pausing v3 local commits until checkpoint output becomes crash-safe"
+                );
+                break;
+            }
             let next_commit_leaders = self
                 .leader_schedule_v3
                 .as_ref()
@@ -1232,6 +1321,7 @@ pub(crate) struct CoreTestFixture {
     pub(crate) dag_state: Arc<RwLock<DagState>>,
     pub(crate) store: Arc<MemStore>,
     pub(crate) transaction_client: TransactionClient,
+    pub(crate) commit_consumer_monitor: Arc<crate::CommitConsumerMonitor>,
 }
 
 #[cfg(test)]
@@ -1322,6 +1412,7 @@ impl CoreTestFixture {
         let block_receiver = signal_receivers.block_broadcast_receiver();
 
         let (commit_consumer, commit_output_receiver) = CommitConsumerArgs::new(0, 0);
+        let commit_consumer_monitor = commit_consumer.monitor();
         let commit_observer = CommitObserver::new(
             context.clone(),
             commit_consumer,
@@ -1356,6 +1447,7 @@ impl CoreTestFixture {
             dag_state,
             store,
             transaction_client,
+            commit_consumer_monitor,
         }
     }
 
@@ -1396,6 +1488,40 @@ mod test {
         test_dag_parser::parse_dag,
         transaction::{BlockStatus, Priority, TransactionClient},
     };
+
+    #[tokio::test]
+    async fn durable_progress_reopens_a_paused_core() {
+        telemetry_subscribers::init_for_testing();
+        let (context, _) = Context::new_for_test(4);
+        let mut fixture = CoreTestFixture::new(
+            context,
+            vec![1, 1, 1, 1],
+            AuthorityIndex::new_for_test(0),
+            false,
+        )
+        .await;
+
+        // A full durable window can outlast both leader timeouts for this round. The
+        // checkpoint writer's next durable update must wake Core independently of them.
+        fixture.core.durable_backpressure_active = true;
+        let mut durable_rx = fixture.core.subscribe_highest_durable_commit();
+        durable_rx.mark_unchanged();
+        fixture
+            .commit_consumer_monitor
+            .set_highest_durable_commit(1);
+        tokio::time::timeout(Duration::from_secs(1), durable_rx.changed())
+            .await
+            .expect("Core should observe durable progress")
+            .expect("durable progress sender should remain open");
+
+        fixture.core.on_durable_commit_progress().unwrap();
+        assert!(!fixture.core.durable_backpressure_active);
+        assert!(
+            fixture.core.dag_state.read().last_commit_index()
+                <= fixture.commit_consumer_monitor.highest_durable_commit()
+                    + crate::MAX_PENDING_DURABLE_COMMITS
+        );
+    }
 
     /// Recover Core and continue proposing from the last round which forms a quorum.
     #[tokio::test]

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! Shared test fixture for commit-related tests.
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use consensus_config::{AuthorityIndex, Stake};
 use consensus_types::block::{BlockDigest, BlockRef};
 use consensus_types::block::{Round, TransactionIndex};
-use mysten_metrics::monitored_mpsc::unbounded_channel;
+use linku_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::RwLock;
 use rand::prelude::SliceRandom;
 use rand::{Rng, rngs::StdRng};

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
@@ -31,7 +31,7 @@ RE_RELEASE_NOTE_LINE = re.compile(
 )
 
 # Path to the protocol config file that contains MAX_PROTOCOL_VERSION.
-PROTOCOL_CONFIG_PATH = "crates/sui-protocol-config/src/lib.rs"
+PROTOCOL_CONFIG_PATH = "crates/rtd-protocol-config/src/lib.rs"
 
 # Only commits that affect changes in these directories will be
 # considered when generating release notes.
@@ -44,7 +44,7 @@ INTERESTING_DIRECTORIES = [
     "external-crates",
     "kiosk",
     "nre",
-    "sui-execution",
+    "rtd-execution",
 ]
 
 # Start release notes with these sections, if they contain relevant
@@ -303,7 +303,7 @@ def extract_notes_for_pr(pr):
 
     """
 
-    variables = {"owner": "MystenLabs", "name": "sui", "number": int(pr)}
+    variables = {"owner": "LinkUVerse", "name": "rtd", "number": int(pr)}
     data = gql(PR_BODY_QUERY, variables)
     body = data.get("data", {}).get("repository", {}).get("pullRequest", {}).get("body")
     return parse_notes(body)
@@ -319,7 +319,7 @@ def fetch_release_notes_for_commits(commits):
     results = defaultdict(list)
     for start in range(0, len(commits), BATCH_SIZE):
         chunk = commits[start : start + BATCH_SIZE]
-        variables = {"owner": "MystenLabs", "name": "sui"}
+        variables = {"owner": "LinkUVerse", "name": "rtd"}
         for i, sha in enumerate(chunk):
             variables[f"sha{i}"] = sha
 
@@ -357,9 +357,9 @@ def fetch_release_notes_for_commits(commits):
 def extract_protocol_version(commit):
     """Find the max protocol version at this commit.
 
-    Assumes that it is being called from the root of the sui repository."""
+    Assumes that it is being called from the root of the rtd repository."""
     for line in git(
-        "show", f"{commit}:crates/sui-protocol-config/src/lib.rs"
+        "show", f"{commit}:crates/rtd-protocol-config/src/lib.rs"
     ).splitlines():
         if "const MAX_PROTOCOL_VERSION" not in line:
             continue
@@ -377,7 +377,7 @@ def extract_protocol_version(commit):
 
 def print_changelog(pr, log):
     if pr:
-        print(f"https://github.com/MystenLabs/sui/pull/{pr}: {log}")
+        print(f"https://github.com/LinkUVerse/rtd/pull/{pr}: {log}")
     else:
         print(log)
 
@@ -474,7 +474,7 @@ def do_check(pr):
 
 def pr_has_release_notes(pr):
     """Check if a PR has any checked release notes boxes."""
-    variables = {"owner": "MystenLabs", "name": "sui", "number": int(pr)}
+    variables = {"owner": "LinkUVerse", "name": "rtd", "number": int(pr)}
     data = gql(PR_BODY_QUERY, variables)
     body = data.get("data", {}).get("repository", {}).get("pullRequest", {}).get("body") or ""
     return bool(re.search(r"^\s*-\s*\[x\]\s*", body, re.MULTILINE | re.IGNORECASE))
@@ -491,7 +491,7 @@ def pr_bumps_protocol_version(pr):
 
     try:
         diff = subprocess.check_output(
-            [GH_CLI_PATH, "pr", "diff", str(pr), "--repo", "MystenLabs/sui"],
+            [GH_CLI_PATH, "pr", "diff", str(pr), "--repo", "LinkUVerse/rtd"],
             text=True,
             stderr=subprocess.DEVNULL,
         )
@@ -542,7 +542,7 @@ def do_list_prs(from_, to):
 
     for start in range(0, len(commit_list), BATCH_SIZE):
         chunk = commit_list[start : start + BATCH_SIZE]
-        variables = {"owner": "MystenLabs", "name": "sui"}
+        variables = {"owner": "LinkUVerse", "name": "rtd"}
         for i, sha in enumerate(chunk):
             variables[f"sha{i}"] = sha
 
@@ -629,7 +629,7 @@ def do_generate(from_, to):
     if protocol_bump_commits:
         for start in range(0, len(protocol_bump_commits.split("\n")), BATCH_SIZE):
             chunk = protocol_bump_commits.split("\n")[start : start + BATCH_SIZE]
-            variables = {"owner": "MystenLabs", "name": "sui"}
+            variables = {"owner": "LinkUVerse", "name": "rtd"}
             for i, sha in enumerate(chunk):
                 variables[f"sha{i}"] = sha
             data = gql(COMMIT_QUERY, variables)
@@ -662,7 +662,7 @@ def do_generate(from_, to):
         print(f"## {impact_area}")
 
         if impact_area == "Protocol":
-            print(f"#### Sui Protocol Version in this release: `{protocol_version}`")
+            print(f"#### Rtd Protocol Version in this release: `{protocol_version}`")
 
             # Split into version bump PRs and other protocol PRs
             bump_prs = [(pr, note) for pr, note in reversed(notes) if pr in version_bump_prs]

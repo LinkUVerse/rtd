@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Validates that the gasless stablecoin table in the docs matches the
-// MAINNET_* token constants in crates/sui-protocol-config/src/lib.rs.
+// MAINNET_* token constants in crates/rtd-protocol-config/src/lib.rs.
 //
 // Exits 0 if the table is up-to-date, exits 1 with a diff if not.
 // Wired into the build pipeline via build-and-check.sh.
@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 
 const LIB_RS = path.resolve(
   __dirname,
-  "../../../crates/sui-protocol-config/src/lib.rs",
+  "../../../crates/rtd-protocol-config/src/lib.rs",
 );
 const MDX_FILE = path.resolve(
   __dirname,
@@ -28,7 +28,7 @@ const MDX_FILE = path.resolve(
 const ISSUER_MAP = new Map([
   ["MAINNET_USDC", "Circle"],
   ["MAINNET_USDSUI", "Bridge/Stripe"],
-  ["MAINNET_SUI_USDE", "Ethena"],
+  ["MAINNET_RTD_USDE", "Ethena"],
   ["MAINNET_USDY", "Ondo"],
   ["MAINNET_FDUSD", "First Digital"],
   ["MAINNET_AUSD", "Agora"],

@@ -2,11 +2,11 @@
 title: Developer Tools
 description: >-
   Browse and filter developer tools for building, testing, deploying, and
-  auditing Move packages on Sui, including CLI tools, IDE extensions, SDKs,
+  auditing Move packages on Rtd, including CLI tools, IDE extensions, SDKs,
   indexers, and community tools.
 keywords:
   - developer tools
-  - sui CLI
+  - rtd CLI
   - suiup
   - move-analyzer
   - MVR
@@ -22,7 +22,7 @@ pagination_prev: null
 goal:
   description: >-
     Reader can find and choose the right developer tool for writing, testing,
-    deploying, or auditing Move on Sui
+    deploying, or auditing Move on Rtd
   requires:
     - min_words: 1000
       label: Comprehensive tool listings
@@ -48,21 +48,21 @@ builder_paths:
     step: Developer tools
     stage: Setup
 questions:
-  - What is Developer Tools in Sui?
+  - What is Developer Tools in Rtd?
   - How do I build apps?
-  - How do I test and debug Move packages on Sui?
+  - How do I test and debug Move packages on Rtd?
 answer: >-
-  Browse the tools available for developing on Sui. Each tool includes a
+  Browse the tools available for developing on Rtd. Each tool includes a
   description, installation command, and link to its source.
 ---
 
 import React from 'react';
 
-Browse the tools available for developing on Sui. Each tool includes a description, installation command, and link to its source.
+Browse the tools available for developing on Rtd. Each tool includes a description, installation command, and link to its source.
 
 :::caution
 
-Tools tagged as Community are maintained by third-party developers. Mysten Labs, Sui Foundation, and Walrus Foundation do not guarantee their functionality, security, or compatibility with the latest platform updates.
+Tools tagged as Community are maintained by third-party developers. LinkU Labs, Rtd Foundation, and Walrus Foundation do not guarantee their functionality, security, or compatibility with the latest platform updates.
 
 :::
 
@@ -352,18 +352,18 @@ export const ToolGrid = ({ children }) => (
 <ToolGrid>
 <ToolCard
   name="suiup"
-  description="Installer and version manager for the Sui toolchain. Installs and manages sui, mvr, move-analyzer, walrus, and other Sui binaries."
-  github="https://github.com/MystenLabs/suiup"
-  install="curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh"
-  docs="/getting-started/onboarding/sui-install"
+  description="Installer and version manager for the Rtd toolchain. Installs and manages rtd, mvr, move-analyzer, walrus, and other Rtd binaries."
+  github="https://github.com/LinkUVerse/suiup"
+  install="curl -sSfL https://raw.githubusercontent.com/LinkUVerse/suiup/main/install.sh | sh"
+  docs="/getting-started/onboarding/rtd-install"
 />
 
 <ToolCard
-  name="Sui CLI"
-  description="The core Sui command-line interface. Includes sui move, sui client, sui replay, and other subcommands."
-  github="https://github.com/MystenLabs/sui"
-  install="suiup install sui@testnet or suiup install sui@mainnet"
-  notes="suiup is the recommended installer. Also available through brew install sui or install from source with Cargo."
+  name="Rtd CLI"
+  description="The core Rtd command-line interface. Includes rtd move, rtd client, rtd replay, and other subcommands."
+  github="https://github.com/LinkUVerse/rtd"
+  install="suiup install rtd@testnet or suiup install rtd@mainnet"
+  notes="suiup is the recommended installer. Also available through brew install rtd or install from source with Cargo."
   docs="/references/cli"
 />
 
@@ -374,9 +374,9 @@ export const ToolGrid = ({ children }) => (
 />
 
 <ToolCard
-  name="Sui Devstack"
-  description="Boot a local Sui stack with Walrus, Seal, DeepBook, and faucets from a single TypeScript config. Publishes packages, funds accounts, and generates typed bindings."
-  install="pnpm create @mysten-incubation/devstack-app@latest my-app"
+  name="Rtd Devstack"
+  description="Boot a local Rtd stack with Walrus, Seal, DeepBook, and faucets from a single TypeScript config. Publishes packages, funds accounts, and generates typed bindings."
+  install="pnpm create @linku-incubation/devstack-app@latest my-app"
   docs="https://ts-sdks-incubation.vercel.app/devstack"
 />
 
@@ -391,50 +391,50 @@ IDEs, editor extensions, and language tools for writing Move smart contracts.
 <ToolCard
   name="Move Analyzer"
   description="Move Language Server providing code completion, go-to-definition, hover information, and diagnostics."
-  github="https://github.com/MystenLabs/sui"
+  github="https://github.com/LinkUVerse/rtd"
   install="suiup install move-analyzer"
-  notes="VS Code extension: mysten.move"
+  notes="VS Code extension: linku.move"
   docs="/references/ide/move"
-  website="https://marketplace.visualstudio.com/items?itemName=mysten.move"
+  website="https://marketplace.visualstudio.com/items?itemName=linku.move"
 />
 
 <ToolCard
   name="Prettier Move Plugin"
   description="Official Move code formatter using a Prettier plugin backed by tree-sitter."
-  github="https://github.com/MystenLabs/sui/tree/main/external-crates/move/crates/move-analyzer/prettier-plugin"
-  install="npm i -D prettier @mysten/prettier-plugin-move"
-  notes="VS Code extension: mysten.prettier-move"
-  website="https://marketplace.visualstudio.com/items?itemName=mysten.prettier-move"
+  github="https://github.com/LinkUVerse/rtd/tree/main/external-crates/move/crates/move-analyzer/prettier-plugin"
+  install="npm i -D prettier @linku/prettier-plugin-move"
+  notes="VS Code extension: linku.prettier-move"
+  website="https://marketplace.visualstudio.com/items?itemName=linku.prettier-move"
 />
 
 <ToolCard
   name="Tree Sitter Move"
   description="Tree-sitter grammar for the Move language, enabling syntax highlighting and code analysis in supported editors."
-  github="https://github.com/MystenLabs/sui/tree/main/external-crates/move/tooling/tree-sitter"
+  github="https://github.com/LinkUVerse/rtd/tree/main/external-crates/move/tooling/tree-sitter"
 />
 
 <ToolCard
   name="Move Registry CLI (MVR)"
-  description="On-chain package manager for Sui with human-readable names, versioning, and dependency resolution."
-  github="https://github.com/MystenLabs/mvr"
+  description="On-chain package manager for Rtd with human-readable names, versioning, and dependency resolution."
+  github="https://github.com/LinkUVerse/mvr"
   install="suiup install mvr"
-  notes="Usage: mvr add @deepbook/core, mvr resolve. Integrates with sui move build."
-  docs="https://docs.suins.io/move-registry"
+  notes="Usage: mvr add @deepbook/core, mvr resolve. Integrates with rtd move build."
+  docs="https://docs.rtdns.io/move-registry"
 />
 
 <ToolCard
   name="Move Registry"
   description="Web portal for the Move Registry. Browse, search, and manage Move packages."
-  github="https://github.com/MystenLabs/mvr"
+  github="https://github.com/LinkUVerse/mvr"
   notes="Provides package analytics, name registration, and deployment management."
   website="https://www.moveregistry.com/"
 />
 
 <ToolCard
-  name="IntelliJ Sui Move Language Plugin"
-  description="IntelliJ-based plugin for Move on Sui development."
+  name="IntelliJ Rtd Move Language Plugin"
+  description="IntelliJ-based plugin for Move on Rtd development."
   github="https://github.com/movefuns/intellij-move"
-  website="https://plugins.jetbrains.com/plugin/23301-sui-move-language"
+  website="https://plugins.jetbrains.com/plugin/23301-rtd-move-language"
   community
 />
 
@@ -461,7 +461,7 @@ IDEs, editor extensions, and language tools for writing Move smart contracts.
 
 <ToolCard
   name="BitsLab IDE"
-  description="Online Move code editor that requires no configuration. Supports Move syntax highlighting and interacting with Sui."
+  description="Online Move code editor that requires no configuration. Supports Move syntax highlighting and interacting with Rtd."
   website="https://ide.bitslab.xyz/"
   docs="https://www.youtube.com/watch?v=-9-WkqQwtu8"
   community
@@ -469,24 +469,24 @@ IDEs, editor extensions, and language tools for writing Move smart contracts.
 
 <ToolCard
   name="ChainIDE"
-  description="Cloud-powered Move development platform for Sui."
-  docs="https://chainide.gitbook.io/chainide-english-1/ethereum-ide-1/9.-sui-ide"
-  website="https://chainide.com/s/sui"
+  description="Cloud-powered Move development platform for Rtd."
+  docs="https://chainide.gitbook.io/chainide-english-1/ethereum-ide-1/9.-rtd-ide"
+  website="https://chainide.com/s/rtd"
   community
 />
 
 <ToolCard
-  name="Sui Extension (zktx.io)"
-  description="VS Code extension for compiling, deploying, and testing Sui smart contracts directly within the editor."
-  github="https://github.com/zktx-io/sui-extension"
-  docs="https://docs.zktx.io/vsce/sui/"
-  website="https://marketplace.visualstudio.com/items?itemName=zktxio.sui-extension"
+  name="Rtd Extension (zktx.io)"
+  description="VS Code extension for compiling, deploying, and testing Rtd smart contracts directly within the editor."
+  github="https://github.com/zktx-io/rtd-extension"
+  docs="https://docs.zktx.io/vsce/rtd/"
+  website="https://marketplace.visualstudio.com/items?itemName=zktxio.rtd-extension"
   community
 />
 
 <ToolCard
-  name="Sui TUI"
-  description="Terminal UI tool for Sui."
+  name="Rtd TUI"
+  description="Terminal UI tool for Rtd."
   github="https://github.com/wbbradley/suitui"
   install="cargo install suitui"
   docs="https://crates.io/crates/suitui"
@@ -500,53 +500,53 @@ Frontend toolkits, wallet integration, authentication, and app scaffolding.
 
 <ToolGrid>
 <ToolCard
-  name="@mysten/create-dapp"
-  description="CLI tool for creating Sui apps."
-  docs="https://sdk.mystenlabs.com/dapp-kit"
+  name="@linku/create-dapp"
+  description="CLI tool for creating Rtd apps."
+  docs="https://sdk.linkuverse.com/dapp-kit"
 />
 
 <ToolCard
-  name="Sui dApp Kit"
-  description="React components, hooks, and utilities for building apps on Sui."
-  github="https://github.com/MystenLabs/ts-sdks/tree/main/packages/dapp-kit"
-  docs="https://sdk.mystenlabs.com/dapp-kit"
+  name="Rtd dApp Kit"
+  description="React components, hooks, and utilities for building apps on Rtd."
+  github="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/dapp-kit"
+  docs="https://sdk.linkuverse.com/dapp-kit"
 />
 
 <ToolCard
-  name="SuiLink"
-  description="Securely link wallet addresses from different blockchains to a Sui wallet address. Receive a soulbound NFT as proof of ownership."
+  name="RtdLink"
+  description="Securely link wallet addresses from different blockchains to a Rtd wallet address. Receive a soulbound NFT as proof of ownership."
   website="https://www.suilink.io/"
 />
 
 <ToolCard
   name="SAGAT"
   description="Multisig wallet management platform for proposing, signing, and managing multi-party transactions."
-  github="https://github.com/MystenLabs/sagat"
+  github="https://github.com/LinkUVerse/sagat"
   install="Self-host (Bun + TypeScript + PostgreSQL)"
   notes="Includes API backend, React frontend, and TypeScript SDK."
-  docs="/sui-stack/sagat"
-  website="https://sagat.mystenlabs.com/"
+  docs="/rtd-stack/sagat"
+  website="https://sagat.linkuverse.com/"
 />
 
 <ToolCard
-  name="@mysten/signers"
-  description="The Sui KMS Signers package provides a set of tools for securely signing transactions using Key Management Services (KMS) like AWS KMS and GCP KMS."
-  docs="https://www.npmjs.com/package/@mysten/signers"
-  install="npm i @mysten/signers"
+  name="@linku/signers"
+  description="The Rtd KMS Signers package provides a set of tools for securely signing transactions using Key Management Services (KMS) like AWS KMS and GCP KMS."
+  docs="https://www.npmjs.com/package/@linku/signers"
+  install="npm i @linku/signers"
 />
 
 <ToolCard
-  name="YubiSui"
-  description="Create a Sui wallet inside a YubiKey and sign Sui transactions with it."
-  github="https://github.com/MystenLabs/yubigen"
+  name="YubiRtd"
+  description="Create a Rtd wallet inside a YubiKey and sign Rtd transactions with it."
+  github="https://github.com/LinkUVerse/yubigen"
 />
 
 <ToolCard
-  name="Sui dApp Starter"
-  description="Full-stack boilerplate for scaffolding Sui projects with React."
-  github="https://github.com/suiware/sui-dapp-starter"
-  docs="https://sui-dapp-starter.dev/docs/"
-  website="https://demo.sui-dapp-starter.dev/"
+  name="Rtd dApp Starter"
+  description="Full-stack boilerplate for scaffolding Rtd projects with React."
+  github="https://github.com/suiware/rtd-dapp-starter"
+  docs="https://rtd-dapp-starter.dev/docs/"
+  website="https://demo.rtd-dapp-starter.dev/"
   community
 />
 
@@ -564,7 +564,7 @@ Frontend toolkits, wallet integration, authentication, and app scaffolding.
 
 <ToolCard
   name="Suiet Wallet Kit"
-  description="React toolkit for apps to interact with all wallet types in Sui easily."
+  description="React toolkit for apps to interact with all wallet types in Rtd easily."
   github="https://github.com/suiet/wallet-kit"
   docs="https://kit.suiet.app/docs/QuickStart"
   community
@@ -572,7 +572,7 @@ Frontend toolkits, wallet integration, authentication, and app scaffolding.
 
 <ToolCard
   name="@suiware/kit"
-  description="Opinionated React components and hooks for Sui apps."
+  description="Opinionated React components and hooks for Rtd apps."
   github="https://github.com/suiware/kit"
   docs="https://github.com/suiware/kit/tree/main/packages/kit#readme"
   website="https://kit.suiware.io/"
@@ -580,16 +580,16 @@ Frontend toolkits, wallet integration, authentication, and app scaffolding.
 />
 
 <ToolCard
-  name="Sui Suitcase (Polymedia)"
-  description="Sui utilities for TypeScript, Node, and React."
+  name="Rtd Suitcase (Polymedia)"
+  description="Rtd utilities for TypeScript, Node, and React."
   github="https://github.com/juzybits/polymedia-suitcase"
   community
 />
 
 <ToolCard
-  name="Sui dApp Scaffold (Bucket Protocol)"
-  description="Frontend scaffold for a decentralized app on Sui."
-  github="https://github.com/Bucket-Protocol/sui-dapp-scaffold-v1"
+  name="Rtd dApp Scaffold (Bucket Protocol)"
+  description="Frontend scaffold for a decentralized app on Rtd."
+  github="https://github.com/Bucket-Protocol/rtd-dapp-scaffold-v1"
   community
 />
 
@@ -602,15 +602,15 @@ Frontend toolkits, wallet integration, authentication, and app scaffolding.
 
 <ToolCard
   name="create-dubhe (Dubhe Engine)"
-  description="Create a new Dubhe project on Sui."
+  description="Create a new Dubhe project on Rtd."
   github="https://github.com/0xobelisk/dubhe/tree/main/packages/create-dubhe"
   community
 />
 
 <ToolCard
-  name="sui-dapp-kit-theme-creator"
-  description="Build custom Sui dApp Kit themes."
-  website="https://sui-dapp-kit-theme-creator.app/"
+  name="rtd-dapp-kit-theme-creator"
+  description="Build custom Rtd dApp Kit themes."
+  website="https://rtd-dapp-kit-theme-creator.app/"
   community
 />
 
@@ -630,16 +630,16 @@ Tools and demos for integrating zkLogin authentication into your app.
 
 <ToolGrid>
 <ToolCard
-  name="useSuiZkLogin"
-  description="React hook and functions for seamless zkLogin integration on Sui."
-  github="https://github.com/pixelbrawlgames/use-sui-zklogin"
+  name="useRtdZkLogin"
+  description="React hook and functions for seamless zkLogin integration on Rtd."
+  github="https://github.com/pixelbrawlgames/use-rtd-zklogin"
   community
 />
 
 <ToolCard
   name="React ZK Login Kit"
   description="Ready-to-use component with hook for sign-in and sign-transaction."
-  github="https://github.com/denyskozak/react-sui-zk-login-kit"
+  github="https://github.com/denyskozak/react-rtd-zk-login-kit"
   community
 />
 
@@ -652,15 +652,15 @@ Tools and demos for integrating zkLogin authentication into your app.
 
 <ToolCard
   name="zkLogin Demo (jovicheng)"
-  description="Demo implementation of Sui zkLogin."
-  github="https://github.com/jovicheng/sui-zklogin-demo"
+  description="Demo implementation of Rtd zkLogin."
+  github="https://github.com/jovicheng/rtd-zklogin-demo"
   community
 />
 
 <ToolCard
   name="zkWallet Demo (ronanyeah)"
-  description="Demo implementation of a Sui zk wallet."
-  github="https://github.com/ronanyeah/sui-zk-wallet"
+  description="Demo implementation of a Rtd zk wallet."
+  github="https://github.com/ronanyeah/rtd-zk-wallet"
   community
 />
 </ToolGrid>
@@ -671,20 +671,20 @@ Tools for unit testing, replaying transactions, and debugging Move execution loc
 
 <ToolGrid>
 <ToolCard
-  name="sui replay"
+  name="rtd replay"
   description="Locally re-executes any past on-chain transaction and compares effects."
-  github="https://github.com/MystenLabs/sui"
-  notes="Usage: sui replay --digest <TX_DIGEST>. Use --trace for debugger input."
+  github="https://github.com/LinkUVerse/rtd"
+  notes="Usage: rtd replay --digest <TX_DIGEST>. Use --trace for debugger input."
   docs="/references/cli/replay"
 />
 
 <ToolCard
   name="Move Trace Debugger"
   description="Step-through debugger for Move execution traces with variable inspection and breakpoints."
-  github="https://github.com/MystenLabs/sui"
-  notes="Works on traces from sui move test --trace-execution and sui replay --trace.VS Code extension: mysten.move-trace-debug"
+  github="https://github.com/LinkUVerse/rtd"
+  notes="Works on traces from rtd move test --trace-execution and rtd replay --trace.VS Code extension: linku.move-trace-debug"
   docs="/references/ide/debugger"
-  website="https://marketplace.visualstudio.com/items?itemName=mysten.move-trace-debug"
+  website="https://marketplace.visualstudio.com/items?itemName=linku.move-trace-debug"
 />
 
 <ToolCard
@@ -695,7 +695,7 @@ Tools for unit testing, replaying transactions, and debugging Move execution loc
 />
 
 <ToolCard
-  name="SuiBase"
+  name="RtdBase"
   description="Create workdirs, each defining a distinct development environment targeting a network."
   github="https://github.com/chainmovers/suibase"
   docs="https://suibase.io/"
@@ -718,21 +718,21 @@ Obtain testing tokens for Testnet deployment.
 
 <ToolGrid>
 <ToolCard
-  name="Sui Faucet"
-  description="Request Testnet or Devnet SUI tokens for development and testing."
-  website="https://faucet.sui.io/"
+  name="Rtd Faucet"
+  description="Request Testnet or Devnet RTD tokens for development and testing."
+  website="https://faucet.rtd.io/"
 />
 
 <ToolCard
   name="N1 Stake Faucet"
-  description="Community-provided faucet for obtaining Testnet SUI tokens."
+  description="Community-provided faucet for obtaining Testnet RTD tokens."
   website="http://faucet.n1stake.com/"
   community
 />
 
 <ToolCard
-  name="SuiLearn Faucet"
-  description="Community-provided faucet for obtaining Testnet SUI tokens."
+  name="RtdLearn Faucet"
+  description="Community-provided faucet for obtaining Testnet RTD tokens."
   website="http://faucet.suilearn.io/"
   community
 />
@@ -744,9 +744,9 @@ Formal verification, source verification, linting, and phishing protection.
 
 <ToolGrid>
 <ToolCard
-  name="Sui Prover"
-  description="Prover for doing formal verification of Move on Sui code."
-  website="https://info.asymptotic.tech/sui-prover"
+  name="Rtd Prover"
+  description="Prover for doing formal verification of Move on Rtd code."
+  website="https://info.asymptotic.tech/rtd-prover"
   community
 />
 
@@ -759,30 +759,30 @@ Formal verification, source verification, linting, and phishing protection.
 />
 
 <ToolCard
-  name="SuiSecBlockList"
+  name="RtdSecBlockList"
   description="Block malicious websites and packages. Identify and hide phishing objects."
-  github="https://github.com/SuiSec/SuiSecBlockList"
+  github="https://github.com/RtdSec/RtdSecBlockList"
   community
 />
 
 <ToolCard
   name="Guardians"
-  description="Phishing website protection for Sui."
+  description="Phishing website protection for Rtd."
   github="https://github.com/suiet/guardians"
   community
 />
 
 <ToolCard
-  name="HoneyPotDetectionOnSui"
-  description="Detect honeypot scams on Sui."
-  github="https://github.com/SuiSec/HoneyPotDetectionOnSui"
+  name="HoneyPotDetectionOnRtd"
+  description="Detect honeypot scams on Rtd."
+  github="https://github.com/RtdSec/HoneyPotDetectionOnRtd"
   community
 />
 
 <ToolCard
-  name="Sui RPC Proxy"
-  description="Monitor and analyze the network requests made by wallet applications and Sui apps."
-  github="https://github.com/SuiSec/sui-rpc-proxy"
+  name="Rtd RPC Proxy"
+  description="Monitor and analyze the network requests made by wallet applications and Rtd apps."
+  github="https://github.com/RtdSec/rtd-rpc-proxy"
   community
 />
 </ToolGrid>
@@ -794,9 +794,9 @@ Indexers, data APIs, and analytics services for querying on-chain state.
 <ToolGrid>
 
 <ToolCard
-  name="Sui GraphQL RPC"
-  description="Rich data query interface for Sui."
-  notes="Mainnet: https://graphql.mainnet.sui.io/graphql, Testnet: https://graphql.testnet.sui.io/graphql, Devnet: https://graphql.devnet.sui.io/graphql"
+  name="Rtd GraphQL RPC"
+  description="Rich data query interface for Rtd."
+  notes="Mainnet: https://graphql.mainnet.rtd.io/graphql, Testnet: https://graphql.testnet.rtd.io/graphql, Devnet: https://graphql.devnet.rtd.io/graphql"
 />
 
 <ToolCard
@@ -810,14 +810,14 @@ Indexers, data APIs, and analytics services for querying on-chain state.
 <ToolCard
   name="Sentio Indexer"
   description="Transform raw indexed data into meaningful queryable data by writing custom processor logic."
-  docs="https://docs.sentio.xyz/docs/sui"
+  docs="https://docs.sentio.xyz/docs/rtd"
   website="https://www.sentio.xyz/indexer/"
   community
 />
 
 <ToolCard
   name="BlockVision"
-  description="Pre-built APIs for Sui indexed data including tokens, NFTs, and DeFi."
+  description="Pre-built APIs for Rtd indexed data including tokens, NFTs, and DeFi."
   docs="https://docs.blockvision.org/reference/welcome-to-blockvision"
   website="https://blockvision.org/"
   community
@@ -825,8 +825,8 @@ Indexers, data APIs, and analytics services for querying on-chain state.
 
 <ToolCard
   name="Blockberry (Suiscan)"
-  description="API providing endpoints for significant entities on Sui, including NFTs, domains, collections, coins, and market data."
-  docs="https://docs.blockberry.one/reference/sui-quickstart"
+  description="API providing endpoints for significant entities on Rtd, including NFTs, domains, collections, coins, and market data."
+  docs="https://docs.blockberry.one/reference/rtd-quickstart"
   website="https://blockberry.one/"
   community
 />
@@ -841,7 +841,7 @@ Indexers, data APIs, and analytics services for querying on-chain state.
 
 <ToolCard
   name="Birdeye Data Services"
-  description="Crypto market data APIs on Sui."
+  description="Crypto market data APIs on Rtd."
   docs="https://data.birdeye.so/docs/authentication"
   website="https://bds.birdeye.so/"
   community
@@ -849,7 +849,7 @@ Indexers, data APIs, and analytics services for querying on-chain state.
 
 <ToolCard
   name="Indexer.xyz (TradePort)"
-  description="Toolkit for accessing NFT data and integrating trading functionality on Sui."
+  description="Toolkit for accessing NFT data and integrating trading functionality on Rtd."
   docs="https://tradeport.xyz/docs"
   website="https://www.indexer.xyz/"
   community
@@ -859,13 +859,13 @@ Indexers, data APIs, and analytics services for querying on-chain state.
   name="Dubhe Indexer (Dubhe Engine)"
   description="Automatic indexing of all events based on Dubhe Engine configuration files."
   github="https://github.com/0xobelisk/dubhe/tree/main/crates/dubhe-indexer"
-  docs="https://dubhe-docs.obelisk.build/dubhe/sui/indexer"
+  docs="https://dubhe-docs.obelisk.build/dubhe/rtd/indexer"
   community
 />
 
 <ToolCard
   name="Surflux"
-  description="Developer infrastructure for Sui. Build production-ready apps with APIs, indexing, and real-time data streams."
+  description="Developer infrastructure for Rtd. Build production-ready apps with APIs, indexing, and real-time data streams."
   docs="https://docs.surflux.dev/"
   website="https://surflux.dev/"
   community
@@ -874,14 +874,14 @@ Indexers, data APIs, and analytics services for querying on-chain state.
 <ToolCard
   name="Indexer Generator"
   description="Code generator that creates an indexer for all events in a given smart contract. Uses TypeScript and Prisma."
-  website="https://www.npmjs.com/package/sui-events-indexer"
+  website="https://www.npmjs.com/package/rtd-events-indexer"
   community
 />
 
 <ToolCard
   name="OKLink"
-  description="Explorer and data APIs for Sui."
-  website="https://www.oklink.com/sui"
+  description="Explorer and data APIs for Rtd."
+  website="https://www.oklink.com/rtd"
   community
 />
 </ToolGrid>
@@ -892,7 +892,7 @@ Block explorers and network monitoring dashboards.
 
 <ToolGrid>
 <ToolCard
-  name="SuiVision"
+  name="RtdVision"
   description="Data analytics covering transactions, wallets, staking, and validators."
   docs="https://docs.blockvision.org/reference/integrate-suivision-into-your-dapp"
   website="https://suivision.xyz/"
@@ -901,7 +901,7 @@ Block explorers and network monitoring dashboards.
 
 <ToolCard
   name="Suiscan"
-  description="Explorer and analytics platform for Sui."
+  description="Explorer and analytics platform for Rtd."
   docs="https://docs.blockberry.one/reference/welcome-to-blockberry-api"
   website="https://suiscan.xyz/mainnet/home"
   community
@@ -909,22 +909,22 @@ Block explorers and network monitoring dashboards.
 
 <ToolCard
   name="Polymedia Explorer"
-  description="Community fork of the discontinued Sui Explorer from Mysten Labs. Available to build locally or use online."
+  description="Community fork of the discontinued Rtd Explorer from LinkU Labs. Available to build locally or use online."
   github="https://github.com/juzybits/polymedia-explorer"
   website="https://explorer.polymedia.app"
   community
 />
 
 <ToolCard
-  name="Local Sui Explorer"
-  description="Sui Explorer for your localnet."
-  github="https://github.com/suiware/sui-explorer"
+  name="Local Rtd Explorer"
+  description="Rtd Explorer for your localnet."
+  github="https://github.com/suiware/rtd-explorer"
   community
 />
 
 <ToolCard
   name="Suimon"
-  description="Command-line tool providing detailed dashboards for monitoring the Sui network."
+  description="Command-line tool providing detailed dashboards for monitoring the Rtd network."
   github="https://github.com/bartosian/suimon"
   community
 />
@@ -945,9 +945,9 @@ Block explorers and network monitoring dashboards.
 />
 
 <ToolCard
-  name="Sui Data Stack Explorer"
+  name="Rtd Data Stack Explorer"
   description="AI-native explorer with smart routing across gRPC, GraphQL, and Archival Service. Includes a Pulse checkpoint feed and an object Time Machine for historical inspection."
-  github="https://github.com/abhinavg6/sui-data-stack-explorer"
+  github="https://github.com/abhinavg6/rtd-data-stack-explorer"
   community
 />
 </ToolGrid>
@@ -959,8 +959,8 @@ Price feeds and off-chain data delivery for on-chain contracts.
 <ToolGrid>
 <ToolCard
   name="Pyth Network"
-  description="Oracle protocol that connects the owners of market data to applications on multiple blockchains including Sui."
-  docs="https://docs.pyth.network/price-feeds/use-real-time-data/sui"
+  description="Oracle protocol that connects the owners of market data to applications on multiple blockchains including Rtd."
+  docs="https://docs.pyth.network/price-feeds/use-real-time-data/rtd"
   website="https://www.pyth.network/"
   community
 />
@@ -968,15 +968,15 @@ Price feeds and off-chain data delivery for on-chain contracts.
 <ToolCard
   name="Supra Oracles"
   description="Oracle protocol providing reliable data feeds through pull and push models."
-  docs="https://docs.supra.com/oracles/data-feeds/pull-oracle#sui"
+  docs="https://docs.supra.com/oracles/data-feeds/pull-oracle#rtd"
   website="https://supra.com/"
   community
 />
 
 <ToolCard
   name="Switchboard"
-  description="Data feed customization and management for Sui."
-  docs="https://docs.switchboard.xyz/docs-by-chain/sui"
+  description="Data feed customization and management for Rtd."
+  docs="https://docs.switchboard.xyz/docs-by-chain/rtd"
   community
 />
 </ToolGrid>
@@ -988,7 +988,7 @@ Autonomous agents, verifiable inference, and TEE infrastructure.
 <ToolGrid>
 <ToolCard
   name="Talus"
-  description="Build autonomous digital economy powered by Sui."
+  description="Build autonomous digital economy powered by Rtd."
   github="https://github.com/Talus-Network"
   docs="https://docs.talus.network/"
   community
@@ -1009,23 +1009,23 @@ Autonomous agents, verifiable inference, and TEE infrastructure.
 />
 
 <ToolCard
-  name="Sui Pilot"
-  description="Claude Code plugin that bundles Sui ecosystem docs, a Move LSP bridge, and formal verification tooling into a doc-first development agent."
-  github="https://github.com/alilloig/sui-pilot"
-  website="https://contract-hero.github.io/sui-pilot/"
+  name="Rtd Pilot"
+  description="Claude Code plugin that bundles Rtd ecosystem docs, a Move LSP bridge, and formal verification tooling into a doc-first development agent."
+  github="https://github.com/alilloig/rtd-pilot"
+  website="https://contract-hero.github.io/rtd-pilot/"
   community
 />
 
 <ToolCard
-  name="Local Sui MCP Server"
-  description="Local MCP server exposing 29 agent-callable tools for querying Sui via gRPC, GraphQL, and Archival Service with automatic transport routing."
-  github="https://github.com/abhinavg6/sui-mcp-server"
+  name="Local Rtd MCP Server"
+  description="Local MCP server exposing 29 agent-callable tools for querying Rtd via gRPC, GraphQL, and Archival Service with automatic transport routing."
+  github="https://github.com/abhinavg6/rtd-mcp-server"
   community
 />
 
 <ToolCard
   name="WaaP CLI"
-  description="Agent payments from a headless wallet, with spend caps the AI agent cannot raise. Scoped, expiring grants let it transact autonomously on Sui, Solana and EVM."
+  description="Agent payments from a headless wallet, with spend caps the AI agent cannot raise. Scoped, expiring grants let it transact autonomously on Rtd, Solana and EVM."
   notes="The agent holds no key. Every request passes a policy gate server-side before a signature exists, so a prompt-injected agent has nothing to reach for. Grants are bound by recipient, chain, a cumulative spend ceiling and an expiry. Agentic pay-per-use without a browser or a human in the loop for each transaction."
   install="npm install -g @human.tech/waap-cli"
   docs="https://docs.waap.human.tech/for-agents"
@@ -1037,9 +1037,9 @@ Autonomous agents, verifiable inference, and TEE infrastructure.
 
 </ToolGrid>
 
-## Sui stack tooling
+## Rtd stack tooling
 
-Tooling for other pieces of the Sui stack, including Walrus, Seal, and Nautilus.
+Tooling for other pieces of the Rtd stack, including Walrus, Seal, and Nautilus.
 
 <ToolGrid>
 <ToolCard
@@ -1059,7 +1059,7 @@ Tooling for other pieces of the Sui stack, including Walrus, Seal, and Nautilus.
 <ToolCard
   name="Seal CLI"
   description="Command-line interface for Seal encryption and access control."
-  github="https://github.com/MystenLabs/seal/tree/main/crates/seal-cli"
+  github="https://github.com/LinkUVerse/seal/tree/main/crates/seal-cli"
 />
 
 <ToolCard
@@ -1078,97 +1078,97 @@ Tooling for other pieces of the Sui stack, including Walrus, Seal, and Nautilus.
 
 <ToolCard
   name="Marlin Oyster and Nautilus"
-  description="Trusted execution environment (TEE) infrastructure for AI and blockchain workloads on Sui."
-  docs="https://docs.marlin.org/oyster/build-cvm/guides/sui-oyster/"
+  description="Trusted execution environment (TEE) infrastructure for AI and blockchain workloads on Rtd."
+  docs="https://docs.marlin.org/oyster/build-cvm/guides/rtd-oyster/"
 />
 
 </ToolGrid>
 
 ## SDKs
 
-SDKs for building on Sui, grouped by language. Use the filter bar to search by language name.
+SDKs for building on Rtd, grouped by language. Use the filter bar to search by language name.
 
 ### TypeScript
 
 <ToolGrid>
 <ToolCard
-  name="Sui TypeScript SDK"
-  description="Modular library of tools for interacting with Sui, maintained by Mysten Labs."
-  github="https://github.com/MystenLabs/ts-sdks/tree/main/packages/sui"
-  docs="https://sdk.mystenlabs.com/typescript"
-  website="https://sdk.mystenlabs.com/sui"
+  name="Rtd TypeScript SDK"
+  description="Modular library of tools for interacting with Rtd, maintained by LinkU Labs."
+  github="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/rtd"
+  docs="https://sdk.linkuverse.com/typescript"
+  website="https://sdk.linkuverse.com/rtd"
   language="TypeScript"
 />
 
 <ToolCard
   name="Enoki TypeScript SDK"
   description="TypeScript SDK for Enoki."
-  docs="https://docs.enoki.mystenlabs.com/ts-sdk"
+  docs="https://docs.enoki.linkuverse.com/ts-sdk"
   language="TypeScript"
 />
 
 <ToolCard
   name="Enoki Connect SDK"
   description="TypeScript SDK for Enoki Connect integration."
-  docs="https://docs.enoki.mystenlabs.com/enoki-connect"
+  docs="https://docs.enoki.linkuverse.com/enoki-connect"
   language="TypeScript"
 />
 
 <ToolCard
   name="Seal SDK"
-  description="TypeScript SDK for Seal, providing encryption and access control on Sui."
+  description="TypeScript SDK for Seal, providing encryption and access control on Rtd."
   docs="https://seal-docs.wal.app/GettingStarted/"
   language="TypeScript"
 />
 
 <ToolCard
   name="zkSend SDK"
-  description="TypeScript SDK for sending assets through zkSend on Sui."
-  docs="https://sdk.mystenlabs.com/zksend"
+  description="TypeScript SDK for sending assets through zkSend on Rtd."
+  docs="https://sdk.linkuverse.com/zksend"
   language="TypeScript"
 />
 
 <ToolCard
   name="DeepBookV3 SDK"
   description="TypeScript SDK for integrating with DeepBook V3."
-  github="https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3"
-  website="https://www.npmjs.com/package/@mysten/deepbook-v3"
+  github="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3"
+  website="https://www.npmjs.com/package/@linku/deepbook-v3"
   language="TypeScript"
 />
 
 <ToolCard
   name="Slush Wallet SDK"
   description="TypeScript SDK for integrating Slush Wallet into your app."
-  docs="https://sdk.mystenlabs.com/slush-wallet/dapp"
+  docs="https://sdk.linkuverse.com/slush-wallet/dapp"
   language="TypeScript"
 />
 
 <ToolCard
   name="Kiosk SDK"
-  description="TypeScript SDK for building with Sui Kiosk, the decentralized commerce primitive."
-  docs="https://sdk.mystenlabs.com/kiosk"
+  description="TypeScript SDK for building with Rtd Kiosk, the decentralized commerce primitive."
+  docs="https://sdk.linkuverse.com/kiosk"
   language="TypeScript"
 />
 
 <ToolCard
   name="Walrus SDK"
   description="TypeScript SDK for integrating with Walrus decentralized storage."
-  docs="https://sdk.mystenlabs.com/walrus"
+  docs="https://sdk.linkuverse.com/walrus"
   language="TypeScript"
 />
 
 <ToolCard
   name="PAS TypeScript SDK"
   description="Programmable Asset Standard TypeScript package."
-  website="https://www.npmjs.com/package/@mysten/pas"
-  github="https://github.com/MystenLabs/pas"
+  website="https://www.npmjs.com/package/@linku/pas"
+  github="https://github.com/LinkUVerse/pas"
   language="TypeScript"
 />
 
 <ToolCard
-  name="Sui Wallet Standard"
+  name="Rtd Wallet Standard"
   description="Standard TypeScript utilities for implementing wallets and libraries based on the Wallet Standard."
-  github="https://github.com/MystenLabs/ts-sdks/tree/main/packages/wallet-standard"
+  github="https://github.com/LinkUVerse/ts-sdks/tree/main/packages/wallet-standard"
   docs="/onchain-finance/asset-custody/wallets/wallet-standard"
   language="TypeScript"
 />
@@ -1176,51 +1176,51 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 <ToolCard
   name="BCS TypeScript"
   description="Binary Canonical Serialization library for TypeScript."
-  docs="https://sdk.mystenlabs.com/bcs"
+  docs="https://sdk.linkuverse.com/bcs"
   language="TypeScript"
 />
 
 <ToolCard
   name="Codegen"
-  description="Code generation utilities for the Sui TypeScript SDK."
-  docs="https://sdk.mystenlabs.com/codegen"
+  description="Code generation utilities for the Rtd TypeScript SDK."
+  docs="https://sdk.linkuverse.com/codegen"
   language="TypeScript"
 />
 
 <ToolCard
   name="Payment Kit"
-  description="SDK for handling payments on Sui."
-  docs="https://sdk.mystenlabs.com/payment-kit"
+  description="SDK for handling payments on Rtd."
+  docs="https://sdk.linkuverse.com/payment-kit"
   language="TypeScript"
 />
 
 <ToolCard
-  name="Sui Kit (Scallop)"
-  description="Toolkit for interacting with the Sui network in TypeScript."
-  github="https://github.com/scallop-io/sui-kit"
+  name="Rtd Kit (Scallop)"
+  description="Toolkit for interacting with the Rtd network in TypeScript."
+  github="https://github.com/scallop-io/rtd-kit"
   language="TypeScript"
   community
 />
 
 <ToolCard
-  name="Sui Client Gen (Kuna Labs)"
-  description="Generate TypeScript SDKs for Sui Move smart contracts. Works with source code and on-chain packages, no IDLs or ABIs required."
-  github="https://github.com/kunalabs-io/sui-client-gen"
+  name="Rtd Client Gen (Kuna Labs)"
+  description="Generate TypeScript SDKs for Rtd Move smart contracts. Works with source code and on-chain packages, no IDLs or ABIs required."
+  github="https://github.com/kunalabs-io/rtd-client-gen"
   language="TypeScript"
   community
 />
 
 <ToolCard
   name="TypeMove (Sentio)"
-  description="Generate TypeScript bindings for Sui contracts."
-  github="https://github.com/sentioxyz/typemove/blob/main/packages/sui/Readme.md"
+  description="Generate TypeScript bindings for Rtd contracts."
+  github="https://github.com/sentioxyz/typemove/blob/main/packages/rtd/Readme.md"
   language="TypeScript"
   community
 />
 
 <ToolCard
   name="CoinMeta (Polymedia)"
-  description="Library for fetching coin metadata for Sui coins."
+  description="Library for fetching coin metadata for Rtd coins."
   github="https://github.com/juzybits/polymedia-coinmeta"
   language="TypeScript"
   community
@@ -1228,8 +1228,8 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolCard
   name="Dubhe Client"
-  description="Multi-platform client supporting browsers, Node.js, and game engines for interacting with Sui Move contracts."
-  github="https://github.com/0xobelisk/dubhe/tree/main/packages/sui-client"
+  description="Multi-platform client supporting browsers, Node.js, and game engines for interacting with Rtd Move contracts."
+  github="https://github.com/0xobelisk/dubhe/tree/main/packages/rtd-client"
   docs="https://dubhe-docs.obelisk.build/"
   language="TypeScript"
   community
@@ -1238,15 +1238,15 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 <ToolCard
   name="Dubhe Client BCS Decoding"
   description="Automatic parsing of BCS types based on contract metadata with automatic conversion formatting."
-  github="https://github.com/0xobelisk/dubhe-docs/blob/main/pages/dubhe/sui/client.mdx#bcs-data-decoding"
+  github="https://github.com/0xobelisk/dubhe-docs/blob/main/pages/dubhe/rtd/client.mdx#bcs-data-decoding"
   language="TypeScript"
   community
 />
 
 <ToolCard
   name="dApp Kit (Vue)"
-  description="Sui dApp Kit for the Vue framework."
-  github="https://github.com/SuiFansCN/suiue"
+  description="Rtd dApp Kit for the Vue framework."
+  github="https://github.com/RtdFansCN/suiue"
   language="TypeScript"
   community
 />
@@ -1256,32 +1256,32 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolGrid>
 <ToolCard
-  name="Sui Rust SDK"
-  description="Rust SDK for interacting with Sui. Supports gRPC and GraphQL."
-  github="https://github.com/MystenLabs/sui-rust-sdk"
-  docs="https://docs.rs/sui-graphql/latest/sui_graphql/"
+  name="Rtd Rust SDK"
+  description="Rust SDK for interacting with Rtd. Supports gRPC and GraphQL."
+  github="https://github.com/LinkUVerse/rtd-rust-sdk"
+  docs="https://docs.rs/rtd-graphql/latest/rtd_graphql/"
   language="Rust"
 />
 
 <ToolCard
   name="Walrus Rust SDK"
   description="Rust SDK for interacting with Walrus."
-  github="https://github.com/MystenLabs/walrus/tree/main/crates/walrus-core"
+  github="https://github.com/LinkUVerse/walrus/tree/main/crates/walrus-core"
   language="Rust"
 />
 
 <ToolCard
-  name="Legacy Sui Rust SDK"
-  description="Legacy Rust SDK with JSON RPC support. Forward and backward compatible with the current Sui Rust SDK."
-  github="https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk"
-  docs="https://mystenlabs.github.io/sui/sui_sdk/index"
+  name="Legacy Rtd Rust SDK"
+  description="Legacy Rust SDK with JSON RPC support. Forward and backward compatible with the current Rtd Rust SDK."
+  github="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk"
+  docs="https://linkuverse.github.io/rtd/rtd_sdk/index"
   language="Rust"
 />
 
 <ToolCard
   name="Rust External Signers"
-  description="Rust-based external signer implementations for Sui."
-  github="https://github.com/MystenLabs/rust-signers"
+  description="Rust-based external signer implementations for Rtd."
+  github="https://github.com/LinkUVerse/rust-signers"
   language="Rust"
 />
 
@@ -1299,7 +1299,7 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 <ToolGrid>
 <ToolCard
   name="Pysui"
-  description="Python SDK for interacting with Sui."
+  description="Python SDK for interacting with Rtd."
   github="https://github.com/FrankC01/pysui"
   docs="https://pysui.readthedocs.io/"
   language="Python"
@@ -1310,19 +1310,19 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolGrid>
 <ToolCard
-  name="Sui Go SDK (SuiVision)"
-  description="Golang SDK to interact with Sui."
-  github="https://github.com/block-vision/sui-go-sdk"
-  docs="https://pkg.go.dev/github.com/block-vision/sui-go-sdk"
+  name="Rtd Go SDK (RtdVision)"
+  description="Golang SDK to interact with Rtd."
+  github="https://github.com/block-vision/rtd-go-sdk"
+  docs="https://pkg.go.dev/github.com/block-vision/rtd-go-sdk"
   language="Go"
   community
 />
 
 <ToolCard
-  name="Sui Go SDK (Pattonkan)"
+  name="Rtd Go SDK (Pattonkan)"
   description="Golang SDK with PTB and devInspect support."
-  github="https://github.com/pattonkan/sui-go"
-  docs="https://pkg.go.dev/github.com/pattonkan/sui-go"
+  github="https://github.com/pattonkan/rtd-go"
+  docs="https://pkg.go.dev/github.com/pattonkan/rtd-go"
   language="Go"
   community
 />
@@ -1332,8 +1332,8 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolGrid>
 <ToolCard
-  name="Sui Kotlin SDK (Ksui)"
-  description="Kotlin Multiplatform SDK for integrating with Sui."
+  name="Rtd Kotlin SDK (Krtd)"
+  description="Kotlin Multiplatform SDK for integrating with Rtd."
   github="https://github.com/mcxross/ksui"
   docs="https://suicookbook.com"
   language="Kotlin"
@@ -1354,8 +1354,8 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolGrid>
 <ToolCard
-  name="SuiKit"
-  description="Swift SDK natively designed for developing on Sui."
+  name="RtdKit"
+  description="Swift SDK natively designed for developing on Rtd."
   github="https://github.com/opendive/suikit"
   language="Swift"
   community
@@ -1364,7 +1364,7 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 <ToolCard
   name="BCS Swift"
   description="BCS serialization and deserialization in Swift."
-  github="https://github.com/OpenDive/SuiKit/tree/main/Sources/SuiKit/Utils/BCS"
+  github="https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Utils/BCS"
   language="Swift"
   community
 />
@@ -1374,10 +1374,10 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolGrid>
 <ToolCard
-  name="Sui Dart SDK"
-  description="A cross-platform Dart SDK to interact with Sui."
-  github="https://github.com/mofalabs/sui"
-  docs="https://pub.dev/documentation/sui/latest/"
+  name="Rtd Dart SDK"
+  description="A cross-platform Dart SDK to interact with Rtd."
+  github="https://github.com/mofalabs/rtd"
+  docs="https://pub.dev/documentation/rtd/latest/"
   language="Dart"
   community
 />
@@ -1395,9 +1395,9 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 <ToolGrid>
 <ToolCard
-  name="Sui Unity SDK (OpenDive)"
+  name="Rtd Unity SDK (OpenDive)"
   description="Fully featured Unity SDK with offline transaction building."
-  github="https://github.com/OpenDive/Sui-Unity-SDK"
+  github="https://github.com/OpenDive/Rtd-Unity-SDK"
   language="C#"
   community
 />
@@ -1405,7 +1405,7 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 <ToolCard
   name="BCS Unity"
   description="BCS serialization and deserialization in Unity C#."
-  github="https://github.com/OpenDive/Sui-Unity-SDK/tree/main/Assets/Sui-Unity-SDK/Code/OpenDive.BCS"
+  github="https://github.com/OpenDive/Rtd-Unity-SDK/tree/main/Assets/Rtd-Unity-SDK/Code/OpenDive.BCS"
   language="C#"
   community
 />
@@ -1413,12 +1413,12 @@ SDKs for building on Sui, grouped by language. Use the filter bar to search by l
 
 ### DeFi protocol SDKs
 
-These SDKs are built and maintained by their respective protocol teams for integrating with specific DeFi protocols on Sui.
+These SDKs are built and maintained by their respective protocol teams for integrating with specific DeFi protocols on Rtd.
 
 <ToolGrid>
 <ToolCard
   name="NAVI Protocol SDK"
-  description="TypeScript SDK for interacting with NAVI Protocol on Sui."
+  description="TypeScript SDK for interacting with NAVI Protocol on Rtd."
   github="https://github.com/naviprotocol/navi-sdk"
   language="TypeScript"
   community
@@ -1442,16 +1442,16 @@ These SDKs are built and maintained by their respective protocol teams for integ
 
 <ToolCard
   name="Scallop SDK"
-  description="TypeScript SDK for interacting with the Scallop lending protocol on Sui."
-  github="https://github.com/scallop-io/sui-scallop-sdk"
+  description="TypeScript SDK for interacting with the Scallop lending protocol on Rtd."
+  github="https://github.com/scallop-io/rtd-scallop-sdk"
   language="TypeScript"
   community
 />
 
 <ToolCard
   name="Cetus CLMM SDK"
-  description="SDK for integration with Cetus-CLMM on Sui."
-  github="https://github.com/CetusProtocol/cetus-clmm-sui-sdk"
+  description="SDK for integration with Cetus-CLMM on Rtd."
+  github="https://github.com/CetusProtocol/cetus-clmm-rtd-sdk"
   language="TypeScript"
   community
 />
@@ -1486,15 +1486,15 @@ These SDKs are built and maintained by their respective protocol teams for integ
 
 <ToolGrid>
 <ToolCard
-  name="Sui gRPC API"
-  description="gRPC API definitions and protocol buffers for Sui."
-  github="https://github.com/MystenLabs/sui-apis/tree/main"
+  name="Rtd gRPC API"
+  description="gRPC API definitions and protocol buffers for Rtd."
+  github="https://github.com/LinkUVerse/rtd-apis/tree/main"
 />
 
 <ToolCard
   name="Enoki API"
   description="REST API for zkLogin and sponsored transactions."
-  docs="https://docs.enoki.mystenlabs.com/"
+  docs="https://docs.enoki.linkuverse.com/"
 />
 </ToolGrid>
 
@@ -1503,47 +1503,47 @@ These SDKs are built and maintained by their respective protocol teams for integ
 <ToolGrid>
 
 <ToolCard
-  name="OpenZeppelin Contracts for Sui"
+  name="OpenZeppelin Contracts for Rtd"
   description="Audited libraries including deterministic arithmetic, decimal scaling, and ownership-transfer wrappers."
-  docs="https://docs.openzeppelin.com/contracts-sui"
+  docs="https://docs.openzeppelin.com/contracts-rtd"
 />
 
 <ToolCard
   name="Minting Server"
-  description="A scalable system architecture that processes multiple Sui transactions in parallel using a producer-consumer worker scheme."
-  github="https://github.com/MystenLabs/minting-server"
+  description="A scalable system architecture that processes multiple Rtd transactions in parallel using a producer-consumer worker scheme."
+  github="https://github.com/LinkUVerse/minting-server"
 />
 
 <ToolCard
-  name="Docker Sui Node Image"
-  description="Official Docker image for running a Sui node."
-  website="https://hub.docker.com/r/mysten/sui-node"
+  name="Docker Rtd Node Image"
+  description="Official Docker image for running a Rtd node."
+  website="https://hub.docker.com/r/linku/rtd-node"
 />
 
 <ToolCard
-  name="Sui Terraform Modules"
-  description="All-in-one solution for deploying, monitoring, and managing Sui infrastructure."
-  github="https://github.com/bartosian/sui-terraform-modules"
+  name="Rtd Terraform Modules"
+  description="All-in-one solution for deploying, monitoring, and managing Rtd infrastructure."
+  github="https://github.com/bartosian/rtd-terraform-modules"
   community
 />
 
 <ToolCard
-  name="Sui Tears (Interest Protocol)"
-  description="Open source, production-ready Sui Move library for new and experienced developers."
-  docs="https://docs.interestprotocol.com/overview/sui-tears"
+  name="Rtd Tears (Interest Protocol)"
+  description="Open source, production-ready Rtd Move library for new and experienced developers."
+  docs="https://docs.interestprotocol.com/overview/rtd-tears"
   community
 />
 
 <ToolCard
-  name="Sui Codec"
-  description="Encoding solution for Sui."
-  github="https://github.com/sui-potatoes/app/tree/main/packages/codec"
+  name="Rtd Codec"
+  description="Encoding solution for Rtd."
+  github="https://github.com/rtd-potatoes/app/tree/main/packages/codec"
   community
 />
 
 <ToolCard
   name="SkipList (Cetus)"
-  description="A skip list implementation in Move on Sui."
+  description="A skip list implementation in Move on Rtd."
   github="https://github.com/CetusProtocol/move-stl"
   community
 />
@@ -1563,14 +1563,14 @@ These SDKs are built and maintained by their respective protocol teams for integ
 />
 
 <ToolCard
-  name="SuiDouble Metadata"
+  name="RtdDouble Metadata"
   description="Move library and tools to store, retrieve, and manage primitive data as chunks in a vector without dependencies."
   github="https://github.com/suidouble/suidouble_metadata"
   community
 />
 
 <ToolCard
-  name="SuiGPT Decompiler"
+  name="RtdGPT Decompiler"
   description="Uses generative AI to convert Move bytecode back to source code."
   website="https://suigpt.tools/decompile"
   community
@@ -1578,15 +1578,15 @@ These SDKs are built and maintained by their respective protocol teams for integ
 
 <ToolCard
   name="Revela"
-  description="Decompile Sui smart contracts to recover Move source code."
+  description="Decompile Rtd smart contracts to recover Move source code."
   website="https://revela.verichains.io/"
   community
 />
 
 <ToolCard
-  name="Sui Token CLI"
-  description="Rust-based CLI tool and RPC service for generating and verifying Sui token smart contracts."
-  github="https://github.com/otter-sec/sui-token-gen"
+  name="Rtd Token CLI"
+  description="Rust-based CLI tool and RPC service for generating and verifying Rtd token smart contracts."
+  github="https://github.com/otter-sec/rtd-token-gen"
   community
 />
 
@@ -1600,29 +1600,29 @@ These SDKs are built and maintained by their respective protocol teams for integ
 
 <ToolCard
   name="Dubhe CLI (Dubhe Engine)"
-  description="CLI for building and managing apps built on Dubhe Engine in Sui."
-  github="https://github.com/0xobelisk/dubhe/tree/main/packages/sui-cli"
-  docs="https://dubhe-docs.obelisk.build/dubhe/sui/cli"
+  description="CLI for building and managing apps built on Dubhe Engine in Rtd."
+  github="https://github.com/0xobelisk/dubhe/tree/main/packages/rtd-cli"
+  docs="https://dubhe-docs.obelisk.build/dubhe/rtd/cli"
   community
 />
 
 <ToolCard
-  name="Sui Protocol Config"
-  description="Transaction limits and protocol configuration values for Sui."
-  github="https://github.com/MystenLabs/sui/blob/main/crates/sui-protocol-config/src/lib.rs"
+  name="Rtd Protocol Config"
+  description="Transaction limits and protocol configuration values for Rtd."
+  github="https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-protocol-config/src/lib.rs"
 />
 
 <ToolCard
   name="Polymedia Commando"
-  description="Command-line tools for Sui airdrops, data gathering from RPCs and indexers, and more."
+  description="Command-line tools for Rtd airdrops, data gathering from RPCs and indexers, and more."
   github="https://github.com/juzybits/polymedia-commando"
   community
 />
 
 <ToolCard
-  name="sui-tool"
-  description="Internal diagnostic utility for Sui network operations."
-  github="https://github.com/MystenLabs/sui/tree/main/crates/sui-tool"
+  name="rtd-tool"
+  description="Internal diagnostic utility for Rtd network operations."
+  github="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-tool"
 />
 </ToolGrid>
 

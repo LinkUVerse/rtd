@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -93,12 +93,12 @@ exports.processOptions = (text, options) => {
   // Replace all the //docs:: lines in code and license header
   let processed = text
     .replace(
-      /^\/\/\s*Copyright.*Mysten Labs.*\n\/\/\s*SPDX-License.*?\n?$/gim,
+      /^\/\/\s*Copyright.*LinkU Labs.*\n\/\/\s*SPDX-License.*?\n?$/gim,
       "",
     )
     .replace(/^\s*\/\/\s*docs::\/?.*\r?$\n?/gm, "")
     .replace(
-      /\[dependencies\]\nsui\s?=\s?{\s?local\s?=.*sui-framework.*\n/i,
+      /\[dependencies\]\nsui\s?=\s?{\s?local\s?=.*rtd-framework.*\n/i,
       "[dependencies]",
     );
   processed = removeComments(processed, options);

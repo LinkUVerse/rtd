@@ -101,8 +101,8 @@
       "permanent": true
     },
     {
-      "source": "/concepts/sui-move-concepts",
-      "destination": "/develop/write-move/sui-move-concepts",
+      "source": "/concepts/rtd-move-concepts",
+      "destination": "/develop/write-move/rtd-move-concepts",
       "permanent": true
     },
     {
@@ -282,12 +282,12 @@
     },
     {
       "source": "/learn/objects",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
-      "source": "/learn/about-sui",
-      "destination": "/develop/sui-architecture/index",
+      "source": "/learn/about-rtd",
+      "destination": "/develop/rtd-architecture/index",
       "permanent": true
     },
     {
@@ -307,12 +307,12 @@
     },
     {
       "source": "/learn/why-move",
-      "destination": "/develop/write-move/sui-move-concepts",
+      "destination": "/develop/write-move/rtd-move-concepts",
       "permanent": true
     },
     {
-      "source": "/learn/sui-move-diffs",
-      "destination": "/develop/write-move/sui-move-concepts",
+      "source": "/learn/rtd-move-diffs",
+      "destination": "/develop/write-move/rtd-move-concepts",
       "permanent": true
     },
     {
@@ -326,12 +326,12 @@
       "permanent": true
     },
     {
-      "source": "/learn/cryptography/sui-multisig",
+      "source": "/learn/cryptography/rtd-multisig",
       "destination": "/develop/transactions/transaction-auth/multisig",
       "permanent": true
     },
     {
-      "source": "/learn/cryptography/sui-signatures",
+      "source": "/learn/cryptography/rtd-signatures",
       "destination": "/develop/cryptography/signing",
       "permanent": true
     },
@@ -341,7 +341,7 @@
       "permanent": true
     },
     {
-      "source": "/learn/cryptography/sui-intent-signing",
+      "source": "/learn/cryptography/rtd-intent-signing",
       "destination": "/develop/transactions/transaction-auth/intent-signing",
       "permanent": true
     },
@@ -361,58 +361,58 @@
       "permanent": true
     },
     {
-      "source": "/learn/cryptography/sui-move-signatures",
+      "source": "/learn/cryptography/rtd-move-signatures",
       "destination": "/develop/cryptography/signing",
       "permanent": true
     },
     {
-      "source": "/learn/cryptography/sui-offline-signing",
+      "source": "/learn/cryptography/rtd-offline-signing",
       "destination": "/develop/transactions/transaction-auth/offline-signing",
       "permanent": true
     },
     {
-      "source": "/learn/architecture/sui-full-node-data",
+      "source": "/learn/architecture/rtd-full-node-data",
       "destination": "/operators/data-management",
       "permanent": true
     },
     {
       "source": "/learn/architecture/validators",
-      "destination": "/develop/sui-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/storage-fund",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/learn/tokenomics/sui-token",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/learn/tokenomics/rtd-token",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/gas-pricing",
-      "destination": "/develop/transaction-payment/gas-in-sui",
+      "destination": "/develop/transaction-payment/gas-in-rtd",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/proof-of-stake",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/learn/tokenomics/gas-in-sui",
-      "destination": "/develop/transaction-payment/gas-in-sui",
+      "source": "/learn/tokenomics/gas-in-rtd",
+      "destination": "/develop/transaction-payment/gas-in-rtd",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/index",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -436,13 +436,13 @@
       "permanent": true
     },
     {
-      "source": "/build/sui-gas-charges",
-      "destination": "/develop/transaction-payment/gas-in-sui",
+      "source": "/build/rtd-gas-charges",
+      "destination": "/develop/transaction-payment/gas-in-rtd",
       "permanent": true
     },
     {
-      "source": "/build/sui-json",
-      "destination": "/references/sui-api",
+      "source": "/build/rtd-json",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
@@ -456,22 +456,22 @@
       "permanent": true
     },
     {
-      "source": "/build/sui-object-display",
+      "source": "/build/rtd-object-display",
       "destination": "/develop/objects/display/display-overview",
       "permanent": true
     },
     {
       "source": "/build/fullnode",
-      "destination": "/operators/full-node/sui-full-node",
+      "destination": "/operators/full-node/rtd-full-node",
       "permanent": true
     },
     {
       "source": "/build/json-rpc",
-      "destination": "/references/sui-api",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
-      "source": "/build/sui-transfer-policy",
+      "source": "/build/rtd-transfer-policy",
       "destination": "/develop/publish-upgrade-packages/custom-policies",
       "permanent": true
     },
@@ -481,7 +481,7 @@
       "permanent": true
     },
     {
-      "source": "/build/sui-kiosk",
+      "source": "/build/rtd-kiosk",
       "destination": "/onchain-finance/kiosk",
       "permanent": true
     },
@@ -492,17 +492,17 @@
     },
     {
       "source": "/build/install",
-      "destination": "/getting-started/onboarding/sui-install",
+      "destination": "/getting-started/onboarding/rtd-install",
       "permanent": true
     },
     {
-      "source": "/build/sui-local-network",
+      "source": "/build/rtd-local-network",
       "destination": "/getting-started/onboarding/local-network",
       "permanent": true
     },
     {
       "source": "/build/comms",
-      "destination": "/getting-started/onboarding/configure-sui-client",
+      "destination": "/getting-started/onboarding/configure-rtd-client",
       "permanent": true
     },
     {
@@ -522,12 +522,12 @@
     },
     {
       "source": "/build/rpc-best-practices",
-      "destination": "/references/sui-api/rpc-best-practices",
+      "destination": "/references/rtd-api/rpc-best-practices",
       "permanent": true
     },
     {
       "source": "/build/zk_login",
-      "destination": "/sui-stack/zklogin-integration",
+      "destination": "/rtd-stack/zklogin-integration",
       "permanent": true
     },
     {
@@ -551,8 +551,8 @@
       "permanent": true
     },
     {
-      "source": "/build/connect-sui-network",
-      "destination": "/getting-started/onboarding/configure-sui-client",
+      "source": "/build/connect-rtd-network",
+      "destination": "/getting-started/onboarding/configure-rtd-client",
       "permanent": true
     },
     {
@@ -602,12 +602,12 @@
     },
     {
       "source": "/build/move/time",
-      "destination": "/sui-stack/on-chain-primitives/access-time",
+      "destination": "/rtd-stack/on-chain-primitives/access-time",
       "permanent": true
     },
     {
-      "source": "/build/move/sui-move-library",
-      "destination": "/develop/write-move/sui-move-concepts",
+      "source": "/build/move/rtd-move-library",
+      "destination": "/develop/write-move/rtd-move-concepts",
       "permanent": true
     },
     {
@@ -617,7 +617,7 @@
     },
     {
       "source": "/build/programming-with-objects/ch1-object-basics",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -632,7 +632,7 @@
     },
     {
       "source": "/build/programming-with-objects/index",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -646,8 +646,8 @@
       "permanent": true
     },
     {
-      "source": "/reference/sui-json",
-      "destination": "/references/sui-api",
+      "source": "/reference/rtd-json",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
@@ -671,18 +671,18 @@
       "permanent": true
     },
     {
-      "source": "/learn/how-sui-works",
-      "destination": "/develop/sui-architecture/index",
+      "source": "/learn/how-rtd-works",
+      "destination": "/develop/rtd-architecture/index",
       "permanent": true
     },
     {
-      "source": "/learn/sui-compared",
-      "destination": "/develop/sui-architecture/index",
+      "source": "/learn/rtd-compared",
+      "destination": "/develop/rtd-architecture/index",
       "permanent": true
     },
     {
-      "source": "/learn/sui-bridging",
-      "destination": "/onchain-finance/fungible-tokens/sui-bridging",
+      "source": "/learn/rtd-bridging",
+      "destination": "/onchain-finance/fungible-tokens/rtd-bridging",
       "permanent": true
     },
     {
@@ -701,23 +701,23 @@
       "permanent": true
     },
     {
-      "source": "/references/framework/sui-framework/:path*",
-      "destination": "/references/framework/sui_sui/:path*",
+      "source": "/references/framework/rtd-framework/:path*",
+      "destination": "/references/framework/rtd_rtd/:path*",
       "permanent": true
     },
     {
       "source": "/references/framework/move-stdlib/:path*",
-      "destination": "/references/framework/sui_std/:path*",
+      "destination": "/references/framework/rtd_std/:path*",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui-system/:path*",
-      "destination": "/references/framework/sui_sui_system/:path*",
+      "source": "/references/framework/rtd-system/:path*",
+      "destination": "/references/framework/rtd_rtd_system/:path*",
       "permanent": true
     },
     {
-      "source": "/references/sui-api/sui-graphql/reference/:path*",
-      "destination": "/references/sui-api/sui-graphql/beta/reference/:path*",
+      "source": "/references/rtd-api/rtd-graphql/reference/:path*",
+      "destination": "/references/rtd-api/rtd-graphql/beta/reference/:path*",
       "permanent": true
     },
     {
@@ -727,22 +727,22 @@
     },
     {
       "source": "/references/framework/bridge/:path*",
-      "destination": "/references/framework/sui_bridge/:path*",
+      "destination": "/references/framework/rtd_bridge/:path*",
       "permanent": true
     },
     {
       "source": "/references/framework/std/:path*",
-      "destination": "/references/framework/sui_std/:path*",
+      "destination": "/references/framework/rtd_std/:path*",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui/:path*",
-      "destination": "/references/framework/sui_sui/:path*",
+      "source": "/references/framework/rtd/:path*",
+      "destination": "/references/framework/rtd_rtd/:path*",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_system/:path*",
-      "destination": "/references/framework/sui_sui_system/:path*",
+      "source": "/references/framework/rtd_system/:path*",
+      "destination": "/references/framework/rtd_rtd_system/:path*",
       "permanent": true
     },
     {
@@ -752,7 +752,7 @@
     },
     {
       "source": "/operator/validator/validator-committee",
-      "destination": "/develop/sui-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
@@ -762,12 +762,12 @@
     },
     {
       "source": "/learn/architecture",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
       "source": "/references/rpc",
-      "destination": "/references/sui-api",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
@@ -787,17 +787,17 @@
     },
     {
       "source": "/references/graphql",
-      "destination": "/references/sui-graphql",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
-      "source": "/references/sui-cli-client",
+      "source": "/references/rtd-cli-client",
       "destination": "/references/cli",
       "permanent": true
     },
     {
       "source": "/technology",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -811,33 +811,33 @@
       "permanent": true
     },
     {
-      "source": "/apps/sui-wallet",
+      "source": "/apps/rtd-wallet",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
     {
       "source": "/guides/user/stake-delegate",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/token-release-schedule",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/references/rpc/fullnode",
-      "destination": "/operators/full-node/sui-full-node",
+      "destination": "/operators/full-node/rtd-full-node",
       "permanent": true
     },
     {
-      "source": "/references/sui-token",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/references/rtd-token",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/sui-tokenomics",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/rtd-tokenomics",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -852,7 +852,7 @@
     },
     {
       "source": "/build/graphql",
-      "destination": "/references/sui-graphql",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
@@ -861,38 +861,38 @@
       "permanent": true
     },
     {
-      "source": "/build/sui-move/token-standard",
+      "source": "/build/rtd-move/token-standard",
       "destination": "/onchain-finance/fungible-tokens",
       "permanent": true
     },
     {
       "source": "/guides/consumer/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/sui-wallet",
+      "source": "/guides/rtd-wallet",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
     {
-      "source": "/guides/sui-wallet/ledger-support",
+      "source": "/guides/rtd-wallet/ledger-support",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
     {
-      "source": "/guides/sui-wallet/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/guides/rtd-wallet/staking",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/learn/sui-object-model",
-      "destination": "/develop/sui-architecture/object-model",
+      "source": "/learn/rtd-object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -911,32 +911,32 @@
       "permanent": true
     },
     {
-      "source": "/references/sui-api/reference/rest/transaction-operations/dry-run-transaction-block",
+      "source": "/references/rtd-api/reference/rest/transaction-operations/dry-run-transaction-block",
       "destination": "/references",
       "permanent": true
     },
     {
-      "source": "/references/sui-graphql/reference",
-      "destination": "/references/sui-graphql",
+      "source": "/references/rtd-graphql/reference",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
-      "source": "/references/sui-tokenomics",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/references/rtd-tokenomics",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/references/sui-typescript-sdk",
-      "destination": "/references/sui-sdks",
+      "source": "/references/rtd-typescript-sdk",
+      "destination": "/references/rtd-sdks",
       "permanent": true
     },
     {
       "source": "/tokenomics",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/references/move/sui/package",
+      "source": "/references/move/rtd/package",
       "destination": "/develop/write-move",
       "permanent": true
     },
@@ -947,17 +947,17 @@
     },
     {
       "source": "/applications/walrus",
-      "destination": "/develop/sui-architecture/sui-storage",
+      "destination": "/develop/rtd-architecture/rtd-storage",
       "permanent": true
     },
     {
       "source": "/apps/walrus/overview",
-      "destination": "/develop/sui-architecture/sui-storage",
+      "destination": "/develop/rtd-architecture/rtd-storage",
       "permanent": true
     },
     {
       "source": "/architecture",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -967,7 +967,7 @@
     },
     {
       "source": "/build/rpc",
-      "destination": "/references/sui-api",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
@@ -977,7 +977,7 @@
     },
     {
       "source": "/guides/apps/walrus",
-      "destination": "/develop/sui-architecture/sui-storage",
+      "destination": "/develop/rtd-architecture/rtd-storage",
       "permanent": true
     },
     {
@@ -987,57 +987,57 @@
     },
     {
       "source": "/guides/consumer/stake",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/consumer/sui-wallets",
+      "source": "/guides/consumer/rtd-wallets",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
     {
       "source": "/guides/operating-a-validator/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/participant/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/sui-tokenomics/sui-token",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/guides/rtd-tokenomics/rtd-token",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/validator/staking-delegation",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/validator/staking-unstaking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/zklogin",
-      "destination": "/sui-stack/zklogin-integration",
+      "destination": "/rtd-stack/zklogin-integration",
       "permanent": true
     },
     {
-      "source": "/learn/sui-transaction-model",
+      "source": "/learn/rtd-transaction-model",
       "destination": "/develop/transactions",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/stake-subsidy",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/staking-and-participation",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -1046,8 +1046,8 @@
       "permanent": true
     },
     {
-      "source": "/references/move/sui/random",
-      "destination": "/sui-stack/on-chain-primitives/randomness-onchain",
+      "source": "/references/move/rtd/random",
+      "destination": "/rtd-stack/on-chain-primitives/randomness-onchain",
       "permanent": true
     },
     {
@@ -1061,17 +1061,17 @@
       "permanent": true
     },
     {
-      "source": "/references/sui-framework/sui/versioned",
+      "source": "/references/rtd-framework/rtd/versioned",
       "destination": "/references",
       "permanent": true
     },
     {
-      "source": "/references/sui-system",
+      "source": "/references/rtd-system",
       "destination": "/references",
       "permanent": true
     },
     {
-      "source": "/references/sui-txns",
+      "source": "/references/rtd-txns",
       "destination": "/references",
       "permanent": true
     },
@@ -1097,7 +1097,7 @@
     },
     {
       "source": "/apps/walrus",
-      "destination": "/develop/sui-architecture/sui-storage",
+      "destination": "/develop/rtd-architecture/rtd-storage",
       "permanent": true
     },
     {
@@ -1107,12 +1107,12 @@
     },
     {
       "source": "/build/dapp-kit",
-      "destination": "/references/sui-sdks",
+      "destination": "/references/rtd-sdks",
       "permanent": true
     },
     {
       "source": "/build/devnet",
-      "destination": "/develop/sui-architecture/networks",
+      "destination": "/develop/rtd-architecture/networks",
       "permanent": true
     },
     {
@@ -1127,7 +1127,7 @@
     },
     {
       "source": "/build/zklogin",
-      "destination": "/sui-stack/zklogin-integration",
+      "destination": "/rtd-stack/zklogin-integration",
       "permanent": true
     },
     {
@@ -1141,68 +1141,68 @@
       "permanent": true
     },
     {
-      "source": "/guides/operate-a-sui-node",
+      "source": "/guides/operate-a-rtd-node",
       "destination": "/operators",
       "permanent": true
     },
     {
       "source": "/guides/operating-a-validator/staking-and-delegation",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/operating-a-validator/staking-rewards",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/sui-tokenomics/staking-and-unstaking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/guides/rtd-tokenomics/staking-and-unstaking",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/sui-tokenomics/staking-rewards",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/guides/rtd-tokenomics/staking-rewards",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/user/sui-wallets/ledger",
+      "source": "/guides/user/rtd-wallets/ledger",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
     {
       "source": "/guides/validator/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/intro-to-sui",
+      "source": "/intro-to-rtd",
       "destination": "/getting-started",
       "permanent": true
     },
     {
-      "source": "/learn/about-sui/performance",
+      "source": "/learn/about-rtd/performance",
       "destination": "/getting-started",
       "permanent": true
     },
     {
       "source": "/learn/consensus",
-      "destination": "/develop/sui-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
-      "source": "/learn/sui-architecture/consensus",
-      "destination": "/develop/sui-architecture/consensus",
+      "source": "/learn/rtd-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
-      "source": "/learn/sui-architecture/high-level-view",
-      "destination": "/develop/sui-architecture",
+      "source": "/learn/rtd-architecture/high-level-view",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/gas-fees",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -1212,7 +1212,7 @@
     },
     {
       "source": "/references/fullnode-protocol/grpc-v2",
-      "destination": "/operators/full-node/sui-full-node",
+      "destination": "/operators/full-node/rtd-full-node",
       "permanent": true
     },
     {
@@ -1232,42 +1232,42 @@
     },
     {
       "source": "/references/rpc/servers",
-      "destination": "/references/sui-api",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
-      "source": "/references/sui-consensus",
-      "destination": "/develop/sui-architecture/consensus",
+      "source": "/references/rtd-consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
-      "source": "/references/sui-glossary",
+      "source": "/references/rtd-glossary",
       "destination": "/references",
       "permanent": true
     },
     {
-      "source": "/references/sui-move-examples",
+      "source": "/references/rtd-move-examples",
       "destination": "/develop/write-move",
       "permanent": true
     },
     {
-      "source": "/references/sui-move/coin",
+      "source": "/references/rtd-move/coin",
       "destination": "/onchain-finance/fungible-tokens",
       "permanent": true
     },
     {
-      "source": "/references/sui-protocol/sui-consensus",
-      "destination": "/develop/sui-architecture/consensus",
+      "source": "/references/rtd-protocol/rtd-consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
-      "source": "/references/sui-token.pdf",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/references/rtd-token.pdf",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/applications/walrus/overview",
-      "destination": "/develop/sui-architecture/sui-storage",
+      "destination": "/develop/rtd-architecture/rtd-storage",
       "permanent": true
     },
     {
@@ -1291,8 +1291,8 @@
       "permanent": true
     },
     {
-      "source": "/build/sui-sdk-kit/sui-java-sdk",
-      "destination": "/references/sui-sdks",
+      "source": "/build/rtd-sdk-kit/rtd-java-sdk",
+      "destination": "/references/rtd-sdks",
       "permanent": true
     },
     {
@@ -1312,26 +1312,26 @@
     },
     {
       "source": "/guides/consumer/zk-login",
-      "destination": "/sui-stack/zklogin-integration",
+      "destination": "/rtd-stack/zklogin-integration",
       "permanent": true
     },
     {
-      "source": "/guides/developer/getting-started/sui-wallets",
+      "source": "/guides/developer/getting-started/rtd-wallets",
       "destination": "/getting-started/onboarding",
       "permanent": true
     },
     {
       "source": "/guides/operating/staking-unstaking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/user/stake-sui",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/guides/user/stake-rtd",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/guides/user/sui-wallets/hardware-wallets/ledger",
+      "source": "/guides/user/rtd-wallets/hardware-wallets/ledger",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
@@ -1342,12 +1342,12 @@
     },
     {
       "source": "/learn/architecture/high-level-overview",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
       "source": "/learn/architecture/overview",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -1361,8 +1361,8 @@
       "permanent": true
     },
     {
-      "source": "/learn/tokenomics/sui-economy",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/learn/tokenomics/rtd-economy",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -1382,26 +1382,26 @@
     },
     {
       "source": "/references/sdk/typescript",
-      "destination": "/references/sui-sdks",
+      "destination": "/references/rtd-sdks",
       "permanent": true
     },
     {
-      "source": "/references/sui-dapp-toolkit",
+      "source": "/references/rtd-dapp-toolkit",
       "destination": "/references",
       "permanent": true
     },
     {
-      "source": "/references/sui-framework/staking-pool",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/references/rtd-framework/staking-pool",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/references/sui-token/use",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/references/rtd-token/use",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/references/sui-types/transaction",
+      "source": "/references/rtd-types/transaction",
       "destination": "/references",
       "permanent": true
     },
@@ -1411,18 +1411,18 @@
       "permanent": true
     },
     {
-      "source": "/sui-paper/sui.pdf",
+      "source": "/rtd-paper/rtd.pdf",
       "destination": "/references/research-papers",
       "permanent": true
     },
     {
-      "source": "/sui-rpc",
-      "destination": "/references/sui-api",
+      "source": "/rtd-rpc",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
       "source": "/technology/architecture",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -1431,27 +1431,27 @@
       "permanent": true
     },
     {
-      "source": "/sui-whitepaper",
+      "source": "/rtd-whitepaper",
       "destination": "/references/research-papers",
       "permanent": true
     },
     {
-      "source": "/contribute-to-sui-repos",
+      "source": "/contribute-to-rtd-repos",
       "destination": "/references/contribute/contribution-process",
       "permanent": true
     },
     {
       "source": "/guides/bridge",
-      "destination": "/onchain-finance/fungible-tokens/sui-bridging",
+      "destination": "/onchain-finance/fungible-tokens/rtd-bridging",
       "permanent": true
     },
     {
       "source": "/learn/tokenomics/staking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/references/sui-move/modules/coin_registry",
+      "source": "/references/rtd-move/modules/coin_registry",
       "destination": "/onchain-finance/fungible-tokens",
       "permanent": true
     },
@@ -1477,7 +1477,7 @@
     },
     {
       "source": "/references/rpc/mainnet",
-      "destination": "/references/sui-api",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
@@ -1487,7 +1487,7 @@
     },
     {
       "source": "/learn/architecture/consensus/mysticeti",
-      "destination": "/develop/sui-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
@@ -1496,8 +1496,8 @@
       "permanent": true
     },
     {
-      "source": "/localize-sui-docs",
-      "destination": "/references/contribute/localize-sui-docs",
+      "source": "/localize-rtd-docs",
+      "destination": "/references/contribute/localize-rtd-docs",
       "permanent": true
     },
     {
@@ -1506,8 +1506,8 @@
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture",
-      "destination": "/develop/sui-architecture",
+      "source": "/concepts/rtd-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -1517,17 +1517,17 @@
     },
     {
       "source": "/guides/developer/nautilus/index",
-      "destination": "/sui-stack/nautilus",
+      "destination": "/rtd-stack/nautilus",
       "permanent": true
     },
     {
       "source": "/concepts/tokenomics",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/guides/developer/cryptography/zklogin-integration",
-      "destination": "/sui-stack/zklogin-integration",
+      "destination": "/rtd-stack/zklogin-integration",
       "permanent": true
     },
     {
@@ -1537,12 +1537,12 @@
     },
     {
       "source": "/guides/operator",
-      "destination": "/operators/full-node/sui-full-node",
+      "destination": "/operators/full-node/rtd-full-node",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/components",
-      "destination": "/develop/sui-architecture",
+      "source": "/concepts/rtd-architecture/components",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -1552,17 +1552,17 @@
     },
     {
       "source": "/guides/developer/getting-started",
-      "destination": "/getting-started/onboarding/sui-install",
+      "destination": "/getting-started/onboarding/rtd-install",
       "permanent": true
     },
     {
       "source": "/guides/developer/nautilus/nautilus-overview",
-      "destination": "/sui-stack/nautilus",
+      "destination": "/rtd-stack/nautilus",
       "permanent": true
     },
     {
       "source": "/guides/developer/objects",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -1581,38 +1581,38 @@
       "permanent": true
     },
     {
-      "source": "/references/sui-api/sui-graphql/beta/reference/types/enums/multisig-member-signature-scheme",
-      "destination": "/references/sui-graphql",
+      "source": "/references/rtd-api/rtd-graphql/beta/reference/types/enums/multisig-member-signature-scheme",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
-      "source": "/references/sui-api/sui-graphql/beta/reference/types/objects/multisig-member-signature",
-      "destination": "/references/sui-graphql",
+      "source": "/references/rtd-api/rtd-graphql/beta/reference/types/objects/multisig-member-signature",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_bridge.md",
-      "destination": "/references/framework/sui_bridge",
+      "source": "/references/framework/rtd_bridge.md",
+      "destination": "/references/framework/rtd_bridge",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_std.md",
-      "destination": "/references/framework/sui_std",
+      "source": "/references/framework/rtd_std.md",
+      "destination": "/references/framework/rtd_std",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_sui.md",
-      "destination": "/references/framework/sui_sui",
+      "source": "/references/framework/rtd_rtd.md",
+      "destination": "/references/framework/rtd_rtd",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_sui_system.md",
-      "destination": "/references/framework/sui_sui_system",
+      "source": "/references/framework/rtd_rtd_system.md",
+      "destination": "/references/framework/rtd_rtd_system",
       "permanent": true
     },
     {
-      "source": "/references/sui-api/sui-graphql/beta/reference/types/enums/multisig-member-signature-scheme.md",
-      "destination": "/references/sui-graphql",
+      "source": "/references/rtd-api/rtd-graphql/beta/reference/types/enums/multisig-member-signature-scheme.md",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
@@ -1626,18 +1626,18 @@
       "permanent": true
     },
     {
-      "source": "/sui-compared",
-      "destination": "/develop/sui-architecture",
+      "source": "/rtd-compared",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
-      "source": "/sui-framework-reference",
+      "source": "/rtd-framework-reference",
       "destination": "/references/framework",
       "permanent": true
     },
     {
-      "source": "/sui-glossary",
-      "destination": "/references/sui-glossary",
+      "source": "/rtd-glossary",
+      "destination": "/references/rtd-glossary",
       "permanent": true
     },
     {
@@ -1646,8 +1646,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/operator/sui-full-node",
-      "destination": "/operators/full-node/sui-full-node",
+      "source": "/guides/operator/rtd-full-node",
+      "destination": "/operators/full-node/rtd-full-node",
       "permanent": true
     },
     {
@@ -1767,7 +1767,7 @@
     },
     {
       "source": "/guides/developer/objects/object-model",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -1977,67 +1977,67 @@
     },
     {
       "source": "/guides/developer/nautilus",
-      "destination": "/sui-stack/nautilus",
+      "destination": "/rtd-stack/nautilus",
       "permanent": true
     },
     {
       "source": "/guides/developer/nautilus/using-nautilus",
-      "destination": "/sui-stack/nautilus/using-nautilus",
+      "destination": "/rtd-stack/nautilus/using-nautilus",
       "permanent": true
     },
     {
       "source": "/guides/developer/nautilus/nautilus-design",
-      "destination": "/sui-stack/nautilus/nautilus-design",
+      "destination": "/rtd-stack/nautilus/nautilus-design",
       "permanent": true
     },
     {
       "source": "/guides/developer/nautilus/customize-nautilus",
-      "destination": "/sui-stack/nautilus/customize-nautilus",
+      "destination": "/rtd-stack/nautilus/customize-nautilus",
       "permanent": true
     },
     {
       "source": "/guides/developer/nautilus/community-dev-tools",
-      "destination": "/sui-stack/nautilus/community-dev-tools",
+      "destination": "/rtd-stack/nautilus/community-dev-tools",
       "permanent": true
     },
     {
       "source": "/guides/developer/nautilus/seal",
-      "destination": "/sui-stack/nautilus/seal",
+      "destination": "/rtd-stack/nautilus/seal",
       "permanent": true
     },
     {
       "source": "/guides/developer/cryptography/zklogin-integration/zklogin",
-      "destination": "/sui-stack/zklogin-integration/zklogin",
+      "destination": "/rtd-stack/zklogin-integration/zklogin",
       "permanent": true
     },
     {
       "source": "/guides/developer/cryptography/zklogin-integration/zklogin-example",
-      "destination": "/sui-stack/zklogin-integration/zklogin-demo",
+      "destination": "/rtd-stack/zklogin-integration/zklogin-demo",
       "permanent": true
     },
     {
-      "source": "/sui-stack/zklogin-integration/zklogin-example",
-      "destination": "/sui-stack/zklogin-integration/zklogin-demo",
+      "source": "/rtd-stack/zklogin-integration/zklogin-example",
+      "destination": "/rtd-stack/zklogin-integration/zklogin-demo",
       "permanent": true
     },
     {
       "source": "/guides/developer/cryptography/zklogin-integration/developer-account",
-      "destination": "/sui-stack/zklogin-integration/developer-account",
+      "destination": "/rtd-stack/zklogin-integration/developer-account",
       "permanent": true
     },
     {
       "source": "/guides/developer/on-chain-primitives",
-      "destination": "/sui-stack/on-chain-primitives",
+      "destination": "/rtd-stack/on-chain-primitives",
       "permanent": true
     },
     {
       "source": "/guides/developer/on-chain-primitives/access-time",
-      "destination": "/sui-stack/on-chain-primitives/access-time",
+      "destination": "/rtd-stack/on-chain-primitives/access-time",
       "permanent": true
     },
     {
       "source": "/guides/developer/on-chain-primitives/randomness-onchain",
-      "destination": "/sui-stack/on-chain-primitives/randomness-onchain",
+      "destination": "/rtd-stack/on-chain-primitives/randomness-onchain",
       "permanent": true
     },
     {
@@ -2051,8 +2051,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/developer/getting-started/configure-sui-client",
-      "destination": "/getting-started/onboarding/configure-sui-client",
+      "source": "/guides/developer/getting-started/configure-rtd-client",
+      "destination": "/getting-started/onboarding/configure-rtd-client",
       "permanent": true
     },
     {
@@ -2062,17 +2062,17 @@
     },
     {
       "source": "/guides/developer/accessing-data/custom-indexer/indexer-walrus",
-      "destination": "/sui-stack/walrus/indexer-walrus",
+      "destination": "/rtd-stack/walrus/indexer-walrus",
       "permanent": true
     },
     {
-      "source": "/sui-stack/indexer-walrus",
-      "destination": "/sui-stack/walrus/indexer-walrus",
+      "source": "/rtd-stack/indexer-walrus",
+      "destination": "/rtd-stack/walrus/indexer-walrus",
       "permanent": true
     },
     {
       "source": "/concepts",
-      "destination": "/develop/sui-architecture",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
@@ -2087,7 +2087,7 @@
     },
     {
       "source": "/concepts/cryptography/system/checkpoint-verification",
-      "destination": "/develop/sui-architecture/checkpoint-verification",
+      "destination": "/develop/rtd-architecture/checkpoint-verification",
       "permanent": true
     },
     {
@@ -2136,63 +2136,63 @@
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/consensus",
-      "destination": "/develop/sui-architecture/consensus",
+      "source": "/concepts/rtd-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/epochs",
-      "destination": "/develop/sui-architecture/epochs",
+      "source": "/concepts/rtd-architecture/epochs",
+      "destination": "/develop/rtd-architecture/epochs",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/networks",
-      "destination": "/develop/sui-architecture/networks",
+      "source": "/concepts/rtd-architecture/networks",
+      "destination": "/develop/rtd-architecture/networks",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/protocol-upgrades",
-      "destination": "/develop/sui-architecture/protocol-upgrades",
+      "source": "/concepts/rtd-architecture/protocol-upgrades",
+      "destination": "/develop/rtd-architecture/protocol-upgrades",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/sui-security",
-      "destination": "/develop/sui-architecture/sui-security",
+      "source": "/concepts/rtd-architecture/rtd-security",
+      "destination": "/develop/rtd-architecture/rtd-security",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/sui-storage",
-      "destination": "/develop/sui-architecture/sui-storage",
+      "source": "/concepts/rtd-architecture/rtd-storage",
+      "destination": "/develop/rtd-architecture/rtd-storage",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-for-ethereum",
-      "destination": "/getting-started/sui-for-ethereum",
+      "source": "/concepts/rtd-for-ethereum",
+      "destination": "/getting-started/rtd-for-ethereum",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-for-solana",
-      "destination": "/getting-started/sui-for-solana",
+      "source": "/concepts/rtd-for-solana",
+      "destination": "/getting-started/rtd-for-solana",
       "permanent": true
     },
     {
-      "source": "/concepts/tokenomics/gas-in-sui",
-      "destination": "/develop/transaction-payment/gas-in-sui",
+      "source": "/concepts/tokenomics/gas-in-rtd",
+      "destination": "/develop/transaction-payment/gas-in-rtd",
       "permanent": true
     },
     {
       "source": "/concepts/tokenomics/staking-unstaking",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/concepts/tokenomics/sui-bridging",
-      "destination": "/onchain-finance/fungible-tokens/sui-bridging",
+      "source": "/concepts/tokenomics/rtd-bridging",
+      "destination": "/onchain-finance/fungible-tokens/rtd-bridging",
       "permanent": true
     },
     {
       "source": "/concepts/tokenomics/tokenomics-overview",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -2237,7 +2237,7 @@
     },
     {
       "source": "/guides/developer/cryptography/zklogin-integration/zklogin-integration",
-      "destination": "/sui-stack/zklogin-integration",
+      "destination": "/rtd-stack/zklogin-integration",
       "permanent": true
     },
     {
@@ -2391,8 +2391,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/developer/getting-started/sui-install",
-      "destination": "/getting-started/onboarding/sui-install",
+      "source": "/guides/developer/getting-started/rtd-install",
+      "destination": "/getting-started/onboarding/rtd-install",
       "permanent": true
     },
     {
@@ -2507,27 +2507,27 @@
     },
     {
       "source": "/guides/suiplay0x1",
-      "destination": "/sui-stack/suiplay0x1",
+      "destination": "/rtd-stack/suiplay0x1",
       "permanent": true
     },
     {
       "source": "/guides/suiplay0x1/best-practices",
-      "destination": "/sui-stack/suiplay0x1/best-practices",
+      "destination": "/rtd-stack/suiplay0x1/best-practices",
       "permanent": true
     },
     {
       "source": "/guides/suiplay0x1/integration",
-      "destination": "/sui-stack/suiplay0x1/integration",
+      "destination": "/rtd-stack/suiplay0x1/integration",
       "permanent": true
     },
     {
       "source": "/guides/suiplay0x1/migration-strategies",
-      "destination": "/sui-stack/suiplay0x1/migration-strategies",
+      "destination": "/rtd-stack/suiplay0x1/migration-strategies",
       "permanent": true
     },
     {
       "source": "/guides/suiplay0x1/wallet-integration",
-      "destination": "/sui-stack/suiplay0x1/wallet-integration",
+      "destination": "/rtd-stack/suiplay0x1/wallet-integration",
       "permanent": true
     },
     {
@@ -2967,17 +2967,17 @@
     },
     {
       "source": "/standards/sagat",
-      "destination": "/sui-stack/sagat",
+      "destination": "/rtd-stack/sagat",
       "permanent": true
     },
     {
       "source": "/onchain-finance/sagat",
-      "destination": "/sui-stack/sagat",
+      "destination": "/rtd-stack/sagat",
       "permanent": true
     },
     {
       "source": "/onchain-finance/sagat/",
-      "destination": "/sui-stack/sagat",
+      "destination": "/rtd-stack/sagat",
       "permanent": true
     },
     {
@@ -2997,7 +2997,7 @@
     },
     {
       "source": "/concepts/cryptography/system/checkpoint-verification",
-      "destination": "/develop/sui-architecture/checkpoint-verification",
+      "destination": "/develop/rtd-architecture/checkpoint-verification",
       "permanent": true
     },
     {
@@ -3012,7 +3012,7 @@
     },
     {
       "source": "/concepts/cryptography/zklogin",
-      "destination": "/sui-stack/zklogin-integration/zklogin",
+      "destination": "/rtd-stack/zklogin-integration/zklogin",
       "permanent": true
     },
     {
@@ -3032,7 +3032,7 @@
     },
     {
       "source": "/build/objects",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -3042,7 +3042,7 @@
     },
     {
       "source": "/concepts/cryptography/nautilus",
-      "destination": "/sui-stack/nautilus",
+      "destination": "/rtd-stack/nautilus",
       "permanent": true
     },
     {
@@ -3087,7 +3087,7 @@
     },
     {
       "source": "/concepts/object-model",
-      "destination": "/develop/sui-architecture/object-model",
+      "destination": "/develop/rtd-architecture/object-model",
       "permanent": true
     },
     {
@@ -3101,43 +3101,43 @@
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/indexer-functions",
+      "source": "/concepts/rtd-architecture/indexer-functions",
       "destination": "/develop/accessing-data/custom-indexer",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-architecture/transaction-lifecycle",
+      "source": "/concepts/rtd-architecture/transaction-lifecycle",
       "destination": "/develop/transactions/transaction-lifecycle",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-move-concepts/packages",
+      "source": "/concepts/rtd-move-concepts/packages",
       "destination": "/develop/write-move/package-overview",
       "permanent": true
     },
     {
-      "source": "/concepts/sui-move-concepts/packages/custom-policies",
+      "source": "/concepts/rtd-move-concepts/packages/custom-policies",
       "destination": "/develop/publish-upgrade-packages/custom-policies",
       "permanent": true
     },
     {
       "source": "/concepts/tokenomics/gas-pricing",
-      "destination": "/develop/transaction-payment/gas-in-sui",
+      "destination": "/develop/transaction-payment/gas-in-rtd",
       "permanent": true
     },
     {
       "source": "/concepts/tokenomics/proof-of-stake",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
       "source": "/concepts/tokenomics/storage-fund",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
-      "source": "/concepts/tokenomics/sui-coin",
-      "destination": "/develop/sui-architecture/tokenomics-overview",
+      "source": "/concepts/tokenomics/rtd-coin",
+      "destination": "/develop/rtd-architecture/tokenomics-overview",
       "permanent": true
     },
     {
@@ -3166,18 +3166,18 @@
       "permanent": true
     },
     {
-      "source": "/develop/sui-architecture/index",
-      "destination": "/develop/sui-architecture",
+      "source": "/develop/rtd-architecture/index",
+      "destination": "/develop/rtd-architecture",
       "permanent": true
     },
     {
-      "source": "/doc-updates/sui-migration-guide",
+      "source": "/doc-updates/rtd-migration-guide",
       "destination": "/getting-started",
       "permanent": true
     },
     {
       "source": "/explore/devnet",
-      "destination": "/develop/sui-architecture/networks",
+      "destination": "/develop/rtd-architecture/networks",
       "permanent": true
     },
     {
@@ -3212,7 +3212,7 @@
     },
     {
       "source": "/guides/developer/advanced/randomness-onchain",
-      "destination": "/sui-stack/on-chain-primitives/randomness-onchain",
+      "destination": "/rtd-stack/on-chain-primitives/randomness-onchain",
       "permanent": true
     },
     {
@@ -3241,63 +3241,63 @@
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/access-time",
-      "destination": "/sui-stack/on-chain-primitives/access-time",
+      "source": "/guides/developer/rtd-101/access-time",
+      "destination": "/rtd-stack/on-chain-primitives/access-time",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/building-ptb",
+      "source": "/guides/developer/rtd-101/building-ptb",
       "destination": "/develop/transactions/ptbs/building-ptb",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/coin-mgt",
+      "source": "/guides/developer/rtd-101/coin-mgt",
       "destination": "/onchain-finance/fungible-tokens",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/shared-owned",
+      "source": "/guides/developer/rtd-101/shared-owned",
       "destination": "/develop/objects/object-ownership/shared",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/sponsor-txn",
+      "source": "/guides/developer/rtd-101/sponsor-txn",
       "destination": "/develop/transaction-payment/sponsor-txn",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/using-events",
+      "source": "/guides/developer/rtd-101/using-events",
       "destination": "/develop/accessing-data/using-events",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/working-with-ptbs",
+      "source": "/guides/developer/rtd-101/working-with-ptbs",
       "destination": "/develop/transactions/ptbs",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/move-package-management",
+      "source": "/guides/developer/rtd-101/move-package-management",
       "destination": "/develop/manage-packages/move-package-management",
       "permanent": true
     },
     {
-      "source": "/guides/developer/sui-101/sign-and-send-txn",
+      "source": "/guides/developer/rtd-101/sign-and-send-txn",
       "destination": "/develop/transactions/transaction-auth/auth-overview",
       "permanent": true
     },
     {
       "source": "/learn/architecture/consensus",
-      "destination": "/develop/sui-architecture/consensus",
+      "destination": "/develop/rtd-architecture/consensus",
       "permanent": true
     },
     {
-      "source": "/learn/cryptography/sui-wallet-specs",
+      "source": "/learn/cryptography/rtd-wallet-specs",
       "destination": "/onchain-finance/asset-custody/wallets",
       "permanent": true
     },
     {
-      "source": "/learn/sui-glossary",
-      "destination": "/references/sui-glossary",
+      "source": "/learn/rtd-glossary",
+      "destination": "/references/rtd-glossary",
       "permanent": true
     },
     {
@@ -3306,23 +3306,23 @@
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_sui/sui_sui/:path*",
-      "destination": "/references/framework/sui_sui",
+      "source": "/references/framework/rtd_rtd/rtd_rtd/:path*",
+      "destination": "/references/framework/rtd_rtd",
       "permanent": true
     },
     {
-      "source": "/references/framework/sui_sui/transferx",
-      "destination": "/references/framework/sui_sui",
+      "source": "/references/framework/rtd_rtd/transferx",
+      "destination": "/references/framework/rtd_rtd",
       "permanent": true
     },
     {
-      "source": "/references/sui-api/beta-graph-ql",
-      "destination": "/references/sui-graphql",
+      "source": "/references/rtd-api/beta-graph-ql",
+      "destination": "/references/rtd-graphql",
       "permanent": true
     },
     {
-      "source": "/sui-jsonrpc",
-      "destination": "/references/sui-api",
+      "source": "/rtd-jsonrpc",
+      "destination": "/references/rtd-api",
       "permanent": true
     },
     {
@@ -3427,22 +3427,22 @@
     },
     {
       "source": "/getting-started/examples/consumer-app-zklogin",
-      "destination": "/sui-stack/zklogin-integration/consumer-app-zklogin",
+      "destination": "/rtd-stack/zklogin-integration/consumer-app-zklogin",
       "permanent": true
     },
     {
       "source": "/getting-started/examples/consumer-app-zklogin/",
-      "destination": "/sui-stack/zklogin-integration/consumer-app-zklogin",
+      "destination": "/rtd-stack/zklogin-integration/consumer-app-zklogin",
       "permanent": true
     },
     {
       "source": "/getting-started/examples/defi-trading-zklogin",
-      "destination": "/sui-stack/zklogin-integration/defi-trading-zklogin",
+      "destination": "/rtd-stack/zklogin-integration/defi-trading-zklogin",
       "permanent": true
     },
     {
       "source": "/getting-started/examples/defi-trading-zklogin/",
-      "destination": "/sui-stack/zklogin-integration/defi-trading-zklogin",
+      "destination": "/rtd-stack/zklogin-integration/defi-trading-zklogin",
       "permanent": true
     },
     {
@@ -3461,7 +3461,7 @@
       "permanent": true
     },
     {
-      "source": "/concepts/sui-move-concepts/testing",
+      "source": "/concepts/rtd-move-concepts/testing",
       "destination": "/develop/testing-debugging/testing",
       "permanent": true
     }
@@ -3586,7 +3586,7 @@
       "headers": [
         {
           "key": "Link",
-          "value": "</.well-known/mcp/server-card.json>; rel=\"mcp-server-card\"; type=\"application/json\", </.well-known/api-catalog>; rel=\"api-catalog\", </llms.txt>; rel=\"service-doc\"; type=\"text/plain\"; title=\"LLM-optimized documentation\", </sitemap.xml>; rel=\"sitemap\"; type=\"application/xml\", </robots.txt>; rel=\"robots\"; type=\"text/plain\", </references/sui-api>; rel=\"service-doc\"; title=\"Sui API Reference\""
+          "value": "</.well-known/mcp/server-card.json>; rel=\"mcp-server-card\"; type=\"application/json\", </.well-known/api-catalog>; rel=\"api-catalog\", </llms.txt>; rel=\"service-doc\"; type=\"text/plain\"; title=\"LLM-optimized documentation\", </sitemap.xml>; rel=\"sitemap\"; type=\"application/xml\", </robots.txt>; rel=\"robots\"; type=\"text/plain\", </references/rtd-api>; rel=\"service-doc\"; title=\"Rtd API Reference\""
         },
         {
           "key": "Vary",

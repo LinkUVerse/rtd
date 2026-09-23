@@ -38,8 +38,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Rules in Sui?
-  - How does rules work on Sui?
+  - What is Rules in Rtd?
+  - How does rules work on Rtd?
   - Why should I use rules?
 answer: >-
   Rule modules create programmable restrictions that apply to any action within
@@ -69,8 +69,8 @@ A rule module is a regular module with a `verify`-like function that typically t
 
 ```move
 module example::pass_rule {
-    use sui::tx_context;
-    use sui::token::{Self, ActionRequest, TokenPolicy};
+    use rtd::tx_context;
+    use rtd::token::{Self, ActionRequest, TokenPolicy};
 
     /// The Rule type
     public struct Pass has drop {}
@@ -108,14 +108,14 @@ The only attack vector available to the rule creator is upgrading the module and
 
 ## Configuration API
 
-The `sui::token` module defines the configuration API and has the following set of functions.
+The `rtd::token` module defines the configuration API and has the following set of functions.
 
 ### Add new configuration
 
 A rule must approve new configurations (the rule witness) and the `TokenPolicy` owner. The type of the configuration can be any as long as it has the `store` ability.
 
 ```move
-// module: sui::token
+// module: rtd::token
 public fun add_rule_config<T, Rule: drop, Config: store>(
     _rule: Rule,
     policy: &mut TokenPolicy<T>,
@@ -130,7 +130,7 @@ public fun add_rule_config<T, Rule: drop, Config: store>(
 Rules can read the configuration stored in the `TokenPolicy`.
 
 ```move
-// module: sui::token
+// module: rtd::token
 public fun rule_config<T, Rule: drop, Config: store>(
     _rule: Rule, policy: &TokenPolicy<T>
 ): &Config;
@@ -141,7 +141,7 @@ public fun rule_config<T, Rule: drop, Config: store>(
 A rule must approve configuration modifications (the rule witness) as well as the `TokenPolicy` owner.
 
 ```move
-// module: sui::token
+// module: rtd::token
 public fun rule_config_mut<T, Rule: drop, Config: store>(
     _rule: Rule, policy: &mut TokenPolicy<T>, policy_cap: &TokenPolicyCap<T>
 ): &mut Config;
@@ -152,7 +152,7 @@ public fun rule_config_mut<T, Rule: drop, Config: store>(
 A good practice for rules is to provide a method to remove the configuration, as a rule can use a custom type for it. However, a token owner can always call the `remove_rule_config` function to remove the configuration.
 
 ```move
-// module: sui::token
+// module: rtd::token
 public fun remove_rule_config<T, Rule, Config: store>(
     policy: &mut TokenPolicy<T>,
     policy_cap: &TokenPolicyCap<T>,

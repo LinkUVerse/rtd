@@ -174,13 +174,13 @@ mod tests {
                 version = 1
 
                 [env.mainnet]
-                chain-id = "35834a8a"
+                chain-id = "01020304"
                 original-published-id = "0x2"
                 latest-published-id = "0x3"
                 published-version = "3"
 
                 [env.testnet]
-                chain-id = "4c78adac"
+                chain-id = "05060708"
                 original-published-id = "0x5"
                 latest-published-id = "0x6"
                 published-version = "2"
@@ -198,13 +198,13 @@ mod tests {
         # This file SHOULD be committed to source control
 
         [published.mainnet]
-        chain-id = "35834a8a"
+        chain-id = "01020304"
         published-at = "0x0000000000000000000000000000000000000000000000000000000000000003"
         original-id = "0x0000000000000000000000000000000000000000000000000000000000000002"
         version = 3
 
         [published.testnet]
-        chain-id = "4c78adac"
+        chain-id = "05060708"
         published-at = "0x0000000000000000000000000000000000000000000000000000000000000006"
         original-id = "0x0000000000000000000000000000000000000000000000000000000000000005"
         version = 2
@@ -258,7 +258,7 @@ mod tests {
                 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
                 dependencies = [
                   { name = "P" },
-                  { name = "Sui" },
+                  { name = "Rtd" },
                 ]
 
                 [[move.package]]
@@ -269,7 +269,7 @@ mod tests {
                 [move.toolchain-version]
                 compiler-version = "1.30.1"
                 edition = "2024.beta"
-                flavor = "sui"
+                flavor = "rtd"
                 "###
             ),
         )
@@ -293,7 +293,7 @@ mod tests {
                 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
                 dependencies = [
                   { name = "P" },
-                  { name = "Sui" },
+                  { name = "Rtd" },
                 ]
 
                 [[move.package]]
@@ -304,9 +304,9 @@ mod tests {
                 [move.toolchain-version]
                 compiler-version = "1.30.1"
                 edition = "2024.beta"
-                flavor = "sui"
+                flavor = "rtd"
 
-                [pinned.testnet.Sui]
+                [pinned.testnet.Rtd]
                 source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
                 use_environment = "testnet"
                 manifest_digest = "ED5DEFBBF556EE89312E639A53F21DE24320F9B13C2087D3BFE2989D5B2B5DAF"
@@ -316,7 +316,7 @@ mod tests {
                 source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
                 use_environment = "testnet"
                 manifest_digest = "ED5DEFBBF556EE89312E639A53F21DE24320F9B13C2087D3BFE2989D5B2B5DAF"
-                deps = { sui = "Sui" }
+                deps = { rtd = "Rtd" }
                 "###
             ),
         )
@@ -333,7 +333,7 @@ mod tests {
         [move]
         version = 4
 
-        [pinned.testnet.Sui]
+        [pinned.testnet.Rtd]
         source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
         use_environment = "testnet"
         manifest_digest = "ED5DEFBBF556EE89312E639A53F21DE24320F9B13C2087D3BFE2989D5B2B5DAF"
@@ -343,7 +343,7 @@ mod tests {
         source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
         use_environment = "testnet"
         manifest_digest = "ED5DEFBBF556EE89312E639A53F21DE24320F9B13C2087D3BFE2989D5B2B5DAF"
-        deps = { sui = "Sui" }
+        deps = { rtd = "Rtd" }
         "###);
     }
 }

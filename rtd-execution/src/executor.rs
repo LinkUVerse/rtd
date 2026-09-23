@@ -1,0 +1,142 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use move_trace_format::format::MoveTraceBuilder;
+use std::sync::Arc;
+use rtd_protocol_config::ProtocolConfig;
+use rtd_types::execution::ExecutionTiming;
+use rtd_types::execution_params::ExecutionOrEarlyError;
+use rtd_types::storage::BackingStore;
+use rtd_types::transaction::GasData;
+use rtd_types::{
+    accumulator_root::UnsettledObjectFundsRead,
+    base_types::{RtdAddress, SystemObjectVersions},
+    committee::EpochId,
+    digests::TransactionDigest,
+    effects::TransactionEffects,
+    error::ExecutionError,
+    execution::{ExecutionResult, TypeLayoutStore},
+    execution_status::ExecutionFailure,
+    gas::RtdGasStatus,
+    inner_temporary_store::InnerTemporaryStore,
+    layout_resolver::LayoutResolver,
+    metrics::ExecutionMetrics,
+    transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
+};
+
+/// Abstracts over access to the VM across versions of the execution layer.
+pub trait Executor {
+    fn execute_transaction_to_effects(
+        &self,
+        store: &dyn BackingStore,
+        // Configuration
+        protocol_config: &ProtocolConfig,
+        metrics: Arc<ExecutionMetrics>,
+        enable_expensive_checks: bool,
+        execution_params: ExecutionOrEarlyError,
+        // Epoch
+        epoch_id: &EpochId,
+        epoch_timestamp_ms: u64,
+        // Transaction Inputs
+        input_objects: CheckedInputObjects,
+        // Versions of system objects this transaction may read.
+        system_object_versions: SystemObjectVersions,
+        unsettled_object_funds: &dyn UnsettledObjectFundsRead,
+        // Gas related
+        gas: GasData,
+        gas_status: RtdGasStatus,
+        // Transaction
+        transaction_kind: TransactionKind,
+        rewritten_inputs: Option<Vec<bool>>,
+        transaction_signer: RtdAddress,
+        transaction_digest: TransactionDigest,
+        trace_builder_opt: &mut Option<MoveTraceBuilder>,
+    ) -> (
+        InnerTemporaryStore,
+        RtdGasStatus,
+        TransactionEffects,
+        Vec<ExecutionTiming>,
+        Result<(), ExecutionFailure>,
+    );
+
+    /// Execution mode returns greater error information, primarily used in fullnode execution
+    /// as opposed to `execute_transaction_to_effects` which only includes basic `ExecutionFailure` error.
+    fn execute_transaction_to_effects_and_execution_error(
+        &self,
+        store: &dyn BackingStore,
+        protocol_config: &ProtocolConfig,
+        metrics: Arc<ExecutionMetrics>,
+        enable_expensive_checks: bool,
+        execution_params: ExecutionOrEarlyError,
+        epoch_id: &EpochId,
+        epoch_timestamp_ms: u64,
+        input_objects: CheckedInputObjects,
+        system_object_versions: SystemObjectVersions,
+        unsettled_object_funds: &dyn UnsettledObjectFundsRead,
+        gas: GasData,
+        gas_status: RtdGasStatus,
+        transaction_kind: TransactionKind,
+        _rewritten_inputs: Option<Vec<bool>>,
+        transaction_signer: RtdAddress,
+        transaction_digest: TransactionDigest,
+        trace_builder_opt: &mut Option<MoveTraceBuilder>,
+    ) -> (
+        InnerTemporaryStore,
+        RtdGasStatus,
+        TransactionEffects,
+        Vec<ExecutionTiming>,
+        Result<(), ExecutionError>,
+    );
+
+    fn dev_inspect_transaction(
+        &self,
+        store: &dyn BackingStore,
+        // Configuration
+        protocol_config: &ProtocolConfig,
+        metrics: Arc<ExecutionMetrics>,
+        enable_expensive_checks: bool,
+        execution_params: ExecutionOrEarlyError,
+        // Epoch
+        epoch_id: &EpochId,
+        epoch_timestamp_ms: u64,
+        // Transaction Inputs
+        input_objects: CheckedInputObjects,
+        system_object_versions: SystemObjectVersions,
+        // Gas related
+        gas: GasData,
+        gas_status: RtdGasStatus,
+        // Transaction
+        transaction_kind: TransactionKind,
+        rewritten_inputs: Option<Vec<bool>>,
+        transaction_signer: RtdAddress,
+        transaction_digest: TransactionDigest,
+        skip_all_checks: bool,
+    ) -> (
+        InnerTemporaryStore,
+        RtdGasStatus,
+        TransactionEffects,
+        Result<Vec<ExecutionResult>, ExecutionError>,
+    );
+
+    fn update_genesis_state(
+        &self,
+        store: &dyn BackingStore,
+        // Configuration
+        protocol_config: &ProtocolConfig,
+        metrics: Arc<ExecutionMetrics>,
+        // Epoch
+        epoch_id: EpochId,
+        epoch_timestamp_ms: u64,
+        // Genesis Digest
+        transaction_digest: &TransactionDigest,
+        // Transaction
+        input_objects: CheckedInputObjects,
+        pt: ProgrammableTransaction,
+    ) -> Result<InnerTemporaryStore, ExecutionError>;
+
+    fn type_layout_resolver<'r, 'vm: 'r, 'store: 'r>(
+        &'vm self,
+        protocol_config: &'vm ProtocolConfig,
+        store: Box<dyn TypeLayoutStore + 'store>,
+    ) -> Box<dyn LayoutResolver + 'r>;
+}

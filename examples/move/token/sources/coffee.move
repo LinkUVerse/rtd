@@ -1,15 +1,15 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// This example illustrates how to use the `Token` without a `TokenPolicy`. And
 /// only rely on `TreasuryCap` for minting and burning tokens.
 module examples::coffee;
 
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, TreasuryCap, Coin};
-use sui::sui::SUI;
-use sui::token::{Self, Token};
-use sui::tx_context::sender;
+use rtd::balance::{Self, Balance};
+use rtd::coin::{Self, TreasuryCap, Coin};
+use rtd::rtd::RTD;
+use rtd::token::{Self, Token};
+use rtd::tx_context::sender;
 
 /// Error code for incorrect amount.
 const EIncorrectAmount: u64 = 0;
@@ -17,20 +17,20 @@ const EIncorrectAmount: u64 = 0;
 /// Or trying to transfer but not enough points to pay the commission.
 const ENotEnoughPoints: u64 = 1;
 
-/// 10 SUI for a coffee.
+/// 10 RTD for a coffee.
 const COFFEE_PRICE: u64 = 10_000_000_000;
 
 /// OTW for the Token.
 public struct COFFEE has drop {}
 
 /// The shop that sells Coffee and allows to buy a Coffee if the customer
-/// has 10 SUI or 4 COFFEE points.
+/// has 10 RTD or 4 COFFEE points.
 public struct CoffeeShop has key {
     id: UID,
     /// The treasury cap for the `COFFEE` points.
     coffee_points: TreasuryCap<COFFEE>,
-    /// The SUI balance of the shop; the shop can sell Coffee for SUI.
-    balance: Balance<SUI>,
+    /// The RTD balance of the shop; the shop can sell Coffee for RTD.
+    balance: Balance<RTD>,
 }
 
 /// Event marking that a Coffee was purchased; transaction sender serves as
@@ -50,8 +50,8 @@ fun init(otw: COFFEE, ctx: &mut TxContext) {
         ctx,
     );
 
-    sui::transfer::public_freeze_object(metadata);
-    sui::transfer::share_object(CoffeeShop {
+    rtd::transfer::public_freeze_object(metadata);
+    rtd::transfer::share_object(CoffeeShop {
         coffee_points,
         id: object::new(ctx),
         balance: balance::zero(),
@@ -60,8 +60,8 @@ fun init(otw: COFFEE, ctx: &mut TxContext) {
 
 /// Buy a coffee from the shop. Emitted event is tracked by the real coffee
 /// shop and the customer gets a free coffee after 4 purchases.
-public fun buy_coffee(app: &mut CoffeeShop, payment: Coin<SUI>, ctx: &mut TxContext) {
-    // Check if the customer has enough SUI to pay for the coffee.
+public fun buy_coffee(app: &mut CoffeeShop, payment: Coin<RTD>, ctx: &mut TxContext) {
+    // Check if the customer has enough RTD to pay for the coffee.
     assert!(coin::value(&payment) == COFFEE_PRICE, EIncorrectAmount);
 
     let token = token::mint(&mut app.coffee_points, 1, ctx);
@@ -69,7 +69,7 @@ public fun buy_coffee(app: &mut CoffeeShop, payment: Coin<SUI>, ctx: &mut TxCont
 
     token::confirm_with_treasury_cap(&mut app.coffee_points, request, ctx);
     coin::put(&mut app.balance, payment);
-    sui::event::emit(CoffeePurchased {})
+    rtd::event::emit(CoffeePurchased {})
 }
 
 /// Claim a free coffee from the shop. Emitted event is tracked by the real
@@ -82,7 +82,7 @@ public fun claim_free(app: &mut CoffeeShop, points: Token<COFFEE>, ctx: &mut TxC
     // While we could use `burn`, spend illustrates another way of doing this
     let request = token::spend(points, ctx);
     token::confirm_with_treasury_cap(&mut app.coffee_points, request, ctx);
-    sui::event::emit(CoffeePurchased {})
+    rtd::event::emit(CoffeePurchased {})
 }
 
 /// We allow transfer of `COFFEE` points to other customers but we charge 1

@@ -3,7 +3,7 @@ title: Intent Signing
 description: >-
   Intent signing provides a compact domain separator to data signed by both user
   and authority signatures. Data that each signature commits to is called an
-  intent message, which all signatures on Sui must include.
+  intent message, which all signatures on Rtd must include.
 keywords:
   - intent
   - signing
@@ -42,15 +42,15 @@ builder_paths:
     step: Intent signing
     stage: Signing
 questions:
-  - What is Intent Signing in Sui?
-  - How do user signatures use intent messages on Sui?
-  - What are the intent scopes and app IDs in Sui signing?
+  - What is Intent Signing in Rtd?
+  - How do user signatures use intent messages on Rtd?
+  - What are the intent scopes and app IDs in Rtd signing?
 answer: >-
   Intent signing provides a compact domain separator to data signed by both user
   and authority signatures.
 ---
 
-An intent is a compact struct that serves as the domain separator for a message that a signature commits to. The data that the signature commits to is an intent message. All signatures in Sui must commit to an intent message rather than the message itself.
+An intent is a compact struct that serves as the domain separator for a message that a signature commits to. The data that the signature commits to is an intent message. All signatures in Rtd must commit to an intent message rather than the message itself.
 
 The intent signing standard provides a compact domain separator to the data being signed for both user signatures and authority signatures. It has several benefits:
 
@@ -125,13 +125,13 @@ Under the hood, the `new_secure` method in Rust and the `signData` method in Typ
 
 1.  Apply Blake2b hash to get the 32-byte digest.
 
-1.  Pass the digest to the signing API for each corresponding scheme of the signer. The supported signature schemes are pure Ed25519, ECDSA Secp256k1, and ECDSA Secp256r1. See [Sui Signatures](/develop/transactions/transaction-auth/auth-overview#signature-requirements) for requirements of each scheme.
+1.  Pass the digest to the signing API for each corresponding scheme of the signer. The supported signature schemes are pure Ed25519, ECDSA Secp256k1, and ECDSA Secp256r1. See [Rtd Signatures](/develop/transactions/transaction-auth/auth-overview#signature-requirements) for requirements of each scheme.
 
 ## Authority signature
 
 The authority signature is created using the protocol key. It does not use the external Blake2b-256 prehash that user signatures use. Instead, `AuthoritySignature::new_secure` BCS-serializes the `IntentMessage`, appends the 8-byte epoch, and passes the resulting `BCS(IntentMessage) || epoch` bytes directly to the BLS signer. In other words, the authority signs `intent || message || epoch`. Verification reconstructs the same bytes from the `IntentMessage` and the epoch, then checks them against the authority protocol public key, so the epoch is bound into every authority signature.
 
-Authority signatures use the internal intent scopes, such as `TransactionEffects`, `ProofOfPossession`, and `SenderSignedTransaction`. For all available intent scopes, see the `IntentScope` enum in [`crates/shared-crypto/src/intent.rs`](https://github.com/MystenLabs/sui/blob/main/crates/shared-crypto/src/intent.rs).
+Authority signatures use the internal intent scopes, such as `TransactionEffects`, `ProofOfPossession`, and `SenderSignedTransaction`. For all available intent scopes, see the `IntentScope` enum in [`crates/shared-crypto/src/intent.rs`](https://github.com/LinkUVerse/rtd/blob/main/crates/shared-crypto/src/intent.rs).
 
 ### Generating proof of possession for an authority
 
@@ -139,7 +139,7 @@ When an authority requests to join the network, the protocol public key and its 
 
 The proof of possession is a BLS signature created using the authority protocol private key, committed over the following message: `intent || pubkey || address || epoch`. The values are as follows:
 
-- `intent`: Serialized to `[5, 0, 0]` representing an intent with scope as `Proof of Possession`, `version` as `V0`, and `app_id` as `Sui`.
+- `intent`: Serialized to `[5, 0, 0]` representing an intent with scope as `Proof of Possession`, `version` as `V0`, and `app_id` as `Rtd`.
 
 - `pubkey`: The serialized public key bytes of the authority BLS protocol key.
 
@@ -147,14 +147,14 @@ The proof of possession is a BLS signature created using the authority protocol 
 
 - `epoch`: Serialized to `[0, 0, 0, 0, 0, 0, 0, 0]`.
 
-To generate a proof of possession in Rust, see [`generate_proof_of_possession`](https://github.com/MystenLabs/sui/blob/main/crates/sui-types/src/crypto.rs) in `crates/sui-types/src/crypto.rs`. That function builds the intent message with `Intent::sui_app(IntentScope::ProofOfPossession)`, sets the message to the protocol public key bytes concatenated with the authority account address, and signs it with the authority protocol key. For test vectors, see `fn test_proof_of_possession`.
+To generate a proof of possession in Rust, see [`generate_proof_of_possession`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-types/src/crypto.rs) in `crates/rtd-types/src/crypto.rs`. That function builds the intent message with `Intent::rtd_app(IntentScope::ProofOfPossession)`, sets the message to the protocol public key bytes concatenated with the authority account address, and signs it with the authority protocol key. For test vectors, see `fn test_proof_of_possession`.
 
 ## Verifying signatures in Move
 
-You can verify a personal-message signature onchain using the `sui::ed25519` or `sui::ecdsa_k1` module:
+You can verify a personal-message signature onchain using the `rtd::ed25519` or `rtd::ecdsa_k1` module:
 
 ```move
-use sui::ed25519;
+use rtd::ed25519;
 
 public fun verify_personal_message(
     signature: vector<u8>,
@@ -174,7 +174,7 @@ On the client side (TypeScript), produce the signature:
 
 ```typescript
 const { signature } = await wallet.signPersonalMessage({
-  message: new TextEncoder().encode('Hello from Sui'),
+  message: new TextEncoder().encode('Hello from Rtd'),
 });
 ```
 
@@ -186,6 +186,6 @@ When you sign application or offchain messages (for example, login challenges or
 
 :::info
 
-This page covers Sui transaction intent signing (the cryptographic envelope format). For cross-chain bridge integrations, see the [Wormhole](https://wormhole.com/docs/) or [Axelar](https://docs.axelar.dev/) documentation.
+This page covers Rtd transaction intent signing (the cryptographic envelope format). For cross-chain bridge integrations, see the [Wormhole](https://wormhole.com/docs/) or [Axelar](https://docs.axelar.dev/) documentation.
 
 :::

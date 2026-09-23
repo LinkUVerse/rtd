@@ -1,14 +1,14 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import {
 	ConnectButton,
 	useCurrentAccount,
 	useSignTransaction,
-	useSuiClient,
-} from '@mysten/dapp-kit';
-import { SuiTransactionBlockResponse } from '@mysten/sui/client';
-import { Transaction } from '@mysten/sui/transactions';
+	useRtdClient,
+} from '@linku/dapp-kit';
+import { RtdTransactionBlockResponse } from '@linku/rtd/client';
+import { Transaction } from '@linku/rtd/transactions';
 import { ComponentProps, ReactNode, useMemo, useState } from 'react';
 
 import { sponsorTransaction } from './utils/sponsorTransaction';
@@ -39,7 +39,7 @@ const CodePanel = ({
 );
 
 export function App() {
-	const client = useSuiClient();
+	const client = useRtdClient();
 	const currentAccount = useCurrentAccount();
 	const { mutateAsync: signTransaction } = useSignTransaction();
 	const [loading, setLoading] = useState(false);
@@ -49,7 +49,7 @@ export function App() {
 	const [signedTx, setSignedTx] = useState<Awaited<ReturnType<typeof signTransaction>> | null>(
 		null,
 	);
-	const [executedTx, setExecutedTx] = useState<SuiTransactionBlockResponse | null>(null);
+	const [executedTx, setExecutedTx] = useState<RtdTransactionBlockResponse | null>(null);
 
 	const tx = useMemo(() => {
 		if (!currentAccount) return null;

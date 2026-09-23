@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -373,19 +373,19 @@ function evaluateGoalRequires(goal, body, data, headings) {
         /How do I [a-z]+ [a-z]+(ture|ure|icy|ity)\?$/i,           // "How do I user signature?"
         /How do I [a-z]+ and [a-z]+\?$/i,                          // "How do I create and share?" (no object)
         /\b(\w{4,}) \1\b/i,                                        // repeated word ("reference reference")
-        /How do I (the|a|an|sui|set up sui|operator|data) /i,     // bad starts
+        /How do I (the|a|an|rtd|set up rtd|operator|data) /i,     // bad starts
         /verify that .* worked\?/i,                                 // template leak
         /need before I can .*\?/i,                                  // template leak
         /overview [a-z]+-[a-z]+\?/i,                                // anchor fragment leak
         /How do I [a-z]+ [a-z]+ [a-z]+-[a-z]+\?$/i,               // "How do I upgradecap upgradecap?"
-        /How do I build a [a-z]+ on Sui\?$/i,                      // "How do I build a plinko on Sui?" (single word)
-        /How do I build a [a-z]+ (testing|apps) on Sui/i,         // "How do I build a scenario testing on Sui?"
+        /How do I build a [a-z]+ on Rtd\?$/i,                      // "How do I build a plinko on Rtd?" (single word)
+        /How do I build a [a-z]+ (testing|apps) on Rtd/i,         // "How do I build a scenario testing on Rtd?"
         /How do I add your /i,                                      // "How do I add your sdk?"
         /^What you learn\??$/i,                                     // heading fragment "What you learn?"
-        /^What is [A-Z][a-z]+ a [A-Z]/i,                          // "What is Build a Custom Indexer in Sui?"
-        /(in|on) Sui (in|on) Sui/i,                                // "What is X on Sui in Sui?"
-        /-> Sui in Sui/i,                                          // "What is Ethereum -> Sui in Sui?"
-        /\bon sui\b/,                                               // lowercase "on sui" is always a template artifact (proper noun is "Sui")
+        /^What is [A-Z][a-z]+ a [A-Z]/i,                          // "What is Build a Custom Indexer in Rtd?"
+        /(in|on) Rtd (in|on) Rtd/i,                                // "What is X on Rtd in Rtd?"
+        /-> Rtd in Rtd/i,                                          // "What is Ethereum -> Rtd in Rtd?"
+        /\bon rtd\b/,                                               // lowercase "on rtd" is always a template artifact (proper noun is "Rtd")
       ];
       let junkCount = 0;
       if (has) {

@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -317,11 +317,11 @@ export default function ImportContent({
 
   let out = content
     .replace(
-      /^\/\/\s*Copyright.*Mysten Labs.*\n\/\/\s*SPDX-License.*?\n?$/gim,
+      /^\/\/\s*Copyright.*LinkU Labs.*\n\/\/\s*SPDX-License.*?\n?$/gim,
       "",
     )
     .replace(
-      /\[dependencies\]\nsui\s?=\s?{\s?local\s?=.*sui-framework.*\n/i,
+      /\[dependencies\]\nsui\s?=\s?{\s?local\s?=.*rtd-framework.*\n/i,
       "[dependencies]",
     );
 

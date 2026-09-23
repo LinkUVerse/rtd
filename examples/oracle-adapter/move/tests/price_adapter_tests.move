@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
 module oracle_adapter::price_adapter_tests;
 
 use oracle_adapter::price_adapter as pa;
-use sui::clock;
+use rtd::clock;
 
 // The reads that touch a PriceInfoObject (`price_from_pyth`, `price_or_fallback`)
 // cannot be unit-tested, because a PriceInfoObject cannot be minted in a test.

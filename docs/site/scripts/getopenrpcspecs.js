@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const axios = require('axios');
@@ -28,7 +28,7 @@ const downloadFile = async (branch) => {
 
   try {
     const res = await axios.get(
-      `https://raw.githubusercontent.com/MystenLabs/sui/${branch}/crates/sui-open-rpc/spec/openrpc.json`
+      `https://raw.githubusercontent.com/LinkUVerse/rtd/${branch}/crates/rtd-open-rpc/spec/openrpc.json`
     );
 
     if (fs.existsSync(backupFile)) {

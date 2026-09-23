@@ -1,1 +1,1 @@
-The runbook is now located at sui/docs/content/guides/operator/bridge-node-configuration.mdx. You can view it online at https://docs.sui.io/guides/operator/bridge-node-configuration
+The runbook is now located at rtd/docs/content/guides/operator/bridge-node-configuration.mdx. You can view it online at https://docs.rtd.io/guides/operator/bridge-node-configuration

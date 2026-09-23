@@ -1,7 +1,7 @@
 ---
 title: Hashing
 description: >-
-  Sui supports SHA2-256, SHA3-256, Keccak256, and Blake2b-256 cryptographic hash
+  Rtd supports SHA2-256, SHA3-256, Keccak256, and Blake2b-256 cryptographic hash
   functions.
 keywords:
   - SHA2-256
@@ -15,7 +15,7 @@ keywords:
   - cryptographic hash
 goal:
   description: >-
-    Reader understands sui supports SHA2-256, SHA3-256, Keccak256, and
+    Reader understands rtd supports SHA2-256, SHA3-256, Keccak256, and
     Blake2b-256 cryptographic hash functions
   requires:
     - has_frontmatter:
@@ -38,26 +38,26 @@ builder_paths:
     step: Content hashing
     stage: Agent Write
 questions:
-  - What is Hashing in Sui?
-  - How does hashing work on Sui?
+  - What is Hashing in Rtd?
+  - How does hashing work on Rtd?
   - Why should I use hashing?
 answer: >-
-  Sui supports SHA2-256, SHA3-256, Keccak256, and Blake2b-256 cryptographic hash
+  Rtd supports SHA2-256, SHA3-256, Keccak256, and Blake2b-256 cryptographic hash
   functions.
 ---
 
-Cryptographic hash functions map arbitrary-length input to a fixed-length output (the hash value). These functions are one-way, meaning you cannot recover the input from the hash, and collision-resistant, meaning you cannot find two different inputs that produce the same hash. You use hash functions on Sui for data integrity verification, commitment schemes, and content addressing.
+Cryptographic hash functions map arbitrary-length input to a fixed-length output (the hash value). These functions are one-way, meaning you cannot recover the input from the hash, and collision-resistant, meaning you cannot find two different inputs that produce the same hash. You use hash functions on Rtd for data integrity verification, commitment schemes, and content addressing.
 
-Sui supports the following cryptographic hash functions:
+Rtd supports the following cryptographic hash functions:
 
 | Hash function | Module | Output size | Use case |
 |---|---|---|---|
 | SHA2-256 | `std::hash::sha2_256` | 32 bytes | General-purpose hashing, interoperability with Bitcoin and TLS |
 | SHA3-256 | `std::hash::sha3_256` | 32 bytes | General-purpose hashing, NIST-standardized alternative to SHA2 |
-| Keccak256 | `sui::hash::keccak256` | 32 bytes | Ethereum compatibility (Keccak256 is the hash function used in Ethereum for address derivation and signatures) |
-| Blake2b-256 | `sui::hash::blake2b256` | 32 bytes | High-performance hashing, used internally by Sui for object ID computation |
+| Keccak256 | `rtd::hash::keccak256` | 32 bytes | Ethereum compatibility (Keccak256 is the hash function used in Ethereum for address derivation and signatures) |
+| Blake2b-256 | `rtd::hash::blake2b256` | 32 bytes | High-performance hashing, used internally by Rtd for object ID computation |
 
-SHA2-256 and SHA3-256 are in the Move Standard Library (`std::hash`). Keccak256 and Blake2b-256 are in the Sui Framework (`sui::hash`). The difference affects how you import them in your module.
+SHA2-256 and SHA3-256 are in the Move Standard Library (`std::hash`). Keccak256 and Blake2b-256 are in the Rtd Framework (`rtd::hash`). The difference affects how you import them in your module.
 
 ## Usage
 
@@ -66,9 +66,9 @@ The SHA2-256 and SHA3-256 hash functions are available in the Move Standard Libr
 ```move
 module test::hashing_std {
     use std::hash;
-    use sui::object::{Self, UID};
-    use sui::tx_context::TxContext;
-    use sui::transfer;
+    use rtd::object::{Self, UID};
+    use rtd::tx_context::TxContext;
+    use rtd::transfer;
     use std::vector;
 
     /// Object that holds the output hash value.
@@ -88,14 +88,14 @@ module test::hashing_std {
 }
 ```
 
-The Keccak256 and Blake2b-256 hash functions are available through the `sui::hash` module in the Sui Move Library. An example of how to use the Keccak256 hash function in a smart contract is shown below. Notice that here, the input to the hash function is given as a reference. This is the case for both Keccak256 and Blake2b-256.
+The Keccak256 and Blake2b-256 hash functions are available through the `rtd::hash` module in the Rtd Move Library. An example of how to use the Keccak256 hash function in a smart contract is shown below. Notice that here, the input to the hash function is given as a reference. This is the case for both Keccak256 and Blake2b-256.
 
 ```move
-module test::hashing_sui {
-    use sui::hash;
-    use sui::object::{Self, UID};
-    use sui::tx_context::TxContext;
-    use sui::transfer;
+module test::hashing_rtd {
+    use rtd::hash;
+    use rtd::object::{Self, UID};
+    use rtd::tx_context::TxContext;
+    use rtd::transfer;
     use std::vector;
 
     /// Object that holds the output hash value.

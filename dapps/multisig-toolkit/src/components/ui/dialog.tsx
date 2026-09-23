@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';

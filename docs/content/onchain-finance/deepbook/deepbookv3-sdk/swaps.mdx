@@ -42,7 +42,7 @@ builder_paths:
     stage: DeFi SDK
 questions:
   - How do I use the Swaps SDK?
-  - What is Swaps in Sui?
+  - What is Swaps in Rtd?
   - What methods does the Swaps provide?
 answer: Learn how to use the DeepBookV3 SDK to interact with a swap-like interface.
 ---
@@ -93,7 +93,7 @@ Use `swapExactQuantity` to swap an exact quantity in either direction (base to q
   - `quoteCoin`: Optional `TransactionArgument` for quote coin input.
   - `deepCoin`: Optional `TransactionArgument` for DEEP coin input.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="swapExactQuantity" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="swapExactQuantity" signatureOnly/>
 
 ### swapExactQuantityWithManager
 
@@ -113,7 +113,7 @@ Use `swapExactQuantityWithManager` to swap an exact quantity using a balance man
   - `baseCoin`: Optional `TransactionArgument` for base coin input.
   - `quoteCoin`: Optional `TransactionArgument` for quote coin input.
 
-<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="MystenLabs" repo="ts-sdks" fun="swapExactQuantityWithManager" signatureOnly/>
+<ImportContent source="packages/deepbook-v3/src/transactions/deepbook.ts" mode="code" org="LinkUVerse" repo="ts-sdks" fun="swapExactQuantityWithManager" signatureOnly/>
 
 ### Examples
 
@@ -122,8 +122,8 @@ The following examples demonstrate custom swap functions that you can place into
 ```tsx
 swapExactBaseForQuote = (tx: Transaction) => {
   const [baseOut, quoteOut, deepOut] = this.deepBook.swapExactBaseForQuote({
-    poolKey: 'SUI_DBUSDC',
-    amount: 1, // amount of SUI to swap
+    poolKey: 'RTD_DBUSDC',
+    amount: 1, // amount of RTD to swap
     deepAmount: 1, // amount of DEEP to pay as fees, excess is returned
     minOut: 0.1, // minimum amount of DBUSDC to receive or transaction fails
   })(tx);
@@ -134,10 +134,10 @@ swapExactBaseForQuote = (tx: Transaction) => {
 
 swapExactQuoteForBase = (tx: Transaction) => {
   const [baseOut, quoteOut, deepOut] = this.deepBook.swapExactQuoteForBase({
-    poolKey: 'SUI_DBUSDC',
+    poolKey: 'RTD_DBUSDC',
     amount: 1, // amount of DBUSDC to swap
     deepAmount: 1, // amount of DEEP to pay as fees, excess is returned
-    minOut: 0.1, // minimum amount of SUI to receive or transaction fails
+    minOut: 0.1, // minimum amount of RTD to receive or transaction fails
   })(tx);
 
   // Transfer received coins to own address

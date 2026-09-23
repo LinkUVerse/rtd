@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCurrentAccount } from "@mysten/dapp-kit";
-import { isValidSuiAddress, normalizeSuiAddress } from "@mysten/sui/utils";
+import { useCurrentAccount } from "@linku/dapp-kit";
+import { isValidRtdAddress, normalizeRtdAddress } from "@linku/rtd/utils";
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Box, Button, Em, Flex, Separator, Spinner, Text, TextField } from "@radix-ui/themes";
 import { useTransactions } from "hooks/useTransactions";
@@ -118,6 +118,6 @@ function normalizedAddress(address?: string): string | null {
         return null;
     }
 
-    address = normalizeSuiAddress(address);
-    return isValidSuiAddress(address) ? address : null;
+    address = normalizeRtdAddress(address);
+    return isValidRtdAddress(address) ? address : null;
 }

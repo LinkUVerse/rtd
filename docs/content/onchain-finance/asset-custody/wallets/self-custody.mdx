@@ -1,8 +1,8 @@
 ---
 title: Self-Custodial Wallets
 description: >-
-  Learn about self-custodial wallets on Sui,
-  how to integrate any Wallet Standard wallet into your app using Sui dApp Kit.
+  Learn about self-custodial wallets on Rtd,
+  how to integrate any Wallet Standard wallet into your app using Rtd dApp Kit.
 keywords:
   - wallet
   - self-custodial
@@ -14,7 +14,7 @@ keywords:
   - dapp-kit-core
 goal:
   description: >-
-    Reader can learn about self-custodial wallets on Sui
+    Reader can learn about self-custodial wallets on Rtd
   requires:
     - has_frontmatter:
         - title
@@ -39,14 +39,14 @@ builder_paths:
     step: Self-custody wallets
     stage: Wallets & Funding
 questions:
-  - What is Self-Custodial Wallets in Sui?
-  - How does self-custodial wallets work on Sui?
+  - What is Self-Custodial Wallets in Rtd?
+  - How does self-custodial wallets work on Rtd?
   - Why should I use self-custodial wallets?
 answer: >-
-  Learn about self-custodial wallets on Sui, how to integrate any Wallet Standard wallet into your app using Sui dApp Kit.
+  Learn about self-custodial wallets on Rtd, how to integrate any Wallet Standard wallet into your app using Rtd dApp Kit.
 ---
 
-A self-custodial wallet stores your private key on a device you control. No third party holds the key, and no third party can authorize transactions on your behalf. If you lose the device and your recovery passphrase, access to your assets is permanently lost. Every self-custodial wallet compatible with Sui implements the [Wallet Standard](/onchain-finance/asset-custody/wallets/wallet-standard), which means [Sui dApp Kit](https://sdk.mystenlabs.com/dapp-kit) and other apps can discover and connect to them automatically, without any wallet-specific code.
+A self-custodial wallet stores your private key on a device you control. No third party holds the key, and no third party can authorize transactions on your behalf. If you lose the device and your recovery passphrase, access to your assets is permanently lost. Every self-custodial wallet compatible with Rtd implements the [Wallet Standard](/onchain-finance/asset-custody/wallets/wallet-standard), which means [Rtd dApp Kit](https://sdk.linkuverse.com/dapp-kit) and other apps can discover and connect to them automatically, without any wallet-specific code.
 
 :::tip
 
@@ -58,45 +58,45 @@ Because you are the sole custodian, have a recovery and key rotation plan before
 
 [Ledger](https://www.ledger.com/) is a hardware wallet that stores private keys on a dedicated secure element chip physically isolated from your computer or phone. Transactions are signed on the device itself, so the private key never leaves the hardware.
 
-On Sui, Ledger supports the following:
+On Rtd, Ledger supports the following:
 
-- Sending and receiving SUI and Sui tokens natively through Ledger Live
+- Sending and receiving RTD and Rtd tokens natively through Ledger Live
 - Clear Signing, which displays human-readable transaction details on the device screen before you confirm anything
-- Connecting to third-party Sui wallets and apps that support hardware signers
+- Connecting to third-party Rtd wallets and apps that support hardware signers
 
-To use Ledger with Sui, install the Sui app on your Ledger device through [Ledger Wallet](https://shop.ledger.com/pages/ledger-wallet). Connect your Ledger device to a wallet such as Ledger Wallet or a compatible Sui wallet such as [Slush](/onchain-finance/asset-custody/wallets/slush).
+To use Ledger with Rtd, install the Rtd app on your Ledger device through [Ledger Wallet](https://shop.ledger.com/pages/ledger-wallet). Connect your Ledger device to a wallet such as Ledger Wallet or a compatible Rtd wallet such as [Slush](/onchain-finance/asset-custody/wallets/slush).
 
 ## App integration
 
-The [Sui dApp Kit](https://sdk.mystenlabs.com/dapp-kit) is the official SDK for building Sui apps. Any wallet that implements the Wallet Standard, including Ledger, is detected automatically and appears in the connection UI without any wallet-specific configuration.
+The [Rtd dApp Kit](https://sdk.linkuverse.com/dapp-kit) is the official SDK for building Rtd apps. Any wallet that implements the Wallet Standard, including Ledger, is detected automatically and appears in the connection UI without any wallet-specific configuration.
 
-Sui dApp Kit 2.0 consists of two packages:
+Rtd dApp Kit 2.0 consists of two packages:
 
-- `@mysten/dapp-kit-core`: Framework-agnostic core that works with vanilla JavaScript, React, Vue, or any other framework.
-- `@mysten/dapp-kit-react`: React bindings built on top of the core package, including hooks and pre-built components.
+- `@linku/dapp-kit-core`: Framework-agnostic core that works with vanilla JavaScript, React, Vue, or any other framework.
+- `@linku/dapp-kit-react`: React bindings built on top of the core package, including hooks and pre-built components.
 
 ### Install
 
 For React applications:
 
 ```bash
-npm i @mysten/dapp-kit-react @mysten/sui
+npm i @linku/dapp-kit-react @linku/rtd
 ```
 
 For vanilla JavaScript or other frameworks:
 
 ```bash
-npm i @mysten/dapp-kit-core @mysten/sui
+npm i @linku/dapp-kit-core @linku/rtd
 ```
 
 ### Set up a dApp Kit instance
 
-Create a configuration file to initialize your dApp Kit instance. The `createDAppKit` function manages wallet connections, network configuration, and Sui client access.
+Create a configuration file to initialize your dApp Kit instance. The `createDAppKit` function manages wallet connections, network configuration, and Rtd client access.
 
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-core/src/core/index.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="createDAppKit"
   signatureOnly
@@ -107,7 +107,7 @@ Create a configuration file to initialize your dApp Kit instance. The `createDAp
 |---|---|---|
 | `networks` | Yes | List of networks the app supports |
 | `defaultNetwork` | No | Initial network. Defaults to first in the `networks` array |
-| `createClient` | Yes | Factory function that returns a `SuiClient` for a given network |
+| `createClient` | Yes | Factory function that returns a `RtdClient` for a given network |
 | `autoConnect` | No | Reconnects to the last used wallet on load. Defaults to `true` |
 | `enableBurnerWallet` | No | Enables a development-only burner wallet. Defaults to `false` |
 | `walletInitializers` | No | Custom wallet registrations for wallets outside the Wallet Standard |
@@ -120,7 +120,7 @@ Wrap your application with `DAppKitProvider` to make all hooks available through
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/components/DAppKitProvider.tsx"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="DAppKitProvider"
   noComments
@@ -143,7 +143,7 @@ Use hooks to access information about the connected wallet and account:
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/hooks/useWalletConnection.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="useWalletConnection"
   noComments
@@ -152,7 +152,7 @@ Use hooks to access information about the connected wallet and account:
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/hooks/useCurrentWallet.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="useCurrentWallet"
   noComments
@@ -161,7 +161,7 @@ Use hooks to access information about the connected wallet and account:
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/hooks/useCurrentAccount.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="useCurrentAccount"
   noComments
@@ -172,7 +172,7 @@ Use hooks to access information about the connected wallet and account:
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/hooks/useWallets.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="useWallets"
   noComments
@@ -183,13 +183,13 @@ Use hooks to access information about the connected wallet and account:
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/hooks/useDAppKit.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="useDAppKit"
   noComments
 />
 
-When the user is connected through a hardware wallet such as Ledger, `signAndExecuteTransaction` routes the signing request to the device. Once the user approves on the hardware device, the host wallet submits the signed transaction to the Sui network and returns the digest and effects to your app.
+When the user is connected through a hardware wallet such as Ledger, `signAndExecuteTransaction` routes the signing request to the device. Once the user approves on the hardware device, the host wallet submits the signed transaction to the Rtd network and returns the digest and effects to your app.
 
 ### Preferred wallets
 
@@ -199,9 +199,9 @@ Use `preferredWallets` in `createDAppKit` to sort specific wallets to the top of
 export const dAppKit = createDAppKit({
   networks: ['mainnet'],
   createClient: (network) =>
-    new SuiGrpcClient({ network, baseUrl: GRPC_URLS[network] }),
+    new RtdGrpcClient({ network, baseUrl: GRPC_URLS[network] }),
   walletInitializers: [],
 });
 ```
 
-Wallet ordering and filtering can also be controlled through the [`ConnectModal` component](https://sdk.mystenlabs.com/dapp-kit/web-components/connect-modal).
+Wallet ordering and filtering can also be controlled through the [`ConnectModal` component](https://sdk.linkuverse.com/dapp-kit/web-components/connect-modal).

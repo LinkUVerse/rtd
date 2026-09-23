@@ -28,7 +28,7 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I set up the Sui GraphQL and indexer stack?
+  - How do I set up the Rtd GraphQL and indexer stack?
   - What infrastructure do I need for the general-purpose indexer?
   - How do I configure the indexer for production?
 answer: >-
@@ -39,11 +39,11 @@ answer: >-
 
 <ImportContent source="indexer-graphql" mode="snippet" />
 
-See [Sui Data Access](/develop/accessing-data/data-serving) for more information on how the stack serves application queries.
+See [Rtd Data Access](/develop/accessing-data/data-serving) for more information on how the stack serves application queries.
 
 ## Production fullnode endpoints
 
-The `https://fullnode.mainnet.sui.io:443`, `https://fullnode.testnet.sui.io:443`, and `https://fullnode.devnet.sui.io:443` endpoints are public-good services for testing only. They are not intended for a production indexer or GraphQL stack. For every fullnode URL in this guide, use a production-grade gRPC endpoint from an [RPC provider](/develop/accessing-data/rpc-providers) with sufficient capacity and retention for your workload.
+The `https://fullnode.mainnet.rtd.io:443`, `https://fullnode.testnet.rtd.io:443`, and `https://fullnode.devnet.rtd.io:443` endpoints are public-good services for testing only. They are not intended for a production indexer or GraphQL stack. For every fullnode URL in this guide, use a production-grade gRPC endpoint from an [RPC provider](/develop/accessing-data/rpc-providers) with sufficient capacity and retention for your workload.
 
 ## Requester Pays checkpoint buckets {#requester-pays}
 
@@ -65,7 +65,7 @@ The indexer consists of multiple pipelines that each read, transform, and write 
 - **CPU:** 2 cores per instance
 - **Memory:** 4GB per instance
 
-Internally at Mysten Labs, indexer instances use 8 CPUs and 16 GiB of memory for backfill, and scale down to 0.5 CPU and 1 GiB of memory for normal operation at network tip.
+Internally at LinkU Labs, indexer instances use 8 CPUs and 16 GiB of memory for backfill, and scale down to 0.5 CPU and 1 GiB of memory for normal operation at network tip.
 
 #### Storage requirements
 The general-purpose indexer writes to a Postgres database. The storage footprint estimations outlined below are based on the network as of early 2026, and might fluctuate in relation to network growth. These numbers should be seen as directional rather than exact figures.
@@ -104,7 +104,7 @@ A 30-day retention adds 1.8 TB on top, while a 90-day retention contributes up t
 | cp_sequence_numbers | 10 | 5 |
 | **TOTAL** | **698–779** | **2,430–3,165** |
 
-### Run `sui-indexer-alt`
+### Run `rtd-indexer-alt`
 
 Run production ingestion in 2 phases: backfill from the full-retention Requester Pays GCS bucket, then stop the backfill process and restart from the saved watermarks with fullnode gRPC for steady state. Run 1 indexer process for each configuration file and assign every co-located process a unique metrics address.
 
@@ -113,7 +113,7 @@ Run production ingestion in 2 phases: backfill from the full-retention Requester
 Unprunable pipelines must start at genesis:
 
 ```sh
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config <CONFIG_FILE> \
     --database-url <DATABASE_URL> \
     --remote-store-gcs <REMOTE_STORE_GCS_BUCKET> \
@@ -124,7 +124,7 @@ $ sui-indexer-alt indexer \
 Prunable pipelines can start at a checkpoint based on their retention period:
 
 ```sh
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config <CONFIG_FILE> \
     --database-url <DATABASE_URL> \
     --remote-store-gcs <REMOTE_STORE_GCS_BUCKET> \
@@ -141,7 +141,7 @@ For prunable pipelines, calculate the `first-checkpoint` based on your retention
 | --- | --- |
 | `<CONFIG_FILE>` | Path to indexer configuration file. |
 | `<DATABASE_URL>` | Postgres database connection string. |
-| `<REMOTE_STORE_GCS_BUCKET>` | Full-retention GCS bucket name. Use `mysten-mainnet-checkpoints-use4` for Mainnet or `mysten-testnet-checkpoints-use4` for Testnet. |
+| `<REMOTE_STORE_GCS_BUCKET>` | Full-retention GCS bucket name. Use `linku-mainnet-checkpoints-use4` for Mainnet or `linku-testnet-checkpoints-use4` for Testnet. |
 | `<CHECKPOINT_NUMBER>` | For prunable pipelines only, the checkpoint at which indexing starts. |
 | `<UNIQUE_METRICS_ADDRESS>` | Prometheus bind address unique to this process, for example `127.0.0.1:9184`. |
 
@@ -150,10 +150,10 @@ For prunable pipelines, calculate the `first-checkpoint` based on your retention
 **Unprunable pipeline from genesis:**
 
 ```sh
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config unpruned.toml \
     --database-url postgres://username:password@localhost:5432/database \
-    --remote-store-gcs mysten-mainnet-checkpoints-use4 \
+    --remote-store-gcs linku-mainnet-checkpoints-use4 \
     --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}" \
     --metrics-address 127.0.0.1:9184
 ```
@@ -161,10 +161,10 @@ $ sui-indexer-alt indexer \
 **Prunable pipeline with 30-day retention (assuming current checkpoint is 100,000,000):**
 
 ```sh
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config events.toml \
     --database-url postgres://username:password@localhost:5432/database \
-    --remote-store-gcs mysten-mainnet-checkpoints-use4 \
+    --remote-store-gcs linku-mainnet-checkpoints-use4 \
     --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}" \
     --first-checkpoint 89632000 \
     --metrics-address 127.0.0.1:9187
@@ -177,7 +177,7 @@ After a backfill process reaches the network tip, stop it and restart the same c
 ```sh
 $ export FULLNODE_GRPC_URL=https://your-rpc-provider.example:443
 
-$ sui-indexer-alt indexer \
+$ rtd-indexer-alt indexer \
     --config events.toml \
     --database-url postgres://username:password@localhost:5432/database \
     --rpc-api-url "$FULLNODE_GRPC_URL" \
@@ -189,7 +189,7 @@ If recovery requires checkpoints outside the fullnode's retention, stop the proc
 
 :::info
 
-For checkpoint ingestion, the public `https://checkpoints.mainnet.sui.io` and `https://checkpoints.testnet.sui.io` stores are for testing only. Do not use them for production backfill, recovery, fallback, or steady state. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources) for the source matrix.
+For checkpoint ingestion, the public `https://checkpoints.mainnet.rtd.io` and `https://checkpoints.testnet.rtd.io` stores are for testing only. Do not use them for production backfill, recovery, fallback, or steady state. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources) for the source matrix.
 
 :::
 
@@ -207,7 +207,7 @@ min-cohort-boundary = 25000
 :::info
 The example configurations linked below use a fixed concurrency of 20 for simplicity, but this leads to longer backfill times.
 When backfilling a pipeline, consider setting the `ingest-concurrency` to a higher initial concurrency, such as `{ kind = "adaptive", initial = 200, min = 50, max = 2000 }`. The indexer automatically adjusts concurrency based on current load and performance.
-Once caught up to network tip, you can manually set the max concurrency to a lower value. Mysten-internal indexers are capped at 20.
+Once caught up to network tip, you can manually set the max concurrency to a lower value. LinkU-internal indexers are capped at 20.
 :::
 
 <table>
@@ -382,16 +382,16 @@ The restore command reads from two distinct sources:
 1. Exactly 1 formal snapshot source, such as `--http`, `--gcs`, `--azure`, `--s3`, or `--local`.
 1. A required `--remote-store-url`. The restorer uses this store to map the snapshot epoch to its ending checkpoint and fetch that checkpoint; it is not the post-restore catch-up source.
 
-Mainnet and Testnet restores can use `https://checkpoints.mainnet.sui.io` or `https://checkpoints.testnet.sui.io` for `--remote-store-url`, respectively.
+Mainnet and Testnet restores can use `https://checkpoints.mainnet.rtd.io` or `https://checkpoints.testnet.rtd.io` for `--remote-store-url`, respectively.
 
 ```sh
 $ export CONSISTENT_STORE_PATH=/path/to/consistent-store
 $ mkdir -p "$(dirname "$CONSISTENT_STORE_PATH")"
 
-$ sui-indexer-alt-consistent-store restore \
+$ rtd-indexer-alt-consistent-store restore \
     --database-path "$CONSISTENT_STORE_PATH" \
-    --http https://formal-snapshot.mainnet.sui.io \
-    --remote-store-url https://checkpoints.mainnet.sui.io \
+    --http https://formal-snapshot.mainnet.rtd.io \
+    --remote-store-url https://checkpoints.mainnet.rtd.io \
     --object-file-concurrency 5 \
     --pipeline address_balances \
     --pipeline balances \
@@ -404,7 +404,7 @@ $ sui-indexer-alt-consistent-store restore \
 | **CLI parameter** | **Description** |
 | --- | --- |
 | `--database-path` | Empty path where the RocksDB database is created. |
-| `--http`, `--gcs`, `--azure`, `--s3`, or `--local` | Formal snapshot source. Specify exactly one. See [managed snapshots](/operators/snapshots#mysten-labs-managed-snapshots). |
+| `--http`, `--gcs`, `--azure`, `--s3`, or `--local` | Formal snapshot source. Specify exactly one. See [managed snapshots](/operators/snapshots#linku-labs-managed-snapshots). |
 | `--remote-store-url` | Public HTTPS checkpoint store used to read the epoch mapping and selected end-of-epoch checkpoint during restore. |
 | `--object-file-concurrency` | Number of formal-snapshot object files to download concurrently. |
 | `--pipeline` | Runtime pipeline name to restore. Repeat once for each required pipeline. |
@@ -421,7 +421,7 @@ After restore completes, start the combined consistent-store indexer and gRPC se
 ```sh
 $ export FULLNODE_GRPC_URL=https://your-rpc-provider.example:443
 
-$ sui-indexer-alt-consistent-store run \
+$ rtd-indexer-alt-consistent-store run \
     --database-path "$CONSISTENT_STORE_PATH" \
     --rpc-api-url "$FULLNODE_GRPC_URL" \
     --streaming-url "$FULLNODE_GRPC_URL" \
@@ -435,9 +435,9 @@ Wait for the service to report `SERVING` and for every pipeline watermark to app
 If a successfully restored watermark is older than the fullnode's retention window, use GCS for the catch-up phase:
 
 ```sh
-$ sui-indexer-alt-consistent-store run \
+$ rtd-indexer-alt-consistent-store run \
     --database-path "$CONSISTENT_STORE_PATH" \
-    --remote-store-gcs mysten-mainnet-checkpoints-use4 \
+    --remote-store-gcs linku-mainnet-checkpoints-use4 \
     --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}" \
     --rpc-listen-address 127.0.0.1:7001 \
     --metrics-address 127.0.0.1:9186 \
@@ -448,7 +448,7 @@ Do not route traffic to this temporary catch-up process. After it reaches the ne
 
 To build a consistent store without a formal snapshot, run from an empty path against the full-retention GCS bucket and process from checkpoint 0. Do not set `--first-checkpoint` to a later checkpoint, because doing so produces incomplete ownership and balance state.
 
-For Testnet, use `https://formal-snapshot.testnet.sui.io`, `https://checkpoints.testnet.sui.io`, and a production-grade Testnet fullnode endpoint from an RPC provider. Use the `mysten-testnet-checkpoints-use4` bucket when GCS catch-up is necessary. Keep every source on the same network and use a separate RocksDB path per network.
+For Testnet, use `https://formal-snapshot.testnet.rtd.io`, `https://checkpoints.testnet.rtd.io`, and a production-grade Testnet fullnode endpoint from an RPC provider. Use the `linku-testnet-checkpoints-use4` bucket when GCS catch-up is necessary. Keep every source on the same network and use a separate RocksDB path per network.
 
 ### Run config recommendations
 
@@ -497,18 +497,18 @@ The GraphQL RPC server relies on multiple backend services to fulfill different 
 
 Set the appropriate service URLs in your run command based on the query types your GraphQL RPC server needs to support.
 
-### Run `sui-indexer-alt-graphql`
+### Run `rtd-indexer-alt-graphql`
 
 :::info
 
-If you use the Sui Foundation-hosted public good archival service on Testnet or Mainnet, you might encounter performance issues. The team plans to address these before the GraphQL RPC and Archival Service reach general availability.
+If you use the Rtd Foundation-hosted public good archival service on Testnet or Mainnet, you might encounter performance issues. The team plans to address these before the GraphQL RPC and Archival Service reach general availability.
 
 :::
 
 Use the following command to run a GraphQL RPC server node:
 
 ```sh
-$ sui-indexer-alt-graphql rpc \
+$ rtd-indexer-alt-graphql rpc \
     --config <PATH_TO_GRAPHQL_CONFIG_FILE> \
     --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_1> \
     --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_2> \
@@ -539,7 +539,7 @@ Example:
 ```sh
 $ export FULLNODE_GRPC_URL=https://your-rpc-provider.example:443
 
-$ sui-indexer-alt-graphql rpc \
+$ rtd-indexer-alt-graphql rpc \
     --config graphql.toml \
     --indexer-config events.toml \
     --indexer-config obj_versions.toml \
@@ -548,7 +548,7 @@ $ sui-indexer-alt-graphql rpc \
     --indexer-config tx_calls.toml \
     --indexer-config tx_kinds.toml \
     --indexer-config unpruned.toml \
-    --ledger-grpc-url https://archive.mainnet.sui.io:443 \
+    --ledger-grpc-url https://archive.mainnet.rtd.io:443 \
     --consistent-store-url http://127.0.0.1:7001 \
     --database-url postgres://username:password@localhost:5432/database \
     --fullnode-rpc-url "$FULLNODE_GRPC_URL" \
@@ -563,7 +563,7 @@ With these addresses, GraphQL is available at `http://127.0.0.1:7000/graphql`, i
 You can run the GraphQL RPC server without a configuration file, which uses default values. To customize settings, generate a configuration file using the following command and edit it as needed:
 
 ```sh
-$ sui-indexer-alt-graphql generate-config > <PATH_TO_GRAPHQL_CONFIG_FILE>
+$ rtd-indexer-alt-graphql generate-config > <PATH_TO_GRAPHQL_CONFIG_FILE>
 ```
 
 This produces output similar to the following:
@@ -613,7 +613,7 @@ FROM watermarks
 ORDER BY pipeline;
 ```
 
-If a pipeline's `checkpoint_hi_inclusive` is significantly behind the network tip, that pipeline is lagging. Compare against the current network checkpoint (visible on [SuiVision](https://suivision.xyz/) or through `curl -s http://localhost:9184/metrics | grep watermark_checkpoint`). The [`watermark_checkpoint` metric](https://github.com/MystenLabs/sui/blob/main/crates/sui-indexer-alt-framework/src/metrics.rs) tracks each pipeline's current position; `watermark_checkpoint_in_db` shows the last position persisted to the database.
+If a pipeline's `checkpoint_hi_inclusive` is significantly behind the network tip, that pipeline is lagging. Compare against the current network checkpoint (visible on [RtdVision](https://suivision.xyz/) or through `curl -s http://localhost:9184/metrics | grep watermark_checkpoint`). The [`watermark_checkpoint` metric](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-indexer-alt-framework/src/metrics.rs) tracks each pipeline's current position; `watermark_checkpoint_in_db` shows the last position persisted to the database.
 
 If you also run the GraphQL RPC server, its health endpoint (for example, `http://localhost:7000/health`) reports lag broken down by data source and pipeline.
 
@@ -690,7 +690,7 @@ Bloat occurs when dead rows from deletes accumulate faster than autovacuum can r
 - You enable pruning on a previously unpruned pipeline.
 - You reduce the retention period on an already-pruned pipeline.
 
-Mysten Labs uses the following autovacuum settings for a 32-vCPU, 256 GiB Postgres instance. Adjust these proportionally for your setup:
+LinkU Labs uses the following autovacuum settings for a 32-vCPU, 256 GiB Postgres instance. Adjust these proportionally for your setup:
 
 | Parameter | Value |
 |-----------|-------|

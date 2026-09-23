@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // WebMCP: expose documentation tools to AI agents via the browser.
@@ -11,9 +11,9 @@ if (typeof window !== 'undefined') {
 		navigator.modelContext.provideContext({
 			tools: [
 				{
-					name: 'search_sui_docs',
+					name: 'search_rtd_docs',
 					description:
-						'Search the Sui documentation site for pages matching a query. Returns page titles, URLs, and snippets.',
+						'Search the Rtd documentation site for pages matching a query. Returns page titles, URLs, and snippets.',
 					inputSchema: {
 						type: 'object',
 						properties: {
@@ -29,7 +29,7 @@ if (typeof window !== 'undefined') {
 						const searchUrl = `${window.location.origin}/search?q=${encodeURIComponent(query)}`;
 						return {
 							type: 'text',
-							text: `Search Sui docs for "${query}": ${searchUrl}`,
+							text: `Search Rtd docs for "${query}": ${searchUrl}`,
 						};
 					},
 				},
@@ -120,9 +120,9 @@ if (typeof window !== 'undefined') {
 					},
 				},
 				{
-					name: 'get_sui_api_reference',
+					name: 'get_rtd_api_reference',
 					description:
-						'Get a summary of available Sui APIs including JSON-RPC, GraphQL, and gRPC endpoints with their documentation URLs.',
+						'Get a summary of available Rtd APIs including JSON-RPC, GraphQL, and gRPC endpoints with their documentation URLs.',
 					inputSchema: {
 						type: 'object',
 						properties: {},
@@ -142,14 +142,14 @@ if (typeof window !== 'undefined') {
 							text: JSON.stringify({
 								apis: [
 									{
-										name: 'Sui JSON-RPC',
-										docs: 'https://docs.sui.io/references/sui-api',
-										spec: 'https://docs.sui.io/open-spec/mainnet/openrpc.json',
+										name: 'Rtd JSON-RPC',
+										docs: 'https://docs.rtd.io/references/rtd-api',
+										spec: 'https://docs.rtd.io/open-spec/mainnet/openrpc.json',
 									},
 									{
-										name: 'Sui GraphQL',
-										docs: 'https://docs.sui.io/references/sui-graphql',
-										endpoint: 'https://graphql.mainnet.sui.io/graphql',
+										name: 'Rtd GraphQL',
+										docs: 'https://docs.rtd.io/references/rtd-graphql',
+										endpoint: 'https://graphql.mainnet.rtd.io/graphql',
 									},
 								],
 							}),

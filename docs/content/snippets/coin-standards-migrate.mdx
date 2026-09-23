@@ -1,6 +1,6 @@
 ## Migration from Coin to Currency Standard
 
-Sui provides a migration path from the `CoinMetadata<T>` system while maintaining backward compatibility.
+Rtd provides a migration path from the `CoinMetadata<T>` system while maintaining backward compatibility.
 
 The migration system is designed with specific constraints to maintain data integrity and preserve existing functionality. Migration can only occur permissionlessly when done by reference, meaning the original `CoinMetadata` object remains intact while its data is copied to create a new `Currency` entry in the registry. This approach allows for safe registration of new currency data and updates to existing currency data, but only as long as the `MetadataCap` has not yet been claimed.
 
@@ -20,16 +20,16 @@ Some of the benefits to migrate to the Coin Registry include:
 ### Migration process
 
 1. **Metadata migration:** Use `migrate_legacy_metadata<T>()` to create a new `Currency<T>` entry based on existing `CoinMetadata<T>` information.
-    <ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="migrate_legacy_metadata" noTitle signatureOnly noComments />
+    <ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="migrate_legacy_metadata" noTitle signatureOnly noComments />
 
 1. **Regulatory migration:** For coins with deny list capabilities, use:
    - `migrate_regulated_state_by_metadata<T>()`: Migrate based on existing metadata.
 
-        <ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="migrate_regulated_state_by_metadata" noTitle signatureOnly noComments />
+        <ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="migrate_regulated_state_by_metadata" noTitle signatureOnly noComments />
 
    - `migrate_regulated_state_by_cap<T>()`: Migrate based on deny capability.
 
-        <ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="migrate_regulated_state_by_cap" noTitle signatureOnly noComments />
+        <ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="migrate_regulated_state_by_cap" noTitle signatureOnly noComments />
 
 ### Migration function mappings
 
@@ -38,4 +38,4 @@ Update smart contract logic that relies on the `coin` module to use the `coin_re
 - `coin::create_currency` -> `coin_registry::new_currency_with_otw`
 - `coin::create_regulated_currency_v2` -> `coin_registry::new_currency_with_otw`
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="new_currency_with_otw" signatureOnly noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="new_currency_with_otw" signatureOnly noComments />

@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import type { DeepBookMarginClient } from './client.js';
 
 // docs::#deposit-collateral
 // Deposit collateral into the MarginManager. Use `depositBase` for the pool's
-// base asset (SUI in SUI_DBUSDC) and `depositQuote` for the quote asset
+// base asset (RTD in RTD_DBUSDC) and `depositQuote` for the quote asset
 // (DBUSDC). Collateral is what backs your borrow: the more you deposit before
 // borrowing, the higher your starting risk ratio. The amount is in whole coins;
 // the SDK scales it to the coin's decimals.
@@ -23,7 +23,7 @@ export function depositBaseCollateral(
 
 // docs::#safe-collateral
 // Never deposit more collateral than the wallet holds. `depositBase` sources
-// coins with coinWithBalance, which throws at build time otherwise. Leave a SUI
+// coins with coinWithBalance, which throws at build time otherwise. Leave a RTD
 // reserve so gas still has funds after the deposit.
 export async function safeCollateralAmount(
 	client: DeepBookMarginClient,

@@ -1,7 +1,7 @@
 ---
 title: Security Best Practices
 sidebar_label: Best Practices
-description: Overview of security best practices on Sui.
+description: Overview of security best practices on Rtd.
 keywords:
   - security
   - security best practices
@@ -10,7 +10,7 @@ keywords:
   - package upgrades
   - key management
 goal:
-  description: Reader understands overview of security best practices on Sui
+  description: Reader understands overview of security best practices on Rtd
   requires:
     - has_frontmatter:
         - title
@@ -48,21 +48,21 @@ builder_paths:
     step: Security best practices
     stage: Ship
 questions:
-  - What is Security Best Practices in Sui?
-  - How does security best practices work on Sui?
+  - What is Security Best Practices in Rtd?
+  - How does security best practices work on Rtd?
   - What are the security considerations for security best practices?
-answer: Overview of security best practices on Sui.
+answer: Overview of security best practices on Rtd.
 ---
 
-Overview of security best practices on Sui.
+Overview of security best practices on Rtd.
 
-This page describes a few recommended security best practices when developing applications on Sui. These recommendations are not comprehensive for all application types, use cases, or architectures. Do your own research and have production applications audited thoroughly.
+This page describes a few recommended security best practices when developing applications on Rtd. These recommendations are not comprehensive for all application types, use cases, or architectures. Do your own research and have production applications audited thoroughly.
 
 ## Smart contract security
 
 #### Audit your contracts
 
-Ensure transactions operate on smart contracts you trust and have audited. Sui packages are immutable once published. If a package is upgradeable, the `UpgradeCap` controls publication of newer versions, so audit both the current package and its upgrade policy.
+Ensure transactions operate on smart contracts you trust and have audited. Rtd packages are immutable once published. If a package is upgradeable, the `UpgradeCap` controls publication of newer versions, so audit both the current package and its upgrade policy.
 
 #### Govern package upgrades
 
@@ -84,7 +84,7 @@ Move's type system, resource model, bytecode verifier, and checked arithmetic re
 
 #### Validate invariants and object relationships
 
-Many Sui bugs use a valid object in the wrong relationship. Inside every privileged function, validate amounts, object IDs, dynamic field keys, ownership expectations, and the relationships between objects, such as a capability matching the object it governs. Check zero and overflow edge cases even though Move arithmetic is checked, because an unexpected abort can still be a denial of service.
+Many Rtd bugs use a valid object in the wrong relationship. Inside every privileged function, validate amounts, object IDs, dynamic field keys, ownership expectations, and the relationships between objects, such as a capability matching the object it governs. Check zero and overflow edge cases even though Move arithmetic is checked, because an unexpected abort can still be a denial of service.
 
 #### Emit events for privileged actions
 
@@ -94,7 +94,7 @@ Emit [events](/develop/accessing-data/using-events) for admin changes, allowlist
 
 #### Limit what follows a random call in a PTB
 
-Sui restricts which commands can follow a `MoveCall` that consumes `Random` in the same [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks). Do not depend on post-random commands other than the allowed object transfers and coin merges. This prevents `test-and-abort` attacks, where an attacker inspects the result and aborts the transaction if the outcome is unfavorable.
+Rtd restricts which commands can follow a `MoveCall` that consumes `Random` in the same [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks). Do not depend on post-random commands other than the allowed object transfers and coin merges. This prevents `test-and-abort` attacks, where an attacker inspects the result and aborts the transaction if the outcome is unfavorable.
 
 #### Mark randomness-consuming functions as private `entry`
 
@@ -172,7 +172,7 @@ Set the supply model early, and understand the implications of a fixed, burn-onl
 
 Access control determines who can call privileged functions in your package, such as minting, withdrawals, or configuration changes. Move gives you several mechanisms to enforce authorization. Choose them deliberately, because a missing or weak check can expose privileged operations to any caller.
 
-For implementation patterns and code examples, see the [Access control](/develop/write-move/move-best-practices) section of the Move best practices guide and the [capability pattern example app](https://github.com/MystenLabs/sui-move-bootcamp/tree/solution/C1/capability).
+For implementation patterns and code examples, see the [Access control](/develop/write-move/move-best-practices) section of the Move best practices guide and the [capability pattern example app](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/C1/capability).
 
 #### Prefer capability objects over address allowlists
 
@@ -244,7 +244,7 @@ Verify the exact package IDs your frontend calls. Do not trust a package only be
 
 #### Domain-separate offchain signed messages
 
-When your app signs messages offchain, such as personal messages, include a domain separator and an intent so a signature created for one context cannot be replayed in another. See [Intent Signing](/develop/transactions/transaction-auth/intent-signing) for how Sui separates signing domains.
+When your app signs messages offchain, such as personal messages, include a domain separator and an intent so a signature created for one context cannot be replayed in another. See [Intent Signing](/develop/transactions/transaction-auth/intent-signing) for how Rtd separates signing domains.
 
 ## User and operator key management
 
@@ -272,8 +272,8 @@ Write down how to recover and rotate every privileged key before you launch. A d
 
 #### Understand the validator trust assumption
 
-Sui maintains its security properties as long as more than 2/3 of validators by stake operate correctly. The network uses Byzantine fault tolerant broadcast and consensus, so it tolerates a minority of faulty or malicious validators.
+Rtd maintains its security properties as long as more than 2/3 of validators by stake operate correctly. The network uses Byzantine fault tolerant broadcast and consensus, so it tolerates a minority of faulty or malicious validators.
 
 #### Treat all onchain activity as public
 
-Every transaction and object on Sui is public and auditable, so anyone can inspect the activity of an address. To protect user privacy, consider using multiple addresses to separate unrelated activity.
+Every transaction and object on Rtd is public and auditable, so anyone can inspect the activity of an address. To protect user privacy, consider using multiple addresses to separate unrelated activity.

@@ -1,20 +1,20 @@
 ---
 title: Exchange Integration
 description: >-
-  Guidance for integrating SUI into a cryptocurrency exchange. Covers
+  Guidance for integrating RTD into a cryptocurrency exchange. Covers
   infrastructure, current APIs (gRPC and GraphQL), balance tracking,
   transactions, transfers, and staking.
 keywords:
-  - integrate sui
-  - integrate with SUI token
-  - sui tokens
-  - SUI
-  - integrate sui into exchange
+  - integrate rtd
+  - integrate with RTD token
+  - rtd tokens
+  - RTD
+  - integrate rtd into exchange
   - cryptocurrency exchange
   - decentralized exchange
   - dex
   - integrate with dex
-  - sui balance transfer
+  - rtd balance transfer
   - staking functions
   - track balance
   - checkpoints
@@ -22,7 +22,7 @@ keywords:
   - graphql
 goal:
   description: >-
-    Operator understands guidance for integrating SUI into a cryptocurrency
+    Operator understands guidance for integrating RTD into a cryptocurrency
     exchange.
   requires:
     - has_frontmatter:
@@ -37,54 +37,54 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I integrate Sui into a cryptocurrency exchange?
-  - What APIs should I use for exchange integration with Sui?
-  - How do I track deposits and withdrawals on Sui?
+  - How do I integrate Rtd into a cryptocurrency exchange?
+  - What APIs should I use for exchange integration with Rtd?
+  - How do I track deposits and withdrawals on Rtd?
 answer: >-
-  Guidance for integrating SUI into a cryptocurrency exchange. Covers
+  Guidance for integrating RTD into a cryptocurrency exchange. Covers
   infrastructure, current APIs (gRPC and GraphQL), balance tracking,
   transactions, transfers, and staking.
 ---
 
-This topic describes how to integrate SUI into a cryptocurrency exchange. Specific requirements and processes vary between exchanges. Before you ship an integration to production, confirm the API and SDK examples you use against the current references linked from each section.
+This topic describes how to integrate RTD into a cryptocurrency exchange. Specific requirements and processes vary between exchanges. Before you ship an integration to production, confirm the API and SDK examples you use against the current references linked from each section.
 
-## Requirements to configure a SUI integration
+## Requirements to configure a RTD integration
 
-Sui's primary data access APIs are [gRPC](/develop/accessing-data/grpc) and [GraphQL RPC](/develop/accessing-data/graphql/graphql-rpc). JSON-RPC has been deprecated. New integrations should use gRPC or GraphQL.
+Rtd's primary data access APIs are [gRPC](/develop/accessing-data/grpc) and [GraphQL RPC](/develop/accessing-data/graphql/graphql-rpc). JSON-RPC has been deprecated. New integrations should use gRPC or GraphQL.
 
-The requirements to configure a SUI integration include:
+The requirements to configure a RTD integration include:
 
-- A Sui full node. You can operate your own Sui full node or use a full node from a node operator.
+- A Rtd full node. You can operate your own Rtd full node or use a full node from a node operator.
 
-- Suggested hardware requirements to run a Sui full node:
+- Suggested hardware requirements to run a Rtd full node:
 
     - CPU: 8 physical cores / 16 vCPUs
     - RAM: 128 GB
     - Storage (SSD): 4 TB NVMe drive
 
-For software prerequisites, snapshots, observability, and the full setup walkthrough, see [Run a Sui Full Node](/operators/full-node/sui-full-node).
+For software prerequisites, snapshots, observability, and the full setup walkthrough, see [Run a Rtd Full Node](/operators/full-node/rtd-full-node).
 
 ## Infrastructure
 
-An exchange integration needs reliable access to Sui network data and the ability to submit transactions. You have two options:
+An exchange integration needs reliable access to Rtd network data and the ability to submit transactions. You have two options:
 
-- **Run your own [Sui full node](/operators/full-node/sui-full-node).** This gives you full control over availability, retention, and read performance. The full node operator guide covers hardware sizing, setup, snapshots, logging, and monitoring.
+- **Run your own [Rtd full node](/operators/full-node/rtd-full-node).** This gives you full control over availability, retention, and read performance. The full node operator guide covers hardware sizing, setup, snapshots, logging, and monitoring.
 
-- **Use an RPC or data provider.** Several providers operate gRPC-enabled and GraphQL-enabled Sui endpoints. See the [list of RPC and data providers](https://www.notion.so/mystenlabs/RPC-providers-offering-future-Sui-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) for current options.
+- **Use an RPC or data provider.** Several providers operate gRPC-enabled and GraphQL-enabled Rtd endpoints. See the [list of RPC and data providers](https://www.notion.so/linkuverse/RPC-providers-offering-future-Rtd-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) for current options.
 
 :::caution
 
-The public endpoints at `https://fullnode.<network>.sui.io` and `https://graphql.<network>.sui.io/graphql` are rate-limited and intended for development. Do not point a production exchange at them. Run your own full node or use a provider endpoint with a contract that meets your throughput and uptime needs.
+The public endpoints at `https://fullnode.<network>.rtd.io` and `https://graphql.<network>.rtd.io/graphql` are rate-limited and intended for development. Do not point a production exchange at them. Run your own full node or use a provider endpoint with a contract that meets your throughput and uptime needs.
 
 :::
 
-## Sui APIs
+## Rtd APIs
 
 ### gRPC
 
 gRPC is the recommended high-performance API for backend services. It supports `FieldMask`-based projection so you only fetch the fields you need, and includes checkpoint subscriptions that stream finalized checkpoints along with the transaction and event data you select through the response mask. For a complete tutorial including `grpcurl`, TypeScript, Go, and Python examples, see [Querying Data with gRPC](/develop/accessing-data/grpc/using-grpc).
 
-For the Rust client, use the [`sui-rust-sdk`](https://github.com/MystenLabs/sui-rust-sdk) crate (gRPC) for new code. The legacy [`sui-sdk` JSON-RPC client](/references/rust-sdk) remains available for migration purposes only.
+For the Rust client, use the [`rtd-rust-sdk`](https://github.com/LinkUVerse/rtd-rust-sdk) crate (gRPC) for new code. The legacy [`rtd-sdk` JSON-RPC client](/references/rust-sdk) remains available for migration purposes only.
 
 ### GraphQL RPC
 
@@ -94,11 +94,11 @@ GraphQL exposes a single endpoint where you select exactly the fields you need a
 
 Existing integrations should plan a migration to gRPC or GraphQL. New integrations should not adopt JSON-RPC.
 
-## Sui addresses
+## Rtd addresses
 
-Sui addresses do not need onchain initialization. You can spend from an address as soon as it corresponds to a private key you control.
+Rtd addresses do not need onchain initialization. You can spend from an address as soon as it corresponds to a private key you control.
 
-For the key-pair schemes Pure Ed25519, ECDSA Secp256k1, ECDSA Secp256r1, and Passkey, a Sui address is a 32-byte value derived as [BLAKE2b](https://www.blake2.net/)-256 of the 1-byte signature scheme flag concatenated with the public key bytes (`flag || pubkey`).
+For the key-pair schemes Pure Ed25519, ECDSA Secp256k1, ECDSA Secp256r1, and Passkey, a Rtd address is a 32-byte value derived as [BLAKE2b](https://www.blake2.net/)-256 of the 1-byte signature scheme flag concatenated with the public key bytes (`flag || pubkey`).
 
 Multisig and zkLogin use scheme-specific derivations and do not follow the basic `flag || pubkey` rule:
 
@@ -106,9 +106,9 @@ Multisig and zkLogin use scheme-specific derivations and do not follow the basic
 
 - **zkLogin:** `BLAKE2b-256(flag_zkLogin || iss_len || iss || address_seed)`, where `iss_len` is the 1-byte length of the issuer string and `address_seed` is the unpadded form with leading zero bytes removed.
 
-For every scheme, derive addresses through the [Sui SDKs](/references/sui-sdks) or the Sui CLI rather than hand-rolling the computation. Hand-rolling the keypair formula for a multisig or zkLogin account produces the wrong address. See [Signing and Sending Transactions](/develop/transactions/transaction-auth/auth-overview) for the per-scheme details, and the [`SuiAddress` implementations](https://github.com/MystenLabs/sui/blob/main/crates/sui-types/src/base_types.rs) in `crates/sui-types/src/base_types.rs` for the byte-exact layout.
+For every scheme, derive addresses through the [Rtd SDKs](/references/rtd-sdks) or the Rtd CLI rather than hand-rolling the computation. Hand-rolling the keypair formula for a multisig or zkLogin account produces the wrong address. See [Signing and Sending Transactions](/develop/transactions/transaction-auth/auth-overview) for the per-scheme details, and the [`RtdAddress` implementations](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-types/src/base_types.rs) in `crates/rtd-types/src/base_types.rs` for the byte-exact layout.
 
-Sui currently supports the following schemes and flag bytes:
+Rtd currently supports the following schemes and flag bytes:
 
 | Scheme          | Flag |
 | --------------- | ---- |
@@ -123,15 +123,15 @@ For full details on address derivation, signature formats, and key derivation pa
 
 ### Displaying addresses
 
-Sui accepts addresses with or without the `0x` prefix. Always include the `0x` prefix when you display addresses to users and when you pass them to API calls.
+Rtd accepts addresses with or without the `0x` prefix. Always include the `0x` prefix when you display addresses to users and when you pass them to API calls.
 
 ## Tracking balances
 
-Sui supports two ways to hold fungible value at an address:
+Rtd supports two ways to hold fungible value at an address:
 
 - **Coin objects.** Individual `Coin<T>` objects owned by an address.
 
-- **Address balances.** A canonical per-coin-type balance tied directly to an address, introduced in [SIP-58](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md). Funds sent through `sui::coin::send_funds` and `sui::balance::send_funds` merge automatically into a single balance per coin type with no object management required. See [Using Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances) for details.
+- **Address balances.** A canonical per-coin-type balance tied directly to an address, introduced in [SIP-58](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md). Funds sent through `rtd::coin::send_funds` and `rtd::balance::send_funds` merge automatically into a single balance per coin type with no object management required. See [Using Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances) for details.
 
 When you query a balance, account for both representations. In the GraphQL schema, `Balance.totalBalance` returns the sum across coin objects and the address-balance accumulator. `Balance.coinBalance` and `Balance.addressBalance` expose each component separately, so you can reconcile against your own bookkeeping.
 
@@ -145,13 +145,13 @@ Query balances for an address using the `address(address:).balances(...)` connec
 
 ## Blocks vs Checkpoints {#blocks-vs-checkpoints}
 
-Sui is a DAG-based blockchain and uses checkpoints for node synchronization and global transaction ordering. Checkpoints differ from blocks in the following ways:
+Rtd is a DAG-based blockchain and uses checkpoints for node synchronization and global transaction ordering. Checkpoints differ from blocks in the following ways:
 
-- Sui creates checkpoints and adds finalized transactions. Transactions are finalized before they are included in a checkpoint.
+- Rtd creates checkpoints and adds finalized transactions. Transactions are finalized before they are included in a checkpoint.
 
 - Checkpoints do not fork, roll back, or reorganize.
 
-- Sui creates about 4 checkpoints every second. Find the most current statistic on the [Sui public dashboard](https://metrics.sui.io/public-dashboards/4ceb11cc210d4025b122294586961169).
+- Rtd creates about 4 checkpoints every second. Find the most current statistic on the [Rtd public dashboard](https://metrics.rtd.io/public-dashboards/4ceb11cc210d4025b122294586961169).
 
 ### Checkpoint API operations {#checkpoint-api-operations}
 
@@ -173,7 +173,7 @@ For real-time pipelines, subscribe to the checkpoint stream over [gRPC](/develop
 
 For event consumption patterns, including filtering by sender, package, or event type, see [Using Events](/develop/accessing-data/using-events).
 
-## SUI transfers
+## RTD transfers
 
 Build transfers as [programmable transaction blocks (PTBs)](/develop/transactions/ptbs/prog-txn-blocks) using the SDK of your choice. PTBs let you split, merge, and transfer coins in a single atomic transaction.
 
@@ -187,9 +187,9 @@ A few points that matter for exchange flows:
 
 ## Signing transactions
 
-Sui signs over the Blake2b-256 hash of the BCS serialization of an `IntentMessage` that wraps the transaction data. The supported signature schemes are pure Ed25519, ECDSA Secp256k1, and ECDSA Secp256r1, along with multisig, zkLogin, and passkey.
+Rtd signs over the Blake2b-256 hash of the BCS serialization of an `IntentMessage` that wraps the transaction data. The supported signature schemes are pure Ed25519, ECDSA Secp256k1, and ECDSA Secp256r1, along with multisig, zkLogin, and passkey.
 
-For the full signature requirements, intent format, and worked examples in Rust, TypeScript, and the Sui CLI, see [Signing and Sending Transactions](/develop/transactions/transaction-auth/auth-overview) and [Intent Signing](/develop/transactions/transaction-auth/intent-signing). For offline custody workflows, see [Offline Signing](/develop/transactions/transaction-auth/offline-signing).
+For the full signature requirements, intent format, and worked examples in Rust, TypeScript, and the Rtd CLI, see [Signing and Sending Transactions](/develop/transactions/transaction-auth/auth-overview) and [Intent Signing](/develop/transactions/transaction-auth/intent-signing). For offline custody workflows, see [Offline Signing](/develop/transactions/transaction-auth/offline-signing).
 
 :::caution
 
@@ -202,24 +202,24 @@ Custody keys and privileged capabilities are the highest-value assets in an exch
 
 :::
 
-## SUI staking
+## RTD staking
 
-The Sui blockchain uses a Delegated Proof-of-Stake (DPoS) mechanism. SUI token holders stake to a validator's staking pool. When a user stakes, the network locks those tokens for the duration of the epoch in which the user adds the stake. New staking requests become active at the start of the next epoch. A user can request a withdrawal at any time. Stake withdrawals process immediately using the previous epoch's exchange rate and include the principal plus rewards accumulated through the previous epoch. The withdrawn stake stops contributing starting the next epoch.
+The Rtd blockchain uses a Delegated Proof-of-Stake (DPoS) mechanism. RTD token holders stake to a validator's staking pool. When a user stakes, the network locks those tokens for the duration of the epoch in which the user adds the stake. New staking requests become active at the start of the next epoch. A user can request a withdrawal at any time. Stake withdrawals process immediately using the previous epoch's exchange rate and include the principal plus rewards accumulated through the previous epoch. The withdrawn stake stops contributing starting the next epoch.
 
-SUI holders who stake to validators earn rewards for helping secure the Sui network. Sui determines staking rewards based on stake performance and distributes them at the end of each epoch.
+RTD holders who stake to validators earn rewards for helping secure the Rtd network. Rtd determines staking rewards based on stake performance and distributes them at the end of each epoch.
 
-The network fixes the total voting power across all validators at 10,000, similar to basis points (a voting power of 101 = 1.01%). Sui caps the voting power for a single validator at 1,000 (10%) regardless of how much stake the validator has. The quorum threshold for confirming a transaction is 6,667, which is greater than 2/3.
+The network fixes the total voting power across all validators at 10,000, similar to basis points (a voting power of 101 = 1.01%). Rtd caps the voting power for a single validator at 1,000 (10%) regardless of how much stake the validator has. The quorum threshold for confirming a transaction is 6,667, which is greater than 2/3.
 
 ### Staking functions
 
-The current entry functions in the [`sui_system` Move module](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/sui-system/sources/sui_system.move) for staking are listed below. These signatures are the source of truth, because they change with system package upgrades, so verify against the linked Move source before you ship.
+The current entry functions in the [`rtd_system` Move module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/rtd-system/sources/rtd_system.move) for staking are listed below. These signatures are the source of truth, because they change with system package upgrades, so verify against the linked Move source before you ship.
 
-- `request_add_stake`: Add stake to a validator's staking pool. The function transfers the resulting `StakedSui` object to the sender.
+- `request_add_stake`: Add stake to a validator's staking pool. The function transfers the resulting `StakedRtd` object to the sender.
 
     ```move
     public entry fun request_add_stake(
-        wrapper: &mut SuiSystemState,
-        stake: Coin<SUI>,
+        wrapper: &mut RtdSystemState,
+        stake: Coin<RTD>,
         validator_address: address,
         ctx: &mut TxContext,
     )
@@ -229,29 +229,29 @@ The current entry functions in the [`sui_system` Move module](https://github.com
 
     ```move
     public entry fun request_add_stake_mul_coin(
-        wrapper: &mut SuiSystemState,
-        stakes: vector<Coin<SUI>>,
+        wrapper: &mut RtdSystemState,
+        stakes: vector<Coin<RTD>>,
         stake_amount: option::Option<u64>,
         validator_address: address,
         ctx: &mut TxContext,
     )
     ```
 
-- `request_withdraw_stake`: Withdraw stake from a validator's staking pool. The function transfers the unstaked SUI coin to the sender.
+- `request_withdraw_stake`: Withdraw stake from a validator's staking pool. The function transfers the unstaked RTD coin to the sender.
 
     ```move
     public entry fun request_withdraw_stake(
-        wrapper: &mut SuiSystemState,
-        staked_sui: StakedSui,
+        wrapper: &mut RtdSystemState,
+        staked_rtd: StakedRtd,
         ctx: &mut TxContext,
     )
     ```
 
-Non-entry variants `request_add_stake_non_entry` and `request_withdraw_stake_non_entry` return the `StakedSui` object or withdrawn balance directly, so you can compose them with other PTB commands. The `StakedSui` type lives in the [`staking_pool` module](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/sui-system/sources/staking_pool.move).
+Non-entry variants `request_add_stake_non_entry` and `request_withdraw_stake_non_entry` return the `StakedRtd` object or withdrawn balance directly, so you can compose them with other PTB commands. The `StakedRtd` type lives in the [`staking_pool` module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/rtd-system/sources/staking_pool.move).
 
-To build staking and unstaking transactions, assemble a PTB that calls one of these functions. The [TypeScript SDK](https://sdk.mystenlabs.com/typescript) provides the helpers you need.
+To build staking and unstaking transactions, assemble a PTB that calls one of these functions. The [TypeScript SDK](https://sdk.linkuverse.com/typescript) provides the helpers you need.
 
-To read stake state for an address, list owned `StakedSui` objects through `StateService.ListOwnedObjects` filtered by type on [gRPC](/develop/accessing-data/grpc/using-grpc), or through the `address.objects(filter: { type: ... })` connection on [GraphQL](/develop/accessing-data/graphql/query-with-graphql). The current schema exposes balance, transaction, and object access; it does not yet expose a first-class staking-state field that returns active stakes, pending stakes, and accrued rewards together. To compute accrued rewards, read the `StakedSui` object's stake activation epoch and principal, then compute the current value against the validator's exchange rate, or use the [TypeScript SDK](https://sdk.mystenlabs.com/typescript) staking helpers if available for your use case.
+To read stake state for an address, list owned `StakedRtd` objects through `StateService.ListOwnedObjects` filtered by type on [gRPC](/develop/accessing-data/grpc/using-grpc), or through the `address.objects(filter: { type: ... })` connection on [GraphQL](/develop/accessing-data/graphql/query-with-graphql). The current schema exposes balance, transaction, and object access; it does not yet expose a first-class staking-state field that returns active stakes, pending stakes, and accrued rewards together. To compute accrued rewards, read the `StakedRtd` object's stake activation epoch and principal, then compute the current value against the validator's exchange rate, or use the [TypeScript SDK](https://sdk.linkuverse.com/typescript) staking helpers if available for your use case.
 
 ## Designing deposits and withdrawals
 
@@ -261,7 +261,7 @@ Treat deposit and withdrawal pipelines as event-driven and idempotent. The follo
 
 - **Make every credit and debit idempotent.** Key your ledger entries by `(transaction digest, event sequence)` for event-driven credits, or by `(transaction digest, object change)` for object-based credits. Replaying the same checkpoint must not produce duplicate ledger entries.
 
-- **Define a finality policy.** Sui transactions are final before they are included in a checkpoint, and checkpoints themselves are final. For exchange purposes, treating inclusion in a finalized checkpoint as the point of finality is the standard choice.
+- **Define a finality policy.** Rtd transactions are final before they are included in a checkpoint, and checkpoints themselves are final. For exchange purposes, treating inclusion in a finalized checkpoint as the point of finality is the standard choice.
 
 - **Support reprocessing and backfill.** Build the pipeline so you can replay a range of checkpoints to recover from a bug or a missed window. This depends on the idempotency keys above.
 
@@ -273,11 +273,11 @@ Treat deposit and withdrawal pipelines as event-driven and idempotent. The follo
 
 ## Production considerations
 
-- **Endpoints.** Use your own full node or a contracted provider endpoint. Do not rely on the public `fullnode.<network>.sui.io` or `graphql.<network>.sui.io` URLs for production traffic.
+- **Endpoints.** Use your own full node or a contracted provider endpoint. Do not rely on the public `fullnode.<network>.rtd.io` or `graphql.<network>.rtd.io` URLs for production traffic.
 
 - **Observability.** Configure full node [logging](/operators/observability#logging-levels) and [metrics monitoring](/operators/full-node/monitoring) so you can detect lag or failures quickly.
 
-- **Snapshots.** Start a new full node from a recent snapshot rather than syncing from genesis. See [Sui Snapshots](/operators/snapshots).
+- **Snapshots.** Start a new full node from a recent snapshot rather than syncing from genesis. See [Rtd Snapshots](/operators/snapshots).
 
 - **Custody and key management.** Treat exchange custody keys and any administrative capabilities (for example, capability objects governing your deposit or withdrawal flow) as high-value assets. Separate hot, warm, and cold keys by role, so an online compromise does not expose the keys with the most privilege. Hold warm and cold keys in a [multisig](/develop/transactions/transaction-auth/multisig) address or hardware custody, and sign cold-key transactions using [Offline Signing](/develop/transactions/transaction-auth/offline-signing). Keep Testnet and Mainnet keys strictly separate, so a test key can never sign a production transaction.
 

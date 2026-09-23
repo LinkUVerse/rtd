@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -13,9 +13,9 @@ use bytes::Bytes;
 use consensus_config::{NetworkKeyPair, NetworkPublicKey};
 use consensus_types::block::{BlockRef, Round};
 use futures::{Stream, StreamExt as _};
-use mysten_network::Multiaddr;
+use linku_network::Multiaddr;
 use parking_lot::RwLock;
-use sui_http::middleware::callback::CallbackLayer;
+use rtd_http::middleware::callback::CallbackLayer;
 use tokio_stream::Iter;
 use tonic::{Request, Response};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer};
@@ -170,7 +170,7 @@ impl ChannelPool {
         let address = format!("https://{address}");
         let config = &self.context.parameters.tonic;
         let buffer_size = config.connection_buffer_size;
-        let client_tls_config = sui_tls::create_rustls_client_config(
+        let client_tls_config = rtd_tls::create_rustls_client_config(
             peer_network_key.into_inner().clone(),
             certificate_server_name(&self.context),
             Some(network_keypair.private_key().into_inner()),
@@ -642,7 +642,7 @@ mod tests {
         use crate::network::{
             NetworkManager, ObserverNetworkClient, PeerId, tonic_network::TonicManager,
         };
-        use mysten_network::Multiaddr;
+        use linku_network::Multiaddr;
         use std::str::FromStr;
         use std::time::Duration;
 

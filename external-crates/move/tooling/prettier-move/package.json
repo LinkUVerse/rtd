@@ -1,12 +1,12 @@
 {
-    "name": "@mysten/prettier-plugin-move",
-    "author": "Mysten Labs <build@mystenlabs.com>",
+    "name": "@linku/prettier-plugin-move",
+    "author": "LinkU Labs <build@linkuverse.com>",
     "description": "Move Plugin for Prettier",
     "version": "0.4.0",
     "license": "Apache-2.0",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/MystenLabs/sui.git",
+        "url": "git+https://github.com/LinkUVerse/rtd.git",
         "directory": "external-crates/move/tooling/prettier-move"
     },
     "keywords": [

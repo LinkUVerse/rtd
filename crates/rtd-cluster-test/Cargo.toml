@@ -1,0 +1,42 @@
+[package]
+name = "rtd-cluster-test"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+futures.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+clap.workspace = true
+reqwest.workspace = true
+async-trait.workspace = true
+anyhow = { workspace = true, features = ["backtrace"] }
+fastcrypto.workspace = true
+shared-crypto.workspace = true
+derive_more = { workspace = true, features = ["debug"] }
+regex.workspace = true
+
+rtd-faucet.workspace = true
+rtd-swarm.workspace = true
+rtd-swarm-config.workspace = true
+rtd-sdk.workspace = true
+rtd-keys.workspace = true
+rtd-types.workspace = true
+rtd-json.workspace = true
+rtd-config.workspace = true
+rtd-rpc-api.workspace = true
+rtd-sdk-types.workspace = true
+rtd-test-transaction-builder.workspace = true
+telemetry-subscribers.workspace = true
+
+test-cluster.workspace = true
+move-core-types.workspace = true
+rtd-move-build.workspace = true

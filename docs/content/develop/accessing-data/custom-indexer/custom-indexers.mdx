@@ -1,19 +1,19 @@
 ---
 title: What Are Custom Indexers?
 description: >-
-  The `sui-indexer-alt-framework` is a powerful Rust framework for building
-  high-performance, custom blockchain indexers on Sui. It provides customizable,
+  The `rtd-indexer-alt-framework` is a powerful Rust framework for building
+  high-performance, custom blockchain indexers on Rtd. It provides customizable,
   production-ready components for data ingestion, processing, and storage.
 keywords:
   - indexer
   - custom indexer
   - data processing
   - blockchain indexer
-  - sui-indexer-alt-framework
+  - rtd-indexer-alt-framework
 goal:
   description: >-
     Reader understands what custom indexers are, when to use them, and how the
-    sui-indexer-alt-framework ingestion, processing, and storage layers fit
+    rtd-indexer-alt-framework ingestion, processing, and storage layers fit
     together
   requires:
     - has_frontmatter:
@@ -44,17 +44,17 @@ builder_paths:
     step: Custom indexer framework
     stage: Ship
 questions:
-  - What is Custom Indexers in Sui?
+  - What is Custom Indexers in Rtd?
   - When to use?
   - How do I build custom indexers?
 answer: >-
-  The `sui-indexer-alt-framework` is a powerful Rust framework for building
-  high-performance, custom blockchain indexers on Sui.
+  The `rtd-indexer-alt-framework` is a powerful Rust framework for building
+  high-performance, custom blockchain indexers on Rtd.
 ---
 
-Sui generates rich, complex data, including transactions, events, object changes, and more. While Sui provides standard APIs to access this data, many applications need customized data processing for workflows like tracking specific events, aggregating analytics, building dashboards, or creating specialized databases. Custom indexers let you extract, transform, and store the specific blockchain data you need. Instead of querying Sui APIs repeatedly or building complex filtering logic, you process the raw blockchain data once and store it in your preferred format and storage layer.
+Rtd generates rich, complex data, including transactions, events, object changes, and more. While Rtd provides standard APIs to access this data, many applications need customized data processing for workflows like tracking specific events, aggregating analytics, building dashboards, or creating specialized databases. Custom indexers let you extract, transform, and store the specific blockchain data you need. Instead of querying Rtd APIs repeatedly or building complex filtering logic, you process the raw blockchain data once and store it in your preferred format and storage layer.
 
-Custom indexers enable use cases such as tracking DEX trading volumes, monitoring NFT collection activity, building analytics dashboards, or aggregating cross-chain data. You build custom indexers using the `sui-indexer-alt-framework`, a Rust framework that provides production-ready components for data ingestion, processing, and storage while giving you full control over your indexing logic.
+Custom indexers enable use cases such as tracking DEX trading volumes, monitoring NFT collection activity, building analytics dashboards, or aggregating cross-chain data. You build custom indexers using the `rtd-indexer-alt-framework`, a Rust framework that provides production-ready components for data ingestion, processing, and storage while giving you full control over your indexing logic.
 
 ## When to use
 
@@ -72,7 +72,7 @@ If you set up your own indexer, you are responsible for its ongoing maintenance 
 
 At a high level, the indexing framework is a streaming pipeline that continuously polls for the latest available checkpoints from a predefined data source and streams that checkpoint data to your pipeline's processing logic.
 
-Checkpoints on Sui are batches of transactions that represent consistent blockchain state snapshots. Each checkpoint contains complete transaction details, events, object changes, and execution results with guaranteed ordering. See [Life of a Transaction](/develop/transactions/transaction-lifecycle) for more information on checkpoints.
+Checkpoints on Rtd are batches of transactions that represent consistent blockchain state snapshots. Each checkpoint contains complete transaction details, events, object changes, and execution results with guaranteed ordering. See [Life of a Transaction](/develop/transactions/transaction-lifecycle) for more information on checkpoints.
 
 ![Overview](../images/context_custom-indexer-overview_v1.png)
 
@@ -90,7 +90,7 @@ The indexing framework supports multiple data sources to give you flexibility in
 
 **Polling-based sources** that periodically check for new checkpoints:
 
-- **Remote stores** can connect to public checkpoint repositories such as [`https://checkpoints.mainnet.sui.io`](https://checkpoints.mainnet.sui.io/) and [`https://checkpoints.testnet.sui.io`](https://checkpoints.testnet.sui.io/), but these HTTPS endpoints retain only the most recent 30 days of checkpoints and should be used only as fallback sources. For full-retention backfills, use `gs://mysten-mainnet-checkpoints-use4` or `gs://mysten-testnet-checkpoints-use4` with `--remote-store-gcs` and Requester Pays enabled.
+- **Remote stores** can connect to public checkpoint repositories such as [`https://checkpoints.mainnet.rtd.io`](https://checkpoints.mainnet.rtd.io/) and [`https://checkpoints.testnet.rtd.io`](https://checkpoints.testnet.rtd.io/), but these HTTPS endpoints retain only the most recent 30 days of checkpoints and should be used only as fallback sources. For full-retention backfills, use `gs://linku-mainnet-checkpoints-use4` or `gs://linku-testnet-checkpoints-use4` with `--remote-store-gcs` and Requester Pays enabled.
 
 - **Local files** process checkpoint files produced by a local full node. This method offers the lowest latency but is recommended only for testing because the node does not automatically clean up these files.
 
@@ -122,4 +122,4 @@ The indexing framework abstracts database operations through a flexible storage 
 
 ## Building custom indexers
 
-To build your own pipelines for application-specific data, see [Building Your First Custom Indexer](/develop/accessing-data/custom-indexer/build). You can also reach out to a [data indexer operator](/references/awesome-sui) that might already have set one up for your needs.
+To build your own pipelines for application-specific data, see [Building Your First Custom Indexer](/develop/accessing-data/custom-indexer/build). You can also reach out to a [data indexer operator](/references/awesome-rtd) that might already have set one up for your needs.

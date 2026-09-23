@@ -1,8 +1,8 @@
 ---
 title: Validator Node Tools
-description: Use the Sui CLI to interact with a full node's validator commands.
+description: Use the Rtd CLI to interact with a full node's validator commands.
 keywords:
-  - sui cli
+  - rtd cli
   - full node
   - delegator
   - validator
@@ -16,7 +16,7 @@ keywords:
 sidebar_label: Tools
 goal:
   description: >-
-    Validator operator can use the Sui CLI to interact with a full node's
+    Validator operator can use the Rtd CLI to interact with a full node's
     validator commands
   requires:
     - has_frontmatter:
@@ -34,13 +34,13 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What tools are available for Sui validator operators?
-  - How do I use the Sui validator CLI tools?
+  - What tools are available for Rtd validator operators?
+  - How do I use the Rtd validator CLI tools?
   - How do I check my validator node health?
-answer: Use the Sui CLI to interact with a full node's validator commands.
+answer: Use the Rtd CLI to interact with a full node's validator commands.
 ---
 
-This guide focuses on using the Sui CLI `validator` commands. 
+This guide focuses on using the Rtd CLI `validator` commands. 
 
 :::info
 
@@ -51,78 +51,78 @@ This tool supports only pending validators and active validators.
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] Complete all [Sui installation prerequisites](/getting-started/onboarding/sui-install).
+- [x] Complete all [Rtd installation prerequisites](/getting-started/onboarding/rtd-install).
 
-- [x] Build the `sui` binary, which you need for the genesis ceremony. You can do this on any computer.
+- [x] Build the `rtd` binary, which you need for the genesis ceremony. You can do this on any computer.
 
 <details className="nudge-details">
 
 <summary>
 
-View `sui` binary installation details.
+View `rtd` binary installation details.
 
 </summary>
 
     1. Clone the git repo:
 
-           `$ git clone git@github.com:MystenLabs/sui.git && cd sui`
+           `$ git clone git@github.com:LinkUVerse/rtd.git && cd rtd`
 
     2. Check out the commit to use for Testnet:
 
            `$ git checkout testnet`
 
-    3. Build `sui` binary
+    3. Build `rtd` binary
 
-           `$ cargo build --bin sui`
+           `$ cargo build --bin rtd`
 
     4. Remember the path to your binary:
 
-           `$ export SUI_BINARY="$(pwd)/target/debug/sui"`
+           `$ export RTD_BINARY="$(pwd)/target/debug/rtd"`
 
 </details>
 
-- [x] Set up your Sui account and CLI environment. 
+- [x] Set up your Rtd account and CLI environment. 
 
 <details className="nudge-details">
 
 <summary>
 
-View Sui account and CLI environment instructions.
+View Rtd account and CLI environment instructions.
 
 </summary>
 
-    - If this is the first time running this program, it asks you to provide a Sui full node server URL and a meaningful environment alias. It also generates a random key pair in `sui.keystore` and a config `client.yaml`. Swap in your validator account key if you already have one.
+    - If this is the first time running this program, it asks you to provide a Rtd full node server URL and a meaningful environment alias. It also generates a random key pair in `rtd.keystore` and a config `client.yaml`. Swap in your validator account key if you already have one.
 
-       By default, the `client.yaml` and `sui.keystore` files are located in `~/.sui/sui_config`. For more information, refer to the [Sui client CLI tutorial](/references/cli/client).
+       By default, the `client.yaml` and `rtd.keystore` files are located in `~/.rtd/rtd_config`. For more information, refer to the [Rtd client CLI tutorial](/references/cli/client).
 
        ```sh
-       $ sui client
+       $ rtd client
        ```
 
     - If you already set it up, just make sure:
       - `rpc` is correct in `client.yaml`. 
       - `active_address` is correct in `client.yaml`.
-      - `sui.keystore` contains your account key pair.
+      - `rtd.keystore` contains your account key pair.
 
 </details>
 
 - [x] Test your network connection and configuration by displaying your validator information:
 
 ```sh
-$ sui validator display-metadata
+$ rtd validator display-metadata
 ```
 
 </TabItem>
 </Tabs>
 
-## Using Sui CLI
+## Using Rtd CLI
 
-Use the Sui CLI to perform validator tasks.
+Use the Rtd CLI to perform validator tasks.
 
 ### Print help information
 
 ```sh
-$ sui validator --help
+$ rtd validator --help
 ```
 
 ### Become a validator or join committee
@@ -130,18 +130,18 @@ $ sui validator --help
 To become a validator candidate, first run:
 
 ```sh
-$ sui validator make-validator-info <name> <description> <image-url> <project-url> <host-name> <gas_price>
+$ rtd validator make-validator-info <name> <description> <image-url> <project-url> <host-name> <gas_price>
 ```
 
 This generates a `validator.info` file and key pair files. The output of this command includes:
   1. Four [key pair files](/operators/validator/validator-tasks#key-management). **Set their permissions with the minimal visibility (`chmod 600`, for example) and store them securely**. You need them when running the validator node.
-    a. If you follow this guide thoroughly, this key pair is actually copied from your `sui.keystore` file.
+    a. If you follow this guide thoroughly, this key pair is actually copied from your `rtd.keystore` file.
   2. `validator.info` file that contains your validator information. Double-check that all information is correct.
 
 Then run:
 
 ```sh
-$ sui validator become-candidate path/to/validator.info
+$ rtd validator become-candidate path/to/validator.info
 ```
 
 This submits an onchain transaction for you to become a validator candidate. The parameter is the file path to the `validator.info` file you generated in the previous step. **Make sure the transaction succeeds (printed in the output).**
@@ -150,16 +150,16 @@ At this point, you are a validator candidate and can start to accept self-stakin
 
 If you have not already, start a full node now to catch up with the network. When you officially join the committee but are not fully up-to-date, you cannot make meaningful contributions to the network and might be subject to peer reporting. This imposes the risk of reduced staking rewards for you and your delegators.
 
-Then, you must acquire 30M SUI and stake it to the validator staking pool. You can add Sui to the validator staking pool with the command:
+Then, you must acquire 30M RTD and stake it to the validator staking pool. You can add Rtd to the validator staking pool with the command:
 
 ```sh
-$ sui client call --package 0x3 --module sui_system --function request_add_stake --args 0x5 {sui_object_id} {validator_address}
+$ rtd client call --package 0x3 --module rtd_system --function request_add_stake --args 0x5 {rtd_object_id} {validator_address}
 ```
 
-This creates a stake object (of type `0x3::staking_pool::StakedSui`). You can withdraw this object with the following command:
+This creates a stake object (of type `0x3::staking_pool::StakedRtd`). You can withdraw this object with the following command:
 
 ```sh
-$ sui client call --package 0x3 --module sui_system --function request_withdraw_stake --args 0x5 {stake_object_id}
+$ rtd client call --package 0x3 --module rtd_system --function request_withdraw_stake --args 0x5 {stake_object_id}
 ```
 
 :::tip 
@@ -171,7 +171,7 @@ You cannot withdraw non-activated stake from an inactive validator. If that is t
 After you have staked enough, run:
 
 ```sh
-$ sui validator join-committee
+$ rtd validator join-committee
 ```
 
 Joining the committee makes you a pending validator. A pending validator becomes active and joins the committee starting from the next epoch.
@@ -182,7 +182,7 @@ Joining the committee makes you a pending validator. A pending validator becomes
 To leave the committee, run:
 
 ```sh
-$ sui validator leave-committee
+$ rtd validator leave-committee
 ```
 
 The network removes you from the committee starting from the next epoch.
@@ -192,7 +192,7 @@ The network removes you from the committee starting from the next epoch.
 Serialize the payload that you use to generate proof of possession. This allows the signer to take the payload offline for an authority protocol BLS key pair to sign.
 
 ```sh
-$ sui validator serialize-payload-pop --account-address $ACCOUNT_ADDRESS --protocol-public-key $BLS_PUBKEY
+$ rtd validator serialize-payload-pop --account-address $ACCOUNT_ADDRESS --protocol-public-key $BLS_PUBKEY
 ```
 
 ```sh
@@ -204,13 +204,13 @@ Serialized payload: $PAYLOAD_TO_SIGN
 Display metadata about your local validator:
 
 ```sh
-$ sui validator display-metadata
+$ rtd validator display-metadata
 ```
 
 Display metadata about another validator through its validator address:
 
 ```sh
-$ sui validator display-metadata <validator-address>
+$ rtd validator display-metadata <validator-address>
 ```
 
 ### Update validator metadata
@@ -218,7 +218,7 @@ $ sui validator display-metadata <validator-address>
 Run the following to see how to update validator metadata. Read the description carefully about when the change takes effect.
 
 ```sh
-$ sui validator update-metadata --help
+$ rtd validator update-metadata --help
 ```
 
 You can update the following onchain metadata:
@@ -243,7 +243,7 @@ Make sure the new address is not behind a firewall.
 Run the following to see how to update each metadata field.
 
 ```sh
-$ sui validator update-metadata --help
+$ rtd validator update-metadata --help
 ```
 
 ### Operation Cap
@@ -257,13 +257,13 @@ The Operation Cap holder (either the validator itself or the delegatee) updates 
 If your account is a validator and holds the Operation Cap, update the gas price with:
 
 ```sh
-$ sui validator update-gas-price <gas-price>
+$ rtd validator update-gas-price <gas-price>
 ```
 
 If your account is a delegatee:
 
 ```sh
-$ sui validator update-gas-price --operation-cap-id <operation-cap-id> <gas-price>
+$ rtd validator update-gas-price --operation-cap-id <operation-cap-id> <gas-price>
 ```
 
 ### Report validators
@@ -271,7 +271,7 @@ $ sui validator update-gas-price --operation-cap-id <operation-cap-id> <gas-pric
 If your account is a validator and holds the Operation Cap, report validator peers with:
 
 ```sh
-$ sui validator report-validator <reportee-address>
+$ rtd validator report-validator <reportee-address>
 ```
 
 Add the `--undo-report false` argument if you intend to undo an existing report.
@@ -281,5 +281,5 @@ Similarly, if your account is a delegatee, add the `--operation-cap-id <operatio
 If your account is a delegatee, run:
 
 ```sh
-$ sui validator update-gas-price --operation-cap-id <operation-cap-id> <gas-price>
+$ rtd validator update-gas-price --operation-cap-id <operation-cap-id> <gas-price>
 ```

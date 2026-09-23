@@ -1,7 +1,7 @@
 ---
 title: Shared Objects
 description: >-
-  Anyone can access shared objects on the Sui network, so care must be taken to
+  Anyone can access shared objects on the Rtd network, so care must be taken to
   secure access, if needed.
 keywords:
   - shared objects
@@ -12,7 +12,7 @@ keywords:
   - accessing public objects
 goal:
   description: >-
-    Reader understands anyone can access shared objects on the Sui network, so
+    Reader understands anyone can access shared objects on the Rtd network, so
     care must be taken to secure access, if needed
   requires:
     - has_frontmatter:
@@ -35,7 +35,7 @@ builder_paths:
     step: Shared objects
     stage: Move Contract
 questions:
-  - What is Shared Objects in Sui?
+  - What is Shared Objects in Rtd?
   - How do I create shared objects?
   - When to use shared objects?
 answer: >-
@@ -48,7 +48,7 @@ A [shared object](/develop/objects/object-ownership) is a public, mutable object
 
 ## Create shared objects
 
-Use the [`sui::transfer::share_object`](/references/framework/sui_sui/transfer#sui_transfer_share_object) function to create a shared object, making it publicly accessible on the network. Extended functionality and accessibility of shared objects requires additional effort by securing access, if needed.
+Use the [`rtd::transfer::share_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_share_object) function to create a shared object, making it publicly accessible on the network. Extended functionality and accessibility of shared objects requires additional effort by securing access, if needed.
 
 Shared objects require the `key` ability.
 
@@ -74,14 +74,14 @@ Shared objects are ideal for things like marketplaces, games, or other scenarios
 
 ## Interact with shared objects 
 
-The following example creates a shop to sell digital donuts. Everyone needs access to the shop to purchase donuts from it, so the example creates the shop as a shared object using [`sui::transfer::share_object`](/references/framework/sui_sui/transfer#sui_transfer_share_object).
+The following example creates a shop to sell digital donuts. Everyone needs access to the shop to purchase donuts from it, so the example creates the shop as a shared object using [`rtd::transfer::share_object`](/references/framework/rtd_rtd/transfer#rtd_transfer_share_object).
 
 ```move
 module examples::donuts;
 
-use sui::sui::SUI;
-use sui::coin::{Self, Coin};
-use sui::balance::{Self, Balance};
+use rtd::rtd::RTD;
+use rtd::coin::{Self, Coin};
+use rtd::balance::{Self, Balance};
 
 /// For when Coin balance is too low.
 const ENotEnough: u64 = 0;
@@ -96,7 +96,7 @@ public struct Donut has key { id: UID }
 public struct DonutShop has key {
     id: UID,
     price: u64,
-    balance: Balance<SUI>
+    balance: Balance<RTD>
 }
 
 /// Init function is often ideal place for initializing
@@ -116,11 +116,11 @@ fun init(ctx: &mut TxContext) {
 
 /// Entry function available to everyone who owns a Coin.
 public fun buy_donut(
-    shop: &mut DonutShop, payment: &mut Coin<SUI>, ctx: &mut TxContext
+    shop: &mut DonutShop, payment: &mut Coin<RTD>, ctx: &mut TxContext
 ) {
     assert!(coin::value(payment) >= shop.price, ENotEnough);
 
-    // Take amount = `shop.price` from Coin<SUI>
+    // Take amount = `shop.price` from Coin<RTD>
     let paid = payment.balance_mut().split(shop.price);
 
     // Put the coin to the Shop's balance
@@ -151,7 +151,7 @@ public fun collect_profits(
 
 ## Security considerations
 
-Anyone can submit a transaction that references a shared object. The Sui runtime does not enforce access control on shared objects. Your Move code must verify authorization for every privileged operation. Learn more in ([Security Best Practices](/develop/security/best-practices)).
+Anyone can submit a transaction that references a shared object. The Rtd runtime does not enforce access control on shared objects. Your Move code must verify authorization for every privileged operation. Learn more in ([Security Best Practices](/develop/security/best-practices)).
 
 ## Performance considerations
 
@@ -161,7 +161,7 @@ When many transactions write to the same shared object in the same checkpoint, t
 
 ## Query shared objects offchain
 
-You can read shared objects offchain using the same methods as any other Sui object. Use the object's ID to query its current state:
+You can read shared objects offchain using the same methods as any other Rtd object. Use the object's ID to query its current state:
 
 - **GraphQL RPC:** Use the `object` query with the shared object's ID. See the [GraphQL RPC reference](/develop/accessing-data/graphql/graphql-rpc) for the full schema.
 - **gRPC:** Use the `GetObject` method. See the [gRPC reference](/develop/accessing-data/grpc) for details.

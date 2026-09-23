@@ -1,5 +1,5 @@
 ---
-title: Deploy Sui Packages with GitHub Actions
+title: Deploy Rtd Packages with GitHub Actions
 sidebar_label: Deploy with GitHub Actions
 description: >-
   Build a production-safe CI/CD pipeline that tests every pull request,
@@ -14,9 +14,9 @@ keywords:
   - UpgradeCap
   - suiup
 questions:
-  - How do I deploy sui packages with github actions?
+  - How do I deploy rtd packages with github actions?
   - How do I test every pull request?
-  - What is Deploy Sui Packages with GitHub Actions in Sui?
+  - What is Deploy Rtd Packages with GitHub Actions in Rtd?
 answer: >-
   Build a production-safe CI/CD pipeline that tests every pull request,
   automates Testnet publishing, and gates Mainnet publishing and upgrades behind
@@ -32,7 +32,7 @@ This guide shows how to deploy Move packages through a continuous integration an
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
-- [x] A Move package that builds and tests locally with the Sui CLI.
+- [x] A Move package that builds and tests locally with the Rtd CLI.
 - [x] A GitHub repository with Actions enabled.
 - [x] Familiarity with [publishing](/develop/publish-upgrade-packages) and [upgrading packages](/develop/publish-upgrade-packages/upgrade).
 - [x] For Mainnet, a signing solution you control, such as a hardware wallet, a multisig, or a key management service, and a dedicated RPC endpoint.
@@ -86,37 +86,37 @@ Never print, echo, or commit a private key. Pass keys to a step through the `env
 
 :::
 
-When a step needs a key, map it from secrets to an environment variable and reference the variable. The Sui CLI reads the imported key from its keystore, so the key value appears only once, during import.
+When a step needs a key, map it from secrets to an environment variable and reference the variable. The Rtd CLI reads the imported key from its keystore, so the key value appears only once, during import.
 
 ### Prefer external signers for production
 
 For Mainnet, the strongest pattern keeps the private key out of CI entirely. CI builds an unsigned transaction, a signer you control approves it, and the signed transaction goes back to the network. This works with hardware wallets, multisig, and custody services.
 
-The flow uses three commands. First, build the unsigned transaction in CI with the `--serialize-unsigned-transaction` flag, which every transaction-crafting command accepts, including `sui client publish` and `sui client upgrade`. Second, sign the transaction bytes offline with your signer. Third, submit the signed transaction:
+The flow uses three commands. First, build the unsigned transaction in CI with the `--serialize-unsigned-transaction` flag, which every transaction-crafting command accepts, including `rtd client publish` and `rtd client upgrade`. Second, sign the transaction bytes offline with your signer. Third, submit the signed transaction:
 
 ```bash
-$ sui client execute-signed-tx --tx-bytes <TX_BYTES> --signatures <SERIALIZED_SIGNATURE>
+$ rtd client execute-signed-tx --tx-bytes <TX_BYTES> --signatures <SERIALIZED_SIGNATURE>
 ```
 
 For details on signing the bytes and combining multisig signatures, see [Offline Signing](/develop/transactions/transaction-auth/offline-signing) and [Multisig Authentication](/develop/transactions/transaction-auth/multisig). For Testnet automation, importing a low-value key from a secret is acceptable because the stakes are low.
 
-## Pin the Sui CLI to a release
+## Pin the Rtd CLI to a release
 
-Sui ships updates regularly, and the CLI version determines build output and framework compatibility. Pin the CLI to a specific release so your pipeline produces the same result every run. Use [suiup](https://github.com/MystenLabs/suiup) to install and pin a version. The `sui@NETWORK-VERSION` form pins both the network release line and the exact version.
+Rtd ships updates regularly, and the CLI version determines build output and framework compatibility. Pin the CLI to a specific release so your pipeline produces the same result every run. Use [suiup](https://github.com/LinkUVerse/suiup) to install and pin a version. The `rtd@NETWORK-VERSION` form pins both the network release line and the exact version.
 
-Add these steps to any job that runs the Sui CLI. They install `suiup`, install a pinned Sui CLI, and add the binary directory to the path:
+Add these steps to any job that runs the Rtd CLI. They install `suiup`, install a pinned Rtd CLI, and add the binary directory to the path:
 
 ```yaml
 - name: Install suiup
-  run: cargo install --git https://github.com/MystenLabs/suiup.git --locked
+  run: cargo install --git https://github.com/LinkUVerse/suiup.git --locked
 
-- name: Install pinned Sui CLI
+- name: Install pinned Rtd CLI
   run: |
-    suiup install sui@${{ env.SUI_VERSION }}
+    suiup install rtd@${{ env.RTD_VERSION }}
     echo "$HOME/.suiup/bin" >> "$GITHUB_PATH"
 ```
 
-Pin to the release line that matches the target network. Use a Testnet release for the Testnet job and a Mainnet release for the Mainnet job, because the CLI must agree with the onchain Sui framework version. The workflows below set `SUI_VERSION` per file, such as `testnet-1.51.4` or `mainnet-1.51.4`. Replace the version numbers with the current release you intend to pin.
+Pin to the release line that matches the target network. Use a Testnet release for the Testnet job and a Mainnet release for the Mainnet job, because the CLI must agree with the onchain Rtd framework version. The workflows below set `RTD_VERSION` per file, such as `testnet-1.51.4` or `mainnet-1.51.4`. Replace the version numbers with the current release you intend to pin.
 
 ## Test every pull request
 
@@ -135,7 +135,7 @@ permissions:
   contents: read
 
 env:
-  SUI_VERSION: testnet-1.51.4
+  RTD_VERSION: testnet-1.51.4
   PACKAGE_PATH: ./move/my_package
 
 jobs:
@@ -151,21 +151,21 @@ jobs:
           path: |
             ~/.cargo
             ~/.suiup
-          key: suiup-${{ runner.os }}-${{ env.SUI_VERSION }}
+          key: suiup-${{ runner.os }}-${{ env.RTD_VERSION }}
 
       - name: Install suiup
-        run: cargo install --git https://github.com/MystenLabs/suiup.git --locked
+        run: cargo install --git https://github.com/LinkUVerse/suiup.git --locked
 
-      - name: Install pinned Sui CLI
+      - name: Install pinned Rtd CLI
         run: |
-          suiup install sui@${{ env.SUI_VERSION }}
+          suiup install rtd@${{ env.RTD_VERSION }}
           echo "$HOME/.suiup/bin" >> "$GITHUB_PATH"
 
       - name: Build
-        run: sui move build --path ${{ env.PACKAGE_PATH }}
+        run: rtd move build --path ${{ env.PACKAGE_PATH }}
 
       - name: Test
-        run: sui move test --path ${{ env.PACKAGE_PATH }}
+        run: rtd move test --path ${{ env.PACKAGE_PATH }}
 ```
 
 :::caution
@@ -197,7 +197,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SUI_VERSION: testnet-1.51.4
+  RTD_VERSION: testnet-1.51.4
   PACKAGE_PATH: ./move/my_package
 
 jobs:
@@ -207,24 +207,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pinned Sui CLI
+      - name: Install pinned Rtd CLI
         run: |
-          cargo install --git https://github.com/MystenLabs/suiup.git --locked
-          suiup install sui@${{ env.SUI_VERSION }}
+          cargo install --git https://github.com/LinkUVerse/suiup.git --locked
+          suiup install rtd@${{ env.RTD_VERSION }}
           echo "$HOME/.suiup/bin" >> "$GITHUB_PATH"
 
       - name: Configure network and key
         env:
-          SUI_PRIVATE_KEY: ${{ secrets.TESTNET_PRIVATE_KEY }}
+          RTD_PRIVATE_KEY: ${{ secrets.TESTNET_PRIVATE_KEY }}
         run: |
-          sui client new-env --alias testnet --rpc https://fullnode.testnet.sui.io:443
-          sui client switch --env testnet
-          sui keytool import "$SUI_PRIVATE_KEY" ed25519
-          sui client switch --address ${{ vars.TESTNET_ADDRESS }}
+          rtd client new-env --alias testnet --rpc https://fullnode.testnet.rtd.io:443
+          rtd client switch --env testnet
+          rtd keytool import "$RTD_PRIVATE_KEY" ed25519
+          rtd client switch --address ${{ vars.TESTNET_ADDRESS }}
 
       - name: Publish and capture IDs
         run: |
-          sui client publish --json --gas-budget 200000000 ${{ env.PACKAGE_PATH }} > publish.json
+          rtd client publish --json --gas-budget 200000000 ${{ env.PACKAGE_PATH }} > publish.json
           PACKAGE_ID=$(jq -r '.objectChanges[] | select(.type == "published") | .packageId' publish.json)
           UPGRADE_CAP=$(jq -r '.objectChanges[] | select(.objectType == "0x2::package::UpgradeCap") | .objectId' publish.json)
           echo "Package ID: $PACKAGE_ID" >> "$GITHUB_STEP_SUMMARY"
@@ -262,7 +262,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SUI_VERSION: mainnet-1.51.4
+  RTD_VERSION: mainnet-1.51.4
   PACKAGE_PATH: ./move/my_package
 
 jobs:
@@ -272,21 +272,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pinned Sui CLI
+      - name: Install pinned Rtd CLI
         run: |
-          cargo install --git https://github.com/MystenLabs/suiup.git --locked
-          suiup install sui@${{ env.SUI_VERSION }}
+          cargo install --git https://github.com/LinkUVerse/suiup.git --locked
+          suiup install rtd@${{ env.RTD_VERSION }}
           echo "$HOME/.suiup/bin" >> "$GITHUB_PATH"
 
       - name: Connect to a dedicated Mainnet RPC
         run: |
-          sui client new-env --alias mainnet --rpc ${{ secrets.MAINNET_RPC_URL }}
-          sui client switch --env mainnet
-          sui client switch --address ${{ vars.MAINNET_SENDER_ADDRESS }}
+          rtd client new-env --alias mainnet --rpc ${{ secrets.MAINNET_RPC_URL }}
+          rtd client switch --env mainnet
+          rtd client switch --address ${{ vars.MAINNET_SENDER_ADDRESS }}
 
       - name: Build the unsigned upgrade transaction
         run: |
-          sui client upgrade \
+          rtd client upgrade \
             --upgrade-capability ${{ vars.MAINNET_UPGRADE_CAP }} \
             --gas-budget 500000000 \
             --serialize-unsigned-transaction \
@@ -299,7 +299,7 @@ jobs:
           path: unsigned-upgrade.txt
 ```
 
-The artifact holds the Base64 transaction bytes. Sign those bytes with your hardware wallet, multisig, or custody service, then submit the signed transaction with `sui client execute-signed-tx`, as shown earlier. A first Mainnet publish follows the same pattern with `sui client publish --serialize-unsigned-transaction`.
+The artifact holds the Base64 transaction bytes. Sign those bytes with your hardware wallet, multisig, or custody service, then submit the signed transaction with `rtd client execute-signed-tx`, as shown earlier. A first Mainnet publish follows the same pattern with `rtd client publish --serialize-unsigned-transaction`.
 
 If you accept single-key risk for a lower-assurance setup, you can sign and submit inside the gated job by importing a Mainnet key from the `mainnet` environment secret, the same way the Testnet job does. The manual approval and restricted secret scope still apply.
 
@@ -342,7 +342,7 @@ The `UpgradeCap` is the object that authorizes upgrades to your package. Whoever
 
 :::danger
 
-Protect the `UpgradeCap` with the same care as a signing key. Do not leave it on a single hot key used by automation. For production, transfer it to a multisig or custody account, and consider locking its upgrade policy so it cannot become more permissive later. Calling `sui::package::make_immutable` destroys the `UpgradeCap` and makes the package permanently unupgradable, which removes single-key risk but also blocks all future fixes. This action is irreversible.
+Protect the `UpgradeCap` with the same care as a signing key. Do not leave it on a single hot key used by automation. For production, transfer it to a multisig or custody account, and consider locking its upgrade policy so it cannot become more permissive later. Calling `rtd::package::make_immutable` destroys the `UpgradeCap` and makes the package permanently unupgradable, which removes single-key risk but also blocks all future fixes. This action is irreversible.
 
 :::
 

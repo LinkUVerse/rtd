@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -46,10 +46,10 @@ function globMdx(dir) {
 }
 
 function getArchetype(relPath) {
-  if (relPath.startsWith('snippets/') || relPath.includes('sui-graphql/beta/reference/')) return 'skip';
+  if (relPath.startsWith('snippets/') || relPath.includes('rtd-graphql/beta/reference/')) return 'skip';
   if (relPath.startsWith('getting-started/onboarding/')) return 'onboarding';
   if (relPath.startsWith('getting-started/examples/')) return 'example';
-  if (relPath.startsWith('getting-started/sui-for-')) return 'migration';
+  if (relPath.startsWith('getting-started/rtd-for-')) return 'migration';
   if (relPath.startsWith('operators/')) return 'operator';
   if (relPath.includes('-sdk/') || relPath.includes('-sdk.mdx')) return 'sdk';
   if (relPath.startsWith('references/')) return 'reference';
@@ -131,9 +131,9 @@ function improveQuestions(questions, title, description, headings, archetype) {
     // Clean up
     q = q.replace(/SDK SDK/g, 'SDK')
          .replace(/pattern pattern/g, 'pattern')
-         .replace(/in Sui in Sui/g, 'in Sui')
-         .replace(/on Sui on Sui/g, 'on Sui')
-         .replace(/install sui\b(?! CLI)/gi, 'install the Sui CLI')
+         .replace(/in Rtd in Rtd/g, 'in Rtd')
+         .replace(/on Rtd on Rtd/g, 'on Rtd')
+         .replace(/install rtd\b(?! CLI)/gi, 'install the Rtd CLI')
          .replace(/\s{2,}/g, ' ')
          .trim();
     if (!q.endsWith('?')) q += '?';
@@ -149,12 +149,12 @@ function improveQuestions(questions, title, description, headings, archetype) {
       addQ(`How do I ${topicAction}?`);
       break;
     case 'example':
-      addQ(`How do I build a ${topicAction.replace(/\s+pattern$/i, '')} on Sui?`);
+      addQ(`How do I build a ${topicAction.replace(/\s+pattern$/i, '')} on Rtd?`);
       break;
     case 'migration': {
-      const platform = topicName.replace(/->|→/g, ' ').replace(/\s+(to\s+)?Sui$/i, '').trim();
-      addQ(`How is Sui different from ${platform}?`);
-      addQ(`How do I migrate from ${platform} to Sui?`);
+      const platform = topicName.replace(/->|→/g, ' ').replace(/\s+(to\s+)?Rtd$/i, '').trim();
+      addQ(`How is Rtd different from ${platform}?`);
+      addQ(`How do I migrate from ${platform} to Rtd?`);
       break;
     }
     case 'operator':
@@ -169,7 +169,7 @@ function improveQuestions(questions, title, description, headings, archetype) {
       if (/^(build|create|set up|configure|install|deploy|write|test|debug|connect|query|emit|use|run|monitor|sign|send|mint|transfer|upgrade|publish)/i.test(topicAction)) {
         addQ(`How do I ${topicAction}?`);
       } else {
-        addQ(`What is ${topicName} in Sui?`);
+        addQ(`What is ${topicName} in Rtd?`);
       }
   }
 
@@ -194,7 +194,7 @@ function improveQuestions(questions, title, description, headings, archetype) {
 
   // Add a "What is X" if we only have "How" questions and archetype isn't procedural
   if (newQuestions.length > 0 && newQuestions.every(q => q.startsWith('How')) && !['onboarding', 'operator'].includes(archetype)) {
-    addQ(`What is ${topicName} in Sui?`);
+    addQ(`What is ${topicName} in Rtd?`);
   }
 
   // Limit to 5

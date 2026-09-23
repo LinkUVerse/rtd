@@ -1,7 +1,7 @@
 ---
 title: Loyalty Tokens
 description: >-
-  Use the Sui Closed-Loop Token standard to create tokens that are only valid
+  Use the Rtd Closed-Loop Token standard to create tokens that are only valid
   within specific workflows and services. One example of Closed-Loop Tokens is a
   loyalty token.
 keywords:
@@ -12,7 +12,7 @@ keywords:
   - token example
   - create a token
   - how to create token
-  - SUI token standards
+  - RTD token standards
 goal:
   description: >-
     Reader can use the Closed-Loop Token standard to create tokens valid only
@@ -33,11 +33,11 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Loyalty Tokens in Sui?
-  - How does loyalty tokens work on Sui?
+  - What is Loyalty Tokens in Rtd?
+  - How does loyalty tokens work on Rtd?
   - Where can I find loyalty tokens examples?
 answer: >-
-  Using the Sui [Closed-Loop Token](/onchain-finance/closed-loop-token)
+  Using the Rtd [Closed-Loop Token](/onchain-finance/closed-loop-token)
   standard, you can create tokens that are valid only for a specific service,
   like an airline that wants to grant tokens to frequent flyers to purchase
   tickets or upgrades.
@@ -45,7 +45,7 @@ answer: >-
 
 A closed-loop token is a token that can only be used within specific workflows you define. Unlike standard `Coin` types that users can freely transfer and trade, closed-loop tokens restrict what actions holders can perform. You control minting, spending, and transfer through a [`TokenPolicy`](/onchain-finance/closed-loop-token/token-policy) that enforces your rules onchain ([Closed-Loop Token standard](/onchain-finance/closed-loop-token)).
 
-Using the Sui [Closed-Loop Token](/onchain-finance/closed-loop-token) standard, you can create tokens that are valid only for a specific service, like an airline that wants to grant tokens to frequent flyers to purchase tickets or upgrades.
+Using the Rtd [Closed-Loop Token](/onchain-finance/closed-loop-token) standard, you can create tokens that are valid only for a specific service, like an airline that wants to grant tokens to frequent flyers to purchase tickets or upgrades.
 
 In this example, the Admin sends `LOYALTY` tokens to the users of your service as a reward for their continued business. The example creates a `GiftShop` where holders can spend `LOYALTY` tokens to buy `Gift`s.
 
@@ -88,4 +88,4 @@ Loyalty tokens follow this lifecycle:
 3. **Settlement:** The `ActionRequest` is confirmed against the `TokenPolicy`, which accumulates the spent balance.
 4. **Burning:** The `TreasuryCap` holder can remove the accumulated spent balance from the `TokenPolicy`, effectively burning the tokens.
 
-[View the full example on GitHub](https://github.com/MystenLabs/sui/tree/main/examples/move/token/sources/loyalty.move).
+[View the full example on GitHub](https://github.com/LinkUVerse/rtd/tree/main/examples/move/token/sources/loyalty.move).

@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#create-manager
 import type {
 	CreateManagerReceipt,
 	DecodableTransactionResult,
-} from '@mysten/deepbook-v3/predict';
-import type { Transaction } from '@mysten/sui/transactions';
+} from '@linku/deepbook-v3/predict';
+import type { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 
 // Each trader holds one canonical account: a shared `AccountWrapper` holding an

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// This example demonstrates how to use Closed Loop to create a regulated coin
@@ -28,10 +28,10 @@ module examples::regulated_token {
     use examples::allowlist_rule::Allowlist;
     use examples::denylist_rule::Denylist;
     use examples::limiter_rule::{Self as limiter, Limiter};
-    use sui::coin::{Self, TreasuryCap};
-    use sui::token::{Self, TokenPolicy, TokenPolicyCap};
-    use sui::tx_context::sender;
-    use sui::vec_map;
+    use rtd::coin::{Self, TreasuryCap};
+    use rtd::token::{Self, TokenPolicy, TokenPolicyCap};
+    use rtd::tx_context::sender;
+    use rtd::vec_map;
 
     /// OTW and the type for the Token.
     public struct REGULATED_TOKEN has drop {}
@@ -113,9 +113,9 @@ module examples::regulated_token_tests {
     use examples::denylist_rule as denylist;
     use examples::limiter_rule as limiter;
     use examples::regulated_token::set_rules;
-    use sui::coin;
-    use sui::token::{Self, TokenPolicy, TokenPolicyCap};
-    use sui::token_test_utils::{Self as test, TEST};
+    use rtd::coin;
+    use rtd::token::{Self, TokenPolicy, TokenPolicyCap};
+    use rtd::token_test_utils::{Self as test, TEST};
 
     const ALICE: address = @0x0;
     const BOB: address = @0x1;

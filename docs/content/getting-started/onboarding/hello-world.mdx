@@ -15,9 +15,9 @@ keywords:
   - what is a package
   - what is an object
   - move object
-  - sui move object
-  - sui move package
-  - sui move module
+  - rtd move object
+  - rtd move package
+  - rtd move module
   - move module
   - build package
   - publish package
@@ -62,56 +62,56 @@ questions:
   - How do I publish the move package?
 answer: >-
   You'll build a "Hello, World!" program to learn the fundamentals of
-  programming on Sui. You create programs on Sui by writing and deploying smart
+  programming on Rtd. You create programs on Rtd by writing and deploying smart
   contracts to the network.
 ---
 
 <AgentPrompt
-  prompt={"Clone the https://github.com/MystenLabs/sui-stack-hello-world example app, build and publish the Move package at move/hello-world to Testnet, then call its entry function and show me the resulting object and transaction on SuiVision. Remember: The Move.toml uses edition = '2024' and does NOT need a [dependencies] section for Sui — the framework is resolved automatically."}
+  prompt={"Clone the https://github.com/LinkUVerse/rtd-stack-hello-world example app, build and publish the Move package at move/hello-world to Testnet, then call its entry function and show me the resulting object and transaction on RtdVision. Remember: The Move.toml uses edition = '2024' and does NOT need a [dependencies] section for Rtd — the framework is resolved automatically."}
 />
 
-You'll build a "Hello, World!" program to learn the fundamentals of programming on Sui. You create programs on Sui by writing and deploying smart contracts to the network.
+You'll build a "Hello, World!" program to learn the fundamentals of programming on Rtd. You create programs on Rtd by writing and deploying smart contracts to the network.
 
-The most basic unit of storage on Sui is an [object](/develop/sui-architecture/object-model). Other blockchains typically structure storage using key-value stores. Sui centers storage around objects with unique ID addresses onchain. Every Sui smart contract is an object that manipulates other objects.
+The most basic unit of storage on Rtd is an [object](/develop/rtd-architecture/object-model). Other blockchains typically structure storage using key-value stores. Rtd centers storage around objects with unique ID addresses onchain. Every Rtd smart contract is an object that manipulates other objects.
 
 Objects can be immutable or mutable:
 
 - **Immutable** objects cannot be transferred, changed, or deleted. No one owns them and anyone can access them publicly.
 
-- **Mutable** objects can be transferred, changed, and deleted. A Sui address can own them, or they can be shared for public access.
+- **Mutable** objects can be transferred, changed, and deleted. A Rtd address can own them, or they can be shared for public access.
 
 Every object's unique ID and version number references it onchain. Every transaction on the network takes objects as input, then reads, writes, and mutates the inputs to produce new or altered objects as output. Every object knows the hash of the transaction that produced it. 
 
 When an object is modified by a transaction, the transaction's output writes the object's mutated contents to the same object ID but with a new version number. 
 
-Sui has limits on the maximum transaction size (128KB) and number of objects (2,048) used in a transaction. For more information on limits, see [Building Against Limits](https://move-book.com/guides/building-against-limits/) in The Move Book.
+Rtd has limits on the maximum transaction size (128KB) and number of objects (2,048) used in a transaction. For more information on limits, see [Building Against Limits](https://move-book.com/guides/building-against-limits/) in The Move Book.
 
 ## What is Move? 
 
-[Move](/develop/write-move/sui-move-concepts) is the programming language Sui uses to create smart contracts. It is platform agnostic and enables common libraries, tooling, and developer communities across blockchains with vastly different data and execution models. There are three ways to use Move in the context of Sui: Move packages, Move modules, and Move objects.
+[Move](/develop/write-move/rtd-move-concepts) is the programming language Rtd uses to create smart contracts. It is platform agnostic and enables common libraries, tooling, and developer communities across blockchains with vastly different data and execution models. There are three ways to use Move in the context of Rtd: Move packages, Move modules, and Move objects.
 
-A Sui **Move package** is also referred to as a Move smart contract. It is a set of Move bytecode published to the Sui network. It is immutable and cannot be changed or removed, but you can upgrade it. Upgrading creates a new version of the package object onchain, leaving the original intact. All prior versions of a package still exist onchain. Once you publish it, other packages can import and use the modules it provides. Anyone can view a package's contents and use a Sui Explorer to see how its logic manipulates other objects. 
+A Rtd **Move package** is also referred to as a Move smart contract. It is a set of Move bytecode published to the Rtd network. It is immutable and cannot be changed or removed, but you can upgrade it. Upgrading creates a new version of the package object onchain, leaving the original intact. All prior versions of a package still exist onchain. Once you publish it, other packages can import and use the modules it provides. Anyone can view a package's contents and use a Rtd Explorer to see how its logic manipulates other objects. 
 
-Every Move package on Sui includes one or more **Sui Move modules** that define the package's interaction with onchain objects. A module's name is always unique within the package that contains it.
+Every Move package on Rtd includes one or more **Rtd Move modules** that define the package's interaction with onchain objects. A module's name is always unique within the package that contains it.
 
-A Sui Move module governs a Sui **Move object**, which is typed data from a Sui Move package. Each Move object value is a struct with fields that can contain primitive types, such as integers and addresses, other objects, and non-object structs.
+A Rtd Move module governs a Rtd **Move object**, which is typed data from a Rtd Move package. Each Move object value is a struct with fields that can contain primitive types, such as integers and addresses, other objects, and non-object structs.
 
 ## Clone "Hello, World!"
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] [Install the latest version of Sui](/getting-started/onboarding/sui-install).
+- [x] [Install the latest version of Rtd](/getting-started/onboarding/rtd-install).
 
-- [x] [Configure the Sui client](/getting-started/onboarding/configure-sui-client).
+- [x] [Configure the Rtd client](/getting-started/onboarding/configure-rtd-client).
 
-- [x] [Create a Sui address](/getting-started/onboarding/get-address).
+- [x] [Create a Rtd address](/getting-started/onboarding/get-address).
 
-- [x] [Get SUI Testnet tokens](/getting-started/onboarding/get-coins).
+- [x] [Get RTD Testnet tokens](/getting-started/onboarding/get-coins).
 
 - [x] Download and install an IDE. The following are recommended, as they offer Move extensions:
 
-    - [VSCode](https://code.visualstudio.com/), corresponding [Move extension](https://marketplace.visualstudio.com/items?itemName=mysten.move)
+    - [VSCode](https://code.visualstudio.com/), corresponding [Move extension](https://marketplace.visualstudio.com/items?itemName=linku.move)
 
     - [Emacs](https://www.gnu.org/software/emacs/), corresponding [Move extension](https://github.com/amnn/move-mode)
 
@@ -126,12 +126,12 @@ A Sui Move module governs a Sui **Move object**, which is typed data from a Sui 
 </TabItem>
 </Tabs>
 
-To demonstrate creating objects, packages, and how to build your first Sui application, start by cloning the "Hello, World!" example:
+To demonstrate creating objects, packages, and how to build your first Rtd application, start by cloning the "Hello, World!" example:
 
 ```
 $ git clone \
-  https://github.com/MystenLabs/sui-stack-hello-world.git
-$ cd sui-stack-hello-world/move/hello-world
+  https://github.com/LinkUVerse/rtd-stack-hello-world.git
+$ cd rtd-stack-hello-world/move/hello-world
 ```
 
 In this project, there are two important files that define the package's logic, information, and its dependencies:
@@ -144,7 +144,7 @@ In this project, there are two important files that define the package's logic, 
 
 <summary>`move/hello-world/Move.toml`</summary>
 
-<ImportContent source="/move/hello-world/Move.toml" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/move/hello-world/Move.toml" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 </details>
 
@@ -152,16 +152,16 @@ In this project, there are two important files that define the package's logic, 
 
 Open the `greeting.move` file in your IDE of choice. You can see the following Move code:
 
-<ImportContent source="/move/hello-world/sources/greeting.move" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/move/hello-world/sources/greeting.move" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 ### Code explanation
 
-<CodeWalkthrough source="/move/hello-world/sources/greeting.move" org="MystenLabs" repo="sui-stack-hello-world" language="move">
+<CodeWalkthrough source="/move/hello-world/sources/greeting.move" org="LinkUVerse" repo="rtd-stack-hello-world" language="move">
   <Step lines="8-9" title="Module declaration">
     This code defines a module called `greeting` inside the `hello_world` package and imports the `string` library from the standard library.
   </Step>
   <Step lines="11-15" title="`Greeting` struct">
-    The `Greeting` struct is a Sui object (it has the `key` ability and a `UID` field). It contains a `text` field that stores a string. A struct with `key` is a resource type, meaning it cannot be copied and must be explicitly moved or destroyed.
+    The `Greeting` struct is a Rtd object (it has the `key` ability and a `UID` field). It contains a `text` field that stores a string. A struct with `key` is a resource type, meaning it cannot be copied and must be explicitly moved or destroyed.
   </Step>
   <Step lines="17-24" title="Constructor: `new`">
     The `new` function creates a `Greeting` object initialized with the text "Hello world." and shares it as a public object through `transfer::share_object`. Shared objects are accessible to anyone on the network, so any address can read or mutate them in a transaction.
@@ -173,7 +173,7 @@ Open the `greeting.move` file in your IDE of choice. You can see the following M
 
 ### Resource safety 
 
-A unique aspect of programming applications on Sui is the resource safety that the Move Bytecode Verifier enforces. Move packages must satisfy the following resource safety parameters:
+A unique aspect of programming applications on Rtd is the resource safety that the Move Bytecode Verifier enforces. Move packages must satisfy the following resource safety parameters:
 
 - All resources must be either moved into global storage or destroyed by the end of a transaction. 
 
@@ -185,7 +185,7 @@ To satisfy the requirement that all resources must be moved or destroyed by the 
 
 To mutate `Greeting`, the function `update_text` takes the input `(&mut Greeting)` rather than the resource itself. This function satisfies resource safety because the function does not copy the resource and mutates it through a reference.
 
-[Learn more](https://github.com/MystenLabs/sui/blob/main/external-crates/move/historical-versions/v1/crates/move-bytecode-verifier/README.md) about the Move Bytecode Verifier.
+[Learn more](https://github.com/LinkUVerse/rtd/blob/main/external-crates/move/historical-versions/v1/crates/move-bytecode-verifier/README.md) about the Move Bytecode Verifier.
 
 #### How does this differ from EVM applications?
 
@@ -195,17 +195,17 @@ The Ethereum Virtual Machine adopts a gas-based resource safety strategy. Every 
 
 Before you can publish a Move package to the network, you must first build it. Building your package is necessary because the `.move` source file is a human-readable piece of code, while the network can only understand bytecode.
 
-To build your "Hello, World!" package, first confirm your working directory is `~/sui-stack-hello-world/move/hello-world`, then run the following command:
+To build your "Hello, World!" package, first confirm your working directory is `~/rtd-stack-hello-world/move/hello-world`, then run the following command:
 
 ```
-$ sui move build
+$ rtd move build
 ```
 
-The build process fetches and compiles the dependencies defined in the `Move.toml` file. The Move compiler checks your `.move` code for type errors, syntax errors, and enforces [resource safety](#resource-safety), then translates your `.move` code into bytecode that Sui can execute.
+The build process fetches and compiles the dependencies defined in the `Move.toml` file. The Move compiler checks your `.move` code for type errors, syntax errors, and enforces [resource safety](#resource-safety), then translates your `.move` code into bytecode that Rtd can execute.
 
 :::info
 
-Both `sui move test` and `sui client publish` automatically build your package first, so running `sui move build` separately is optional. It is useful for catching compilation errors early before you test or publish.
+Both `rtd move test` and `rtd client publish` automatically build your package first, so running `rtd move build` separately is optional. It is useful for catching compilation errors early before you test or publish.
 
 :::
 
@@ -216,18 +216,18 @@ Now that your package has been built, you need to publish it. After you publish 
 First, confirm your client is configured to use Testnet as the active environment:
 
 ```
-$ sui client active-env
+$ rtd client active-env
 ```
 
-This should return `testnet`. If it does not return `testnet`, follow the [client configuration instructions](/getting-started/onboarding/configure-sui-client) before continuing.
+This should return `testnet`. If it does not return `testnet`, follow the [client configuration instructions](/getting-started/onboarding/configure-rtd-client) before continuing.
 
-Then, check your balance of SUI tokens to confirm you have enough to publish to Testnet:
+Then, check your balance of RTD tokens to confirm you have enough to publish to Testnet:
 
 ```
-$ sui client balance 
+$ rtd client balance 
 ```
 
-You should have a balance of SUI tokens:
+You should have a balance of RTD tokens:
 
 ```
 ╭────────────────────────────────────────────╮
@@ -236,17 +236,17 @@ You should have a balance of SUI tokens:
 │ ╭────────────────────────────────────────╮ │
 │ │ coin       balance (raw)  balance      │ │
 │ ├────────────────────────────────────────┤ │
-│ │ Sui        56804696124     0.50 SUI    │ │
+│ │ Rtd        56804696124     0.50 RTD    │ │
 │ ╰────────────────────────────────────────╯ │
 ╰────────────────────────────────────────────╯
 ```
 
-If you do not have a balance, follow the [SUI faucet instructions](/getting-started/onboarding/get-coins).
+If you do not have a balance, follow the [RTD faucet instructions](/getting-started/onboarding/get-coins).
 
 Now, publish the package to Testnet with the command:
 
 ```
-$ sui client publish 
+$ rtd client publish 
 ```
 
 <details>
@@ -363,7 +363,7 @@ Transaction Digest: 8R39iKKLGPDG3QkW2SrRW3QX71csRP2BLhK9H7oz9SwW
 │  │ ObjectID: 0x816e5ec6ff457f18232498b57af8a0e1e219307a3a43fb5df5a4c2198296510c                  │
 │  │ Sender: 0x9ac241b2b3cb87ecd2a58724d4d182b5cd897ad307df62be2ae84beddc9d9803                    │
 │  │ Owner: Account Address ( 0x9ac241b2b3cb87ecd2a58724d4d182b5cd897ad307df62be2ae84beddc9d9803 ) │
-│  │ ObjectType: 0x2::coin::Coin<0x2::sui::SUI>                                                    │
+│  │ ObjectType: 0x2::coin::Coin<0x2::rtd::RTD>                                                    │
 │  │ Version: 591332926                                                                            │
 │  │ Digest: CiU5KNZALUmuckc2YUFmJq5YXgbB8oG3rs4cnh2rdDXd                                          │
 │  └──                                                                                             │
@@ -380,7 +380,7 @@ Transaction Digest: 8R39iKKLGPDG3QkW2SrRW3QX71csRP2BLhK9H7oz9SwW
 ├───────────────────────────────────────────────────────────────────────────────────────────────────┤
 │  ┌──                                                                                              │
 │  │ Owner: Account Address ( 0x9ac241b2b3cb87ecd2a58724d4d182b5cd897ad307df62be2ae84beddc9d9803 )  │
-│  │ CoinType: 0x2::sui::SUI                                                                        │
+│  │ CoinType: 0x2::rtd::RTD                                                                        │
 │  │ Amount: -7865080                                                                               │
 │  └──                                                                                              │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -388,7 +388,7 @@ Transaction Digest: 8R39iKKLGPDG3QkW2SrRW3QX71csRP2BLhK9H7oz9SwW
 
 </details>
 
-When you publish a Move package to the network, the network uploads and stores the bytecode as a Move package with a unique package ID and version number. The network consumes SUI tokens as gas and processes the transaction onchain.
+When you publish a Move package to the network, the network uploads and stores the bytecode as a Move package with a unique package ID and version number. The network consumes RTD tokens as gas and processes the transaction onchain.
 
 After successfully executing, the output provides details about the transaction used to publish the package, including the gas cost, transaction digest, dependencies, owner, and sender. 
 
@@ -411,10 +411,10 @@ Both the package ID and module are required to interact with the package from th
 Interact with the newly published package by first making a call to the `new` function that creates a new `Greeting` object and initializes it with the text "Hello world!":
 
 ```
-$ sui client call --package <PACKAGE_ID> --module greeting --function new  
+$ rtd client call --package <PACKAGE_ID> --module greeting --function new  
 ```
 
-Replace `<PACKAGE_ID>` with the package ID the output of the `sui client publish` command returned. You must include the `--package`, `--module`, and `--function` flags. 
+Replace `<PACKAGE_ID>` with the package ID the output of the `rtd client publish` command returned. You must include the `--package`, `--module`, and `--function` flags. 
 
 The output of this call includes a newly created object:
 
@@ -439,7 +439,7 @@ The output of this call includes a newly created object:
 To verify that the object contains the text `"Hello world!"`, make a call to query the object's information:
 
 ```
-$ sui client object <OBJECT_ID>
+$ rtd client object <OBJECT_ID>
 ```
 
 Replace `<OBJECT_ID>` with the value under `Created Objects, ID:`.
@@ -481,7 +481,7 @@ You cannot send 2 or more transactions simultaneously, otherwise you encounter a
 Failed to sign transaction by a quorum of validators because one or more of its objects is reserved for another transaction.
 ```
 
-If you receive this error, you must wait until the current epoch is over before submitting your transaction again. You can see how long is left in the current epoch using [Sui Explorer](https://suivision.xyz/) or another network explorer like [SuiScan](https://suiscan.xyz/mainnet/home). 
+If you receive this error, you must wait until the current epoch is over before submitting your transaction again. You can see how long is left in the current epoch using [Rtd Explorer](https://suivision.xyz/) or another network explorer like [RtdScan](https://suiscan.xyz/mainnet/home). 
 
 To prevent the same object from being modified by multiple transactions at once, your address 'locks' the object to prevent conflicting modifications. If you'd like to batch multiple transaction commands together, you can use [programmable transaction blocks](/develop/transactions/ptbs/prog-txn-blocks).
 
@@ -499,16 +499,16 @@ Transactions also have limitations regarding total size, number of objects, and 
       Connect a frontend interface to your "Hello, World!" smart contract.
     </Card>
     <Card className="plausible-event-name=hello+data+button"
-      title="Access Sui Data" 
+      title="Access Rtd Data" 
       href="/develop/accessing-data/data-serving"
     >
-      Learn more about accessing data on Sui.
+      Learn more about accessing data on Rtd.
     </Card>
     <Card className="plausible-event-name=hello+community+button"
       title="Join the Community" 
       href="/getting-started/onboarding/next-steps"
     >
-      Join the Sui developer community, try out other example projects, or read more documentation.
+      Join the Rtd developer community, try out other example projects, or read more documentation.
     </Card>
   </div>
 </div>

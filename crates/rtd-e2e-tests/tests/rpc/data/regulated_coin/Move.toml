@@ -1,0 +1,9 @@
+[package]
+name = "regulated_coin"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+regulated_coin = "0x0"

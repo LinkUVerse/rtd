@@ -52,9 +52,9 @@ builder_paths:
     step: Connect a frontend
     stage: Setup
 questions:
-  - How do I connect a React frontend to a Sui Move package?
+  - How do I connect a React frontend to a Rtd Move package?
   - How do I call a Move function from a web app?
-  - What is the Sui dApp Kit and how do I use it?
+  - What is the Rtd dApp Kit and how do I use it?
 answer: >-
   In the previous guide, ["Hello,
   World!"](/getting-started/onboarding/hello-world), you deployed a Move package
@@ -69,13 +69,13 @@ This guide demonstrates how to connect a React interface to that "Hello, World!"
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] [Install the latest version of Sui](/getting-started/onboarding/sui-install).
+- [x] [Install the latest version of Rtd](/getting-started/onboarding/rtd-install).
 
-- [x] [Configure the Sui client](/getting-started/onboarding/configure-sui-client).
+- [x] [Configure the Rtd client](/getting-started/onboarding/configure-rtd-client).
 
-- [x] [Create a Sui address](/getting-started/onboarding/get-address).
+- [x] [Create a Rtd address](/getting-started/onboarding/get-address).
 
-- [x] [Get SUI Testnet tokens](/getting-started/onboarding/get-coins).
+- [x] [Get RTD Testnet tokens](/getting-started/onboarding/get-coins).
 
 - [x] Complete the ["Hello, World!"](/getting-started/onboarding/hello-world) guide and have your published Move package's ID. 
 
@@ -86,37 +86,37 @@ This guide demonstrates how to connect a React interface to that "Hello, World!"
 </TabItem>
 </Tabs>
 
-## Sui dApp Kit
+## Rtd dApp Kit
 
-The example frontend uses [`@mysten/dapp-kit`](https://sdk.mystenlabs.com/dapp-kit), which provides React hooks and components for wallet connection, transaction signing, and onchain data queries. The key components used in this example are:
+The example frontend uses [`@linku/dapp-kit`](https://sdk.linkuverse.com/dapp-kit), which provides React hooks and components for wallet connection, transaction signing, and onchain data queries. The key components used in this example are:
 
 - `ConnectButton`: A pre-built button component that opens a wallet selection dialog. Users click it to connect their Slush wallet (or any Wallet Standard compatible wallet) to your app.
-- `useCurrentAccount`: A React hook that returns the currently connected wallet account, including the user's Sui address. Use it to check whether a user is connected and to read their address for transaction construction.
+- `useCurrentAccount`: A React hook that returns the currently connected wallet account, including the user's Rtd address. Use it to check whether a user is connected and to read their address for transaction construction.
 - `useSignAndExecuteTransaction`: A React hook that signs and submits a transaction through the connected wallet.
 
-The `dapp-kit.ts` file in the example project configures the Sui dApp Kit provider with network settings. For a deeper walkthrough of building a frontend with Sui dApp Kit, see the [dApp Kit starter app](https://github.com/MystenLabs/sui-move-bootcamp/tree/solution/E2/my-first-sui-dapp).
+The `dapp-kit.ts` file in the example project configures the Rtd dApp Kit provider with network settings. For a deeper walkthrough of building a frontend with Rtd dApp Kit, see the [dApp Kit starter app](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/E2/my-first-rtd-dapp).
 
 ## Call the Move package
 
-First, confirm that you have [followed the "Hello, World!"](https://github.com/MystenLabs/sui-stack-hello-world.git) example guide and are within the `sui-stack-hello-world/move/hello-world` directory in your CLI.
+First, confirm that you have [followed the "Hello, World!"](https://github.com/LinkUVerse/rtd-stack-hello-world.git) example guide and are within the `rtd-stack-hello-world/move/hello-world` directory in your CLI.
 
 Then, verify your Move package is still available on Testnet by obtaining its object information:
 
 ```
-$ sui client object <PACKAGE_ID>
+$ rtd client object <PACKAGE_ID>
 ```
 
 Replace `<PACKAGE_ID>` with your Move package's ID. 
 
 :::danger
 
-If your package no longer exists, or if you need to obtain the package ID again, follow the steps in the ["Hello, World!"](https://github.com/MystenLabs/sui-stack-hello-world.git) guide.
+If your package no longer exists, or if you need to obtain the package ID again, follow the steps in the ["Hello, World!"](https://github.com/LinkUVerse/rtd-stack-hello-world.git) guide.
 
 :::
 
 ## View the frontend source code
 
-In the "Hello, World!" example project, the subdirectory `sui-stack-hello-world/ui` contains the frontend interface source code files:
+In the "Hello, World!" example project, the subdirectory `rtd-stack-hello-world/ui` contains the frontend interface source code files:
 
 ```
 .
@@ -141,21 +141,21 @@ In the "Hello, World!" example project, the subdirectory `sui-stack-hello-world/
 
 ### `App.tsx`
 
-The `App.tsx` file contains code that creates a basic starter template for your React app. It includes a button to connect a Slush wallet to the app and a button to open the Sui Faucet to obtain Testnet SUI. 
+The `App.tsx` file contains code that creates a basic starter template for your React app. It includes a button to connect a Slush wallet to the app and a button to open the Rtd Faucet to obtain Testnet RTD. 
 
-<ImportContent source="/ui/src/App.tsx" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/ui/src/App.tsx" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 ### `CreateGreeting.tsx`
 
-The `CreateGreeting.tsx` file contains logic that creates and sends a transaction to your Move package. The transaction calls the `new` function of the package, which creates a Move object with the value `Hello world!`. In the ["Hello, World!"](/getting-started/onboarding/hello-world) guide, you called this function manually through the CLI with the command `sui client call --package <PACKAGE_ID> --module greeting --function new`.
+The `CreateGreeting.tsx` file contains logic that creates and sends a transaction to your Move package. The transaction calls the `new` function of the package, which creates a Move object with the value `Hello world!`. In the ["Hello, World!"](/getting-started/onboarding/hello-world) guide, you called this function manually through the CLI with the command `rtd client call --package <PACKAGE_ID> --module greeting --function new`.
 
-<ImportContent source="/ui/src/CreateGreeting.tsx" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/ui/src/CreateGreeting.tsx" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 ### `Greeting.tsx`
 
 The `Greeting.tsx` file also contains logic that creates and sends a transaction to your Move package. However, this transaction calls the `update_text` function of the package, which modifies the text to replace "Hello world!" with the text of your choosing.
 
-<ImportContent source="/ui/src/Greeting.tsx" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/ui/src/Greeting.tsx" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 ## Connect the React interface to your Move package
 
@@ -163,15 +163,15 @@ The `constants.ts` file is where you connect the React app to your Move package.
 
 Modify this file to include your Move package ID instead.
 
-<ImportContent source="/ui/src/constants.ts" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/ui/src/constants.ts" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 The `networkConfig.ts` file uses this constant:
 
-<ImportContent source="/ui/src/networkConfig.ts" mode="code" org="MystenLabs" repo="sui-stack-hello-world" />
+<ImportContent source="/ui/src/networkConfig.ts" mode="code" org="LinkUVerse" repo="rtd-stack-hello-world" />
 
 ## Install frontend dependencies 
 
-Now, navigate into the `sui-stack-hello-world/ui` directory if you are not already there and install the necessary frontend dependencies:
+Now, navigate into the `rtd-stack-hello-world/ui` directory if you are not already there and install the necessary frontend dependencies:
 
 ```sh
 $ pnpm install
@@ -187,11 +187,11 @@ $ pnpm dev
 
 Then, open `http://localhost:5173/` in your browser. The app prompts you to connect your Slush wallet. Click **Connect Wallet**, authenticate when prompted, then approve the connection.
 
-## Send SUI tokens to your Slush wallet
+## Send RTD tokens to your Slush wallet
 
-If you sent SUI tokens to an address used in the CLI in previous guides, then created a new Slush wallet in your browser, you likely need to send SUI tokens to the Slush wallet. The Slush wallet address is different and separate from the address created and used in the CLI.
+If you sent RTD tokens to an address used in the CLI in previous guides, then created a new Slush wallet in your browser, you likely need to send RTD tokens to the Slush wallet. The Slush wallet address is different and separate from the address created and used in the CLI.
 
-Follow the [Testnet SUI](/getting-started/onboarding/get-coins) instructions to send Testnet tokens to your Slush address. 
+Follow the [Testnet RTD](/getting-started/onboarding/get-coins) instructions to send Testnet tokens to your Slush address. 
 
 ## Use the frontend interface
 
@@ -203,7 +203,7 @@ The Slush wallet prompts you to approve this transaction.
 
 If there is a problem, the prompt to approve the transaction displays the error message. Common errors include "Unable to Process Transaction" due to either insufficient gas coins or an incorrect Move package ID. 
 
-[Obtain Testnet SUI](/getting-started/onboarding/get-coins) or [confirm you have the correct Move package ID](/getting-started/onboarding/hello-world) to resolve these errors.
+[Obtain Testnet RTD](/getting-started/onboarding/get-coins) or [confirm you have the correct Move package ID](/getting-started/onboarding/hello-world) to resolve these errors.
 
 :::
 
@@ -223,16 +223,16 @@ After you approve the transaction, the new greeting is displayed:
   </div>
   <div className="next-steps-grid">
     <Card className="plausible-event-name=hello+data+button"
-      title="Access Sui Data" 
+      title="Access Rtd Data" 
       href="/develop/accessing-data/data-serving"
     >
-      Learn more about accessing data on Sui.
+      Learn more about accessing data on Rtd.
     </Card>
     <Card className="plausible-event-name=hello+community+button"
       title="Join the Community" 
       href="/getting-started/onboarding/next-steps"
     >
-      Join the Sui developer community, try out other example projects, or read more documentation.
+      Join the Rtd developer community, try out other example projects, or read more documentation.
     </Card>
   </div>
 </div>

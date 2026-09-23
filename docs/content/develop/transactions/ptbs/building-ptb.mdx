@@ -1,7 +1,7 @@
 ---
 title: Building Transactions
 description: >-
-  Using the Sui TypeScript SDK, you can create programmable transaction blocks
+  Using the Rtd TypeScript SDK, you can create programmable transaction blocks
   to perform multiple commands in a single transaction.
 keywords:
   - ptbs
@@ -47,18 +47,18 @@ questions:
   - How do I build transactions?
   - How do I build ptbs with the cli?
   - How do I use the gas coin?
-  - What is Building Transactions in Sui?
+  - What is Building Transactions in Rtd?
 answer: >-
-  Using the Sui TypeScript SDK, you can create programmable transaction blocks
+  Using the Rtd TypeScript SDK, you can create programmable transaction blocks
   to perform multiple commands in a single transaction.
 ---
 
-This guide explores creating a [programmable transaction block (PTB)](/develop/transactions/ptbs/prog-txn-blocks) on Sui using the [TypeScript SDK](https://sdk.mystenlabs.com/typescript/install) and the Sui CLI.
+This guide explores creating a [programmable transaction block (PTB)](/develop/transactions/ptbs/prog-txn-blocks) on Rtd using the [TypeScript SDK](https://sdk.linkuverse.com/typescript/install) and the Rtd CLI.
 
-This example constructs a PTB to send SUI tokens. First, import the `Transaction` class, and construct it:
+This example constructs a PTB to send RTD tokens. First, import the `Transaction` class, and construct it:
 
 ```ts
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 const tx = new Transaction();
 ```
@@ -70,15 +70,15 @@ Using this, you can then add transactions to the PTB:
 // sender's coin objects and address balance, so you do not select coins yourself.
 tx.moveCall({
 	target: '0x2::balance::send_funds',
-	typeArguments: ['0x2::sui::SUI'],
-	arguments: [tx.balance({ balance: 100n }), tx.pure.address('0xSomeSuiAddress')],
+	typeArguments: ['0x2::rtd::RTD'],
+	arguments: [tx.balance({ balance: 100n }), tx.pure.address('0xSomeRtdAddress')],
 });
 ```
 
 A balance transfer creates no new objects for the recipient to manage. When the recipient needs a `Coin<T>` object instead, such as a payment a downstream Move call consumes, use `tx.coin()` with `transferObjects`:
 
 ```ts
-tx.transferObjects([tx.coin({ balance: 100n })], '0xSomeSuiAddress');
+tx.transferObjects([tx.coin({ balance: 100n })], '0xSomeRtdAddress');
 ```
 
 You can attach multiple transaction commands of the same type to a PTB. For example, to get a list of transfers, and iterate over them to transfer coins to each:
@@ -89,7 +89,7 @@ interface Transfer {
 	amount: number;
 }
 
-// Procure a list of some Sui transfers to make:
+// Procure a list of some Rtd transfers to make:
 const transfers: Transfer[] = getTransfers();
 
 const tx = new Transaction();
@@ -100,7 +100,7 @@ transfers.forEach((transfer) => {
 });
 ```
 
-After you define the transaction, directly execute it with a Sui client and `KeyPair` using `client.signAndExecuteTransaction`.
+After you define the transaction, directly execute it with a Rtd client and `KeyPair` using `client.signAndExecuteTransaction`.
 
 ```ts
 client.signAndExecuteTransaction({ signer: keypair, transaction: tx });
@@ -108,23 +108,23 @@ client.signAndExecuteTransaction({ signer: keypair, transaction: tx });
 
 ## Build PTBs with the CLI
 
-Use `sui client ptb` to build and execute PTBs from the command line. Prefer `sui client ptb` for examples that build transactions, including basic transfers and coin operations, because it exposes the same PTB commands used by SDKs.
+Use `rtd client ptb` to build and execute PTBs from the command line. Prefer `rtd client ptb` for examples that build transactions, including basic transfers and coin operations, because it exposes the same PTB commands used by SDKs.
 
 The following CLI PTB splits 500,000,000 MIST from the gas coin and transfers the new coin to `eloquent-amber`:
 
 ```sh
-$ sui client ptb \
+$ rtd client ptb \
     --split-coins gas "[500000000]" \
     --assign coin \
     --transfer-objects "[coin]" eloquent-amber \
     --gas-budget 5000000
 ```
 
-Use `--preview` to inspect the PTB commands without executing them, `--dry-run` to simulate execution, and `--summary` for concise output after execution. For more examples, see [Sui Client PTB CLI](/references/cli/ptb).
+Use `--preview` to inspect the PTB commands without executing them, `--dry-run` to simulate execution, and `--summary` for concise output after execution. For more examples, see [Rtd Client PTB CLI](/references/cli/ptb).
 
 ## Constructing inputs
 
-Inputs are how you provide external values to PTBs, for example, an amount of SUI to transfer, an object to pass into a Move call, or a shared object.
+Inputs are how you provide external values to PTBs, for example, an amount of RTD to transfer, an object to pass into a Move call, or a shared object.
 
 Define inputs in two ways:
 
@@ -135,7 +135,7 @@ Define inputs in two ways:
 
   - Otherwise, the function generates the BCS serialization layout for the value.
 
-  - The new version provides a more intuitive syntax, for example: `tx.pure.u64(100)`, `tx.pure.string('SomeString')`, `tx.pure.address('0xSomeSuiAddress')`, `tx.pure.vector('bool', [true, false])`.
+  - The new version provides a more intuitive syntax, for example: `tx.pure.u64(100)`, `tx.pure.string('SomeString')`, `tx.pure.address('0xSomeRtdAddress')`, `tx.pure.vector('bool', [true, false])`.
 
 Learn more about [inputs](/develop/transactions/ptbs/inputs-and-results).
 
@@ -164,7 +164,7 @@ tx.transferObjects([mintMany[0], mintMany[1]], tx.pure.address(address));
 
 ## Use the gas coin
 
-For most transactions, reach for [`tx.coin()` and `tx.balance()`](https://sdk.mystenlabs.com/sui/transactions/coins-and-balances) rather than the gas coin. They are the recommended way to source tokens, and they draw from coin objects and address balances without you selecting either.
+For most transactions, reach for [`tx.coin()` and `tx.balance()`](https://sdk.linkuverse.com/rtd/transactions/coins-and-balances) rather than the gas coin. They are the recommended way to source tokens, and they draw from coin objects and address balances without you selecting either.
 
 `tx.gas` still matters when you want the gas coin specifically, and it is valid as input for any argument.
 
@@ -173,7 +173,7 @@ For most transactions, reach for [`tx.coin()` and `tx.balance()`](https://sdk.my
 You can borrow the gas coin by reference freely: add to it with `mergeCoins`, split from it with `splitCoins`, or pass it to a Move function with `moveCall`. Consuming it by value is restricted to 2 commands:
 
 - `transferObjects`, to send the whole remaining balance to another address.
-- `sui::coin::send_funds`, to deposit it into an address balance.
+- `rtd::coin::send_funds`, to deposit it into an address balance.
 
 Any other by-value use fails with `InvalidGasCoinUsage`.
 
@@ -248,7 +248,7 @@ By default, the SDK automatically derives the gas budget by executing a dry-run 
 
 :::info
 
-Set the gas budget in MIST, not SUI. 1 SUI is 1,000,000,000 MIST, so `tx.setGasBudget(50_000_000)` caps the transaction at 0.05 SUI. Take the gas price of the PTB into account when choosing a value.
+Set the gas budget in MIST, not RTD. 1 RTD is 1,000,000,000 MIST, so `tx.setGasBudget(50_000_000)` caps the transaction at 0.05 RTD. Take the gas price of the PTB into account when choosing a value.
 
 :::
 
@@ -274,7 +274,7 @@ Gas coins should be objects containing the coin's `{ objectId: string, version: 
 
 The Wallet Standard interface now supports the `Transaction` kind directly. All `signTransaction` and `signAndExecuteTransaction` calls from apps into wallets must provide a `Transaction` class. You can then serialize this PTB class and send it to your wallet for execution.
 
-To serialize a PTB for sending to a wallet, Sui recommends using the `tx.serialize()` function, which returns an opaque string representation of the PTB that can be passed from the Wallet Standard app context to your wallet. You can then convert this back into a `Transaction` using `Transaction.from()`.
+To serialize a PTB for sending to a wallet, Rtd recommends using the `tx.serialize()` function, which returns an opaque string representation of the PTB that can be passed from the Wallet Standard app context to your wallet. You can then convert this back into a `Transaction` using `Transaction.from()`.
 
 :::tip
 
@@ -321,11 +321,11 @@ Learn more about [sponsored transactions](/develop/transaction-payment/sponsor-t
 
 ## Rust SDK example
 
-You can also build PTBs using the Sui Rust SDK. The following example demonstrates creating a `ProgrammableTransactionBuilder`, adding pure value and shared object inputs, and calling a Move function with type arguments:
+You can also build PTBs using the Rtd Rust SDK. The following example demonstrates creating a `ProgrammableTransactionBuilder`, adding pure value and shared object inputs, and calling a Move function with type arguments:
 
 ```rust
 use move_core_types::{identifier::Identifier, language_storage::TypeTag};
-use sui_types::{
+use rtd_types::{
     base_types::ObjectID,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     transaction::{Argument, CallArg, ObjectArg, SharedObjectMutability},
@@ -360,7 +360,7 @@ Generic Move functions require type parameters. Specify them as a `Vec<TypeTag>`
 ```typescript
 tx.moveCall({
   target: '0xPACKAGE::module::generic_function',
-  typeArguments: ['0x2::coin::Coin<0x2::sui::SUI>'],
+  typeArguments: ['0x2::coin::Coin<0x2::rtd::RTD>'],
   arguments: [tx.object('0x...')],
 });
 ```

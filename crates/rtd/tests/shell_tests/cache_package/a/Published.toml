@@ -1,0 +1,5 @@
+[published.testnet]
+chain-id = "01234567"
+published-at = "0xcafe"
+original-id = "0xdeadbeef"
+version = 2

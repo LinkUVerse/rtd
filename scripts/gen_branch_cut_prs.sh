@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Generate the framework bytecode snapshot PR for branch cut.
@@ -56,23 +56,23 @@ git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
 # Get current main version
-SUI_VERSION=$(sed -nE 's/^version = "([0-9]+\.[0-9]+\.[0-9]+)"/\1/p' ./Cargo.toml)
+RTD_VERSION=$(sed -nE 's/^version = "([0-9]+\.[0-9]+\.[0-9]+)"/\1/p' ./Cargo.toml)
 STAMP="$(date +%Y%m%d%H%M%S)"
 
 echo "Generating framework bytecode snapshot..."
 # Set up branch for changes.
-BRANCH="${GITHUB_ACTOR}/sui-v${SUI_VERSION}-bytecode-framework-snapshot-${STAMP}"
+BRANCH="${GITHUB_ACTOR}/rtd-v${RTD_VERSION}-bytecode-framework-snapshot-${STAMP}"
 git checkout -b "$BRANCH"
 
 # Generate framework bytecode snapshot
-cargo run --bin sui-framework-snapshot
+cargo run --bin rtd-framework-snapshot
 
 # Staged all changes
 echo "Staging all changed files..."
 git add -A .
 
 # Generate PR body
-BODY="Sui v${SUI_VERSION} Framework Bytecode snapshot"
+BODY="Rtd v${RTD_VERSION} Framework Bytecode snapshot"
 
 # Commit, push, and create PR.
 git commit -m "$BODY"
@@ -92,7 +92,7 @@ if PR_OUTPUT=$(gh pr create \
   --base main \
   --head "$BRANCH" \
   --title "$BODY" \
-  --reviewer "ebmifa,pei-mysten,tharbert" \
+  --reviewer "ebmifa,pei-linku,tharbert" \
   --body "$BODY" 2>&1); then
 
   # Extract PR URL from output
@@ -110,4 +110,4 @@ else
 fi
 
 gh pr merge --auto --squash --delete-branch "$BRANCH"
-echo "Pull request for Sui v${SUI_VERSION} Framework Bytecode snapshot created: $PR_URL"
+echo "Pull request for Rtd v${RTD_VERSION} Framework Bytecode snapshot created: $PR_URL"

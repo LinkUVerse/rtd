@@ -1,0 +1,25 @@
+[package]
+name = "rtd-package-management"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+
+rtd-types.workspace = true
+rtd-protocol-config.workspace = true
+
+
+[build-dependencies]
+rtd-framework-snapshot.workspace = true
+anyhow.workspace = true

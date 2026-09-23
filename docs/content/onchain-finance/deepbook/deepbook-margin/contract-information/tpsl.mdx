@@ -29,8 +29,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Take Profit Stop Loss in Sui?
-  - How does take profit stop loss work on Sui?
+  - What is Take Profit Stop Loss in Rtd?
+  - How does take profit stop loss work on Rtd?
   - Why should I use take profit stop loss?
 answer: >-
   Learn about conditional orders for automated trading strategies on DeepBook
@@ -64,7 +64,7 @@ Create a new condition that specifies when the order should trigger.
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_condition"
 	noComments
@@ -80,7 +80,7 @@ Create a pending limit order that the system places when the condition is met. O
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_pending_limit_order"
 	noComments
@@ -96,7 +96,7 @@ Create a pending market order that the system places when the condition is met.
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_pending_market_order"
 	noComments
@@ -116,7 +116,7 @@ Add a conditional order to the margin manager. The system places the order when 
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="add_conditional_order"
 />
@@ -131,7 +131,7 @@ Cancel a specific conditional order by ID.
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="cancel_conditional_order"
 />
@@ -146,7 +146,7 @@ Cancel all conditional orders for the margin manager.
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="cancel_all_conditional_orders"
 />
@@ -161,7 +161,7 @@ Execute conditional orders whose conditions are met. This is a permissionless fu
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="execute_conditional_orders"
 />
@@ -174,7 +174,7 @@ Execute conditional orders whose conditions are met. This is a permissionless fu
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="trigger_below_orders,trigger_above_orders,num_conditional_orders,get_conditional_order,conditional_order_id,condition,pending_order,trigger_below_price,trigger_price,client_order_id,order_type,self_matching_option,price,quantity,is_bid,pay_with_deep,expire_timestamp,is_limit_order"
 />
@@ -191,7 +191,7 @@ The system emits this event when you add a conditional order to a margin manager
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="ConditionalOrderAdded"
 />
@@ -206,7 +206,7 @@ The system emits this event when you cancel a conditional order.
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="ConditionalOrderCancelled"
 />
@@ -221,7 +221,7 @@ The system emits this event when a conditional order executes.
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="ConditionalOrderExecuted"
 />
@@ -236,7 +236,7 @@ The system emits this event when a conditional order fails to execute due to ins
 <ImportContent
 	source="packages/deepbook_margin/sources/tpsl.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="ConditionalOrderInsufficientFunds"
 />

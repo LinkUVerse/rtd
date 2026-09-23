@@ -1,11 +1,11 @@
 {
   "messaging": {
-    "repo": "MystenLabs/sui-stack-messaging",
+    "repo": "LinkUVerse/rtd-stack-messaging",
     "branch": "main",
-    "sourcePath": "docs/sui-stack-messaging",
-    "targetPath": "sui-stack/messaging",
+    "sourcePath": "docs/rtd-stack-messaging",
+    "targetPath": "rtd-stack/messaging",
     "transforms": ["frontmatter", "admonitions", "nav-header", "toc", "links"],
-    "linkPrefix": "/sui-stack/messaging",
+    "linkPrefix": "/rtd-stack/messaging",
     "preserve": ["index.mdx", "chat-app.mdx"],
     "exclude": [],
     "fileMap": {
@@ -25,13 +25,13 @@
     }
   },
   "seal": {
-    "repo": "MystenLabs/seal",
+    "repo": "LinkUVerse/seal",
     "branch": "main",
     "sourcePath": "docs/content",
-    "targetPath": "sui-stack/seal",
+    "targetPath": "rtd-stack/seal",
     "transforms": ["links"],
-    "linkPrefix": "/sui-stack/seal",
-    "preserve": ["sui-stack-seal.mdx"],
+    "linkPrefix": "/rtd-stack/seal",
+    "preserve": ["rtd-stack-seal.mdx"],
     "exclude": ["Seal_White_Paper_v2.pdf"],
     "staticAssets": ["Seal_White_Paper_v2.pdf"],
     "fileMap": {

@@ -31,9 +31,9 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is PTB Commands in Sui?
+  - What is PTB Commands in Rtd?
   - Where can I find the ptb commands reference?
-  - How does ptb commands work on Sui?
+  - How does ptb commands work on Rtd?
 answer: >-
   The following sections describe each PTB command. Command signatures shown are
   conceptual Move representations, as these operations cannot always be
@@ -62,13 +62,13 @@ Sends one or more objects to a specified address.
 
 Splits off one or more coins from a single coin.
 
-- `CoinArg: Argument`: Coin of type `sui::coin::Coin<T>` (any coin type). Taken by mutable reference.
+- `CoinArg: Argument`: Coin of type `rtd::coin::Coin<T>` (any coin type). Taken by mutable reference.
 
 - `AmountArgs: [Argument]`: `u64` values for split amounts. Taken by value (copied).
 
-**Returns:** Vector of coins `sui::coin::Coin<T>` matching the number of amounts.
+**Returns:** Vector of coins `rtd::coin::Coin<T>` matching the number of amounts.
 
-**Signature:** `<T: key + store>(coin: &mut sui::coin::Coin<T>, amounts: vector<u64>): vector<sui::coin::Coin<T>>`
+**Signature:** `<T: key + store>(coin: &mut rtd::coin::Coin<T>, amounts: vector<u64>): vector<rtd::coin::Coin<T>>`
 
 #### `MergeCoins`
 
@@ -76,13 +76,13 @@ Splits off one or more coins from a single coin.
 
 Merges multiple coins into a single coin.
 
-- `CoinArg: Argument`: Target coin of type `sui::coin::Coin<T>` (any coin type). Taken by mutable reference.
+- `CoinArg: Argument`: Target coin of type `rtd::coin::Coin<T>` (any coin type). Taken by mutable reference.
 
-- `ToMergeArgs: [Argument]`: Coins of type `sui::coin::Coin<T>` to merge. Taken by value (moved).
+- `ToMergeArgs: [Argument]`: Coins of type `rtd::coin::Coin<T>` to merge. Taken by value (moved).
 
 **Returns:** Empty result vector.
 
-**Signature:** `<T: key + store>(coin: &mut sui::coin::Coin<T>, to_merge: vector<sui::coin::Coin<T>>): ()`
+**Signature:** `<T: key + store>(coin: &mut rtd::coin::Coin<T>, to_merge: vector<rtd::coin::Coin<T>>): ()`
 
 #### `MakeMoveVec`
 
@@ -128,7 +128,7 @@ Creates a new package and calls the `init` function of each module.
 
 - `TransitiveDependencies: [ObjectID]`: Object IDs of package dependencies for version selection.
 
-**Returns:** Single result of type `sui::package::UpgradeCap` for the newly published package.
+**Returns:** Single result of type `rtd::package::UpgradeCap` for the newly published package.
 
 After verification, the `init` function of each module is called in the same order as the module byte vector.
 
@@ -144,9 +144,9 @@ Upgrades an existing package. No `init` functions are called for upgraded module
 
 - `Package: ObjectID`: Object ID of the package being upgraded (must exist and be latest version).
 
-- `UpgradeTicket: sui::package::UpgradeTicket`: Upgrade ticket generated from `sui::package::UpgradeCap`. Taken by value (moved).
+- `UpgradeTicket: rtd::package::UpgradeTicket`: Upgrade ticket generated from `rtd::package::UpgradeCap`. Taken by value (moved).
 
-**Returns:** Single result of type `sui::package::UpgradeReceipt` providing proof of upgrade.
+**Returns:** Single result of type `rtd::package::UpgradeReceipt` providing proof of upgrade.
 
 For more details on upgrades, see [Upgrading Packages](/develop/publish-upgrade-packages/upgrade).
 

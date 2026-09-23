@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useMemo, useState } from "react";
@@ -33,13 +33,13 @@ function CopyCommand({ command }) {
   );
 }
 
-// Skill data is generated at build time from the mystenlabs/skills repository
+// Skill data is generated at build time from the linkuverse/skills repository
 // by scripts/generate-skills.mjs (wired into the prebuild and prestart npm
 // scripts). Do not edit src/data/skills.json by hand: it regenerates on every
 // build, so the page stays in sync with the repo automatically.
 import SKILLS from "../data/skills.json";
 
-const REPO = "https://github.com/MystenLabs/skills";
+const REPO = "https://github.com/LinkUVerse/skills";
 
 // Categories are derived from the generated data, so new categories appear
 // automatically. Sorted alphabetically, with "Get started" floated first.
@@ -72,18 +72,18 @@ export default function Skills() {
 
   return (
     <Layout
-      title="Sui Agent Skills"
-      description="Pre-built agent skills for building on Sui. Install them into Claude Code, Cursor, Codex, and other AI coding agents."
+      title="Rtd Agent Skills"
+      description="Pre-built agent skills for building on Rtd. Install them into Claude Code, Cursor, Codex, and other AI coding agents."
     >
       <div className={styles.page}>
         <header className={styles.hero}>
-          <h1 className={styles.heroTitle}>Sui Agent Skills</h1>
+          <h1 className={styles.heroTitle}>Rtd Agent Skills</h1>
           <p className={styles.heroTagline}>
             Pre-built skills you can drop into your AI coding agent to build on
-            Sui. Install them into Claude Code, Cursor, Codex, and other agents
+            Rtd. Install them into Claude Code, Cursor, Codex, and other agents
             with the <code>skills</code> CLI.
           </p>
-          <CopyCommand command="npx skills add mystenlabs/skills --all" />
+          <CopyCommand command="npx skills add linkuverse/skills --all" />
           <Link className={styles.repoLink} to={REPO}>
             View the repository on GitHub →
           </Link>
@@ -109,7 +109,7 @@ export default function Skills() {
 
         <p className={styles.installHint}>
           Install any single skill with{" "}
-          <code>npx skills add mystenlabs/skills --skill &lt;name&gt;</code>.
+          <code>npx skills add linkuverse/skills --skill &lt;name&gt;</code>.
         </p>
 
         <div className={styles.grid}>

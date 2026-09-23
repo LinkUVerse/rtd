@@ -26,8 +26,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Fixed Supply in Sui?
-  - How does fixed supply work on Sui?
+  - What is Fixed Supply in Rtd?
+  - How does fixed supply work on Rtd?
   - How do I subscribe to fixed supply events?
 answer: >-
   This fixed supply example mints the total supply of 10,000,000,000,000,000,000
@@ -43,7 +43,7 @@ This pattern involves 3 steps during the module's `init` function:
 2. **Mint the total supply:** Call `coin::mint` with the `TreasuryCap` to create all tokens at once. The amount is specified in the smallest unit (base units). For example, if your coin has 9 decimals, a supply of `10_000_000_000_000_000_000` represents 10 billion coins.
 3. **Lock the `TreasuryCap`:** Store the `TreasuryCap` as a [dynamic object field](/develop/objects/dynamic-fields) on a permanent object. This prevents anyone from calling `coin::mint` again because the `TreasuryCap` is no longer directly accessible. You can also freeze or destroy the `TreasuryCap` depending on your requirements.
 
-<ImportContent source="I2/fixed_supply/sources/silver.move" mode="code" org="MystenLabs" repo="sui-move-bootcamp" branch="solution" noComments />
+<ImportContent source="I2/fixed_supply/sources/silver.move" mode="code" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" noComments />
 
 ### Why lock the `TreasuryCap`
 
@@ -65,12 +65,12 @@ To deploy a fixed-supply coin:
 
 1. Build the package:
    ```sh
-   $ sui move build
+   $ rtd move build
    ```
 2. Publish to the network:
    ```sh
-   $ sui client publish
+   $ rtd client publish
    ```
 3. Verify the total supply by calling `coin::total_supply` on the `TreasuryCap`. The value should match your intended total. `CoinMetadata` carries the coin's display fields (`decimals`, `name`, `symbol`, `description`, `icon_url`) and does not track supply.
 
-[View the full example on GitHub](https://github.com/MystenLabs/sui-move-bootcamp/tree/solution/I2).
+[View the full example on GitHub](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/I2).

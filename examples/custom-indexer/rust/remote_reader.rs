@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
 use async_trait::async_trait;
-use sui_data_ingestion_core::{setup_single_workflow, Worker};
-use sui_types::full_checkpoint_content::CheckpointData;
+use rtd_data_ingestion_core::{setup_single_workflow, Worker};
+use rtd_types::full_checkpoint_content::CheckpointData;
 
 struct CustomWorker;
 
@@ -26,7 +26,7 @@ impl Worker for CustomWorker {
 async fn main() -> Result<()> {
     let (executor, term_sender) = setup_single_workflow(
         CustomWorker,
-        "https://checkpoints.testnet.sui.io".to_string(),
+        "https://checkpoints.testnet.rtd.io".to_string(),
         0,    /* initial checkpoint number */
         5,    /* concurrency */
         None, /* extra reader options */

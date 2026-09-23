@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import '@mysten/dapp-kit/dist/index.css';
+import '@linku/dapp-kit/dist/index.css';
 import './index.css';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/red-hat-mono';
 
-import { SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
-import { getFullnodeUrl } from '@mysten/sui/client';
+import { RtdClientProvider, WalletProvider } from '@linku/dapp-kit';
+import { getFullnodeUrl } from '@linku/rtd/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -19,18 +19,18 @@ import { router } from './routes';
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 	<React.StrictMode>
 		<QueryClientProvider client={queryClient}>
-			<SuiClientProvider
-				defaultNetwork="sui:mainnet"
+			<RtdClientProvider
+				defaultNetwork="rtd:mainnet"
 				networks={{
-					'sui:testnet': { url: getFullnodeUrl('testnet') },
-					'sui:mainnet': { url: getFullnodeUrl('mainnet') },
-					'sui:devnet': { url: getFullnodeUrl('devnet') },
+					'rtd:testnet': { url: getFullnodeUrl('testnet') },
+					'rtd:mainnet': { url: getFullnodeUrl('mainnet') },
+					'rtd:devnet': { url: getFullnodeUrl('devnet') },
 				}}
 			>
 				<WalletProvider>
 					<RouterProvider router={router} />
 				</WalletProvider>
-			</SuiClientProvider>
+			</RtdClientProvider>
 		</QueryClientProvider>
 	</React.StrictMode>,
 );

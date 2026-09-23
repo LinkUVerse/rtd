@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -81,7 +81,7 @@ function computeRouteFromFile(docsRootAbs, fileAbs) {
 // ---------- plugin ----------
 const descriptionPlugin = (context, options) => {
   return {
-    name: "sui-description-plugin",
+    name: "rtd-description-plugin",
 
     async loadContent() {
       // Find classic preset options robustly

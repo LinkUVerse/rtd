@@ -79,7 +79,7 @@ The struct declares those fields in this order:
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="PoolVault"
@@ -97,7 +97,7 @@ A queue is a paged list. Each `RequestPage` holds up to 64 entries, and each `Re
 <ImportContent
 	source="packages/predict/sources/plp/lp_book.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="LpBook,RequestQueue,RequestEntry"
@@ -115,7 +115,7 @@ A queue is a paged list. Each `RequestPage` holds up to 64 entries, and each `Re
 <ImportContent
 	source="packages/predict/sources/plp/pool_accounting.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="Ledger,ActiveExpiry,RegisteredExpiry"
@@ -157,7 +157,7 @@ Whether a flush is in flight is a `ProtocolConfig` read, `protocol_config::valua
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="idle_balance,protocol_reserve_balance,fee_incentive_reserve,plp_total_supply,supply_requests_pending,withdraw_requests_pending,active_expiry_markets,active_live_expiry_count,profit_basis_debits,profit_basis_credits,pending_protocol_profit"
@@ -222,7 +222,7 @@ Minimum sizes apply per request:
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="request_supply,request_withdraw,cancel_supply_request,cancel_withdraw_request"
@@ -295,7 +295,7 @@ public fun value_expiry(
 
 It is permissionless and idempotent. A market that is not in the expected set, or that a prior call has already valued, returns without changing anything, so a stranger valuing a market ahead of the keeper can only help. It aborts with `EValuationSnapshotNotSealed` before the seal. For a market frozen with a pricer it thaws the pricer, walks the payout tree's frozen shadow, subtracts that liability from the stamped free cash, adds the result to `total_nav`, and clears the market's stamp. A market frozen as settled contributes `0`. The call moves no cash.
 
-One market per transaction is the intended cadence. Only `value_expiry` walks a payout tree, and a tree holds one dynamic-field child per distinct strike tick, so splitting the walk across transactions is what keeps a large book inside Sui's per-transaction object budget.
+One market per transaction is the intended cadence. Only `value_expiry` walks a payout tree, and a tree holds one dynamic-field child per distinct strike tick, so splitting the walk across transactions is what keeps a large book inside Rtd's per-transaction object budget.
 
 ### Finish {#finish-stage}
 
@@ -341,7 +341,7 @@ A market created mid-flush is not in the frozen expected set and joins the next 
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="PoolValuationProof,SnapshotStage,PoolValuation"
@@ -355,7 +355,7 @@ A market created mid-flush is not in the frozen expected set and joins the next 
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="start_pool_valuation,snapshot_expiry_pricer,seal_valuation_snapshot,value_expiry,finish_flush"
@@ -498,7 +498,7 @@ Call `expiry_market::try_settle` first in the same transaction when settlement m
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="rebalance_expiry_cash"
@@ -550,7 +550,7 @@ public fun fee_incentive_balance(market: &ExpiryMarket): u64
 <ImportContent
 	source="packages/predict/sources/expiry_cash.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="ExpiryCash"
@@ -568,7 +568,7 @@ PLP is the Predict pool share token, registered as a 6-decimal currency to match
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="PLP"
@@ -600,7 +600,7 @@ The vault bounds capacity when a market registers, not when it trades. Registeri
 <ImportContent
 	source="packages/predict/sources/plp/plp.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="lock_capital,sponsor_fee_incentives"
@@ -647,7 +647,7 @@ One `FlushExecuted` per flush carries the priced mark and its breakdown, so `poo
 <ImportContent
 	source="packages/predict/sources/events/vault_events.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="FlushExecuted,FlushRestarted"
@@ -657,7 +657,7 @@ One `FlushExecuted` per flush carries the priced mark and its breakdown, so `poo
 
 ## Read and write the pool from a client {#read-vault-state-from-a-client}
 
-`@mysten/deepbook-v3` version 2.5.0 queues and cancels supply and withdraw requests, reads the pool and a PLP balance, and decodes request receipts on its `/predict` subpath, running every read through the Sui client's core API. See [Predict Liquidity SDK](/onchain-finance/deepbook/deepbook-predict-sdk/liquidity) for each function, the units each floor takes, and examples.
+`@linku/deepbook-v3` version 2.5.0 queues and cancels supply and withdraw requests, reads the pool and a PLP balance, and decodes request receipts on its `/predict` subpath, running every read through the Rtd client's core API. See [Predict Liquidity SDK](/onchain-finance/deepbook/deepbook-predict-sdk/liquidity) for each function, the units each floor takes, and examples.
 
 ## Error codes {#error-codes}
 

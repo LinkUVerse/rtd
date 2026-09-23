@@ -1,18 +1,18 @@
 ---
 title: Legacy Rust SDK
 description: >-
-  The Sui Rust SDK is available as two crates: the current sui-rust-sdk (using
-  GraphQL RPC and gRPC) for new integrations, and the legacy sui-sdk crate for
+  The Rtd Rust SDK is available as two crates: the current rtd-rust-sdk (using
+  GraphQL RPC and gRPC) for new integrations, and the legacy rtd-sdk crate for
   maintaining existing projects.
 keywords:
   - rust
   - rust SDK
-  - sui rust SDK
-  - crates/sui-sdk
-  - sui-sdk
+  - rtd rust SDK
+  - crates/rtd-sdk
+  - rtd-sdk
 goal:
   description: >-
-    Reader can look up how to use the Sui Rust SDK to interact with Sui networks
+    Reader can look up how to use the Rtd Rust SDK to interact with Rtd networks
     in Rust
   requires:
     - has_frontmatter:
@@ -27,26 +27,26 @@ goal:
       label: Needs answer summary for AI citation
 questions:
   - How do I use the Legacy Rust SDK?
-  - What is Legacy Rust SDK in Sui?
+  - What is Legacy Rust SDK in Rtd?
   - What methods does the Legacy Rust SDK provide?
 answer: >-
-  The Legacy Rust SDK crate is in the [`crates/sui-sdk`
-  directory](https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk) of the
-  Sui repository.
+  The Legacy Rust SDK crate is in the [`crates/rtd-sdk`
+  directory](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) of the
+  Rtd repository.
 ---
 
-The Sui Rust SDK provides Rust wrappers for interacting with Sui networks. Two Rust SDK crates are available:
+The Rtd Rust SDK provides Rust wrappers for interacting with Rtd networks. Two Rust SDK crates are available:
 
 | **Crate** | **Repository** | **Status** | **Use when** |
 |---|---|---|---|
-| [`sui-rust-sdk`](https://github.com/MystenLabs/sui-rust-sdk) | [MystenLabs/sui-rust-sdk](https://github.com/MystenLabs/sui-rust-sdk) | **Current** | Building new Rust integrations. Uses [GraphQL RPC](/develop/accessing-data/graphql/graphql-rpc) and [gRPC](/develop/accessing-data/grpc). |
-| [`sui-sdk`](https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk) | [MystenLabs/sui](https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk) | **Legacy** | Maintaining existing integrations that depend on this crate. |
+| [`rtd-rust-sdk`](https://github.com/LinkUVerse/rtd-rust-sdk) | [LinkUVerse/rtd-rust-sdk](https://github.com/LinkUVerse/rtd-rust-sdk) | **Current** | Building new Rust integrations. Uses [GraphQL RPC](/develop/accessing-data/graphql/graphql-rpc) and [gRPC](/develop/accessing-data/grpc). |
+| [`rtd-sdk`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) | [LinkUVerse/rtd](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) | **Legacy** | Maintaining existing integrations that depend on this crate. |
 
-For new projects, use [`sui-rust-sdk`](https://github.com/MystenLabs/sui-rust-sdk). It is the actively maintained Rust SDK with support for the current Sui API surface.
+For new projects, use [`rtd-rust-sdk`](https://github.com/LinkUVerse/rtd-rust-sdk). It is the actively maintained Rust SDK with support for the current Rtd API surface.
 
-## Legacy `sui-sdk` crate
+## Legacy `rtd-sdk` crate
 
-The legacy SDK crate lives in the [`crates/sui-sdk` directory](https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk) of the main Sui repository. It is forward and backwards compatible with `sui-rust-sdk`.
+The legacy SDK crate lives in the [`crates/rtd-sdk` directory](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) of the main Rtd repository. It is forward and backwards compatible with `rtd-rust-sdk`.
 
 ### Installation
 
@@ -54,11 +54,11 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sui-sdk = { git = "https://github.com/MystenLabs/sui.git", package = "sui-sdk" }
+rtd-sdk = { git = "https://github.com/LinkUVerse/rtd.git", package = "rtd-sdk" }
 ```
 
 ### SDK reference
 
 The legacy SDK README contains usage examples for connecting to a network, querying objects, and submitting transactions:
 
-<ImportContent source="crates/sui-sdk/README.md" mode="code" style="md" />
+<ImportContent source="crates/rtd-sdk/README.md" mode="code" style="md" />

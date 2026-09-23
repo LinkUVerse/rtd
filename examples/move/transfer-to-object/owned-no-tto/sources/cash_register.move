@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Note that there isn't any cash register for this and while the code is
@@ -18,13 +18,13 @@
 module owned_no_tto::cash_register;
 
 use common::identified_payment::{Self, IdentifiedPayment};
-use sui::coin::{Self, Coin};
-use sui::event;
-use sui::sui::SUI;
+use rtd::coin::{Self, Coin};
+use rtd::event;
+use rtd::rtd::RTD;
 
 public struct PaymentProcessed has copy, drop { payment_id: u64, amount: u64 }
 
-public fun process_payment(payment: IdentifiedPayment): Coin<SUI> {
+public fun process_payment(payment: IdentifiedPayment): Coin<RTD> {
     let (payment_id, coin) = identified_payment::unpack(payment);
     event::emit(PaymentProcessed { payment_id, amount: coin::value(&coin) });
     coin

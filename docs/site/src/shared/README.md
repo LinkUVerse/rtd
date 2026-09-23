@@ -1,6 +1,6 @@
-# Mysten Labs Shared Docusaurus Documentation Components
+# LinkU Labs Shared Docusaurus Documentation Components
 
-This repo houses the shared custom components, plugins, and scripts used across all Sui Stack documentation sites (Sui, Walrus, Seal, SuiNS, etc).
+This repo houses the shared custom components, plugins, and scripts used across all Rtd Stack documentation sites (Rtd, Walrus, Seal, RtdNS, etc).
 
 This repo is a work in progress and will continue to be updated, as some sites have not yet adopted the Docusaurus framework.
 
@@ -47,9 +47,9 @@ thus managed individually.
 Additionally, all `src/theme` and `css/` components are unique to each site to prevent conflicts
 between the styling of each individual site.
 
-## Sui-specific components
+## Rtd-specific components
 
-Components unique to the Sui documentation are as follows:
+Components unique to the Rtd documentation are as follows:
 
 ```
 ├── client
@@ -67,7 +67,7 @@ Components unique to the Sui documentation are as follows:
 │   └── custom.css
 │   └── fonts.css
 ├── js/
-│   └── convert-awesome-sui.mjs
+│   └── convert-awesome-rtd.mjs
 │   └── update-cli-output.js
 ├── plugins/
 │   └── askcookbook

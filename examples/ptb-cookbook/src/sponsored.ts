@@ -1,15 +1,15 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
-const client = new SuiGrpcClient({ baseUrl: 'https://fullnode.testnet.sui.io:443', network: 'testnet' });
+const client = new RtdGrpcClient({ baseUrl: 'https://fullnode.testnet.rtd.io:443', network: 'testnet' });
 const userKeypair = new Ed25519Keypair();
 const sponsorKeypair = new Ed25519Keypair();
-const userAddress = userKeypair.toSuiAddress();
-const sponsorAddress = sponsorKeypair.toSuiAddress();
+const userAddress = userKeypair.toRtdAddress();
+const sponsorAddress = sponsorKeypair.toRtdAddress();
 const sponsorGasCoins = [{ objectId: '0x...', version: '1', digest: '...' }];
 
 // docs::#sponsored
@@ -59,7 +59,7 @@ sponsoredTx2.setSender(userAddress);
 sponsoredTx2.setGasOwner(sponsorAddress);
 
 // Empty gas payment array tells the protocol to deduct gas from the
-// sponsor's SUI address balance. The SDK sets the ValidDuring expiration
+// sponsor's RTD address balance. The SDK sets the ValidDuring expiration
 // and nonce automatically when you build with a connected client.
 sponsoredTx2.setGasPayment([]);
 

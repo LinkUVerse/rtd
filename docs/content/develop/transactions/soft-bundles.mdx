@@ -2,7 +2,7 @@
 title: Soft Bundles
 sidebar_label: Soft Bundles
 description: >-
-  Submit a sequence of transactions from different signers so that Sui orders
+  Submit a sequence of transactions from different signers so that Rtd orders
   and executes them together with high probability, using the Soft Bundle API
   introduced in SIP-19.
 keywords:
@@ -12,18 +12,18 @@ keywords:
   - transaction bundling
   - gRPC
 questions:
-  - What is Soft Bundles in Sui?
+  - What is Soft Bundles in Rtd?
   - When to use a soft bundle?
   - How do I submit a soft bundle?
 answer: >-
-  Submit a sequence of transactions from different signers so that Sui orders
+  Submit a sequence of transactions from different signers so that Rtd orders
   and executes them together with high probability, using the Soft Bundle API
   introduced in SIP-19.
 ---
 
-A soft bundle is a group of transactions, possibly from different signers, that Sui orders and executes together with high probability. The Soft Bundle API serves cases that a single [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks) (PTB) cannot, such as sequencing transactions that have different signers and allowing a subset of the bundle to revert independently.
+A soft bundle is a group of transactions, possibly from different signers, that Rtd orders and executes together with high probability. The Soft Bundle API serves cases that a single [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks) (PTB) cannot, such as sequencing transactions that have different signers and allowing a subset of the bundle to revert independently.
 
-Shio authored and implemented this primitive in [SIP-19: Soft Bundle API](https://github.com/sui-foundation/sips/blob/main/sips/sip-19.md), which has a status of Final. Sui enables the feature through the `soft_bundle` protocol configuration flag.
+Shio authored and implemented this primitive in [SIP-19: Soft Bundle API](https://github.com/rtd-foundation/sips/blob/main/sips/sip-19.md), which has a status of Final. Rtd enables the feature through the `soft_bundle` protocol configuration flag.
 
 ## When to use a soft bundle
 
@@ -35,11 +35,11 @@ A soft bundle covers the cases a PTB cannot:
 - **Partial revert:** A transaction in the bundle can revert without forcing the rest of the bundle to revert.
 - **Sequencing across accounts:** A bundle attempts to keep its transactions in the same relative order when they reach consensus, on a best-effort basis.
 
-A common use case is Maximal Extractable Value (MEV) order flow, where an originating transaction and one or more back-run transactions from different parties need to land in the same consensus commit in a known order. For background, see [MEV on Sui: Current State and Next Steps](https://blog.sui.io/mev-on-sui-current-state/).
+A common use case is Maximal Extractable Value (MEV) order flow, where an originating transaction and one or more back-run transactions from different parties need to land in the same consensus commit in a known order. For background, see [MEV on Rtd: Current State and Next Steps](https://blog.rtd.io/mev-on-rtd-current-state/).
 
 ## How soft bundles work
 
-In the standard flow, you submit each transaction to a validator on its own. The validator validates and signs the transaction, then submits it to [consensus](/develop/sui-architecture/consensus). Different validators can submit at different times, so the final order of transactions that share the same gas price depends on factors that a client cannot control directly.
+In the standard flow, you submit each transaction to a validator on its own. The validator validates and signs the transaction, then submits it to [consensus](/develop/rtd-architecture/consensus). Different validators can submit at different times, so the final order of transactions that share the same gas price depends on factors that a client cannot control directly.
 
 The Soft Bundle API adds a submission type that keeps related transactions together. You submit the group through the validator `SubmitTransaction` gRPC method with the submission type set to `SoftBundle`. The validator processes the transactions as a unit and submits them to consensus in the same batch, which preserves their relative order.
 
@@ -82,15 +82,15 @@ Most integrations today submit through an MEV service rather than calling a vali
 
 ### Directly through gRPC
 
-Soft bundle submission belongs to the validator submission API, not the public full-node `sui.rpc.v2` API. You submit a bundle through the validator `SubmitTransaction` gRPC method, with the request's submission type set to `SoftBundle` and the signed transactions included in the request. The response returns one result per transaction, where each result reports that the validator submitted the transaction to consensus, already executed it, or rejected it.
+Soft bundle submission belongs to the validator submission API, not the public full-node `rtd.rpc.v2` API. You submit a bundle through the validator `SubmitTransaction` gRPC method, with the request's submission type set to `SoftBundle` and the signed transactions included in the request. The response returns one result per transaction, where each result reports that the validator submitted the transaction to consensus, already executed it, or rejected it.
 
-The Sui TypeScript SDK does not wrap the validator submission API. Its public gRPC `TransactionExecutionService` executes single transactions through `ExecuteTransaction` only. Direct integration therefore requires you to build gRPC requests against the validator proto definitions, sign each transaction, and submit them as a single request.
+The Rtd TypeScript SDK does not wrap the validator submission API. Its public gRPC `TransactionExecutionService` executes single transactions through `ExecuteTransaction` only. Direct integration therefore requires you to build gRPC requests against the validator proto definitions, sign each transaction, and submit them as a single request.
 
 Because no first-party SDK exposes this API today, most teams integrate through an MEV service instead.
 
 :::info
 
-Sui has migrated data access from JSON-RPC to gRPC and GraphQL RPC. Sui Foundation disabled JSON-RPC on Mainnet full nodes the week of July 27, 2026. The public full-node gRPC API does not include soft bundle execution. See [Sui and Community SDKs](/references/sui-sdks) for current SDK support.
+Rtd has migrated data access from JSON-RPC to gRPC and GraphQL RPC. Rtd Foundation disabled JSON-RPC on Mainnet full nodes the week of July 27, 2026. The public full-node gRPC API does not include soft bundle execution. See [Rtd and Community SDKs](/references/rtd-sdks) for current SDK support.
 
 :::
 

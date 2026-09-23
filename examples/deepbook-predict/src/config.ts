@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#config
-import { getConfig, getDeployment, getUnits } from '@mysten/deepbook-v3/predict';
+import { getConfig, getDeployment, getUnits } from '@linku/deepbook-v3/predict';
 
 // The SDK carries a deployment record for Testnet and for Mainnet, so `getConfig`
 // resolves either. This constant is the single place these examples select a
@@ -12,8 +12,8 @@ export const NETWORK = 'testnet' as 'testnet' | 'mainnet';
 
 export const FULLNODE_URL =
 	NETWORK === 'mainnet'
-		? 'https://fullnode.mainnet.sui.io:443'
-		: 'https://fullnode.testnet.sui.io:443';
+		? 'https://fullnode.mainnet.rtd.io:443'
+		: 'https://fullnode.testnet.rtd.io:443';
 
 // One underlying is live on this deployment.
 export const UNDERLYING = 'BTC';

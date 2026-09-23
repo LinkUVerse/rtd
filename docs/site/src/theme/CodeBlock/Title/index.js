@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const GITHUB = "https://github.com";
 const GITHUB_BLOB = "blob/main";
-const ML_ORG = "MystenLabs";
-const SUI_REPO = "sui";
+const ML_ORG = "LinkUVerse";
+const RTD_REPO = "rtd";
 
 export default function CodeBlockTitle({ children }) {
   let link;
@@ -15,7 +15,7 @@ export default function CodeBlockTitle({ children }) {
     const rest = parts.slice(3).join("/");
     link = `${GITHUB}/${org}/${repo}/${GITHUB_BLOB}/${rest}`;
   } else {
-    link = `${GITHUB}/${ML_ORG}/${SUI_REPO}/${GITHUB_BLOB}/${children}`;
+    link = `${GITHUB}/${ML_ORG}/${RTD_REPO}/${GITHUB_BLOB}/${children}`;
   }
   return (
     <a href={link} target="_blank" rel="noreferrer">

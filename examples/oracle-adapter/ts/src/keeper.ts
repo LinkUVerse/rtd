@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#keeper
-import { Transaction } from '@mysten/sui/transactions';
-import type { SuiClient } from '@mysten/sui/client';
-import type { Signer } from '@mysten/sui/cryptography';
-import type { SuiPythClient, SuiPriceServiceConnection } from '@pythnetwork/pyth-sui-js';
+import { Transaction } from '@linku/rtd/transactions';
+import type { RtdClient } from '@linku/rtd/client';
+import type { Signer } from '@linku/rtd/cryptography';
+import type { RtdPythClient, RtdPriceServiceConnection } from '@pythnetwork/pyth-rtd-js';
 
 // One push cycle: fetch the latest signed update from Hermes and apply it
 // onchain, refreshing the feed's PriceInfoObject. A pull consumer updates and
@@ -16,9 +16,9 @@ import type { SuiPythClient, SuiPriceServiceConnection } from '@pythnetwork/pyth
 // choose an interval that balances freshness against cost. A push consumer must
 // still check the stored price's age, because the keeper can fall behind.
 export async function pushOnce(
-	sui: SuiClient,
-	pyth: SuiPythClient,
-	hermes: SuiPriceServiceConnection,
+	rtd: RtdClient,
+	pyth: RtdPythClient,
+	hermes: RtdPriceServiceConnection,
 	signer: Signer,
 	feedId: string,
 ): Promise<string> {
@@ -26,7 +26,7 @@ export async function pushOnce(
 	const tx = new Transaction();
 	await pyth.updatePriceFeeds(tx, updates, [feedId]);
 	tx.setGasBudget(150_000_000n);
-	const r = await sui.signAndExecuteTransaction({
+	const r = await rtd.signAndExecuteTransaction({
 		transaction: tx,
 		signer,
 		options: { showEffects: true },

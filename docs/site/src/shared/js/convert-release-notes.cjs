@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -12,7 +12,7 @@ const releaseNotesDir = '../../release-notes/';
 const outputReleaseNotesPath = '../../docs/content/references/release-notes.mdx';
 
 const MAX_PAGE_CHARS = 49500;
-const GITHUB_RELEASES_URL = 'https://github.com/MystenLabs/sui/releases';
+const GITHUB_RELEASES_URL = 'https://github.com/LinkUVerse/rtd/releases';
 
 const excludeDirs = ['node_modules', '.git', 'build', 'dist', '.docusaurus'];
 
@@ -195,7 +195,7 @@ function fetchGitHubReleases() {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'api.github.com',
-      path: '/repos/MystenLabs/sui/releases?per_page=100',
+      path: '/repos/LinkUVerse/rtd/releases?per_page=100',
       method: 'GET',
       headers: {
         'User-Agent': 'Node.js Script',
@@ -459,7 +459,7 @@ sidebar_position: 999
 sidebar_label: Release Notes
 title: Release Notes
 description: >-
-  Review what changed in each Sui release, including protocol upgrades,
+  Review what changed in each Rtd release, including protocol upgrades,
   framework changes, GraphQL updates, and indexing improvements.
 keywords:
   - release notes
@@ -468,7 +468,7 @@ keywords:
   - framework changes
   - versioning
 goal:
-  description: Reader can review what changed in each Sui release
+  description: Reader can review what changed in each Rtd release
   requires:
     - has_frontmatter:
         - title
@@ -481,11 +481,11 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Release Notes in Sui?
+  - What is Release Notes in Rtd?
   - Where can I find the release notes reference?
-  - How does release notes work on Sui?
+  - How does release notes work on Rtd?
 answer: >-
-  Review what changed in each Sui release, including protocol upgrades,
+  Review what changed in each Rtd release, including protocol upgrades,
   framework changes, GraphQL updates, and indexing improvements.
 ---
 
@@ -534,7 +534,7 @@ Published release history could not be retrieved when this page was built. See [
 
       // Add network badge
       const networkBadge = note.network === 'testnet' ? '🔶 Testnet' : '✅ Mainnet';
-      consolidatedContent += `**${networkBadge}** | *Source: [GitHub Release](https://github.com/MystenLabs/sui/releases/tag/${note.tag})*\n\n`;
+      consolidatedContent += `**${networkBadge}** | *Source: [GitHub Release](https://github.com/LinkUVerse/rtd/releases/tag/${note.tag})*\n\n`;
 
       // Add local content in collapsible details if it exists
       if (note.localNotes.length > 0) {

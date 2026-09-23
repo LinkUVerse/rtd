@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import type { DeepBookMarginClient } from './client.js';
 
 // Margin orders go through the pool proxy, not the spot order entry, so the
@@ -12,7 +12,7 @@ import type { DeepBookMarginClient } from './client.js';
 
 // docs::#open-position
 // Open the leveraged position. With borrowed DBUSDC in the manager, place a bid
-// on SUI_DBUSDC to buy SUI: your position is now larger than your own collateral
+// on RTD_DBUSDC to buy RTD: your position is now larger than your own collateral
 // funded, which is the leverage.
 export function openLongPosition(
 	client: DeepBookMarginClient,
@@ -40,7 +40,7 @@ export function openLongPosition(
 // docs::#reduce-position
 // Close or shrink the position with a reduce-only order. Reduce-only guarantees
 // the order can only decrease your exposure, never flip you to the other side or
-// add leverage: here it sells SUI back for DBUSDC so you can repay the borrow.
+// add leverage: here it sells RTD back for DBUSDC so you can repay the borrow.
 export function reduceLongPosition(
 	client: DeepBookMarginClient,
 	marginManagerKey: string,

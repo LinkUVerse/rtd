@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use sui_types::base_types::{ObjectID, SuiAddress};
+use rtd_types::base_types::{ObjectID, RtdAddress};
 
 use crate::{
     client::{Client, Connection},
@@ -84,7 +84,7 @@ impl Command {
                 /* shared */
                 {
                     assert!(!multi_sig);
-                    let opponent = SuiAddress::from_str(&opponent)
+                    let opponent = RtdAddress::from_str(&opponent)
                         .with_context(|| format!("Invalid opponent address {opponent}"))?;
 
                     client.new_shared_game(opponent).await.with_context(|| {

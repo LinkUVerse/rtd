@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Vercel Edge Middleware: content negotiation for Markdown for Agents.
@@ -39,7 +39,7 @@ function trackPlausibleEvent(request, visitorType) {
     },
     body: JSON.stringify({
       name: 'pageview',
-      domain: 'docs.sui.io',
+      domain: 'docs.rtd.io',
       url: url.toString(),
       referrer: request.headers.get('referer') || '',
       props: { visitor_type: visitorType },

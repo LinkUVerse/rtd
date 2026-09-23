@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Implements a coin with a fixed supply. Upon initialization, mint the total
@@ -9,7 +9,7 @@
 /// description, and icon URL.
 module examples::fixed_supply;
 
-use sui::coin_registry;
+use rtd::coin_registry;
 
 // Total supply of the `FIXED_SUPPLY` coin is 1B (with 6 decimals).
 const TOTAL_SUPPLY: u64 = 1000000000_000000;

@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#mint-range
-import type { MarketDescriptor, MintQuote } from '@mysten/deepbook-v3/predict';
-import type { Transaction } from '@mysten/sui/transactions';
+import type { MarketDescriptor, MintQuote } from '@linku/deepbook-v3/predict';
+import type { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 import { UNDERLYING } from './config.js';
 import { admissibleStrike, tradeableMarket } from './markets.js';

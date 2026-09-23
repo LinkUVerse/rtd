@@ -11,32 +11,32 @@ concepts:
 
   # ─── Getting Started ───────────────────────────────────────────────────────
 
-  sui-install:
+  rtd-install:
     must_appear_in:
-      - "getting-started/onboarding/sui-install.mdx"
+      - "getting-started/onboarding/rtd-install.mdx"
     terms:
       - "suiup"
-      - "sui --version"
+      - "rtd --version"
       - "install"
       - "prerequisites"
 
-  sui-client-config:
+  rtd-client-config:
     must_appear_in:
-      - "getting-started/onboarding/configure-sui-client.mdx"
+      - "getting-started/onboarding/configure-rtd-client.mdx"
     terms:
-      - "sui client"
+      - "rtd client"
       - "client.yaml"
       - "envs"
       - "switch"
 
-  sui-address:
+  rtd-address:
     must_appear_in:
       - "getting-started/onboarding/get-address.mdx"
-      - "getting-started/onboarding/configure-sui-client.mdx"
+      - "getting-started/onboarding/configure-rtd-client.mdx"
     terms:
       - "address"
       - "0x"
-      - "sui client new-address"
+      - "rtd client new-address"
       - "recovery phrase"
       - "keystore"
 
@@ -47,16 +47,16 @@ concepts:
     terms:
       - "gas"
       - "faucet"
-      - "SUI"
-      - "sui client gas"
+      - "RTD"
+      - "rtd client gas"
       - "balance"
 
   move-build-publish:
     must_appear_in:
       - "getting-started/onboarding/hello-world.mdx"
     terms:
-      - "sui move build"
-      - "sui client publish"
+      - "rtd move build"
+      - "rtd client publish"
       - "Move.toml"
       - "module"
       - "package"
@@ -65,7 +65,7 @@ concepts:
     must_appear_in:
       - "getting-started/onboarding/hello-world.mdx"
     terms:
-      - "sui client call"
+      - "rtd client call"
       - "function"
       - "transaction"
       - "object"
@@ -78,13 +78,13 @@ concepts:
       - "wallet"
       - "useCurrentAccount"
       - "React"
-      - "@mysten/dapp-kit"
+      - "@linku/dapp-kit"
 
   ptb:
     must_appear_in:
       - "getting-started/onboarding/hello-world.mdx"
-      - "getting-started/sui-for-ethereum.mdx"
-      - "getting-started/sui-for-solana.mdx"
+      - "getting-started/rtd-for-ethereum.mdx"
+      - "getting-started/rtd-for-solana.mdx"
       - "develop/transactions/ptbs/prog-txn-blocks.mdx"
       - "develop/transactions/ptbs/building-ptb.mdx"
     terms:
@@ -96,10 +96,10 @@ concepts:
 
   object-ownership:
     must_appear_in:
-      - "getting-started/sui-for-ethereum.mdx"
-      - "getting-started/sui-for-solana.mdx"
+      - "getting-started/rtd-for-ethereum.mdx"
+      - "getting-started/rtd-for-solana.mdx"
       - "develop/objects/object-ownership/index.mdx"
-      - "develop/sui-architecture/object-model.mdx"
+      - "develop/rtd-architecture/object-model.mdx"
     terms:
       - "owned"
       - "shared"
@@ -124,7 +124,7 @@ concepts:
     terms:
       - "test_scenario"
       - "#[test]"
-      - "sui move test"
+      - "rtd move test"
       - "next_tx"
       - "take_shared"
 
@@ -151,7 +151,7 @@ concepts:
     must_appear_in:
       - "getting-started/onboarding/local-network.mdx"
     terms:
-      - "sui start"
+      - "rtd start"
       - "localnet"
       - "faucet"
       - "localhost"
@@ -159,7 +159,7 @@ concepts:
 
   ethereum-migration:
     must_appear_in:
-      - "getting-started/sui-for-ethereum.mdx"
+      - "getting-started/rtd-for-ethereum.mdx"
     terms:
       - "Solidity"
       - "EVM"
@@ -170,7 +170,7 @@ concepts:
 
   solana-migration:
     must_appear_in:
-      - "getting-started/sui-for-solana.mdx"
+      - "getting-started/rtd-for-solana.mdx"
     terms:
       - "Solana"
       - "Anchor"
@@ -251,7 +251,7 @@ concepts:
 
   gas-mechanics:
     must_appear_in:
-      - "develop/transaction-payment/gas-in-sui.mdx"
+      - "develop/transaction-payment/gas-in-rtd.mdx"
       - "develop/transaction-payment/gas-smashing.mdx"
     terms:
       - "gas budget"
@@ -304,7 +304,7 @@ concepts:
       - "pipeline"
       - "checkpoint"
       - "PostgreSQL"
-      - "sui-indexer-alt"
+      - "rtd-indexer-alt"
 
   archival-store:
     must_appear_in:
@@ -320,7 +320,7 @@ concepts:
 
   move-concepts:
     must_appear_in:
-      - "develop/write-move/sui-move-concepts.mdx"
+      - "develop/write-move/rtd-move-concepts.mdx"
     terms:
       - "ability"
       - "key"
@@ -344,8 +344,8 @@ concepts:
 
   zklogin:
     must_appear_in:
-      - "sui-stack/zklogin-integration/zklogin.mdx"
-      - "sui-stack/zklogin-integration/zklogin-example.mdx"
+      - "rtd-stack/zklogin-integration/zklogin.mdx"
+      - "rtd-stack/zklogin-integration/zklogin-example.mdx"
     terms:
       - "zkLogin"
       - "OAuth"
@@ -365,9 +365,9 @@ concepts:
 
   # ─── Develop: Architecture ─────────────────────────────────────────────────
 
-  sui-object-model:
+  rtd-object-model:
     must_appear_in:
-      - "develop/sui-architecture/object-model.mdx"
+      - "develop/rtd-architecture/object-model.mdx"
     terms:
       - "UID"
       - "object"
@@ -378,7 +378,7 @@ concepts:
 
   consensus:
     must_appear_in:
-      - "develop/sui-architecture/consensus.mdx"
+      - "develop/rtd-architecture/consensus.mdx"
     terms:
       - "Mysticeti"
       - "consensus"
@@ -388,7 +388,7 @@ concepts:
 
   epochs:
     must_appear_in:
-      - "develop/sui-architecture/epochs.mdx"
+      - "develop/rtd-architecture/epochs.mdx"
     terms:
       - "epoch"
       - "committee"
@@ -449,9 +449,9 @@ concepts:
       - "schedule"
       - "unlock"
 
-  sui-bridging:
+  rtd-bridging:
     must_appear_in:
-      - "onchain-finance/fungible-tokens/sui-bridging.mdx"
+      - "onchain-finance/fungible-tokens/rtd-bridging.mdx"
     terms:
       - "bridge"
       - "wormhole"
@@ -735,7 +735,7 @@ concepts:
 
   full-node:
     must_appear_in:
-      - "operators/full-node/sui-full-node.mdx"
+      - "operators/full-node/rtd-full-node.mdx"
     terms:
       - "full node"
       - "RocksDB"
@@ -776,11 +776,11 @@ concepts:
       - "retention"
       - "RocksDB"
 
-  # ─── Sui Stack ─────────────────────────────────────────────────────────────
+  # ─── Rtd Stack ─────────────────────────────────────────────────────────────
 
   walrus:
     must_appear_in:
-      - "sui-stack/walrus/sui-stack-walrus.mdx"
+      - "rtd-stack/walrus/rtd-stack-walrus.mdx"
     terms:
       - "Walrus"
       - "blob"
@@ -790,7 +790,7 @@ concepts:
 
   walrus-sites:
     must_appear_in:
-      - "sui-stack/walrus/sui-stack-walrus-sites.mdx"
+      - "rtd-stack/walrus/rtd-stack-walrus-sites.mdx"
     terms:
       - "Walrus Sites"
       - "site-builder"
@@ -799,7 +799,7 @@ concepts:
 
   seal:
     must_appear_in:
-      - "sui-stack/seal/sui-stack-seal.mdx"
+      - "rtd-stack/seal/rtd-stack-seal.mdx"
     terms:
       - "Seal"
       - "encrypt"
@@ -809,8 +809,8 @@ concepts:
 
   nautilus:
     must_appear_in:
-      - "sui-stack/nautilus/nautilus-overview.mdx"
-      - "sui-stack/nautilus/using-nautilus.mdx"
+      - "rtd-stack/nautilus/nautilus-overview.mdx"
+      - "rtd-stack/nautilus/using-nautilus.mdx"
     terms:
       - "Nautilus"
       - "TEE"
@@ -818,11 +818,11 @@ concepts:
       - "attestation"
       - "offchain"
 
-  suins:
+  rtdns:
     must_appear_in:
-      - "sui-stack/suins/sui-stack-suins.mdx"
+      - "rtd-stack/rtdns/rtd-stack-rtdns.mdx"
     terms:
-      - "SuiNS"
+      - "RtdNS"
       - "name"
       - "domain"
       - "resolve"
@@ -830,7 +830,7 @@ concepts:
 
   randomness:
     must_appear_in:
-      - "sui-stack/on-chain-primitives/randomness-onchain.mdx"
+      - "rtd-stack/on-chain-primitives/randomness-onchain.mdx"
     terms:
       - "Random"
       - "random"
@@ -845,8 +845,8 @@ concepts:
       - "references/cli/client.mdx"
       - "references/cli/move.mdx"
     terms:
-      - "sui client"
-      - "sui move"
+      - "rtd client"
+      - "rtd move"
       - "command"
       - "flag"
       - "usage"
@@ -854,10 +854,10 @@ concepts:
   sdk-overview:
     must_appear_in:
       - "references/sdk-comparison.mdx"
-      - "references/sui-sdks.mdx"
+      - "references/rtd-sdks.mdx"
     terms:
       - "TypeScript"
       - "Rust"
       - "SDK"
-      - "@mysten/sui"
+      - "@linku/rtd"
       - "client"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 if ! cosign version &> /dev/null
@@ -15,19 +15,19 @@ if [ -z "$1" ]; then
 fi
 
 commit_sha=$1
-pub_key=https://sui-private.s3.us-west-2.amazonaws.com/sui_security_release.pem
-url=https://sui-releases.s3-accelerate.amazonaws.com/$commit_sha
+pub_key=https://rtd-private.s3.us-west-2.amazonaws.com/rtd_security_release.pem
+url=https://rtd-releases.s3-accelerate.amazonaws.com/$commit_sha
 
-echo "[+] Downloading sui binaries for $commit_sha ..."
-for binary in sui sui-node sui-tool; do
+echo "[+] Downloading rtd binaries for $commit_sha ..."
+for binary in rtd rtd-node rtd-tool; do
     if ! curl -fSs "$url/$binary" -o "$binary"; then
         echo "Error: failed to download $url/$binary (check the commit sha)"
         exit 1
     fi
 done
 
-echo "[+] Verifying sui binaries for $commit_sha ..."
-for binary in sui sui-node sui-tool; do
+echo "[+] Verifying rtd binaries for $commit_sha ..."
+for binary in rtd rtd-node rtd-tool; do
     if ! cosign verify-blob --insecure-ignore-tlog --key "$pub_key" --signature "$url/$binary.sig" "$binary"; then
         echo "Error: signature verification failed for $binary"
         exit 1

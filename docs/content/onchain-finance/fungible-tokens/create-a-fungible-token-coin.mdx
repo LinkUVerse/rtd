@@ -1,7 +1,7 @@
 ---
 title: 'Create Fungible Tokens: Coin Standard'
 description: >-
-  Learn how to create and mint coins using the Coin standard on Sui, and manage
+  Learn how to create and mint coins using the Coin standard on Rtd, and manage
   fungible assets with address balances or coin objects.
 keywords:
   - mint tokens
@@ -9,13 +9,13 @@ keywords:
   - use tokens
   - publish token
   - custom tokens
-  - sui CLI
+  - rtd CLI
   - denylist
   - regulated coins
   - coin registry
   - currency registry
 goal:
-  description: Reader can create currencies and mint coins and tokens on the Sui network
+  description: Reader can create currencies and mint coins and tokens on the Rtd network
   requires:
     - has_frontmatter:
         - title
@@ -44,15 +44,15 @@ questions:
   - 'How do I create fungible tokens: coin standard?'
   - How do I use the coin standard?
   - How do I check coin address balances?
-  - 'What is Create Fungible Tokens: Coin Standard in Sui?'
-answer: Learn how to create currencies and mint coins and tokens on the Sui network.
+  - 'What is Create Fungible Tokens: Coin Standard in Rtd?'
+answer: Learn how to create currencies and mint coins and tokens on the Rtd network.
 ---
 
-The Coin standard uses the [`sui::coin`](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/coin.md) module to define fungible assets called coins that have `key` and `store` abilities. Coins support wrapping and public transfer functionality.
+The Coin standard uses the [`rtd::coin`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/coin.md) module to define fungible assets called coins that have `key` and `store` abilities. Coins support wrapping and public transfer functionality.
 
-The `Coin<T>` type represents open-loop fungible tokens, denominated by their type parameter `T`, which is also associated with metadata that applies to all instances of `Coin<T>`. The `sui::coin` module exposes an interface over `Coin<T>` that treats it as fungible, meaning that a unit of `T` held in one instance of `Coin<T>` is interchangeable with any other unit of `T`, similar to how traditional fiat currencies operate.
+The `Coin<T>` type represents open-loop fungible tokens, denominated by their type parameter `T`, which is also associated with metadata that applies to all instances of `Coin<T>`. The `rtd::coin` module exposes an interface over `Coin<T>` that treats it as fungible, meaning that a unit of `T` held in one instance of `Coin<T>` is interchangeable with any other unit of `T`, similar to how traditional fiat currencies operate.
 
-The network's native coin, SUI, uses the Coin standard.
+The network's native coin, RTD, uses the Coin standard.
 
 ## Use the Coin standard
 
@@ -65,8 +65,8 @@ Define the metadata for the coin, including its name, description, symbol, icon 
 <ImportContent
 	source="I1/silver/sources/silver.move"
 	mode="code"
-	org="MystenLabs"
-	repo="sui-move-bootcamp"
+	org="LinkUVerse"
+	repo="rtd-move-bootcamp"
 	lines="11-15"
 	branch="solution"
 />
@@ -80,8 +80,8 @@ Create the coin using the `coin::create_currency` function:
 <ImportContent
 	source="I1/silver/sources/silver.move"
 	mode="code"
-	org="MystenLabs"
-	repo="sui-move-bootcamp"
+	org="LinkUVerse"
+	repo="rtd-move-bootcamp"
 	fun="create_currency"
 	branch="solution"
 />
@@ -93,27 +93,27 @@ Mint the initial supply of your coin:
 <ImportContent
 	source="I1/silver/sources/silver.move"
 	mode="code"
-	org="MystenLabs"
-	repo="sui-move-bootcamp"
+	org="LinkUVerse"
+	repo="rtd-move-bootcamp"
 	fun="mint"
 	branch="solution"
 />
 
-[View the full example](https://github.com/MystenLabs/sui-move-bootcamp/blob/main/I1) or learn more about the [Coin Standard](/onchain-finance/fungible-tokens/coin).
+[View the full example](https://github.com/LinkUVerse/rtd-move-bootcamp/blob/main/I1) or learn more about the [Coin Standard](/onchain-finance/fungible-tokens/coin).
 
 ## Managing coins
 
-Sui supports two ways to hold fungible assets: address balances and coin objects. Address balances are the recommended default for most use cases. Coin objects remain available for scenarios that require explicit object-level control.
+Rtd supports two ways to hold fungible assets: address balances and coin objects. Address balances are the recommended default for most use cases. Coin objects remain available for scenarios that require explicit object-level control.
 
 ## Address balances
 
-Address balances provide a canonical balance for each coin type tied directly to a Sui address. Funds sent through `send_funds` merge automatically into a single balance per coin type, with no object management required.
+Address balances provide a canonical balance for each coin type tied directly to a Rtd address. Funds sent through `send_funds` merge automatically into a single balance per coin type, with no object management required.
 
 Key advantages of address balances:
 
 - No coin selection or merging logic needed.
 - Stateless transaction construction without querying object states.
-- Gas payment directly from SUI address balances.
+- Gas payment directly from RTD address balances.
 - Multiple deposits merge automatically.
 
 The TypeScript SDK (v2+) uses address balances by default. When you use `coinWithBalance`, the SDK draws from address balances first and falls back to coin objects only when needed. For gas payment, pass an empty array to `setGasPayment` to pay from your address balance.
@@ -122,7 +122,7 @@ See [Address Balances Migration Guide](/onchain-finance/asset-custody/address-ba
 
 ## Coin objects
 
-Coin objects are address-owned objects that represent a specific amount of a given coin type. Before address balances, all funds on Sui were held as coin objects. They remain fully functional and are not deprecated.
+Coin objects are address-owned objects that represent a specific amount of a given coin type. Before address balances, all funds on Rtd were held as coin objects. They remain fully functional and are not deprecated.
 
 Coin objects are useful when you need to:
 
@@ -144,9 +144,9 @@ You can convert coin objects into an address balance at any time by calling `coi
 
 When executing a transaction, you can provide multiple coins as gas payment rather than a single coin. This feature, known as gas smashing, automatically merges the provided coins into the first coin in the payment vector. That merged coin, minus the gas budget, is then available inside the transaction for use in any command. If unused, it returns to the sender.
 
-Gas smashing applies only to `Coin<SUI>` objects, because SUI is the only coin type accepted for gas payment.
+Gas smashing applies only to `Coin<RTD>` objects, because RTD is the only coin type accepted for gas payment.
 
-You can provide as many coins as you want (up to a maximum defined in the protocol configuration). Gas smashing is a useful tool when you need to consolidate SUI coins as part of a transaction.
+You can provide as many coins as you want (up to a maximum defined in the protocol configuration). Gas smashing is a useful tool when you need to consolidate RTD coins as part of a transaction.
 
 :::tip
 

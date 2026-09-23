@@ -33,7 +33,7 @@ questions:
 answer: Explore examples of package manifest files.
 ---
 
-`Move.toml` is the manifest file for a Sui Move package. It declares the package name, dependencies, network environments, and environment-specific dependency overrides. Every Move project has a `Move.toml` at its root ([Move package management](/develop/manage-packages/move-package-management)).
+`Move.toml` is the manifest file for a Rtd Move package. It declares the package name, dependencies, network environments, and environment-specific dependency overrides. Every Move project has a `Move.toml` at its root ([Move package management](/develop/manage-packages/move-package-management)).
 
 This reference covers the syntax and available fields for each section of `Move.toml`.
 
@@ -63,7 +63,7 @@ name = "<package-name>"
 |-------|----------|-------------|
 | `name` | Yes | The package name. |
 | `edition` | No | Move edition (for example, `"2024"`). |
-| `implicit-dependencies` | No | Set to `false` to exclude the default `std` and `sui` dependencies. |
+| `implicit-dependencies` | No | Set to `false` to exclude the default `std` and `rtd` dependencies. |
 
 ### `[dependencies]`
 
@@ -75,7 +75,7 @@ Lists the packages your project depends on. Each dependency has a name (the key)
 | Git | `name = { git = "URL", subdir = "PATH", rev = "BRANCH_OR_TAG" }` | Packages hosted in a Git repository. `subdir` is required when the package is not at the repo root. `rev` specifies a branch, tag, or commit hash. |
 | Local | `name = { local = "../path/to/package" }` | Packages on your local filesystem (useful during development) |
 
-The `sui` and `std` framework dependencies are resolved automatically. You do not need to add them to `[dependencies]` unless you set `implicit-dependencies = false` in `[package]`.
+The `rtd` and `std` framework dependencies are resolved automatically. You do not need to add them to `[dependencies]` unless you set `implicit-dependencies = false` in `[package]`.
 
 ### `[environments]` {#environments}
 
@@ -88,7 +88,7 @@ Chain IDs accept either format interchangeably:
 
 The package system compares chain IDs by their underlying bytes, so a Hex value in the manifest matches a Base58 value from the CLI and vice versa.
 
-Use `sui client chain-identifier` to look up both formats for the network you are connected to.
+Use `rtd client chain-identifier` to look up both formats for the network you are connected to.
 
 ### `[dep-replacements.<ENV>]`
 
@@ -109,7 +109,7 @@ See [environment-specific dependencies](/develop/manage-packages/move-package-ma
 
 ### Minimal manifest
 
-A basic project that only depends on `sui` and `std` (resolved automatically):
+A basic project that only depends on `rtd` and `std` (resolved automatically):
 
 ```toml
 [package]
@@ -167,7 +167,7 @@ Use MVR for packages registered in the Move Registry (these resolve network-spec
 
 ##### How do environments affect publishing?
 
-The environment determines which dependency addresses the compiler uses during the build. When you publish with `sui client publish`, the active environment (set with `--build-env` or inferred from the connected network) determines which `[dep-replacements]` section applies.
+The environment determines which dependency addresses the compiler uses during the build. When you publish with `rtd client publish`, the active environment (set with `--build-env` or inferred from the connected network) determines which `[dep-replacements]` section applies.
 
 ##### What is a lockfile?
 

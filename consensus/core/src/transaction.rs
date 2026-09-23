@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -6,8 +6,8 @@ use consensus_config::Epoch;
 use consensus_types::block::{
     BlockRef, NUM_RESERVED_TRANSACTION_INDICES, PING_TRANSACTION_INDEX, Round, TransactionIndex,
 };
-use mysten_common::debug_fatal;
-use mysten_metrics::monitored_mpsc::{Receiver, Sender, channel};
+use linku_common::debug_fatal;
+use linku_metrics::monitored_mpsc::{Receiver, Sender, channel};
 use parking_lot::Mutex;
 use tap::TapFallible;
 use thiserror::Error;
@@ -459,7 +459,7 @@ impl TransactionClient {
 
 /// `TransactionPool` supplies transactions for block proposals, as an alternative to
 /// submitting transactions through `TransactionClient`. Like `TransactionVerifier`, the
-/// implementation can be provided by Sui and passed into `ConsensusAuthority::start()`.
+/// implementation can be provided by Rtd and passed into `ConsensusAuthority::start()`.
 pub trait TransactionPool: Send + Sync + 'static {
     /// Called by the proposer while building a block. Takes transactions to include, up to
     /// `max_count` transactions and `max_bytes` total serialized bytes. Returns the
@@ -528,7 +528,7 @@ impl TransactionPool for TransactionConsumerPool {
     }
 }
 
-/// `TransactionVerifier` implementation is supplied by Sui to validate transactions in a block,
+/// `TransactionVerifier` implementation is supplied by Rtd to validate transactions in a block,
 /// before acceptance of the block.
 pub trait TransactionVerifier: Send + Sync + 'static {
     /// Determines if this batch of transactions is valid.

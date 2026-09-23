@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import type { DeepBookMarginClient } from './client.js';
 
 // docs::#create-cap
@@ -20,7 +20,7 @@ export function createSupplierCap(client: DeepBookMarginClient, owner: string): 
 
 // docs::#supply
 // Supply an asset to its margin pool. The SDK sources the coin from your wallet,
-// so keep a gas reserve when supplying SUI. Supplying needs no borrow liquidity
+// so keep a gas reserve when supplying RTD. Supplying needs no borrow liquidity
 // and is capped only by the pool's supply cap. `supplierCapId` is the reusable
 // cap you persisted; `referralId` is optional.
 export function supplyToPool(

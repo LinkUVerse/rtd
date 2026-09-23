@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Copyright (c) The Diem Core Contributors
@@ -6,23 +6,23 @@
 
 use std::{fmt::Debug, path::PathBuf, sync::Arc};
 
-use sui_core::authority::AuthorityState;
-use sui_core::authority::authority_test_utils::submit_and_execute;
-use sui_core::authority::test_authority_builder::TestAuthorityBuilder;
-use sui_move_build::BuildConfig;
-use sui_types::base_types::{ObjectID, ObjectRef, SuiAddress};
-use sui_types::crypto::get_authority_key_pair;
-use sui_types::effects::{TransactionEffects, TransactionEffectsAPI};
-use sui_types::error::SuiError;
-use sui_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
-use sui_types::object::Object;
-use sui_types::transaction::{Transaction, TransactionData, TransactionKind};
-use sui_types::utils::to_sender_signed_transaction;
+use rtd_core::authority::AuthorityState;
+use rtd_core::authority::authority_test_utils::submit_and_execute;
+use rtd_core::authority::test_authority_builder::TestAuthorityBuilder;
+use rtd_move_build::BuildConfig;
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
+use rtd_types::crypto::get_authority_key_pair;
+use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
+use rtd_types::error::RtdError;
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
+use rtd_types::object::Object;
+use rtd_types::transaction::{Transaction, TransactionData, TransactionKind};
+use rtd_types::utils::to_sender_signed_transaction;
 use tokio::runtime::Runtime;
 
 use crate::account_universe::{AccountCurrent, PUBLISH_BUDGET};
 
-pub type ExecutionResult = Result<ExecutionStatus, SuiError>;
+pub type ExecutionResult = Result<ExecutionStatus, RtdError>;
 
 fn build_test_modules(test_dir: &str) -> (Vec<u8>, Vec<Vec<u8>>) {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -165,7 +165,7 @@ impl Executor {
             .collect()
     }
 
-    pub fn dry_run_transaction(&self, tx_data: TransactionData) -> Result<(), SuiError> {
+    pub fn dry_run_transaction(&self, tx_data: TransactionData) -> Result<(), RtdError> {
         self.rt
             .block_on(self.state.dry_exec_transaction(tx_data))
             .map(|_| ())
@@ -173,14 +173,14 @@ impl Executor {
 
     pub fn dev_inspect_transaction(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         kind: TransactionKind,
         gas_price: Option<u64>,
         gas_budget: Option<u64>,
-        gas_sponsor: Option<SuiAddress>,
+        gas_sponsor: Option<RtdAddress>,
         gas_objects: Option<Vec<ObjectRef>>,
         skip_checks: Option<bool>,
-    ) -> Result<(), SuiError> {
+    ) -> Result<(), RtdError> {
         self.rt
             .block_on(self.state.dev_inspect_transaction_block(
                 sender,

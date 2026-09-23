@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCurrentAccount, useSuiClientQuery } from "@mysten/dapp-kit";
-import { SuiObjectDisplay } from "@/components/SuiObjectDisplay";
+import { useCurrentAccount, useRtdClientQuery } from "@linku/dapp-kit";
+import { RtdObjectDisplay } from "@/components/RtdObjectDisplay";
 import { Button } from "@radix-ui/themes";
 import {
   ArrowDownIcon,
@@ -33,7 +33,7 @@ export function Locked({
   const account = useCurrentAccount();
   const { mutate: unlockMutation, isPending } = useUnlockMutation();
 
-  const suiObject = useSuiClientQuery(
+  const rtdObject = useRtdClientQuery(
     "getObject",
     {
       id: locked.itemId,
@@ -73,8 +73,8 @@ export function Locked({
   };
 
   return (
-    <SuiObjectDisplay
-      object={suiObject.data!}
+    <RtdObjectDisplay
+      object={rtdObject.data!}
       label={getLabel()}
       labelClasses={getLabelClasses()}
     >
@@ -92,7 +92,7 @@ export function Locked({
               unlockMutation({
                 lockedId: locked.objectId,
                 keyId: locked.keyId,
-                suiObject: suiObject.data!,
+                rtdObject: rtdObject.data!,
               });
             }}
           >
@@ -115,6 +115,6 @@ export function Locked({
           </div>
         )}
       </div>
-    </SuiObjectDisplay>
+    </RtdObjectDisplay>
   );
 }

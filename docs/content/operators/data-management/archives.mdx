@@ -1,8 +1,8 @@
 ---
-title: Sui Archive Data
+title: Rtd Archive Data
 sidebar_label: Archive Data
 description: >-
-  The archive is a historical record of all transactions on Sui. Enable
+  The archive is a historical record of all transactions on Rtd. Enable
   archiving on your Full nodes as a best practice.
 keywords:
   - archive
@@ -14,7 +14,7 @@ keywords:
 goal:
   description: >-
     Operator understands the archive is a historical record of all transactions
-    on Sui.
+    on Rtd.
   requires:
     - has_frontmatter:
         - title
@@ -31,15 +31,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is the Sui archive and why should I enable it?
-  - How do I enable archiving on a Sui full node?
-  - What data does the Sui archive contain?
+  - What is the Rtd archive and why should I enable it?
+  - How do I enable archiving on a Rtd full node?
+  - What data does the Rtd archive contain?
 answer: >-
-  The archive is a historical record of all transactions on Sui. Enable
+  The archive is a historical record of all transactions on Rtd. Enable
   archiving on your Full nodes as a best practice.
 ---
 
-A Sui archive is a history of all transaction data on Sui. In some cases, peer nodes might not catch up with all transactions and effects through synchronization if they lag behind the current epoch by more than the latest few epochs. In such cases, instead of relying on synchronization, peer nodes can fall back to downloading the relevant information from an archive.
+A Rtd archive is a history of all transaction data on Rtd. In some cases, peer nodes might not catch up with all transactions and effects through synchronization if they lag behind the current epoch by more than the latest few epochs. In such cases, instead of relying on synchronization, peer nodes can fall back to downloading the relevant information from an archive.
 
 :::info
 Starting with the 1.51 release, the default archive bucket for Mainnet switches to a requester-pays model. See the following section for a configuration example.
@@ -56,7 +56,7 @@ To enable your node to fall back to an archive in case of lag, add the following
 
 ```yaml
 state-archive-read-config:
-  - ingestion-url: "https://s3.us-west-2.amazonaws.com/mysten-mainnet-checkpoints"
+  - ingestion-url: "https://s3.us-west-2.amazonaws.com/linku-mainnet-checkpoints"
     # How many objects to read ahead when catching up
     concurrency: 5
     remote-store-options:
@@ -69,7 +69,7 @@ state-archive-read-config:
 
 ```yaml
 state-archive-read-config:
-  - ingestion-url: "https://checkpoints.testnet.sui.io"
+  - ingestion-url: "https://checkpoints.testnet.rtd.io"
     # How many objects to read ahead when catching up
     concurrency: 5
 ```
@@ -79,7 +79,7 @@ state-archive-read-config:
 
 :::info
 
-Mainnet archival fallback requires AWS credentials for the S3 Requester Pays bucket. Run the node on EC2 with an instance profile that grants access to the bucket; the archive client retrieves these credentials from EC2 instance metadata. Do not put access keys in `fullnode.yaml`: the node configuration can be exposed through administrative diagnostics. Other AWS credential providers, including environment variables, ECS task roles, and IRSA, are not loaded by this configuration. State sync explicitly rejects `checkpoints.mainnet.sui.io` as an archive source. Testnet uses a public HTTPS endpoint that does not require credentials.
+Mainnet archival fallback requires AWS credentials for the S3 Requester Pays bucket. Run the node on EC2 with an instance profile that grants access to the bucket; the archive client retrieves these credentials from EC2 instance metadata. Do not put access keys in `fullnode.yaml`: the node configuration can be exposed through administrative diagnostics. Other AWS credential providers, including environment variables, ECS task roles, and IRSA, are not loaded by this configuration. State sync explicitly rejects `checkpoints.mainnet.rtd.io` as an archive source. Testnet uses a public HTTPS endpoint that does not require credentials.
 
 :::
 
@@ -99,7 +99,7 @@ For the full table of available checkpoint stores with retention policies and cr
 
 :::caution
 
-Do not use `https://checkpoints.mainnet.sui.io` for Mainnet archival fallback. State sync rejects this endpoint. Use the [S3](/operators/data-management/available-data-stores#checkpoint-s3) or [GCS](/operators/data-management/available-data-stores#checkpoint-gcs) bucket instead.
+Do not use `https://checkpoints.mainnet.rtd.io` for Mainnet archival fallback. State sync rejects this endpoint. Use the [S3](/operators/data-management/available-data-stores#checkpoint-s3) or [GCS](/operators/data-management/available-data-stores#checkpoint-gcs) bucket instead.
 
 :::
 

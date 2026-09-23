@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-import { useCurrentAccount, useSuiClientQuery } from "@mysten/dapp-kit";
-import { SuiObjectDisplay } from "@/components/SuiObjectDisplay";
+import { useCurrentAccount, useRtdClientQuery } from "@linku/dapp-kit";
+import { RtdObjectDisplay } from "@/components/RtdObjectDisplay";
 import { Button } from "@radix-ui/themes";
 import {
   ArrowDownIcon,
@@ -32,7 +32,7 @@ export function Escrow({ escrow }: { escrow: ApiEscrowObject }) {
   const { mutate: cancelEscrowMutation, isPending: pendingCancellation } =
     useCancelEscrowMutation();
 
-  const suiObject = useSuiClientQuery("getObject", {
+  const rtdObject = useRtdClientQuery("getObject", {
     id: escrow?.itemId,
     options: {
       showDisplay: true,
@@ -52,7 +52,7 @@ export function Escrow({ escrow }: { escrow: ApiEscrowObject }) {
     enabled: !escrow.cancelled,
   });
 
-  const { data: suiLockedObject } = useGetLockedObject({
+  const { data: rtdLockedObject } = useGetLockedObject({
     lockedId: lockedData.data?.objectId,
   });
 
@@ -74,8 +74,8 @@ export function Escrow({ escrow }: { escrow: ApiEscrowObject }) {
   };
 
   return (
-    <SuiObjectDisplay
-      object={suiObject.data?.data!}
+    <RtdObjectDisplay
+      object={rtdObject.data?.data!}
       label={getLabel()}
       labelClasses={getLabelClasses()}
     >
@@ -102,7 +102,7 @@ export function Escrow({ escrow }: { escrow: ApiEscrowObject }) {
               onClick={() =>
                 cancelEscrowMutation({
                   escrow,
-                  suiObject: suiObject.data?.data!,
+                  rtdObject: rtdObject.data?.data!,
                 })
               }
             >
@@ -112,9 +112,9 @@ export function Escrow({ escrow }: { escrow: ApiEscrowObject }) {
           )}
         {isToggled && lockedData.data && (
           <div className="min-w-[340px] w-full justify-self-start text-left">
-            {suiLockedObject?.data && (
+            {rtdLockedObject?.data && (
               <LockedObject
-                object={suiLockedObject.data}
+                object={rtdLockedObject.data}
                 itemId={lockedData.data.itemId}
                 hideControls
               />
@@ -156,6 +156,6 @@ export function Escrow({ escrow }: { escrow: ApiEscrowObject }) {
           </div>
         )}
       </div>
-    </SuiObjectDisplay>
+    </RtdObjectDisplay>
   );
 }

@@ -1,7 +1,7 @@
 ---
 title: Types of Assets
 description: >-
-  Sui provides a variety of asset standards with different features for multiple
+  Rtd provides a variety of asset standards with different features for multiple
   usage patterns.
 keywords:
   - coin
@@ -19,7 +19,7 @@ keywords:
   - nft
 goal:
   description: >-
-    Reader understands sui provides a variety of asset standards with different
+    Reader understands rtd provides a variety of asset standards with different
     features for multiple usage patterns
   requires:
     - has_frontmatter:
@@ -37,19 +37,19 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Types of Assets in Sui?
-  - How does types of assets work on Sui?
+  - What is Types of Assets in Rtd?
+  - How does types of assets work on Rtd?
   - Why should I use types of assets?
 answer: >-
-  Sui provides a variety of asset standards with different features for multiple
+  Rtd provides a variety of asset standards with different features for multiple
   usage patterns.
 ---
 
-On Sui, there are a variety of fungible, non-fungible, and other types of asset standards, each with their own defined usage patterns and capabilities. Choosing the correct standard for your use case is important to enable the correct set of features in your application.
+On Rtd, there are a variety of fungible, non-fungible, and other types of asset standards, each with their own defined usage patterns and capabilities. Choosing the correct standard for your use case is important to enable the correct set of features in your application.
 
 ## Fungible tokens: Coin standard
 
-The Coin standard defines fungible tokens that have `key` and `store` abilities. Coin supports wrapping and public transfers. It uses the [`sui::coin`](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/coin.md) module. Coin refers to a **single object wrapper for a fungible asset**.
+The Coin standard defines fungible tokens that have `key` and `store` abilities. Coin supports wrapping and public transfers. It uses the [`rtd::coin`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/coin.md) module. Coin refers to a **single object wrapper for a fungible asset**.
 
 The `Coin<T>` type represents open-loop fungible tokens. Coins are denominated by their type parameter, `T`, which is also associated with metadata (like name, symbol, and decimal precision) that applies to all instances of `Coin<T>`.
 
@@ -61,7 +61,7 @@ When you create a coin using the `coin::create_currency` function, the publisher
 
 Use the Coin standard if you are:
 
-- Working with legacy code or maintaining an existing coin that was created with the `sui::coin` module
+- Working with legacy code or maintaining an existing coin that was created with the `rtd::coin` module
 
 - Creating a coin that does not require advanced supply tracking or regulatory features
 
@@ -71,13 +71,13 @@ Use the Coin standard if you are:
 
 ### Address balances
 
-Address balances tie fungible assets to a Sui address directly. They replace the UTXO-style `Coin<T>` model, where balances are calculated by summing all `Coin<T>` objects owned by an address. With the address balance functionality, each Sui address can have one address-owned balance for each currency they own, with the total balance being the sum of all `Coin<T>` objects plus the address balance. `Coin<T>` and address balances can exist together, however address balances provide several advantages over using `Coin<T>` alone.
+Address balances tie fungible assets to a Rtd address directly. They replace the UTXO-style `Coin<T>` model, where balances are calculated by summing all `Coin<T>` objects owned by an address. With the address balance functionality, each Rtd address can have one address-owned balance for each currency they own, with the total balance being the sum of all `Coin<T>` objects plus the address balance. `Coin<T>` and address balances can exist together, however address balances provide several advantages over using `Coin<T>` alone.
 
-For the full specification, see [SIP-58: Sui Address Balances](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md).
+For the full specification, see [SIP-58: Rtd Address Balances](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md).
 
 ## Fungible tokens: Currency standard
 
-The Currency standard is an example of an open-loop system. It supports free-flowing, [wrappable](/develop/objects/object-ownership/wrapped), [freely transferable](/develop/objects/transfers/custom-rules) fungible assets that you can store in any application. It uses the [`sui::coin_registry`](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/coin_registry.md) module and the `Currency` object for metadata. **Currency** refers to the object that is created in Coin Registry, which describes the currency properties and setup.
+The Currency standard is an example of an open-loop system. It supports free-flowing, [wrappable](/develop/objects/object-ownership/wrapped), [freely transferable](/develop/objects/transfers/custom-rules) fungible assets that you can store in any application. It uses the [`rtd::coin_registry`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/coin_registry.md) module and the `Currency` object for metadata. **Currency** refers to the object that is created in Coin Registry, which describes the currency properties and setup.
 
 The `Currency<T>` type represents open-loop fungible tokens. Currencies are denominated by their type parameter, `T`, which is also associated with metadata like name, symbol, and decimal precision that applies to all instances of `Currency<T>`.
 
@@ -93,19 +93,19 @@ You can create coins with the Currency standard using `coin_registry::new_curren
 
 The Coin and Currency standards are both used to create fungible tokens. However, they use different creation methods and store metadata in a different type of object.
 
-Coin creates tokens using `coin::create_currency` while Currency uses `sui::coin_registry`.
+Coin creates tokens using `coin::create_currency` while Currency uses `rtd::coin_registry`.
 
 Coin uses `CoinMetadata` while Currency uses `Currency`.
 
-Fungible tokens created on Sui using the Coin or Currency standard are referred to as **coins**.
+Fungible tokens created on Rtd using the Coin or Currency standard are referred to as **coins**.
 
-For fungible tokens created on Sui using the [Closed-Loop Token standard](/onchain-finance/closed-loop-token), the documentation uses the term **tokens**. In practice, the terms for both these objects are often interchangeable.
+For fungible tokens created on Rtd using the [Closed-Loop Token standard](/onchain-finance/closed-loop-token), the documentation uses the term **tokens**. In practice, the terms for both these objects are often interchangeable.
 
 :::
 
 ### Coin Registry
 
-The Coin Registry system provides a centralized approach to currency management through the `sui::coin_registry` module. The registry is a shared object located at address `0xc` that stores metadata, supply information, and regulatory status for all registered coin types.
+The Coin Registry system provides a centralized approach to currency management through the `rtd::coin_registry` module. The registry is a shared object located at address `0xc` that stores metadata, supply information, and regulatory status for all registered coin types.
 
 ### When to use Currency
 
@@ -125,9 +125,9 @@ Use the Currency standard if you are:
 
 The Permissioned Asset Standard (PAS) enables asset ownership through Account objects. Account objects can hold assets and enforce transfer controls and compliance checks. There is one Account per address, and an Account can hold any asset type. Assets can only move between Accounts through hot potato requests that must be approved and resolved in the same programmable transaction block (PTB).
 
-PAS uses Sui [Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances). PAS balances are managed by PAS on behalf of the wallet address. They are held in a derived Account object, however, transfers always target the wallet address, not the Account address.
+PAS uses Rtd [Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances). PAS balances are managed by PAS on behalf of the wallet address. They are held in a derived Account object, however, transfers always target the wallet address, not the Account address.
 
-PAS assets are stored in Sui objects and can be queried using the same data access methods as any other address-owned data.
+PAS assets are stored in Rtd objects and can be queried using the same data access methods as any other address-owned data.
 
 [Learn more about Permissioned Asset Standard](/onchain-finance/pas/pas-architecture).
 
@@ -139,7 +139,7 @@ The Permissioned Asset Standard (PAS) provides a new and improved alternative to
 
 :::
 
-The Closed-Loop Token standard creates a fungible token that only has the `key` ability. Closed-loop tokens cannot be wrapped, stored as a dynamic field, or freely transferred (unless a custom policy allows it). Due to this restriction, tokens created with this standard **can only be owned by an account** and cannot be stored in an application. However, [they can be spent](/onchain-finance/closed-loop-token/spending). The standard uses the [`sui::token` module](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/token.md).
+The Closed-Loop Token standard creates a fungible token that only has the `key` ability. Closed-loop tokens cannot be wrapped, stored as a dynamic field, or freely transferred (unless a custom policy allows it). Due to this restriction, tokens created with this standard **can only be owned by an account** and cannot be stored in an application. However, [they can be spent](/onchain-finance/closed-loop-token/spending). The standard uses the [`rtd::token` module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/token.md).
 
 Fungible tokens created using the Closed-Loop Token standard are referred to as **tokens**.
 
@@ -147,9 +147,9 @@ Using the Closed-Loop Token standard, you can limit the applications that use th
 
 Refer to [Closed-Loop Token](/onchain-finance/closed-loop-token) for more information.
 
-## Non-fungible tokens: Sui objects
+## Non-fungible tokens: Rtd objects
 
-Sui uses an object model, meaning every entity on Sui has a unique ID. Whether your application interacts with a pool of fungible tokens or a collection of non-fungible tokens, the application's smart contract interacts with individual objects. Therefore, Sui does not require an NFT standard that pairs globally unique IDs with relevant smart contract addresses to create unique token instances, such as how the ERC-721 standard works.
+Rtd uses an object model, meaning every entity on Rtd has a unique ID. Whether your application interacts with a pool of fungible tokens or a collection of non-fungible tokens, the application's smart contract interacts with individual objects. Therefore, Rtd does not require an NFT standard that pairs globally unique IDs with relevant smart contract addresses to create unique token instances, such as how the ERC-721 standard works.
 
 Consider the following example Move smart contract, where the NFT's name attribute is a field on the object that defines the NFT itself. The `TestnetNFT` struct defines the NFT with `id`, `name`, `description`, and `url` fields.
 

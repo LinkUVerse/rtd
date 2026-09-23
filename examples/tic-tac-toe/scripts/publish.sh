@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 set -e
@@ -8,8 +8,8 @@ set -e
 cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null
 
 # Check dependencies are available.
-SUI=${SUI:-sui}
-for i in jq $SUI; do
+RTD=${RTD:-rtd}
+for i in jq $RTD; do
   if ! command -V ${i} &>/dev/null; then
     echo "${i} is not installed"
     exit 1
@@ -22,9 +22,9 @@ if [ -z "$1" ]; then
     exit 1
 fi
 ENV=$1; shift
-$SUI client switch --env $ENV
+$RTD client switch --env $ENV
 
-PUBLISH=$($SUI client publish ../move --json $@)
+PUBLISH=$($RTD client publish ../move --json $@)
 
 STATUS=$(
     echo $PUBLISH |
@@ -52,7 +52,7 @@ UPGRADE_CAP=$(
 
 CONFIG="$(readlink -f ../ui/src)/env.$ENV.ts"
 cat > $CONFIG <<EOF
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 export default {

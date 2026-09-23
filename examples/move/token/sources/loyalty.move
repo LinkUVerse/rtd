@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// This module illustrates a Closed Loop Loyalty Token. The `Token` is sent to
@@ -9,8 +9,8 @@
 /// - spend - spend the token in the shop
 module examples::loyalty;
 
-use sui::coin::{Self, TreasuryCap};
-use sui::token::{Self, ActionRequest, Token};
+use rtd::coin::{Self, TreasuryCap};
+use rtd::token::{Self, ActionRequest, Token};
 
 /// Token amount does not match the `GIFT_PRICE`.
 const EIncorrectAmount: u64 = 0;

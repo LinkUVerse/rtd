@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module examples::testnet_soulbound_nft;
 
 use std::string;
-use sui::event;
-use sui::url::{Self, Url};
+use rtd::event;
+use rtd::url::{Self, Url};
 
 /// An example soulbound NFT that can be minted by anybody
 ///

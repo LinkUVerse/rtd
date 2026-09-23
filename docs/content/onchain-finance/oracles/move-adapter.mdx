@@ -56,7 +56,7 @@ builder_paths:
 
 Reading a provider feed directly scatters two concerns across every call site: the provider's data shape, and the safety checks. An adapter collapses both into one module. Consumers call the adapter, never the provider, so the price shape and every guard live in one place, and swapping or adding a provider never touches a consumer.
 
-The reference module lives in `examples/oracle-adapter/move`. It builds and its tests pass against the real Pyth Testnet package with `sui move test`.
+The reference module lives in `examples/oracle-adapter/move`. It builds and its tests pass against the real Pyth Testnet package with `rtd move test`.
 
 ## One normalized price type
 
@@ -90,7 +90,7 @@ A Move test cannot mint a `PriceInfoObject`, so Testnet execution verifies the r
 
 <ImportContent source="examples/oracle-adapter/move/tests/price_adapter_tests.move" mode="code" fun="confidence_blowout_aborts" />
 
-Run the full suite with `sui move test` in `examples/oracle-adapter/move`.
+Run the full suite with `rtd move test` in `examples/oracle-adapter/move`.
 
 ## Keep it provider-neutral
 

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Reversed-dependency-order variant of `system_packages_chain.move`: the leaf `pinned_a` lives at

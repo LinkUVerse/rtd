@@ -1,9 +1,9 @@
 ---
 title: Payment Kit Standard
 description: >-
-  The Sui Payment Kit is a robust, open-source payment processing toolkit that
+  The Rtd Payment Kit is a robust, open-source payment processing toolkit that
   provides secure payment verification, receipt management, and duplicate
-  prevention for applications built on the Sui blockchain.
+  prevention for applications built on the Rtd blockchain.
 sidebar_label: Payment Kit
 keywords:
   - payment processing
@@ -15,7 +15,7 @@ keywords:
   - multi-coin support
   - payment kit
   - payment standard
-  - sui payments
+  - rtd payments
 pagination_prev: null
 goal:
   description: >-
@@ -46,18 +46,18 @@ builder_paths_source:
   dashboard: 'https://docs-analytics-dashboard.vercel.app/evals'
   snapshot: '2026-07-10'
 questions:
-  - What is Payment Kit Standard in Sui?
-  - How does payment kit standard work on Sui?
+  - What is Payment Kit Standard in Rtd?
+  - How does payment kit standard work on Rtd?
   - What are the security considerations for payment kit standard?
 answer: >-
-  The Sui Payment Kit is a framework for secure, flexible payment processing on
-  Sui. It provides persistent and ephemeral payment options, event-driven
+  The Rtd Payment Kit is a framework for secure, flexible payment processing on
+  Rtd. It provides persistent and ephemeral payment options, event-driven
   architecture, and built-in duplicate prevention.
 ---
 
-The Sui Payment Kit is a framework for secure, flexible payment processing on Sui. It provides persistent and ephemeral payment options, event-driven architecture, and built-in duplicate prevention.
+The Rtd Payment Kit is a framework for secure, flexible payment processing on Rtd. It provides persistent and ephemeral payment options, event-driven architecture, and built-in duplicate prevention.
 
-The Payment Kit standardizes payment processing on Sui, enabling developers to build robust payment flows without reimplementing common payment verification and receipt management logic. Applications using the Payment Kit benefit from battle-tested security patterns and consistent payment handling across the ecosystem.
+The Payment Kit standardizes payment processing on Rtd, enabling developers to build robust payment flows without reimplementing common payment verification and receipt management logic. Applications using the Payment Kit benefit from battle-tested security patterns and consistent payment handling across the ecosystem.
 
 ## Key features
 
@@ -67,7 +67,7 @@ The Payment Kit provides the following core capabilities:
 - **Payment registries**: Optional persistent storage for payment receipts with duplicate detection.
 - **Flexible receipt management**: Generates receipts for payment tracking and verification.
 - **Event-driven architecture**: Emits events for offchain tracking and integration.
-- **Multi-coin support**: Works with any Sui coin type.
+- **Multi-coin support**: Works with any Rtd coin type.
 - **Transaction URIs**: Standardized URI format to create encoded links for user-friendly payment flows.
 
 ## Architecture components
@@ -215,7 +215,7 @@ public fun process_registry_payment<T>(
 - `payment_amount`: Expected payment amount in coin units.
 - `coin`: Payment coin object.
 - `receiver`: Optional receiver address (if `None`, funds stay in registry).
-- `clock`: Sui clock object for timestamping.
+- `clock`: Rtd clock object for timestamping.
 - `ctx`: Transaction context.
 
 The function:
@@ -336,7 +336,7 @@ The Payment Kit defines a standard URI format for encoding payment requests. Tra
 Payment Kit Transaction URIs use the following format:
 
 ```
-sui:pay?receiver=<receiverAddress>
+rtd:pay?receiver=<receiverAddress>
     &amount=<amount>
     &coinType=<coinType>
     &nonce=<nonce>
@@ -350,11 +350,11 @@ sui:pay?receiver=<receiverAddress>
 
 #### `receiver`
 
-The destination address to receive the payment funds. Must be a valid Sui address.
+The destination address to receive the payment funds. Must be a valid Rtd address.
 
 #### `amount`
 
-The `amount` field is a required query parameter. The value must be a positive `u64`. This field represents the native amount of a specified coin type (for example, 100000000 MISTS represents 0.1 SUI).
+The `amount` field is a required query parameter. The value must be a positive `u64`. This field represents the native amount of a specified coin type (for example, 100000000 MISTS represents 0.1 RTD).
 
 #### `nonce`
 
@@ -362,7 +362,7 @@ The `nonce` field is a required query parameter. This represents a unique ASCII-
 
 #### `coinType`
 
-The `coinType` field is a required query parameter. The full type identifier of the coin to be transferred (for example, `0x2::sui::SUI` or `0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI`).
+The `coinType` field is a required query parameter. The full type identifier of the coin to be transferred (for example, `0x2::rtd::RTD` or `0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD`).
 
 #### `label`
 
@@ -382,21 +382,21 @@ The object ID or ASCII-represented `name` of the `PaymentRegistry` to use for pr
 
 ### Example URIs
 
-**Basic SUI payment:**
+**Basic RTD payment:**
 
 ```
-sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+rtd:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     &amount=1000000000
-    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI
+    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD
     &nonce=550e8400-e29b-41d4-a716-446655440000
 ```
 
 **Payment with display metadata:**
 
 ```
-sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+rtd:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     &amount=1000000000
-    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI
+    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD
     &nonce=550e8400-e29b-41d4-a716-446655440000
     &label=Coffee%20Shop
     &iconUrl=https://example.com/icon.png
@@ -406,9 +406,9 @@ sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc
 **Registry-based payment (registry object ID):**
 
 ```
-sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+rtd:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     &amount=1000000000
-    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI
+    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD
     &nonce=550e8400-e29b-41d4-a716-446655440000
     &registry=0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
 ```
@@ -416,9 +416,9 @@ sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc
 **Registry-based payment (registry ASCII name):**
 
 ```
-sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+rtd:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     &amount=1000000000
-    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI
+    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD
     &nonce=550e8400-e29b-41d4-a716-446655440000
     &registry=default-payment-registry
 ```
@@ -436,7 +436,7 @@ All parameter values must be properly URL-encoded according to RFC 3986. Special
 
 When implementing transaction URI support:
 
-1. **Validate all parameters**: Ensure addresses are valid Sui addresses, amounts are positive `u64` values, nonces do not exceed 36 characters, and coin types follow the correct format.
+1. **Validate all parameters**: Ensure addresses are valid Rtd addresses, amounts are positive `u64` values, nonces do not exceed 36 characters, and coin types follow the correct format.
 2. **Generate unique nonces**: Use UUIDv4 or another cryptographically secure random identifier to prevent accidental duplicates.
 3. **Display metadata to users**: Show the `label`, `iconUrl`, and `message` parameters to users during payment confirmation to provide context.
 4. **Route to correct payment function**: Use `process_registry_payment` when `registry` is provided, otherwise use `process_ephemeral_payment`.
@@ -564,5 +564,5 @@ The Payment Kit defines the following error conditions:
 
 ## Source code
 
-- [Move Package](https://github.com/MystenLabs/sui-payment-kit)
-- [SDK](https://github.com/MystenLabs/ts-sdks/tree/main/packages/payment-kit)
+- [Move Package](https://github.com/LinkUVerse/rtd-payment-kit)
+- [SDK](https://github.com/LinkUVerse/ts-sdks/tree/main/packages/payment-kit)

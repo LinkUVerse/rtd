@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#switchboard
-import { Transaction } from '@mysten/sui/transactions';
-import type { SuiClient } from '@mysten/sui/client';
-import { SwitchboardClient, Aggregator } from '@switchboard-xyz/sui-sdk';
+import { Transaction } from '@linku/rtd/transactions';
+import type { RtdClient } from '@linku/rtd/client';
+import { SwitchboardClient, Aggregator } from '@switchboard-xyz/rtd-sdk';
 
 // Switchboard is on-demand: instead of a shared price object you update, you
 // hold an Aggregator feed and pull a fresh oracle response into your
@@ -17,11 +17,11 @@ import { SwitchboardClient, Aggregator } from '@switchboard-xyz/sui-sdk';
 // `get_price_no_older_than`, `current_result` does not gate on age, so the
 // consumer must check the timestamps against the clock itself.
 export async function buildSwitchboardUpdateAndRead(
-	sui: SuiClient,
+	rtd: RtdClient,
 	aggregatorId: string,
 	consumerTarget: string,
 ): Promise<Transaction> {
-	const sb = new SwitchboardClient(sui);
+	const sb = new SwitchboardClient(rtd);
 	const aggregator = new Aggregator(sb, aggregatorId);
 	const tx = new Transaction();
 	await aggregator.fetchUpdateTx(tx);

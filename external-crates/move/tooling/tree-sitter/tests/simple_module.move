@@ -1,7 +1,7 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-module sui::foo {
+module rtd::foo {
     public struct Bar { x: u64 }
 
     fun f() { }

@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -28,17 +28,17 @@ const FIXES = {
   'develop/accessing-data/authenticated-events.mdx':
     'Reader understands how authenticated events let a light client cryptographically verify Move events without trusting an intermediary',
   'develop/accessing-data/grpc/what-is-grpc.mdx':
-    'Reader understands how gRPC provides fast, type-safe access to Sui network data',
+    'Reader understands how gRPC provides fast, type-safe access to Rtd network data',
   'develop/cryptography/ecvrf.mdx':
     'Reader understands how ECVRF generates a random number with a proof that it was produced using a secret key',
   'develop/objects/transfers/custom-rules.mdx':
-    'Reader can define custom transfer rules that must be satisfied before Sui considers a transfer valid',
+    'Reader can define custom transfer rules that must be satisfied before Rtd considers a transfer valid',
   'develop/transactions/transaction-auth/address-aliases.mdx':
     'Reader can use address aliases to configure which keys are allowed to sign transactions for an address',
   'getting-started/examples/scenario-testing.mdx':
     'Reader can write multi-transaction tests with test_scenario that simulate flows across multiple users and shared objects',
   'getting-started/onboarding/install-source.mdx':
-    'Reader can build and install the Sui framework from source, either locally or directly from GitHub',
+    'Reader can build and install the Rtd framework from source, either locally or directly from GitHub',
   'onchain-finance/deepbook-margin/contract-information/margin-manager.mdx':
     'Reader understands how the margin manager enables leveraged trading on DeepBook',
   'onchain-finance/deepbookv3/contract-information/flash-loans.mdx':
@@ -48,21 +48,21 @@ const FIXES = {
   'onchain-finance/examples-patterns/nft-rental.mdx':
     'Reader can implement NFT rental that lets users rent NFTs under a defined policy instead of owning them outright',
   'onchain-finance/fungible-tokens/coin.mdx':
-    'Reader understands how the Coin standard supports creating a broad range of fungible tokens on Sui',
+    'Reader understands how the Coin standard supports creating a broad range of fungible tokens on Rtd',
   'operators/data-management/remote-store-setup.mdx':
     'Operator can run the checkpoint blob indexer to populate a remote store with protobuf checkpoint blobs',
   'references/cli.mdx':
-    'Reader can look up the Sui CLI command groups for interacting with the network and the Move language',
+    'Reader can look up the Rtd CLI command groups for interacting with the network and the Move language',
   'references/fullnode-protocol.mdx':
-    'Reader can look up the Sui full node gRPC protocol available on all full nodes',
+    'Reader can look up the Rtd full node gRPC protocol available on all full nodes',
   'references/research-papers.mdx':
-    'Reader can look up Sui-relevant research papers co-authored by Sui team members',
+    'Reader can look up Rtd-relevant research papers co-authored by Rtd team members',
   'references/rust-sdk.mdx':
-    'Reader can look up how to use the Sui Rust SDK to interact with Sui networks in Rust',
-  'references/sui-api.mdx':
-    'Reader can look up how SuiJSON aligns JSON inputs with Move call arguments',
-  'references/sui-graphql.mdx':
-    'Reader can look up how to use the GraphQL RPC service to interact with the Sui network',
+    'Reader can look up how to use the Rtd Rust SDK to interact with Rtd networks in Rust',
+  'references/rtd-api.mdx':
+    'Reader can look up how RtdJSON aligns JSON inputs with Move call arguments',
+  'references/rtd-graphql.mdx':
+    'Reader can look up how to use the GraphQL RPC service to interact with the Rtd network',
 };
 
 let applied = 0;

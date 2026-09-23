@@ -6,24 +6,24 @@
 module prettier::group_imports_comments;
 
 use std::ascii::String as ASCII;
-use sui::clock::Clock;
+use rtd::clock::Clock;
 
 // leading comment keeps this import out of the group
-use sui::coin::Coin;
+use rtd::coin::Coin;
 /// doc comments are also preserved
-use sui::balance::Balance;
+use rtd::balance::Balance;
 use std::string::String; // trailing comment
-use sui::{
+use rtd::{
     // comment inside the group
     table::Table,
 };
 /* block comments count too */
-use sui::event;
-use sui::{vec_map::VecMap, vec_set::VecSet}; // trailing comment keeps braces flat
+use rtd::event;
+use rtd::{vec_map::VecMap, vec_set::VecSet}; // trailing comment keeps braces flat
 // prettier-ignore
-use sui::dynamic_field::{   Field  ,  Wrapper };
+use rtd::dynamic_field::{   Field  ,  Wrapper };
 #[test_only]
-use sui::{
+use rtd::{
     // annotated imports keep comments too
     test_utils::destroy,
 };

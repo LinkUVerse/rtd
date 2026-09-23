@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Generates site/src/data/skills.json from the MystenLabs/skills repository.
+// Generates site/src/data/skills.json from the LinkUVerse/skills repository.
 //
 // This runs at build time (wired into the `prebuild` and `prestart` scripts in
 // package.json). When a skill is added, removed, or edited in the skills repo,
@@ -25,7 +25,7 @@ import matter from "gray-matter";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const REPO_OWNER = "MystenLabs";
+const REPO_OWNER = "LinkUVerse";
 const REPO_NAME = "skills";
 const REPO_BRANCH = "main";
 const OUT_PATH = path.join(__dirname, "../src/data/skills.json");
@@ -33,7 +33,7 @@ const OUT_PATH = path.join(__dirname, "../src/data/skills.json");
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 const headers = {
   Accept: "application/vnd.github+json",
-  "User-Agent": "sui-docs-skills-generator",
+  "User-Agent": "rtd-docs-skills-generator",
   ...(token ? { Authorization: `Bearer ${token}` } : {}),
 };
 
@@ -109,7 +109,7 @@ async function main() {
     const parts = dir.split("/");
     // Peek at the slug before fetching — skip if already known or is the template.
     const dirSlug = parts[parts.length - 1];
-    if (dirSlug === "template" || dirSlug === "sui-dev-skills") continue;
+    if (dirSlug === "template" || dirSlug === "rtd-dev-skills") continue;
     if (existingSlugs.has(dirSlug)) continue;
 
     const res = await fetch(

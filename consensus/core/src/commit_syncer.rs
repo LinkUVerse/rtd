@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! CommitSyncer implements efficient synchronization of committed data.
@@ -12,7 +12,7 @@
 //! CommitSyncer achieves efficient synchronization by relying on the following: when blocks
 //! are included in commits with >= 2f+1 certifiers by stake, these blocks must have passed
 //! verifications on some honest validators, so re-verifying them is unnecessary. In fact, the
-//! quorum certified commits themselves can be trusted to be sent to Sui directly, but for
+//! quorum certified commits themselves can be trusted to be sent to Rtd directly, but for
 //! simplicity this is not done. Blocks from trusted commits still go through Core and committer.
 //!
 //! Another way CommitSyncer improves the efficiency of synchronization is parallel fetching:
@@ -34,8 +34,8 @@ use bytes::Bytes;
 use consensus_types::block::{BlockRef, TransactionIndex};
 use futures::{StreamExt as _, stream::FuturesOrdered};
 use itertools::Itertools as _;
-use mysten_common::ZipDebugEqIteratorExt;
-use mysten_metrics::spawn_logged_monitored_task;
+use linku_common::ZipDebugEqIteratorExt;
+use linku_metrics::spawn_logged_monitored_task;
 use parking_lot::RwLock;
 use rand::{prelude::SliceRandom as _, rngs::ThreadRng};
 use tokio::{
@@ -332,6 +332,13 @@ where
                     .map(|b| b.reference().to_string())
                     .join(","),
             );
+
+            // Core persists the certified range before the external consumer handles it.
+            // Reserve its full end index against the crash-safe consumer cursor first.
+            self.inner
+                .commit_consumer_monitor
+                .wait_for_durable_commit_capacity(fetched_commit_range.end())
+                .await;
 
             // If core thread cannot handle the incoming blocks, it is ok to block here
             // to slow down the commit syncer.
@@ -911,7 +918,7 @@ mod tests {
     use bytes::Bytes;
     use consensus_config::{AuthorityIndex, NetworkKeyPair, Parameters};
     use consensus_types::block::{BlockRef, Round};
-    use mysten_common::ZipDebugEqIteratorExt;
+    use linku_common::ZipDebugEqIteratorExt;
     use parking_lot::RwLock;
 
     use crate::{

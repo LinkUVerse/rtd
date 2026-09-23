@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 LOG=$(mktemp)
@@ -18,7 +18,7 @@ node scripts/validate-gasless-tokens.mjs || { echo "❌ validate-gasless-tokens 
 node scripts/generate-import-context.js || { echo "❌ generate-import-context failed"; exit 1; }
 node scripts/generate-resolved-pages.js || { echo "❌ generate-resolved-pages failed"; exit 1; }
 node scripts/grpc-download.js || { echo "❌ grpc-download failed"; exit 1; }
-docusaurus graphql-to-doc:beta && node scripts/remove-no-desc.mjs ../content/references/sui-api/sui-graphql/beta/reference || { echo "❌ graphql-to-doc step failed"; exit 1; }
+docusaurus graphql-to-doc:beta && node scripts/remove-no-desc.mjs ../content/references/rtd-api/rtd-graphql/beta/reference || { echo "❌ graphql-to-doc step failed"; exit 1; }
 node scripts/getopenrpcspecs.js || { echo "❌ getopenrpcspecs failed"; exit 1; }
 node scripts/massagegraphql.js || { echo "❌ massagegraphql failed"; exit 1; }
 echo "✅ Pre-build generation complete"
@@ -28,7 +28,7 @@ echo "✅ Pre-build generation complete"
 SITE_DIR="$(pwd)"
 
 TEMP_DIR=$(mktemp -d)
-git clone --depth 1 https://github.com/MystenLabs/display-preview.git "$TEMP_DIR/display-preview"
+git clone --depth 1 https://github.com/LinkUVerse/display-preview.git "$TEMP_DIR/display-preview"
 cd "$TEMP_DIR/display-preview"
 pnpm install
 pnpm build

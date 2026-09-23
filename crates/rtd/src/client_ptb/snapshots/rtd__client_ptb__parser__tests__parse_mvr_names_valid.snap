@@ -1,0 +1,87 @@
+---
+source: crates/rtd/src/client_ptb/parser.rs
+expression: parsed
+---
+[
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 1,
+        },
+        value: Named(
+            "@1/foo",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 3,
+        },
+        value: Named(
+            "1.rtd/foo",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 3,
+        },
+        value: Named(
+            "1.rtd/foo/1",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 3,
+        },
+        value: Named(
+            "1.rtd/3/1",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 1,
+        },
+        value: Named(
+            "1.rtd/3/1",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 1,
+        },
+        value: Named(
+            "@foo/bar",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 1,
+        },
+        value: Named(
+            "@foo/bar/1",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 3,
+        },
+        value: Named(
+            "foo.rtd/bar",
+        ),
+    },
+    Spanned {
+        span: Span {
+            start: 0,
+            end: 3,
+        },
+        value: Named(
+            "foo.rtd/bar/1",
+        ),
+    },
+]

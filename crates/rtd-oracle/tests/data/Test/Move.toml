@@ -1,0 +1,12 @@
+[package]
+name = "test"
+version = "0.0.1"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { git = "https://github.com/LinkUVerse/rtd.git", subdir = "crates/rtd-framework/packages/rtd-framework", rev = "9d0fba4a490e1cf80101bbd4019c7bb1ccfce99b" }
+rtd-oracle = { local = "../../../move/oracle" }
+
+[addresses]
+test = "0x0"
+rtd = "0x2"

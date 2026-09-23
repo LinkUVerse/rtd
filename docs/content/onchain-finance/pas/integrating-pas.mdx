@@ -30,9 +30,9 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Integrating with Permissioned Assets in Sui?
+  - What is Integrating with Permissioned Assets in Rtd?
   - How do I set up a policy for a currency?
-  - How does integrating with permissioned assets work on Sui?
+  - How does integrating with permissioned assets work on Rtd?
 answer: 'To integrate with the Permissioned Assets Standard (PAS), you must:.'
 ---
 
@@ -46,7 +46,7 @@ To integrate with the Permissioned Assets Standard (PAS), you must:
 
 4. Set template commands so clients can build programmable transaction blocks (PTBs) automatically.
 
-You can use PAS through the [TypeScript package](https://www.npmjs.com/package/@mysten/pas) or learn more in the [GitHub repo](https://github.com/MystenLabs/pas).
+You can use PAS through the [TypeScript package](https://www.npmjs.com/package/@linku/pas) or learn more in the [GitHub repo](https://github.com/LinkUVerse/pas).
 
 ## Define an approval witness
 
@@ -102,7 +102,7 @@ public fun approve_transfer(
 }
 ```
 
-See the [KYC example `kyc_registry`](https://github.com/MystenLabs/pas/blob/main/packages/examples/kyc/sources/kyc_registry.move) for a complete implementation.
+See the [KYC example `kyc_registry`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/kyc/sources/kyc_registry.move) for a complete implementation.
 
 ## Set template commands
 
@@ -148,7 +148,7 @@ The template is keyed by `A`, the witness type used to approve requests. This cr
 
 ### Example
 
-Given the approval function from the [KYC example `kyc_registry`](https://github.com/MystenLabs/pas/blob/main/packages/examples/kyc/sources/kyc_registry.move):
+Given the approval function from the [KYC example `kyc_registry`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/kyc/sources/kyc_registry.move):
 
 ```move
 public fun approve_transfer(

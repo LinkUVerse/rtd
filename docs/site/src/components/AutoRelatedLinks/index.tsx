@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -54,8 +54,8 @@ const SPECIAL_CASING = new Map<string, string>([
   ["mainnet", "mainnet"], ["localnet", "localnet"], ["grpcurl", "grpcurl"],
   ["protoc", "protoc"], ["kubectl", "kubectl"], ["curl", "curl"],
   ["rustup", "rustup"], ["cargo", "cargo"], ["npm", "npm"], ["npx", "npx"],
-  ["pnpm", "pnpm"], ["pip", "pip"], ["docker", "docker"], ["sui", "Sui"],
-  ["move", "Move"], ["git", "git"], ["pysui", "pysui"], ["mysten", "Mysten"],
+  ["pnpm", "pnpm"], ["pip", "pip"], ["docker", "docker"], ["rtd", "Rtd"],
+  ["move", "Move"], ["git", "git"], ["pysui", "pysui"], ["linku", "LinkU"],
 ]);
 
 const LOWERCASE_WORDS = new Set([
@@ -158,7 +158,7 @@ function isCleanDescription(text: string): boolean {
 
 function useMetaSafe(): Meta[] | null {
   try {
-    const raw = usePluginData("sui-description-plugin") as any;
+    const raw = usePluginData("rtd-description-plugin") as any;
     if (!raw) return null;
     if (Array.isArray(raw)) return raw as Meta[];
     if (Array.isArray(raw?.items)) return raw.items as Meta[];

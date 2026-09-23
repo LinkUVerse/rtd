@@ -1,17 +1,17 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use serde::Deserialize;
 use std::fmt;
-use sui_types::base_types::{ObjectID, SuiAddress};
+use rtd_types::base_types::{ObjectID, RtdAddress};
 
 #[derive(Deserialize)]
 pub(crate) struct Board {
     pub id: ObjectID,
     pub marks: Vec<u8>,
     pub turn: u8,
-    pub x: SuiAddress,
-    pub o: SuiAddress,
+    pub x: RtdAddress,
+    pub o: RtdAddress,
 }
 
 #[derive(Eq, PartialEq)]

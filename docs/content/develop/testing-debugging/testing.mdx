@@ -2,12 +2,12 @@
 title: Testing Move Smart Contracts
 description: >-
   Learn about the available testing tools and frameworks for validating your
-  Move smart contracts and Sui applications.
+  Move smart contracts and Rtd applications.
 keywords:
   - testing
   - Move testing
   - unit tests
-  - Sui testing
+  - Rtd testing
   - smart contract testing
   - test framework
   - test_scenario
@@ -16,7 +16,7 @@ keywords:
 goal:
   description: >-
     Reader can learn about the available testing tools and frameworks for
-    validating your Move smart contracts and Sui applications
+    validating your Move smart contracts and Rtd applications
   requires:
     - has_frontmatter:
         - title
@@ -30,24 +30,24 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I test Move smart contracts on Sui?
-  - What testing tools are available for Sui Move?
+  - How do I test Move smart contracts on Rtd?
+  - What testing tools are available for Rtd Move?
   - How do I write unit tests in Move?
   - How do I test multi-transaction flows with test_scenario?
   - How do I check test coverage for Move code?
 answer: >-
-  Sui provides built-in testing tools for Move smart contracts. Write unit tests
-  with the #[test] attribute and run them with `sui move test`. Use
+  Rtd provides built-in testing tools for Move smart contracts. Write unit tests
+  with the #[test] attribute and run them with `rtd move test`. Use
   test_scenario for multi-transaction, multi-sender tests that simulate
-  real-world flows. Measure coverage with `sui move test --coverage` and debug
+  real-world flows. Measure coverage with `rtd move test --coverage` and debug
   failures with the Move Trace Debugger.
 ---
 
 <AgentPrompt
-  prompt={"Add Move unit tests for this package's public functions, including success, unauthorized, and edge cases. For test cleanup, use std::unit_test::destroy (NOT sui::test_utils::destroy, which is deprecated). Use event::emit for events (NOT emit_event). Use vector[] literal syntax (NOT vector::empty())."}
+  prompt={"Add Move unit tests for this package's public functions, including success, unauthorized, and edge cases. For test cleanup, use std::unit_test::destroy (NOT rtd::test_utils::destroy, which is deprecated). Use event::emit for events (NOT emit_event). Use vector[] literal syntax (NOT vector::empty())."}
 />
 
-Sui includes a built-in test framework for Move smart contracts. You write tests directly in your Move source files, run them with the `sui move test` CLI command, and use the `test_scenario` module to simulate multi-transaction flows. No external test runner or framework installation is required.
+Rtd includes a built-in test framework for Move smart contracts. You write tests directly in your Move source files, run them with the `rtd move test` CLI command, and use the `test_scenario` module to simulate multi-transaction flows. No external test runner or framework installation is required.
 
 ## Unit tests
 
@@ -83,7 +83,7 @@ Use the `#[test_only]` attribute to define helper functions or imports that exis
 
 ```move
 #[test_only]
-use sui::test_scenario;
+use rtd::test_scenario;
 
 #[test_only]
 fun create_test_sword(ctx: &mut TxContext): Sword {
@@ -128,12 +128,12 @@ You can also match on other failure types:
 
 ## Scenario testing with `test_scenario`
 
-Unit tests execute in a single transaction context. Real Sui transactions involve multiple steps, multiple senders, and objects that move between addresses. The `test_scenario` module simulates this by maintaining a virtual object store and advancing through transactions.
+Unit tests execute in a single transaction context. Real Rtd transactions involve multiple steps, multiple senders, and objects that move between addresses. The `test_scenario` module simulates this by maintaining a virtual object store and advancing through transactions.
 
 ```move
 #[test]
 fun test_sword_transactions() {
-    use sui::test_scenario;
+    use rtd::test_scenario;
 
     let initial_owner = @0xCAFE;
     let final_owner = @0xFACE;
@@ -178,16 +178,16 @@ Key operations:
 
 Always pair `take_shared` with `return_shared` within the same transaction block. Owned objects taken with `take_from_sender` can be returned, transferred, or destroyed; they do not need to be returned to the sender.
 
-For a complete walkthrough with access control, cross-module interactions, and transaction effects inspection, see the [scenario testing example app](https://github.com/MystenLabs/sui-move-bootcamp/tree/solution/G1/scenario).
+For a complete walkthrough with access control, cross-module interactions, and transaction effects inspection, see the [scenario testing example app](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/G1/scenario).
 
 ## Test utilities
 
-The Sui framework provides several modules that simplify common testing tasks:
+The Rtd framework provides several modules that simplify common testing tasks:
 
 | Module | Purpose |
 |---|---|
-| [`std::unit_test`](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/move-stdlib/sources/unit_test.move) | `destroy` function for cleaning up objects in tests, plus `assert_eq!` and `assert_ref_eq!` macros for better error messages |
-| [`std::debug`](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/move-stdlib/sources/debug.move) | `print` function for debug output during test runs |
+| [`std::unit_test`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/move-stdlib/sources/unit_test.move) | `destroy` function for cleaning up objects in tests, plus `assert_eq!` and `assert_ref_eq!` macros for better error messages |
+| [`std::debug`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/move-stdlib/sources/debug.move) | `print` function for debug output during test runs |
 
 Example using `std::unit_test::destroy` to clean up an object without writing a custom destructor:
 
@@ -210,7 +210,7 @@ fun test_with_cleanup() {
 Run all tests in your package with:
 
 ```bash
-$ sui move test
+$ rtd move test
 ```
 
 The output shows each test, its pass/fail status, and a summary:
@@ -227,7 +227,7 @@ Test result: OK. Total tests: 2; passed: 2; failed: 0
 Run a subset of tests by providing a filter string. Only tests whose fully qualified name contains the filter string run:
 
 ```bash
-$ sui move test sword
+$ rtd move test sword
 ```
 
 ### Detailed output
@@ -235,7 +235,7 @@ $ sui move test sword
 Use `--statistics` to see gas usage for each test:
 
 ```bash
-$ sui move test --statistics
+$ rtd move test --statistics
 ```
 
 ### Test coverage
@@ -243,8 +243,8 @@ $ sui move test --statistics
 Measure how much of your code the tests exercise:
 
 ```bash
-$ sui move test --coverage
-$ sui move coverage summary --test
+$ rtd move test --coverage
+$ rtd move coverage summary --test
 ```
 
 ```
@@ -261,19 +261,19 @@ Module 0000000000000000000000000000000000000000000000000000000000000000::example
 To see which lines are not covered, run:
 
 ```bash
-$ sui move coverage source --module <module_name>
+$ rtd move coverage source --module <module_name>
 ```
 
 Uncovered lines are highlighted, showing exactly where to add test coverage.
 
-For the full list of CLI options, see the [`sui move` CLI reference](/references/cli/move).
+For the full list of CLI options, see the [`rtd move` CLI reference](/references/cli/move).
 
 ## Debugging test failures
 
 When a test fails, the [Move Trace Debugger](/references/ide/debugger) lets you step through execution line by line in VS Code. Generate a trace and open it in the debugger:
 
 ```bash
-$ sui move test --trace
+$ rtd move test --trace
 ```
 
 Then open the trace file in VS Code with the Move extension installed. You can set breakpoints, inspect variables, and step through each instruction to find where the logic diverges from your expectations.
@@ -282,7 +282,7 @@ Then open the trace file in VS Code with the Move extension installed. You can s
 
 Move tests validate contract logic in a package-local environment. For full application testing, add checks that exercise transactions, network state, client code, and deployment behavior:
 
-- **Local network testing:** Run a [local Sui network](/getting-started/onboarding/local-network) to test transactions, object interactions, and gas costs against a real execution environment before deploying to Testnet.
-- **Testnet deployment:** Deploy your packages to [Testnet](/getting-started/onboarding/configure-sui-client) to verify behavior with real network conditions, indexing, and RPC queries.
-- **Dry runs:** Use `sui client call --dry-run` or `devInspectTransactionBlock` to simulate a transaction against the current network state without executing it. This catches issues like incorrect object versions or insufficient gas before you submit.
-- **SDK integration tests:** Use the [Sui TypeScript SDK](https://sdk.mystenlabs.com/typescript) to write integration tests that submit transactions, query state, and verify end-to-end flows from a client perspective. For an example of a full test matrix (Move contract tests, SDK unit/integration tests, and E2E tests), see the [Sui Stack Messaging test suite](/sui-stack/messaging/testing).
+- **Local network testing:** Run a [local Rtd network](/getting-started/onboarding/local-network) to test transactions, object interactions, and gas costs against a real execution environment before deploying to Testnet.
+- **Testnet deployment:** Deploy your packages to [Testnet](/getting-started/onboarding/configure-rtd-client) to verify behavior with real network conditions, indexing, and RPC queries.
+- **Dry runs:** Use `rtd client call --dry-run` or `devInspectTransactionBlock` to simulate a transaction against the current network state without executing it. This catches issues like incorrect object versions or insufficient gas before you submit.
+- **SDK integration tests:** Use the [Rtd TypeScript SDK](https://sdk.linkuverse.com/typescript) to write integration tests that submit transactions, query state, and verify end-to-end flows from a client perspective. For an example of a full test matrix (Move contract tests, SDK unit/integration tests, and E2E tests), see the [Rtd Stack Messaging test suite](/rtd-stack/messaging/testing).

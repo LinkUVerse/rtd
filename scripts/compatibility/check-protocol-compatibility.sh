@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 NETWORK="$1"
@@ -7,9 +7,8 @@ NETWORK="$1"
 git fetch -q || exit 1
 
 if [ -z "$RELEASED_COMMIT" ]; then
-  # check if API_USER and API_KEY env vars are set
-  if [ -z "$API_USER" ] || [ -z "$API_KEY" ]; then
-    echo "Error: API_USER and API_KEY environment variables must be set"
+  if [ -z "$RTD_PROMETHEUS_URL" ]; then
+    echo "Error: set RTD_PROMETHEUS_URL to the verified RTD Prometheus query endpoint"
     exit 1
   fi
 
@@ -22,19 +21,7 @@ if [ -z "$RELEASED_COMMIT" ]; then
     exit 1
   fi
 
-  case "$NETWORK" in
-    devnet)
-      URL="https://$API_USER:$API_KEY@gateway.mimir.sui.io/prometheus/api/v1/query"
-      ;;
-    testnet)
-      URL="http://$API_USER:$API_KEY@metrics-gw-2.testnet.sui.io/prometheus/api/v1/query"
-      ;;
-    mainnet)
-      URL="https://$API_USER:$API_KEY@metrics-gw-2.mainnet.sui.io/prometheus/api/v1/query"
-      ;;
-  esac
-
-  VERSIONS=$(curl -s -G -k "$URL" --data-urlencode "query=uptime{network=\"$NETWORK\"}" | jq -r '.data.result[].metric.version' | sort | uniq -c | sort -rn)
+  VERSIONS=$(curl -fsS -G "$RTD_PROMETHEUS_URL" --data-urlencode "query=uptime{network=\"$NETWORK\"}" | jq -r '.data.result[].metric.version' | sort | uniq -c | sort -rn)
   TOP_VERSION=$(echo "$VERSIONS" | head -n 1 | awk '{print $2}')
 
   echo "Found following versions on $NETWORK:"
@@ -44,7 +31,7 @@ if [ -z "$RELEASED_COMMIT" ]; then
   # Versions look like "1.0.0-ae1212baf8"; the suffix is the commit the node
   # was built from. Use the most frequent version exactly when its commit
   # resolves here. During a private security release that suffix is a
-  # sui-private commit that does not resolve in this repo: approximate its
+  # rtd-private commit that does not resolve in this repo: approximate its
   # public base instead — the highest publicly-resolvable version that is not
   # newer than the dominant one (ties broken by node count). The semver
   # ceiling keeps a stray node on a newer public build from hijacking the
@@ -101,9 +88,9 @@ function check_git_clean {
 
 check_git_clean "Please commit or stash your changes before running this script" "*"
 
-# check out all files in crates/sui-protocol-config/src/snapshots at origin commit
+# check out all files in crates/rtd-protocol-config/src/snapshots at origin commit
 echo "Checking out $NETWORK snapshot files"
-git checkout $RELEASED_COMMIT -- crates/sui-protocol-config/src/snapshots || exit 1
+git checkout $RELEASED_COMMIT -- crates/rtd-protocol-config/src/snapshots || exit 1
 
 if [ "$NETWORK" != "testnet" ] && [ "$NETWORK" != "mainnet" ]; then
   NETWORK_PATTERN="*__version_*"
@@ -115,9 +102,9 @@ echo "Checking for changes to snapshot files matching $NETWORK_PATTERN"
 check_git_clean "Detected changes to snapshot files since $RELEASED_COMMIT - not safe to release" "$NETWORK_PATTERN"
 
 # remove any snapshot file changes that were ignored
-git reset --hard HEAD
+git restore --source=HEAD --staged --worktree -- crates/rtd-protocol-config/src/snapshots
 
 echo "Running snapshot tests..."
-cargo test --package sui-protocol-config snapshot_tests || exit 1
+cargo test --package rtd-protocol-config snapshot_tests || exit 1
 
 exit 0

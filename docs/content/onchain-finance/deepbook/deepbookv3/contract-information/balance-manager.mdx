@@ -41,8 +41,8 @@ builder_paths:
     step: Balance manager
     stage: DeFi Primitives
 questions:
-  - What is BalanceManager in Sui?
-  - How does balancemanager work on Sui?
+  - What is BalanceManager in Rtd?
+  - How does balancemanager work on Rtd?
   - Why should I use balancemanager?
 answer: Learn about the balance manager and how it works.
 ---
@@ -63,7 +63,7 @@ The `new()` function creates a `BalanceManager`. Combine it with `share`, or els
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new"
 	noComments
@@ -79,7 +79,7 @@ The `new_with_custom_owner()` function creates a `BalanceManager` with a custom 
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_with_custom_owner"
 	noComments
@@ -99,7 +99,7 @@ Move code using DeepBookV3 uses `DepositCap`, `WithdrawCap`, and `TradeCap`, whi
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="new_with_custom_owner_caps"
 	noComments
@@ -115,7 +115,7 @@ The owner of a `BalanceManager` can mint a `TradeCap` and send it to another add
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="mint_trade_cap,revoke_trade_cap"
 />
@@ -130,7 +130,7 @@ The owner of a `BalanceManager` can mint a `DepositCap` or `WithdrawCap` and sen
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="mint_deposit_cap,mint_withdraw_cap"
 />
@@ -145,7 +145,7 @@ To call any function that requires a balance check or transfer, the user must pr
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="generate_proof_as_owner,generate_proof_as_trader"
 />
@@ -160,7 +160,7 @@ Only the owner can call this function to deposit funds into the `BalanceManager`
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="deposit"
 />
@@ -175,7 +175,7 @@ Only the owner can call this function to withdraw funds from the `BalanceManager
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="withdraw,withdraw_all"
 />
@@ -190,7 +190,7 @@ Only holders of a `DepositCap` for the `BalanceManager` can call this function t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="deposit_with_cap"
 />
@@ -205,7 +205,7 @@ Only holders of a `WithdrawCap` for the `BalanceManager` can call this function 
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="withdraw_with_cap"
 />
@@ -220,7 +220,7 @@ The owner of a `TradeCap` can set or unset a pool-specific referral for the bala
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="set_balance_manager_referral,unset_balance_manager_referral"
 />
@@ -235,7 +235,7 @@ Register a balance manager with the registry. This adds the balance manager to t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="register_balance_manager"
 />
@@ -248,7 +248,7 @@ Register a balance manager with the registry. This adds the balance manager to t
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="validate_proof,balance,owner,id,get_balance_manager_referral_id,balance_manager_referral_owner,balance_manager_referral_pool_id"
 />
@@ -265,7 +265,7 @@ The system emits this event when you create a new balance manager.
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="BalanceManagerEvent"
 />
@@ -280,7 +280,7 @@ The system emits this event when a deposit or withdrawal occurs.
 <ImportContent
 	source="packages/deepbook/sources/balance_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="BalanceEvent"
 />

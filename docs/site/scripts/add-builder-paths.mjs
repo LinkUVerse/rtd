@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -56,12 +56,12 @@ const BUILDER_PATHS = [
     score: 35,
     steps: [
       // ── Setup ──
-      { step: 'Install Sui CLI', stage: 'Setup', page: 'getting-started/onboarding/sui-install.mdx', eval: 'covered' },
+      { step: 'Install Rtd CLI', stage: 'Setup', page: 'getting-started/onboarding/rtd-install.mdx', eval: 'covered' },
       { step: 'Scaffold frontend', stage: 'Setup', page: 'getting-started/examples/dapp-kit-frontend.mdx', eval: 'covered' },
-      { step: 'TypeScript SDK', stage: 'Setup', page: null, eval: 'covered', note: 'External: sdk.mystenlabs.com' },
+      { step: 'TypeScript SDK', stage: 'Setup', page: null, eval: 'covered', note: 'External: sdk.linkuverse.com' },
       { step: 'Developer tools', stage: 'Setup', page: 'getting-started/tooling.mdx', eval: null },
       // ── DeFi Primitives ──
-      { step: 'Understand DeFi on Sui', stage: 'DeFi Primitives', page: 'onchain-finance/deepbook/deepbookv3/deepbook.mdx', eval: 'partial' },
+      { step: 'Understand DeFi on Rtd', stage: 'DeFi Primitives', page: 'onchain-finance/deepbook/deepbookv3/deepbook.mdx', eval: 'partial' },
       { step: 'DeepBook architecture', stage: 'DeFi Primitives', page: 'onchain-finance/deepbook/deepbookv3/design.mdx', eval: null },
       { step: 'DeepBook integration', stage: 'DeFi Primitives', page: 'onchain-finance/deepbook/deepbookv3/deepbook.mdx', eval: 'partial' },
       { step: 'DeepBook SDK overview', stage: 'DeFi Primitives', page: 'onchain-finance/deepbook/deepbookv3-sdk/deepbookv3-sdk.mdx', eval: null },
@@ -112,7 +112,7 @@ const BUILDER_PATHS = [
       { step: 'Event querying', stage: 'Advanced', page: 'develop/accessing-data/using-events.mdx', eval: null },
       { step: 'Authenticated events', stage: 'Advanced', page: 'develop/accessing-data/authenticated-events.mdx', eval: null },
       // ── UX ──
-      { step: 'zkLogin + sponsored tx', stage: 'UX', page: 'sui-stack/zklogin-integration/zklogin.mdx', eval: 'missing' },
+      { step: 'zkLogin + sponsored tx', stage: 'UX', page: 'rtd-stack/zklogin-integration/zklogin.mdx', eval: 'missing' },
       // ── Operations ──
       { step: 'Upgrade and versioning', stage: 'Operations', page: 'develop/publish-upgrade-packages/upgrade.mdx', eval: 'partial' },
       { step: 'Package versioning', stage: 'Operations', page: 'develop/publish-upgrade-packages/versioning.mdx', eval: null },
@@ -131,16 +131,16 @@ const BUILDER_PATHS = [
     score: 27,
     steps: [
       // ── Setup ──
-      { step: 'Install Sui CLI', stage: 'Setup', page: 'getting-started/onboarding/sui-install.mdx', eval: 'covered' },
+      { step: 'Install Rtd CLI', stage: 'Setup', page: 'getting-started/onboarding/rtd-install.mdx', eval: 'covered' },
       { step: 'Scaffold frontend', stage: 'Setup', page: 'getting-started/examples/dapp-kit-frontend.mdx', eval: 'covered' },
       { step: 'Connect a frontend', stage: 'Setup', page: 'getting-started/onboarding/app-frontends.mdx', eval: null },
       { step: 'Developer tools', stage: 'Setup', page: 'getting-started/tooling.mdx', eval: null },
       { step: 'Choose payment model', stage: 'Setup', page: null, eval: 'missing' },
       // ── Auth ──
-      { step: 'zkLogin overview', stage: 'Auth', page: 'sui-stack/zklogin-integration/index.mdx', eval: null },
-      { step: 'zkLogin setup', stage: 'Auth', page: 'sui-stack/zklogin-integration/zklogin.mdx', eval: 'partial' },
-      { step: 'zkLogin example', stage: 'Auth', page: 'sui-stack/zklogin-integration/zklogin-example.mdx', eval: 'partial' },
-      { step: 'OpenID provider config', stage: 'Auth', page: 'sui-stack/zklogin-integration/developer-account.mdx', eval: null },
+      { step: 'zkLogin overview', stage: 'Auth', page: 'rtd-stack/zklogin-integration/index.mdx', eval: null },
+      { step: 'zkLogin setup', stage: 'Auth', page: 'rtd-stack/zklogin-integration/zklogin.mdx', eval: 'partial' },
+      { step: 'zkLogin example', stage: 'Auth', page: 'rtd-stack/zklogin-integration/zklogin-example.mdx', eval: 'partial' },
+      { step: 'OpenID provider config', stage: 'Auth', page: 'rtd-stack/zklogin-integration/developer-account.mdx', eval: null },
       { step: 'Passkey authentication', stage: 'Auth', page: 'develop/cryptography/passkeys.mdx', eval: null },
       { step: 'Salt management', stage: 'Auth', page: null, eval: 'missing' },
       { step: 'Session lifecycle', stage: 'Auth', page: null, eval: 'missing' },
@@ -153,7 +153,7 @@ const BUILDER_PATHS = [
       { step: 'Using address balances', stage: 'Wallets & Funding', page: 'onchain-finance/asset-custody/address-balances/using-address-balances.mdx', eval: null },
       { step: 'Wallet funding', stage: 'Wallets & Funding', page: null, eval: 'missing' },
       // ── Gas ──
-      { step: 'Gas mechanics', stage: 'Gas', page: 'develop/transaction-payment/gas-in-sui.mdx', eval: null },
+      { step: 'Gas mechanics', stage: 'Gas', page: 'develop/transaction-payment/gas-in-rtd.mdx', eval: null },
       { step: 'Sponsored transactions', stage: 'Gas', page: 'develop/transaction-payment/sponsor-txn.mdx', eval: 'covered' },
       { step: 'Gasless stablecoin transfers', stage: 'Gas', page: 'develop/transaction-payment/gasless-stablecoin-transfers.mdx', eval: null },
       { step: 'Gas smashing', stage: 'Gas', page: 'develop/transaction-payment/gas-smashing.mdx', eval: null },
@@ -170,8 +170,8 @@ const BUILDER_PATHS = [
       { step: 'Build payment transaction', stage: 'Payment Flow', page: 'onchain-finance/payment-kit.mdx', eval: 'partial' },
       { step: 'Transaction overview', stage: 'Payment Flow', page: 'develop/transactions/txn-overview.mdx', eval: null },
       { step: 'Transaction lifecycle', stage: 'Payment Flow', page: 'develop/transactions/transaction-lifecycle.mdx', eval: null },
-      { step: 'Recipient resolution (SuiNS)', stage: 'Payment Flow', page: 'sui-stack/suins/index.mdx', eval: 'missing' },
-      { step: 'SuiNS integration', stage: 'Payment Flow', page: 'sui-stack/suins/sui-stack-suins.mdx', eval: null },
+      { step: 'Recipient resolution (RtdNS)', stage: 'Payment Flow', page: 'rtd-stack/rtdns/index.mdx', eval: 'missing' },
+      { step: 'RtdNS integration', stage: 'Payment Flow', page: 'rtd-stack/rtdns/rtd-stack-rtdns.mdx', eval: null },
       { step: 'Address-owned objects', stage: 'Payment Flow', page: 'develop/objects/object-ownership/address-owned.mdx', eval: null },
       { step: 'Money math pitfalls', stage: 'Payment Flow', page: null, eval: 'missing' },
       // ── Signing ──
@@ -204,8 +204,8 @@ const BUILDER_PATHS = [
     score: 48,
     steps: [
       // ── Environment ──
-      { step: 'Install toolchain', stage: 'Environment', page: 'getting-started/onboarding/sui-install.mdx', eval: 'covered' },
-      { step: 'Object model (ownership, shared)', stage: 'Environment', page: 'develop/sui-architecture/object-model.mdx', eval: 'covered' },
+      { step: 'Install toolchain', stage: 'Environment', page: 'getting-started/onboarding/rtd-install.mdx', eval: 'covered' },
+      { step: 'Object model (ownership, shared)', stage: 'Environment', page: 'develop/rtd-architecture/object-model.mdx', eval: 'covered' },
       { step: 'Address-owned objects', stage: 'Environment', page: 'develop/objects/object-ownership/address-owned.mdx', eval: null },
       { step: 'Wrapped objects', stage: 'Environment', page: 'develop/objects/object-ownership/wrapped.mdx', eval: null },
       { step: 'Immutable objects', stage: 'Environment', page: 'develop/objects/object-ownership/immutable.mdx', eval: null },
@@ -221,10 +221,10 @@ const BUILDER_PATHS = [
       { step: 'Spending policy/mandate', stage: 'Authorization', page: null, eval: 'missing' },
       { step: 'Transfer policies', stage: 'Authorization', page: 'develop/objects/transfers/transfer-policies.mdx', eval: null },
       { step: 'Sponsored gas', stage: 'Authorization', page: 'develop/transaction-payment/sponsor-txn.mdx', eval: 'partial' },
-      { step: 'Gas mechanics', stage: 'Authorization', page: 'develop/transaction-payment/gas-in-sui.mdx', eval: null },
+      { step: 'Gas mechanics', stage: 'Authorization', page: 'develop/transaction-payment/gas-in-rtd.mdx', eval: null },
       { step: 'Gas smashing', stage: 'Authorization', page: 'develop/transaction-payment/gas-smashing.mdx', eval: null },
       { step: 'Gasless stablecoin transfers', stage: 'Authorization', page: 'develop/transaction-payment/gasless-stablecoin-transfers.mdx', eval: null },
-      { step: 'zkLogin for agent identity', stage: 'Authorization', page: 'sui-stack/zklogin-integration/index.mdx', eval: null },
+      { step: 'zkLogin for agent identity', stage: 'Authorization', page: 'rtd-stack/zklogin-integration/index.mdx', eval: null },
       // ── Money Movement ──
       { step: 'Construct payment PTB', stage: 'Money Movement', page: 'develop/transactions/ptbs/building-ptb.mdx', eval: 'covered' },
       { step: 'PTB inputs and results', stage: 'Money Movement', page: 'develop/transactions/ptbs/inputs-and-results.mdx', eval: null },
@@ -259,23 +259,23 @@ const BUILDER_PATHS = [
     score: 91,
     steps: [
       // ── Environment ──
-      { step: 'Install toolchain', stage: 'Environment', page: 'getting-started/onboarding/sui-install.mdx', eval: 'covered' },
-      { step: 'Walrus concepts', stage: 'Environment', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Storage resource, epochs & lifetime', stage: 'Environment', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Install toolchain', stage: 'Environment', page: 'getting-started/onboarding/rtd-install.mdx', eval: 'covered' },
+      { step: 'Walrus concepts', stage: 'Environment', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Storage resource, epochs & lifetime', stage: 'Environment', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
       // ── Store ──
-      { step: 'Choose upload path', stage: 'Store', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Store a blob', stage: 'Store', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Set blob lifetime', stage: 'Store', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Choose upload path', stage: 'Store', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Store a blob', stage: 'Store', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Set blob lifetime', stage: 'Store', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
       // ── Read & Verify ──
-      { step: 'Retrieve blob', stage: 'Read & Verify', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Verify availability & integrity', stage: 'Read & Verify', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Store sensitive data (Seal)', stage: 'Read & Verify', page: 'sui-stack/seal/sui-stack-seal.mdx', eval: 'covered' },
+      { step: 'Retrieve blob', stage: 'Read & Verify', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Verify availability & integrity', stage: 'Read & Verify', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Store sensitive data (Seal)', stage: 'Read & Verify', page: 'rtd-stack/seal/rtd-stack-seal.mdx', eval: 'covered' },
       // ── Ship ──
-      { step: 'Integrate into app', stage: 'Ship', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Walrus example app (OnlyFins)', stage: 'Ship', page: 'sui-stack/walrus/only-fins.mdx', eval: null },
-      { step: 'Walrus custom indexer', stage: 'Ship', page: 'sui-stack/walrus/indexer-walrus.mdx', eval: null },
+      { step: 'Integrate into app', stage: 'Ship', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Walrus example app (OnlyFins)', stage: 'Ship', page: 'rtd-stack/walrus/only-fins.mdx', eval: null },
+      { step: 'Walrus custom indexer', stage: 'Ship', page: 'rtd-stack/walrus/indexer-walrus.mdx', eval: null },
       { step: 'Custom indexer framework', stage: 'Ship', page: 'develop/accessing-data/custom-indexer/custom-indexers.mdx', eval: null },
-      { step: 'Manage lifecycle', stage: 'Ship', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Manage lifecycle', stage: 'Ship', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
       { step: 'Dynamic fields for metadata', stage: 'Ship', page: 'develop/objects/dynamic-fields.mdx', eval: null },
       { step: 'Upgrade storage contracts', stage: 'Ship', page: 'develop/publish-upgrade-packages/upgrade.mdx', eval: null },
       { step: 'Security best practices', stage: 'Ship', page: 'develop/security/best-practices.mdx', eval: null },
@@ -288,29 +288,29 @@ const BUILDER_PATHS = [
     score: 90,
     steps: [
       // ── Environment ──
-      { step: 'Programmatic toolchain', stage: 'Environment', page: 'getting-started/onboarding/sui-install.mdx', eval: 'covered' },
-      { step: 'Object model for agent blobs', stage: 'Environment', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Storage resource & payment', stage: 'Environment', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Object model concepts', stage: 'Environment', page: 'develop/sui-architecture/object-model.mdx', eval: null },
+      { step: 'Programmatic toolchain', stage: 'Environment', page: 'getting-started/onboarding/rtd-install.mdx', eval: 'covered' },
+      { step: 'Object model for agent blobs', stage: 'Environment', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Storage resource & payment', stage: 'Environment', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Object model concepts', stage: 'Environment', page: 'develop/rtd-architecture/object-model.mdx', eval: null },
       { step: 'Address-owned objects', stage: 'Environment', page: 'develop/objects/object-ownership/address-owned.mdx', eval: null },
       { step: 'Wrapped objects', stage: 'Environment', page: 'develop/objects/object-ownership/wrapped.mdx', eval: null },
       // ── Agent Write ──
-      { step: 'Programmatic store via SDK', stage: 'Agent Write', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Batch small blobs (Quilt)', stage: 'Agent Write', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Content addressing & metadata/tags', stage: 'Agent Write', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Programmatic store via SDK', stage: 'Agent Write', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Batch small blobs (Quilt)', stage: 'Agent Write', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Content addressing & metadata/tags', stage: 'Agent Write', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
       { step: 'Content hashing', stage: 'Agent Write', page: 'develop/cryptography/hashing.mdx', eval: null },
       { step: 'Dynamic fields for versioning', stage: 'Agent Write', page: 'develop/objects/dynamic-fields.mdx', eval: null },
       { step: 'PTB inputs and results', stage: 'Agent Write', page: 'develop/transactions/ptbs/inputs-and-results.mdx', eval: null },
       // ── Verify & Secure ──
-      { step: 'Encrypt agent state (Seal)', stage: 'Verify & Secure', page: 'sui-stack/seal/sui-stack-seal.mdx', eval: 'covered' },
-      { step: 'Verify availability before acting', stage: 'Verify & Secure', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
-      { step: 'Versioned datasets/immutable lineage', stage: 'Verify & Secure', page: 'sui-stack/walrus/sui-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Encrypt agent state (Seal)', stage: 'Verify & Secure', page: 'rtd-stack/seal/rtd-stack-seal.mdx', eval: 'covered' },
+      { step: 'Verify availability before acting', stage: 'Verify & Secure', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
+      { step: 'Versioned datasets/immutable lineage', stage: 'Verify & Secure', page: 'rtd-stack/walrus/rtd-stack-walrus.mdx', eval: 'covered' },
       { step: 'Authenticated events', stage: 'Verify & Secure', page: 'develop/accessing-data/authenticated-events.mdx', eval: null },
       { step: 'Event querying', stage: 'Verify & Secure', page: 'develop/accessing-data/using-events.mdx', eval: null },
       // ── Ship ──
       { step: 'Test full agent storage loop', stage: 'Ship', page: null, eval: 'covered' },
-      { step: 'Walrus example app (OnlyFins)', stage: 'Ship', page: 'sui-stack/walrus/only-fins.mdx', eval: null },
-      { step: 'Walrus custom indexer', stage: 'Ship', page: 'sui-stack/walrus/indexer-walrus.mdx', eval: null },
+      { step: 'Walrus example app (OnlyFins)', stage: 'Ship', page: 'rtd-stack/walrus/only-fins.mdx', eval: null },
+      { step: 'Walrus custom indexer', stage: 'Ship', page: 'rtd-stack/walrus/indexer-walrus.mdx', eval: null },
       { step: 'Build a custom indexer', stage: 'Ship', page: 'develop/accessing-data/custom-indexer/build.mdx', eval: null },
       { step: 'Indexer data integration', stage: 'Ship', page: 'develop/accessing-data/custom-indexer/indexer-data-integration.mdx', eval: null },
       { step: 'Data access interfaces', stage: 'Ship', page: 'develop/accessing-data/data-serving.mdx', eval: null },

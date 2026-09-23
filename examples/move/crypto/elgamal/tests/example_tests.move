@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
@@ -6,9 +6,9 @@ module elgamal::tests;
 
 use elgamal::example;
 use std::unit_test::assert_eq;
-use sui::bls12381::{Self, Scalar, G1};
-use sui::group_ops::Element;
-use sui::random;
+use rtd::bls12381::{Self, Scalar, G1};
+use rtd::group_ops::Element;
+use rtd::random;
 
 #[test]
 fun test_elgamal_equality() {

@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -48,7 +48,7 @@ function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 // Clean up a title for use in a sentence
 function cleanTitle(t) {
   return t
-    .replace(/^Sui\s+/i, '')
+    .replace(/^Rtd\s+/i, '')
     .replace(/\s*->\s*/g, ' to ')
     .replace(/[`]/g, '')
     .trim();
@@ -91,20 +91,20 @@ function generateDescription(relPath, data, body) {
   // ── Getting started: onboarding ──
   if (relPath.startsWith('getting-started/onboarding/')) {
     const specifics = {
-      'sui-install.mdx': 'Reader can install the Sui CLI, verify it works, and understand available toolchain components',
-      'configure-sui-client.mdx': 'Reader can configure the Sui client for Testnet, Devnet, or a custom network and verify connectivity',
-      'get-address.mdx': 'Reader can create a Sui address, understand recovery phrases, and manage multiple addresses',
-      'get-coins.mdx': 'Reader can request SUI tokens from the faucet and confirm they arrived in their wallet',
+      'rtd-install.mdx': 'Reader can install the Rtd CLI, verify it works, and understand available toolchain components',
+      'configure-rtd-client.mdx': 'Reader can configure the Rtd client for Testnet, Devnet, or a custom network and verify connectivity',
+      'get-address.mdx': 'Reader can create a Rtd address, understand recovery phrases, and manage multiple addresses',
+      'get-coins.mdx': 'Reader can request RTD tokens from the faucet and confirm they arrived in their wallet',
       'hello-world.mdx': 'Reader can clone, build, publish, and call a Move package, understanding each step along the way',
       'app-frontends.mdx': 'Reader can connect a React frontend to their published Move package and see it working locally',
-      'local-network.mdx': 'Reader can start a local Sui network, fund addresses, and test against it instead of Testnet',
-      'install-source.mdx': 'Reader can build the Sui CLI from source when prebuilt binaries are not suitable',
-      'install-binaries.mdx': 'Reader can install prebuilt Sui binaries for their platform',
+      'local-network.mdx': 'Reader can start a local Rtd network, fund addresses, and test against it instead of Testnet',
+      'install-source.mdx': 'Reader can build the Rtd CLI from source when prebuilt binaries are not suitable',
+      'install-binaries.mdx': 'Reader can install prebuilt Rtd binaries for their platform',
       'next-steps.mdx': 'Reader knows where to go after completing the onboarding path based on what they want to build',
     };
     const basename = path.basename(relPath);
     if (specifics[basename]) return specifics[basename];
-    return `Reader can ${ctLower} on Sui and confirm it worked`;
+    return `Reader can ${ctLower} on Rtd and confirm it worked`;
   }
 
   // ── Getting started: examples ──
@@ -121,11 +121,11 @@ function generateDescription(relPath, data, body) {
   }
 
   // ── Migration guides ──
-  if (relPath.startsWith('getting-started/sui-for-')) {
+  if (relPath.startsWith('getting-started/rtd-for-')) {
     const platform = title.includes('->') ? title.split('->')[0].trim()
       : title.includes('→') ? title.split('→')[0].trim()
-      : title.replace(/^Sui for /i, '').trim();
-    return `${platform} developer can map their existing mental model to Sui's object-centric equivalents and start building`;
+      : title.replace(/^Rtd for /i, '').trim();
+    return `${platform} developer can map their existing mental model to Rtd's object-centric equivalents and start building`;
   }
 
   // ── Cheat sheet ──
@@ -135,13 +135,13 @@ function generateDescription(relPath, data, body) {
 
   // ── Tooling catalog ──
   if (relPath === 'getting-started/tooling.mdx') {
-    return 'Reader can find and choose the right developer tool for writing, testing, deploying, or auditing Move on Sui';
+    return 'Reader can find and choose the right developer tool for writing, testing, deploying, or auditing Move on Rtd';
   }
 
   // ── CLI reference ──
   if (relPath.startsWith('references/cli/')) {
     if (relPath.endsWith('cheatsheet.mdx')) {
-      return 'Reader can quickly find the right CLI command for common Sui operations';
+      return 'Reader can quickly find the right CLI command for common Rtd operations';
     }
     return `Reader can look up ${ctLower} command syntax, flags, and usage examples`;
   }
@@ -154,19 +154,19 @@ function generateDescription(relPath, data, body) {
   // ── Other references ──
   if (relPath.startsWith('references/')) {
     if (relPath.includes('contribute/')) {
-      return `Contributor understands the ${ctLower} requirements for the Sui documentation`;
+      return `Contributor understands the ${ctLower} requirements for the Rtd documentation`;
     }
     if (relPath.includes('package-managers/')) {
       return `Reader can look up ${ctLower} syntax and configuration options`;
     }
     if (title.toLowerCase().includes('glossary')) {
-      return 'Reader can look up unfamiliar Sui terms and concepts by name';
+      return 'Reader can look up unfamiliar Rtd terms and concepts by name';
     }
     if (title.toLowerCase().includes('release notes')) {
-      return 'Reader can review what changed in each Sui release';
+      return 'Reader can review what changed in each Rtd release';
     }
     if (title.toLowerCase().includes('framework')) {
-      return 'Reader can browse the Sui framework module reference to find function signatures and type definitions';
+      return 'Reader can browse the Rtd framework module reference to find function signatures and type definitions';
     }
     if (desc) {
       const cleaned = desc.replace(/\.$/, '');
@@ -200,8 +200,8 @@ function generateDescription(relPath, data, body) {
     return `Developer can integrate ${ctLower} into their application using the SDK`;
   }
 
-  // ── Sui stack ──
-  if (relPath.startsWith('sui-stack/')) {
+  // ── Rtd stack ──
+  if (relPath.startsWith('rtd-stack/')) {
     if (desc) {
       const outcome = descToOutcome(desc);
       if (outcome) return `Reader can ${outcome}`;
@@ -214,7 +214,7 @@ function generateDescription(relPath, data, body) {
   // ── Troubleshooting / testing ──
   if (relPath.includes('testing-debugging/')) {
     if (title.toLowerCase().includes('error') || title.toLowerCase().includes('troubleshoot')) {
-      return 'Reader can identify common Sui errors by their message and apply the documented fix';
+      return 'Reader can identify common Rtd errors by their message and apply the documented fix';
     }
     if (desc) {
       const cleaned = desc.replace(/\.$/, '');

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const protocolInject = async function (source) {
@@ -21,12 +21,12 @@ const protocolInject = async function (source) {
   const createId = (name) =>
     String(name ?? "").replace(/[\._]/g, "-").replace(/\//g, "_");
 
-  const suiSorted = (array) =>
+  const rtdSorted = (array) =>
     array.sort((a, b) => {
-      const aStartsWithSui = a.name.startsWith("sui");
-      const bStartsWithSui = b.name.startsWith("sui");
-      if (aStartsWithSui && !bStartsWithSui) return -1;
-      if (!aStartsWithSui && bStartsWithSui) return 1;
+      const aStartsWithRtd = a.name.startsWith("rtd");
+      const bStartsWithRtd = b.name.startsWith("rtd");
+      if (aStartsWithRtd && !bStartsWithRtd) return -1;
+      if (!aStartsWithRtd && bStartsWithRtd) return 1;
       return 0;
     });
 
@@ -100,7 +100,7 @@ const protocolInject = async function (source) {
     }
   }
 
-  const tocSorted = suiSorted(toc);
+  const tocSorted = rtdSorted(toc);
   if (isTypesPage && !isMessagesPage && types.length > 0) {
     tocSorted.push({
       name: "Scalar Value Types",
@@ -148,7 +148,7 @@ const protocolInject = async function (source) {
   const messageSort = (array) =>
     array.sort((a, b) => a.name.localeCompare(b.name));
 
-  const files = suiSorted(spec.files);
+  const files = rtdSorted(spec.files);
 
   // -----------------------------
   // CSS classes (custom.css owns styling)

@@ -31,8 +31,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Move Syntax Fundamentals in Sui?
-  - How does move syntax fundamentals work on Sui?
+  - What is Move Syntax Fundamentals in Rtd?
+  - How does move syntax fundamentals work on Rtd?
   - Why should I use move syntax fundamentals?
 answer: >-
   A comprehensive reference for Move language syntax fundamentals, covering
@@ -40,7 +40,7 @@ answer: >-
   more.
 ---
 
-Move is a resource-oriented programming language designed for safe smart contract development. Sui uses Move with extensions for the [object model](/develop/objects), [programmable transaction blocks](/develop/transactions/ptbs/prog-txn-blocks), and the Sui-specific framework modules. This page covers the core language syntax. For the full language reference, see [The Move Book](https://move-book.com/).
+Move is a resource-oriented programming language designed for safe smart contract development. Rtd uses Move with extensions for the [object model](/develop/objects), [programmable transaction blocks](/develop/transactions/ptbs/prog-txn-blocks), and the Rtd-specific framework modules. This page covers the core language syntax. For the full language reference, see [The Move Book](https://move-book.com/).
 
 ## Modules
 
@@ -54,13 +54,13 @@ Move provides the following primitive types:
 |---|---|
 | `bool` | Boolean (`true` or `false`) |
 | `u8`, `u16`, `u32`, `u64`, `u128`, `u256` | Unsigned integers of various widths |
-| `address` | A 32-byte address value representing an account or object location on Sui |
+| `address` | A 32-byte address value representing an account or object location on Rtd |
 
 See [The Move Book: Primitive Types](https://move-book.com/move-basics/primitive-types.html).
 
 ## Structs
 
-Structs define custom data types with named fields. On Sui, structs with the `key` ability represent [objects](/develop/objects) and must have `id: UID` as their first field. See [The Move Book: Structs](https://move-book.com/move-basics/struct.html).
+Structs define custom data types with named fields. On Rtd, structs with the `key` ability represent [objects](/develop/objects) and must have `id: UID` as their first field. See [The Move Book: Structs](https://move-book.com/move-basics/struct.html).
 
 ## Abilities
 
@@ -68,7 +68,7 @@ Abilities control what operations you can perform on a type. Every struct has a 
 
 | **Ability** | **Grants** |
 |---|---|
-| `key` | The type can be stored as a Sui object (requires `id: UID` as first field) |
+| `key` | The type can be stored as a Rtd object (requires `id: UID` as first field) |
 | `store` | The type can be stored inside other objects or transferred using `public_transfer` |
 | `copy` | The type can be copied (duplicated in memory) |
 | `drop` | The type can be discarded when it goes out of scope |
@@ -118,4 +118,4 @@ References prevent copying or moving the original value while the reference is a
 
 ## Testing
 
-Move supports inline unit tests using the `#[test]` attribute. Test functions run during `sui move test` and do not deploy onchain. Use `#[test_only]` for helper modules that exist only for testing. See [The Move Book: Testing](https://move-book.com/move-basics/testing.html).
+Move supports inline unit tests using the `#[test]` attribute. Test functions run during `rtd move test` and do not deploy onchain. Use `#[test_only]` for helper modules that exist only for testing. See [The Move Book: Testing](https://move-book.com/move-basics/testing.html).

@@ -1,6 +1,6 @@
-# Sui Documentation
+# Rtd Documentation
 
-This directory contains the source for [docs.sui.io](https://docs.sui.io). It is split between `content/` (documentation pages) and `site/` (Docusaurus configuration, plugins, and scripts).
+This directory contains the source for [docs.rtd.io](https://docs.rtd.io). It is split between `content/` (documentation pages) and `site/` (Docusaurus configuration, plugins, and scripts).
 
 ## Repository layout
 
@@ -12,7 +12,7 @@ docs/
 │   ├── onchain-finance/        # Tokens, DeepBook, kiosk, payments, asset custody
 │   ├── operators/              # Full nodes, validators, data management
 │   ├── references/             # CLI, APIs, framework, SDKs, contributing
-│   ├── sui-stack/              # Walrus, Seal, zkLogin, Nautilus, SuiNS, Enoki
+│   ├── rtd-stack/              # Walrus, Seal, zkLogin, Nautilus, RtdNS, Enoki
 │   ├── snippets/               # Reusable content referenced by <ImportContent>
 │   └── sidebars.js             # Navigation structure / page hierarchy
 ├── site/                       # Docusaurus site
@@ -44,7 +44,7 @@ Pages also have a `goal:` block that defines what the page should achieve for th
 goal:
   description: Reader can build, publish, and call a Move package
   requires:
-    - pattern: 'sui move build'
+    - pattern: 'rtd move build'
       min: 1
       label: Shows build command
     - pattern: '```move'
@@ -89,13 +89,13 @@ Pages have `questions:` and `answer:` fields for Generative Engine Optimization 
 
 ```yaml
 questions:
-  - How do I install the Sui CLI?
+  - How do I install the Rtd CLI?
   - What is suiup?
-  - How do I verify my Sui installation?
+  - How do I verify my Rtd installation?
 answer: >-
-  Run `curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh`
-  to install suiup, then `suiup install sui@testnet` for the Testnet toolchain.
-  Verify with `sui --version`.
+  Run `curl -sSfL https://raw.githubusercontent.com/LinkUVerse/suiup/main/install.sh | sh`
+  to install suiup, then `suiup install rtd@testnet` for the Testnet toolchain.
+  Verify with `rtd --version`.
 ```
 
 - **`questions`**: 2-5 questions this page answers. AI engines match user queries against these.
@@ -157,7 +157,7 @@ This detects each page's archetype (onboarding, example, guide, reference, opera
 
 ### Frontmatter schema
 
-The full frontmatter contract is defined as a JSON Schema at [`docs/site/frontmatter.schema.json`](site/frontmatter.schema.json). It is the canonical, machine-readable source of truth for every field above (`title`, `description`, `keywords`, `goal`, `questions`, `answer`, `builder_paths`, and the optional metadata fields). Downstream tooling — the [evals harness](https://github.com/jessiemongeon1/sui-docs-automation) and the evals dashboard — relies on this shape.
+The full frontmatter contract is defined as a JSON Schema at [`docs/site/frontmatter.schema.json`](site/frontmatter.schema.json). It is the canonical, machine-readable source of truth for every field above (`title`, `description`, `keywords`, `goal`, `questions`, `answer`, `builder_paths`, and the optional metadata fields). Downstream tooling — the [evals harness](https://github.com/jessiemongeon1/rtd-docs-automation) and the evals dashboard — relies on this shape.
 
 Validate pages locally before pushing:
 
@@ -167,7 +167,7 @@ pnpm docs:validate-frontmatter          # all pages
 node scripts/validate-frontmatter.mjs ../content/getting-started/tooling.mdx   # specific pages
 ```
 
-The validator checks changed pages against the schema and exits non-zero on: wrong types, invalid `builder_paths[].eval` values (must be `covered`/`partial`/`missing`), goal checks missing a `label` or not matching exactly one check type, and missing required fields. Snippets and the generated `sui-graphql` reference are excluded. Unknown top-level frontmatter keys are permitted (to allow Docusaurus-native fields); the nested `goal` and `builder_paths` objects are validated strictly.
+The validator checks changed pages against the schema and exits non-zero on: wrong types, invalid `builder_paths[].eval` values (must be `covered`/`partial`/`missing`), goal checks missing a `label` or not matching exactly one check type, and missing required fields. Snippets and the generated `rtd-graphql` reference are excluded. Unknown top-level frontmatter keys are permitted (to allow Docusaurus-native fields); the nested `goal` and `builder_paths` objects are validated strictly.
 
 ### CI
 
@@ -210,8 +210,8 @@ Starts a dev server at `localhost:3000` with hot reload. Run `pnpm build` before
 
 Do not edit these sections directly:
 
-- **Framework reference** (`/references/framework`) -- generated from `cargo-doc` Markdown in `/sui/crates`.
-- **GraphQL reference** (`/references/sui-api/sui-graphql`) -- generated from the GraphQL schema.
+- **Framework reference** (`/references/framework`) -- generated from `cargo-doc` Markdown in `/rtd/crates`.
+- **GraphQL reference** (`/references/rtd-api/rtd-graphql`) -- generated from the GraphQL schema.
 - **OpenRPC and gRPC specs** -- downloaded during build.
 
 ## Scripts
@@ -232,8 +232,8 @@ Key scripts in `docs/site/scripts/`:
 
 ## For AI agents and LLMs
 
-- **`llms.txt`**: Generated at `https://docs.sui.io/llms.txt`. Use as entry point for documentation structure.
-- **Style guide skill**: Machine-readable style rules at `docs/sui-documentation-style-guide.skill`.
+- **`llms.txt`**: Generated at `https://docs.rtd.io/llms.txt`. Use as entry point for documentation structure.
+- **Style guide skill**: Machine-readable style rules at `docs/rtd-documentation-style-guide.skill`.
 - **`sidebars.js`**: Full navigation tree at `docs/content/sidebars.js`.
 - **`mdx-components.mdx`**: Custom component reference at `docs/content/references/contribute/mdx-components.mdx`.
 
@@ -245,7 +245,7 @@ To preview before your changes are ready for review, [mark your PR as a draft](h
 
 ## Style guide
 
-All contributions must follow the [Sui Documentation Style Guide](https://docs.sui.io/references/contribute/style-guide):
+All contributions must follow the [Rtd Documentation Style Guide](https://docs.rtd.io/references/contribute/style-guide):
 
 - US English, active voice, present tense, second person ("you")
 - No Latin abbreviations (use "for example" not "e.g.")
@@ -254,12 +254,12 @@ All contributions must follow the [Sui Documentation Style Guide](https://docs.s
 
 ## Contributing
 
-- [Contribution process](https://docs.sui.io/references/contribute/contribution-process)
-- [Repo contributing guidelines](https://docs.sui.io/references/contribute/contribute-to-sui-repos)
-- [Style guide](https://docs.sui.io/references/contribute/style-guide)
-- [MDX components](https://docs.sui.io/references/contribute/mdx-components)
-- [Code of conduct](https://docs.sui.io/references/contribute/code-of-conduct)
+- [Contribution process](https://docs.rtd.io/references/contribute/contribution-process)
+- [Repo contributing guidelines](https://docs.rtd.io/references/contribute/contribute-to-rtd-repos)
+- [Style guide](https://docs.rtd.io/references/contribute/style-guide)
+- [MDX components](https://docs.rtd.io/references/contribute/mdx-components)
+- [Code of conduct](https://docs.rtd.io/references/contribute/code-of-conduct)
 
 ## License
 
-The Sui documentation is distributed under the [CC BY 4.0 license](../LICENSE-docs).
+The Rtd documentation is distributed under the [CC BY 4.0 license](../LICENSE-docs).

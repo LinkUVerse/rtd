@@ -1,0 +1,69 @@
+[package]
+name = "rtd-move"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+colored.workspace = true
+indoc.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tracing.workspace = true
+prometheus.workspace = true
+bin-version.workspace = true
+serde.workspace = true
+toml.workspace = true
+which.workspace = true
+
+move-binary-format.workspace = true
+move-cli.workspace = true
+move-compiler.workspace = true
+move-disassembler.workspace = true
+move-ir-types.workspace = true
+move-package-alt.workspace = true
+move-package-alt-compilation.workspace = true
+move-bytecode-source-map.workspace = true
+move-unit-test.workspace = true
+move-vm-config.workspace = true
+telemetry-subscribers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+move-vm-runtime = { path = "../../external-crates/move/crates/move-vm-runtime", features = ["tiered-gas"] }
+rtd-move-natives = { path = "../../rtd-execution/latest/rtd-move-natives", package = "rtd-move-natives-latest" }
+rtd-adapter = { path = "../../rtd-execution/latest/rtd-adapter", package = "rtd-adapter-latest" }
+
+rtd-config.workspace = true
+rtd-move-build.workspace = true
+rtd-protocol-config.workspace = true
+rtd-sdk.workspace = true
+rtd-types.workspace = true
+rtd-package-alt.workspace = true
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemalloc-ctl.workspace = true
+
+[dev-dependencies]
+jsonrpsee.workspace = true
+rand.workspace = true
+tempfile.workspace = true
+walkdir.workspace = true
+insta.workspace = true
+
+move-package-alt.workspace = true
+
+linku-metrics.workspace = true
+rtd-macros.workspace = true
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["tikv-jemalloc-ctl"]
+
+[lints]
+workspace = true
+
+[features]
+tracing = []

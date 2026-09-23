@@ -1,7 +1,7 @@
 ---
 title: What are Move Packages?
 description: >-
-  Sui uses Move through three constructs. They are packages, modules, and
+  Rtd uses Move through three constructs. They are packages, modules, and
   objects.
 keywords:
   - move packages
@@ -11,7 +11,7 @@ keywords:
   - package overview
 goal:
   description: >-
-    Reader understands sui uses Move through three constructs. They are
+    Reader understands rtd uses Move through three constructs. They are
     packages, modules, and objects
   requires:
     - has_frontmatter:
@@ -29,20 +29,20 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Move Packages in Sui?
+  - What is Move Packages in Rtd?
   - How do I upgrade packages?
-  - How does move packages work on Sui?
+  - How does move packages work on Rtd?
 answer: >-
-  Move is the smart contract language Sui uses to define onchain logic. Move is
+  Move is the smart contract language Rtd uses to define onchain logic. Move is
   platform-agnostic, enabling shared libraries, tooling, and developer
   communities across blockchains with different data and execution models.
 ---
 
-Move is the smart contract language Sui uses to define onchain logic. Move is platform-agnostic, enabling shared libraries, tooling, and developer communities across blockchains with different data and execution models.
+Move is the smart contract language Rtd uses to define onchain logic. Move is platform-agnostic, enabling shared libraries, tooling, and developer communities across blockchains with different data and execution models.
 
-Sui uses Move through three constructs: packages, modules, and objects.
+Rtd uses Move through three constructs: packages, modules, and objects.
 
-A Move package is a set of Move bytecode published to the Sui network. Packages are immutable. You can upgrade a package, but upgrading creates a new onchain version while leaving all prior versions intact. Once published, other packages can import and use a package's modules, and anyone can inspect its contents or trace its logic using a Sui Explorer.
+A Move package is a set of Move bytecode published to the Rtd network. Packages are immutable. You can upgrade a package, but upgrading creates a new onchain version while leaving all prior versions intact. Once published, other packages can import and use a package's modules, and anyone can inspect its contents or trace its logic using a Rtd Explorer.
 
 A Move module defines a package's interaction with onchain objects. Each module name is unique within its package.
 
@@ -56,7 +56,7 @@ If developers could modify onchain packages after publication, downstream behavi
 
 ### Making packages immutable
 
-You can call the Move function `sui::package::make_immutable` to destroy a package's `UpgradeCap` and make the package permanently immutable. This eliminates single-key risk but also prevents all future bug fixes and feature additions.
+You can call the Move function `rtd::package::make_immutable` to destroy a package's `UpgradeCap` and make the package permanently immutable. This eliminates single-key risk but also prevents all future bug fixes and feature additions.
 
 For a more flexible approach, use [custom upgrade policies](/develop/publish-upgrade-packages/custom-policies) to protect `UpgradeCap` access without giving up the ability to upgrade.
 
@@ -66,9 +66,9 @@ Although you cannot edit a published package directly, you can **upgrade** it. U
 
 See [Upgrading packages](/develop/publish-upgrade-packages/upgrade) for details on the process.
 
-## Using the Sui Client CLI
+## Using the Rtd Client CLI
 
-The [Sui Client CLI](/references/cli/client) provides an approachable way to publish and upgrade packages. See [the package management
+The [Rtd Client CLI](/references/cli/client) provides an approachable way to publish and upgrade packages. See [the package management
 guide](/develop/manage-packages/move-package-management) for information on creating and working with Move packages.
 
 If the CLI's active address owns the `UpgradeCap` for a package, you can use the `upgrade` command to perform an upgrade. This workflow is convenient when you're starting development or iterating quickly. However, protecting package upgrades with a single private key poses security risks:

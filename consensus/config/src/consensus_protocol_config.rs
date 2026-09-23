@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Identifies the chain of the network.
-/// Mirrors `sui_protocol_config::Chain`.
+/// Mirrors `rtd_protocol_config::Chain`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ChainType {
     #[default]
@@ -12,7 +12,7 @@ pub enum ChainType {
 }
 
 /// Protocol configuration values that consensus reads. This is a standalone
-/// struct so that `consensus-core` does not depend on `sui-protocol-config`
+/// struct so that `consensus-core` does not depend on `rtd-protocol-config`
 /// (and transitively on the Move VM).
 #[derive(Clone, Debug)]
 pub struct ConsensusProtocolConfig {

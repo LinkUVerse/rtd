@@ -45,7 +45,7 @@ runs:
           - 'consensus/**'
           - 'crates/**'
           - 'external-crates/**'
-          - 'sui-execution/**'
+          - 'rtd-execution/**'
           - '.github/workflows/cargo-llvm-cov.yml'
           - '.github/workflows/rust.yml'
           - '.github/workflows/external.yml'
@@ -63,13 +63,13 @@ runs:
           - 'doc/**'
           - '*.md'  
         isMove:
-          - 'crates/sui-framework/**'
-          - 'crates/sui-framework-build/**'
-          - 'crates/sui-framework-tests/**'
-          - 'crates/sui_move/**'
+          - 'crates/rtd-framework/**'
+          - 'crates/rtd-framework-build/**'
+          - 'crates/rtd-framework-tests/**'
+          - 'crates/rtd_move/**'
           - 'Cargo.toml'
           - 'examples/**'
-          - 'sui_programmability/**'
+          - 'rtd_programmability/**'
         isSolidity:
           - 'bridge/evm/**'
         isReleaseNotesEligible:
@@ -81,7 +81,7 @@ runs:
           - 'external-crates/**'
           - 'kiosk/**'
           - 'nre/**'
-          - 'sui-execution/**'
+          - 'rtd-execution/**'
         isMoveAutoFormatter:
           - 'external-crates/move/crates/move-analyzer/prettier-plugin/**'
         isMoveAnalyzerTraceAdapter:
@@ -120,7 +120,7 @@ runs:
       # doc snapshot tests, so markdown changes here must still run CI. 
       for file in "${changed_files[@]}"; do
         case "$file" in
-          crates/sui-framework/* | external-crates/move/documentation/* | external-crates/move/crates/move-stdlib/*)
+          crates/rtd-framework/* | external-crates/move/documentation/* | external-crates/move/crates/move-stdlib/*)
             is_non_framework_markdown_only=false
             break
             ;;

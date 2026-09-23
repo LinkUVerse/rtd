@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const fs = require('fs');
@@ -27,7 +27,7 @@ function resolveSnippet(source) {
     }
   }
 
-  // Try subdirectories (e.g., "console-output/sui-client-help")
+  // Try subdirectories (e.g., "console-output/rtd-client-help")
   const subPath = path.join(snippetsDir, source);
   const subCandidates = [subPath + '.mdx', subPath + '.md'];
   for (const candidate of subCandidates) {

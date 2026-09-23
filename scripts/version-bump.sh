@@ -1,8 +1,8 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Unified Sui version bump script.
+# Unified Rtd version bump script.
 # Updates Cargo.toml, openrpc.json, and snap.json, then runs cargo check.
 #
 # This script handles file changes ONLY — git operations (commit, push, PR)
@@ -28,7 +28,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Bump the Sui workspace version across all required files.
+Bump the Rtd workspace version across all required files.
 
 Options:
   --type patch|minor   Bump direction (default: patch)
@@ -38,8 +38,8 @@ Options:
 
 Files updated:
   - Cargo.toml (workspace version)
-  - crates/sui-open-rpc/spec/openrpc.json (API spec version)
-  - crates/sui-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json (snapshot)
+  - crates/rtd-open-rpc/spec/openrpc.json (API spec version)
+  - crates/rtd-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json (snapshot)
   - Cargo.lock (regenerated via cargo check)
 
 This script does NOT commit, push, or create PRs — the caller handles delivery.
@@ -82,7 +82,7 @@ fi
 # ── Extract current version ──────────────────────────────────────────
 if [[ ! -f "Cargo.toml" ]]; then
   echo -e "${RED}Error: Cargo.toml not found in current directory.${NC}" >&2
-  echo "Run this script from the root of the sui repository." >&2
+  echo "Run this script from the root of the rtd repository." >&2
   exit 1
 fi
 
@@ -115,7 +115,7 @@ if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
 fi
 
 # ── Confirmation ─────────────────────────────────────────────────────
-echo -e "${GREEN}=== Sui Version Bump ===${NC}"
+echo -e "${GREEN}=== Rtd Version Bump ===${NC}"
 echo ""
 echo "Current version: $CURRENT_VERSION"
 echo -e "New version:     ${GREEN}$NEW_VERSION${NC} ($BUMP_TYPE bump)"
@@ -138,7 +138,7 @@ sed -i -E "s/^(version = \")[0-9]+\.[0-9]+\.[0-9]+(\"$)/\1${NEW_VERSION}\2/" Car
 echo -e "${GREEN}✓ Cargo.toml updated${NC}"
 
 # ── Update openrpc.json ──────────────────────────────────────────────
-OPENRPC_FILE="crates/sui-open-rpc/spec/openrpc.json"
+OPENRPC_FILE="crates/rtd-open-rpc/spec/openrpc.json"
 if [[ -f "$OPENRPC_FILE" ]]; then
   echo -e "${YELLOW}Updating openrpc.json...${NC}"
   sed -i -E "s/(\"version\": \")([0-9]+\.[0-9]+\.[0-9]+)(\")/\1${NEW_VERSION}\3/" "$OPENRPC_FILE"
@@ -148,7 +148,7 @@ else
 fi
 
 # ── Update snap.json ─────────────────────────────────────────────────
-SNAP_FILE="crates/sui-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json"
+SNAP_FILE="crates/rtd-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json"
 if [[ -f "$SNAP_FILE" ]]; then
   echo -e "${YELLOW}Updating snap.json...${NC}"
   sed -i -E "s/(\"version\": \")([0-9]+\.[0-9]+\.[0-9]+)(\")/\1${NEW_VERSION}\3/" "$SNAP_FILE"

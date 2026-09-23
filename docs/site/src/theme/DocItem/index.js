@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -12,7 +12,7 @@ export default function DocItemWrapper(props) {
   const metadata = doc.metadata ?? {};
 
   const { pathname } = useLocation();
-  const isGraphQlBeta = pathname?.includes("/sui-graphql/alpha/reference");
+  const isGraphQlBeta = pathname?.includes("/rtd-graphql/alpha/reference");
   const title = frontMatter?.title || metadata?.title || "GraphQL";
 
   return (

@@ -41,8 +41,8 @@ builder_paths:
     step: PTB inputs and results
     stage: Agent Write
 questions:
-  - What is Inputs and Results in Sui?
-  - How does inputs and results work on Sui?
+  - What is Inputs and Results in Rtd?
+  - How does inputs and results work on Rtd?
   - Why should I use inputs and results?
 answer: >-
   Programmable transaction blocks accept two types of inputs (objects and pure
@@ -65,15 +65,15 @@ For object inputs, the metadata needed differs depending on the type of [ownersh
 
 - If an object is shared, then use `ObjectArg::SharedObject { id: ObjectID, initial_shared_version: SequenceNumber, mutable: bool }`. Unlike `ImmOrOwnedObject`, a shared object's version and digest are determined by the network's consensus protocol. The `initial_shared_version` is the version of the object when it was first shared, which is used by consensus when it has not yet seen a transaction with that object. While all shared objects can be mutated, the `mutable` flag indicates whether the object is to be used mutably in this transaction. In the case where the `mutable` flag is set to `false`, the object is read-only and the system can schedule other read-only transactions in parallel.
 
-- If the object is owned by another object, as in it was sent to an object's ID through the `TransferObjects` command or the `sui::transfer::transfer` function, then use `ObjectArg::Receiving(ObjectID, SequenceNumber, ObjectDigest)`. The object data is the same as for the `ImmOrOwnedObject` case.
+- If the object is owned by another object, as in it was sent to an object's ID through the `TransferObjects` command or the `rtd::transfer::transfer` function, then use `ObjectArg::Receiving(ObjectID, SequenceNumber, ObjectDigest)`. The object data is the same as for the `ImmOrOwnedObject` case.
 
-For pure inputs, the only data provided is the [BCS](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/std/bcs.md) bytes, which are deserialized to construct Move values. Not all Move values can be constructed from BCS bytes. The following types are allowed to be used with pure values:
+For pure inputs, the only data provided is the [BCS](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/std/bcs.md) bytes, which are deserialized to construct Move values. Not all Move values can be constructed from BCS bytes. The following types are allowed to be used with pure values:
 
 - All primitive types: `u8`, `u16`, `u32`, `u64`, `u128`, `u256`, `bool`, `address`.
 
 - A string, either an ASCII string `std::ascii::String` or UTF8 string `std::string::String`. In either case, the bytes are verified to be a valid string with the respective encoding.
 
-- An object ID `sui::object::ID`.
+- An object ID `rtd::object::ID`.
 
 - A vector, `vector<T>`.
 
@@ -89,11 +89,11 @@ Each transaction command produces an array of values. The array can be empty. Th
 
 - `MoveCall`: The number of results and their types are determined by the Move function being called. Move calls cannot return references (`&T` or `&mut T`); this restriction will be lifted in the future.
 
-- `SplitCoins`: Produces one or more coins from a single coin. The type of each coin is `sui::coin::Coin<T>` where the specific coin type `T` matches the coin being split.
+- `SplitCoins`: Produces one or more coins from a single coin. The type of each coin is `rtd::coin::Coin<T>` where the specific coin type `T` matches the coin being split.
 
-- `Publish`: Returns a single `sui::package::UpgradeCap`. Module bytes and dependency IDs are embedded in the command structure; they are not `Argument` values. After the package is staged, `init` functions run for each module in order.
+- `Publish`: Returns a single `rtd::package::UpgradeCap`. Module bytes and dependency IDs are embedded in the command structure; they are not `Argument` values. After the package is staged, `init` functions run for each module in order.
 
-- `Upgrade`: Takes exactly one `Argument`: a `sui::package::UpgradeTicket` (by value). Returns a single `sui::package::UpgradeReceipt`. Module bytes and dependency IDs are embedded in the command, not supplied as `Argument` values. Does not call `init` functions.
+- `Upgrade`: Takes exactly one `Argument`: a `rtd::package::UpgradeTicket` (by value). Returns a single `rtd::package::UpgradeReceipt`. Module bytes and dependency IDs are embedded in the command, not supplied as `Argument` values. Does not call `init` functions.
 
 - `TransferObjects` and `MergeCoins` produce an empty result vector.
 

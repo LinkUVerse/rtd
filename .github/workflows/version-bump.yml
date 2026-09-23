@@ -1,5 +1,5 @@
-name: Sui Version Bump
-run-name: "Sui Version Bump (${{ inputs.type }})"
+name: Rtd Version Bump
+run-name: "Rtd Version Bump (${{ inputs.type }})"
 
 on:
   workflow_call:
@@ -113,15 +113,15 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           STAMP="$(date +%Y%m%d%H%M%S)"
-          BRANCH="${GITHUB_ACTOR}/sui-v${NEW_VERSION}-version-bump-${STAMP}"
+          BRANCH="${GITHUB_ACTOR}/rtd-v${NEW_VERSION}-version-bump-${STAMP}"
 
           git checkout -b "$BRANCH"
           git add \
             Cargo.toml \
             Cargo.lock \
-            crates/sui-open-rpc/spec/openrpc.json \
-            crates/sui-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json
-          BODY="Sui v${NEW_VERSION} Version Bump"
+            crates/rtd-open-rpc/spec/openrpc.json \
+            crates/rtd-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json
+          BODY="Rtd v${NEW_VERSION} Version Bump"
           git commit -m "$BODY"
           # Push using the app token URL so the push is attributed to the GitHub App,
           # not github-actions[bot]. Pushes with GITHUB_TOKEN don't trigger CI workflows.
@@ -133,7 +133,7 @@ jobs:
             --base "$REF_NAME" \
             --head "$BRANCH" \
             --title "$BODY" \
-            --reviewer "ebmifa,pei-mysten,tharbert" \
+            --reviewer "ebmifa,pei-linku,tharbert" \
             --body "$BODY"
 
           if [[ "$AUTO_MERGE" == "true" ]]; then
@@ -146,12 +146,12 @@ jobs:
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          BODY="Sui v${NEW_VERSION} Version Bump"
+          BODY="Rtd v${NEW_VERSION} Version Bump"
 
           git add \
             Cargo.toml \
             Cargo.lock \
-            crates/sui-open-rpc/spec/openrpc.json \
-            crates/sui-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json
+            crates/rtd-open-rpc/spec/openrpc.json \
+            crates/rtd-open-rpc/tests/snapshots/generate_spec__openrpc.snap.json
           git commit -m "$BODY"
           git push origin HEAD:"$REF_NAME"

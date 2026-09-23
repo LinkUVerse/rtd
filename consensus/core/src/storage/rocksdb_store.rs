@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -10,8 +10,8 @@ use std::{
 use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockDigest, BlockRef, Round, TransactionIndex};
-use mysten_common::ZipDebugEqIteratorExt;
-use sui_macros::fail_point;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_macros::fail_point;
 #[cfg(not(tidehunter))]
 use typed_store::rocks::{DBMapTableConfigMap, default_db_options};
 use typed_store::{
@@ -151,6 +151,38 @@ impl RocksDBStore {
                 .with_th_batch_compression(),
             configs.into_iter().collect(),
         )
+    }
+
+    /// Read the persisted consensus head before starting Core, without replaying commits.
+    pub fn read_last_commit_index_for_recovery(path: &str) -> ConsensusResult<CommitIndex> {
+        let has_entries = match std::fs::read_dir(path) {
+            Ok(mut entries) => entries.next().is_some(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => panic!("cannot inspect consensus DB path {path}: {error}"),
+        };
+        if !has_entries {
+            return Ok(0);
+        }
+
+        #[cfg(not(tidehunter))]
+        let store = Self::get_read_only_handle(
+            path.into(),
+            None,
+            None,
+            MetricConf::new("consensus_head_readonly"),
+        );
+        #[cfg(tidehunter)]
+        let store = Self::new(path);
+
+        let Some(result) = store
+            .commits
+            .reversed_safe_iter_with_bounds(None, None)?
+            .next()
+        else {
+            return Ok(0);
+        };
+        let ((commit_index, _digest), _serialized) = result?;
+        Ok(commit_index)
     }
 }
 

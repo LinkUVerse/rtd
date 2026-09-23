@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import * as React from "react";
 import { useThemeConfig, ErrorCauseBoundary } from "@docusaurus/theme-common";
@@ -119,7 +119,7 @@ function KapaButton() {
       className="kapa-trigger-btn flex items-center gap-2.5 cursor-pointer bg-white text-gray-900 font-semibold text-base px-5 py-2.5 rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
     >
       <img src="/img/logo.svg" alt="" width="23" height="23" />
-      <span className="hidden min-[1400px]:inline">Ask Sui AI</span>
+      <span className="hidden min-[1400px]:inline">Ask Rtd AI</span>
     </button>
   );
 }

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState, useEffect } from "react";
@@ -10,13 +10,13 @@ export default function ProtocolConfig(props) {
   const data = {
     jsonrpc: "2.0",
     id: 1,
-    method: "sui_getProtocolConfig",
+    method: "rtd_getProtocolConfig",
     params: [],
   };
   const urls = [
-    "https://fullnode.mainnet.sui.io:443",
-    "https://fullnode.testnet.sui.io:443",
-    "https://fullnode.devnet.sui.io:443",
+    "https://fullnode.mainnet.rtd.io:443",
+    "https://fullnode.testnet.rtd.io:443",
+    "https://fullnode.devnet.rtd.io:443",
   ];
   const [results, setResults] = useState({
     mainnet: null,
@@ -107,7 +107,7 @@ export default function ProtocolConfig(props) {
   }
 
   return (
-    <Tabs groupId="sui-network">
+    <Tabs groupId="rtd-network">
       <TabItem value="mainnet" label="Mainnet">
         <DisplayResults results={results.mainnet} />
       </TabItem>

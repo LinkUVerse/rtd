@@ -431,7 +431,7 @@ impl<'extensions> MoveVM<'extensions> {
     pub(crate) fn find_function(
         &self,
         // This is expected to be the translated version of the module ID, already translated by
-        // the link context to the original ID. See `sui-adapter/src/static_programmable_transactions/env.rs`
+        // the link context to the original ID. See `rtd-adapter/src/static_programmable_transactions/env.rs`
         original_id: &ModuleId,
         function_name: &IdentStr,
         ty_args: &[Type],

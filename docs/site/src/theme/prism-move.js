@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /**
@@ -308,7 +308,7 @@
     },
 
     /** Just some, non-object, most commonly used */
-    "sui-native-types": {
+    "rtd-native-types": {
       pattern: /\b(Option|String|UID|ID|VecSet|VecMap)\b/,
       alias: "symbol",
     },

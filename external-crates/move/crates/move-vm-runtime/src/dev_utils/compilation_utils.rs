@@ -86,7 +86,7 @@ pub fn compile_packages_in_file(filename: &str, dependencies: &[&str]) -> Vec<St
     .set_default_config(PackageConfig {
         is_dependency: false,
         warning_filter: unused_for_test_filter_scope(),
-        flavor: Flavor::Sui,
+        flavor: Flavor::Rtd,
         edition: Edition::E2024_ALPHA,
     })
     .build_and_report()

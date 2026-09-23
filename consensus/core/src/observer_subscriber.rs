@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -8,7 +8,7 @@ use std::{
 
 use consensus_types::block::Round;
 use futures::StreamExt;
-use mysten_metrics::{monitored_scope, spawn_monitored_task};
+use linku_metrics::{monitored_scope, spawn_monitored_task};
 use parking_lot::Mutex;
 use tokio::{
     sync::oneshot,
@@ -239,7 +239,7 @@ impl<C: ObserverNetworkClient, S: ObserverNetworkService> ObserverSubscriber<C, 
     ) {
         const IMMEDIATE_RETRIES: i64 = 3;
         const MIN_TIMEOUT: Duration = Duration::from_millis(500);
-        let mut backoff = mysten_common::backoff::ExponentialBackoff::new(
+        let mut backoff = linku_common::backoff::ExponentialBackoff::new(
             Duration::from_millis(100),
             Duration::from_secs(10),
         );

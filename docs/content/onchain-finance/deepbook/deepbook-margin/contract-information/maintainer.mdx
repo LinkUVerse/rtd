@@ -28,8 +28,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Maintainer in Sui?
-  - How does maintainer work on Sui?
+  - What is Maintainer in Rtd?
+  - How does maintainer work on Rtd?
   - How do I configure maintainer?
 answer: >-
   The maintainer module provides functions for managing margin pools,
@@ -51,7 +51,7 @@ Creates and registers a new margin pool for a specific asset. Only one margin po
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="create_margin_pool"
 	noComments
@@ -67,7 +67,7 @@ Control which DeepBook pools can borrow from this margin pool. Only margin manag
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="enable_deepbook_pool_for_loan,disable_deepbook_pool_for_loan"
 />
@@ -82,7 +82,7 @@ Update interest rate parameters and margin pool configuration settings.
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="update_interest_params,update_margin_pool_config"
 />
@@ -97,7 +97,7 @@ Withdraw accumulated maintainer and protocol fees from the margin pool.
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="withdraw_maintainer_fees,withdraw_protocol_fees,admin_withdraw_default_referral_fees"
 />
@@ -114,7 +114,7 @@ The system emits this event when you update a maintainer capability.
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="MaintainerCapUpdated"
 />
@@ -129,7 +129,7 @@ The system emits this event when you update a pause capability.
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="PauseCapUpdated"
 />
@@ -144,7 +144,7 @@ The system emits this event when you register a DeepBook pool in the margin regi
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="DeepbookPoolRegistered"
 />
@@ -159,7 +159,7 @@ The system emits this event when you update a DeepBook pool's enabled status in 
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="DeepbookPoolUpdated"
 />
@@ -174,7 +174,7 @@ The system emits this event when you update a DeepBook pool's configuration in t
 <ImportContent
 	source="packages/deepbook_margin/sources/margin_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	struct="DeepbookPoolConfigUpdated"
 />

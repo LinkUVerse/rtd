@@ -43,19 +43,19 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Closed-Loop Token in Sui?
+  - What is Closed-Loop Token in Rtd?
   - What topics does Closed-Loop Token cover?
-  - How does closed-loop token work on Sui?
+  - How does closed-loop token work on Rtd?
 answer: >-
   Closed-Loop tokens can only be used for a specific service or by authorized
   users.
 ---
 
-Using the Closed-Loop Token standard, you can limit the applications that can use the token and set up custom policies for transfers, spends, and conversions. The [`sui::token` module](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/token.md) in the Sui framework defines the standard.
+Using the Closed-Loop Token standard, you can limit the applications that can use the token and set up custom policies for transfers, spends, and conversions. The [`rtd::token` module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/token.md) in the Rtd framework defines the standard.
 
 ## Background and use cases
 
-The [Currency Standard](/onchain-finance/fungible-tokens/currency) on Sui is an example of an open-loop system. Coins are free-flowing, [wrappable](/develop/objects/object-ownership/wrapped), [freely transferable](/develop/objects/transfers/custom-rules), and you can store them in any application.
+The [Currency Standard](/onchain-finance/fungible-tokens/currency) on Rtd is an example of an open-loop system. Coins are free-flowing, [wrappable](/develop/objects/object-ownership/wrapped), [freely transferable](/develop/objects/transfers/custom-rules), and you can store them in any application.
 
 Some applications, however, require constraining the scope of the token to a specific purpose. For example, some applications might need a token that you can only use for a specific service, or that only an authorized account can use, or a token that you can block certain accounts from using. A real-world analogy would be a bank account that is regulated, bank-controlled, and compliant with certain rules and policies.
 
@@ -66,10 +66,10 @@ Some applications, however, require constraining the scope of the token to a spe
 Unlike Coin, which has `key + store` abilities and thus supports wrapping and public transfers, Token has only the `key` ability and cannot be wrapped, stored as a dynamic field, or freely transferred (unless there's a custom policy for that). Due to this restriction, Token **can only be owned by an account** and can't be stored in an application (however, [it can be spent](/onchain-finance/closed-loop-token/spending).
 
 ```move
-// defined in `sui::coin`
+// defined in `rtd::coin`
 public struct Coin<phantom T> has key, store { id: UID, balance: Balance<T> }
 
-// defined in `sui::token`
+// defined in `rtd::token`
 public struct Token<phantom T> has key { id: UID, balance: Balance<T> }
 ```
 

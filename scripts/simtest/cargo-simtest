@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 die() {
@@ -52,14 +52,14 @@ msim_rustflags='--cfg msim'
 if [[ -n "$LOCAL_MSIM_PATH" ]]; then
   cargo_patch_args=(
     --config "patch.crates-io.tokio.path = \"$LOCAL_MSIM_PATH/msim-tokio\""
-    --config "patch.'https://github.com/MystenLabs/mysten-sim'.msim.path = \"$LOCAL_MSIM_PATH/msim\""
+    --config "patch.'https://github.com/LinkUVerse/linku-sim'.msim.path = \"$LOCAL_MSIM_PATH/msim\""
     --config "patch.crates-io.futures-timer.path = \"$LOCAL_MSIM_PATH/mocked-crates/futures-timer\""
   )
 else
   cargo_patch_args=(
-    --config 'patch.crates-io.tokio.git = "https://github.com/MystenLabs/mysten-sim.git"'
+    --config 'patch.crates-io.tokio.git = "https://github.com/LinkUVerse/linku-sim.git"'
     --config 'patch.crates-io.tokio.rev =  "6b8e1e8cdce408e73d46538773fc85a56c082db7"'
-    --config 'patch.crates-io.futures-timer.git = "https://github.com/MystenLabs/mysten-sim.git"'
+    --config 'patch.crates-io.futures-timer.git = "https://github.com/LinkUVerse/linku-sim.git"'
     --config 'patch.crates-io.futures-timer.rev =  "6b8e1e8cdce408e73d46538773fc85a56c082db7"'
   )
 fi
@@ -71,7 +71,7 @@ if [[ -n "$USE_MOCK_CRYPTO" ]]; then
   echo "Using mocked crypto crates - no cryptographic verification will occur"
   msim_rustflags="$msim_rustflags --cfg use_mock_crypto"
   cargo_patch_args+=(
-    --config 'patch.crates-io.blst.git = "https://github.com/MystenLabs/mock-blst.git"'
+    --config 'patch.crates-io.blst.git = "https://github.com/LinkUVerse/mock-blst.git"'
     --config 'patch.crates-io.blst.rev = "630ca4d55de8e199e62c5b6a695c702d95fe6498"'
   )
 fi

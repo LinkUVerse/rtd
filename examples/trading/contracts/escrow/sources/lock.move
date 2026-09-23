@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// The `lock` module offers an API for wrapping any object that has
@@ -8,8 +8,8 @@
 /// particular, fixed state during escrow.
 module escrow::lock;
 
-use sui::dynamic_object_field as dof;
-use sui::event;
+use rtd::dynamic_object_field as dof;
+use rtd::event;
 
 /// The `name` of the DOF that holds the Locked object.
 /// Allows better discoverability for the locked object.
@@ -92,15 +92,15 @@ public struct LockDestroyed has copy, drop {
 
 // === Tests ===
 #[test_only]
-use sui::coin::{Self, Coin};
+use rtd::coin::{Self, Coin};
 #[test_only]
-use sui::sui::SUI;
+use rtd::rtd::RTD;
 #[test_only]
-use sui::test_scenario::{Self as ts, Scenario};
+use rtd::test_scenario::{Self as ts, Scenario};
 
 #[test_only]
-fun test_coin(ts: &mut Scenario): Coin<SUI> {
-    coin::mint_for_testing<SUI>(42, ts.ctx())
+fun test_coin(ts: &mut Scenario): Coin<RTD> {
+    coin::mint_for_testing<RTD>(42, ts.ctx())
 }
 
 #[test]

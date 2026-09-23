@@ -1,14 +1,15 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::Duration};
 
 use parking_lot::RwLock;
+use tokio::sync::watch;
 use tokio::time::Instant;
 use tracing::info;
 
 use crate::{
-    CommitConsumerArgs, CommittedSubDag,
+    CommitConsumerArgs, CommitConsumerMonitor, CommitIndex, CommittedSubDag,
     block::{BlockAPI, VerifiedBlock},
     commit::{CommitAPI, load_committed_subdag_from_store},
     commit_finalizer::{CommitFinalizer, CommitFinalizerHandle},
@@ -27,12 +28,12 @@ use crate::{
 ///   gets subdags for each leader via the commit interpreter (linearizer)
 /// - The committed subdags are sent as consensus output via an unbounded tokio channel.
 ///
-/// There is no flow control on sending output. Consensus backpressure is applied earlier
-/// at consensus input level, and on commit sync.
+/// There is no flow control on sending output. Live consensus is bounded against the
+/// consumer's crash-safe watermark at proposal, commit, and commit-sync admission.
 ///
 /// Commit is persisted in store before the CommittedSubDag is sent to the commit handler.
-/// When Sui recovers, it blocks until the commits it knows about are recovered. So consensus
-/// must be able to quickly recover the commits it has sent to Sui.
+/// When Rtd recovers, it blocks until the commits it knows about are recovered. So consensus
+/// must be able to quickly recover the commits it has sent to Rtd.
 pub(crate) struct CommitObserver {
     context: Arc<Context>,
     dag_state: Arc<RwLock<DagState>>,
@@ -43,6 +44,7 @@ pub(crate) struct CommitObserver {
     commit_interpreter: Linearizer,
     /// Handle to an unbounded channel to send output commits.
     commit_finalizer_handle: CommitFinalizerHandle,
+    commit_consumer_monitor: Arc<CommitConsumerMonitor>,
 }
 
 impl CommitObserver {
@@ -60,6 +62,7 @@ impl CommitObserver {
             transaction_vote_tracker.clone(),
             commit_consumer.commit_sender.clone(),
         );
+        let commit_consumer_monitor = commit_consumer.monitor();
 
         let mut observer = Self {
             context,
@@ -68,6 +71,7 @@ impl CommitObserver {
             transaction_vote_tracker,
             commit_interpreter,
             commit_finalizer_handle,
+            commit_consumer_monitor,
         };
         observer.recover_and_send_commits(&commit_consumer).await;
 
@@ -156,11 +160,16 @@ impl CommitObserver {
                 "Commit replay should start at the beginning if there is no commit history"
             );
             info!("Nothing to recover for commit observer - starting new epoch");
+            self.commit_consumer_monitor.start_recovery(0);
+            self.commit_consumer_monitor.finish_recovery_scan();
             return;
         };
 
         let last_commit_index = last_commit.index();
+        self.commit_consumer_monitor
+            .start_recovery(last_commit_index);
         if last_commit_index == replay_after_commit_index {
+            self.commit_consumer_monitor.finish_recovery_scan();
             info!(
                 "Nothing to recover for commit observer - replay is requested immediately after last commit index {last_commit_index}"
             );
@@ -263,6 +272,7 @@ impl CommitObserver {
             "We should have sent all commits up to the last commit {}",
             last_commit_index
         );
+        self.commit_consumer_monitor.finish_recovery_scan();
 
         info!(
             "Commit observer recovery [{}..={}] completed, took {:?}",
@@ -270,6 +280,21 @@ impl CommitObserver {
             last_commit_index,
             now.elapsed()
         );
+    }
+
+    /// Remaining room before newly persisted commits exceed the crash-safe consumer window.
+    pub(crate) fn remaining_durable_commit_capacity(
+        &self,
+        consensus_head: CommitIndex,
+        highest_pending_consensus_head: CommitIndex,
+    ) -> CommitIndex {
+        self.commit_consumer_monitor
+            .remaining_durable_commit_capacity(consensus_head, highest_pending_consensus_head)
+    }
+
+    pub(crate) fn subscribe_highest_durable_commit(&self) -> watch::Receiver<CommitIndex> {
+        self.commit_consumer_monitor
+            .subscribe_highest_durable_commit()
     }
 
     /// Reports per-commit metrics and logs the commit. Called for every commit on the
@@ -326,7 +351,7 @@ impl CommitObserver {
 #[cfg(test)]
 mod tests {
     use consensus_types::block::BlockRef;
-    use mysten_metrics::monitored_mpsc::UnboundedReceiver;
+    use linku_metrics::monitored_mpsc::UnboundedReceiver;
     use parking_lot::RwLock;
     use rstest::rstest;
     use tokio::time::timeout;
@@ -608,6 +633,8 @@ mod tests {
                 replay_after_commit_index,
                 consumer_last_processed_commit_index,
             );
+            let recovery_monitor = commit_consumer.monitor();
+            assert!(!recovery_monitor.is_recovery_complete());
             let _observer = CommitObserver::new(
                 context.clone(),
                 commit_consumer,
@@ -615,6 +642,10 @@ mod tests {
                 transaction_vote_tracker.clone(),
             )
             .await;
+            assert!(
+                !recovery_monitor.is_recovery_complete(),
+                "scanning alone cannot report completion before the handler reaches the persisted head"
+            );
 
             let mut processed_subdag_index = replay_after_commit_index;
             while let Ok(Some(mut subdag)) =
@@ -636,6 +667,9 @@ mod tests {
             }
             assert_eq!(processed_subdag_index, consumer_last_processed_commit_index);
 
+            recovery_monitor.set_highest_handled_commit(consumer_last_processed_commit_index);
+            assert!(recovery_monitor.is_recovery_complete());
+
             verify_channel_empty(&mut commit_receiver).await;
         }
 
@@ -653,6 +687,7 @@ mod tests {
                 replay_after_commit_index,
                 consumer_last_processed_commit_index,
             );
+            let recovery_monitor = commit_consumer.monitor();
             let _observer = CommitObserver::new(
                 context.clone(),
                 commit_consumer,
@@ -660,6 +695,7 @@ mod tests {
                 transaction_vote_tracker.clone(),
             )
             .await;
+            assert!(recovery_monitor.is_recovery_complete());
 
             // No commits should be resubmitted as consensus store's last commit index
             // is equal to replay after index by consumer

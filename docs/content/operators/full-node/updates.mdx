@@ -2,13 +2,13 @@
 title: Updating a Full Node
 sidebar_label: Updating
 description: >-
-  Update your Sui full node to the latest version to remain in sync with the
+  Update your Rtd full node to the latest version to remain in sync with the
   network.
 keywords:
   - update a full node
   - update full node
   - update node
-  - sui release schedule
+  - rtd release schedule
   - release schedule
   - release process
   - how to update node
@@ -16,7 +16,7 @@ keywords:
   - when are updates released
 goal:
   description: >-
-    Node operator understands update your Sui full node to the latest version to
+    Node operator understands update your Rtd full node to the latest version to
     remain in sync with the network
   requires:
     - has_frontmatter:
@@ -31,18 +31,18 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I update a Sui full node to a new version?
-  - When should I update my Sui full node?
+  - How do I update a Rtd full node to a new version?
+  - When should I update my Rtd full node?
   - How do I handle database migrations during a node update?
 answer: >-
-  Each Sui network is deployed on a consistent schedule. Extenuating
+  Each Rtd network is deployed on a consistent schedule. Extenuating
   circumstances might delay releases occasionally, but these delays are rare and
   communicated through [official channels](#communication).
 ---
 
-## Sui release process
+## Rtd release process
 
-Each Sui network is deployed on a consistent schedule. Extenuating circumstances might delay releases occasionally, but these delays are rare and communicated through [official channels](#communication).
+Each Rtd network is deployed on a consistent schedule. Extenuating circumstances might delay releases occasionally, but these delays are rare and communicated through [official channels](#communication).
 
 - `devnet`: Deployed every week on Mondays.
 - `testnet`: Deployed every week on Tuesdays.
@@ -50,18 +50,18 @@ Each Sui network is deployed on a consistent schedule. Extenuating circumstances
 
 :::info
 
-For additional details, see each network's [release schedule and configuration](https://sui.io/networkinfo).
+For additional details, see each network's [release schedule and configuration](https://rtd.io/networkinfo).
 
 :::
 
-Whenever Sui releases a new version, you must update your full node with the release to ensure compatibility with the network it connects to. For example, if you use Sui Testnet you should install the version of Sui running on Sui Testnet.
+Whenever Rtd releases a new version, you must update your full node with the release to ensure compatibility with the network it connects to. For example, if you use Rtd Testnet you should install the version of Rtd running on Rtd Testnet.
 
 Any release that contains a protocol change needs to be applied before the protocol upgrade takes place (when enough stake within the validator set upgrades, the new protocol version is enacted in the next epoch).
 If you do not update your full node, it cannot connect to the network after the protocol upgrade takes place.
 
 ## Communication
 
-Releases are announced on the [Sui Discord server](https://discord.com/invite/sui) and the [node-operators](https://groups.google.com/a/groups.sui.io/g/node-operators) Google group.
+Releases are announced on the [Rtd Discord server](https://discord.com/invite/rtd) and the [node-operators](https://groups.google.com/a/groups.rtd.io/g/node-operators) Google group.
 
 ### Discord channels
 - `devnet`: [`#devnet-updates`](https://discord.com/channels/916379725201563759/1004638487078772736)
@@ -70,7 +70,7 @@ Releases are announced on the [Sui Discord server](https://discord.com/invite/su
 
 ## Update your full node 
 
-You can track the latest version of Sui on the [Sui Releases](https://github.com/MystenLabs/sui/releases) page on GitHub.
-The schedule for each network is available in the [Network Release Schedule](https://sui.io/networkinfo) page.
+You can track the latest version of Rtd on the [Rtd Releases](https://github.com/LinkUVerse/rtd/releases) page on GitHub.
+The schedule for each network is available in the [Network Release Schedule](https://rtd.io/networkinfo) page.
 
-It is reasonable to have to shut down your full node to perform an update, whether that be a rolling restart in Kubernetes, or a systemctl stop on a Linux machine to replace the sui-node binary.
+It is reasonable to have to shut down your full node to perform an update, whether that be a rolling restart in Kubernetes, or a systemctl stop on a Linux machine to replace the rtd-node binary.

@@ -2,7 +2,7 @@
 title: DeepBook Predict
 description: >-
   Prediction market protocol built alongside DeepBook, with per-expiry range
-  positions, oracle-driven pricing, pooled liquidity, deployments on Sui Mainnet
+  positions, oracle-driven pricing, pooled liquidity, deployments on Rtd Mainnet
   and Testnet, and a TypeScript SDK quickstart.
 keywords:
   - deepbook predict
@@ -13,7 +13,7 @@ keywords:
   - oracle
   - plp
   - deepbook
-  - sui
+  - rtd
 last_verified: 2026-09-14
 verified_against: deepbook-predict-mainnet 7b169bde; deepbook-predict-testnet 4d752fb8
 goal:
@@ -37,23 +37,23 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is DeepBook Predict on Sui?
-  - Is DeepBook Predict on Sui Mainnet?
+  - What is DeepBook Predict on Rtd?
+  - Is DeepBook Predict on Rtd Mainnet?
   - Does DeepBook Predict have a TypeScript SDK?
   - How do I mint a DeepBook Predict position on Testnet?
   - How do I create a DeepBook Predict account?
 answer: >-
-  DeepBook Predict is an expiry-based prediction market protocol deployed on Sui
-  Mainnet and Sui Testnet, where every position pays a fixed amount when the
-  settlement price lands inside a chosen strike range. The @mysten/deepbook-v3
+  DeepBook Predict is an expiry-based prediction market protocol deployed on Rtd
+  Mainnet and Rtd Testnet, where every position pays a fixed amount when the
+  settlement price lands inside a chosen strike range. The @linku/deepbook-v3
   package ships a /predict subpath that carries both deployments, creates an
   account, discovers live markets, quotes a position, and mints it under a cost
   cap and a fill price cap.
 ---
 
-DeepBook Predict is an expiry-based prediction market protocol on Sui. Each market covers one underlying and one expiry timestamp, and every position is a range contract: it pays a fixed amount when the settlement price lands inside a chosen strike range, and nothing otherwise. Liquidity providers supply USDC to a shared pool, receive `PLP` shares, and take the other side of every trade.
+DeepBook Predict is an expiry-based prediction market protocol on Rtd. Each market covers one underlying and one expiry timestamp, and every position is a range contract: it pays a fixed amount when the settlement price lands inside a chosen strike range, and nothing otherwise. Liquidity providers supply USDC to a shared pool, receive `PLP` shares, and take the other side of every trade.
 
-Predict runs on Sui Mainnet as `deepbook-predict-mainnet` and on Sui Testnet as `deepbook-predict-testnet`, with identical package sources: the Mainnet publish comes from DeepBookV3 source commit [`7b169bde`](https://github.com/MystenLabs/deepbookv3/tree/7b169bde2c2a25fee3ac9aa4686e346309bfe570/packages/predict), and the Testnet publish from source commit `4d752fb8`. Version 2.5.0 or later of the [`@mysten/deepbook-v3`](https://www.npmjs.com/package/@mysten/deepbook-v3) package ships a `/predict` subpath that carries both deployments, builds every transaction, and answers every read, so trading needs no indexer. The examples on these pages select a network with one constant and default to Testnet.
+Predict runs on Rtd Mainnet as `deepbook-predict-mainnet` and on Rtd Testnet as `deepbook-predict-testnet`, with identical package sources: the Mainnet publish comes from DeepBookV3 source commit [`7b169bde`](https://github.com/LinkUVerse/deepbookv3/tree/7b169bde2c2a25fee3ac9aa4686e346309bfe570/packages/predict), and the Testnet publish from source commit `4d752fb8`. Version 2.5.0 or later of the [`@linku/deepbook-v3`](https://www.npmjs.com/package/@linku/deepbook-v3) package ships a `/predict` subpath that carries both deployments, builds every transaction, and answers every read, so trading needs no indexer. The examples on these pages select a network with one constant and default to Testnet.
 
 :::caution
 
@@ -63,36 +63,36 @@ These pages describe the 2 current deployments, which went live on 2026-09-12. A
 
 ## Quickstart: mint a position
 
-The following 7 steps install the DeepBook TypeScript SDK, prepare a funded Predict account, and quote and mint a position on a live market under a cost cap and a fill price cap. They run on Testnet, where the quote coin is a mintable test coin. The samples live in the `examples/deepbook-predict` package, which type-checks with `npm run build` (`tsc --noEmit`) against `@mysten/deepbook-v3` version 2.5.0 or later and `@mysten/sui` version 2.30.0 or later. They pass compile checks but do not run against Testnet during the documentation build, so work through [Verify on Testnet](#verify-on-testnet) before you rely on them.
+The following 7 steps install the DeepBook TypeScript SDK, prepare a funded Predict account, and quote and mint a position on a live market under a cost cap and a fill price cap. They run on Testnet, where the quote coin is a mintable test coin. The samples live in the `examples/deepbook-predict` package, which type-checks with `npm run build` (`tsc --noEmit`) against `@linku/deepbook-v3` version 2.5.0 or later and `@linku/rtd` version 2.30.0 or later. They pass compile checks but do not run against Testnet during the documentation build, so work through [Verify on Testnet](#verify-on-testnet) before you rely on them.
 
 ### 1. Install the SDK
 
-Install the DeepBook SDK and its Sui peer dependency.
+Install the DeepBook SDK and its Rtd peer dependency.
 
 ```sh npm2yarn
-npm install @mysten/deepbook-v3 @mysten/sui
+npm install @linku/deepbook-v3 @linku/rtd
 ```
 
-The Predict client lives on the `@mysten/deepbook-v3/predict` subpath. You do not need a separate Predict package. [DeepBook Predict SDK](/onchain-finance/deepbook/deepbook-predict-sdk) documents every function it exports.
+The Predict client lives on the `@linku/deepbook-v3/predict` subpath. You do not need a separate Predict package. [DeepBook Predict SDK](/onchain-finance/deepbook/deepbook-predict-sdk) documents every function it exports.
 
 ### 2. Request Testnet tokens
 
 You need 2 assets on Testnet, from 2 separate sources. Neither one substitutes for the other:
 
-- **SUI for gas:** Every transaction on this page pays gas in SUI, including the ones that only move the quote coin. Request SUI from a [Sui Testnet faucet](/getting-started/onboarding/get-coins), which lists the browser, Discord, and cURL routes.
-- **Test USDC as the quote asset:** Predict denominates deposits, premiums, payouts, and pool supplies in its quote coin. On Testnet that is a test coin with the type `0xc028557a1ed49e42ed091e115aedefd70a442b184c18fbec5c48d5b6c0b8c184::usdc::USDC`, which wallets display as DUSDC. Request it through the [DeepBook Predict Testnet token request form](https://tally.so/r/Xx102L). The quote coin never pays gas, so an address that holds it but no SUI cannot submit a Predict transaction.
+- **RTD for gas:** Every transaction on this page pays gas in RTD, including the ones that only move the quote coin. Request RTD from a [Rtd Testnet faucet](/getting-started/onboarding/get-coins), which lists the browser, Discord, and cURL routes.
+- **Test USDC as the quote asset:** Predict denominates deposits, premiums, payouts, and pool supplies in its quote coin. On Testnet that is a test coin with the type `0xc028557a1ed49e42ed091e115aedefd70a442b184c18fbec5c48d5b6c0b8c184::usdc::USDC`, which wallets display as DUSDC. Request it through the [DeepBook Predict Testnet token request form](https://tally.so/r/Xx102L). The quote coin never pays gas, so an address that holds it but no RTD cannot submit a Predict transaction.
 
 On Mainnet the quote asset is Circle's native USDC, and there is no faucet. Read the exact type for either network from `getConfig(network).quoteCoinType` rather than from a symbol: the 2 coins share the `usdc::USDC` module path but live in different packages.
 
-#### How much SUI to hold
+#### How much RTD to hold
 
-Keep at least 1 SUI on the address as a working reserve. That covers many Predict transactions with headroom, because a single faucet request supplies well above the cost of one transaction. The quickstart transactions cost more than a plain transfer: creating and sharing an account writes new objects, so it pays storage on top of computation. Sui refunds part of the storage cost as a rebate when you delete objects, so a session costs less in total than the sum of its gas budgets.
+Keep at least 1 RTD on the address as a working reserve. That covers many Predict transactions with headroom, because a single faucet request supplies well above the cost of one transaction. The quickstart transactions cost more than a plain transfer: creating and sharing an account writes new objects, so it pays storage on top of computation. Rtd refunds part of the storage cost as a rebate when you delete objects, so a session costs less in total than the sum of its gas budgets.
 
-Treat 1 SUI as a starting reserve, not a budget. Before you rely on a fixed gas budget in your own code, measure the real cost of each transaction with a dry run, then set the budget with margin for variable costs such as shared object contention. See [Gas Fees](/develop/transaction-payment/gas-in-sui) for the fee formula and budget rules.
+Treat 1 RTD as a starting reserve, not a budget. Before you rely on a fixed gas budget in your own code, measure the real cost of each transaction with a dry run, then set the budget with margin for variable costs such as shared object contention. See [Gas Fees](/develop/transaction-payment/gas-in-rtd) for the fee formula and budget rules.
 
-#### Request more SUI
+#### Request more RTD
 
-Check your balance with `sui client gas` before you request. Faucets rate-limit per address and per IP, so request only when the balance actually runs low. If the browser faucet rate-limits you, use the Discord or cURL routes under [alternative methods for getting SUI tokens](/getting-started/onboarding/get-coins#alternative-faucets). When you finish testing, return unused Testnet SUI to the faucet pool.
+Check your balance with `rtd client gas` before you request. Faucets rate-limit per address and per IP, so request only when the balance actually runs low. If the browser faucet rate-limits you, use the Discord or cURL routes under [alternative methods for getting RTD tokens](/getting-started/onboarding/get-coins#alternative-faucets). When you finish testing, return unused Testnet RTD to the faucet pool.
 
 ### 3. Set the configuration block
 
@@ -163,11 +163,11 @@ The mint returns an order ID. Read it from the transaction result with `client.p
 
 The samples above pass compile checks, but nothing runs them against Testnet. Confirm them end to end yourself, with `NETWORK` set to `'testnet'`:
 
-1. Fund a Testnet address with SUI, then confirm a nonzero balance with `sui client gas`.
-2. Request test USDC through the token request form, then confirm the balance with `sui client balance`, where it appears as DUSDC.
+1. Fund a Testnet address with RTD, then confirm a nonzero balance with `rtd client gas`.
+2. Request test USDC through the token request form, then confirm the balance with `rtd client balance`, where it appears as DUSDC.
 3. Confirm the configuration block resolves: `getDeployment('testnet').deployment` is `deepbook-predict-testnet` on chain `4c78adac`.
 4. Confirm at least one live market exists: `client.predict.read.markets()` returns an entry whose expiry is in the future, with `mintPaused` false and a non-null `referencePrice`.
-5. Run the account step, then confirm the derived wrapper resolves with `sui client object WRAPPER_ID`.
+5. Run the account step, then confirm the derived wrapper resolves with `rtd client object WRAPPER_ID`.
 6. Run the quote step, then set `quantity` so that `quantity` multiplied by the quote's `entryProbability` clears 1 USDC with margin. A quantity of 3 against a near-the-money strike is a safe first try, and a quantity of 1 aborts on every market.
 7. Run the mint step, then confirm the effects report a success status and an `OrderMinted` event. Its `account_id` field is the canonical account ID.
 

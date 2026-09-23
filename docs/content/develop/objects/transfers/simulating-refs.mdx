@@ -1,21 +1,21 @@
 ---
 title: Simulating References
 description: >-
-  Use the borrow module in the Sui framework to include objects by reference in
+  Use the borrow module in the Rtd framework to include objects by reference in
   your programmable transaction blocks.
 keywords:
   - borrow module
-  - sui framework
+  - rtd framework
   - objects
   - immutable reference
   - mutable reference
-  - Sui API
+  - Rtd API
   - references
   - simulate a reference
   - simulate references
 goal:
   description: >-
-    Reader can use the borrow module in the Sui framework to include objects by
+    Reader can use the borrow module in the Rtd framework to include objects by
     reference in your programmable transaction blocks
   requires:
     - has_frontmatter:
@@ -33,18 +33,18 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Simulating References in Sui?
-  - How does simulating references work on Sui?
+  - What is Simulating References in Rtd?
+  - How does simulating references work on Rtd?
   - Why should I use simulating references?
 answer: >-
-  Use the borrow module in the Sui framework to include objects by reference in
+  Use the borrow module in the Rtd framework to include objects by reference in
   your programmable transaction blocks.
 ---
 
 
-Everything on the Sui blockchain is an object. When you develop Move packages for the Sui network, you typically manipulate or use onchain objects in some way through functionality available in the Sui API. For most API functions, you provide an object by reference.
+Everything on the Rtd blockchain is an object. When you develop Move packages for the Rtd network, you typically manipulate or use onchain objects in some way through functionality available in the Rtd API. For most API functions, you provide an object by reference.
 
-References are a key construct when programming in Move and on Sui. Most of the functionality available in the Sui API takes objects by reference.
+References are a key construct when programming in Move and on Rtd. Most of the functionality available in the Rtd API takes objects by reference.
 
 There are 2 ways to use an object:
 
@@ -60,7 +60,7 @@ Programmable transaction blocks (PTBs) do not currently allow the use of object 
 
 ## The borrow module
 
-The Sui framework includes a [borrow](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/borrow.md) module that offers a solution to the reference problem. The module provides access to an object by value but builds a model that makes it impossible to destroy, transfer, or wrap the object retrieved. The borrow module exposes a `Referent` object that wraps another object (the object you want to reference). The module uses the hot potato pattern (through a `Borrow` instance) to allow retrieval of the wrapped object by value. Within the same PTB, the module then forces the object to be returned to the `Referent`. The `Borrow` instance guarantees that the object returned is the same that was retrieved.
+The Rtd framework includes a [borrow](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/borrow.md) module that offers a solution to the reference problem. The module provides access to an object by value but builds a model that makes it impossible to destroy, transfer, or wrap the object retrieved. The borrow module exposes a `Referent` object that wraps another object (the object you want to reference). The module uses the hot potato pattern (through a `Borrow` instance) to allow retrieval of the wrapped object by value. Within the same PTB, the module then forces the object to be returned to the `Referent`. The `Borrow` instance guarantees that the object returned is the same that was retrieved.
 
 As an example, consider the following module stub that exposes an object (`Asset`) and a function (`use_asset`) to use that object.
 

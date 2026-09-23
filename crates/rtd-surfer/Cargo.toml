@@ -1,0 +1,37 @@
+[package]
+name = "rtd-surfer"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+rtd-core.workspace = true
+rtd-swarm-config.workspace = true
+rtd-move-build.workspace = true
+rtd-protocol-config.workspace = true
+rtd-types.workspace = true
+test-cluster.workspace = true
+linku-common.workspace = true
+
+bcs.workspace = true
+clap.workspace = true
+futures.workspace = true
+indexmap.workspace = true
+rand.workspace = true
+tokio = { workspace = true, features = ["full", "tracing", "test-util"] }
+tracing.workspace = true
+
+move-binary-format.workspace = true
+move-core-types.workspace = true
+telemetry-subscribers.workspace = true
+
+[dev-dependencies]
+prometheus.workspace = true
+rtd-macros.workspace = true
+rtd-simulator.workspace = true
+

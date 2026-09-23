@@ -437,15 +437,21 @@ fn check_for_environment<F: MoveFlavor>(
     if known_environments.contains(env) {
         Ok(())
     } else {
-        let message = format!(
-            "Package `{}` does not declare a `{}` environment. The available environments are {:?}. Consider running with `--build-env {}`",
-            manifest.package_name(),
-            env,
-            known_environments,
-            known_environments
-                .first()
-                .expect("there is at least one environment")
-        );
+        let message = if let Some(first_environment) = known_environments.first() {
+            format!(
+                "Package `{}` does not declare a `{}` environment. The available environments are {:?}. Consider running with `--build-env {}`",
+                manifest.package_name(),
+                env,
+                known_environments,
+                first_environment
+            )
+        } else {
+            format!(
+                "Package `{}` declares no environments. Add an `[environments]` entry with this chain's genesis identifier before building for `{}`",
+                manifest.package_name(),
+                env
+            )
+        };
         Err(PackageError::UnknownBuildEnv(message))
     }
 }

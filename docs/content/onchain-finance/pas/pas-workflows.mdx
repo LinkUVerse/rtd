@@ -2,7 +2,7 @@
 title: Permissioned Assets Actions
 sidebar_label: Actions
 description: >-
-  Learn how to move assets through the Permissioned Asset Standard (PAS) on Sui
+  Learn how to move assets through the Permissioned Asset Standard (PAS) on Rtd
   using Accounts, Requests, and Policies.
 keywords:
   - PAS
@@ -15,7 +15,7 @@ keywords:
   - transfer
 goal:
   description: >-
-    Reader can move assets through the Permissioned Asset Standard (PAS) on Sui
+    Reader can move assets through the Permissioned Asset Standard (PAS) on Rtd
     using Accounts, Requests, and Policies
   requires:
     - has_frontmatter:
@@ -33,15 +33,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Permissioned Assets Actions in Sui?
+  - What is Permissioned Assets Actions in Rtd?
   - How do I create accounts?
   - How do I transfer a balance?
 answer: >-
-  Learn how to move assets through the Permissioned Asset Standard (PAS) on Sui
+  Learn how to move assets through the Permissioned Asset Standard (PAS) on Rtd
   using Accounts, Requests, and Policies.
 ---
 
-The Permissioned Asset Standard (PAS) is a permissioned asset framework on Sui. Assets of different types live under **Accounts** (one per address, independent of types) and can only move between Accounts through hot potato requests that must be approved and resolved in the same programmable transaction block (PTB).
+The Permissioned Asset Standard (PAS) is a permissioned asset framework on Rtd. Assets of different types live under **Accounts** (one per address, independent of types) and can only move between Accounts through hot potato requests that must be approved and resolved in the same programmable transaction block (PTB).
 
 Every action follows the same pattern:
 
@@ -98,7 +98,7 @@ request.approve(MyTransferApproval());
 send_funds::resolve_balance(request, &policy);
 ```
 
-See the [KYC example `kyc_registry`](https://github.com/MystenLabs/pas/blob/main/packages/examples/kyc/sources/kyc_registry.move) for a registry-gated transfer implementation.
+See the [KYC example `kyc_registry`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/kyc/sources/kyc_registry.move) for a registry-gated transfer implementation.
 
 ## Clawback a balance
 
@@ -132,7 +132,7 @@ let balance: Balance<MY_COIN> = clawback_funds::resolve(request, &policy);
 to_account.deposit_balance(balance);
 ```
 
-See the [KYC example `treasury::burn`](https://github.com/MystenLabs/pas/blob/main/packages/examples/kyc/sources/treasury.move) for a clawback-to-burn implementation.
+See the [KYC example `treasury::burn`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/kyc/sources/treasury.move) for a clawback-to-burn implementation.
 
 ## Unlock a balance
 
@@ -151,7 +151,7 @@ There are 2 resolution paths:
 | `unlock_funds::resolve(request, &policy)` | Managed asset (`Policy<T>` exists) | Requires matching approvals |
 | `unlock_funds::resolve_unrestricted_balance(request, &namespace)` | Unmanaged balance (no Policy) | No approvals needed |
 
-The unrestricted path is `Balance<C>`-specific. It exists for assets like SUI that might accidentally end up in an Account. It aborts if a `Policy<Balance<C>>` exists for the type because you cannot bypass managed asset controls.
+The unrestricted path is `Balance<C>`-specific. It exists for assets like RTD that might accidentally end up in an Account. It aborts if a `Policy<Balance<C>>` exists for the type because you cannot bypass managed asset controls.
 
 ### Managed assets (policy exists)
 
@@ -166,18 +166,18 @@ let balance: Balance<MY_COIN> = unlock_funds::resolve(request, &policy);
 // Balance is now outside the system
 ```
 
-See the [Loyalty example `treasury::redeem`](https://github.com/MystenLabs/pas/blob/main/packages/examples/loyalty/sources/treasury.move) for a registry-gated unlock (redemption) implementation.
+See the [Loyalty example `treasury::redeem`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/loyalty/sources/treasury.move) for a registry-gated unlock (redemption) implementation.
 
 ### Unmanaged assets (no policy)
 
-For example, if SUI is accidentally sent to an Account:
+For example, if RTD is accidentally sent to an Account:
 
 ```move
 let auth = account::new_auth(ctx);
-let request = account.unlock_balance<SUI>(&auth, amount, ctx);
+let request = account.unlock_balance<RTD>(&auth, amount, ctx);
 
 // No approval needed — resolves with empty approval set
-let balance: Balance<SUI> = unlock_funds::resolve_unrestricted_balance(request, &namespace);
+let balance: Balance<RTD> = unlock_funds::resolve_unrestricted_balance(request, &namespace);
 ```
 
 ## Deposit a balance
@@ -216,7 +216,7 @@ public fun burn(
 }
 ```
 
-**Use case:** Burn, seize, or any operation where your contract needs the balance. See [`treasury::burn`](https://github.com/MystenLabs/pas/blob/main/packages/examples/kyc/sources/treasury.move) (KYC) and [`treasury::redeem`](https://github.com/MystenLabs/pas/blob/main/packages/examples/loyalty/sources/treasury.move) (Loyalty).
+**Use case:** Burn, seize, or any operation where your contract needs the balance. See [`treasury::burn`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/kyc/sources/treasury.move) (KYC) and [`treasury::redeem`](https://github.com/LinkUVerse/pas/blob/main/packages/examples/loyalty/sources/treasury.move) (Loyalty).
 
 ## Resolve actions in a PTB (client-side)
 
@@ -241,5 +241,5 @@ Steps 3 and 4 must be in the same PTB. The request is a hot potato. If the trans
 
 | **Example** | **Actions** | **Approval pattern** |
 |---|---|---|
-| [Loyalty](https://github.com/MystenLabs/pas/tree/main/packages/examples/loyalty) | `send_funds` (permissionless), `unlock_funds` (per-address registry) | Transfers are open, and points stay in the system. Redemptions are gated by a `RedeemRegistry` and resolved in Move. Once unlocked, funds leave the managed system entirely. |
-| [KYC](https://github.com/MystenLabs/pas/tree/main/packages/examples/kyc) | `send_funds` (KYC registry), `clawback_funds` (issuer) | Every transfer checks the recipient against a `KYCRegistry`. Clawbacks are approved unconditionally, allowing the issuer to burn tokens from any account. |
+| [Loyalty](https://github.com/LinkUVerse/pas/tree/main/packages/examples/loyalty) | `send_funds` (permissionless), `unlock_funds` (per-address registry) | Transfers are open, and points stay in the system. Redemptions are gated by a `RedeemRegistry` and resolved in Move. Once unlocked, funds leave the managed system entirely. |
+| [KYC](https://github.com/LinkUVerse/pas/tree/main/packages/examples/kyc) | `send_funds` (KYC registry), `clawback_funds` (issuer) | Every transfer checks the recipient against a `KYCRegistry`. Clawbacks are approved unconditionally, allowing the issuer to burn tokens from any account. |

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { execFileSync } from "node:child_process";
@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname);
-const CACHE_DIR = join(ROOT, ".cache", "sui");
+const CACHE_DIR = join(ROOT, ".cache", "rtd");
 const OUT_DIR = resolve(__dirname, "..", "..", "content", "snippets", "console-output");
 const FORCE = process.argv.includes("--force");
 
@@ -42,7 +42,7 @@ function getPlatformAsset(tag) {
     throw new Error(`Unsupported platform/arch: ${platform}/${arch}`);
   }
 
-  return `sui-testnet-v${version}-${suffix}.tgz`;
+  return `rtd-testnet-v${version}-${suffix}.tgz`;
 }
 
 async function fetchJSON(url) {
@@ -62,9 +62,9 @@ async function download(url, dest) {
 // 1. Determine latest testnet release tag
 // ---------------------------------------------------------------------------
 
-console.log("Fetching latest Sui testnet release…");
+console.log("Fetching latest Rtd testnet release…");
 const releases = await fetchJSON(
-  "https://api.github.com/repos/MystenLabs/sui/releases"
+  "https://api.github.com/repos/LinkUVerse/rtd/releases"
 );
 const release = releases.find((r) => r.tag_name.startsWith("testnet-"));
 if (!release) {
@@ -79,7 +79,7 @@ console.log(`  Latest release: ${TAG}`);
 // ---------------------------------------------------------------------------
 
 const binDir = join(CACHE_DIR, TAG);
-const binPath = join(binDir, "sui");
+const binPath = join(binDir, "rtd");
 
 if (!FORCE && existsSync(binPath)) {
   console.log(`  Using cached binary: ${binPath}`);
@@ -87,8 +87,8 @@ if (!FORCE && existsSync(binPath)) {
   mkdirSync(binDir, { recursive: true });
 
   const asset = getPlatformAsset(TAG);
-  const url = `https://github.com/MystenLabs/sui/releases/download/${TAG}/${asset}`;
-  const tmpTar = join(tmpdir(), `sui-${TAG}.tgz`);
+  const url = `https://github.com/LinkUVerse/rtd/releases/download/${TAG}/${asset}`;
+  const tmpTar = join(tmpdir(), `rtd-${TAG}.tgz`);
 
   console.log(`  Downloading ${asset}…`);
   await download(url, tmpTar);
@@ -97,12 +97,12 @@ if (!FORCE && existsSync(binPath)) {
   execFileSync("tar", ["-xzf", tmpTar, "-C", binDir]);
 
   // The tarball may nest the binary — find it.
-  const find = execFileSync("find", [binDir, "-name", "sui", "-type", "f"], {
+  const find = execFileSync("find", [binDir, "-name", "rtd", "-type", "f"], {
     encoding: "utf-8",
   }).trim().split("\n")[0];
 
   if (!find) {
-    console.error("Could not locate `sui` binary in extracted archive.");
+    console.error("Could not locate `rtd` binary in extracted archive.");
     process.exit(1);
   }
 
@@ -120,7 +120,7 @@ if (!FORCE && existsSync(binPath)) {
 try {
   execFileSync(binPath, ["--version"], { encoding: "utf-8" });
 } catch {
-  console.warn("⚠ Sui binary not compatible with this platform — using existing snippets.");
+  console.warn("⚠ Rtd binary not compatible with this platform — using existing snippets.");
   process.exit(0);
 }
 
@@ -131,17 +131,17 @@ try {
 mkdirSync(OUT_DIR, { recursive: true });
 
 const SNIPPETS = [
-  ["sui-help.mdx", ["--help"]],
-  ["sui-client-help.mdx", ["client", "--help"]],
-  ["sui-client-call-help.mdx", ["client", "call", "--help"]],
-  ["sui-client-ptb-help.mdx", ["client", "ptb", "--help"]],
-  ["sui-replay-help.mdx", ["replay", "--help"]],
-  ["sui-keytool-sign-help.mdx", ["keytool", "sign", "--help"]],
-  ["sui-keytool-help.mdx", ["keytool", "--help"]],
-  ["sui-move-help.mdx", ["move", "--help"]],
-  ["sui-move-build-help.mdx", ["move", "build", "--help"]],
-  ["sui-validator-help.mdx", ["validator", "--help"]],
-  ["sui-validator-report-validator-help.mdx", ["validator", "report-validator", "--help"]],
+  ["rtd-help.mdx", ["--help"]],
+  ["rtd-client-help.mdx", ["client", "--help"]],
+  ["rtd-client-call-help.mdx", ["client", "call", "--help"]],
+  ["rtd-client-ptb-help.mdx", ["client", "ptb", "--help"]],
+  ["rtd-replay-help.mdx", ["replay", "--help"]],
+  ["rtd-keytool-sign-help.mdx", ["keytool", "sign", "--help"]],
+  ["rtd-keytool-help.mdx", ["keytool", "--help"]],
+  ["rtd-move-help.mdx", ["move", "--help"]],
+  ["rtd-move-build-help.mdx", ["move", "build", "--help"]],
+  ["rtd-validator-help.mdx", ["validator", "--help"]],
+  ["rtd-validator-report-validator-help.mdx", ["validator", "report-validator", "--help"]],
 ];
 
 console.log(`Generating ${SNIPPETS.length} help snippets…`);

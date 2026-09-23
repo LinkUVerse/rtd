@@ -43,8 +43,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - 'What is Automated Address Management (Legacy, pre-v1.63) in Sui?'
-  - 'How does automated address management (legacy, pre-v1.63) work on Sui?'
+  - 'What is Automated Address Management (Legacy, pre-v1.63) in Rtd?'
+  - 'How does automated address management (legacy, pre-v1.63) work on Rtd?'
   - 'Why should I use automated address management (legacy, pre-v1.63)?'
 answer: >-
   Legacy documentation for the pre-v1.63 Move.lock-based address tracking
@@ -52,7 +52,7 @@ answer: >-
 ---
 
 <AgentPrompt
-  prompt={"Migrate this package to current Sui package address management using Move.lock / Published.toml conventions, then verify build and publish/test-publish behavior."}
+  prompt={"Migrate this package to current Rtd package address management using Move.lock / Published.toml conventions, then verify build and publish/test-publish behavior."}
 />
 
 :::warning Legacy documentation
@@ -63,9 +63,9 @@ This page describes the **pre-v1.63** address management system that used `Move.
 
 When you publish or upgrade a package, its address is tracked in the `Move.lock` file. A package's address is its package ID. This happens automatically, so you do not need to manually record or update hexadecimal addresses.
 
-When you publish or upgrade your package on multiple Sui networks (Mainnet, Testnet, Devnet), automated address management tracks separate addresses for each chain. Tracking is based on your active environment. You can run `sui client active-env` to see your current environment. For example, if your active environment is `testnet` and you publish a package, the `Move.lock` records the address for that package and associates it with `testnet`.
+When you publish or upgrade your package on multiple Rtd networks (Mainnet, Testnet, Devnet), automated address management tracks separate addresses for each chain. Tracking is based on your active environment. You can run `rtd client active-env` to see your current environment. For example, if your active environment is `testnet` and you publish a package, the `Move.lock` records the address for that package and associates it with `testnet`.
 
-Automated address management works for one package published to one or more Sui networks. If a package is republished to a network, tracked addresses for that network are overwritten.
+Automated address management works for one package published to one or more Rtd networks. If a package is republished to a network, tracked addresses for that network are overwritten.
 
 ## Adopting automated address management
 
@@ -74,14 +74,14 @@ Previously, a `published-at` entry in `Move.toml` was **mandatory**. It is no lo
 1. Switch to your active environment for the chain where your package is published:
 
 ```sh
-sui client --switch --env <YOUR-CHAIN-ENVIRONMENT>
+rtd client --switch --env <YOUR-CHAIN-ENVIRONMENT>
 ```
 
 2. Run the `manage-package` command with details of your published package:
 
 ```sh
-sui move manage-package --environment "$(sui client active-env)" \
-                        --network-id "$(sui client chain-identifier)" \
+rtd move manage-package --environment "$(rtd client active-env)" \
+                        --network-id "$(rtd client chain-identifier)" \
                         --original-id 'ORIGINAL-ADDRESS' \
                         --latest-id 'LATEST-ADDRESS' \
                         --version-number 'VERSION-NUMBER'
@@ -160,6 +160,6 @@ published-version = "1"
 
 - Entries are keyed by `chain-id`, not the `[env.NAME]`. This ensures addresses are resolved consistently even if users assign arbitrary environment names.
 
-- Key-value pairs correspond to the data described in [adopting automated address management](#adopting-automated-address-management). Use the `sui move manage-package` command as the frontend to modify these values.
+- Key-value pairs correspond to the data described in [adopting automated address management](#adopting-automated-address-management). Use the `rtd move manage-package` command as the frontend to modify these values.
 
 :::

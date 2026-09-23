@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -51,10 +51,10 @@ function cleanTitle(t) {
 }
 
 function getArchetype(relPath) {
-  if (relPath.startsWith('snippets/') || relPath.includes('sui-graphql/beta/reference/')) return 'skip';
+  if (relPath.startsWith('snippets/') || relPath.includes('rtd-graphql/beta/reference/')) return 'skip';
   if (relPath.startsWith('getting-started/onboarding/')) return 'onboarding';
   if (relPath.startsWith('getting-started/examples/')) return 'example';
-  if (relPath.startsWith('getting-started/sui-for-')) return 'migration';
+  if (relPath.startsWith('getting-started/rtd-for-')) return 'migration';
   if (relPath.startsWith('operators/')) return 'operator';
   if (relPath.includes('-sdk/') || relPath.includes('-sdk.mdx')) return 'sdk';
   if (relPath.startsWith('references/cli/')) return 'cli';
@@ -91,7 +91,7 @@ function generateQuestions(title, description, archetype, existing) {
       add(`What are the prerequisites for the ${topicLower} example?`);
       break;
     case 'migration':
-      add(`What are the key differences between Sui and other blockchains?`);
+      add(`What are the key differences between Rtd and other blockchains?`);
       break;
     case 'operator':
       add(`How do I set up ${topicLower}?`);
@@ -118,7 +118,7 @@ function generateQuestions(title, description, archetype, existing) {
   // "How does X work?" — only for noun-phrase topics (not action phrases)
   const isActionPhrase = /^(build|create|set up|configure|install|deploy|run|test|use|add|enable|connect|query|submit|verify|sign|send|mint|transfer|upgrade|publish|start|stop|monitor|integrate|optimize|emit|write|debug|check|migrate)/i.test(topicLower);
   if (!isActionPhrase) {
-    add(`How does ${topicLower} work on Sui?`);
+    add(`How does ${topicLower} work on Rtd?`);
   }
 
   // Description-derived questions — use the topic noun, not the full action title

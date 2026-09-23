@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -18,8 +18,8 @@ use consensus_core::{
     to_socket_addr,
 };
 use consensus_types::block::BlockTimestampMs;
-use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-use mysten_metrics::monitored_mpsc::unbounded_channel;
+use linku_metrics::monitored_mpsc::UnboundedReceiver;
+use linku_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::Mutex;
 use prometheus::Registry;
 use tempfile::TempDir;
@@ -95,7 +95,7 @@ impl AuthorityNode {
     }
 
     /// Return the simulator node ID for the running authority.
-    pub fn sim_node_id(&self) -> sui_simulator::task::NodeId {
+    pub fn sim_node_id(&self) -> rtd_simulator::task::NodeId {
         self.inner
             .lock()
             .as_ref()
@@ -201,7 +201,7 @@ pub(crate) struct AuthorityNodeInner {
 
 #[derive(Debug)]
 struct NodeHandle {
-    node_id: sui_simulator::task::NodeId,
+    node_id: rtd_simulator::task::NodeId,
 }
 
 /// When dropped, stop and wait for the node running in this node to completely shutdown.
@@ -209,13 +209,13 @@ impl Drop for AuthorityNodeInner {
     fn drop(&mut self) {
         if let Some(handle) = self.handle.take() {
             tracing::info!("shutting down {}", handle.node_id);
-            sui_simulator::runtime::Handle::try_current().map(|h| h.delete_node(handle.node_id));
+            rtd_simulator::runtime::Handle::try_current().map(|h| h.delete_node(handle.node_id));
         }
     }
 }
 
 impl AuthorityNodeInner {
-    fn node_id(&self) -> sui_simulator::task::NodeId {
+    fn node_id(&self) -> rtd_simulator::task::NodeId {
         self.handle.as_ref().expect("Node handle missing").node_id
     }
 
@@ -233,7 +233,7 @@ impl AuthorityNodeInner {
         let (startup_sender, mut startup_receiver) = tokio::sync::watch::channel(false);
         let (cancel_sender, cancel_receiver) = tokio::sync::watch::channel(false);
 
-        let handle = sui_simulator::runtime::Handle::current();
+        let handle = rtd_simulator::runtime::Handle::current();
         let builder = handle.create_node();
 
         // Determine IP address and node name based on whether this is an Observer node

@@ -51,7 +51,7 @@ answer: >-
   finish the flush at that frozen mark while trading continues.
 ---
 
-DeepBook Predict keeps its protocol state in 4 kinds of shared object, custodies user funds in the DeepBook `account` package, and reads every price from feeds that belong to a separate `propbook` package. Knowing which object owns which piece of state is enough to follow any Predict transaction. The same contracts run on Sui Mainnet and Sui Testnet; the only difference a reader of this page meets is the quote coin, which is native USDC on Mainnet and a mintable test coin with the same `usdc::USDC` module path on Testnet, where it displays as DUSDC.
+DeepBook Predict keeps its protocol state in 4 kinds of shared object, custodies user funds in the DeepBook `account` package, and reads every price from feeds that belong to a separate `propbook` package. Knowing which object owns which piece of state is enough to follow any Predict transaction. The same contracts run on Rtd Mainnet and Rtd Testnet; the only difference a reader of this page meets is the quote coin, which is native USDC on Mainnet and a mintable test coin with the same `usdc::USDC` module path on Testnet, where it displays as DUSDC.
 
 The protocol's own shared objects are:
 
@@ -80,7 +80,7 @@ Predict defines no account object of its own. It uses the shared `AccountWrapper
 
 Both the wrapper and the account address derive from the owner address through the `AccountRegistry`, so an application can compute either offchain before the account exists. `account_registry::new` creates the wrapper permissionlessly with the transaction sender as owner, and `account::share` publishes it in the same transaction. A second creation for the same owner aborts.
 
-The 2 derived addresses are not interchangeable, and each surface takes exactly one of them. Every Move call takes the shared `AccountWrapper` object, so the wrapper ID is the onchain handle. The canonical account ID is the identity everything else keys on: app data hangs off it, event payloads carry it as `account_id`, and indexed read services accept it and nothing else. `client.predict.wrapperIdFor(owner)` derives the first, and `SessionsContract.deriveAccountId(owner)` on the `@mysten/deepbook-v3/sessions` subpath derives the second.
+The 2 derived addresses are not interchangeable, and each surface takes exactly one of them. Every Move call takes the shared `AccountWrapper` object, so the wrapper ID is the onchain handle. The canonical account ID is the identity everything else keys on: app data hangs off it, event payloads carry it as `account_id`, and indexed read services accept it and nothing else. `client.predict.wrapperIdFor(owner)` derives the first, and `SessionsContract.deriveAccountId(owner)` on the `@linku/deepbook-v3/sessions` subpath derives the second.
 
 Predict attaches its own state to that account under the `PredictApp` namespace: a table of open positions keyed by the pair of expiry market ID and order ID, plus the sticky builder code the account trades under. Positions are not standalone objects, so read them from the account with `read.positions`.
 
@@ -202,8 +202,8 @@ Because supplies fill before withdrawals, USDC supplied in a flush can pay that 
 
 Split reads by freshness and purpose:
 
-1. Build quotes, balances, positions, pool state, and market state with the Predict client in [`@mysten/deepbook-v3`](https://www.npmjs.com/package/@mysten/deepbook-v3). Every read runs against the Sui node core API through simulation and object reads, and the event decoders parse a transaction result with no network call at all, so these reads need no indexer on either network.
-1. Subscribe to Sui checkpoints or protocol events over gRPC when an interface needs a live tape of oracle updates and trades, and back it with a `ListEvents` backfill for history.
+1. Build quotes, balances, positions, pool state, and market state with the Predict client in [`@linku/deepbook-v3`](https://www.npmjs.com/package/@linku/deepbook-v3). Every read runs against the Rtd node core API through simulation and object reads, and the event decoders parse a transaction result with no network call at all, so these reads need no indexer on either network.
+1. Subscribe to Rtd checkpoints or protocol events over gRPC when an interface needs a live tape of oracle updates and trades, and back it with a `ListEvents` backfill for history.
 1. Render history, portfolios, and oracle observation series from an indexed read service where one exists for the deployment you target. As of 2026-09-14 the public read services index only `predict-8-21`, an earlier Testnet deployment, and none exists for the current Mainnet or Testnet deployments; [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information#public-read-apis-for-the-predict-8-21-testnet-deployment) scopes them. Any such service keys account-scoped paths on the canonical account ID, and a wrapper ID there returns `200` with an empty array rather than an error.
 
 Preflight is a property of the SDK layer, not of the Move layer, and the 2 quote surfaces differ:

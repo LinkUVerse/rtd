@@ -1,7 +1,7 @@
 ---
 title: Dynamic Fields
 description: >-
-  Dynamic fields and dynamic object fields on Sui are added and removed
+  Dynamic fields and dynamic object fields on Rtd are added and removed
   dynamically, affect gas only when accessed, and store heterogeneous values.
 keywords:
   - dynamic fields
@@ -14,7 +14,7 @@ keywords:
   - deleting an object with dynamic fields
 goal:
   description: >-
-    Reader understands dynamic fields and dynamic object fields on Sui are added
+    Reader understands dynamic fields and dynamic object fields on Rtd are added
     and removed dynamically
   requires:
     - has_frontmatter:
@@ -45,9 +45,9 @@ builder_paths:
     step: Dynamic fields for versioning
     stage: Agent Write
 questions:
-  - What is Dynamic Fields in Sui?
+  - What is Dynamic Fields in Rtd?
   - How do I add dynamic fields?
-  - How does dynamic fields work on Sui?
+  - How does dynamic fields work on Rtd?
 answer: >-
   There are various ways to use object fields to store primitive data and other
   objects, such as wrapping, but there are a few limitations to these:.
@@ -61,7 +61,7 @@ There are various ways to use object fields to store primitive data and other ob
 
 1. There are use cases where you need to store a collection of objects of heterogeneous types. Because the Move `vector` type must be instantiated with 1 single type `<T>`, it is not suitable for this.
 
-Fortunately, Sui provides dynamic fields with arbitrary names, not just identifiers, that are added and removed on-the-fly, which only affect gas when they are accessed. Dynamic fields can store heterogeneous values. 
+Fortunately, Rtd provides dynamic fields with arbitrary names, not just identifiers, that are added and removed on-the-fly, which only affect gas when they are accessed. Dynamic fields can store heterogeneous values. 
 
 ## Fields and object fields
 
@@ -69,8 +69,8 @@ There are 2 types of dynamic field: fields and object fields, which differ based
 
 | Type | Description | Module |
 | --- | --- | --- |
-| Fields | Can store any value that has `store`, however an object stored in this kind of field is considered wrapped and is not accessible through its ID by external tools (explorers, wallets, and so on).| [`dynamic_field`](https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/packages/sui-framework/sources/dynamic_field.move) |
-| Object field | Values must be objects (have the `key` ability, and `id: UID` as the first field), but are still accessible at their ID to external tools.| [`dynamic_object_field`](https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/packages/sui-framework/sources/dynamic_object_field.move) |
+| Fields | Can store any value that has `store`, however an object stored in this kind of field is considered wrapped and is not accessible through its ID by external tools (explorers, wallets, and so on).| [`dynamic_field`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/packages/rtd-framework/sources/dynamic_field.move) |
+| Object field | Values must be objects (have the `key` ability, and `id: UID` as the first field), but are still accessible at their ID to external tools.| [`dynamic_object_field`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/packages/rtd-framework/sources/dynamic_object_field.move) |
 
 ## Field names
 
@@ -78,15 +78,15 @@ Unlike an object's regular fields where names must be Move identifiers, dynamic 
 
 ## Adding dynamic fields
 
-Use the `add` function from the relevant Sui framework module to add dynamic fields:
+Use the `add` function from the relevant Rtd framework module to add dynamic fields:
 
 **Dynamic field**
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/dynamic_field.move" mode="code" fun="add" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/dynamic_field.move" mode="code" fun="add" noComments />
 
 **Dynamic object field**
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/dynamic_object_field.move" mode="code" fun="add" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/dynamic_object_field.move" mode="code" fun="add" noComments />
 
 These functions add a field with name `name` and value `value` to `object`. To see it in action, consider these code snippets:
 
@@ -112,15 +112,15 @@ A transaction that attempts to add a field with the same `<Name>` type and value
 
 You can reference dynamic fields using the following APIs:
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/dynamic_field.move" mode="code" fun="borrow" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/dynamic_field.move" mode="code" fun="borrow" noComments />
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/dynamic_field.move" mode="code" fun="borrow_mut" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/dynamic_field.move" mode="code" fun="borrow_mut" noComments />
 
 `object` is the UID of the object the field is defined on and `name` is the field's name.
 
 :::info
 
-`sui::dynamic_object_field` has equivalent functions for object fields, but with the added constraint `Value: key + store`.
+`rtd::dynamic_object_field` has equivalent functions for object fields, but with the added constraint `Value: key + store`.
 
 :::
 
@@ -148,11 +148,11 @@ You must access dynamic object field values through these APIs. A transaction th
 
 Similar to unwrapping an object held in a regular field, you can remove a dynamic field, exposing its value:
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/dynamic_field.move" mode="code" fun="remove" noComments />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/dynamic_field.move" mode="code" fun="remove" noComments />
 
 This function takes a mutable reference to the ID of the `object` the field is defined on and the field's `name`. If a field with a `value: Value` is defined on `object` at `name`, it is removed and `value` returned, otherwise it aborts. Future attempts to access this field on `object` fail.
 
-`sui::dynamic_object_field` has an equivalent function for object fields.
+`rtd::dynamic_object_field` has an equivalent function for object fields.
 
 The value that is returned can be interacted with just like any other value. For example, removed dynamic object field values can then be deleted or transferred back to the sender:
 
@@ -168,18 +168,18 @@ It is possible to delete an object that has (potentially non-`drop`) dynamic fie
 
 ## `Table` and `Bag`
 
-Sui provides `Table` and `Bag` collections built using dynamic fields, but with additional support to count the number of entries they contain to protect against accidental deletion when non-empty. 
+Rtd provides `Table` and `Bag` collections built using dynamic fields, but with additional support to count the number of entries they contain to protect against accidental deletion when non-empty. 
 
-The types and functions discussed in this section are built into the Sui framework in modules [`table`](https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/packages/sui-framework/sources/table.move) and [`bag`](https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/packages/sui-framework/sources/bag.move). As with dynamic fields, there is also an `object_` variant of both: `ObjectTable` in [`object_table`](https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/packages/sui-framework/sources/object_table.move) and `ObjectBag` in [`object_bag`](https://github.com/MystenLabs/sui/tree/main/crates/sui-framework/packages/sui-framework/sources/object_bag.move). The relationship between `Table` and `ObjectTable`, and `Bag` and `ObjectBag` is the same as between a field and an object field: the former can hold any `store` type as a value, but objects stored as values are hidden when viewed from external storage. The latter can only store objects as values, but keeps those objects visible at their ID in external storage.
+The types and functions discussed in this section are built into the Rtd framework in modules [`table`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/packages/rtd-framework/sources/table.move) and [`bag`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/packages/rtd-framework/sources/bag.move). As with dynamic fields, there is also an `object_` variant of both: `ObjectTable` in [`object_table`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/packages/rtd-framework/sources/object_table.move) and `ObjectBag` in [`object_bag`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/packages/rtd-framework/sources/object_bag.move). The relationship between `Table` and `ObjectTable`, and `Bag` and `ObjectBag` is the same as between a field and an object field: the former can hold any `store` type as a value, but objects stored as values are hidden when viewed from external storage. The latter can only store objects as values, but keeps those objects visible at their ID in external storage.
 
 ### Tables
 
-`Table<K, V>` is a homogeneous map, meaning that all its keys have the same type as each other (`K`), and all its values have the same type as each other as well (`V`). It is created with `sui::table::new`, which requires access to a `&mut TxContext` because `Table`s are objects themselves, which can be transferred, shared, wrapped, or unwrapped, just like any other object.
+`Table<K, V>` is a homogeneous map, meaning that all its keys have the same type as each other (`K`), and all its values have the same type as each other as well (`V`). It is created with `rtd::table::new`, which requires access to a `&mut TxContext` because `Table`s are objects themselves, which can be transferred, shared, wrapped, or unwrapped, just like any other object.
 
-See `sui::object_table::ObjectTable` for the object-preserving version of `Table`.
+See `rtd::object_table::ObjectTable` for the object-preserving version of `Table`.
 
 ```move
-module sui::table;
+module rtd::table;
 
 public struct Table<K: copy + drop + store, V: store> has key, store { /* ... */ }
 
@@ -190,12 +190,12 @@ public fun new<K: copy + drop + store, V: store>(
 
 ### Bags
 
-`Bag` is a heterogeneous map, so it can hold key-value pairs of arbitrary types, they do not need to match each other. The `Bag` type does not have any type parameters for this reason. Like `Table`, `Bag` is also an object, so creating one with `sui::bag::new` requires supplying a `&mut TxContext` to generate an ID.
+`Bag` is a heterogeneous map, so it can hold key-value pairs of arbitrary types, they do not need to match each other. The `Bag` type does not have any type parameters for this reason. Like `Table`, `Bag` is also an object, so creating one with `rtd::bag::new` requires supplying a `&mut TxContext` to generate an ID.
 
-See `sui::bag::ObjectBag` for the object-preserving version of `Bag`.
+See `rtd::bag::ObjectBag` for the object-preserving version of `Bag`.
 
 ```move
-module sui::bag;
+module rtd::bag;
 
 public struct Bag has key, store { /* ... */ }
 
@@ -207,7 +207,7 @@ public fun new(ctx: &mut TxContext): Bag;
 All collection types come with the following functions, defined in their respective modules:
 
 ```move
-module sui::table;
+module rtd::table;
 
 public fun add<K: copy + drop + store, V: store>(
     table: &mut Table<K, V>,
@@ -246,7 +246,7 @@ The extra flexibility of `Bag`'s heterogeneity means the type system does not st
 It is possible to query all collection types for their length and check whether they are empty using the following family of functions:
 
 ```move
-module sui::table;
+module rtd::table;
 
 public fun length<K: copy + drop + store, V: store>(
     table: &Table<K, V>,
@@ -264,7 +264,7 @@ public fun is_empty<K: copy + drop + store, V: store>(
 Tables can be queried for key containment with:
 
 ```move
-module sui::table;
+module rtd::table;
 
 public fun contains<K: copy + drop + store, V: store>(
     table: &Table<K, V>,
@@ -275,7 +275,7 @@ public fun contains<K: copy + drop + store, V: store>(
 The equivalent functions for `Bag` are:
 
 ```move
-module sui::bag;
+module rtd::bag;
 
 public fun contains<K: copy + drop + store>(bag: &Bag, k: K): bool;
 
@@ -292,17 +292,17 @@ The first function tests whether `bag` contains a key-value pair with key `k: K`
 Collection types protect against accidental deletion when they might not be empty. This protection comes from the fact that they do not have `drop`, so they must be explicitly deleted using this API:
 
 ```move
-module sui::table;
+module rtd::table;
 
 public fun destroy_empty<K: copy + drop + store, V: store>(
     table: Table<K, V>,
 );
 ```
 
-This function takes the collection by value. If it contains no entries, it is deleted, otherwise the call fails. `sui::table::Table` also has a convenience function:
+This function takes the collection by value. If it contains no entries, it is deleted, otherwise the call fails. `rtd::table::Table` also has a convenience function:
 
 ```move
-module sui::table;
+module rtd::table;
 
 public fun drop<K: copy + drop + store, V: drop + store>(
     table: Table<K, V>,
@@ -322,7 +322,7 @@ The `drop` function is not called implicitly on eligible tables before they go o
 Equality on collections is based on identity, for example, an instance of a collection type is only considered equal to itself and not to all collections that hold the same entries:
 
 ```move
-use sui::table;
+use rtd::table;
 
 let t1 = table::new<u64, u64>(ctx);
 let t2 = table::new<u64, u64>(ctx);
@@ -335,7 +335,7 @@ This is unlikely to be the definition of equality that you want.
 
 ## Debugging dynamic field errors
 
-Dynamic field operations are a common source of runtime `MoveAbort` errors. The following table lists all error codes defined in the [`sui::dynamic_field` module](https://docs.sui.io/references/framework/sui_sui/dynamic_field) ([source](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/packages/sui-framework/sources/dynamic_field.move)):
+Dynamic field operations are a common source of runtime `MoveAbort` errors. The following table lists all error codes defined in the [`rtd::dynamic_field` module](https://docs.rtd.io/references/framework/rtd_rtd/dynamic_field) ([source](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/rtd-framework/sources/dynamic_field.move)):
 
 | Error | Abort code | Cause | Fix |
 |---|---|---|---|
@@ -350,4 +350,4 @@ Dynamic field operations are a common source of runtime `MoveAbort` errors. The 
 - **Field name type mismatch:** The most common cause of `EFieldDoesNotExist` is passing the wrong type for the field name. A field's key is the combination of the parent ID, the key's type, and the key's value. A field added with key type `vector<u8>` cannot be accessed with key type `String`, even if the underlying bytes are identical, because the types differ.
 - **Deleted parent with orphaned fields:** If you delete a parent object that still has dynamic fields attached, those fields become permanently inaccessible. The fields are not automatically cleaned up. Remove all dynamic fields before deleting the parent object.
 - **Stale or invalid parent:** If a parent object was deleted, wrapped, or has a version mismatch, the transaction fails during object input validation (before the Move function executes), not with a dynamic field `MoveAbort`. Check the transaction effects for input validation errors rather than abort codes.
-- **`dynamic_field` vs `dynamic_object_field`:** `dynamic_field::borrow` returns `&Value` and the stored object is wrapped (inaccessible by its ID externally). `dynamic_object_field::borrow` also returns `&Value` (where `Value` must be an object), but the child object remains visible and queryable by its ID. Use `dynamic_object_field` when you need the child to be independently addressable. See the [`sui::dynamic_object_field` reference](https://docs.sui.io/references/framework/sui_sui/dynamic_object_field).
+- **`dynamic_field` vs `dynamic_object_field`:** `dynamic_field::borrow` returns `&Value` and the stored object is wrapped (inaccessible by its ID externally). `dynamic_object_field::borrow` also returns `&Value` (where `Value` must be an object), but the child object remains visible and queryable by its ID. Use `dynamic_object_field` when you need the child to be independently addressable. See the [`rtd::dynamic_object_field` reference](https://docs.rtd.io/references/framework/rtd_rtd/dynamic_object_field).

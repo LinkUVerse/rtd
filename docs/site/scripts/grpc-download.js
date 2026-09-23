@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const { writeFile } = require("fs/promises");
@@ -6,8 +6,8 @@ const axios = require("axios");
 const path = require("path");
 
 const repo = {
-  owner: "MystenLabs",
-  name: "sui-apis",
+  owner: "LinkUVerse",
+  name: "rtd-apis",
   branch: "gen-docs",
   filePath: "documentation.json",
 };

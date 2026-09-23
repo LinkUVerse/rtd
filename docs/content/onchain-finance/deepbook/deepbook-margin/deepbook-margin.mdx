@@ -35,7 +35,7 @@ builder_paths:
     step: Margin trading overview
     stage: Margin
 questions:
-  - What is DeepBook Margin on Sui?
+  - What is DeepBook Margin on Rtd?
   - How do I open a leveraged position on DeepBook?
   - How much leverage can I take on DeepBook Margin?
   - When does DeepBook Margin liquidate my position?
@@ -106,7 +106,7 @@ Closing reverses the sequence. Reduce exposure with `poolProxy.placeReduceOnlyLi
 
 ### Read the parameters before you borrow {#read-parameters}
 
-Every threshold is a read-only query, so you can inspect a pool before committing any funds. The following helper reads all six values a position depends on, using the `MarginRegistry` accessors in `@mysten/deepbook-v3`:
+Every threshold is a read-only query, so you can inspect a pool before committing any funds. The following helper reads all six values a position depends on, using the `MarginRegistry` accessors in `@linku/deepbook-v3`:
 
 <ImportContent source="examples/deepbook-margin/src/risk-params.ts" mode="code" tag="risk-params" />
 

@@ -40,8 +40,8 @@ builder_paths:
     step: Margin event indexing
     stage: Advanced
 questions:
-  - What is DeepBook Margin Indexer in Sui?
-  - How does deepbook margin indexer work on Sui?
+  - What is DeepBook Margin Indexer in Rtd?
+  - How does deepbook margin indexer work on Rtd?
   - How do I subscribe to deepbook margin indexer events?
 answer: >-
   The DeepBook Margin Indexer extends the DeepBookV3 Indexer with endpoints for
@@ -55,9 +55,9 @@ The DeepBook Margin Indexer extends the DeepBookV3 Indexer with endpoints for ma
 
 The margin endpoints are available through the same public indexer as DeepBookV3.
 
-- **Mainnet**: `https://deepbook-indexer.mainnet.mystenlabs.com/`
+- **Mainnet**: `https://deepbook-indexer.mainnet.linkuverse.com/`
 
-- **Testnet**: `https://deepbook-indexer.testnet.mystenlabs.com/`
+- **Testnet**: `https://deepbook-indexer.testnet.linkuverse.com/`
 
 ## Common query parameters
 
@@ -220,7 +220,7 @@ Returns an aggregate view of all margin managers with their associated pool and 
         "margin_manager_id": "0x1234...",
         "deepbook_pool_id": "0x5678...",
         "base_asset_id": "0xabcd...",
-        "base_asset_symbol": "SUI",
+        "base_asset_symbol": "RTD",
         "quote_asset_id": "0xefgh...",
         "quote_asset_symbol": "USDC",
         "base_margin_pool_id": "0x1111...",
@@ -254,7 +254,7 @@ Returns the current state of margin managers. This endpoint is useful for monito
         "base_margin_pool_id": "0x1111...",
         "quote_margin_pool_id": "0x2222...",
         "base_asset_id": "0xabcd...",
-        "base_asset_symbol": "SUI",
+        "base_asset_symbol": "RTD",
         "quote_asset_id": "0xefgh...",
         "quote_asset_symbol": "USDC",
         "risk_ratio": "1.5",
@@ -300,7 +300,7 @@ Returns events for when assets are supplied to margin pools.
         "checkpoint_timestamp_ms": 1738000000000,
         "package": "0x2222...",
         "margin_pool_id": "0x1234...",
-        "asset_type": "0x2::sui::SUI",
+        "asset_type": "0x2::rtd::RTD",
         "supplier": "0xabcd...",
         "amount": 1000000000,
         "shares": 1000000000,
@@ -332,7 +332,7 @@ Returns events for when assets are withdrawn from margin pools.
         "checkpoint_timestamp_ms": 1738000000000,
         "package": "0x2222...",
         "margin_pool_id": "0x1234...",
-        "asset_type": "0x2::sui::SUI",
+        "asset_type": "0x2::rtd::RTD",
         "supplier": "0xabcd...",
         "amount": 1000000000,
         "shares": 1000000000,
@@ -365,7 +365,7 @@ Returns events for when margin pools are created.
         "package": "0x2222...",
         "margin_pool_id": "0x1234...",
         "maintainer_cap_id": "0x5678...",
-        "asset_type": "0x2::sui::SUI",
+        "asset_type": "0x2::rtd::RTD",
         "config_json": {
             "margin_pool_config": {
                 "supply_cap": 10000000000000,
@@ -635,7 +635,7 @@ Returns events for when collateral is deposited or withdrawn from margin manager
         "event_type": "Deposit",
         "margin_manager_id": "0x1234...",
         "amount": "1000000000",
-        "asset_type": "0x2::sui::SUI",
+        "asset_type": "0x2::rtd::RTD",
         "pyth_decimals": 8,
         "pyth_price": "100000000",
         "withdraw_base_asset": null,

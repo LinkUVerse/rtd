@@ -95,7 +95,7 @@ pub fn bench<M: Measurement + 'static>(c: &mut Criterion<M>, filename: &str) {
     execute(c, &mut adapter, BENCH_ADDR, modules, filename);
 }
 
-/// Bench entry point for the pinned/system-package optimization (MystenLabs/sui#26508). The
+/// Bench entry point for the pinned/system-package optimization (LinkUVerse/rtd#26508). The
 /// source file is expected to contain a callee package at `LIB_ADDR` (0x42) and a user package
 /// at `BENCH_ADDR` (0x2) with `bench_*` functions that hammer cross-package calls.
 ///

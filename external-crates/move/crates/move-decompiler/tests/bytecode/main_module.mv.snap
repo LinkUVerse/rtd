@@ -21,7 +21,7 @@ use 0x1::option::Option;
 use 0x2::balance::Balance;
 use 0x2::coin::Coin;
 use 0x2::object::UID;
-use 0x2::sui::SUI;
+use 0x2::rtd::RTD;
 use 0x2::table::Table;
 use 0x2::tx_context::TxContext;
 use 0x74c15e5ee047a5a841228aa0f49f33c7d7752891d653fc3692646f8ed6cbe987::sbt::Own;
@@ -30,7 +30,7 @@ use 0x74c15e5ee047a5a841228aa0f49f33c7d7752891d653fc3692646f8ed6cbe987::sbt::Own
 
 public struct AdminCap has key { id: UID }
 
-public struct TheTreasury has key { id: UID, version: u64, balance: Balance<SUI> }
+public struct TheTreasury has key { id: UID, version: u64, balance: Balance<RTD> }
 
 public struct SeatingChart
 has key { id: UID, version: u64, current_row: u64, current_floor: u64, seating: vector<vector<address>> }
@@ -266,7 +266,7 @@ fun init(l0: &mut TxContext) {
     transfer::share_object(l2)
 }
 
-public entry fun participate(l0: &mut InviteArchieves, l1: &mut SeatingChart, l2: u64, l3: &mut Coin<SUI>, l4: &mut Own, l5: &mut TxContext) {
+public entry fun participate(l0: &mut InviteArchieves, l1: &mut SeatingChart, l2: u64, l3: &mut Coin<RTD>, l4: &mut Own, l5: &mut TxContext) {
     let l45 = tx_context::sender(freeze(l5));
     assert!(l0.version <= C0, C7);
     assert!(l1.version <= C0, C7);
@@ -522,7 +522,7 @@ public fun upgrade_seatingchart(l0: &mut SeatingChart) {
     *(&mut l0.version) = C0
 }
 
-public entry fun whiteList(mut l0: vector<address>, mut l1: vector<u64>, l2: &mut Coin<SUI>, l3: &mut TxContext) {
+public entry fun whiteList(mut l0: vector<address>, mut l1: vector<u64>, l2: &mut Coin<RTD>, l3: &mut TxContext) {
     while (!(vector::is_empty(&l0))) {
         let l4 = l0.pop_back();
         let l5 = l1.pop_back();

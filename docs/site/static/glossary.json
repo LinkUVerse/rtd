@@ -7,12 +7,12 @@
   {
     "id": "archival-store",
     "label": "Archival Store",
-    "definition": "A long-term storage system that holds checkpoint-indexed Sui data."
+    "definition": "A long-term storage system that holds checkpoint-indexed Rtd data."
   },
   {
     "id": "causal-history",
     "label": "Causal history",
-    "definition": "The relationship between an object in Sui and its direct predecessors and successors."
+    "definition": "The relationship between an object in Rtd and its direct predecessors and successors."
   },
   {
     "id": "causal-order",
@@ -32,7 +32,7 @@
   {
     "id": "deepbook",
     "label": "DeepBook",
-    "definition": "A decentralized central limit order book (CLOB) built on Sui."
+    "definition": "A decentralized central limit order book (CLOB) built on Rtd."
   },
   {
     "id": "devnet",
@@ -67,7 +67,7 @@
   {
     "id": "kiosk",
     "label": "Kiosk",
-    "definition": "A decentralized system for commerce applications on Sui."
+    "definition": "A decentralized system for commerce applications on Rtd."
   },
   {
     "id": "mainnet",
@@ -82,12 +82,12 @@
   {
     "id": "mysticeti",
     "label": "Mysticeti",
-    "definition": "The consensus protocol used on Sui."
+    "definition": "The consensus protocol used on Rtd."
   },
   {
     "id": "object",
     "label": "Object",
-    "definition": "The basic unit of storage on Sui."
+    "definition": "The basic unit of storage on Rtd."
   },
   {
     "id": "operation-cap",
@@ -142,13 +142,13 @@
   {
     "id": "dpos",
     "label": "DPoS",
-    "definition": "Consensus mechanism used by Sui.",
+    "definition": "Consensus mechanism used by Rtd.",
     "aliases": ["delegated proof-of-stake"]
   },
   {
     "id": "programmable-transaction-blocks",
     "label": "Programmable transaction blocks",
-    "definition": "Define all user transactions on Sui.",
+    "definition": "Define all user transactions on Rtd.",
     "aliases": ["PTB", "PTBs"]
   },
   {
@@ -159,12 +159,12 @@
   {
     "id": "mist",
     "label": "MIST",
-    "definition": "The smallest unit of SUI."
+    "definition": "The smallest unit of RTD."
   },
   {
     "id": "move",
     "label": "Move",
-    "definition": "An open source programming language used for all activity on Sui."
+    "definition": "An open source programming language used for all activity on Rtd."
   },
   {
     "id": "quorum",
@@ -202,7 +202,7 @@
   {
     "id": "zklogin",
     "label": "zkLogin",
-    "definition": "A Sui primitive that allows you to send transactions using an OAuth credential."
+    "definition": "A Rtd primitive that allows you to send transactions using an OAuth credential."
   },
   {
     "id": "checkpoint",
@@ -224,7 +224,7 @@
   {
     "id": "package",
     "label": "Package",
-    "definition": "Smart contracts on Sui.",
+    "definition": "Smart contracts on Rtd.",
     "aliases": ["packages", "Move package", "Move packages"]
   },
   {
@@ -236,6 +236,6 @@
   {
     "id": "nautilus",
     "label": "Nautilus",
-    "definition": "Secure and verifiable off-chain computation on Sui."
+    "definition": "Secure and verifiable off-chain computation on Rtd."
   }
 ]

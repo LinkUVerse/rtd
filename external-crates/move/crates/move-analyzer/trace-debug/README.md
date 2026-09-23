@@ -1,6 +1,6 @@
 # Move Trace Debugging
 
-Provides the ability to visualize trace files, which can be generated for a given package when running Move unit tests or replaying on-chain transactions with the [replay tool](https://docs.sui.io/references/cli/replay). These trace files contain information about operations executed during a Move unit test run or during an on-chain transaction run (including [PTB](https://docs.sui.io/concepts/transactions/prog-txn-blocks) commands).
+Provides the ability to visualize trace files, which can be generated for a given package when running Move unit tests or replaying on-chain transactions with the [replay tool](https://docs.rtd.io/references/cli/replay). These trace files contain information about operations executed during a Move unit test run or during an on-chain transaction run (including [PTB](https://docs.rtd.io/concepts/transactions/prog-txn-blocks) commands).
 
 This extension leverages an implementation of the [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol) (DAP) that analyzes execution traces and presents them to the IDE client (in this case a VSCode extension) in a format that the client understands and can visualize using a familiar debugging interface.
 
@@ -12,7 +12,7 @@ Currently we support inspection of native PTB commands and trace-debugging of Mo
 - line breakpoints
 - disassembly view (disassembled bytecode view) with support for stepping and setting breakpoints in disassembled bytecode files
 
-Note that support for trace-debugging macros and enums is limited at this point - stepping through macros or code related to enums may result in somewhat unexpected results due to how these constructs are handled internally by the Move execution framework. In particular, variable value tracking may be affected when trace-debugging these constructs. Work is ongoing to improve state-of-the-art - improvement suggestions and bug reports files as issues against Sui's GitHub [repository](https://github.com/MystenLabs/sui) are greatly appreciated.
+Note that support for trace-debugging macros and enums is limited at this point - stepping through macros or code related to enums may result in somewhat unexpected results due to how these constructs are handled internally by the Move execution framework. In particular, variable value tracking may be affected when trace-debugging these constructs. Work is ongoing to improve state-of-the-art - improvement suggestions and bug reports files as issues against Rtd's GitHub [repository](https://github.com/LinkUVerse/rtd) are greatly appreciated.
 
 # How to Install
 
@@ -26,4 +26,4 @@ Note that support for trace-debugging macros and enums is limited at this point 
 
 # How to use
 
-A detailed description of the debugger is available as part of the Sui [documentation](https://docs.sui.io/references/ide/debugger), including comprehensive usage [instructions](https://docs.sui.io/references/ide/debugger#usage).
+A detailed description of the debugger is available as part of the Rtd [documentation](https://docs.rtd.io/references/ide/debugger), including comprehensive usage [instructions](https://docs.rtd.io/references/ide/debugger#usage).

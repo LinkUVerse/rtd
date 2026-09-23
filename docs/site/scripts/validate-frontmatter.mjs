@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -37,10 +37,10 @@ const CONTENT_ROOT = path.resolve(SITE_ROOT, '..', 'content');
 const SCHEMA_PATH = path.resolve(SITE_ROOT, 'frontmatter.schema.json');
 
 // Paths excluded from frontmatter validation. Snippets are reusable partials;
-// the sui-graphql reference is generated at build time.
+// the rtd-graphql reference is generated at build time.
 const EXCLUDE_PATTERNS = [
   /(^|\/)snippets\//,
-  /(^|\/)sui-graphql\//,
+  /(^|\/)rtd-graphql\//,
 ];
 
 function isExcluded(relPath) {

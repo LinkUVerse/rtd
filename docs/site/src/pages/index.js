@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -9,22 +9,22 @@ import Link from "@docusaurus/Link";
 import styles from "./index.module.css";
 
 // Target for the "Developer Updates" hero link. That page does not exist yet,
-// so this points at the external Sui blog as an interim (external links are not
+// so this points at the external Rtd blog as an interim (external links are not
 // route-checked, so the strict build passes). Swap this single constant to
 // "/developer-updates" when the dedicated page ships.
-export const DEVELOPER_UPDATES_URL = "https://blog.sui.io";
+export const DEVELOPER_UPDATES_URL = "https://blog.rtd.io";
 
 export default function Home() {
   const developerResources = [
     {
       title: "Getting Started",
       description:
-        "Install the Sui toolchain, set up a wallet, and publish your first Move package.",
+        "Install the Rtd toolchain, set up a wallet, and publish your first Move package.",
       to: "/getting-started",
     },
     {
-      title: "Sui Agent Skills",
-      description: "Equip AI coding agents with Sui-specific skills and context.",
+      title: "Rtd Agent Skills",
+      description: "Equip AI coding agents with Rtd-specific skills and context.",
       to: "/skills",
     },
     {
@@ -40,10 +40,10 @@ export default function Home() {
       to: "/onchain-finance",
     },
     {
-      title: "Sui Stack",
+      title: "Rtd Stack",
       description:
         "Compose onchain primitives like zkLogin, Nautilus, and Seal into your app.",
-      to: "/sui-stack",
+      to: "/rtd-stack",
     },
     {
       title: "References",
@@ -57,20 +57,20 @@ export default function Home() {
     {
       title: "DeepBook",
       description:
-        "Trade on Sui's onchain central limit order book across spot, margin, and prediction markets.",
+        "Trade on Rtd's onchain central limit order book across spot, margin, and prediction markets.",
       to: "/onchain-finance/deepbook",
     },
     {
       title: "Walrus",
       description:
         "Store and serve media, blobs, and app data on decentralized storage.",
-      to: "/sui-stack/walrus",
+      to: "/rtd-stack/walrus",
     },
     {
       title: "zkLogin",
       description:
         "Onboard users with their existing Web2 logins, no seed phrase required.",
-      to: "/sui-stack/zklogin-integration/zklogin",
+      to: "/rtd-stack/zklogin-integration/zklogin",
     },
     {
       title: "Digital Assets",
@@ -82,9 +82,9 @@ export default function Home() {
 
   const nodeOperators = [
     {
-      title: "Run a Sui Full Node",
+      title: "Run a Rtd Full Node",
       description: "Run a full node to sync the network and serve onchain data.",
-      to: "/operators/full-node/sui-full-node",
+      to: "/operators/full-node/rtd-full-node",
     },
     {
       title: "Validators",
@@ -135,7 +135,7 @@ export default function Home() {
         >
           <div className="w-full mt-8 mb-4 mx-auto">
             <div className={styles.heroText}>
-              <h1 className="h1 center-text text-white">Sui Documentation</h1>
+              <h1 className="h1 center-text text-white">Rtd Documentation</h1>
               <p
                 className="center-text"
                 style={{
@@ -146,10 +146,10 @@ export default function Home() {
                   lineHeight: "1.6",
                 }}
               >
-                Sui is a next-generation smart contract platform with high
+                Rtd is a next-generation smart contract platform with high
                 throughput, low latency, and an asset-oriented programming model
                 powered by the Move programming language. Explore guides,
-                references, and tutorials to start building on Sui.
+                references, and tutorials to start building on Rtd.
               </p>
               <Link to={DEVELOPER_UPDATES_URL} className={styles.devUpdates}>
                 Developer Updates

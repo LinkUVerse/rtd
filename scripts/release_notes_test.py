@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 """Unit tests for release_notes.py"""
@@ -330,9 +330,9 @@ class TestPrBumpsProtocolVersion(unittest.TestCase):
     def test_detects_protocol_version_bump(self, mock_check_output):
         """Test detection when MAX_PROTOCOL_VERSION is modified."""
         mock_check_output.return_value = """
-diff --git a/crates/sui-protocol-config/src/lib.rs b/crates/sui-protocol-config/src/lib.rs
---- a/crates/sui-protocol-config/src/lib.rs
-+++ b/crates/sui-protocol-config/src/lib.rs
+diff --git a/crates/rtd-protocol-config/src/lib.rs b/crates/rtd-protocol-config/src/lib.rs
+--- a/crates/rtd-protocol-config/src/lib.rs
++++ b/crates/rtd-protocol-config/src/lib.rs
 @@ -25,7 +25,7 @@
  const MIN_PROTOCOL_VERSION: u64 = 1;
 -const MAX_PROTOCOL_VERSION: u64 = 109;
@@ -347,9 +347,9 @@ diff --git a/crates/sui-protocol-config/src/lib.rs b/crates/sui-protocol-config/
     def test_no_bump_when_file_not_changed(self, mock_check_output):
         """Test returns False when protocol config file not in diff."""
         mock_check_output.return_value = """
-diff --git a/crates/sui-core/src/lib.rs b/crates/sui-core/src/lib.rs
---- a/crates/sui-core/src/lib.rs
-+++ b/crates/sui-core/src/lib.rs
+diff --git a/crates/rtd-core/src/lib.rs b/crates/rtd-core/src/lib.rs
+--- a/crates/rtd-core/src/lib.rs
++++ b/crates/rtd-core/src/lib.rs
 @@ -1,3 +1,4 @@
 +// Some comment
 """
@@ -362,9 +362,9 @@ diff --git a/crates/sui-core/src/lib.rs b/crates/sui-core/src/lib.rs
     def test_no_bump_when_other_line_changed(self, mock_check_output):
         """Test returns False when lib.rs changed but not MAX_PROTOCOL_VERSION."""
         mock_check_output.return_value = """
-diff --git a/crates/sui-protocol-config/src/lib.rs b/crates/sui-protocol-config/src/lib.rs
---- a/crates/sui-protocol-config/src/lib.rs
-+++ b/crates/sui-protocol-config/src/lib.rs
+diff --git a/crates/rtd-protocol-config/src/lib.rs b/crates/rtd-protocol-config/src/lib.rs
+--- a/crates/rtd-protocol-config/src/lib.rs
++++ b/crates/rtd-protocol-config/src/lib.rs
 @@ -100,6 +100,7 @@
 +    some_new_config: true,
 """
@@ -789,7 +789,7 @@ class TestDoGenerateProtocolVersionDisplay(unittest.TestCase):
             do_generate("from_sha", "to_sha")
             output = mock_stdout.getvalue()
 
-        self.assertIn("Sui Protocol Version in this release: `110`", output)
+        self.assertIn("Rtd Protocol Version in this release: `110`", output)
         # The bump PR should be listed with fallback note
         self.assertIn("pull/24736: Bump protocol version", output)
         # The other protocol PR should still be listed
@@ -850,7 +850,7 @@ class TestDoGenerateProtocolVersionDisplay(unittest.TestCase):
             do_generate("from_sha", "to_sha")
             output = mock_stdout.getvalue()
 
-        self.assertIn("Sui Protocol Version in this release: `110`", output)
+        self.assertIn("Rtd Protocol Version in this release: `110`", output)
         self.assertIn("pull/25000: Some protocol change.", output)
         # gql should not be called since no bump commits
         mock_gql.assert_not_called()

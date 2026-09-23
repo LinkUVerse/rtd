@@ -1,9 +1,9 @@
 ---
-title: Sui CLI Completions
-description: Generate shell completion scripts for the Sui CLI.
+title: Rtd CLI Completions
+description: Generate shell completion scripts for the Rtd CLI.
 keywords:
-  - sui completion
-  - sui cli completion
+  - rtd completion
+  - rtd cli completion
   - shell completion
   - bash completion
   - zsh completion
@@ -18,7 +18,7 @@ goal:
     - pattern: '```'
       min: 1
       label: Has command examples
-    - pattern: 'sui '
+    - pattern: 'rtd '
       min: 2
       label: Shows CLI command usage
     - has_questions: true
@@ -26,23 +26,23 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Sui CLI Completions in Sui?
-  - What are the available sui cli completions commands?
-  - What flags does sui cli completions support?
+  - What is Rtd CLI Completions in Rtd?
+  - What are the available rtd cli completions commands?
+  - What flags does rtd cli completions support?
 answer: >-
-  The Sui CLI `completion` command generates shell completion scripts for the
-  `sui` command. Install the generated script for your shell to complete Sui
+  The Rtd CLI `completion` command generates shell completion scripts for the
+  `rtd` command. Install the generated script for your shell to complete Rtd
   commands, subcommands, flags, and values from your command line.
 ---
 
-The Sui CLI `completion` command generates shell completion scripts for the `sui` command. Install the generated script for your shell to complete Sui commands, subcommands, flags, and values from your command line.
+The Rtd CLI `completion` command generates shell completion scripts for the `rtd` command. Install the generated script for your shell to complete Rtd commands, subcommands, flags, and values from your command line.
 
 <ImportContent source="cli-check-install" mode="snippet" />
 
 ## Commands
 
 ```sh
-$ sui completion --help
+$ rtd completion --help
 ```
 
 The command outputs the following help text:
@@ -50,7 +50,7 @@ The command outputs the following help text:
 ```sh
 Generate shell completion scripts for CLI
 
-Usage: sui completion [OPTIONS] --generate <GENERATOR>
+Usage: rtd completion [OPTIONS] --generate <GENERATOR>
 
 Options:
       --generate <GENERATOR>  If provided, outputs the completion file for given shell [possible values: bash, elvish, fish, powershell, zsh]
@@ -64,9 +64,9 @@ Options:
 Redirect the command output to a file for your shell:
 
 ```sh
-$ sui completion --generate bash > sui.bash
-$ sui completion --generate zsh > _sui
-$ sui completion --generate fish > sui.fish
+$ rtd completion --generate bash > rtd.bash
+$ rtd completion --generate zsh > _rtd
+$ rtd completion --generate fish > rtd.fish
 ```
 
 The command also supports `elvish` and `powershell` values for `--generate`.
@@ -77,32 +77,32 @@ Install the generated script in a directory loaded by your shell. Restart your s
 
 ### Bash
 
-For Bash, install the generated `sui.bash` file in a Bash completion directory. Use one of the following common locations:
+For Bash, install the generated `rtd.bash` file in a Bash completion directory. Use one of the following common locations:
 
-- Linux: `/etc/bash_completion.d/sui` for all users.
-- Linux: `~/.local/share/bash-completion/completions/sui` for one user.
-- macOS with Homebrew: `$(brew --prefix)/etc/bash_completion.d/sui`.
+- Linux: `/etc/bash_completion.d/rtd` for all users.
+- Linux: `~/.local/share/bash-completion/completions/rtd` for one user.
+- macOS with Homebrew: `$(brew --prefix)/etc/bash_completion.d/rtd`.
 
 For example, to install it for one user on Linux:
 
 ```sh
 $ mkdir -p ~/.local/share/bash-completion/completions
-$ cp sui.bash ~/.local/share/bash-completion/completions/sui
+$ cp rtd.bash ~/.local/share/bash-completion/completions/rtd
 ```
 
 To load the completion script for your current shell session only, run:
 
 ```sh
-$ source sui.bash
+$ source rtd.bash
 ```
 
 ### Zsh
 
-For Zsh, copy the generated `_sui` file to a directory in your `fpath`, then rebuild the completion cache:
+For Zsh, copy the generated `_rtd` file to a directory in your `fpath`, then rebuild the completion cache:
 
 ```sh
 $ mkdir -p ~/.zsh/completions
-$ cp _sui ~/.zsh/completions/_sui
+$ cp _rtd ~/.zsh/completions/_rtd
 ```
 
 Add the directory to `fpath` before `compinit` in your `~/.zshrc` if it is not already configured:
@@ -121,11 +121,11 @@ $ rm -f ~/.zcompdump
 
 ### Fish
 
-For Fish, copy the generated `sui.fish` file to your Fish completions directory:
+For Fish, copy the generated `rtd.fish` file to your Fish completions directory:
 
 ```sh
 $ mkdir -p ~/.config/fish/completions
-$ cp sui.fish ~/.config/fish/completions/sui.fish
+$ cp rtd.fish ~/.config/fish/completions/rtd.fish
 ```
 
 Fish loads completion files from this directory automatically.

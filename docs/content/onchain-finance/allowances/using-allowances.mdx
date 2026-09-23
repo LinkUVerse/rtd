@@ -1,12 +1,12 @@
 ---
 title: Using Allowances
 description: >-
-  Issue, spend from, and revoke allowances on Sui using the sui::allowance
+  Issue, spend from, and revoke allowances on Rtd using the rtd::allowance
   module and the Rust SDK, including app-bound allowances that route every
   spend through your own Move logic.
 keywords:
   - allowances
-  - sui::allowance
+  - rtd::allowance
   - AllowanceWithdrawal
   - AllowanceCap
   - balance_spend
@@ -48,34 +48,34 @@ builder_paths:
     step: Using allowances
     stage: Authorization
 questions:
-  - How do I issue an allowance on Sui?
+  - How do I issue an allowance on Rtd?
   - How do I spend from an allowance?
   - How do I bind an allowance to my app?
   - How do I revoke an allowance?
   - How do I find the allowances an address has granted?
 answer: >-
-  Issue an allowance by calling sui::allowance::new from the funder's address.
+  Issue an allowance by calling rtd::allowance::new from the funder's address.
   The spender then spends with tx.balance({ allowance, balance }) in the
   TypeScript SDK, or builds a funds withdrawal whose source is SenderAllowance
-  and passes it to sui::allowance::balance_spend. The funder revokes with
-  sui::allowance::revoke and the AllowanceCap.
+  and passes it to rtd::allowance::balance_spend. The funder revokes with
+  rtd::allowance::revoke and the AllowanceCap.
 ---
 
-An allowance is a shared object of type `sui::allowance::Allowance<Balance<T>>` that authorizes one spender to withdraw coin type `T` from the funder's [address balance](/onchain-finance/asset-custody/address-balances). The funder issues it, the spender uses it in their own transactions, and the funder revokes it. For the concepts and use cases, see [What Are Allowances?](/onchain-finance/allowances/allowances-overview). For the full module reference, see [`sui::allowance`](/references/framework/sui_sui/allowance).
+An allowance is a shared object of type `rtd::allowance::Allowance<Balance<T>>` that authorizes one spender to withdraw coin type `T` from the funder's [address balance](/onchain-finance/asset-custody/address-balances). The funder issues it, the spender uses it in their own transactions, and the funder revokes it. For the concepts and use cases, see [What Are Allowances?](/onchain-finance/allowances/allowances-overview). For the full module reference, see [`rtd::allowance`](/references/framework/rtd_rtd/allowance).
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] [Install Sui](/getting-started/onboarding/sui-install) v1.80 or later for Devnet and Testnet, or v1.81 or later for Mainnet.
+- [x] [Install Rtd](/getting-started/onboarding/rtd-install) v1.80 or later for Devnet and Testnet, or v1.81 or later for Mainnet.
 - [x] A funded [address balance](/onchain-finance/asset-custody/address-balances) on the funder's address.
-- [x] For the TypeScript examples, `@mysten/sui` 2.31 or later: `npm install @mysten/sui`.
+- [x] For the TypeScript examples, `@linku/rtd` 2.31 or later: `npm install @linku/rtd`.
 
 </TabItem>
 </Tabs>
 
 ## Issue an allowance
 
-The funder issues a direct allowance with `sui::allowance::new`. It is an `entry` function, so only a [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks) (PTB) signed by the funder can call it. A Move contract cannot issue an allowance over a caller's balance from inside another call.
+The funder issues a direct allowance with `rtd::allowance::new`. It is an `entry` function, so only a [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks) (PTB) signed by the funder can call it. A Move contract cannot issue an allowance over a caller's balance from inside another call.
 
 ```move
 entry fun new<T>(
@@ -89,9 +89,9 @@ entry fun new<T>(
 )
 ```
 
-The type argument `T` is the balance type, for example `Balance<0x2::sui::SUI>`, not the coin type. The arguments are:
+The type argument `T` is the balance type, for example `Balance<0x2::rtd::RTD>`, not the coin type. The arguments are:
 
-- `name`: A label for wallets and dashboards, at most 128 bytes. Sui never reads it.
+- `name`: A label for wallets and dashboards, at most 128 bytes. Rtd never reads it.
 - `spender`: The address allowed to spend. The spender must be the sender of every spending transaction.
 - `lifetime_cap`: The total that can ever be spent through this allowance, in the coin's smallest unit.
 - `start_timestamp_ms`: Optional activation time in milliseconds. Spends before it abort.
@@ -123,28 +123,28 @@ Windows are fixed, not sliding, and unused amounts do not carry over. See the [A
 The TypeScript examples on this page share the following setup:
 
 ```typescript title='setup.ts'
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
-export const client = new SuiGrpcClient({
+export const client = new RtdGrpcClient({
 	network: 'testnet',
-	baseUrl: 'https://fullnode.testnet.sui.io:443',
+	baseUrl: 'https://fullnode.testnet.rtd.io:443',
 });
 
 // Load secret keys from the environment, never hardcode them.
 export const funderKeypair = Ed25519Keypair.fromSecretKey(process.env.FUNDER_SECRET_KEY!);
 export const spenderKeypair = Ed25519Keypair.fromSecretKey(process.env.SPENDER_SECRET_KEY!);
-export const funderAddress = funderKeypair.toSuiAddress();
-export const spenderAddress = spenderKeypair.toSuiAddress();
+export const funderAddress = funderKeypair.toRtdAddress();
+export const spenderAddress = spenderKeypair.toRtdAddress();
 ```
 
-The following transaction issues an allowance of 1 SUI in total, with no rate limit and no start time, that expires in 30 days. Because `Option<RateLimit>` is not a pure value, the `none` comes from a Move call:
+The following transaction issues an allowance of 1 RTD in total, with no rate limit and no start time, that expires in 30 days. Because `Option<RateLimit>` is not a pure value, the `none` comes from a Move call:
 
 ```typescript title='issue-allowance.ts'
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import { client, funderAddress, funderKeypair, spenderAddress } from './setup';
 
-const ALLOWANCE_TYPE = '0x2::balance::Balance<0x2::sui::SUI>';
+const ALLOWANCE_TYPE = '0x2::balance::Balance<0x2::rtd::RTD>';
 const expirationMs = Date.now() + 30 * 24 * 60 * 60 * 1000;
 
 const tx = new Transaction();
@@ -161,7 +161,7 @@ tx.moveCall({
 	arguments: [
 		tx.pure.string('Streaming plan'),
 		tx.pure.address(spenderAddress),
-		tx.pure.option('u256', 1_000_000_000n), // lifetime cap: 1 SUI
+		tx.pure.option('u256', 1_000_000_000n), // lifetime cap: 1 RTD
 		tx.pure.option('u64', null), // no start time
 		tx.pure.option('u64', expirationMs), // expiration
 		noRateLimit,
@@ -196,10 +196,10 @@ The following PTB issues the same allowance:
 ```rust title='issue_allowance.rs'
 use move_core_types::identifier::Identifier;
 use move_core_types::u256::U256;
-use sui_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use sui_types::{MOVE_STDLIB_PACKAGE_ID, SUI_FRAMEWORK_PACKAGE_ID, TypeTag};
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::{MOVE_STDLIB_PACKAGE_ID, RTD_FRAMEWORK_PACKAGE_ID, TypeTag};
 
-let balance_type: TypeTag = "0x2::balance::Balance<0x2::sui::SUI>".parse().unwrap();
+let balance_type: TypeTag = "0x2::balance::Balance<0x2::rtd::RTD>".parse().unwrap();
 let rate_limit_type: TypeTag = "0x2::allowance::RateLimit".parse().unwrap();
 
 let mut builder = ProgrammableTransactionBuilder::new();
@@ -215,14 +215,14 @@ let no_rate_limit = builder.programmable_move_call(
 let args = vec![
     builder.pure("Streaming plan".to_string()).unwrap(),
     builder.pure(spender).unwrap(),
-    builder.pure(Some(U256::from(1_000_000_000u64))).unwrap(), // lifetime cap: 1 SUI
+    builder.pure(Some(U256::from(1_000_000_000u64))).unwrap(), // lifetime cap: 1 RTD
     builder.pure(None::<u64>).unwrap(),                        // no start time
     builder.pure(Some(expiration_ms)).unwrap(),                // expiration
     no_rate_limit,
 ];
 
 builder.programmable_move_call(
-    SUI_FRAMEWORK_PACKAGE_ID,
+    RTD_FRAMEWORK_PACKAGE_ID,
     Identifier::new("allowance").unwrap(),
     Identifier::new("new").unwrap(),
     vec![balance_type],
@@ -239,9 +239,9 @@ The transaction effects list 2 created objects: the shared `Allowance` and the f
 
 The spender sends a spending transaction as a normal PTB. It has 3 parts:
 
-1. A funds withdrawal input whose source is `SenderAllowance { funder, allowance }`. This declares the amount, the funder whose balance Sui debits, and the allowance that authorizes it.
+1. A funds withdrawal input whose source is `SenderAllowance { funder, allowance }`. This declares the amount, the funder whose balance Rtd debits, and the allowance that authorizes it.
 2. The allowance as a mutable shared object input.
-3. A call to `sui::allowance::balance_spend`, which checks the limits, charges them, and returns a `Balance<T>` for the rest of the transaction to use.
+3. A call to `rtd::allowance::balance_spend`, which checks the limits, charges them, and returns a `Balance<T>` for the rest of the transaction to use.
 
 ```move
 public fun balance_spend<C>(
@@ -252,14 +252,14 @@ public fun balance_spend<C>(
 ): Balance<C>
 ```
 
-Before the transaction executes, Sui verifies that the allowance is an input of the transaction, that its funder matches the declared funder, that the transaction sender is its spender, and that the coin type matches. Sui rejects a transaction that fails these checks before execution, so it costs no gas. Sui reserves the amount against the funder's balance, exactly like a withdrawal from the sender's own balance.
+Before the transaction executes, Rtd verifies that the allowance is an input of the transaction, that its funder matches the declared funder, that the transaction sender is its spender, and that the coin type matches. Rtd rejects a transaction that fails these checks before execution, so it costs no gas. Rtd reserves the amount against the funder's balance, exactly like a withdrawal from the sender's own balance.
 
 ### TypeScript SDK
 
-`tx.balance()` accepts an `allowance` option. The SDK reads the allowance to find the funder, adds the withdrawal input, and calls `balance_spend` for you. The following transaction spends 0.1 SUI through the allowance and deposits it into the spender's address balance:
+`tx.balance()` accepts an `allowance` option. The SDK reads the allowance to find the funder, adds the withdrawal input, and calls `balance_spend` for you. The following transaction spends 0.1 RTD through the allowance and deposits it into the spender's address balance:
 
 ```typescript title='spend-allowance.ts'
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import { client, spenderAddress, spenderKeypair } from './setup';
 
 const allowanceId = 'ALLOWANCE_ID'; // from the issuing transaction
@@ -267,11 +267,11 @@ const allowanceId = 'ALLOWANCE_ID'; // from the issuing transaction
 const tx = new Transaction();
 tx.setSender(spenderAddress);
 
-const balance = tx.balance({ allowance: allowanceId, balance: 100_000_000n }); // 0.1 SUI
+const balance = tx.balance({ allowance: allowanceId, balance: 100_000_000n }); // 0.1 RTD
 
 tx.moveCall({
 	target: '0x2::balance::send_funds',
-	typeArguments: ['0x2::sui::SUI'],
+	typeArguments: ['0x2::rtd::RTD'],
 	arguments: [balance, tx.pure.address(spenderAddress)],
 });
 
@@ -282,18 +282,18 @@ if (result.$kind === 'FailedTransaction') {
 }
 ```
 
-Pass `type` for a coin other than SUI. The returned `Balance<T>` works in any Move call. To skip the allowance lookup when you already know the funder, pass `{ objectId, funder }` as the `allowance`. For an app-bound allowance, pass `{ objectId, app: { type, permit } }`, where `permit` is a `SpendPermit` your module returned earlier in the same transaction.
+Pass `type` for a coin other than RTD. The returned `Balance<T>` works in any Move call. To skip the allowance lookup when you already know the funder, pass `{ objectId, funder }` as the `allowance`. For an app-bound allowance, pass `{ objectId, app: { type, permit } }`, where `permit` is a `SpendPermit` your module returned earlier in the same transaction.
 
 For full control over the transaction, replace the `tx.balance()` call above with a withdrawal input built with `from: 'allowance'` and a direct call to `balance_spend`:
 
 ```typescript
 import { funderAddress } from './setup';
 
-const SUI = '0x2::sui::SUI';
+const RTD = '0x2::rtd::RTD';
 
 const withdrawal = tx.withdrawal({
 	amount: 100_000_000n,
-	type: SUI,
+	type: RTD,
 	from: 'allowance',
 	allowance: allowanceId,
 	funder: funderAddress,
@@ -301,12 +301,12 @@ const withdrawal = tx.withdrawal({
 
 const balance = tx.moveCall({
 	target: '0x2::allowance::balance_spend',
-	typeArguments: [SUI],
+	typeArguments: [RTD],
 	arguments: [tx.object(allowanceId), withdrawal, tx.object.clock()],
 });
 ```
 
-Both forms take the coin type, while the funder issued the allowance with the balance type `Balance<0x2::sui::SUI>`. The spender pays gas.
+Both forms take the coin type, while the funder issued the allowance with the balance type `Balance<0x2::rtd::RTD>`. The spender pays gas.
 
 ### Rust SDK
 
@@ -314,10 +314,10 @@ The following PTB spends `amount` MIST from `funder` through the allowance and k
 
 ```rust title='spend_allowance.rs'
 use move_core_types::identifier::Identifier;
-use sui_types::gas_coin::GAS;
-use sui_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use sui_types::transaction::{FundsWithdrawalArg, ObjectArg, SharedObjectMutability};
-use sui_types::{SUI_CLOCK_OBJECT_ID, SUI_CLOCK_OBJECT_SHARED_VERSION, SUI_FRAMEWORK_PACKAGE_ID};
+use rtd_types::gas_coin::GAS;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::{FundsWithdrawalArg, ObjectArg, SharedObjectMutability};
+use rtd_types::{RTD_CLOCK_OBJECT_ID, RTD_CLOCK_OBJECT_SHARED_VERSION, RTD_FRAMEWORK_PACKAGE_ID};
 
 let mut builder = ProgrammableTransactionBuilder::new();
 
@@ -340,25 +340,25 @@ let withdraw_arg = builder
 
 let clock_arg = builder
     .obj(ObjectArg::SharedObject {
-        id: SUI_CLOCK_OBJECT_ID,
-        initial_shared_version: SUI_CLOCK_OBJECT_SHARED_VERSION,
+        id: RTD_CLOCK_OBJECT_ID,
+        initial_shared_version: RTD_CLOCK_OBJECT_SHARED_VERSION,
         mutability: SharedObjectMutability::Immutable,
     })
     .unwrap();
 
 let spent = builder.programmable_move_call(
-    SUI_FRAMEWORK_PACKAGE_ID,
+    RTD_FRAMEWORK_PACKAGE_ID,
     Identifier::new("allowance").unwrap(),
     Identifier::new("balance_spend").unwrap(),
-    vec!["0x2::sui::SUI".parse().unwrap()],
+    vec!["0x2::rtd::RTD".parse().unwrap()],
     vec![allowance_arg, withdraw_arg, clock_arg],
 );
 
 let coin = builder.programmable_move_call(
-    SUI_FRAMEWORK_PACKAGE_ID,
+    RTD_FRAMEWORK_PACKAGE_ID,
     Identifier::new("coin").unwrap(),
     Identifier::new("from_balance").unwrap(),
-    vec!["0x2::sui::SUI".parse().unwrap()],
+    vec!["0x2::rtd::RTD".parse().unwrap()],
     vec![spent],
 );
 
@@ -368,7 +368,7 @@ let pt = builder.finish();
 // Sign and execute as the spender. The spender pays gas.
 ```
 
-`FundsWithdrawalArg::balance_from_allowance` and `balance_spend` both take the coin type (`0x2::sui::SUI`).
+`FundsWithdrawalArg::balance_from_allowance` and `balance_spend` both take the coin type (`0x2::rtd::RTD`).
 
 The returned `Balance<C>` behaves like any other balance. Convert it to a coin with `coin::from_balance`, pass it to a Move function, or deposit it into an address balance with `balance::send_funds`.
 
@@ -376,7 +376,7 @@ The returned `Balance<C>` behaves like any other balance. Convert it to a coin w
 
 An app-bound allowance routes every spend through the Move module that defines the app type `A`. Use it when your contract, not just the spender's key, must decide whether each pull is allowed, or when you need to rotate the spender key without involving the funder.
 
-Issuance has 2 steps. The funder calls `sui::allowance::propose_for_app` in a PTB, which returns an `AllowanceProposal` instead of creating anything. In the same PTB, the funder passes the proposal to a function in your module that accepts it with `sui::allowance::issue`:
+Issuance has 2 steps. The funder calls `rtd::allowance::propose_for_app` in a PTB, which returns an `AllowanceProposal` instead of creating anything. In the same PTB, the funder passes the proposal to a function in your module that accepts it with `rtd::allowance::issue`:
 
 ```move
 entry fun propose_for_app<T, A>(
@@ -397,9 +397,9 @@ Your module obtains the permits from `std::internal::permit<A>()`, which only th
 ```move title='allowance_app.move'
 module my_app::allowance_app;
 
-use sui::allowance::{Self, Allowance, AllowanceProposal, AllowanceWithdrawal};
-use sui::balance::Balance;
-use sui::clock::Clock;
+use rtd::allowance::{Self, Allowance, AllowanceProposal, AllowanceWithdrawal};
+use rtd::balance::Balance;
+use rtd::clock::Clock;
 
 public struct APP has drop {}
 
@@ -431,7 +431,7 @@ Any holder of `SettingsPermit<A>` can rotate the spender of every allowance boun
 
 ## Revoke an allowance
 
-The funder revokes by passing the `AllowanceCap` and the allowance to `sui::allowance::revoke`. Sui deletes both objects, which reclaims their storage rebates:
+The funder revokes by passing the `AllowanceCap` and the allowance to `rtd::allowance::revoke`. Rtd deletes both objects, which reclaims their storage rebates:
 
 ```move
 public fun revoke<T>(self: AllowanceCap<T>, allowance: Allowance<T>)
@@ -440,7 +440,7 @@ public fun revoke<T>(self: AllowanceCap<T>, allowance: Allowance<T>)
 From the TypeScript SDK:
 
 ```typescript title='revoke-allowance.ts'
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import { client, funderAddress, funderKeypair } from './setup';
 
 const allowanceId = 'ALLOWANCE_ID';
@@ -451,21 +451,21 @@ tx.setSender(funderAddress);
 
 tx.moveCall({
 	target: '0x2::allowance::revoke',
-	typeArguments: ['0x2::balance::Balance<0x2::sui::SUI>'],
+	typeArguments: ['0x2::balance::Balance<0x2::rtd::RTD>'],
 	arguments: [tx.object(allowanceCapId), tx.object(allowanceId)],
 });
 
 await client.signAndExecuteTransaction({ transaction: tx, signer: funderKeypair });
 ```
 
-From the [Sui CLI](/references/cli/ptb), using the balance type as the type argument:
+From the [Rtd CLI](/references/cli/ptb), using the balance type as the type argument:
 
 ```bash
-$ sui client ptb \
-    --move-call 0x2::allowance::revoke '<0x2::balance::Balance<0x2::sui::SUI>>' @ALLOWANCE_CAP_ID @ALLOWANCE_ID
+$ rtd client ptb \
+    --move-call 0x2::allowance::revoke '<0x2::balance::Balance<0x2::rtd::RTD>>' @ALLOWANCE_CAP_ID @ALLOWANCE_ID
 ```
 
-After revocation, the allowance no longer exists, so Sui rejects any spend that names it before execution. A spend that was already in flight fails at execution instead. There is no way to update an allowance in place. To change its terms, revoke it and issue a new one.
+After revocation, the allowance no longer exists, so Rtd rejects any spend that names it before execution. A spend that was already in flight fails at execution instead. There is no way to update an allowance in place. To change its terms, revoke it and issue a new one.
 
 ## Find allowances
 

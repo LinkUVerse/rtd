@@ -59,12 +59,12 @@ If you arrived from the old Predict Manager title, you are in the right place. T
 
 This surface belongs to 2 modules, both under `packages/account/sources/` rather than under the Predict package:
 
-- `account::account`: The `AccountWrapper` object, the embedded `Account`, the `Auth` type, and the custody functions, at [`account.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/account/sources/account.move).
-- `account::account_registry`: Account creation, address derivation, and the app authorization allowlist, at [`account_registry.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/account/sources/account_registry.move).
+- `account::account`: The `AccountWrapper` object, the embedded `Account`, the `Auth` type, and the custody functions, at [`account.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/account/sources/account.move).
+- `account::account_registry`: Account creation, address derivation, and the app authorization allowlist, at [`account_registry.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/account/sources/account_registry.move).
 
-Predict's own per-account slot lives in [`deepbook_predict::predict_account`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/predict_account.move).
+Predict's own per-account slot lives in [`deepbook_predict::predict_account`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/predict_account.move).
 
-Sui Mainnet and Sui Testnet each run a separate deployment of the `account` package from identical sources, and the Move snippets on this page pin DeepBookV3 `main` at `76b11922`, whose sources match both deployments. An account on one network does not exist on the other, and neither deployment shares accounts with an earlier deployment. Take the IDs from `getAccountConfig(network)` rather than transcribing them:
+Rtd Mainnet and Rtd Testnet each run a separate deployment of the `account` package from identical sources, and the Move snippets on this page pin DeepBookV3 `main` at `76b11922`, whose sources match both deployments. An account on one network does not exist on the other, and neither deployment shares accounts with an earlier deployment. Take the IDs from `getAccountConfig(network)` rather than transcribing them:
 
 | **Object** | **Mainnet** | **Testnet** |
 |---|---|---|
@@ -139,7 +139,7 @@ Creating an account twice for the same owner aborts with `EAccountAlreadyExists`
 <ImportContent
 	source="packages/account/sources/account_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="new,new_with_referrer"
@@ -169,7 +169,7 @@ That determinism removes the 2-transaction sequence the old manager required. Yo
 <ImportContent
 	source="packages/account/sources/account_registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="derived_address,derived_wrapper_address,derived_exists,derived_wrapper_exists"
@@ -215,7 +215,7 @@ Field order in the table is declaration order. Creation writes the 2 referrer fi
 <ImportContent
 	source="packages/account/sources/account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="AccountWrapper,Account"
@@ -252,7 +252,7 @@ Owner authority comes from 2 constructors, and app authority from 1 package-issu
 <ImportContent
 	source="packages/account/sources/account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="Auth"
@@ -261,7 +261,7 @@ Owner authority comes from 2 constructors, and app authority from 1 package-issu
 <ImportContent
 	source="packages/account/sources/account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="generate_auth,generate_auth_as_object,share,load_account_mut"
@@ -272,7 +272,7 @@ Owner authority comes from 2 constructors, and app authority from 1 package-issu
 
 ## Balances and custody {#quote-balances}
 
-Funds reach an account in 2 ways. Some arrive as stored balance directly: a deposit, and a redemption payout, which Predict credits to the account inside the redeeming transaction. The rest arrive at the wrapper address through Sui's fund accumulator, which is how builder fees, referral shares, and filled liquidity requests arrive, and a settling call has to fold them into stored balance before the account can spend them.
+Funds reach an account in 2 ways. Some arrive as stored balance directly: a deposit, and a redemption payout, which Predict credits to the account inside the redeeming transaction. The rest arrive at the wrapper address through Rtd's fund accumulator, which is how builder fees, referral shares, and filled liquidity requests arrive, and a settling call has to fold them into stored balance before the account can spend them.
 
 `settle` does that folding and is permissionless:
 
@@ -311,7 +311,7 @@ Predict's own trading functions settle USDC through the wrapper before they pric
 <ImportContent
 	source="packages/account/sources/account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="deposit_funds,withdraw_funds,settle"
@@ -352,7 +352,7 @@ Because it includes unsettled funds, it does not go stale between a payout and t
 <ImportContent
 	source="packages/account/sources/account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="owner,receive_address,account_id,balance,referrer_account_id,referrer_receive_address"
@@ -384,7 +384,7 @@ An order ID alone does not identify a position. It carries the quantity and the 
 <ImportContent
 	source="packages/predict/sources/predict_account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="PositionKey,Position,PredictData"
@@ -430,7 +430,7 @@ Both consume an `Auth` and both emit `BuilderCodeSet` from `deepbook_predict::bu
 <ImportContent
 	source="packages/predict/sources/predict_account.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="has_position,builder_code_id,set_builder_code,unset_builder_code"
@@ -487,7 +487,7 @@ public fun unset_builder_code(wrapper: &mut AccountWrapper, auth: Auth, ctx: &mu
 
 ## The account SDK subpath {#account-sdk}
 
-`@mysten/deepbook-v3` publishes the account primitive on its own subpath, `@mysten/deepbook-v3/account`, with `getAccountConfig(network)` for the deployed IDs and an `AccountContract` class whose builders compose into a programmable transaction block of your own. [Predict Accounts SDK](/onchain-finance/deepbook/deepbook-predict-sdk/accounts#account-subpath) documents every `AccountContract` method, the split between wrapper and account IDs, and the generated bindings.
+`@linku/deepbook-v3` publishes the account primitive on its own subpath, `@linku/deepbook-v3/account`, with `getAccountConfig(network)` for the deployed IDs and an `AccountContract` class whose builders compose into a programmable transaction block of your own. [Predict Accounts SDK](/onchain-finance/deepbook/deepbook-predict-sdk/accounts#account-subpath) documents every `AccountContract` method, the split between wrapper and account IDs, and the generated bindings.
 
 ## End-to-end workflow {#end-to-end-workflow}
 
@@ -566,7 +566,7 @@ The module declares 2 further events, `AppAuthorized` and `AppDeauthorized`, whi
 <ImportContent
 	source="packages/account/sources/account_events.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="AccountCreated,Deposited,Withdrawn,FundsSettled"

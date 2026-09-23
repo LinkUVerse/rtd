@@ -26,13 +26,13 @@ markers. The tags map to these pages:
 - `config`, `client`, `create-manager`, `markets`, `mint-binary`, `mint-range`, `redeem`, `supply`, `withdraw`: Testnet workflow tutorial.
 - `sessions-authorize`, `sessions-list`, `sessions-trade`, `sessions-revoke`: Sessions contract reference.
 
-The `sessions-*` files import from `@mysten/deepbook-v3/sessions`, a separate
+The `sessions-*` files import from `@linku/deepbook-v3/sessions`, a separate
 subpath from `/predict`. They build owner-signed grant transactions and
 session-signed trades, and like everything else here they only return the
 transaction.
 
 No package ID, object ID, or coin type is hardcoded here. They all come from
-`@mysten/deepbook-v3/predict`, which carries a record for each deployment its
+`@linku/deepbook-v3/predict`, which carries a record for each deployment its
 release was cut against. `src/config.ts` asserts that record is
 `deepbook-predict-testnet` on Testnet and `deepbook-predict-mainnet` on Mainnet
 at startup, so an SDK upgrade that moves a network to a new deployment fails

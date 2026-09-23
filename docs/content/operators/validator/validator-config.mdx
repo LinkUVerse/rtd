@@ -1,8 +1,8 @@
 ---
 title: Validator Deployment and Configuration
-description: 'Learn how to set up, configure, and manage a Sui validator node.'
+description: 'Learn how to set up, configure, and manage a Rtd validator node.'
 keywords:
-  - sui validator node
+  - rtd validator node
   - validator nodes
   - validator node configuration
   - configure validator node
@@ -10,7 +10,7 @@ keywords:
   - manage validator
 sidebar_label: Deployment and Configuration
 goal:
-  description: 'Validator operator can set up, configure, and manage a Sui validator node'
+  description: 'Validator operator can set up, configure, and manage a Rtd validator node'
   requires:
     - has_frontmatter:
         - title
@@ -27,22 +27,22 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I configure a Sui validator node?
+  - How do I configure a Rtd validator node?
   - What are the required validator configuration parameters?
   - How do I set up validator keys and networking?
 answer: >-
-  Validators on Sui run specialized validator nodes that can execute more tasks
+  Validators on Rtd run specialized validator nodes that can execute more tasks
   than full nodes. Validators handle staking, gas price reference, and tallying
   rules.
 ---
 
-Validators on Sui run specialized validator nodes that can execute more tasks than full nodes. Validators handle staking, gas price reference, and tallying rules.
+Validators on Rtd run specialized validator nodes that can execute more tasks than full nodes. Validators handle staking, gas price reference, and tallying rules.
 
 ## Validator requirements
 
-To run a Sui validator, you must set up and configure a Sui validator node. Specific steps you must take include:
+To run a Rtd validator, you must set up and configure a Rtd validator node. Specific steps you must take include:
 
-1. Install and configure Sui.
+1. Install and configure Rtd.
 2. Configure port and protocol settings.
 3. Configure key management.
 4. Configure storage.
@@ -53,7 +53,7 @@ To run a Sui validator, you must set up and configure a Sui validator node. Spec
 
 ### Hardware requirements
 
-Suggested minimum hardware specifications to run a Sui validator node:
+Suggested minimum hardware specifications to run a Rtd validator node:
 
 - CPU: 24 physical cores (or 48 virtual cores)
 - Memory: 128 GB
@@ -66,7 +66,7 @@ To set up staking on your validator node:
 
 1. Call `request_add_validator_candidate` to become a candidate. This creates the onchain validator information and initializes a staking pool for delegators to contribute to.
 
-2. Acquire 30M SUI by staking to the validator staking pool you created in the previous step. Call `request_add_stake` with the address of the validator (this is not the same as the staking pool ID).
+2. Acquire 30M RTD by staking to the validator staking pool you created in the previous step. Call `request_add_stake` with the address of the validator (this is not the same as the staking pool ID).
 
 3. Call `request_add_validator` to have the validator become a pending validator. At the next epoch, it joins the validator set. Before the next epoch, you should stand up the validator so that when the epoch changes, it can participate.
 
@@ -74,51 +74,51 @@ To set up staking on your validator node:
 
 ## Deployment
 
-You can deploy a Sui node in a number of ways.
+You can deploy a Rtd node in a number of ways.
 
-1. Use pre-built container images available in [Docker Hub](https://hub.docker.com/r/mysten/sui-node/tags).
+1. Use pre-built container images available in [Docker Hub](https://hub.docker.com/r/linku/rtd-node/tags).
 
 2. Use pre-built `linux/amd64` binaries available in S3 that you can fetch using one of the following methods:
 
 ```sh
-$ wget https://releases.sui.io/$SUI_SHA/sui-node
+$ wget https://releases.rtd.io/$RTD_SHA/rtd-node
 ```
 
 ```sh
-$ curl https://releases.sui.io/$SUI_SHA/sui-node -o sui-node
+$ curl https://releases.rtd.io/$RTD_SHA/rtd-node -o rtd-node
 ```
 
 Or, to build directly from source:
 
 ```sh
-$ git clone https://github.com/MystenLabs/sui.git && cd sui
+$ git clone https://github.com/LinkUVerse/rtd.git && cd rtd
 $ git checkout [SHA|BRANCH|TAG]
-$ cargo build --release --bin sui-node
+$ cargo build --release --bin rtd-node
 ```
 
-For more information on deploying a validator, refer to the [Sui for Node Operators](https://github.com/MystenLabs/sui/blob/main/nre/sui_for_node_operators.md) guide.
+For more information on deploying a validator, refer to the [Rtd for Node Operators](https://github.com/LinkUVerse/rtd/blob/main/nre/rtd_for_node_operators.md) guide.
 
 ## Configuration
 
 Use one of the following configuration guides for your deployment option:
 
-- [Systemd](https://github.com/MystenLabs/sui/blob/main/nre/systemd/README.md)
-- [Ansible](https://github.com/MystenLabs/sui/blob/main/nre/ansible/README.md)
-- [Docker Compose](https://github.com/MystenLabs/sui/blob/main/nre/docker/README.md)
+- [Systemd](https://github.com/LinkUVerse/rtd/blob/main/nre/systemd/README.md)
+- [Ansible](https://github.com/LinkUVerse/rtd/blob/main/nre/ansible/README.md)
+- [Docker Compose](https://github.com/LinkUVerse/rtd/blob/main/nre/docker/README.md)
 
-`sui-node` runs with a single configuration file provided as an argument, for example:
+`rtd-node` runs with a single configuration file provided as an argument, for example:
 
 ```sh 
-$ ./sui-node --config-path /opt/sui/config/validator.yaml
+$ ./rtd-node --config-path /opt/rtd/config/validator.yaml
 ```
 
-For more information on configuring a validator, refer to the [Sui for Node Operators](https://github.com/MystenLabs/sui/blob/main/nre/sui_for_node_operators.md) guide.
+For more information on configuring a validator, refer to the [Rtd for Node Operators](https://github.com/LinkUVerse/rtd/blob/main/nre/rtd_for_node_operators.md) guide.
 
-See [Validator](https://github.com/MystenLabs/sui/blob/main/nre/config/validator.yaml) for configuration templates.
+See [Validator](https://github.com/LinkUVerse/rtd/blob/main/nre/config/validator.yaml) for configuration templates.
 
 ## Connectivity
 
-`sui-node` uses the following ports by default:
+`rtd-node` uses the following ports by default:
 
 | protocol/port | reachability     | purpose                           |
 | ------------- | ---------------- | --------------------------------- |
@@ -132,17 +132,17 @@ To run a validator successfully, you must open ports 8080-8084 as outlined, incl
 
 ## Network buffer
 
-Load testing on Sui validator networks suggests that the default Linux network buffer sizes are too small.
+Load testing on Rtd validator networks suggests that the default Linux network buffer sizes are too small.
 Increase them using one of the following two methods:
 
 ### Option 1: With `/etc/sysctl.d/`
 
-Add these settings to a new `sysctl` file specifically for `sui-node` or append them to an existing file. Modifications made in this way persist across system restarts.
+Add these settings to a new `sysctl` file specifically for `rtd-node` or append them to an existing file. Modifications made in this way persist across system restarts.
 
-Create a new `sysctl` file for the `sui-node`:
+Create a new `sysctl` file for the `rtd-node`:
 
 ```sh
-$ sudo nano /etc/sysctl.d/100-sui-node.conf
+$ sudo nano /etc/sysctl.d/100-rtd-node.conf
 ```
 
 Add these lines to the file, overwriting existing settings if necessary:

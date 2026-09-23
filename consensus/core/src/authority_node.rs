@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -12,8 +12,8 @@ use consensus_config::{
 };
 use consensus_types::block::Round;
 use itertools::Itertools;
-use mysten_common::debug_fatal;
-use mysten_network::Multiaddr;
+use linku_common::debug_fatal;
+use linku_network::Multiaddr;
 use parking_lot::RwLock;
 use prometheus::Registry;
 use tracing::{info, warn};
@@ -52,7 +52,7 @@ use crate::{
     transaction_vote_tracker::TransactionVoteTracker,
 };
 
-/// ConsensusAuthority is used by Sui to manage the lifetime of AuthorityNode.
+/// ConsensusAuthority is used by Rtd to manage the lifetime of AuthorityNode.
 /// It hides the details of the implementation from the caller, MysticetiManager.
 #[allow(private_interfaces)]
 pub enum ConsensusAuthority {
@@ -715,8 +715,8 @@ mod tests {
     use consensus_config::{
         AuthorityIndex, ObserverParameters, Parameters, PeerRecord, local_committee_and_keys,
     };
-    use mysten_metrics::RegistryService;
-    use mysten_metrics::monitored_mpsc::UnboundedReceiver;
+    use linku_metrics::RegistryService;
+    use linku_metrics::monitored_mpsc::UnboundedReceiver;
     use prometheus::Registry;
     use rand::{SeedableRng, rngs::StdRng};
     use rstest::rstest;

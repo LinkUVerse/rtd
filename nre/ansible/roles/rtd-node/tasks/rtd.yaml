@@ -1,0 +1,99 @@
+---
+- name: Add a rtd user
+  ansible.builtin.user:
+    name: rtd
+    shell: /bin/bash
+
+- name: Create rtd directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "rtd"
+    group: "rtd"
+    mode: 0755
+  loop:
+    - /opt/rtd/bin
+    - /opt/rtd/config
+    - /opt/rtd/db
+    - /opt/rtd/key-pairs
+
+- name: Copy validator configuration file
+  copy:
+    src: "{{ node_config }}"
+    dest: /opt/rtd/config/validator.yaml
+    owner: "rtd"
+    group: "rtd"
+    mode: 0644
+
+- name: Copy genesis.blob
+  copy:
+    src: "{{ genesis_blob }}"
+    dest: /opt/rtd/config/genesis.blob
+    owner: "rtd"
+    group: "rtd"
+    mode: 0644
+
+- name: Copy protocol.key
+  copy:
+    src: "{{ keypair_path }}protocol.key"
+    dest: /opt/rtd/key-pairs/protocol.key
+    owner: "rtd"
+    group: "rtd"
+    mode: 0600
+
+- name: Copy network.key
+  copy:
+    src: "{{ keypair_path }}network.key"
+    dest: /opt/rtd/key-pairs/network.key
+    owner: "rtd"
+    group: "rtd"
+    mode: 0600
+
+- name: Copy worker.key
+  copy:
+    src: "{{ keypair_path }}worker.key"
+    dest: /opt/rtd/key-pairs/worker.key
+    owner: "rtd"
+    group: "rtd"
+    mode: 0600
+
+- name: Stop rtd-node
+  systemd:
+    name: rtd-node
+    state: stopped
+  ignore_errors: yes
+
+- name: Remove authorities directory
+  file:
+    state: absent
+    path: "/opt/rtd/db/authorities_db"
+  when: reset_db == true
+
+- name: Remove consensus directory
+  file:
+    state: absent
+    path: "/opt/rtd/db/consensus_db"
+  when: reset_db == true
+
+- name: Place binary
+  ansible.builtin.get_url:
+    url: "https://releases.rtd.io/{{ rtd_release }}/rtd-node"
+    dest: /opt/rtd/bin/rtd-node
+    force: true
+    mode: "0755"
+
+- name: Copy rtd-node systemd service file
+  copy:
+    src: "../files/rtd-node.service"
+    dest: /etc/systemd/system/rtd-node.service
+
+- name: Reload rtd-node systemd service file
+  ansible.builtin.systemd:
+    name: rtd-node
+    state: reloaded
+
+- name: Start rtd-node service
+  systemd:
+    name: rtd-node
+    state: started
+  when: start_rtd == true

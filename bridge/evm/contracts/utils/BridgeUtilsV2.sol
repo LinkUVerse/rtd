@@ -39,7 +39,7 @@ library BridgeUtilsV2 {
     /// @dev The function will revert if the payload length is invalid.
     ///     TokenTransfer payload is 64 bytes.
     ///     byte 0       : sender address length
-    ///     bytes 1-32   : sender address (as we only support Sui now, it has to be 32 bytes long)
+    ///     bytes 1-32   : sender address (as we only support Rtd now, it has to be 32 bytes long)
     ///     bytes 33     : target chain id
     ///     byte 34      : target address length
     ///     bytes 35-54  : target address
@@ -59,7 +59,7 @@ library BridgeUtilsV2 {
 
         require(
             senderAddressLength == 32,
-            "BridgeUtils: Invalid sender address length, Sui address must be 32 bytes"
+            "BridgeUtils: Invalid sender address length, Rtd address must be 32 bytes"
         );
 
         // used to offset already read bytes

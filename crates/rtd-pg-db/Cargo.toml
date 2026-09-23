@@ -1,0 +1,39 @@
+[package]
+name = "rtd-pg-db"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+bb8 = "0.9.1"
+clap.workspace = true
+chrono.workspace = true
+diesel = { workspace = true, features = ["chrono"] }
+diesel-async = { workspace = true, features = ["bb8", "postgres", "async-connection-wrapper"] }
+diesel_migrations.workspace = true
+futures.workspace = true
+prometheus.workspace = true
+rustls.workspace = true
+scoped-futures.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-postgres = "0.7.12"
+tokio-postgres-rustls = "0.12.0"
+tracing.workspace = true
+url.workspace = true
+webpki-roots = "0.26.3"
+
+rtd-field-count.workspace = true
+rtd-indexer-alt-framework-store-traits.workspace = true
+rtd-sql-macro.workspace = true
+
+[dev-dependencies]
+rtd-indexer-alt-framework-store-traits = { workspace = true, features = ["testing"] }
+telemetry-subscribers.workspace = true

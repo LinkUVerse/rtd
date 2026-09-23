@@ -1,0 +1,11 @@
+[package]
+name = "RtdExtra"
+edition = "2024.beta"
+
+[dependencies]
+RtdSystem = { local = "../system-packages/rtd-system" }
+Rtd = { local = "../system-packages/rtd-framework" }
+MoveStdlib = { local = "../system-packages/move-stdlib" }
+
+[addresses]
+rtd_extra = "0x42"

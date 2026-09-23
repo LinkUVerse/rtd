@@ -1,7 +1,7 @@
 ---
-title: Sui Node Monitoring
+title: Rtd Node Monitoring
 sidebar_label: Monitoring
-description: Monitor Sui node metrics to ensure the health and performance of your node.
+description: Monitor Rtd node metrics to ensure the health and performance of your node.
 keywords:
   - 'localhost:9184/metrics'
   - node metrics
@@ -10,7 +10,7 @@ keywords:
   - localhost:9184/metrics
 goal:
   description: >-
-    Node operator can monitor Sui node metrics to ensure the health and
+    Node operator can monitor Rtd node metrics to ensure the health and
     performance of your node
   requires:
     - has_frontmatter:
@@ -28,15 +28,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I monitor a Sui full node?
-  - What Prometheus metrics does a Sui node expose?
-  - How do I set up alerts for my Sui node?
-answer: Monitor Sui node metrics to ensure the health and performance of your node.
+  - How do I monitor a Rtd full node?
+  - What Prometheus metrics does a Rtd node expose?
+  - How do I set up alerts for my Rtd node?
+answer: Monitor Rtd node metrics to ensure the health and performance of your node.
 ---
 
 :::info
 
-These instructions are for advanced users. If you just need a local development environment, you should instead follow the instructions in [Create a Local Sui Network](/getting-started/onboarding/local-network) to create a local full node, validators, and faucet.
+These instructions are for advanced users. If you just need a local development environment, you should instead follow the instructions in [Create a Local Rtd Network](/getting-started/onboarding/local-network) to create a local full node, validators, and faucet.
 
 :::
 
@@ -45,7 +45,7 @@ The examples below scrape `localhost:9184/metrics`, but the default full node te
 You can view the metrics in the metrics UI, or use a tool like `curl` to get the metrics in a format that is easy to parse.
 
 ```sh
-$ curl -s http://localhost:9184/metrics | grep -E 'sui_validator|sui_fullnode'
+$ curl -s http://localhost:9184/metrics | grep -E 'rtd_validator|rtd_fullnode'
 ```
 
 ## Key metrics
@@ -77,7 +77,7 @@ Add a scrape target for your node in your Prometheus configuration:
 
 ```yaml
 scrape_configs:
-  - job_name: 'sui-fullnode'
+  - job_name: 'rtd-fullnode'
     static_configs:
       - targets: ['localhost:9184']
     scrape_interval: 15s
@@ -88,6 +88,6 @@ scrape_configs:
 Set up alerts for the following conditions:
 
 - **Sync lag:** `highest_known_checkpoint - highest_synced_checkpoint > 100` sustained for 5 minutes indicates the node is falling behind.
-- **Node down:** `up{job="sui-fullnode"} == 0` sustained for 2 minutes indicates the node is unreachable.
+- **Node down:** `up{job="rtd-fullnode"} == 0` sustained for 2 minutes indicates the node is unreachable.
 - **Execution lag:** `last_executed_checkpoint_timestamp_ms > 0 and time() - last_executed_checkpoint_timestamp_ms / 1000 > 120` sustained for 2 minutes indicates that the node is executing checkpoints more than 2 minutes behind chain time. This alert also fires while a healthy node catches up after an outage or snapshot restore. The `> 0` guard avoids false alerts during startup, when the timestamp has not yet been populated. To detect a stalled executor separately, alert when `last_executed_checkpoint` does not advance over a suitable interval.
 

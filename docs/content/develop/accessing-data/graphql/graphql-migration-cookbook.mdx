@@ -11,7 +11,7 @@ keywords:
   - events
   - checkpoint pagination
   - batch
-  - sui graphql examples
+  - rtd graphql examples
   - graphql migration examples
   - replace json-rpc with graphql
   - graphql event query
@@ -56,12 +56,12 @@ builder_paths:
     stage: Ship
     eval: covered
 questions:
-  - How do I migrate from JSON-RPC to GraphQL on Sui?
-  - How do I query events with GraphQL instead of suix_queryEvents?
-  - How do I look up transactions with GraphQL instead of sui_getTransactionBlock?
-  - How do I get balances with GraphQL instead of suix_getBalance?
-  - What is the GraphQL equivalent of sui_getObject?
-  - How do I list owned coins with GraphQL instead of suix_getCoins?
+  - How do I migrate from JSON-RPC to GraphQL on Rtd?
+  - How do I query events with GraphQL instead of rtdx_queryEvents?
+  - How do I look up transactions with GraphQL instead of rtd_getTransactionBlock?
+  - How do I get balances with GraphQL instead of rtdx_getBalance?
+  - What is the GraphQL equivalent of rtd_getObject?
+  - How do I list owned coins with GraphQL instead of rtdx_getCoins?
   - How do I paginate checkpoints with GraphQL?
   - How do I execute a transaction with GraphQL?
 answer: >-
@@ -75,7 +75,7 @@ answer: >-
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Each recipe pairs a JSON-RPC call with its GraphQL replacement and explains the key differences. For the full method mapping and decision criteria, see the [JSON-RPC Migration Guide](/develop/accessing-data/json-rpc-migration). For GraphQL concepts, pagination, and scope, see [GraphQL for Sui RPC](/develop/accessing-data/graphql/graphql-rpc).
+Each recipe pairs a JSON-RPC call with its GraphQL replacement and explains the key differences. For the full method mapping and decision criteria, see the [JSON-RPC Migration Guide](/develop/accessing-data/json-rpc-migration). For GraphQL concepts, pagination, and scope, see [GraphQL for Rtd RPC](/develop/accessing-data/graphql/graphql-rpc).
 
 :::info
 
@@ -87,11 +87,11 @@ Each recipe pairs a JSON-RPC call with its GraphQL replacement and explains the 
 
 GraphQL queries run against the online IDE or any GraphQL endpoint. Access the service at:
 
-- **Mainnet:** https://graphql.mainnet.sui.io/graphql
-- **Testnet:** https://graphql.testnet.sui.io/graphql
-- **Devnet:** https://graphql.devnet.sui.io/graphql
+- **Mainnet:** https://graphql.mainnet.rtd.io/graphql
+- **Testnet:** https://graphql.testnet.rtd.io/graphql
+- **Devnet:** https://graphql.devnet.rtd.io/graphql
 
-For `curl` examples, replace `<GRAPHQL_ENDPOINT>` with your provider's GraphQL URL. See [GraphQL for Sui RPC](/develop/accessing-data/graphql/graphql-rpc) for headers, variables, fragments, and pagination details.
+For `curl` examples, replace `<GRAPHQL_ENDPOINT>` with your provider's GraphQL URL. See [GraphQL for Rtd RPC](/develop/accessing-data/graphql/graphql-rpc) for headers, variables, fragments, and pagination details.
 
 ```sh
 curl -X POST <GRAPHQL_ENDPOINT> \
@@ -101,18 +101,18 @@ curl -X POST <GRAPHQL_ENDPOINT> \
 
 ## Get a single object
 
-Replace `sui_getObject` with `Query.object`. Select only the fields you need instead of toggling `showContent`, `showOwner` booleans.
+Replace `rtd_getObject` with `Query.object`. Select only the fields you need instead of toggling `showContent`, `showOwner` booleans.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getObject",
+    "method": "rtd_getObject",
     "params": [
       "0xOBJECT_ID",
       { "showContent": true, "showOwner": true }
@@ -155,18 +155,18 @@ query {
 
 ## Multi-get objects
 
-Replace `sui_multiGetObjects` with `Query.multiGetObjects`.
+Replace `rtd_multiGetObjects` with `Query.multiGetObjects`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_multiGetObjects",
+    "method": "rtd_multiGetObjects",
     "params": [
       ["0xOBJECT_A", "0xOBJECT_B", "0xOBJECT_C"],
       { "showContent": true }
@@ -204,18 +204,18 @@ query {
 
 ## Get a transaction
 
-Replace `sui_getTransactionBlock` with `Query.transaction`.
+Replace `rtd_getTransactionBlock` with `Query.transaction`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getTransactionBlock",
+    "method": "rtd_getTransactionBlock",
     "params": [
       "Hay2tj3GcDYcE3AMHrej5WDsHGPVAYsegcubixLUvXUF",
       { "showEffects": true, "showEvents": true }
@@ -252,18 +252,18 @@ query {
 
 ## Multi-get transactions
 
-Replace `sui_multiGetTransactionBlocks` with `Query.multiGetTransactions`.
+Replace `rtd_multiGetTransactionBlocks` with `Query.multiGetTransactions`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_multiGetTransactionBlocks",
+    "method": "rtd_multiGetTransactionBlocks",
     "params": [
       ["DIGEST_A", "DIGEST_B"],
       { "showEffects": true, "showEvents": true }
@@ -291,18 +291,18 @@ query {
 
 ## Get total transactions
 
-Replace `sui_getTotalTransactionBlocks` with `Checkpoint.networkTotalTransactions`.
+Replace `rtd_getTotalTransactionBlocks` with `Checkpoint.networkTotalTransactions`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getTotalTransactionBlocks",
+    "method": "rtd_getTotalTransactionBlocks",
     "params": []
   }'
 ```
@@ -326,18 +326,18 @@ query {
 
 ## Query filtered transactions
 
-Replace `suix_queryTransactionBlocks` with `Query.transactions` and a `TransactionFilter`.
+Replace `rtdx_queryTransactionBlocks` with `Query.transactions` and a `TransactionFilter`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_queryTransactionBlocks",
+    "method": "rtdx_queryTransactionBlocks",
     "params": [
       { "filter": { "FromAddress": "0xADDRESS" } },
       null, 10, false
@@ -380,18 +380,18 @@ query {
 
 ## Query events
 
-Replace `suix_queryEvents` with `Query.events` and an `EventFilter`.
+Replace `rtdx_queryEvents` with `Query.events` and an `EventFilter`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_queryEvents",
+    "method": "rtdx_queryEvents",
     "params": [
       { "MoveEventType": "0xPACKAGE::module::MyEvent" },
       null, 50, false
@@ -440,12 +440,12 @@ query {
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_queryEvents",
+    "method": "rtdx_queryEvents",
     "params": [
       { "Transaction": "8NB8sXb4m9PJhCyLB7eVH4onqQWoFFzVUrqPoYUhcQe2" },
       null, 50, false
@@ -479,18 +479,18 @@ query {
 
 ## Look up a single checkpoint
 
-Replace `sui_getCheckpoint` with `Query.checkpoint`.
+Replace `rtd_getCheckpoint` with `Query.checkpoint`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getCheckpoint",
+    "method": "rtd_getCheckpoint",
     "params": ["164329987"]
   }'
 ```
@@ -517,18 +517,18 @@ query {
 
 ## Paginate checkpoints
 
-Replace `sui_getCheckpoints` polling with `Query.checkpoints` pagination.
+Replace `rtd_getCheckpoints` polling with `Query.checkpoints` pagination.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getCheckpoints",
+    "method": "rtd_getCheckpoints",
     "params": [null, 10, false]
   }'
 ```
@@ -562,29 +562,29 @@ query ($after: String) {
 
 ## Get balances
 
-Replace `suix_getBalance` and `suix_getAllBalances` with `Address.balance` and `Address.balances`.
+Replace `rtdx_getBalance` and `rtdx_getAllBalances` with `Address.balance` and `Address.balances`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
 # Single coin type
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getBalance",
-    "params": ["0xADDRESS", "0x2::sui::SUI"]
+    "method": "rtdx_getBalance",
+    "params": ["0xADDRESS", "0x2::rtd::RTD"]
   }'
 
 # All coin types
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getAllBalances",
+    "method": "rtdx_getAllBalances",
     "params": ["0xADDRESS"]
   }'
 ```
@@ -596,7 +596,7 @@ curl -X POST https://fullnode.mainnet.sui.io:443 \
 # Single coin type
 query {
   address(address: "0xADDRESS") {
-    balance(coinType: "0x2::sui::SUI") {
+    balance(coinType: "0x2::rtd::RTD") {
       coinType { repr }
       totalBalance
     }
@@ -627,19 +627,19 @@ query {
 
 ## List owned coins
 
-Replace `suix_getCoins` and `suix_getAllCoins` with `Address.objects` filtered by coin type.
+Replace `rtdx_getCoins` and `rtdx_getAllCoins` with `Address.objects` filtered by coin type.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getCoins",
-    "params": ["0xADDRESS", "0x2::sui::SUI", null, 50]
+    "method": "rtdx_getCoins",
+    "params": ["0xADDRESS", "0x2::rtd::RTD", null, 50]
   }'
 ```
 
@@ -651,7 +651,7 @@ query {
   address(address: "0xADDRESS") {
     objects(
       first: 50,
-      filter: { type: "0x2::coin::Coin<0x2::sui::SUI>" }
+      filter: { type: "0x2::coin::Coin<0x2::rtd::RTD>" }
     ) {
       pageInfo {
         hasNextPage
@@ -677,19 +677,19 @@ To list coins of every type, use `filter: { type: "0x2::coin::Coin" }` without a
 
 ## Get coin metadata
 
-Replace `suix_getCoinMetadata` with `Query.coinMetadata`.
+Replace `rtdx_getCoinMetadata` with `Query.coinMetadata`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getCoinMetadata",
-    "params": ["0x2::sui::SUI"]
+    "method": "rtdx_getCoinMetadata",
+    "params": ["0x2::rtd::RTD"]
   }'
 ```
 
@@ -698,7 +698,7 @@ curl -X POST https://fullnode.mainnet.sui.io:443 \
 
 ```graphql
 query {
-  coinMetadata(coinType: "0x2::sui::SUI") {
+  coinMetadata(coinType: "0x2::rtd::RTD") {
     name
     symbol
     decimals
@@ -713,18 +713,18 @@ query {
 
 ## List owned objects
 
-Replace `suix_getOwnedObjects` with `Address.objects`.
+Replace `rtdx_getOwnedObjects` with `Address.objects`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getOwnedObjects",
+    "method": "rtdx_getOwnedObjects",
     "params": ["0xADDRESS", null, null, 50]
   }'
 ```
@@ -762,18 +762,18 @@ query {
 
 ## List dynamic fields
 
-Replace `suix_getDynamicFields` with `Object.dynamicFields`.
+Replace `rtdx_getDynamicFields` with `Object.dynamicFields`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getDynamicFields",
+    "method": "rtdx_getDynamicFields",
     "params": ["0xPARENT_OBJECT_ID", null, 50]
   }'
 ```
@@ -817,23 +817,23 @@ query {
 </Tabs>
 
 **Key differences:**
-- GraphQL returns both the name and value of each dynamic field in one query. JSON-RPC required a separate `suix_getDynamicFieldObject` call for each value.
+- GraphQL returns both the name and value of each dynamic field in one query. JSON-RPC required a separate `rtdx_getDynamicFieldObject` call for each value.
 - For a specific dynamic field by name, use `dynamicField(name: { type: "...", bcs: "..." })` or `dynamicObjectField(name: { type: "...", bcs: "..." })` instead of paginating.
 
 ## Get a specific dynamic field object
 
-Replace `suix_getDynamicFieldObject` with `Object.dynamicObjectField`.
+Replace `rtdx_getDynamicFieldObject` with `Object.dynamicObjectField`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getDynamicFieldObject",
+    "method": "rtdx_getDynamicFieldObject",
     "params": [
       "0xPARENT_OBJECT_ID",
       { "type": "0x1::string::String", "value": "my_key" }
@@ -869,18 +869,18 @@ query {
 
 ## Execute a transaction
 
-Replace `sui_executeTransactionBlock` with `Mutation.executeTransaction`.
+Replace `rtd_executeTransactionBlock` with `Mutation.executeTransaction`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_executeTransactionBlock",
+    "method": "rtd_executeTransactionBlock",
     "params": [
       "<BASE64_TX_BYTES>",
       ["<BASE64_SIGNATURE>"],
@@ -924,24 +924,24 @@ mutation ($tx: Base64!, $sigs: [Base64!]!) {
 
 **Key differences:**
 - GraphQL uses a mutation, not a query.
-- The `transactionDataBcs` parameter takes the serialized unsigned transaction data. Use the [Sui Client CLI](/references/cli/client) `--serialize-unsigned-transaction` flag or the TypeScript SDK to generate it.
+- The `transactionDataBcs` parameter takes the serialized unsigned transaction data. Use the [Rtd Client CLI](/references/cli/client) `--serialize-unsigned-transaction` flag or the TypeScript SDK to generate it.
 - Select fields from `effects` in the same mutation to read execution results immediately without waiting for a separate indexed query.
 - The JSON-RPC `unsafe_*` builder methods (`unsafe_moveCall`, `unsafe_transferObject`, and others) have no GraphQL equivalent. Build transactions with [programmable transaction blocks (PTBs)](/develop/transactions/ptbs/prog-txn-blocks) using the SDK, then submit the bytes.
 
 ## Simulate a transaction (dry run)
 
-Replace `sui_dryRunTransactionBlock` and `sui_devInspectTransactionBlock` with `Query.simulateTransaction`.
+Replace `rtd_dryRunTransactionBlock` and `rtd_devInspectTransactionBlock` with `Query.simulateTransaction`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_dryRunTransactionBlock",
+    "method": "rtd_dryRunTransactionBlock",
     "params": ["<BASE64_TX_BYTES>"]
   }'
 ```
@@ -978,23 +978,23 @@ query ($tx: JSON!) {
 </Tabs>
 
 **Key differences:**
-- `simulateTransaction` accepts a JSON transaction matching the Sui gRPC transaction schema, or a BCS-encoded transaction with `{"bcs": {"value": "<base64>"}}`.
+- `simulateTransaction` accepts a JSON transaction matching the Rtd gRPC transaction schema, or a BCS-encoded transaction with `{"bcs": {"value": "<base64>"}}`.
 - Set `doGasSelection: true` to have the service automatically select gas coins for the simulation.
 
 ## Get reference gas price
 
-Replace `suix_getReferenceGasPrice` with `Epoch.referenceGasPrice`.
+Replace `rtdx_getReferenceGasPrice` with `Epoch.referenceGasPrice`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getReferenceGasPrice",
+    "method": "rtdx_getReferenceGasPrice",
     "params": []
   }'
 ```
@@ -1015,18 +1015,18 @@ query {
 
 ## Get staking positions
 
-Replace `suix_getStakes` and `suix_getStakesByIds` with `Address.objects` filtered by the `StakedSui` type.
+Replace `rtdx_getStakes` and `rtdx_getStakesByIds` with `Address.objects` filtered by the `StakedRtd` type.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getStakes",
+    "method": "rtdx_getStakes",
     "params": ["0xADDRESS"]
   }'
 ```
@@ -1038,7 +1038,7 @@ curl -X POST https://fullnode.mainnet.sui.io:443 \
 query {
   address(address: "0xADDRESS") {
     objects(
-      filter: { type: "0x3::staking_pool::StakedSui" }
+      filter: { type: "0x3::staking_pool::StakedRtd" }
     ) {
       nodes {
         address
@@ -1054,18 +1054,18 @@ query {
 
 ## Get validator APY
 
-JSON-RPC provided `suix_getValidatorsApy` as a convenience method. GraphQL does not have a direct APY field. Validator APY is derived from staking pool exchange rate history stored in dynamic fields on each validator's system-state object. The legacy `suix_getValidatorsApy` used a compounding calculation across up to 30 epoch samples with outlier filtering, so a simple two-epoch ratio does not reproduce the same values.
+JSON-RPC provided `rtdx_getValidatorsApy` as a convenience method. GraphQL does not have a direct APY field. Validator APY is derived from staking pool exchange rate history stored in dynamic fields on each validator's system-state object. The legacy `rtdx_getValidatorsApy` used a compounding calculation across up to 30 epoch samples with outlier filtering, so a simple two-epoch ratio does not reproduce the same values.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getValidatorsApy",
+    "method": "rtdx_getValidatorsApy",
     "params": []
   }'
 ```
@@ -1097,7 +1097,7 @@ query {
 2. From each validator's `contents.json`, extract the `staking_pool.exchange_rates` table ID. Then read the exchange rate history from the dynamic fields on that table object.
 3. Apply a compounding formula across multiple epoch samples.
 
-See [issue #23832](https://github.com/MystenLabs/sui/issues/23832) for the recommended computation and the legacy implementation as a reference.
+See [issue #23832](https://github.com/LinkUVerse/rtd/issues/23832) for the recommended computation and the legacy implementation as a reference.
 
 </TabItem>
 </Tabs>
@@ -1108,19 +1108,19 @@ See [issue #23832](https://github.com/MystenLabs/sui/issues/23832) for the recom
 
 ## Get Move module information
 
-Replace `sui_getNormalizedMoveModule`, `sui_getNormalizedMoveFunction`, and `sui_getNormalizedMoveStruct` with `Query.package` and nested `module`, `function`, and `struct` fields.
+Replace `rtd_getNormalizedMoveModule`, `rtd_getNormalizedMoveFunction`, and `rtd_getNormalizedMoveStruct` with `Query.package` and nested `module`, `function`, and `struct` fields.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
 # Get a normalized Move module
-curl -X POST https://fullnode.mainnet.sui.io:443 \
+curl -X POST https://fullnode.mainnet.rtd.io:443 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getNormalizedMoveModule",
+    "method": "rtd_getNormalizedMoveModule",
     "params": ["0x2", "coin"]
   }'
 ```
@@ -1214,7 +1214,7 @@ query {
   checkpoint(sequenceNumber: 164329987) {
     query {
       address(address: "0xADDRESS") {
-        balance(coinType: "0x2::sui::SUI") {
+        balance(coinType: "0x2::rtd::RTD") {
           totalBalance
         }
       }
@@ -1282,4 +1282,4 @@ Different queries hit different data sources with different retention. Live obje
 
 ### Public endpoints are not production endpoints
 
-The public URLs at `https://graphql.<NETWORK>.sui.io/graphql` are rate-limited and intended for development. Production apps should use a provider endpoint or operate their own [GraphQL and Indexer stack](/operators/data-management/indexer-stack-setup).
+The public URLs at `https://graphql.<NETWORK>.rtd.io/graphql` are rate-limited and intended for development. Production apps should use a provider endpoint or operate their own [GraphQL and Indexer stack](/operators/data-management/indexer-stack-setup).

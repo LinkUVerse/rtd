@@ -1,6 +1,6 @@
 ---
 name: dual-replay
-description: Run Sui dual execution replay between base and tip commits, recover failed steps, build, and commit replay instrumentation.
+description: Run Rtd dual execution replay between base and tip commits, recover failed steps, build, and commit replay instrumentation.
 ---
 
 # Dual Execution Replay
@@ -67,17 +67,17 @@ Usually environmental: dirty tree, unresolvable SHA, or `scripts/execution_layer
 The script reports the file and the regex it tried. The tip has likely renamed or moved a symbol since the templates were written. Do not refresh the templates speculatively. Instead:
 
 1. Read the named file and locate the equivalent symbol at tip.
-2. Apply the dual-exec changes manually for this run, following the shape in the `TPL_*` template constants in `scripts/dual_replay.py`. Substitute `${cut_pkg}` → the underscored cut name (e.g. `replay_cut` → `sui_adapter_replay_cut`).
+2. Apply the dual-exec changes manually for this run, following the shape in the `TPL_*` template constants in `scripts/dual_replay.py`. Substitute `${cut_pkg}` → the underscored cut name (e.g. `replay_cut` → `rtd_adapter_replay_cut`).
 3. Skip the inject step (state is preserved) and continue: `python3 scripts/dual_replay.py build`, then `commit`.
 4. If the same anchor breaks repeatedly across invocations, the regex in `scripts/dual_replay.py` should be updated — but only after confirming the new symbol name is stable.
 
 ### `build` failed
 
-`cargo check -p sui-execution -p sui-types` failed. The script already handles the common scaffolding (Clone derives on the gas types it knows about, the `serde_json` dep on `sui-execution`). What's left is genuinely case-by-case. Read the captured stderr and apply the smallest fix that compiles:
+`cargo check -p rtd-execution -p rtd-types` failed. The script already handles the common scaffolding (Clone derives on the gas types it knows about, the `serde_json` dep on `rtd-execution`). What's left is genuinely case-by-case. Read the captured stderr and apply the smallest fix that compiles:
 
 - **Generated cut references an API that no longer exists at tip.** Apply the smallest compatibility patch. Prefer adapting code *inside the cut* (it's a snapshot, you're free to adjust it) over changing shared code at tip. Sometimes restoring a tiny helper in shared code is cleaner — judge per case.
-- **Cascading `Clone` derives.** The script derives `Clone` on `SuiGasStatus` (gas.rs), `gas_v2::SuiGasStatus`, `gas_v2::SuiCostTable`, `gas_v2::ComputationBucket`, and `tables::GasStatus`. If a new field type in any of these (or a transitively-reached type) is not `Clone`, add `#[derive(Clone)]` to it — and if this becomes a recurring fix, add the type to `GAS_CLONE_TARGETS` in `scripts/dual_replay.py` so the script handles it directly.
-- **Missing gas-model setter.** If the template calls `set_gas_model_version` on `SuiGasStatus` and the method doesn't exist, add a narrow one. Keep it minimal.
+- **Cascading `Clone` derives.** The script derives `Clone` on `RtdGasStatus` (gas.rs), `gas_v2::RtdGasStatus`, `gas_v2::RtdCostTable`, `gas_v2::ComputationBucket`, and `tables::GasStatus`. If a new field type in any of these (or a transitively-reached type) is not `Clone`, add `#[derive(Clone)]` to it — and if this becomes a recurring fix, add the type to `GAS_CLONE_TARGETS` in `scripts/dual_replay.py` so the script handles it directly.
+- **Missing gas-model setter.** If the template calls `set_gas_model_version` on `RtdGasStatus` and the method doesn't exist, add a narrow one. Keep it minimal.
 - **Cut crates fail formatting/metadata checks because they think they're part of the nested Move workspace.** Update `external-crates/move/Cargo.toml` so the generated cut crates are either members or explicitly excluded — keep the metadata consistent. Don't skip formatting.
 
 After each fix, re-run `python3 scripts/dual_replay.py build`. When it passes, run `commit`.

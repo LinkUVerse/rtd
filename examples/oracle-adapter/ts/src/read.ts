@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
-import type { SuiClient } from '@mysten/sui/client';
-import type { SuiPythClient, SuiPriceServiceConnection } from '@pythnetwork/pyth-sui-js';
+import { Transaction } from '@linku/rtd/transactions';
+import type { RtdClient } from '@linku/rtd/client';
+import type { RtdPythClient, RtdPriceServiceConnection } from '@pythnetwork/pyth-rtd-js';
 
 // docs::#update-read
 // Pull model: fetch the signed update from Hermes, apply it on-chain with the
@@ -13,8 +13,8 @@ import type { SuiPythClient, SuiPriceServiceConnection } from '@pythnetwork/pyth
 // consumer. Reading through the adapter's `read_and_emit` applies the staleness
 // bound, so an update that somehow did not land aborts rather than reading old.
 export async function buildUpdateAndRead(
-	pyth: SuiPythClient,
-	hermes: SuiPriceServiceConnection,
+	pyth: RtdPythClient,
+	hermes: RtdPriceServiceConnection,
 	feedId: string,
 	consumerPackageId: string,
 	maxAgeSecs: number,
@@ -37,8 +37,8 @@ export async function buildUpdateAndRead(
 // it: this is `dev-inspect`-able, so you can confirm the rejection without
 // spending gas or updating the feed.
 export async function checkStale(
-	sui: SuiClient,
-	pyth: SuiPythClient,
+	rtd: RtdClient,
+	pyth: RtdPythClient,
 	pythStateId: string,
 	feedId: string,
 	sender: string,
@@ -52,7 +52,7 @@ export async function checkStale(
 		target: `${pythPackageId}::pyth::get_price_no_older_than`,
 		arguments: [tx.object(priceInfoObjectId), tx.object.clock(), tx.pure.u64(maxAgeSecs)],
 	});
-	const r = await sui.devInspectTransactionBlock({ sender, transactionBlock: tx });
+	const r = await rtd.devInspectTransactionBlock({ sender, transactionBlock: tx });
 	return { status: r.effects.status.status, error: r.effects.status.error };
 }
 // docs::/#stale-read

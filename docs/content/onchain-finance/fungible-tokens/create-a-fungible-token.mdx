@@ -1,7 +1,7 @@
 ---
 title: 'Create Fungible Tokens: Currency Standard'
 description: >-
-  Learn how to create currencies using the Currency standard on Sui, including
+  Learn how to create currencies using the Currency standard on Rtd, including
   standard and One-Time Witness creation flows, supply model configuration, and
   regulated token setup.
 keywords:
@@ -10,13 +10,13 @@ keywords:
   - use tokens
   - publish token
   - custom tokens
-  - sui CLI
+  - rtd CLI
   - denylist
   - regulated coins
   - coin registry
   - currency registry
 goal:
-  description: Reader can create currencies and mint coins and tokens on the Sui network
+  description: Reader can create currencies and mint coins and tokens on the Rtd network
   requires:
     - has_frontmatter:
         - title
@@ -39,18 +39,18 @@ builder_paths:
     stage: Tokens
 questions:
   - 'How do I create fungible tokens: currency standard?'
-  - 'What is Create Fungible Tokens: Currency Standard in Sui?'
+  - 'What is Create Fungible Tokens: Currency Standard in Rtd?'
   - 'Why should I use create fungible tokens: currency standard?'
-answer: Learn how to create currencies and mint coins and tokens on the Sui network.
+answer: Learn how to create currencies and mint coins and tokens on the Rtd network.
 ---
 
-Assets created using the Currency Standard are free-flowing, [wrappable](/develop/objects/object-ownership/wrapped), [freely transferable](/develop/objects/transfers/custom-rules) fungible assets that you can store in any app. The Currency Standard uses the [`sui::coin_registry`](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/coin_registry.md) module and the `Currency` object for metadata.
+Assets created using the Currency Standard are free-flowing, [wrappable](/develop/objects/object-ownership/wrapped), [freely transferable](/develop/objects/transfers/custom-rules) fungible assets that you can store in any app. The Currency Standard uses the [`rtd::coin_registry`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/coin_registry.md) module and the `Currency` object for metadata.
 
-The `Currency<T>` type represents open-loop fungible tokens. Currencies are denominated by their type parameter `T`, which is also associated with metadata (like name, symbol, and decimal precision) that applies to all instances of `Currency<T>`. The `sui::coin_registry` module exposes an interface over `Currency<T>` that treats it as fungible, meaning that a unit of `T` held in one instance of `Currency<T>` is interchangeable with any other unit of `T`, similar to how traditional fiat currencies operate.
+The `Currency<T>` type represents open-loop fungible tokens. Currencies are denominated by their type parameter `T`, which is also associated with metadata (like name, symbol, and decimal precision) that applies to all instances of `Currency<T>`. The `rtd::coin_registry` module exposes an interface over `Currency<T>` that treats it as fungible, meaning that a unit of `T` held in one instance of `Currency<T>` is interchangeable with any other unit of `T`, similar to how traditional fiat currencies operate.
 
 ## Coin Registry
 
-The Coin Registry system provides a centralized approach to currency management through the `sui::coin_registry` module. The registry is a shared object located at address `0xc` that stores metadata, supply information, and regulatory status for all registered coin types.
+The Coin Registry system provides a centralized approach to currency management through the `rtd::coin_registry` module. The registry is a shared object located at address `0xc` that stores metadata, supply information, and regulatory status for all registered coin types.
 
 ## Creation options
 
@@ -65,7 +65,7 @@ Both creation methods return a `CurrencyInitializer<T>` that allows for addition
 - **Supply model:** Choose between fixed, burn-only, or flexible supply.
 - **Extensions:** Include additional fields for custom functionality.
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" struct="CurrencyInitializer" />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" struct="CurrencyInitializer" />
 
 ## Standard creation (recommended)
 
@@ -75,7 +75,7 @@ Use the `new_currency` function at any time after the coin type is published. It
 
 Once you call the `finalize` function, currency creation is complete:
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="finalize" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="finalize" signatureOnly />
 
 ## One-Time Witness creation
 
@@ -90,12 +90,12 @@ Then, call `coin_registry::finalize_registration` to place the coin into the reg
 ```sh
 # Requires the ID of the Currency object created during publishing.
 # This step is only required for OTW-created currencies.
-sui client ptb \
+rtd client ptb \
     --assign currency_to_promote @<CURRENCY_OBJECT_ID> \
     --move-call 0x2::coin_registry::finalize_registration "<CURRENCY_TYPE>" @0xc currency_to_promote
 ```
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="finalize_registration" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="finalize_registration" signatureOnly />
 
 ## Configure supply model
 
@@ -163,23 +163,23 @@ The `MetadataCap<T>` controls who can update the currency's name, description, a
 
 If you did not transfer the `MetadataCap` during initialization, or if you want to reclaim it from a shared `Currency`, use `claim_metadata_cap`:
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="claim_metadata_cap" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="claim_metadata_cap" signatureOnly />
 
 ### Update metadata
 
 The `MetadataCap` holder can update the currency's display information:
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="set_name" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="set_name" signatureOnly />
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="set_description" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="set_description" signatureOnly />
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="set_icon_url" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="set_icon_url" signatureOnly />
 
 ### Freeze metadata
 
 To make metadata permanently immutable, delete the `MetadataCap`:
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/registries/coin_registry.move" mode="code" fun="delete_metadata_cap" signatureOnly />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/registries/coin_registry.move" mode="code" fun="delete_metadata_cap" signatureOnly />
 
 Once deleted, no one can update the currency's name, description, or icon URL.
 

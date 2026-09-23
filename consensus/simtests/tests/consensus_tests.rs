@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[cfg(msim)]
@@ -24,15 +24,15 @@ mod consensus_tests {
     use consensus_simtests::node::{AuthorityNode, Config};
     use consensus_types::block::{BlockRef, BlockTimestampMs, TransactionIndex};
     use fastcrypto::traits::{KeyPair as _, ToFromBytes as _};
-    use mysten_metrics::RegistryService;
-    use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-    use mysten_network::{Multiaddr, multiaddr::Protocol};
+    use linku_metrics::RegistryService;
+    use linku_metrics::monitored_mpsc::UnboundedReceiver;
+    use linku_network::{Multiaddr, multiaddr::Protocol};
     use parking_lot::Mutex;
     use prometheus::Registry;
     use rand::{Rng, SeedableRng as _, rngs::StdRng, seq::SliceRandom as _};
-    use sui_config::local_ip_utils;
-    use sui_macros::{clear_fail_point, register_fail_points, sim_test};
-    use sui_simulator::{
+    use rtd_config::local_ip_utils;
+    use rtd_macros::{clear_fail_point, register_fail_points, sim_test};
+    use rtd_simulator::{
         SimConfig,
         configs::{bimodal_latency_ms, env_config, uniform_latency_ms},
     };
@@ -1139,10 +1139,10 @@ mod consensus_tests {
                     .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
                     .is_ok()
             {
-                let node_id = sui_simulator::current_simnode_id();
+                let node_id = rtd_simulator::current_simnode_id();
                 tracing::error!(%node_id, "Killing current node");
                 crash_sender.send(node_id).unwrap();
-                sui_simulator::task::shutdown_current_node();
+                rtd_simulator::task::shutdown_current_node();
             }
         });
 

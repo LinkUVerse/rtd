@@ -1,0 +1,18 @@
+[package]
+name = "rtd-prompt"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+
+[build-dependencies]
+serde.workspace = true
+serde_yaml.workspace = true

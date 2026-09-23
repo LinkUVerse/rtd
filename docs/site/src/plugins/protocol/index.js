@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Plugin copies file from crates and creates fullnode doc
@@ -15,7 +15,7 @@ const SPEC_MD = fs.readFileSync(PROTOCOL_PATH, "utf-8");
 
 const fullnodeProtocolPlugin = (context, options) => {
   return {
-    name: "sui-fullnode-protocol-plugin",
+    name: "rtd-fullnode-protocol-plugin",
     configureWebpack() {
       return {
         module: {
@@ -66,7 +66,7 @@ const fullnodeProtocolPlugin = (context, options) => {
 
       const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/>
-<title>Sui gRPC Message Definitions — Full Reference</title>
+<title>Rtd gRPC Message Definitions — Full Reference</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#222}
 h2{border-bottom:1px solid #ddd;padding-bottom:.3rem}
@@ -78,8 +78,8 @@ a{color:#0066cc}
 @media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#ddd}th{background:#2a2a2a}th,td{border-color:#444}a{color:#6cb6ff}}
 </style>
 </head><body>
-<h1>Sui gRPC Message Definitions</h1>
-<p>Complete field-level reference for all Sui Full Node gRPC message types.
+<h1>Rtd gRPC Message Definitions</h1>
+<p>Complete field-level reference for all Rtd Full Node gRPC message types.
 See also: <a href="/references/fullnode-protocol-messages">Message Definitions</a> |
 <a href="/references/fullnode-protocol-types">Enum &amp; Scalar Types</a> |
 <a href="/references/fullnode-protocol">Methods</a></p>

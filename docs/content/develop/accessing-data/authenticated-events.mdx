@@ -51,23 +51,23 @@ builder_paths:
     step: Authenticated events
     stage: Verify & Secure
 questions:
-  - What is Authenticated Events in Sui?
+  - What is Authenticated Events in Rtd?
   - Why authenticated events?
-  - How does authenticated events work on Sui?
+  - How does authenticated events work on Rtd?
 answer: >-
   Cryptographically verifiable Move events that can be verified by a light
   client without trusting any intermediary, suitable for trustless event
   consumption.
 ---
 
-Authenticated events provide a cryptographically verifiable stream of Move events from Sui smart contracts. Unlike regular events, authenticated events can be verified by a light client without trusting any intermediary, making them suitable for applications that require trustless event consumption.
+Authenticated events provide a cryptographically verifiable stream of Move events from Rtd smart contracts. Unlike regular events, authenticated events can be verified by a light client without trusting any intermediary, making them suitable for applications that require trustless event consumption.
 
 ## Why authenticated events?
 
-Regular Sui events are indexed and queryable, but verifying them requires trusting the RPC provider. Authenticated events solve this by:
+Regular Rtd events are indexed and queryable, but verifying them requires trusting the RPC provider. Authenticated events solve this by:
 
 1. **Cryptographic commitments**: Events are committed into a Merkle Mountain Range (MMR) structure stored onchain (see the [MMR section](#merkle-mountain-range-mmr) below).
-2. **Checkpoint verification**: The commitment is tied to Sui checkpoints, which are signed by the validator committee.
+2. **Checkpoint verification**: The commitment is tied to Rtd checkpoints, which are signed by the validator committee.
 3. **Light client verification**: Clients verify the chain from the genesis committee, to checkpoint signatures, to event inclusion proofs.
 
 This enables cryptographic verification of event completeness and correctness, with no full node required, and is lightweight enough to run in a browser or on mobile.
@@ -88,7 +88,7 @@ The following Move module emits an authenticated event:
 ```move
 module my_package::my_module;
 
-use sui::event;
+use rtd::event;
 
 public struct MyEvent has copy, drop {
     value: u64,
@@ -108,7 +108,7 @@ The event is automatically associated with the package that defines the event ty
 
 ### Backward compatibility with events
 
-Authenticated events are fully backward-compatible with regular Sui events. An authenticated event is a regular event with additional metadata for verification. Existing event consumers continue to work unchanged.
+Authenticated events are fully backward-compatible with regular Rtd events. An authenticated event is a regular event with additional metadata for verification. Existing event consumers continue to work unchanged.
 
 To upgrade:
 
@@ -123,8 +123,8 @@ Existing indexers, explorers, and tools that consume regular events continue to 
 The reference Rust client verifies and streams events from a package:
 
 ```rust
-use sui_light_client::authenticated_events::AuthenticatedEventsClient;
-use sui_types::base_types::SuiAddress;
+use rtd_light_client::authenticated_events::AuthenticatedEventsClient;
+use rtd_types::base_types::RtdAddress;
 use futures::StreamExt;
 use std::sync::Arc;
 
@@ -135,7 +135,7 @@ let client = Arc::new(
 );
 
 // Stream events from your package
-let stream_id = SuiAddress::from(package_id);
+let stream_id = RtdAddress::from(package_id);
 let mut stream = client.clone().stream_events(stream_id).await?;
 
 while let Some(result) = stream.next().await {
@@ -229,7 +229,7 @@ Authenticated events use two services: the standard ledger service to read event
 
 ### `LedgerService.ListEvents`
 
-Events are read through the standard `LedgerService.ListEvents` server-streaming RPC in `sui.rpc.v2`. Authenticated events are ordinary events carrying extra metadata, so they need no separate event API.
+Events are read through the standard `LedgerService.ListEvents` server-streaming RPC in `rtd.rpc.v2`. Authenticated events are ordinary events carrying extra metadata, so they need no separate event API.
 
 ```protobuf
 service LedgerService {
@@ -248,7 +248,7 @@ Because the RPC streams, the client reads response frames until the server signa
 
 ### `ProofService.GetCheckpointObjectProof`
 
-The proof service proves what happened to an object at a specific checkpoint. It lives in `sui.rpc.v2alpha`.
+The proof service proves what happened to an object at a specific checkpoint. It lives in `rtd.rpc.v2alpha`.
 
 ```protobuf
 service ProofService {

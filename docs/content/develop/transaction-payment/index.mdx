@@ -1,17 +1,17 @@
 ---
 title: Paying for Transactions
 description: >-
-  Understand how Sui transactions pay for gas, how coinWithBalance selects
+  Understand how Rtd transactions pay for gas, how coinWithBalance selects
   funds automatically, when gasless transfers apply, and how to compose
   multi-step DeFi operations in a single atomic transaction.
 keywords:
   - transaction payment
   - gas fees
-  - Sui gas
+  - Rtd gas
   - execution cost
   - storage cost
   - transaction fees
-  - SUI token
+  - RTD token
   - coinWithBalance
   - gasless
   - sponsored transactions
@@ -33,15 +33,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Paying for Transactions in Sui?
+  - What is Paying for Transactions in Rtd?
   - What topics does Paying for Transactions cover?
-  - How does paying for transactions work on Sui?
+  - How does paying for transactions work on Rtd?
   - How does coinWithBalance work?
   - When can a transaction be gasless?
   - How do I compose DeFi operations into one transaction?
   - How do I sponsor gas for my users?
 answer: >-
-  Every Sui transaction pays for computation and storage. The TypeScript SDK's
+  Every Rtd transaction pays for computation and storage. The TypeScript SDK's
   coinWithBalance automatically selects funds from coins and address balances.
   Qualified stablecoin transfers can execute with zero gas. Sponsored
   transactions let apps pay gas on behalf of users. Programmable transaction
@@ -49,7 +49,7 @@ answer: >-
   operation.
 ---
 
-Every Sui transaction pays for 2 things: **computational execution** and **long-term object storage**. How you source those funds (from coins, address balances, a sponsor, or at zero cost) depends on what the transaction does and who pays.
+Every Rtd transaction pays for 2 things: **computational execution** and **long-term object storage**. How you source those funds (from coins, address balances, a sponsor, or at zero cost) depends on what the transaction does and who pays.
 
 ## Migrate to address balances {#migration-journey}
 
@@ -66,7 +66,7 @@ You do not have to migrate anything at once. Coin objects and address balances c
 When you build a transaction with the TypeScript SDK, you rarely need to pick individual coin objects. The `coinWithBalance` helper (and the `tx.coin()` shorthand) resolves the required amount automatically:
 
 ```tsx
-import { Transaction, coinWithBalance } from '@mysten/sui/transactions';
+import { Transaction, coinWithBalance } from '@linku/rtd/transactions';
 
 // Replace with a real coin type. For allowlisted stablecoins, see
 // /develop/transaction-payment/gasless-stablecoin-transfers#eligible-stablecoins
@@ -87,7 +87,7 @@ Under the hood:
 
 This means you can build transactions without knowing which coin objects the sender owns.
 
-For SUI gas specifically, passing an empty array to `setGasPayment` tells the network to draw gas from the address balance:
+For RTD gas specifically, passing an empty array to `setGasPayment` tells the network to draw gas from the address balance:
 
 ```tsx
 tx.setGasPayment([]); // Gas paid from address balance — no coin lookup required
@@ -99,9 +99,9 @@ See [Using Address Balances](/onchain-finance/asset-custody/address-balances/usi
 
 ## Gas payment strategies {#gas-strategies}
 
-Sui offers 4 ways to pay for gas, each suited to different use cases:
+Rtd offers 4 ways to pay for gas, each suited to different use cases:
 
-| **Strategy** | **Who pays** | **User holds SUI?** | **Best for** |
+| **Strategy** | **Who pays** | **User holds RTD?** | **Best for** |
 |----------|----------|-----------------|----------|
 | **Standard gas** | User | Yes | General transactions |
 | **Address balance gas** | User | Yes (in address balance) | Offline-built transactions, no coin lookup |
@@ -110,15 +110,15 @@ Sui offers 4 ways to pay for gas, each suited to different use cases:
 
 ### Standard gas
 
-The sender provides one or more `Coin<SUI>` objects to cover execution and storage costs. The SDK resolves this automatically when you don't explicitly configure gas. See [Gas Fees](/develop/transaction-payment/gas-in-sui) for the fee formula and budget rules.
+The sender provides one or more `Coin<RTD>` objects to cover execution and storage costs. The SDK resolves this automatically when you don't explicitly configure gas. See [Gas Fees](/develop/transaction-payment/gas-in-rtd) for the fee formula and budget rules.
 
 ### Address balance gas
 
-Instead of selecting coin objects, the network withdraws gas from the sender's SUI address balance. This removes the need for coin lookups at gas-selection time. To use it, set `tx.setGasPayment([])` along with `gasPrice`, `gasBudget`, and `ValidDuring` expiration. When all other transaction inputs are also known at build time (no unresolved `coinWithBalance` intents), the transaction can be built fully offline. See [Paying for gas from address balances](/onchain-finance/asset-custody/address-balances/using-address-balances#paying-for-gas-from-address-balances) for requirements.
+Instead of selecting coin objects, the network withdraws gas from the sender's RTD address balance. This removes the need for coin lookups at gas-selection time. To use it, set `tx.setGasPayment([])` along with `gasPrice`, `gasBudget`, and `ValidDuring` expiration. When all other transaction inputs are also known at build time (no unresolved `coinWithBalance` intents), the transaction can be built fully offline. See [Paying for gas from address balances](/onchain-finance/asset-custody/address-balances/using-address-balances#paying-for-gas-from-address-balances) for requirements.
 
 ### Sponsored transactions
 
-A third party (the sponsor) pays gas on behalf of the user. The user builds the transaction, and the sponsor provides gas payment. Both sign. This is ideal for onboarding new users who don't hold SUI. See [Sponsored Transactions](/develop/transaction-payment/sponsor-txn) for the full flow, including data structures, sequence diagrams, and risk considerations.
+A third party (the sponsor) pays gas on behalf of the user. The user builds the transaction, and the sponsor provides gas payment. Both sign. This is ideal for onboarding new users who don't hold RTD. See [Sponsored Transactions](/develop/transaction-payment/sponsor-txn) for the full flow, including data structures, sequence diagrams, and risk considerations.
 
 With address balances, sponsored transactions become simpler: no gas coin locking risk, no coin inventory management, and the user can sign before the sponsor.
 
@@ -133,13 +133,13 @@ Peer-to-peer transfers of [allowlisted stablecoins](/develop/transaction-payment
 The gRPC and GraphQL transports detect eligibility automatically during simulation and set `gasBudget = 0`. See [Gasless Stablecoin Transfers](/develop/transaction-payment/gasless-stablecoin-transfers) for the full allowlist and integration guide.
 
 ```tsx
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Transaction } from '@mysten/sui/transactions';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Transaction } from '@linku/rtd/transactions';
 
 // Replace with a real coin type. For allowlisted stablecoins, see
 // /develop/transaction-payment/gasless-stablecoin-transfers#eligible-stablecoins
 const USDC = '0xUSDC_PACKAGE::usdc::USDC';
-const client = new SuiGrpcClient({ network: 'mainnet', baseUrl: 'https://fullnode.mainnet.sui.io:443' });
+const client = new RtdGrpcClient({ network: 'mainnet', baseUrl: 'https://fullnode.mainnet.rtd.io:443' });
 
 const tx = new Transaction();
 tx.setSender(senderAddress);
@@ -169,15 +169,15 @@ const [usdc] = tx.splitCoins(coinWithBalance({ type: USDC, balance: 200_000_000n
   tx.pure.u64(200_000_000),
 ]);
 
-// 2. Swap USDC → SUI through a DEX pool
-const [sui] = tx.moveCall({
+// 2. Swap USDC → RTD through a DEX pool
+const [rtd] = tx.moveCall({
   target: '0xDEX_PACKAGE::router::swap_exact_input',
-  typeArguments: [USDC, '0x2::sui::SUI'],
+  typeArguments: [USDC, '0x2::rtd::RTD'],
   arguments: [tx.object('0xPOOL_ID'), usdc, tx.pure.u64(0)], // 0 = min output (set real slippage)
 });
 
-// 3. Transfer the swapped SUI to the recipient
-tx.transferObjects([sui], recipient);
+// 3. Transfer the swapped RTD to the recipient
+tx.transferObjects([rtd], recipient);
 ```
 
 ### Swap, save, and send
@@ -193,11 +193,11 @@ const [allUsdc] = tx.splitCoins(
   [tx.pure.u64(2_000_000_000)],
 );
 
-// 1. Split off 200 USDC and swap to SUI
+// 1. Split off 200 USDC and swap to RTD
 const [swapPortion] = tx.splitCoins(allUsdc, [tx.pure.u64(200_000_000)]);
-const [sui] = tx.moveCall({
+const [rtd] = tx.moveCall({
   target: '0xDEX::router::swap',
-  typeArguments: [USDC, '0x2::sui::SUI'],
+  typeArguments: [USDC, '0x2::rtd::RTD'],
   arguments: [tx.object('0xPOOL'), swapPortion, tx.pure.u64(0)],
 });
 
@@ -218,7 +218,7 @@ tx.moveCall({
 });
 
 // Remaining 800 USDC stays with the sender
-tx.transferObjects([allUsdc, sui], tx.pure.address(senderAddress));
+tx.transferObjects([allUsdc, rtd], tx.pure.address(senderAddress));
 ```
 
 If any step fails (slippage breach, paused pool, invalid address), the entire transaction reverts. See [Payment Intents](/onchain-finance/payment-intents) for the Resolve, Plan, Execute pattern and more composition examples.
@@ -242,7 +242,7 @@ Use this to pick the right gas strategy for your transaction:
 2. **Does your app want to pay gas on behalf of the user?**
    - Yes: use [sponsored transactions](/develop/transaction-payment/sponsor-txn). Consider address-balance sponsorship for simpler flows.
    - No: continue.
-3. **Does the user have a SUI address balance?**
+3. **Does the user have a RTD address balance?**
    - Yes: use address balance gas (`tx.setGasPayment([])`). No coin lookup needed.
    - No: use standard gas. The SDK auto-selects coin objects.
 

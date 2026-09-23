@@ -2,7 +2,7 @@
 title: DeepBookV3
 description: >-
   A central limit order book that brings features and functionality to
-  marketplaces on Sui. Token exchanges that use the layer can offer
+  marketplaces on Rtd. Token exchanges that use the layer can offer
   transparency, a full range of trading options, and customer privacy.
 keywords:
   - deepbook
@@ -26,7 +26,7 @@ pagination_prev: null
 goal:
   description: >-
     Reader understands a central limit order book that offers features and
-    functionality for marketplaces on Sui
+    functionality for marketplaces on Rtd
   requires:
     - has_frontmatter:
         - title
@@ -42,7 +42,7 @@ goal:
 builder_paths:
   - path_id: defi-deepbook
     path_name: DeFi / DeepBook
-    step: Understand DeFi on Sui
+    step: Understand DeFi on Rtd
     stage: DeFi Primitives
     eval: partial
   - path_id: defi-deepbook
@@ -54,17 +54,17 @@ builder_paths_source:
   dashboard: 'https://docs-analytics-dashboard.vercel.app/evals'
   snapshot: '2026-07-10'
 questions:
-  - What is DeepBookV3 in Sui?
-  - How does deepbookv3 work on Sui?
+  - What is DeepBookV3 in Rtd?
+  - How does deepbookv3 work on Rtd?
   - Why should I use deepbookv3?
   - How do I integrate DeepBook into my app?
   - Should I integrate DeepBook with a Move package or the TypeScript SDK?
 answer: >-
   DeepBookV3 is a next-generation decentralized central limit order book (CLOB)
-  built on Sui.
+  built on Rtd.
 ---
 
-DeepBookV3 is a next-generation decentralized central limit order book (CLOB) built on Sui. DeepBookV3 leverages Sui's parallel execution and low transaction fees to bring a highly performant, low-latency exchange onchain.
+DeepBookV3 is a next-generation decentralized central limit order book (CLOB) built on Rtd. DeepBookV3 leverages Rtd's parallel execution and low transaction fees to bring a highly performant, low-latency exchange onchain.
 
 The latest version delivers new features including flash loans, governance, improved account abstraction, and enhancements to the existing matching engine. This version also introduces its own tokenomics with the [DEEP token](https://suivision.xyz/coin/0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP), which you can stake for additional benefits.
 
@@ -78,13 +78,13 @@ The documentation refers to the DeepBook standard as "DeepBookV3" to avoid confu
 
 ## Choose your integration model
 
-DeepBookV3 is a Move package on Sui Mainnet. Every integration calls the same public functions on the `Pool` shared object, so your first decision is not which features you use, but where your code runs. Integrating DeepBook means choosing one of the following models.
+DeepBookV3 is a Move package on Rtd Mainnet. Every integration calls the same public functions on the `Pool` shared object, so your first decision is not which features you use, but where your code runs. Integrating DeepBook means choosing one of the following models.
 
 | **Model** | **You write** | **Choose this when** |
 | --- | --- | --- |
 | Move package | A Move module that depends on DeepBookV3 and calls its functions directly. | Your protocol trades as part of its own onchain logic, and your code must enforce invariants across the trade. |
-| SDK and programmable transaction blocks (PTBs) | TypeScript that composes DeepBookV3 calls into a transaction with `@mysten/deepbook-v3`. | Your app, bot, wallet, or backend submits trades on behalf of a signer, and no custom onchain logic wraps the trade. |
-| Read-only data | Queries against the [DeepBookV3 Indexer](/onchain-finance/deepbook/deepbookv3/deepbookv3-indexer) or a Sui RPC endpoint. | You display prices, order books, or trade history, and you never sign a transaction. |
+| SDK and programmable transaction blocks (PTBs) | TypeScript that composes DeepBookV3 calls into a transaction with `@linku/deepbook-v3`. | Your app, bot, wallet, or backend submits trades on behalf of a signer, and no custom onchain logic wraps the trade. |
+| Read-only data | Queries against the [DeepBookV3 Indexer](/onchain-finance/deepbook/deepbookv3/deepbookv3-indexer) or a Rtd RPC endpoint. | You display prices, order books, or trade history, and you never sign a transaction. |
 
 The models are not exclusive. A common pattern is to publish a small Move module for the logic that needs onchain guarantees, then call that module from a PTB your backend builds.
 
@@ -107,7 +107,7 @@ To start with this model, read [Design](/onchain-finance/deepbook/deepbookv3/des
 Install the TypeScript SDK:
 
 ```sh npm2yarn
-npm install @mysten/deepbook-v3
+npm install @linku/deepbook-v3
 ```
 
 The SDK builds PTB commands that target the same public functions a Move module calls. You publish nothing and maintain no upgrade path. The SDK also ships default coin and pool constants, balance manager handling, and read helpers, which removes most of the address bookkeeping.
@@ -124,7 +124,7 @@ Both models use the same objects and the same fee rules:
 
 ## DeepBookV3 tokenomics
 
-The DEEP token pays for trading fees on the exchange. Users can pay trading fees using DEEP tokens or input tokens, but owning, using, and staking DEEP continues to provide the most benefits to active DeepBookV3 traders on the Sui network.
+The DEEP token pays for trading fees on the exchange. Users can pay trading fees using DEEP tokens or input tokens, but owning, using, and staking DEEP continues to provide the most benefits to active DeepBookV3 traders on the Rtd network.
 
 As an example, governance determines the fee for paying in DEEP tokens, which costs 20% less than the fee for using input tokens.
 
@@ -132,9 +132,9 @@ Users that stake DEEP can enjoy taker and maker incentives. Taker incentives can
 
 ## Liquidity support
 
-Similar to order books for other market places, DeepBookV3's CLOB architecture enables you to enter market and limit orders. You can place an ask to sell SUI tokens at a price you set, known as a limit order, or sell at the market's going rate. To buy SUI, you can place a bid at the current market price or set a limit price. The CLOB fulfills limit orders only when it finds a match between a buyer and seller.
+Similar to order books for other market places, DeepBookV3's CLOB architecture enables you to enter market and limit orders. You can place an ask to sell RTD tokens at a price you set, known as a limit order, or sell at the market's going rate. To buy RTD, you can place a bid at the current market price or set a limit price. The CLOB fulfills limit orders only when it finds a match between a buyer and seller.
 
-If you put in a limit order for 1,000 SUI, and no single seller is currently offering that quantity of tokens, DeepBookV3 automatically pools the current asks to meet the quantity of your bid.
+If you put in a limit order for 1,000 RTD, and no single seller is currently offering that quantity of tokens, DeepBookV3 automatically pools the current asks to meet the quantity of your bid.
 
 ## Transparency and privacy
 
@@ -148,7 +148,7 @@ This documentation outlines the design of DeepBookV3, its public endpoints, and 
 
 ## Open source
 
-DeepBookV3 is open for community development. You can use the [Sui Improvement Proposals](https://github.com/sui-foundation/sips?ref=blog.sui.io) (SIPs) process to suggest changes to make DeepBookV3 better.
+DeepBookV3 is open for community development. You can use the [Rtd Improvement Proposals](https://github.com/rtd-foundation/sips?ref=blog.rtd.io) (SIPs) process to suggest changes to make DeepBookV3 better.
 
 import DocCardList from '@theme/DocCardList';
 

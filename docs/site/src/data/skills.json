@@ -7,11 +7,11 @@
     "path": "accessing-data"
   },
   {
-    "slug": "sui-build-test",
+    "slug": "rtd-build-test",
     "title": "Build and Test Move",
-    "description": "Compile Move packages, resolve build errors, and run sui move build.",
+    "description": "Compile Move packages, resolve build errors, and run rtd move build.",
     "category": "Build and deploy",
-    "path": "sui-build-test"
+    "path": "rtd-build-test"
   },
   {
     "slug": "composable-move-functions",
@@ -51,7 +51,7 @@
   {
     "slug": "deepbook-sdk",
     "title": "DeepBook SDK",
-    "description": "Trade on DeepBook from TypeScript with the @mysten/deepbook-v3 SDK: BalanceManager, orders, and swaps.",
+    "description": "Trade on DeepBook from TypeScript with the @linku/deepbook-v3 SDK: BalanceManager, orders, and swaps.",
     "category": "Onchain finance",
     "path": "deepbook-sdk"
   },
@@ -63,18 +63,18 @@
     "path": "frontend-apps"
   },
   {
-    "slug": "generate-sui-agent-config",
+    "slug": "generate-rtd-agent-config",
     "title": "Generate Agent Config",
-    "description": "Generate a CLAUDE.md or AGENT.md file tailored to your Sui project.",
+    "description": "Generate a CLAUDE.md or AGENT.md file tailored to your Rtd project.",
     "category": "Get started",
-    "path": "generate-sui-agent-config"
+    "path": "generate-rtd-agent-config"
   },
   {
-    "slug": "sui-install",
-    "title": "Install Sui",
-    "description": "Install and manage Sui CLI versions, toolchain components, and network-specific builds with suiup.",
+    "slug": "rtd-install",
+    "title": "Install Rtd",
+    "description": "Install and manage Rtd CLI versions, toolchain components, and network-specific builds with suiup.",
     "category": "Get started",
-    "path": "sui-install"
+    "path": "rtd-install"
   },
   {
     "slug": "kiosk",
@@ -91,11 +91,11 @@
     "path": "modern-move-syntax"
   },
   {
-    "slug": "sui-move-project",
+    "slug": "rtd-move-project",
     "title": "Move Project Setup",
     "description": "Set up Move projects, configure Move.toml and MVR dependencies, and troubleshoot build errors.",
     "category": "Move",
-    "path": "sui-move-project"
+    "path": "rtd-move-project"
   },
   {
     "slug": "move-security",
@@ -121,7 +121,7 @@
   {
     "slug": "object-model",
     "title": "Object Model",
-    "description": "Model data with Sui objects: ownership types, dynamic fields, collections, wrapping, and transfer rules.",
+    "description": "Model data with Rtd objects: ownership types, dynamic fields, collections, wrapping, and transfer rules.",
     "category": "Move",
     "path": "object-model"
   },
@@ -140,67 +140,67 @@
     "path": "ptbs"
   },
   {
-    "slug": "sui-publish",
+    "slug": "rtd-publish",
     "title": "Publish and Upgrade",
     "description": "Publish and upgrade Move packages on any network, from localnet testing to multisig mainnet deploys.",
     "category": "Build and deploy",
-    "path": "sui-publish"
+    "path": "rtd-publish"
   },
   {
-    "slug": "sui-bridge",
-    "title": "Sui Bridge",
-    "description": "Move assets between Sui and Ethereum over the native bridge: supported assets, the global limiter, and governance.",
+    "slug": "rtd-bridge",
+    "title": "Rtd Bridge",
+    "description": "Move assets between Rtd and Ethereum over the native bridge: supported assets, the global limiter, and governance.",
     "category": "Onchain finance",
-    "path": "sui-bridge"
+    "path": "rtd-bridge"
   },
   {
-    "slug": "sui-client",
-    "title": "Sui Client",
-    "description": "Configure the Sui client, manage addresses, switch networks, request faucet tokens, and check balances.",
+    "slug": "rtd-client",
+    "title": "Rtd Client",
+    "description": "Configure the Rtd client, manage addresses, switch networks, request faucet tokens, and check balances.",
     "category": "CLI",
-    "path": "sui-client"
+    "path": "rtd-client"
   },
   {
-    "slug": "sui-for-ethereum",
-    "title": "Sui for Ethereum Developers",
-    "description": "Map Solidity and EVM patterns onto Move and the Sui object model when migrating from Ethereum.",
+    "slug": "rtd-for-ethereum",
+    "title": "Rtd for Ethereum Developers",
+    "description": "Map Solidity and EVM patterns onto Move and the Rtd object model when migrating from Ethereum.",
     "category": "Get started",
-    "path": "sui-for-ethereum"
+    "path": "rtd-for-ethereum"
   },
   {
-    "slug": "sui-move",
-    "title": "Sui Move",
+    "slug": "rtd-move",
+    "title": "Rtd Move",
     "description": "Write and debug Move smart contracts covering abilities, init functions, one-time witnesses, upgrades, and custom coins.",
     "category": "Move",
-    "path": "sui-move"
+    "path": "rtd-move"
   },
   {
-    "slug": "sui-networks-gas",
-    "title": "Sui Networks and Gas",
-    "description": "Understand Sui network environments, gas costs, epochs, and how the network operates at a high level.",
+    "slug": "rtd-networks-gas",
+    "title": "Rtd Networks and Gas",
+    "description": "Understand Rtd network environments, gas costs, epochs, and how the network operates at a high level.",
     "category": "Get started",
-    "path": "sui-networks-gas"
+    "path": "rtd-networks-gas"
   },
   {
-    "slug": "sui-overview",
-    "title": "Sui Overview",
-    "description": "Learn what Sui is, how it compares to other chains, and which Sui Stack primitives fit your use case.",
+    "slug": "rtd-overview",
+    "title": "Rtd Overview",
+    "description": "Learn what Rtd is, how it compares to other chains, and which Rtd Stack primitives fit your use case.",
     "category": "Get started",
-    "path": "sui-overview"
+    "path": "rtd-overview"
   },
   {
-    "slug": "sui-sdks",
-    "title": "Sui SDKs",
-    "description": "Pick the right Sui SDK for your language and wire it up: TypeScript, Rust, Python, Go, Dart, Kotlin, or Swift.",
+    "slug": "rtd-sdks",
+    "title": "Rtd SDKs",
+    "description": "Pick the right Rtd SDK for your language and wire it up: TypeScript, Rust, Python, Go, Dart, Kotlin, or Swift.",
     "category": "Frontend and SDKs",
-    "path": "sui-sdks"
+    "path": "rtd-sdks"
   },
   {
-    "slug": "sui-ts-sdk-backend",
+    "slug": "rtd-ts-sdk-backend",
     "title": "TypeScript SDK for Backends",
-    "description": "Build backend services and agents on Sui: keypairs, signing, sponsored transactions, executors, and cloud KMS.",
+    "description": "Build backend services and agents on Rtd: keypairs, signing, sponsored transactions, executors, and cloud KMS.",
     "category": "Frontend and SDKs",
-    "path": "sui-ts-sdk-backend"
+    "path": "rtd-ts-sdk-backend"
   },
   {
     "slug": "walrus-sites",

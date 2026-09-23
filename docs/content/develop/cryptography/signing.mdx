@@ -2,7 +2,7 @@
 title: Signature Verification in Move
 sidebar_label: Signature Verification
 description: >-
-  Sui supports verification within Move smart contracts through several
+  Rtd supports verification within Move smart contracts through several
   signature schemes. Signature schemes include Ed25519, Secp256k1 recoverable,
   Secp256k1 non-recoverable, Secp256r1 non-recoverable, Secp256r1 recoverable,
   BLS G1, and BLS G2.
@@ -19,7 +19,7 @@ keywords:
   - onchain verification
 goal:
   description: >-
-    Reader understands sui supports verification within Move smart contracts
+    Reader understands rtd supports verification within Move smart contracts
     through several signature schemes
   requires:
     - has_frontmatter:
@@ -54,25 +54,25 @@ builder_paths:
     stage: Authorization
 questions:
   - How do I verify signatures in Move?
-  - What signature schemes does Sui support for onchain verification?
-  - What is Signature Verification in Move in Sui?
+  - What signature schemes does Rtd support for onchain verification?
+  - What is Signature Verification in Move in Rtd?
 answer: >-
-  Sui supports verification within Move smart contracts through several
+  Rtd supports verification within Move smart contracts through several
   signature schemes.
 ---
 
-Move contracts in Sui support verifications for several signature schemes onchain. Not all signatures supported in onchain verification are supported as user signature verification. See [Sui Signatures](/develop/transactions/transaction-auth/auth-overview) for valid signature schemes for transaction authorization.
+Move contracts in Rtd support verifications for several signature schemes onchain. Not all signatures supported in onchain verification are supported as user signature verification. See [Rtd Signatures](/develop/transactions/transaction-auth/auth-overview) for valid signature schemes for transaction authorization.
 
 :::caution
 
-This guide uses the [`fastcrypto`](https://github.com/MystenLabs/fastcrypto) CLI tool (`sigs-cli`) to create signatures of a given scheme. The CLI is for testing and debugging only and **must not** be used in production: it generates keys from fixed seeds, exposes secret keys on the command line and in shell history, and applies no domain separation. For production signing, sign with a vetted wallet, SDK, or HSM/TEE-backed signer, keep private keys outside of CLIs and logs, and bind every signed message to a domain separator and a nonce (or request ID) to prevent cross-context reuse and replay. See [Frontend and transaction signing](/develop/security/best-practices#frontend-and-transaction-signing) and [User and operator key management](/develop/security/best-practices#user-and-operator-key-management) for details.
+This guide uses the [`fastcrypto`](https://github.com/LinkUVerse/fastcrypto) CLI tool (`sigs-cli`) to create signatures of a given scheme. The CLI is for testing and debugging only and **must not** be used in production: it generates keys from fixed seeds, exposes secret keys on the command line and in shell history, and applies no domain separation. For production signing, sign with a vetted wallet, SDK, or HSM/TEE-backed signer, keep private keys outside of CLIs and logs, and bind every signed message to a domain separator and a nonce (or request ID) to prevent cross-context reuse and replay. See [Frontend and transaction signing](/develop/security/best-practices#frontend-and-transaction-signing) and [User and operator key management](/develop/security/best-practices#user-and-operator-key-management) for details.
 
 :::
 
 ## Setup `fastcrypto` CLI binary
 
 ```sh
-git@github.com:MystenLabs/fastcrypto.git
+git@github.com:LinkUVerse/fastcrypto.git
 cd fastcrypto/
 cargo build --bin sigs-cli
 ```
@@ -97,7 +97,7 @@ Public key in hex: $PK
 #### Step 2:Call the verify method in Move. All inputs are represented in bytes in hex format:
 
 ```move
-    use sui::ed25519;
+    use rtd::ed25519;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -124,7 +124,7 @@ Public key in hex: $PK
 #### Step 2:Call the verify method in Move.
 
 ```move
-    use sui::ecdsa_k1;
+    use rtd::ecdsa_k1;
     
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -151,7 +151,7 @@ Public key in hex: $PK
 
 #### Step 2:Call the ecrecover method in Move and check equality.
 ```move
-    use sui::ecdsa_k1;
+    use rtd::ecdsa_k1;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -179,7 +179,7 @@ Public key in hex: $PK
 #### Step 2:Call the verify method in Move.
 
 ```move
-    use sui::ecdsa_r1;
+    use rtd::ecdsa_r1;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -207,7 +207,7 @@ Public key in hex: $PK
 #### Step 2:Call the ecrecover method in Move and check equality.
 
 ```move
-    use sui::ecdsa_r1;
+    use rtd::ecdsa_r1;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -235,7 +235,7 @@ Public key in hex: $PK
 #### Step 2:Call the verify method in Move.
 
 ```move
-    use sui::bls12381;
+    use rtd::bls12381;
 
     let msg = x"$MSG";
     let pk = x"$PK";
@@ -262,7 +262,7 @@ Public key in hex: $PK
 #### Step 2:Call the verify method in Move.
 
 ```move
-    use sui::bls12381;
+    use rtd::bls12381;
 
     let msg = x"$MSG";
     let pk = x"$PK";

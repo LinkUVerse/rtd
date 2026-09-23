@@ -34,7 +34,7 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - Which oracle objects does DeepBook Predict read on Sui Mainnet and Testnet?
+  - Which oracle objects does DeepBook Predict read on Rtd Mainnet and Testnet?
   - How do I find the canonical Pyth feed and Block Scholes stores for an underlying?
   - Why does a DeepBook Predict pricing call abort with a wrong feed or stale oracle error?
 answer: >-
@@ -48,7 +48,7 @@ answer: >-
 
 DeepBook Predict declares no oracle object of its own. Oracle data lives in the separate `propbook` package, which publishes an `OracleRegistry` plus one shared object per feed, and Predict reads those objects by reference at call time. Every priced call therefore takes concrete oracle objects as arguments, and Predict checks each one against the registry's current canonical binding before it prices anything.
 
-The Mainnet and Testnet deployments run the same package sources, so everything on this page holds on both networks; only the object IDs differ. The IDs below come from each network's deployment manifest and match `getConfig(network).underlyings.BTC` in `@mysten/deepbook-v3/predict`. Resolve them from the registry at runtime rather than caching them, because rebinding an underlying changes which object is canonical.
+The Mainnet and Testnet deployments run the same package sources, so everything on this page holds on both networks; only the object IDs differ. The IDs below come from each network's deployment manifest and match `getConfig(network).underlyings.BTC` in `@linku/deepbook-v3/predict`. Resolve them from the registry at runtime rather than caching them, because rebinding an underlying changes which object is canonical.
 
 | **Object** | **Mainnet** | **Testnet** |
 | --- | --- | --- |
@@ -79,7 +79,7 @@ There is one `OracleRegistry` per deployment, one `PythFeed` per Pyth source, an
 <ImportContent
 	source="packages/propbook/sources/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="OracleRegistry,BlockScholesStorePair,OracleMetadata"
@@ -94,7 +94,7 @@ Resolve an underlying to its 3 feed objects before building a transaction:
 <ImportContent
 	source="packages/propbook/sources/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="propbook_pyth_id_for_underlying,propbook_block_scholes_store_pair_for_underlying,block_scholes_value_store_id,block_scholes_svi_store_id"
@@ -108,7 +108,7 @@ Richer metadata is available when you need the source ID behind a binding rather
 <ImportContent
 	source="packages/propbook/sources/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="pyth_metadata_for_underlying,propbook_underlying_id,oracle_kind,source_id,propbook_oracle_id,value_kind"
@@ -124,7 +124,7 @@ Creating a Pyth feed object is permissionless, but binding one to an underlying 
 <ImportContent
 	source="packages/propbook/sources/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="create_and_share_pyth_feed,create_and_share_block_scholes_stores,bind_pyth_to_underlying,replace_pyth_binding_for_underlying"
@@ -155,7 +155,7 @@ Binding changes emit `OracleSourceRegistered`, `OracleBound`, `BlockScholesStore
 <ImportContent
 	source="packages/propbook/sources/feeds/pyth_feed.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="PythFeed,RawSpot"
@@ -170,7 +170,7 @@ The feed has 4 accessors that cover the latest observation and an exact historic
 <ImportContent
 	source="packages/propbook/sources/feeds/pyth_feed.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="raw_spot,normalized_spot,raw_spot_at,normalized_spot_at"
@@ -188,7 +188,7 @@ Writes are permissionless because possession of a verified Pyth Lazer update is 
 <ImportContent
 	source="packages/propbook/sources/feeds/pyth_feed.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="update,insert_at,migrate"
@@ -220,7 +220,7 @@ The vendor surface lives in 2 shared objects. `BlockScholesValueStore` holds spo
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="BlockScholesValueStore,BlockScholesSVIStore"
@@ -243,7 +243,7 @@ Every observation comes back wrapped in a `BsRead`, and SVI values carry an `SVI
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="BsRead,SVIParams"
@@ -256,7 +256,7 @@ Read the observations themselves:
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="spot,spot_at,forward,svi"
@@ -270,7 +270,7 @@ Live pricing finds its spot in the recent history by source timestamp:
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="recent_spot_at"
@@ -284,7 +284,7 @@ Compute a series identifier when you need to address a series directly:
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="spot_sid,forward_sid,svi_sid"
@@ -296,14 +296,14 @@ Unpack a `BsRead` with the read accessors:
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="read_source_timestamp_ms,read_onchain_timestamp_ms,read_writer_digest,read_value"
 	noComments
 />
 
-The 2 timestamps answer 2 different questions. `source_timestamp_ms` is the provider's own time for that observation, the per-update `value_timestamp` of a spot or forward and the `svi_timestamp` of an SVI row, and `onchain_timestamp_ms` is the time the write landed on Sui. Latest ordering, both spot histories, the forward and spot pairing, the freshness windows, and the SVI roll-down all key on the source timestamp; the batch envelope time is transport metadata only and appears nowhere in a `BsRead`. Judge vendor freshness from the source timestamp and landing order from the onchain timestamp, and never sort by source timestamp alone, because an older source observation can land later. There is no model timestamp: `BsRead` carries exactly the 4 fields in its definition, so an integrator decoding `BlockScholesObservationRecorded` payloads from the earlier `predict-8-21` deployment must drop the leading `model_timestamp_ms` it used to read.
+The 2 timestamps answer 2 different questions. `source_timestamp_ms` is the provider's own time for that observation, the per-update `value_timestamp` of a spot or forward and the `svi_timestamp` of an SVI row, and `onchain_timestamp_ms` is the time the write landed on Rtd. Latest ordering, both spot histories, the forward and spot pairing, the freshness windows, and the SVI roll-down all key on the source timestamp; the batch envelope time is transport metadata only and appears nowhere in a `BsRead`. Judge vendor freshness from the source timestamp and landing order from the onchain timestamp, and never sort by source timestamp alone, because an older source observation can land later. There is no model timestamp: `BsRead` carries exactly the 4 fields in its definition, so an integrator decoding `BlockScholesObservationRecorded` payloads from the earlier `predict-8-21` deployment must drop the leading `model_timestamp_ms` it used to read.
 
 `writer_digest` records the transaction digest that wrote the observation. Predict reads it to enforce the same-transaction guard described later on this page.
 
@@ -314,7 +314,7 @@ Writes are permissionless because the signed vendor batch is the authority:
 <ImportContent
 	source="packages/propbook/sources/feeds/block_scholes_store.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="apply_spot_batch,apply_forward_batch,apply_svi_batch"
@@ -339,7 +339,7 @@ Store creation is internal to the package and reachable only through `registry::
 <ImportContent
 	source="packages/propbook/sources/oracle_lane/oracle_lane.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="OracleRead"
@@ -350,7 +350,7 @@ Store creation is internal to the package and reachable only through `registry::
 <ImportContent
 	source="packages/propbook/sources/oracle_lane/oracle_lane.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="read_source_timestamp_ms,read_onchain_timestamp_ms,read_writer_digest,read_value"
@@ -383,7 +383,7 @@ Live pricing runs through a `Pricer`, which you build once per transaction from 
 <ImportContent
 	source="packages/predict/sources/expiry_market.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="load_live_pricer"
@@ -393,7 +393,7 @@ Live pricing runs through a `Pricer`, which you build once per transaction from 
 <ImportContent
 	source="packages/predict/sources/pricing/pricing.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="Pricer"
@@ -410,7 +410,7 @@ A pricer feeds 2 read functions:
 <ImportContent
 	source="packages/predict/sources/pricing/pricing.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="up_price,range_price"
@@ -422,7 +422,7 @@ Both take `range_codec::Strike` values, which you build from a tick with `range_
 <ImportContent
 	source="packages/predict/sources/pricing/pricing.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="RangePrice"
@@ -431,7 +431,7 @@ Both take `range_codec::Strike` values, which you build from a tick with `range_
 <ImportContent
 	source="packages/predict/sources/pricing/pricing.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="lower_up,higher_up,probability"
@@ -556,7 +556,7 @@ Outside of live pricing, 2 market functions read oracles, and both are permissio
 <ImportContent
 	source="packages/predict/sources/expiry_market.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="set_reference_tick,try_settle"
@@ -577,7 +577,7 @@ Settlement emits `MarketSettled`, which carries the settlement price and the sou
 <ImportContent
 	source="packages/predict/sources/events/config_events.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="ReferenceTickSet,MarketSettled"

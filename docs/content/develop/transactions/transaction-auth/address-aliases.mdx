@@ -2,7 +2,7 @@
 title: Address Aliases
 description: >-
   Address aliases can be used to configure the set of keys that are allowed to
-  sign transactions for a particular address on the Sui network.
+  sign transactions for a particular address on the Rtd network.
 keywords:
   - address aliases
   - aliases
@@ -28,14 +28,14 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Address Aliases in Sui?
+  - What is Address Aliases in Rtd?
   - Why should I use address aliases?
 answer: >-
   Address aliases can be used to configure the set of keys that are allowed to
-  sign transactions for a particular address on the Sui network.
+  sign transactions for a particular address on the Rtd network.
 ---
 
-Address aliases can be used to configure the set of keys that are allowed to sign transactions for a particular address on the Sui network.
+Address aliases can be used to configure the set of keys that are allowed to sign transactions for a particular address on the Rtd network.
 
 You can use address aliases to:
 - Perform basic key rotation for an address.
@@ -52,9 +52,9 @@ Be extremely careful when making any changes to your aliases. Any new alias you 
 
 ## How aliases work
 
-Each address on Sui has a set of aliases. New addresses begin as their own alias. That is, a new address `A` has the alias set `{A}`.
+Each address on Rtd has a set of aliases. New addresses begin as their own alias. That is, a new address `A` has the alias set `{A}`.
 
-You can modify aliases for an address using the Move API in the <UnsafeLink href="/references/framework/sui_sui/address_alias">`sui::address_alias` module</UnsafeLink>. These modification functions must be invoked as top-level PTB commands and cannot be called from other Move functions.
+You can modify aliases for an address using the Move API in the <UnsafeLink href="/references/framework/rtd_rtd/address_alias">`rtd::address_alias` module</UnsafeLink>. These modification functions must be invoked as top-level PTB commands and cannot be called from other Move functions.
 
 Some constraints for modifying aliases:
 - An address must always have at least one alias.
@@ -63,7 +63,7 @@ Some constraints for modifying aliases:
 
 ### Authenticating transactions with aliased addresses
 
-Transactions on Sui are configured with two addresses: a `sender` and a `gas_owner` (which might or might not be the same). For each configured address, a signature is required from one of the signers in its alias set.
+Transactions on Rtd are configured with two addresses: a `sender` and a `gas_owner` (which might or might not be the same). For each configured address, a signature is required from one of the signers in its alias set.
 
 For example, with the following transaction and aliases:
 ```
@@ -81,17 +81,17 @@ To be valid, the transaction `T` would require a signature from either `A` or `B
 
 In this example, even if the transaction had signatures from `[B, Y]` and not from `A`, during execution it would nonetheless have access to everything owned by `A`, and during Move call execution its `TxContext::sender` would be `A`.
 
-## Managing aliases with the Sui CLI
+## Managing aliases with the Rtd CLI
 
-You can manage address aliases using `sui client ptb` to call entry functions in the `sui::address_alias` module. The `AddressAliasState` singleton object lives at the address `0xa`.
+You can manage address aliases using `rtd client ptb` to call entry functions in the `rtd::address_alias` module. The `AddressAliasState` singleton object lives at the address `0xa`.
 
 ### Enable aliases for your address
 
 Before modifying aliases, you must enable alias configuration for your address. This creates an `AddressAliases` object initialized with your own address as the sole alias:
 
 ```sh
-$ sui client ptb \
-    --move-call sui::address_alias::enable @0xa \
+$ rtd client ptb \
+    --move-call rtd::address_alias::enable @0xa \
     --gas-budget 50000000
 ```
 
@@ -102,8 +102,8 @@ Note the object ID of the `AddressAliases` object in the created objects section
 Add another address to your alias set, granting it the ability to sign transactions on your behalf:
 
 ```sh
-$ sui client ptb \
-    --move-call sui::address_alias::add \
+$ rtd client ptb \
+    --move-call rtd::address_alias::add \
         @<ADDRESS_ALIASES_OBJECT_ID> \
         @<NEW_ALIAS_ADDRESS> \
     --gas-budget 50000000
@@ -114,8 +114,8 @@ $ sui client ptb \
 Overwrite the entire alias set with a new set of addresses using `replace_all`. For example, to set a single address as the only alias:
 
 ```sh
-$ sui client ptb \
-    --move-call sui::address_alias::replace_all \
+$ rtd client ptb \
+    --move-call rtd::address_alias::replace_all \
         @<ADDRESS_ALIASES_OBJECT_ID> \
         vector[@<ALIAS_ADDRESS>] \
     --gas-budget 50000000
@@ -132,8 +132,8 @@ If you replace your aliases with a set that does not include your own address, y
 Remove a specific address from your alias set:
 
 ```sh
-$ sui client ptb \
-    --move-call sui::address_alias::remove \
+$ rtd client ptb \
+    --move-call rtd::address_alias::remove \
         @<ADDRESS_ALIASES_OBJECT_ID> \
         @<ALIAS_TO_REMOVE> \
     --gas-budget 50000000
@@ -141,4 +141,4 @@ $ sui client ptb \
 
 ### Offline signing
 
-If you are using a hardware wallet or other external signer, add `--serialize-unsigned-transaction` to any of the commands above to output the raw transaction bytes instead of executing. You can then sign the transaction offline and submit it separately. See [Sui Client PTB CLI](/references/cli/ptb) for details.
+If you are using a hardware wallet or other external signer, add `--serialize-unsigned-transaction` to any of the commands above to output the raw transaction bytes instead of executing. You can then sign the transaction offline and submit it separately. See [Rtd Client PTB CLI](/references/cli/ptb) for details.

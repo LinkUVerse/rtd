@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module regulated_token::reg {
     use std::option;
-    use sui::tx_context::{sender, TxContext};
-    use sui::transfer;
-    use sui::coin::{Self, TreasuryCap};
-    use sui::token::{Self, Token, TokenPolicy};
+    use rtd::tx_context::{sender, TxContext};
+    use rtd::transfer;
+    use rtd::coin::{Self, TreasuryCap};
+    use rtd::token::{Self, Token, TokenPolicy};
 
     use regulated_token::denylist_rule::{Self as denylist, Denylist};
 

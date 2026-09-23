@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! This module defines the network interface, and provides network implementations for the
@@ -30,7 +30,7 @@ use consensus_config::{AuthorityIndex, NetworkKeyPair, NetworkPublicKey};
 use consensus_types::block::{BlockRef, Round};
 use fastcrypto::encoding::{Encoding, Hex};
 use futures::Stream;
-use mysten_network::{Multiaddr, multiaddr::Protocol};
+use linku_network::{Multiaddr, multiaddr::Protocol};
 use prost::Message as _;
 
 use crate::{

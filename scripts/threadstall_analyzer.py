@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -18,7 +18,7 @@ class ThreadDumpAnalyzer:
         self.interesting_prefixes = [
             'crates/',
             'consensus/',
-            'sui-execution/',
+            'rtd-execution/',
             'external-crates/',
         ]
 

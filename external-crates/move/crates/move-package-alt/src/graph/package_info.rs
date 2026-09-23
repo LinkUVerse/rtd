@@ -103,7 +103,7 @@ impl<'graph, F: MoveFlavor> PackageInfo<'graph, F> {
     /// The flavor for the package
     pub fn flavor(&self) -> Option<&str> {
         // TODO: pull this from manifest
-        Some("sui")
+        Some("rtd")
     }
 
     /// The path to the package's files on disk
@@ -181,7 +181,7 @@ impl<'graph, F: MoveFlavor> PackageInfo<'graph, F> {
     }
 
     /// For legacy packages, our named addresses need to include all transitive deps too.
-    /// An example of that is depending on "sui", but also keeping it possible to use "std".
+    /// An example of that is depending on "rtd", but also keeping it possible to use "std".
     fn legacy_named_addresses(&self) -> PackageResult<BTreeMap<PackageName, NamedAddress>> {
         let mut result: BTreeMap<PackageName, NamedAddress> = BTreeMap::new();
 

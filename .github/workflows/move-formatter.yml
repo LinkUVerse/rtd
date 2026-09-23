@@ -1,4 +1,4 @@
-# Checks formatting in all examples and system packages (TBD for Sui System and Bridge)
+# Checks formatting in all examples and system packages (TBD for Rtd System and Bridge)
 # Uses a fixed NPM version to separate prettier-move release changes from system package
 # changes.
 #
@@ -50,10 +50,10 @@ jobs:
       matrix:
         working-directory:
           - examples # run on all examples
-          - crates/sui-framework/packages/sui-framework # sui framework
-          - crates/sui-framework/packages/move-stdlib # move stdlib
-          - crates/sui-framework/packages/sui-system # sui system
-          - crates/sui-framework/packages/bridge # bridge
+          - crates/rtd-framework/packages/rtd-framework # rtd framework
+          - crates/rtd-framework/packages/move-stdlib # move stdlib
+          - crates/rtd-framework/packages/rtd-system # rtd system
+          - crates/rtd-framework/packages/bridge # bridge
     defaults:
       run:
         working-directory: ${{ matrix.working-directory }}
@@ -61,5 +61,5 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
       - name: Use Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # pin@v6.2.0
-      - run: npm install --no-warnings @mysten/prettier-plugin-move@${{ env.FORMATTER_VERSION }}
+      - run: npm install --no-warnings @linku/prettier-plugin-move@${{ env.FORMATTER_VERSION }}
       - run: npx prettier-move -c **/*.move

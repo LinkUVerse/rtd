@@ -1,21 +1,21 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
-const client = new SuiGrpcClient({ baseUrl: 'https://fullnode.testnet.sui.io:443', network: 'testnet' });
+const client = new RtdGrpcClient({ baseUrl: 'https://fullnode.testnet.rtd.io:443', network: 'testnet' });
 const keypair = new Ed25519Keypair();
 const recipientAddress = '0xRecipient...';
 
 // docs::#send-from-balance
 const tx = new Transaction();
 
-// Send 1 SUI to the recipient's address balance. The SDK selects the funding source.
+// Send 1 RTD to the recipient's address balance. The SDK selects the funding source.
 tx.moveCall({
 	target: '0x2::balance::send_funds',
-	typeArguments: ['0x2::sui::SUI'],
+	typeArguments: ['0x2::rtd::RTD'],
 	arguments: [tx.balance({ balance: 1_000_000_000n }), tx.pure.address(recipientAddress)],
 });
 // docs::/#send-from-balance
@@ -31,14 +31,14 @@ tx2.transferObjects([coin], tx2.pure.address(recipientAddress));
 // docs::#withdraw-redeem
 const tx3 = new Transaction();
 
-// Withdraw from address balance and redeem to get a Coin<SUI>.
+// Withdraw from address balance and redeem to get a Coin<RTD>.
 const [redeemed] = tx3.moveCall({
 	target: '0x2::coin::redeem_funds',
-	typeArguments: ['0x2::sui::SUI'],
+	typeArguments: ['0x2::rtd::RTD'],
 	arguments: [tx3.withdrawal({ amount: 1_000_000_000 })],
 });
 
-// Pass the coin to a Move function that expects Coin<SUI>.
+// Pass the coin to a Move function that expects Coin<RTD>.
 tx3.moveCall({
 	target: '0xPACKAGE::module::deposit',
 	arguments: [redeemed],

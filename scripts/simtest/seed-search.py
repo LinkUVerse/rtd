@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import subprocess
@@ -423,7 +423,7 @@ def _report_error_match_found(seed, job, log_path):
     print(f"  binary: {binary_name}")
     print(f"  test:   {test}")
     print(f"\nRepro command:")
-    print(f"  MSIM_TEST_SEED={seed} RUST_LOG=sui=debug,info cargo simtest --test {binary_name} -E 'test(={test})' -- --no-capture")
+    print(f"  MSIM_TEST_SEED={seed} RUST_LOG=rtd=debug,info cargo simtest --test {binary_name} -E 'test(={test})' -- --no-capture")
     if log_path:
         print(f"  log:    {log_path}")
     sys.stdout.flush()

@@ -8,9 +8,9 @@ module prettier::group_imports_numeric_module;
 use 0x0::Account::{Self, Account};
 use 0x0::Something;
 use 0x2::coin;
-use 0x2::sui::SUI;
+use 0x2::rtd::RTD;
 use 0x2::transfer as t;
 
-fun f(_: Account, _: Something, _: SUI) {
+fun f(_: Account, _: Something, _: RTD) {
     abort 0
 }

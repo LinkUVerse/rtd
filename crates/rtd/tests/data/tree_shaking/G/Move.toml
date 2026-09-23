@@ -1,0 +1,11 @@
+[package]
+name = "g"
+edition = "2024"
+implicit-dependencies = false
+
+[dependencies]
+rtd = { local = "../../system-packages/rtd-framework" }
+std = { local = "../../system-packages/move-stdlib" }
+bridge = { local = "../../system-packages/bridge" }
+deepbook = { local = "../../system-packages/deepbook" }
+rtd_system = { local = "../../system-packages/rtd-system" }

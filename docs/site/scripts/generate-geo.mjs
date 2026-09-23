@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -79,7 +79,7 @@ function isQuestion(text) {
 function getArchetype(relPath) {
   if (relPath.startsWith('getting-started/onboarding/')) return 'onboarding';
   if (relPath.startsWith('getting-started/examples/')) return 'example';
-  if (relPath.startsWith('getting-started/sui-for-')) return 'migration';
+  if (relPath.startsWith('getting-started/rtd-for-')) return 'migration';
   if (relPath.startsWith('operators/')) return 'operator';
   if (relPath.includes('-sdk/') || relPath.includes('-sdk.mdx')) return 'sdk';
   if (relPath.startsWith('references/')) return 'reference';
@@ -125,22 +125,22 @@ function generateQuestions(title, description, headings, relPath) {
   // Generate primary questions from title based on archetype
   switch (archetype) {
     case 'onboarding':
-      questions.push(`How do I ${actionForm} on Sui?`);
+      questions.push(`How do I ${actionForm} on Rtd?`);
       break;
     case 'example':
-      questions.push(`How do I build a ${topicLower} on Sui?`);
+      questions.push(`How do I build a ${topicLower} on Rtd?`);
       // Avoid "pattern pattern"
       const patternName = topicLower.replace(/\s+pattern$/i, '');
-      questions.push(`What is the ${patternName} pattern in Sui?`);
+      questions.push(`What is the ${patternName} pattern in Rtd?`);
       break;
     case 'migration': {
-      const platform = topicName.replace(/->|→/g, ' ').replace(/\s+to\s+Sui/i, '').replace(/\s+Sui$/i, '').trim();
-      questions.push(`How does Sui compare to ${platform}?`);
-      questions.push(`How do I migrate from ${platform} to Sui?`);
+      const platform = topicName.replace(/->|→/g, ' ').replace(/\s+to\s+Rtd/i, '').replace(/\s+Rtd$/i, '').trim();
+      questions.push(`How does Rtd compare to ${platform}?`);
+      questions.push(`How do I migrate from ${platform} to Rtd?`);
       break;
     }
     case 'operator':
-      questions.push(`How do I ${actionForm} for Sui?`);
+      questions.push(`How do I ${actionForm} for Rtd?`);
       break;
     case 'sdk': {
       // Avoid "SDK SDK" by stripping trailing SDK from name
@@ -149,18 +149,18 @@ function generateQuestions(title, description, headings, relPath) {
       break;
     }
     case 'reference':
-      questions.push(`What is ${topicName} in Sui?`);
+      questions.push(`What is ${topicName} in Rtd?`);
       break;
     case 'index':
-      questions.push(`What is ${topicName} in Sui?`);
+      questions.push(`What is ${topicName} in Rtd?`);
       break;
     default: // guide
       // Detect conceptual vs procedural from title
       if (/^(build|create|set up|configure|install|deploy|write|test|debug|connect|query|emit|use|optimiz|integrat|run|monitor|sign|send)/i.test(actionForm)) {
-        questions.push(`How do I ${actionForm} on Sui?`);
+        questions.push(`How do I ${actionForm} on Rtd?`);
       } else {
-        questions.push(`What is ${topicName} in Sui?`);
-        questions.push(`How does ${topicLower} work on Sui?`);
+        questions.push(`What is ${topicName} in Rtd?`);
+        questions.push(`How does ${topicLower} work on Rtd?`);
       }
   }
 
@@ -257,7 +257,7 @@ function main() {
 
     // Skip snippets and auto-generated pages
     if (relPath.startsWith('snippets/')) { skipped++; continue; }
-    if (relPath.includes('sui-graphql/beta/reference/')) { skipped++; continue; }
+    if (relPath.includes('rtd-graphql/beta/reference/')) { skipped++; continue; }
 
     // Skip if already has both
     if (data.questions && data.answer) { alreadyHas++; continue; }

@@ -55,7 +55,7 @@ answer: >-
 
 Publishing the Predict package creates `Registry` and `ProtocolConfig` together and transfers the single `AdminCap` to the publisher at that moment. The registry object ID for each deployment is on [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information#shared-objects), and `getConfig(network).objects.registry` in the SDK resolves the same ID. The Move snippets on this page pin DeepBookV3 `main` at `76b11922`, whose sources match both deployments.
 
-Most application integrations call only the read functions here. The rest are operator and governance surfaces. None of them is an `entry fun`: every function on this page is a `public fun` invoked as a `moveCall`. The capability-minting functions and `generate_pool_valuation_proof` return values that a later command in the same transaction must consume, because Sui rejects an unused return value only when its type lacks `drop`. The 2 creation functions each return an `ID`, which has `drop`, so a transaction can leave it unused.
+Most application integrations call only the read functions here. The rest are operator and governance surfaces. None of them is an `entry fun`: every function on this page is a `public fun` invoked as a `moveCall`. The capability-minting functions and `generate_pool_valuation_proof` return values that a later command in the same transaction must consume, because Rtd rejects an unused return value only when its type lacks `drop`. The 2 creation functions each return an `ID`, which has `drop`, so a transaction can leave it unused.
 
 ## Registry state
 
@@ -64,7 +64,7 @@ The registry holds the market catalog inline rather than in a separate object:
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="Registry"
@@ -79,7 +79,7 @@ Each market is its own shared `ExpiryMarket` object, addressed by the underlying
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="id,expiry_market_id"
@@ -108,7 +108,7 @@ A cadence ID above `5` aborts with `EInvalidCadence`. Read one cadence or all 6:
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="cadence_config,cadence_configs"
@@ -122,7 +122,7 @@ Both reads return `CadenceConfig` by value, and it carries the 5 terms a market 
 <ImportContent
 	source="packages/predict/sources/registry/market_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="CadenceConfig"
@@ -133,7 +133,7 @@ Read the terms with the accessors rather than by field:
 <ImportContent
 	source="packages/predict/sources/registry/market_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="cadence_tick_size,cadence_admission_tick_size,cadence_max_expiry_allocation,cadence_initial_expiry_cash,cadence_window_size,cadence_enabled"
@@ -164,7 +164,7 @@ Privileged functions sit behind 4 capability types, and each one is a distinct o
 <ImportContent
 	source="packages/predict/sources/capabilities/market_lifecycle_cap.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="MarketLifecycleCap"
@@ -173,7 +173,7 @@ Privileged functions sit behind 4 capability types, and each one is a distinct o
 <ImportContent
 	source="packages/predict/sources/capabilities/pool_valuation_cap.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="PoolValuationCap"
@@ -188,7 +188,7 @@ Pause capabilities are deliberately not version-gated, so an emergency stop stil
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="mint_pause_cap,revoke_pause_cap"
@@ -204,7 +204,7 @@ Lifecycle capabilities are version-gated, unlike pause capabilities:
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="mint_lifecycle_cap,revoke_lifecycle_cap"
@@ -220,7 +220,7 @@ Pool valuation capabilities follow the same version-gated mint and ungated revok
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="mint_pool_valuation_cap,revoke_pool_valuation_cap,generate_pool_valuation_proof"
@@ -238,7 +238,7 @@ The registry has 3 emergency-stop functions, and each validates the capability I
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="pause_trading_pause_cap,freeze_protocol_pause_cap,pause_expiry_market_mint_pause_cap"
@@ -260,7 +260,7 @@ An admin must register an underlying before any market on it can exist:
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="register_underlying,set_template_cadence_config"
@@ -280,7 +280,7 @@ Market creation is the only lifecycle-capability surface in the registry, and it
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="create_and_share_expiry_market"
@@ -308,7 +308,7 @@ Builder-code creation is the only permissionless function in the registry that c
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="create_and_share_builder_code"
@@ -326,7 +326,7 @@ An account attaches a code with `predict_account::set_builder_code` and detaches
 <ImportContent
 	source="packages/predict/sources/config/protocol_config.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="set_no_trade_window_ms,set_max_valuation_window_ms"
@@ -391,7 +391,7 @@ Registry activity surfaces through `deepbook_predict::config_events`:
 <ImportContent
 	source="packages/predict/sources/events/config_events.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="MarketCreated,CadenceConfigUpdated,NoTradeWindowUpdated"

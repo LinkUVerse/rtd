@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Two system packages: `0x3::pinned_b` calls into `0x1::pinned_a`. Used to verify cross-system

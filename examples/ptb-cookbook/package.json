@@ -8,7 +8,7 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@mysten/sui": "2.22.1"
+    "@linku/rtd": "2.22.1"
   },
   "devDependencies": {
     "typescript": "^5.5.3"

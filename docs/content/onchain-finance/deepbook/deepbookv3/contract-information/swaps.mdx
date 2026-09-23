@@ -36,8 +36,8 @@ builder_paths:
     step: Swap mechanics
     stage: DeFi Primitives
 questions:
-  - What is Swaps in Sui?
-  - How does swaps work on Sui?
+  - What is Swaps in Rtd?
+  - How does swaps work on Rtd?
   - Why should I use swaps?
 answer: Use DeepBookV3 to execute token swaps.
 ---
@@ -66,7 +66,7 @@ You can overestimate the amount of DEEP required. The call returns the remaining
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="swap_exact_base_for_quote"
 	noComments
@@ -88,7 +88,7 @@ Some quote quantity could be left over if the input quantity is not divisible by
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="swap_exact_quote_for_base"
 	noComments
@@ -104,7 +104,7 @@ This function is what the previous two functions call with `coin::zero()` set fo
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="swap_exact_quantity"
 	noComments
@@ -120,7 +120,7 @@ Swap exact base for quote using a `BalanceManager`. Assumes fees are paid in DEE
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="swap_exact_base_for_quote_with_manager"
 	noComments
@@ -136,7 +136,7 @@ Swap exact quote for base using a `BalanceManager`. Assumes fees are paid in DEE
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="swap_exact_quote_for_base_with_manager"
 	noComments
@@ -152,7 +152,7 @@ Swap exact quantity using a `BalanceManager`. This is the underlying function th
 <ImportContent
 	source="packages/deepbook/sources/pool.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	fun="swap_exact_quantity_with_manager"
 	noComments

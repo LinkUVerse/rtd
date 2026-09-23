@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState, useEffect } from "react";
@@ -42,10 +42,10 @@ const searchClient = {
 };
 
 const indices = [
-  { label: "Sui", indexName: "sui_docs" },
-  { label: "SuiNS", indexName: "suins_docs" },
+  { label: "Rtd", indexName: "rtd_docs" },
+  { label: "RtdNS", indexName: "rtdns_docs" },
   { label: "The Move Book", indexName: "move_book" },
-  { label: "SDKs", indexName: "sui_sdks" },
+  { label: "SDKs", indexName: "rtd_sdks" },
   { label: "Walrus", indexName: "walrus_docs" },
 ];
 
@@ -57,10 +57,10 @@ function HitItem({ hit }: { hit: any }) {
   return (
     <a
       href={hit.url}
-      className="modal-result block px-4 py-3 -mx-2 rounded-lg no-underline hover:bg-sui-gray-40 dark:hover:bg-sui-gray-80 transition-colors"
+      className="modal-result block px-4 py-3 -mx-2 rounded-lg no-underline hover:bg-rtd-gray-40 dark:hover:bg-rtd-gray-80 transition-colors"
     >
       {breadcrumb.length > 0 && (
-        <div className="text-xs text-gray-500 dark:text-sui-gray-55 mb-1 truncate">
+        <div className="text-xs text-gray-500 dark:text-rtd-gray-55 mb-1 truncate">
           {breadcrumb.join(" > ")}
         </div>
       )}
@@ -69,7 +69,7 @@ function HitItem({ hit }: { hit: any }) {
       </div>
       {hit.content && (
         <p
-          className="text-xs text-gray-600 dark:text-sui-gray-45 mt-1 mb-0 line-clamp-2"
+          className="text-xs text-gray-600 dark:text-rtd-gray-45 mt-1 mb-0 line-clamp-2"
           dangerouslySetInnerHTML={{
             __html: truncateAtWord(hit._highlightResult.content.value, 120),
           }}
@@ -114,7 +114,7 @@ function EmptyState({ label }: { label: string }) {
   const { results } = useInstantSearch();
   if (results?.hits?.length === 0) {
     return (
-      <p className="text-sm text-sui-gray-5s dark:text-sui-gray-50">
+      <p className="text-sm text-rtd-gray-5s dark:text-rtd-gray-50">
         No results in {label}
       </p>
     );
@@ -156,7 +156,7 @@ export default function MultiIndexSearchModal({
 }) {
   const [activeIndex, setActiveIndex] = useState(indices[0].indexName);
   const [tabCounts, setTabCounts] = React.useState<Record<string, number>>({
-    sui_docs: 0,
+    rtd_docs: 0,
   });
   const [query, setQuery] = React.useState("");
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -185,13 +185,13 @@ export default function MultiIndexSearchModal({
   }, [isOpen, onClose]);
 
   const activeMeta = {
-    sui_docs: null,
-    suins_docs: { label: "SuiNS Docs", url: "https://docs.suins.io" },
+    rtd_docs: null,
+    rtdns_docs: { label: "RtdNS Docs", url: "https://docs.rtdns.io" },
     move_book: {
       label: "The Move Book",
       url: "https://move-book.com/",
     },
-    sui_sdks: { label: "SDK Docs", url: "https://sdk.mystenlabs.com" },
+    rtd_sdks: { label: "SDK Docs", url: "https://sdk.linkuverse.com" },
     walrus_docs: { label: "Walrus Docs", url: "https://docs.wal.app" },
   }[activeIndex];
 
@@ -216,7 +216,7 @@ export default function MultiIndexSearchModal({
             </button>
           </div>
 
-          {/* Ask Sui AI — primary action */}
+          {/* Ask Rtd AI — primary action */}
           <button
             type="button"
             className="w-full flex items-center gap-3 px-4 py-3.5 mb-3 rounded-xl bg-gradient-to-r from-[#298DFF] to-[#1B6FD1] text-white border-none cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.99]"
@@ -237,8 +237,8 @@ export default function MultiIndexSearchModal({
               </svg>
             </div>
             <div className="text-left flex-1">
-              <div className="font-semibold text-[15px] leading-tight">Ask Sui AI</div>
-              <div className="text-xs text-white/70 mt-0.5">Get instant answers from the Sui knowledge base</div>
+              <div className="font-semibold text-[15px] leading-tight">Ask Rtd AI</div>
+              <div className="text-xs text-white/70 mt-0.5">Get instant answers from the Rtd knowledge base</div>
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/50">
               <polyline points="9,18 15,12 9,6" />

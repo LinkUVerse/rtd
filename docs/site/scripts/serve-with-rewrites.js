@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /**
@@ -56,7 +56,7 @@ const LINK_HEADER =
   '</llms.txt>; rel="service-doc"; type="text/plain"; title="LLM-optimized documentation", ' +
   '</sitemap.xml>; rel="sitemap"; type="application/xml", ' +
   '</robots.txt>; rel="robots"; type="text/plain", ' +
-  '</references/sui-api>; rel="service-doc"; title="Sui API Reference"';
+  '</references/rtd-api>; rel="service-doc"; title="Rtd API Reference"';
 
 function getContentType(filePath) {
   const ext = path.extname(filePath).toLowerCase();

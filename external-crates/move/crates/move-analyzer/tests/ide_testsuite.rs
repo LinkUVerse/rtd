@@ -695,7 +695,7 @@ fn test_symbols_with_optional_modifications<F: MoveFlavor + Default>(
         project_path.as_path(),
         LintLevel::None,
         move_flavor,
-        Some(Flavor::Sui),
+        Some(Flavor::Rtd),
         None, // No cursor file
     )?;
 
@@ -726,7 +726,7 @@ fn test_symbols_with_cursor<F: MoveFlavor + Default>(
         project_path.as_path(),
         LintLevel::None,
         move_flavor,
-        Some(Flavor::Sui),
+        Some(Flavor::Rtd),
         Some(cursor_path),
     )?;
 

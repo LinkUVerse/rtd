@@ -5,8 +5,8 @@
  * Advisory verification that source-level debugging artifacts added to a trace
  * (see `./add_source`) actually correspond to the on-chain package used by the
  * trace. The locally built package is compared against on-chain bytecode via
- * `sui client verify-source <pkg> --verify-only <ON_CHAIN_ID>` (available since
- * sui v1.77.0), which compares the modules already compiled under the package's
+ * `rtd client verify-source <pkg> --verify-only <ON_CHAIN_ID>` (available since
+ * rtd v1.77.0), which compares the modules already compiled under the package's
  * `build` directory against the on-chain package, without rebuilding.
  *
  * The check is strictly advisory: it runs after the artifacts have been copied,
@@ -41,13 +41,13 @@ const CACHE_SUMMARY_FILE_NAME = 'replay_cache_summary.json';
 const VERIFY_TIMEOUT_MS = 60_000;
 
 /**
- * Minimum Sui binary version supporting the verification check (the CLI's
- * `--verify-only` mode was introduced in sui v1.77.0).
+ * Minimum Rtd binary version supporting the verification check (the CLI's
+ * `--verify-only` mode was introduced in rtd v1.77.0).
  */
-const MIN_SUI_VERSION = '1.77.0';
+const MIN_RTD_VERSION = '1.77.0';
 
 /**
- * How long to wait for the `sui --version` pre-flight check.
+ * How long to wait for the `rtd --version` pre-flight check.
  */
 const VERSION_CHECK_TIMEOUT_MS = 10_000;
 
@@ -60,7 +60,7 @@ const MAX_DETAIL_LENGTH = 500;
 /**
  * Networks for which verification is pinned (via `--client.env`) to the client
  * environment named after the network. These are both the network names the
- * replay tool records in its cache summary and the environment aliases the Sui
+ * replay tool records in its cache summary and the environment aliases the Rtd
  * CLI creates by default. Any other recorded network (a custom endpoint URL)
  * relies on the client's active environment instead, which is also the one
  * most likely to point at it.
@@ -97,25 +97,25 @@ export async function verifyAddedSource(
 }
 
 /**
- * Path to the Sui binary used for source verification. Reads the Move IDE
- * extension's `move.sui.path` setting (settings are a shared store, so the
+ * Path to the Rtd binary used for source verification. Reads the Move IDE
+ * extension's `move.rtd.path` setting (settings are a shared store, so the
  * value is readable here whether or not that extension is installed or active)
- * and defaults to a binary named `sui` on the system path. Since verficaction
+ * and defaults to a binary named `rtd` on the system path. Since verficaction
  * only produces warnings, the consequence of this extension being installed
- * independently of the Move IDE extension (and thus having no `move.sui.path`
+ * independently of the Move IDE extension (and thus having no `move.rtd.path`
  * setting) is not fatal and simply means that verification will not be run.
  */
-function resolveSuiPath(): string {
-    const suiBin = process.platform === 'win32' ? 'sui.exe' : 'sui';
-    const suiPath = vscode.workspace.getConfiguration('move').get<string | null>('sui.path') ?? suiBin;
-    if (suiPath === suiBin) {
+function resolveRtdPath(): string {
+    const rtdBin = process.platform === 'win32' ? 'rtd.exe' : 'rtd';
+    const rtdPath = vscode.workspace.getConfiguration('move').get<string | null>('rtd.path') ?? rtdBin;
+    if (rtdPath === rtdBin) {
         // bare binary name, resolved via the system path by the spawn itself
-        return suiPath;
+        return rtdPath;
     }
-    if (suiPath.startsWith('~/')) {
-        return os.homedir() + suiPath.slice('~'.length);
+    if (rtdPath.startsWith('~/')) {
+        return os.homedir() + rtdPath.slice('~'.length);
     }
-    return path.resolve(suiPath);
+    return path.resolve(rtdPath);
 }
 
 /**
@@ -148,16 +148,16 @@ async function runVerification(
     traceDir: string,
     token: vscode.CancellationToken
 ): Promise<void> {
-    const suiPath = resolveSuiPath();
+    const rtdPath = resolveRtdPath();
     // A binary predating `--verify-only` would fail with an obscure usage
     // error; check the version up front to report something meaningful
     // instead (an unknown version is let through to attempt verification).
-    const suiVersion = semanticVersion(await version(suiPath, ['--version']));
-    if (suiVersion !== null && semver.lt(suiVersion, MIN_SUI_VERSION)) {
+    const rtdVersion = semanticVersion(await version(rtdPath, ['--version']));
+    if (rtdVersion !== null && semver.lt(rtdVersion, MIN_RTD_VERSION)) {
         vscode.window.showWarningMessage(
             cannotVerifyPrefix(pkgRoot)
-            + `the Sui binary is too old (v${suiVersion.version}) - `
-            + `v${MIN_SUI_VERSION} or later is required.`
+            + `the Rtd binary is too old (v${rtdVersion.version}) - `
+            + `v${MIN_RTD_VERSION} or later is required.`
         );
         return;
     }
@@ -177,7 +177,7 @@ async function runVerification(
         let cancelled = false;
         let cancellation: vscode.Disposable | undefined;
         const child = cp.execFile(
-            suiPath,
+            rtdPath,
             args,
             { timeout: VERIFY_TIMEOUT_MS, windowsHide: true },
             (error, stdout, stderr) => {
@@ -188,7 +188,7 @@ async function runVerification(
                 }
                 // log full output to the console for debugging purposes
                 console.log(
-                    `Source verification ('${suiPath} ${args.join(' ')}') finished with `
+                    `Source verification ('${rtdPath} ${args.join(' ')}') finished with `
                     + (error ? `error '${error.message}'` : 'success')
                     + `\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`
                 );
@@ -232,7 +232,7 @@ function verificationFailureMessage(
 
     if (error.code === 'ENOENT') {
         return cannotVerify
-            + `unable to locate the Sui binary (set 'move.sui.path' or add 'sui' `
+            + `unable to locate the Rtd binary (set 'move.rtd.path' or add 'rtd' `
             + `to the system path).`;
     }
     if (error.killed) {

@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -27,102 +27,102 @@ const FIXES = {
   'develop.mdx':
     'Reader can orient in the developer essentials — architecture, writing Move packages, and building transactions — and pick where to start',
   'develop/accessing-data/index.mdx':
-    'Reader can choose the right mechanism (GraphQL, gRPC, indexers, archival store) to access Sui transactions, checkpoints, objects, and events',
+    'Reader can choose the right mechanism (GraphQL, gRPC, indexers, archival store) to access Rtd transactions, checkpoints, objects, and events',
   'develop/accessing-data/archival-store/index.mdx':
     'Reader understands how the Archival Store and Service provide scalable access to historical onchain data beyond full-node retention',
   'develop/accessing-data/custom-indexer/index.mdx':
-    'Reader understands the sui-indexer-alt-framework interfaces (process, commit) for building custom high-performance Sui indexers',
+    'Reader understands the rtd-indexer-alt-framework interfaces (process, commit) for building custom high-performance Rtd indexers',
   'develop/accessing-data/graphql/index.mdx':
-    'Reader understands how the GraphQL RPC Service queries Sui across the indexer, archival store, and full nodes, and when to use it over gRPC',
+    'Reader understands how the GraphQL RPC Service queries Rtd across the indexer, archival store, and full nodes, and when to use it over gRPC',
   'develop/accessing-data/grpc/index.mdx':
-    'Reader understands how the full node gRPC API uses Protocol Buffers for high-performance, type-safe access to Sui data',
+    'Reader understands how the full node gRPC API uses Protocol Buffers for high-performance, type-safe access to Rtd data',
   'develop/cryptography/index.mdx':
-    'Reader understands Sui cryptographic agility and the algorithms and primitives available to smart contracts and applications',
+    'Reader understands Rtd cryptographic agility and the algorithms and primitives available to smart contracts and applications',
   'develop/manage-packages/index.mdx':
     'Reader can manage Move packages safely, understanding how the UpgradeCap governs future upgrades and how to verify dependency package IDs',
   'develop/objects/index.mdx':
-    'Reader can navigate the Sui object model, object usage, and the object ownership types',
+    'Reader can navigate the Rtd object model, object usage, and the object ownership types',
   'develop/objects/display/index.mdx':
-    'Reader understands the Object Display standard (V2 via sui::display_registry) for managing offchain representation of a type onchain',
+    'Reader understands the Object Display standard (V2 via rtd::display_registry) for managing offchain representation of a type onchain',
   'develop/objects/object-ownership/index.mdx':
     'Reader can distinguish the object ownership types (address-owned, shared, party, immutable) and how each affects transaction access and versioning',
   'develop/objects/transfers/index.mdx':
-    'Reader can choose the right object transfer mechanism for their use case on Sui',
+    'Reader can choose the right object transfer mechanism for their use case on Rtd',
   'develop/publish-upgrade-packages/index.mdx':
-    'Reader understands what a Move package is and how modules are compiled and published to a Sui network',
+    'Reader understands what a Move package is and how modules are compiled and published to a Rtd network',
   'develop/security/index.mdx':
-    'Reader can apply Sui security best practices, including treating shared objects as non-authorization boundaries in privileged code paths',
-  'develop/sui-architecture/index.mdx':
-    'Reader can navigate Sui architecture topics — the blockchain, its transactions, and the validators',
+    'Reader can apply Rtd security best practices, including treating shared objects as non-authorization boundaries in privileged code paths',
+  'develop/rtd-architecture/index.mdx':
+    'Reader can navigate Rtd architecture topics — the blockchain, its transactions, and the validators',
   'develop/testing-debugging/index.mdx':
-    'Reader can choose the right tools and techniques to test and debug Move smart contracts and applications on Sui',
+    'Reader can choose the right tools and techniques to test and debug Move smart contracts and applications on Rtd',
   'develop/transaction-payment/index.mdx':
-    'Reader understands how a Sui transaction pays for both computational execution and long-term object storage',
+    'Reader understands how a Rtd transaction pays for both computational execution and long-term object storage',
   'develop/transactions/index.mdx':
-    'Reader understands that every Sui update happens through a transaction, and can find the right transaction topic for their task',
+    'Reader understands that every Rtd update happens through a transaction, and can find the right transaction topic for their task',
   'develop/transactions/ptbs/index.mdx':
     'Reader understands what programmable transaction blocks are and how their commands compose into a single transaction',
   'develop/transactions/transaction-auth/index.mdx':
-    'Reader can compare the transaction authentication methods available on Sui and choose one',
+    'Reader can compare the transaction authentication methods available on Rtd and choose one',
   'develop/write-move/index.mdx':
-    'Reader can get oriented in writing Move packages for Sui — syntax fundamentals, best practices, and package structure',
+    'Reader can get oriented in writing Move packages for Rtd — syntax fundamentals, best practices, and package structure',
   'getting-started.mdx':
-    'Reader can pick a starting point for building on Sui — an agent skill, the Hello, World! example, or another example app',
+    'Reader can pick a starting point for building on Rtd — an agent skill, the Hello, World! example, or another example app',
   'getting-started/examples/index.mdx':
     'Reader can browse end-to-end example apps (Move contracts, React frontends, security challenges) and pick one matching their goal',
   'getting-started/onboarding/index.mdx':
-    'Reader can start the Sui onboarding path and understand what building on Sui involves',
+    'Reader can start the Rtd onboarding path and understand what building on Rtd involves',
   'onchain-finance.mdx':
-    'Reader can find the right onchain finance topic on Sui — digital assets, custody, tokenomics, and DeepBook',
+    'Reader can find the right onchain finance topic on Rtd — digital assets, custody, tokenomics, and DeepBook',
   'onchain-finance/asset-custody/index.mdx':
-    'Reader can find the right asset-custody approach on Sui across fungible tokens, closed-loop tokens, and tokenized assets',
+    'Reader can find the right asset-custody approach on Rtd across fungible tokens, closed-loop tokens, and tokenized assets',
   'onchain-finance/asset-custody/address-balances/index.mdx':
     'Reader understands how address balances replace the UTXO-style Coin model with address-owned balances that remove coin-selection complexity',
   'onchain-finance/asset-custody/wallets/index.mdx':
-    'Reader understands how Sui wallets store keys and sign transactions, and can compare Slush, self-custodial, and zkLogin wallet types',
+    'Reader understands how Rtd wallets store keys and sign transactions, and can compare Slush, self-custodial, and zkLogin wallet types',
   'onchain-finance/closed-loop-token/index.mdx':
     'Reader can use the Closed-Loop Token standard to restrict which apps use a token and define custom transfer, spend, and conversion policies',
   'onchain-finance/examples-patterns/index.mdx':
-    'Reader can browse common asset patterns on Sui and reference the one that fits their use case',
+    'Reader can browse common asset patterns on Rtd and reference the one that fits their use case',
   'onchain-finance/fungible-tokens/index.mdx':
-    'Reader can find how to create and use fungible tokens on Sui',
+    'Reader can find how to create and use fungible tokens on Rtd',
   'onchain-finance/kiosk/index.mdx':
-    'Reader understands how Kiosk enables commerce apps on Sui and how Kiosk apps extend it without changing core functionality',
+    'Reader understands how Kiosk enables commerce apps on Rtd and how Kiosk apps extend it without changing core functionality',
   'onchain-finance/pas/index.mdx':
     'Reader understands how the Permissioned Asset Standard enforces restricted asset movement through Accounts, Policies, and approval logic',
   'onchain-finance/tokenized-assets/index.mdx':
-    'Reader can find how to design and extend NFTs on Sui, including soulbound tokens, rental mechanics, and asset tokenization',
+    'Reader can find how to design and extend NFTs on Rtd, including soulbound tokens, rental mechanics, and asset tokenization',
   'operators.mdx':
-    'Reader can find the right guide for running Sui infrastructure — full nodes, validators, bridge nodes, data management, and exchange integration',
+    'Reader can find the right guide for running Rtd infrastructure — full nodes, validators, bridge nodes, data management, and exchange integration',
   'operators/index.mdx':
-    'Operator can find guidance for running a full node, operating as a validator, or integrating SUI into an exchange',
+    'Operator can find guidance for running a full node, operating as a validator, or integrating RTD into an exchange',
   'operators/data-management/index.mdx':
-    'Operator can set up and manage data indexing, archival storage, and remote data stores for Sui nodes',
+    'Operator can set up and manage data indexing, archival storage, and remote data stores for Rtd nodes',
   'operators/full-node/index.mdx':
-    'Operator can find the guides needed to set up and operate a Sui full node',
+    'Operator can find the guides needed to set up and operate a Rtd full node',
   'operators/validator/index.mdx':
-    'Operator can find the guides needed to run and manage a Sui validator node',
+    'Operator can find the guides needed to run and manage a Rtd validator node',
   'references.mdx':
-    'Reader can look up low-level Sui reference details across features and architecture',
+    'Reader can look up low-level Rtd reference details across features and architecture',
   'references/ide/index.mdx':
-    'Reader can find the IDE tools and extensions for Move development on Sui, including language server and debugging support',
-  'sui-stack.mdx':
-    'Reader can get oriented in the Sui Stack components and primitives and find the one relevant to their app',
-  'sui-stack/messaging/index.mdx':
+    'Reader can find the IDE tools and extensions for Move development on Rtd, including language server and debugging support',
+  'rtd-stack.mdx':
+    'Reader can get oriented in the Rtd Stack components and primitives and find the one relevant to their app',
+  'rtd-stack/messaging/index.mdx':
     'Reader understands how the Messaging SDK delivers end-to-end encrypted group messaging using Seal encryption, a Walrus relayer, and onchain permissions',
-  'sui-stack/nautilus/index.mdx':
+  'rtd-stack/nautilus/index.mdx':
     'Reader understands how Nautilus runs offchain logic in TEEs and verifies it onchain to trigger safe smart contract workflows',
-  'sui-stack/on-chain-primitives/index.mdx':
-    'Reader understands the native onchain time and randomness primitives Sui contracts can use without external oracles',
-  'sui-stack/seal/index.mdx':
+  'rtd-stack/on-chain-primitives/index.mdx':
+    'Reader understands the native onchain time and randomness primitives Rtd contracts can use without external oracles',
+  'rtd-stack/seal/index.mdx':
     'Reader understands how Seal provides threshold encryption with onchain access control enforced by Move-defined policies',
-  'sui-stack/suins/index.mdx':
-    'Reader understands how SuiNS maps human-readable .sui names to addresses, with resolution, reverse lookup, and subnames',
-  'sui-stack/suiplay0x1/index.mdx':
-    'Game developer understands how to build for the SuiPlay0X1 handheld gaming device and what it supports',
-  'sui-stack/walrus/index.mdx':
-    'Reader understands how Walrus provides decentralized storage for large binary files, coordinated and paid for through Sui',
-  'sui-stack/zklogin-integration/index.mdx':
+  'rtd-stack/rtdns/index.mdx':
+    'Reader understands how RtdNS maps human-readable .rtd names to addresses, with resolution, reverse lookup, and subnames',
+  'rtd-stack/suiplay0x1/index.mdx':
+    'Game developer understands how to build for the RtdPlay0X1 handheld gaming device and what it supports',
+  'rtd-stack/walrus/index.mdx':
+    'Reader understands how Walrus provides decentralized storage for large binary files, coordinated and paid for through Rtd',
+  'rtd-stack/zklogin-integration/index.mdx':
     'Reader can implement the zkLogin flow — ephemeral keys, JWT, user salt, and zero-knowledge proof — to enable zkLogin transactions in an app',
 };
 

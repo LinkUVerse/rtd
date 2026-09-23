@@ -2,17 +2,17 @@
 title: Integrate Custom Data Sources with a Custom Indexer
 sidebar_label: Integrate Data Sources
 description: >-
-  Choose and configure checkpoint data sources for a Sui custom indexer,
+  Choose and configure checkpoint data sources for a Rtd custom indexer,
   including production-grade fullnode gRPC, full-retention Requester Pays GCS
   buckets, public testing endpoints, and local checkpoint files.
 keywords:
-  - sui custom indexer
+  - rtd custom indexer
   - checkpoint data sources
   - grpc streaming
   - requester pays
   - google cloud storage
   - blockchain data ingestion
-  - sui indexing framework
+  - rtd indexing framework
 goal:
   description: >-
     Reader can choose and configure the appropriate checkpoint sources for
@@ -42,8 +42,8 @@ builder_paths:
     step: Indexer data integration
     stage: Ship
 questions:
-  - Which checkpoint source should a production Sui indexer use?
-  - How do I configure Requester Pays for the Sui checkpoint GCS buckets?
+  - Which checkpoint source should a production Rtd indexer use?
+  - How do I configure Requester Pays for the Rtd checkpoint GCS buckets?
   - When should I use fullnode gRPC, GCS, or the public HTTPS checkpoint store?
 answer: >-
   Use the full-retention Requester Pays GCS buckets for production backfill and
@@ -52,7 +52,7 @@ answer: >-
   endpoints are for testing only.
 ---
 
-The `sui-indexer-alt-framework` ingests ordered Sui checkpoints from one polling-based source and can optionally add fullnode gRPC streaming for lower latency at the network tip. For production, use Google Cloud Storage (GCS) for backfill and recovery, then use a production-grade fullnode gRPC endpoint from an [RPC provider](/develop/accessing-data/rpc-providers) for steady state.
+The `rtd-indexer-alt-framework` ingests ordered Rtd checkpoints from one polling-based source and can optionally add fullnode gRPC streaming for lower latency at the network tip. For production, use Google Cloud Storage (GCS) for backfill and recovery, then use a production-grade fullnode gRPC endpoint from an [RPC provider](/develop/accessing-data/rpc-providers) for steady state.
 
 ## Checkpoint data sources {#checkpoint-data-sources}
 
@@ -67,12 +67,12 @@ The `sui-indexer-alt-framework` ingests ordered Sui checkpoints from one polling
 
 The Mainnet and Testnet GCS buckets are:
 
-- Mainnet: `gs://mysten-mainnet-checkpoints-use4`
-- Testnet: `gs://mysten-testnet-checkpoints-use4`
+- Mainnet: `gs://linku-mainnet-checkpoints-use4`
+- Testnet: `gs://linku-testnet-checkpoints-use4`
 
-The public-good HTTPS checkpoint stores are `https://checkpoints.mainnet.sui.io` and `https://checkpoints.testnet.sui.io`. They are public-good testing endpoints with only the most recent 30 days of checkpoints. Do not use them as a production backfill, recovery, fallback, or steady-state source.
+The public-good HTTPS checkpoint stores are `https://checkpoints.mainnet.rtd.io` and `https://checkpoints.testnet.rtd.io`. They are public-good testing endpoints with only the most recent 30 days of checkpoints. Do not use them as a production backfill, recovery, fallback, or steady-state source.
 
-The public-good fullnode endpoints are `https://fullnode.mainnet.sui.io:443`, `https://fullnode.testnet.sui.io:443`, and `https://fullnode.devnet.sui.io:443`. They are also for testing only and are not intended for production indexers. For production, obtain a fullnode gRPC endpoint from an RPC provider with capacity and retention appropriate for your workload.
+The public-good fullnode endpoints are `https://fullnode.mainnet.rtd.io:443`, `https://fullnode.testnet.rtd.io:443`, and `https://fullnode.devnet.rtd.io:443`. They are also for testing only and are not intended for production indexers. For production, obtain a fullnode gRPC endpoint from an RPC provider with capacity and retention appropriate for your workload.
 
 ## Recommended production flow
 
@@ -87,11 +87,11 @@ $ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/gcp-credentials.json
 $ export GOOGLE_CLOUD_PROJECT=your-billing-project
 
 $ cargo run -- \
-  --remote-store-gcs mysten-mainnet-checkpoints-use4 \
+  --remote-store-gcs linku-mainnet-checkpoints-use4 \
   --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}"
 ```
 
-For Testnet, replace the bucket with `mysten-testnet-checkpoints-use4`. Workload Identity or another supported Google credential source can replace the credential file, but the billing project header is still required for Requester Pays.
+For Testnet, replace the bucket with `linku-testnet-checkpoints-use4`. Workload Identity or another supported Google credential source can replace the credential file, but the billing project header is still required for Requester Pays.
 
 ### Switch to fullnode gRPC at the network tip
 
@@ -123,9 +123,9 @@ The streaming client automatically falls back to the polling client when streami
 
 The following public-good endpoints are available for testing only:
 
-- Mainnet: `https://fullnode.mainnet.sui.io:443`
-- Testnet: `https://fullnode.testnet.sui.io:443`
-- Devnet: `https://fullnode.devnet.sui.io:443`
+- Mainnet: `https://fullnode.mainnet.rtd.io:443`
+- Testnet: `https://fullnode.testnet.rtd.io:443`
+- Devnet: `https://fullnode.devnet.rtd.io:443`
 
 Do not use these public-good endpoints for a production indexer. Use a production-grade fullnode endpoint from an RPC provider instead.
 
@@ -154,7 +154,7 @@ Use the public HTTPS store only for development or tests against a checkpoint th
 
 ```sh
 $ cargo run -- \
-  --remote-store-url https://checkpoints.testnet.sui.io \
+  --remote-store-url https://checkpoints.testnet.rtd.io \
   --first-checkpoint RECENT_CHECKPOINT
 ```
 

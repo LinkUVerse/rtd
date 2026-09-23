@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-/// A module that demonstrates derived objects using Sui's derived_object framework.
+/// A module that demonstrates derived objects using Rtd's derived_object framework.
 /// It creates a shared registry where anyone can create deterministic derived profile objects.
 module profiles::profiles;
 
 use std::string::String;
-use sui::derived_object;
-use sui::transfer::Receiving;
+use rtd::derived_object;
+use rtd::transfer::Receiving;
 
 /// Error codes
 #[error(code = 0)]

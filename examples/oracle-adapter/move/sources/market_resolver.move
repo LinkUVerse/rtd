@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Price-based resolution for a parametric market: freeze a settlement price
@@ -10,7 +10,7 @@ module oracle_adapter::market_resolver;
 
 use oracle_adapter::price_adapter;
 use pyth::price_info::PriceInfoObject;
-use sui::clock::{Self, Clock};
+use rtd::clock::{Self, Clock};
 
 const ENotExpired: u64 = 1;
 const EAlreadySettled: u64 = 2;

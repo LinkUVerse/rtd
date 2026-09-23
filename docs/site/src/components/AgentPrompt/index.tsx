@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
 // AgentPrompt — a callout that surfaces a ready-made builder prompt at the top
@@ -8,8 +8,8 @@
 // Usage in MDX (registered globally, no import needed):
 //
 //   <AgentPrompt
-//     title="Set up Sui dev environment"
-//     prompt="Set up this machine for Sui development: ..."
+//     title="Set up Rtd dev environment"
+//     prompt="Set up this machine for Rtd development: ..."
 //   />
 
 import React, { useEffect, useRef, useState } from "react";

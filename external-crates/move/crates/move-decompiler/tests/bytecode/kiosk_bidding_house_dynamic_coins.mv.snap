@@ -32,7 +32,7 @@ use 0x2::kiosk::KioskOwnerCap;
 use 0x2::kiosk::PurchaseCap;
 use 0x2::object::ID;
 use 0x2::object::UID;
-use 0x2::sui::SUI;
+use 0x2::rtd::RTD;
 use 0x2::transfer_policy::TransferPolicy;
 use 0x2::transfer_policy::TransferRequest;
 use 0x2::tx_context::TxContext;
@@ -276,7 +276,7 @@ public entry fun claim_accepted_bid_entry<T0: key + store>(l0: &mut Kiosk_Biddin
     transfer::public_transfer(kiosk_bidding_house_dynamic_coins::claim_accepted_bid(l0, l1, l2), tx_context::sender(freeze(l2)))
 }
 
-public entry fun claim_accepted_bid_to_new_kiosk<T0: key + store>(l0: &mut Kiosk_Bidding_Store, l1: ID, l2: &mut TransferPolicy<T0>, l3: Coin<SUI>, l4: &mut TxContext) {
+public entry fun claim_accepted_bid_to_new_kiosk<T0: key + store>(l0: &mut Kiosk_Bidding_Store, l1: ID, l2: &mut TransferPolicy<T0>, l3: Coin<RTD>, l4: &mut TxContext) {
     let (reg_1, reg_2) = kiosk::new(l4);
     let l8 = reg_2;
     let mut l5 = reg_1;

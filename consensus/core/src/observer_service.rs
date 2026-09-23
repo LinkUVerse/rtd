@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -13,7 +13,7 @@ use consensus_config::Committee;
 use consensus_types::block::{BlockRef, Round};
 use futures::{StreamExt as _, future::Either, stream};
 use parking_lot::RwLock;
-use sui_macros::fail_point_async;
+use rtd_macros::fail_point_async;
 use tap::TapFallible;
 use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
@@ -211,7 +211,7 @@ impl ObserverNetworkService for ObserverService {
                 .inc_by(missing_ancestors.len() as u64);
 
             let synchronizer = self.synchronizer.clone();
-            mysten_metrics::spawn_monitored_task!(async move {
+            linku_metrics::spawn_monitored_task!(async move {
                 // This does not wait for the fetch request to complete.
                 // It only waits for synchronizer to queue the request to a peer.
                 // When this fails, it usually means the queue is full.
@@ -352,7 +352,7 @@ fn quorum_gated_accepted_block_stream(
     let release_timeout = context.parameters.leader_timeout;
     let (tx, rx) = mpsc::channel(max_blocks_per_item);
 
-    mysten_metrics::spawn_monitored_task!(async move {
+    linku_metrics::spawn_monitored_task!(async move {
         let mut state = AcceptedBlockReleaseState::new(context, release_timeout);
 
         loop {

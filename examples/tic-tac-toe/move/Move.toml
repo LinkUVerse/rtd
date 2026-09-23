@@ -3,7 +3,7 @@ name = "tic_tac_toe"
 edition = "2024.beta"
 
 [dependencies]
-Sui = { local = "../../../crates/sui-framework/packages/sui-framework" }
+Rtd = { local = "../../../crates/rtd-framework/packages/rtd-framework" }
 
 [addresses]
 tic_tac_toe = "0x0"

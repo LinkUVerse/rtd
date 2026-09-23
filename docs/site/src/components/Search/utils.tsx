@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 const { decode } = require("he");
@@ -8,7 +8,7 @@ const { decode } = require("he");
  *
  * The docs use inline <Tooltip> components whose hidden definition text
  * gets concatenated by the crawler, producing strings like:
- *   "Create, build, and test a MoveMoveAn open source programming language used for all activity on Sui. project​"
+ *   "Create, build, and test a MoveMoveAn open source programming language used for all activity on Rtd. project​"
  *
  * Pattern: a word is immediately followed by itself + a capital-letter
  * definition ending in a period. We replace the duplicated word + definition

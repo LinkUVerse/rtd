@@ -1,7 +1,7 @@
 ---
 title: Address Aliases for Asset Custody
 description: >-
-  Use address aliases to allow multiple keys to act as a single Sui address,
+  Use address aliases to allow multiple keys to act as a single Rtd address,
   enabling key rotation and account abstraction without asset migration.
 keywords:
   - address aliases
@@ -30,16 +30,16 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What are address aliases on Sui?
-  - How do I rotate keys without migrating assets on Sui?
+  - What are address aliases on Rtd?
+  - How do I rotate keys without migrating assets on Rtd?
   - How do I use address aliases for agent authorization?
 answer: >-
- Address aliases let you authorize additional Sui addresses to act as
+ Address aliases let you authorize additional Rtd addresses to act as
  your address. Aliases have full sender authority, enabling key rotation
  without asset migration and agent delegation without object transfers.
 ---
 
-Address aliases let you authorize additional Sui addresses to sign transactions for a Sui address. This page covers how aliases apply to asset custody patterns. For the full API reference and CLI commands, see [Address Aliases](/develop/transactions/transaction-auth/address-aliases).
+Address aliases let you authorize additional Rtd addresses to sign transactions for a Rtd address. This page covers how aliases apply to asset custody patterns. For the full API reference and CLI commands, see [Address Aliases](/develop/transactions/transaction-auth/address-aliases).
 
 :::warning
 
@@ -49,17 +49,17 @@ All aliases for a given address have the ability to **unilaterally control or ta
 
 ## Key rotation without asset migration
 
-Before you can add, remove, or replace aliases for an address, you must first enable alias configuration with `sui::address_alias::enable @0xa`. The enable transaction creates the `AddressAliases` object ID used in later commands.
+Before you can add, remove, or replace aliases for an address, you must first enable alias configuration with `rtd::address_alias::enable @0xa`. The enable transaction creates the `AddressAliases` object ID used in later commands.
 
-Traditional key rotation on Sui requires transferring all objects and balances from the old address to the new one. With aliases, assets stay in place:
+Traditional key rotation on Rtd requires transferring all objects and balances from the old address to the new one. With aliases, assets stay in place:
 
 1. Generate a new keypair (new address).
 2. If alias configuration is not already enabled for the old address, enable it and save the created `AddressAliases` object ID.
 3. Add the new address as an alias of the old address:
 
    ```sh
-   $ sui client ptb \
-       --move-call sui::address_alias::add \
+   $ rtd client ptb \
+       --move-call rtd::address_alias::add \
            @<ADDRESS_ALIASES_OBJECT_ID> \
            @<NEW_ALIAS_ADDRESS> \
        --gas-budget 50000000
@@ -73,8 +73,8 @@ If you remove the old address from its own alias set, the old key can no longer 
 Instead of transferring objects to a trusted agent or operational hot key, add that address as an alias. The alias signs transactions as your address, accessing your objects and balances directly. Revoke access by removing the alias:
 
 ```sh
-sui client ptb \
-    --move-call sui::address_alias::remove @<ALIASES_OBJECT_ID> @<AGENT_ADDRESS> \
+rtd client ptb \
+    --move-call rtd::address_alias::remove @<ALIASES_OBJECT_ID> @<AGENT_ADDRESS> \
     --gas-budget 50000000
 ```
 
@@ -91,4 +91,4 @@ An alias address has the same authority as the original address. It can transfer
 
 ## Managing aliases
 
-The `AddressAliasState` singleton object lives at address `0xa`. Use `sui client ptb` to call entry functions in the `sui::address_alias` module. See [Address Aliases](/develop/transactions/transaction-auth/address-aliases) for the complete CLI reference, including `enable`, `add`, `remove`, and `replace_all` commands.
+The `AddressAliasState` singleton object lives at address `0xa`. Use `rtd client ptb` to call entry functions in the `rtd::address_alias` module. See [Address Aliases](/develop/transactions/transaction-auth/address-aliases) for the complete CLI reference, including `enable`, `add`, `remove`, and `replace_all` commands.

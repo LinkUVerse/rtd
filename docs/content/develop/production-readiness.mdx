@@ -1,7 +1,7 @@
 ---
 title: Production Readiness
 description: >-
-  Prepare a Sui application for Mainnet deployment with checklists covering
+  Prepare a Rtd application for Mainnet deployment with checklists covering
   smart contract security, key management, package upgrades, infrastructure,
   and operational monitoring.
 keywords:
@@ -17,7 +17,7 @@ keywords:
   - multisig
 goal:
   description: >-
-    Reader can evaluate their Sui application against a structured production
+    Reader can evaluate their Rtd application against a structured production
     readiness checklist before deploying to Mainnet
   requires:
     - has_frontmatter:
@@ -35,13 +35,13 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I prepare a Sui application for Mainnet?
-  - What is the production readiness checklist for Sui?
+  - How do I prepare a Rtd application for Mainnet?
+  - What is the production readiness checklist for Rtd?
   - What should I check before deploying a Move package to Mainnet?
-  - How do I secure my Sui deployment for production?
+  - How do I secure my Rtd deployment for production?
   - What key management practices should I follow for Mainnet?
 answer: >-
-  Production readiness for a Sui application involves verifying smart contract
+  Production readiness for a Rtd application involves verifying smart contract
   security (audits, testing, access control), configuring key and capability
   management (multisig, role separation, hardware custody), choosing an
   upgrade strategy (UpgradeCap governance or immutability), setting up
@@ -49,7 +49,7 @@ answer: >-
   operational procedures (incident response, upgrade runbooks, event indexing).
 ---
 
-Production readiness is the process of verifying that a Sui application is secure, correctly configured, and operationally prepared before deploying to [Mainnet](/develop/sui-architecture/networks). Moving from Testnet to Mainnet introduces real financial risk, so each area below requires deliberate verification rather than assumption.
+Production readiness is the process of verifying that a Rtd application is secure, correctly configured, and operationally prepared before deploying to [Mainnet](/develop/rtd-architecture/networks). Moving from Testnet to Mainnet introduces real financial risk, so each area below requires deliberate verification rather than assumption.
 
 
 ## Smart contract security
@@ -84,8 +84,8 @@ Decide and configure your upgrade strategy before publishing. This decision is d
 
 ## Gas and transaction configuration
 
-- [ ] **Gas budget estimation.** Run critical transaction paths with dry run to measure actual gas costs. Set gas budgets with sufficient margin for variable costs (shared object contention, dynamic field depth). Learn more about [gas in Sui](/develop/transaction-payment/gas-in-sui).
-- [ ] **Sponsored transactions.** If using [gas sponsorship](/develop/transaction-payment/sponsor-txn), verify that the gas station has sufficient SUI balance and rate limiting appropriate for your expected transaction volume.
+- [ ] **Gas budget estimation.** Run critical transaction paths with dry run to measure actual gas costs. Set gas budgets with sufficient margin for variable costs (shared object contention, dynamic field depth). Learn more about [gas in Rtd](/develop/transaction-payment/gas-in-rtd).
+- [ ] **Sponsored transactions.** If using [gas sponsorship](/develop/transaction-payment/sponsor-txn), verify that the gas station has sufficient RTD balance and rate limiting appropriate for your expected transaction volume.
 
 ## Infrastructure
 

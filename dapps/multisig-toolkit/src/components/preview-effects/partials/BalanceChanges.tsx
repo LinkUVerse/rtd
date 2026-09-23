@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { type BalanceChange } from '@mysten/sui/client';
+import { type BalanceChange } from '@linku/rtd/client';
 import { useQuery } from '@tanstack/react-query';
 
 import { useDryRunContext } from '../DryRunContext';

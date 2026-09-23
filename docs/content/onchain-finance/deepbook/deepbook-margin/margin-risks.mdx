@@ -37,8 +37,8 @@ builder_paths:
     step: Margin risks
     stage: Margin
 questions:
-  - What is Margin Risks in Sui?
-  - How does margin risks work on Sui?
+  - What is Margin Risks in Rtd?
+  - How does margin risks work on Rtd?
   - Why should I use margin risks?
 answer: >-
   Margin trading amplifies both gains and losses. Before using DeepBook Margin,
@@ -57,12 +57,12 @@ The most significant risk in margin trading is **liquidation** - the forced clos
 When you borrow funds to trade, you must maintain a minimum [risk ratio](/onchain-finance/deepbook/deepbook-margin/contract-information/risk-ratio) (the ratio of your total assets to total debts). If your position's risk ratio falls to or below the **Liquidation Risk Ratio**, anyone can liquidate your position.
 
 :::caution Warning zone
-For SUI/USDC (5x leverage), when your risk ratio falls between 1.1 and 1.2, you are in the **warning zone**. For WAL/USDC and DEEP/USDC (3x leverage), the warning zone is between 1.2 and 1.3. At these levels, even minor price movements can push you into liquidation. Monitor your position carefully and consider adding collateral or reducing your position size.
+For RTD/USDC (5x leverage), when your risk ratio falls between 1.1 and 1.2, you are in the **warning zone**. For WAL/USDC and DEEP/USDC (3x leverage), the warning zone is between 1.2 and 1.3. At these levels, even minor price movements can push you into liquidation. Monitor your position carefully and consider adding collateral or reducing your position size.
 :::
 
 ### Partial liquidation
 
-Liquidation in DeepBook Margin is **partial**, not total. The protocol only liquidates enough of your position to restore your risk ratio to the **Target Liquidation Risk Ratio** (1.25 for SUI/USDC, 1.5 for WAL/USDC and DEEP/USDC).
+Liquidation in DeepBook Margin is **partial**, not total. The protocol only liquidates enough of your position to restore your risk ratio to the **Target Liquidation Risk Ratio** (1.25 for RTD/USDC, 1.5 for WAL/USDC and DEEP/USDC).
 
 During liquidation:
 1. A liquidator repays a portion of your debt (not all of it)
@@ -75,20 +75,20 @@ This means if you're liquidated, you won't lose your entire position. The liquid
 
 However, if your position is severely underwater (assets barely cover debt plus rewards), a full liquidation might occur where all debt is repaid and the lending pool might incur bad debt.
 
-### Example: Getting liquidated on SUI/USDC
+### Example: Getting liquidated on RTD/USDC
 
-Let's walk through a concrete example using the SUI/USDC trading pair, which has a **Liquidation Risk Ratio of 1.1**.
+Let's walk through a concrete example using the RTD/USDC trading pair, which has a **Liquidation Risk Ratio of 1.1**.
 
 **Opening position:**
 - You deposit 100 USDC as collateral
-- You borrow 400 USDC and open a 5x long position on SUI at 1.50 USDC per SUI
+- You borrow 400 USDC and open a 5x long position on RTD at 1.50 USDC per RTD
 - Total assets: 500 USDC
 - Total debt: 400 USDC
 - **Starting risk ratio: 500 / 400 = 1.25**
 
 **The path to liquidation:**
 
-| SUI Price (USDC) | SUI Value (USDC) | Total Assets (USDC) | Risk Ratio | Status |
+| RTD Price (USDC) | RTD Value (USDC) | Total Assets (USDC) | Risk Ratio | Status |
 |------------------|------------------|---------------------|------------|--------|
 | 1.50 | 400 | 500 | 1.25 | Safe (at min borrow ratio) |
 | 1.425 | 380 | 480 | 1.20 | Warning zone |
@@ -96,8 +96,8 @@ Let's walk through a concrete example using the SUI/USDC trading pair, which has
 | 1.275 | 340 | 440 | 1.10 | Liquidatable |
 | 1.20 | 320 | 420 | 1.05 | Underwater |
 
-**What happens at 1.275 USDC per SUI:**
-- Your risk ratio hits 1.1 (the liquidation threshold for SUI/USDC)
+**What happens at 1.275 USDC per RTD:**
+- Your risk ratio hits 1.1 (the liquidation threshold for RTD/USDC)
 - Your position can now be liquidated by anyone
 - A liquidator partially liquidates your position, repaying enough debt to restore your risk ratio to 1.25
 - You pay liquidation rewards (5% total: 2% to liquidator, 3% to pool)
@@ -125,8 +125,8 @@ Cryptocurrency prices are highly volatile. Leverage amplifies this volatility on
 | 5x | -50% equity | Liquidated | Liquidated |
 
 An adverse move means:
-- **Long positions**: Price moves down (you borrowed USDC to buy SUI, and SUI drops)
-- **Short positions**: Price moves up (you borrowed SUI to sell for USDC, and SUI rises)
+- **Long positions**: Price moves down (you borrowed USDC to buy RTD, and RTD drops)
+- **Short positions**: Price moves up (you borrowed RTD to sell for USDC, and RTD rises)
 
 With 5x leverage:
 - A 10% adverse price movement = 50% loss on your equity

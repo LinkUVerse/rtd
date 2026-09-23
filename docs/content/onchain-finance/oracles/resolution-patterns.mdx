@@ -2,9 +2,9 @@
 title: Resolution Patterns
 sidebar_label: Resolution Patterns
 description: >-
-  Resolve DeFi outcomes on Sui: price-based settlement for parametric outcomes
+  Resolve DeFi outcomes on Rtd: price-based settlement for parametric outcomes
   with a Move resolver, and an optimistic dispute pattern for subjective
-  outcomes, expressed as an illustrative interface with no canonical Sui
+  outcomes, expressed as an illustrative interface with no canonical Rtd
   protocol.
 keywords:
   - resolution
@@ -19,7 +19,7 @@ goal:
   description: >-
     Reader can resolve a parametric outcome against an oracle price, and knows
     that subjective outcomes need an optimistic dispute process with no
-    canonical Sui protocol.
+    canonical Rtd protocol.
   requires:
     - has_frontmatter:
         - title
@@ -39,9 +39,9 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I resolve a prediction market on Sui?
+  - How do I resolve a prediction market on Rtd?
   - How do I settle an outcome against a price?
-  - Is there an optimistic oracle on Sui?
+  - Is there an optimistic oracle on Rtd?
   - How do I resolve a subjective outcome onchain?
 answer: >-
   A parametric outcome is a deterministic function of a price, so resolve it by
@@ -49,7 +49,7 @@ answer: >-
   once. A subjective outcome is not a price, so no oracle resolves it; you need
   an optimistic process where someone proposes an answer, posts a bond, and
   anyone can dispute and escalate. No canonical optimistic-oracle protocol
-  exists on Sui today, so that pattern is something you build.
+  exists on Rtd today, so that pattern is something you build.
 builder_paths:
   - path_id: oracle-integration
     path_name: Oracles for DeFi
@@ -79,15 +79,15 @@ A subjective outcome is not a price: did a team win, did a proposal pass, did an
 
 :::caution
 
-No canonical optimistic-oracle protocol exists on Sui as of this writing. UMA's Optimistic Oracle, the reference design that resolves Polymarket, is an EVM protocol with no Sui Move equivalent. The interface below is an illustrative pattern to build against your own governance, not a deployable dependency you can import.
+No canonical optimistic-oracle protocol exists on Rtd as of this writing. UMA's Optimistic Oracle, the reference design that resolves Polymarket, is an EVM protocol with no Rtd Move equivalent. The interface below is an illustrative pattern to build against your own governance, not a deployable dependency you can import.
 
 :::
 
-A minimal optimistic resolver on Sui is a state machine over proposal, bond, dispute, and escalation:
+A minimal optimistic resolver on Rtd is a state machine over proposal, bond, dispute, and escalation:
 
 ```move
 // ILLUSTRATIVE PATTERN, NOT A DEPLOYABLE PACKAGE. Sketch of an optimistic
-// resolver you would implement and audit yourself; no canonical Sui protocol
+// resolver you would implement and audit yourself; no canonical Rtd protocol
 // provides this.
 module example::optimistic_resolver {
     public enum Status has store { Proposed, Disputed, Resolved }

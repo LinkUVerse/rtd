@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import fs from 'node:fs';
@@ -16,8 +16,8 @@ function dirExists(rel) {
   return fs.existsSync(path.join(CONTENT_ROOT, rel));
 }
 
-const alphaDir = 'references/sui-api/sui-graphql/alpha/reference';
-const betaDir  = 'references/sui-api/sui-graphql/beta/reference';
+const alphaDir = 'references/rtd-api/rtd-graphql/alpha/reference';
+const betaDir  = 'references/rtd-api/rtd-graphql/beta/reference';
 
 const graphqlAlpha = {
   type: 'category',
@@ -44,10 +44,10 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui RPC',
+		label: 'Rtd RPC',
 		link: {
 			type: 'doc',
-			id: 'references/sui-api',
+			id: 'references/rtd-api',
 		},
 		items: [
 			{
@@ -55,7 +55,7 @@ const references = [
 				label: 'GraphQL',
 				link: {
 					type: 'doc',
-					id: 'references/sui-graphql',
+					id: 'references/rtd-graphql',
 				},
 				items: [
 					graphqlBeta,
@@ -71,7 +71,7 @@ const references = [
 					'references/fullnode-protocol-types',
 				],
 			},
-			'references/sui-api/rpc-best-practices',
+			'references/rtd-api/rpc-best-practices',
 			{
 				// JSON-RPC was disabled on Mainnet the week of 2026-07-27. Kept
 				// behind a collapsed Legacy category for migration lookups until
@@ -83,7 +83,7 @@ const references = [
 					{
 						type: 'link',
 						label: 'JSON-RPC',
-						href: '/sui-api-ref',
+						href: '/rtd-api-ref',
 					},
 				],
 			},
@@ -91,7 +91,7 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui CLI',
+		label: 'Rtd CLI',
 		link: {
 			type: 'doc',
 			id: 'references/cli',
@@ -111,7 +111,7 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui IDE Support',
+		label: 'Rtd IDE Support',
 		link: {
 			type: 'doc',
 			id: 'references/ide/index',
@@ -123,38 +123,38 @@ const references = [
 	},
 	{
 		type: 'category',
-		label: 'Sui SDKs',
+		label: 'Rtd SDKs',
 		link: {
 			type: 'doc',
-			id: 'references/sui-sdks',
+			id: 'references/rtd-sdks',
 		},
 		items: [
 			'references/sdk-comparison',
 			{
 				type: 'link',
 				label: 'TypeScript SDK v1 -> v2 Migration Guide',
-				href: 'https://sdk.mystenlabs.com/sui/migrations/sui-2.0',
+				href: 'https://sdk.linkuverse.com/rtd/migrations/rtd-2.0',
 			},
 			{
 				type: 'link',
 				label: 'dApp Kit',
-				href: 'https://sdk.mystenlabs.com/dapp-kit',
+				href: 'https://sdk.linkuverse.com/dapp-kit',
 			},
 			{
 				type: 'link',
 				label: 'Rust SDK',
-				href: 'https://github.com/MystenLabs/sui-rust-sdk',
+				href: 'https://github.com/LinkUVerse/rtd-rust-sdk',
 			},
 			"references/rust-sdk",
 			{
 				type: 'link',
 				label: 'TypeScript SDK',
-				href: 'https://sdk.mystenlabs.com/typescript',
+				href: 'https://sdk.linkuverse.com/typescript',
 			},
 			{
 				type: 'link',
 				label: 'zkSend SDK',
-				href: 'https://sdk.mystenlabs.com/zksend',
+				href: 'https://sdk.linkuverse.com/zksend',
 			},
 		],
 	},
@@ -163,7 +163,7 @@ const references = [
 		label: 'Move',
 		link: {
 			type: 'doc',
-			id: 'references/sui-move',
+			id: 'references/rtd-move',
 		},
 		items: [
 			{
@@ -198,19 +198,19 @@ const references = [
 	'references/ptb-commands',
 	'references/object-display-syntax',
 	'references/release-notes',
-    'references/sui-glossary',
+    'references/rtd-glossary',
 	{
 		type: 'link',
 		label: 'Open Zeppelin: Access Library',
-		href: 'https://docs.openzeppelin.com/contracts-sui/1.x/api/access',
+		href: 'https://docs.openzeppelin.com/contracts-rtd/1.x/api/access',
 	},
 	{
 		type: 'link',
 		label: 'Open Zeppelin: Math Library',
-		href: 'https://docs.openzeppelin.com/contracts-sui/1.x/api/math',
+		href: 'https://docs.openzeppelin.com/contracts-rtd/1.x/api/math',
 	},
-	'references/awesome-sui',
-	'references/awesome-sui-gaming',
+	'references/awesome-rtd',
+	'references/awesome-rtd-gaming',
     'references/gaming',
     {
 		type: 'category',
@@ -220,12 +220,12 @@ const references = [
 			id: 'references/contribute/contribution-process',
 		},
 		items: [
-			'references/contribute/sui-environment',
-			'references/contribute/contribute-to-sui-repos',
+			'references/contribute/rtd-environment',
+			'references/contribute/contribute-to-rtd-repos',
 			{
 				type: 'link',
 				label: 'Submit a SIP',
-				href: 'https://sips.sui.io',
+				href: 'https://sips.rtd.io',
 			},
 			'references/contribute/code-of-conduct',
 			'references/contribute/style-guide',

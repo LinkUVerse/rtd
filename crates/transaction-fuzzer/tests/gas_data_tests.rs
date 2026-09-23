@@ -1,17 +1,17 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use proptest::arbitrary::*;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
-use sui_types::base_types::{ObjectID, ObjectRef, SuiAddress, dbg_addr};
-use sui_types::crypto::{AccountKeyPair, KeypairTraits, get_key_pair};
-use sui_types::digests::TransactionDigest;
-use sui_types::error::SuiError;
-use sui_types::object::{MoveObject, OBJECT_START_VERSION, Object, Owner};
-use sui_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use sui_types::transaction::{GasData, TransactionData, TransactionKind};
-use sui_types::utils::to_sender_signed_transaction;
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, dbg_addr};
+use rtd_types::crypto::{AccountKeyPair, KeypairTraits, get_key_pair};
+use rtd_types::digests::TransactionDigest;
+use rtd_types::error::RtdError;
+use rtd_types::object::{MoveObject, OBJECT_START_VERSION, Object, Owner};
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::{GasData, TransactionData, TransactionKind};
+use rtd_types::utils::to_sender_signed_transaction;
 use tracing::debug;
 use transaction_fuzzer::GasDataGenConfig;
 use transaction_fuzzer::GasDataWithObjects;
@@ -22,13 +22,13 @@ use transaction_fuzzer::{run_proptest, run_proptest_with_fullnode};
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn make_transfer_sui_pt() -> TransactionKind {
+fn make_transfer_rtd_pt() -> TransactionKind {
     let mut builder = ProgrammableTransactionBuilder::new();
-    builder.transfer_sui(dbg_addr(2), None);
+    builder.transfer_rtd(dbg_addr(2), None);
     TransactionKind::ProgrammableTransaction(builder.finish())
 }
 
-fn make_gas_coin(sender: SuiAddress, balance: u64) -> Object {
+fn make_gas_coin(sender: RtdAddress, balance: u64) -> Object {
     Object::new_move(
         MoveObject::new_gas_coin(OBJECT_START_VERSION, ObjectID::random(), balance),
         Owner::AddressOwner(sender),
@@ -36,7 +36,7 @@ fn make_gas_coin(sender: SuiAddress, balance: u64) -> Object {
     )
 }
 
-fn make_gas_data(sender: SuiAddress, objects: &[Object], price: u64, budget: u64) -> GasData {
+fn make_gas_data(sender: RtdAddress, objects: &[Object], price: u64, budget: u64) -> GasData {
     GasData {
         payment: objects
             .iter()
@@ -50,24 +50,24 @@ fn make_gas_data(sender: SuiAddress, objects: &[Object], price: u64, budget: u64
 
 /// Results of running a gas scenario through all 4 execution modes.
 struct AllModeResults {
-    normal: Result<(), SuiError>,
-    dry_run: Result<(), SuiError>,
-    dev_inspect_skip: Result<(), SuiError>,
-    dev_inspect_no_skip: Result<(), SuiError>,
+    normal: Result<(), RtdError>,
+    dry_run: Result<(), RtdError>,
+    dev_inspect_skip: Result<(), RtdError>,
+    dev_inspect_no_skip: Result<(), RtdError>,
 }
 
 /// Run a gas scenario through normal execution, dry-run, dev-inspect(skip=true),
 /// and dev-inspect(skip=false). Returns results from each mode.
 fn run_all_modes(
     executor: &mut Executor,
-    sender: SuiAddress,
+    sender: RtdAddress,
     sender_key: &AccountKeyPair,
     gas_data: GasData,
     objects: &[Object],
 ) -> AllModeResults {
     executor.add_objects(objects);
 
-    let kind = make_transfer_sui_pt();
+    let kind = make_transfer_rtd_pt();
     let gas_refs: Vec<ObjectRef> = gas_data.payment.clone();
     let price = gas_data.price;
     let budget = gas_data.budget;
@@ -116,7 +116,7 @@ fn run_all_modes(
     }
 }
 
-fn assert_err_contains(result: &Result<(), SuiError>, expected_substring: &str, mode: &str) {
+fn assert_err_contains(result: &Result<(), RtdError>, expected_substring: &str, mode: &str) {
     let err = result
         .as_ref()
         .expect_err(&format!("{mode}: expected error, got Ok"));
@@ -131,7 +131,7 @@ fn assert_err_contains(result: &Result<(), SuiError>, expected_substring: &str, 
 // Proptest fuzz tests (original + extended to dry-run & dev-inspect)
 // ---------------------------------------------------------------------------
 
-/// Send transfer sui txn with provided random gas data and gas objects to an authority.
+/// Send transfer rtd txn with provided random gas data and gas objects to an authority.
 fn test_with_random_gas_data(
     gas_data_test: GasDataWithObjects,
     executor: &mut Executor,
@@ -145,7 +145,7 @@ fn test_with_random_gas_data(
     let pt = {
         let mut builder = ProgrammableTransactionBuilder::new();
         let recipient = dbg_addr(2);
-        builder.transfer_sui(recipient, None);
+        builder.transfer_rtd(recipient, None);
         builder.finish()
     };
     let kind = TransactionKind::ProgrammableTransaction(pt);
@@ -166,7 +166,7 @@ fn test_with_random_gas_data_dry_run(
     let sender = gas_data_test.sender_key.public().into();
 
     executor.add_objects(&objects);
-    let kind = make_transfer_sui_pt();
+    let kind = make_transfer_rtd_pt();
     let tx_data = TransactionData::new_with_gas_data(kind, sender, gas_data);
 
     let result = executor.dry_run_transaction(tx_data);
@@ -181,10 +181,10 @@ fn test_with_random_gas_data_dev_inspect(
 ) -> Result<(), TestCaseError> {
     let gas_data = gas_data_test.gas_data;
     let objects = gas_data_test.objects;
-    let sender: SuiAddress = gas_data_test.sender_key.public().into();
+    let sender: RtdAddress = gas_data_test.sender_key.public().into();
 
     executor.add_objects(&objects);
-    let kind = make_transfer_sui_pt();
+    let kind = make_transfer_rtd_pt();
     let gas_refs: Vec<ObjectRef> = gas_data.payment.clone();
 
     let result = executor.dev_inspect_transaction(
@@ -255,7 +255,7 @@ fn test_gas_data_dev_inspect_no_skip_fuzz() {
 // ---------------------------------------------------------------------------
 
 fn make_valid_gas_data(rgp: u64) -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let budget = rgp * 200_000;
     let gas_obj = make_gas_coin(sender, budget);
     let gas_data = make_gas_data(sender, std::slice::from_ref(&gas_obj), rgp, budget);
@@ -267,7 +267,7 @@ fn make_valid_gas_data(rgp: u64) -> GasDataWithObjects {
 }
 
 fn make_gas_data_price_zero() -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let budget = 100_000_000;
     let gas_obj = make_gas_coin(sender, budget);
     let gas_data = make_gas_data(sender, std::slice::from_ref(&gas_obj), 0, budget);
@@ -279,7 +279,7 @@ fn make_gas_data_price_zero() -> GasDataWithObjects {
 }
 
 fn make_gas_data_price_below_rgp(rgp: u64) -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let budget = 100_000_000;
     let gas_obj = make_gas_coin(sender, budget);
     let gas_data = make_gas_data(sender, std::slice::from_ref(&gas_obj), rgp - 1, budget);
@@ -291,7 +291,7 @@ fn make_gas_data_price_below_rgp(rgp: u64) -> GasDataWithObjects {
 }
 
 fn make_gas_data_budget_zero(rgp: u64) -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let gas_obj = make_gas_coin(sender, 1_000_000_000);
     let gas_data = make_gas_data(sender, std::slice::from_ref(&gas_obj), rgp, 0);
     GasDataWithObjects {
@@ -302,7 +302,7 @@ fn make_gas_data_budget_zero(rgp: u64) -> GasDataWithObjects {
 }
 
 fn make_gas_data_budget_exceeds_max(rgp: u64, max_budget: u64) -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let over_budget = max_budget + 1;
     let gas_obj = make_gas_coin(sender, over_budget);
     let gas_data = make_gas_data(sender, std::slice::from_ref(&gas_obj), rgp, over_budget);
@@ -314,7 +314,7 @@ fn make_gas_data_budget_exceeds_max(rgp: u64, max_budget: u64) -> GasDataWithObj
 }
 
 fn make_gas_data_balance_insufficient(rgp: u64) -> GasDataWithObjects {
-    let (sender, sender_key): (SuiAddress, AccountKeyPair) = get_key_pair();
+    let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let budget = rgp * 200_000;
     let gas_obj = make_gas_coin(sender, 1);
     let gas_data = make_gas_data(sender, std::slice::from_ref(&gas_obj), rgp, budget);
@@ -329,7 +329,7 @@ fn make_gas_data_balance_insufficient(rgp: u64) -> GasDataWithObjects {
 /// ensuring edge cases are always exercised alongside random exploration.
 fn gen_gas_data_with_edge_cases() -> BoxedStrategy<GasDataWithObjects> {
     let rgp = Executor::new().get_reference_gas_price();
-    let max_budget = sui_protocol_config::ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
+    let max_budget = rtd_protocol_config::ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
 
     prop_oneof![
         1 => Just(()).prop_map(move |_| make_valid_gas_data(rgp)),
@@ -498,7 +498,7 @@ fn test_gas_budget_zero() {
 fn test_gas_budget_exceeds_max() {
     let mut executor = Executor::new();
     let rgp = executor.get_reference_gas_price();
-    let max_budget = sui_protocol_config::ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
+    let max_budget = rtd_protocol_config::ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
     let case = make_gas_data_budget_exceeds_max(rgp, max_budget);
     let sender = case.sender_key.public().into();
 

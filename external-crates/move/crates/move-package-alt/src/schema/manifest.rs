@@ -336,8 +336,8 @@ mod tests {
             flavor = "vanilla"
 
             [environments]
-            mainnet = "35834a8a"
-            testnet = "4c78adac"
+            mainnet = "01020304"
+            testnet = "05060708"
 
             [dependencies]
             foo = { git = "https://example.com/foo.git", rev = "releases/v1", rename-from = "Foo", override = true}
@@ -678,7 +678,7 @@ mod tests {
             other_fields = "fine"
 
             [environments]
-            mainnet = "35834a8a"
+            mainnet = "01020304"
             "#,
         )
         .unwrap();
@@ -941,7 +941,7 @@ mod tests {
             [package]
             name = "name"
             edition = "2024"
-            authors = "me@mystenlabs.com"
+            authors = "me@linkuverse.com"
             "#,
         )
         .unwrap_err()

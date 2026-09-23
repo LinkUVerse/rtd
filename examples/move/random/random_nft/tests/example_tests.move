@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
@@ -6,8 +6,8 @@ module random_nft::tests;
 
 use random_nft::example;
 use std::string;
-use sui::random::{Self, Random};
-use sui::test_scenario as ts;
+use rtd::random::{Self, Random};
+use rtd::test_scenario as ts;
 
 #[test]
 fun test_e2e() {

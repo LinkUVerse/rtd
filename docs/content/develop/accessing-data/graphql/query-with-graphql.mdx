@@ -1,11 +1,11 @@
 ---
 title: Querying Data with GraphQL RPC
 description: >-
-  Practical guide to making queries of the Sui RPC using the GraphQL service,
+  Practical guide to making queries of the Rtd RPC using the GraphQL service,
   with examples for common tasks.
 keywords:
   - rpc
-  - sui rpc
+  - rtd rpc
   - graphql
   - query transactions
   - query blocks
@@ -15,7 +15,7 @@ keywords:
   - graphql examples
 goal:
   description: >-
-    Reader understands practical guide to making queries of the Sui RPC using
+    Reader understands practical guide to making queries of the Rtd RPC using
     the GraphQL service, with examples for common tasks
   requires:
     - has_frontmatter:
@@ -50,28 +50,28 @@ builder_paths:
     stage: Ship
 questions:
   - How do I query data with graphql rpc?
-  - What is Querying Data with GraphQL RPC in Sui?
+  - What is Querying Data with GraphQL RPC in Rtd?
   - Where can I find querying data with graphql rpc examples?
 answer: >-
-  Practical guide to making queries of the Sui RPC using the GraphQL service,
+  Practical guide to making queries of the Rtd RPC using the GraphQL service,
   with examples for common tasks.
 ---
 
 <AgentPrompt
-  prompt={"Convert this Sui JSON-RPC query to GraphQL. Include the query, variables, pagination handling, and TypeScript caller code."}
+  prompt={"Convert this Rtd JSON-RPC query to GraphQL. Include the query, variables, pagination handling, and TypeScript caller code."}
 />
 
-This guide provides practical examples for querying the Sui network using GraphQL, including reads, transaction submission, and transaction simulation. For core concepts like headers, variables, fragments, pagination, scope, and limits, see the [corresponding concepts page](/develop/accessing-data/graphql/graphql-rpc).
+This guide provides practical examples for querying the Rtd network using GraphQL, including reads, transaction submission, and transaction simulation. For core concepts like headers, variables, fragments, pagination, scope, and limits, see the [corresponding concepts page](/develop/accessing-data/graphql/graphql-rpc).
 
-Access the GraphQL service for Sui RPC through an online IDE that provides a complete toolbox for fetching data and executing transactions on the network:
+Access the GraphQL service for Rtd RPC through an online IDE that provides a complete toolbox for fetching data and executing transactions on the network:
 
-- Mainnet: https://graphql.mainnet.sui.io/graphql
-- Testnet: https://graphql.testnet.sui.io/graphql
-- Devnet: https://graphql.devnet.sui.io/graphql
+- Mainnet: https://graphql.mainnet.rtd.io/graphql
+- Testnet: https://graphql.testnet.rtd.io/graphql
+- Devnet: https://graphql.devnet.rtd.io/graphql
 
 :::info
 
-The public Mainnet and Testnet GraphQL services are rate-limited to keep network throughput optimized. They are useful for development and public-good access, but production apps should use a provider endpoint or operate their own GraphQL stack. Refer to the [list of RPC or data providers](https://www.notion.so/mystenlabs/RPC-providers-offering-future-Sui-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) that support GraphQL RPC or gRPC.
+The public Mainnet and Testnet GraphQL services are rate-limited to keep network throughput optimized. They are useful for development and public-good access, but production apps should use a provider endpoint or operate their own GraphQL stack. Refer to the [list of RPC or data providers](https://www.notion.so/linkuverse/RPC-providers-offering-future-Rtd-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) that support GraphQL RPC or gRPC.
 
 :::
 
@@ -81,23 +81,23 @@ The online IDE provides features such as auto-completion (use <kbd>Ctrl</kbd>+<k
 
 GraphQL introspection exposes the schema supported by the RPC service. The IDE's **Docs** pane (Book icon, top-left) and **Search** dialog (<kbd>Cmd</kbd> + <kbd>K</kbd> on macOS or <kbd>Ctrl</kbd> + <kbd>K</kbd> on Windows and Linux) offer a way to browse introspection output interactively.
 
-Consult the [GraphQL reference](/references/sui-graphql) for full documentation on the supported schema. The [official GraphQL introspection documentation](https://graphql.org/learn/introspection/) provides an overview on introspection and how to interact with it programmatically.
+Consult the [GraphQL reference](/references/rtd-graphql) for full documentation on the supported schema. The [official GraphQL introspection documentation](https://graphql.org/learn/introspection/) provides an overview on introspection and how to interact with it programmatically.
 
 ## Headers
 
 The service accepts the following optional HTTP request headers:
 
-- `x-sui-rpc-version`: Specifies which RPC version to use. Currently only one version is supported.
-- `x-sui-rpc-show-usage`: Returns the response with extra query complexity information.
+- `x-rtd-rpc-version`: Specifies which RPC version to use. Currently only one version is supported.
+- `x-rtd-rpc-show-usage`: Returns the response with extra query complexity information.
 
 By default, each response contains the following HTTP response headers:
 
-- `x-sui-rpc-request-id`: A unique identifier for the request. This appears in application logs for debugging.
-- `x-sui-rpc-version`: The version of the service that handled the request.
+- `x-rtd-rpc-request-id`: A unique identifier for the request. This appears in application logs for debugging.
+- `x-rtd-rpc-version`: The version of the service that handled the request.
 
 ```sh
-$ curl -i -X POST https://graphql.testnet.sui.io/graphql\
-     --header 'x-sui-rpc-show-usage: true'                 \
+$ curl -i -X POST https://graphql.testnet.rtd.io/graphql\
+     --header 'x-rtd-rpc-show-usage: true'                 \
      --header 'Content-Type: application/json'             \
      --data '{
           "query": "query { epoch { referenceGasPrice } }"
@@ -111,8 +111,8 @@ $ curl -i -X POST https://graphql.testnet.sui.io/graphql\
 HTTP/2 200
 content-type: application/json
 content-length: 179
-x-sui-rpc-request-id: f5442058-47ab-4360-8295-61c009f38516
-x-sui-rpc-version: x.y.z
+x-rtd-rpc-request-id: f5442058-47ab-4360-8295-61c009f38516
+x-rtd-rpc-version: x.y.z
 vary: origin, access-control-request-method, access-control-request-headers
 access-control-allow-origin: *
 date: Tue, 09 Sep 2025 23:34:04 GMT
@@ -170,14 +170,14 @@ query ($epochID: Int) {
 
 #### Within the GraphQL IDE
 
-When using the [GraphQL online integrated development environment (IDE)](https://graphql.mainnet.sui.io/graphql), supply variables as a JSON object to the query in the **Variables** pane at the bottom of the main editing window. You receive a warning if you supply a variable but don't declare it.
+When using the [GraphQL online integrated development environment (IDE)](https://graphql.mainnet.rtd.io/graphql), supply variables as a JSON object to the query in the **Variables** pane at the bottom of the main editing window. You receive a warning if you supply a variable but don't declare it.
 
 #### Within requests
 
 When making a request to the GraphQL service using a tool such as `curl`, pass the query and variables as two fields of a single JSON object:
 
 ```sh
-$ curl -X POST https://sui-testnet.mystenlabs.com/graphql \
+$ curl -X POST https://rtd-testnet.linkuverse.com/graphql \
     --header 'Content-Type: application/json' \
     --data '{
       "query": "query ($epochID: Int) { epoch(id: $epochID) { referenceGasPrice } }",
@@ -351,7 +351,7 @@ query AtCheckpoint($cp: UInt53!) {
   }
 }
 
-query NextBalancesPage($address: SuiAddress!, $after: String!) {
+query NextBalancesPage($address: RtdAddress!, $after: String!) {
   address(address: $address) {
     balances(after: $after, first: 10) {
       pageInfo {
@@ -370,7 +370,7 @@ query NextBalancesPage($address: SuiAddress!, $after: String!) {
 `AtCheckpoint` returns the last 5 transactions to execute as of the end of the checkpoint with sequence number `$cp`, while `NextBalancesPage` fetches the next 10 balances for `$address` after the page that ended at cursor `$after`. You can also combine both approaches, to ensure that the first page of a live object query is fetched from a specific checkpoint:
 
 ```graphql
-query FirstBalancesPageAtCheckpoint($address: SuiAddress!, $cp: UInt53) {
+query FirstBalancesPageAtCheckpoint($address: RtdAddress!, $cp: UInt53) {
   checkpoint(sequenceNumber: $cp) {
     query {
       address(address: $address) {
@@ -397,7 +397,7 @@ Responses to these queries are subject to [retention](#retention). If `$cp` is o
 Queries nested under the fetch of an object at a specific version are scoped by a root object bound at its version. For example, in the following query, the dynamic field with name `42u64` is fetched as it existed when its owning object was at version `$v`:
 
 ```graphql
-query ObjectsDynamicFields($id: SuiAddress!, $v: UInt53!) {
+query ObjectsDynamicFields($id: RtdAddress!, $v: UInt53!) {
   object(address: $id, version: $v) {
     dynamicField(name: { literal: "42u64" }) {
       value {
@@ -417,7 +417,7 @@ The `rootVersion` parameter overrides this implicit bound. It fetches the object
 In the following query, `$id` is the address of a dynamic field fetched as it existed when its root object was at version `$r`. The nested query fetches a nested dynamic field with name `42u64` owned by a wrapped object stored in field `foo` of the dynamic field. The nested fetch is subject to the same root object version bound, `$r`.
 
 ```graphql
-query NestedDynamicFields($id: SuiAddress!, $r: UInt53!) {
+query NestedDynamicFields($id: RtdAddress!, $r: UInt53!) {
   object(address: $id, rootVersion: $v) {
     asMoveObject {
       asDynamicField {
@@ -437,7 +437,7 @@ query NestedDynamicFields($id: SuiAddress!, $r: UInt53!) {
 Queries that return an `Address` can be used to make nested dynamic field queries on wrapped objects. An `Address` does not have an associated version, but `Query.address` can accept `rootVersion` or `atCheckpoint` parameters to set root object bounds for nested dynamic field queries. The following query fetches a dynamic field with name `42u64` owned by an object with address `$id` (which can belong to a wrapped object) as it existed when its root object was at version `$r`:
 
 ```graphql
-query WrappedDynamicField($id: SuiAddress!, $r: UInt53!) {
+query WrappedDynamicField($id: RtdAddress!, $r: UInt53!) {
   address(address: $id, rootVersion: $r) {
     dynamicField(name: { literal: "42u64" }) {
       value {
@@ -453,7 +453,7 @@ query WrappedDynamicField($id: SuiAddress!, $r: UInt53!) {
 While nested within a scope that has a root object bound, you can reset or override the bound using the `objectAt` or `addressAt` queries. These fields query the same entity but at a different position in its history. If these fields are not provided any parameters, they fetch the state of the object at the latest known checkpoint to the GraphQL service. The following query fetches the latest version of an object that was previously fetched at version `$v`:
 
 ```graphql
-query LatestDynamicField($id: SuiAddress!, $v: UInt53!) {
+query LatestDynamicField($id: RtdAddress!, $v: UInt53!) {
   object(address: $id, version: $v) {
     objectAt {
       version
@@ -464,7 +464,7 @@ query LatestDynamicField($id: SuiAddress!, $v: UInt53!) {
 
 ## Limits
 
-The GraphQL service for Sui RPC is rate-limited on all available instances to keep network throughput optimized and to protect against excessive or abusive calls to the service.
+The GraphQL service for Rtd RPC is rate-limited on all available instances to keep network throughput optimized and to protect against excessive or abusive calls to the service.
 
 ### Rate limits
 
@@ -701,7 +701,7 @@ query {
 
 ### Find all transactions that touched a given object
 
-Find all the transactions that touched (modified, transferred, or deleted) a given object. This might be useful when you want to trace the flow of a `Coin`, `StakeSui`, `NFT`, or similar object.
+Find all the transactions that touched (modified, transferred, or deleted) a given object. This might be useful when you want to trace the flow of a `Coin`, `StakeRtd`, `NFT`, or similar object.
 
 :::info
 
@@ -710,7 +710,7 @@ This example uses GraphQL [variables](#variables) and [pagination](#pagination).
 :::
 
 ```graphql
-query ($objectID: SuiAddress!) {
+query ($objectID: RtdAddress!) {
   transactions(filter: {affectedObject: $objectID}) {
     nodes {
       sender {
@@ -837,9 +837,9 @@ This example makes use of the `last` filter. In this case, it returns only the l
 Find the balance changes of all the transactions where a given address called a staking-related function. This might be useful when you want to get your staking or unstaking history.
 
 ```graphql
-query ($address: SuiAddress!) {
+query ($address: RtdAddress!) {
   transactions(filter: {
-    function: "0x3::sui_system::request_add_stake"
+    function: "0x3::rtd_system::request_add_stake"
     sentAddress: $address
   }) {
     nodes {
@@ -935,7 +935,7 @@ This example uses [fragments](#fragments) and [variables](#variables).
 :::
 
 ```graphql
-query ($id: SuiAddress!) {
+query ($id: RtdAddress!) {
   address(address: $id) {
     dynamicFields {
       nodes {
@@ -1016,7 +1016,7 @@ query ($before: String) {
 
 ### Execute a transaction
 
-GraphQL is not read-only. Transaction execution takes 2 arguments, `transactionDataBcs` and `signatures`. `transactionDataBcs` is the serialized unsigned transaction data, which the [Sui Client CLI](/references/cli/client) `client call` command can generate. Pass the `--serialize-unsigned-transaction` flag to the command to call a Move function. The [Sui Keytool CLI](/references/cli/keytool) command `sui keytool sign` can generate the `signatures`. Select fields from `effects` in the same mutation to read execution results immediately without waiting for a separate indexed query.
+GraphQL is not read-only. Transaction execution takes 2 arguments, `transactionDataBcs` and `signatures`. `transactionDataBcs` is the serialized unsigned transaction data, which the [Rtd Client CLI](/references/cli/client) `client call` command can generate. Pass the `--serialize-unsigned-transaction` flag to the command to call a Move function. The [Rtd Keytool CLI](/references/cli/keytool) command `rtd keytool sign` can generate the `signatures`. Select fields from `effects` in the same mutation to read execution results immediately without waiting for a separate indexed query.
 
 ```graphql
 mutation ($tx: String!, $sigs: [String!]!) {
@@ -1052,7 +1052,7 @@ When using the online IDE, copy the following JSON to the **Variables** window, 
 
 ### Simulate a transaction
 
-Use `simulateTransaction` to preview transaction effects, estimate gas, or test transaction logic without committing the transaction onchain. Simulation accepts a JSON transaction matching the Sui gRPC transaction schema, or a BCS-encoded transaction with `{"bcs": {"value": "<base64>"}}`.
+Use `simulateTransaction` to preview transaction effects, estimate gas, or test transaction logic without committing the transaction onchain. Simulation accepts a JSON transaction matching the Rtd gRPC transaction schema, or a BCS-encoded transaction with `{"bcs": {"value": "<base64>"}}`.
 
 ```graphql
 query ($tx: JSON!) {
@@ -1081,7 +1081,7 @@ Like execution-attached queries, fields selected under simulation are evaluated 
 
 ## Migrating to GraphQL from JSON-RPC
 
-The examples in the following sections are tabbed to show both the JSON-RPC call and the equivalent GraphQL structure. For the broader migration, including a decision between gRPC and GraphQL, a JSON-RPC method mapping, and common migration gotchas, see the [JSON-RPC Migration Guide](/develop/accessing-data/json-rpc-migration). For a comprehensive list of all available GraphQL features, consult the [reference](/references/sui-graphql).
+The examples in the following sections are tabbed to show both the JSON-RPC call and the equivalent GraphQL structure. For the broader migration, including a decision between gRPC and GraphQL, a JSON-RPC method mapping, and common migration gotchas, see the [JSON-RPC Migration Guide](/develop/accessing-data/json-rpc-migration). For a comprehensive list of all available GraphQL features, consult the [reference](/references/rtd-graphql).
 
 #### Example 1: Get total transactions
 
@@ -1095,7 +1095,7 @@ Get the total number of transactions in the network.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "sui_getTotalTransactionBlocks",
+  "method": "rtd_getTotalTransactionBlocks",
   "params": []
 }
 ```
@@ -1126,7 +1126,7 @@ Get the transaction by its digest.
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "sui_getTransactionBlock",
+  "method": "rtd_getTransactionBlock",
   "params": [
     "Hay2tj3GcDYcE3AMHrej5WDsHGPVAYsegcubixLUvXUF",
     {
@@ -1173,7 +1173,7 @@ query {
 
 #### Example 3: Get coin objects owned by an address
 
-Return all `Coin<0x2::sui::SUI>` objects that an address owns.
+Return all `Coin<0x2::rtd::RTD>` objects that an address owns.
 
 <Tabs groupId="migrating-json-rpc">
 
@@ -1183,10 +1183,10 @@ Return all `Coin<0x2::sui::SUI>` objects that an address owns.
 query {
   "jsonrpc": "2.0",
   "id": 1,
-  "method": "suix_getCoins",
+  "method": "rtdx_getCoins",
   "params": [
     "0x5094652429957619e6efa79a404a6714d1126e63f551f4b6c7fb76440f8118c9", //owner
-    "0x2::sui::SUI",                                                      //coin type
+    "0x2::rtd::RTD",                                                      //coin type
     "0xe5c651321915b06c81838c2e370109b554a448a78d3a56220f798398dde66eab", //cursor
     3 //limit
   ]
@@ -1202,7 +1202,7 @@ query {
     objects(
       first: 3,
       after: "vBIzCwAAAADMAQBQlGUkKZV2Gebvp5pASmcU0RJuY/VR9LbH+3ZED4EYyQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAARjb2luAAAAAAAAAARDb2luAAAAAAAAAAEAAAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAA3N1aQAAAAAAAAADU1VJAAAAAAAAAAAB/////XBZUf9feyhb9cW+AOBraL10O9t0D9JAr+tIq2wXDJdl5/zP5w==",
-      filter: { type: "0x2::coin::Coin<0x2::sui::SUI>" }
+      filter: { type: "0x2::coin::Coin<0x2::rtd::RTD>" }
     ) {
       nodes {
         address
@@ -1253,7 +1253,7 @@ query {
 
 #### Example 5: Paging through package versions
 
-Find all versions of the Sui framework and list their modules:
+Find all versions of the Rtd framework and list their modules:
 
 ```graphql
 query {

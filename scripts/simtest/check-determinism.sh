@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 # Verify simulator determinism by running the determinism tests twice, in two
@@ -44,7 +44,7 @@ done < <(ls -t "$ROOT_DIR"/target/simulator/deps/"${BINARY_NAME}"-* 2>/dev/null)
 
 if [ -z "$BIN" ]; then
   echo "FAIL: could not find an executable '${BINARY_NAME}' binary under target/simulator/deps."
-  echo "Build it first, e.g.: scripts/simtest/cargo-simtest simtest --profile ci -p sui-e2e-tests"
+  echo "Build it first, e.g.: scripts/simtest/cargo-simtest simtest --profile ci -p rtd-e2e-tests"
   exit 1
 fi
 
@@ -74,11 +74,11 @@ run() {
   set -o pipefail
   # RUST_LOG is set explicitly (not inherited): the CI job exports RUST_LOG=error,
   # which would leave almost nothing to compare. The bulk of the comparable, deterministic
-  # output comes from test_net_determinism's node/sim logs (sui targets); the other tests
+  # output comes from test_net_determinism's node/sim logs (rtd targets); the other tests
   # run to completion under the same seed and their results are compared too.
   MSIM_TEST_SEED="$SEED" \
   MSIM_WATCHDOG_TIMEOUT_MS="${MSIM_WATCHDOG_TIMEOUT_MS:-60000}" \
-  RUST_LOG="sui=debug,info" \
+  RUST_LOG="rtd=debug,info" \
     "$BIN" --test-threads 1 --nocapture --exact "${TESTS[@]}" 2>&1 | normalize > "$out"
   local rc=${PIPESTATUS[0]}
   set +o pipefail

@@ -1,0 +1,48 @@
+# Copyright (c) LinkU Labs, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "rtd-execution-backtest"
+version = "0.1.0"
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+backoff.workspace = true
+bcs.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
+diesel = { workspace = true, features = ["postgres_backend", "chrono"] }
+diesel-async = { workspace = true, features = ["bb8", "postgres", "async-connection-wrapper"] }
+diesel_migrations.workspace = true
+futures.workspace = true
+object_store.workspace = true
+prometheus.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs", "time"] }
+tonic.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+url.workspace = true
+
+move-core-types.workspace = true
+
+rtd-types.workspace = true
+rtd-protocol-config.workspace = true
+rtd-data-store.workspace = true
+rtd-indexer-alt-framework = { workspace = true, default-features = false, features = ["postgres"] }
+rtd-rpc.workspace = true
+
+rtd-execution = { path = "../../rtd-execution" }
+
+[[bin]]
+name = "rtd-execution-backtest"
+path = "src/main.rs"
+

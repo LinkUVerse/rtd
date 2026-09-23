@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -23,11 +23,11 @@ for (let i = 0; i < args.length; i++) {
 const scriptDir = path.dirname(new URL(import.meta.url).pathname);
 const markdownDir = path.resolve(positional[0] ?? path.join(scriptDir, "../../static/markdown"));
 const outputFile = flags["output"] ?? path.join(scriptDir, "../../../static/llms.txt");
-const baseUrl = flags["base-url"] ?? "https://docs.sui.io";
+const baseUrl = flags["base-url"] ?? "https://docs.rtd.io";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TARGET_CHARS = 45_000;
-const PINNED_SECTIONS = ["Move", "Top Level Navigation", "Sui Developer Skills"];
+const PINNED_SECTIONS = ["Move", "Top Level Navigation", "Rtd Developer Skills"];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,21 +43,21 @@ const IGNORE_PATHS = new Set([
 const IGNORE_FILES = new Set([
   "guides/operator/observability.md",
   "references/ts-asset-tokenization.md",
-  "guides/developer/getting-started/sui-wallets.md",
+  "guides/developer/getting-started/rtd-wallets.md",
   "guides/developer/coin/stablecoins.md",
   "guides/developer/app-examples/recaptcha.md",
   "guides/developer/accessing-data/index.md",
-  "references/framework/sui_bridge/message_types.md",
-  "references/framework/sui_std/address.md",
-  "references/framework/sui_std/bool.md",
-  "references/framework/sui_sui/hex.md",
-  "references/framework/sui_sui/prover.md",
-  "references/framework/sui_sui_system/validator_wrapper.md",
-  "references/sui-api/sui-graphql/beta/reference/types/enums/multisig-member-signature-scheme.md",
-  "references/sui-api/sui-graphql/beta/reference/types/objects/multisig-member-signature.md",
-  "references/sui-framework-reference.md",
+  "references/framework/rtd_bridge/message_types.md",
+  "references/framework/rtd_std/address.md",
+  "references/framework/rtd_std/bool.md",
+  "references/framework/rtd_rtd/hex.md",
+  "references/framework/rtd_rtd/prover.md",
+  "references/framework/rtd_rtd_system/validator_wrapper.md",
+  "references/rtd-api/rtd-graphql/beta/reference/types/enums/multisig-member-signature-scheme.md",
+  "references/rtd-api/rtd-graphql/beta/reference/types/objects/multisig-member-signature.md",
+  "references/rtd-framework-reference.md",
   "/references/release-notes.md",
-  "/references/awesome-sui.md",
+  "/references/awesome-rtd.md",
 ]);
 
 function walk(dir, results = []) {
@@ -154,7 +154,7 @@ function getHierarchy(relPath) {
 
 function collectSkills() {
   const base = path.join(scriptDir, "../../static");
-  const dirs = ["sui-move", "sui-frontend", "sui-app"];
+  const dirs = ["rtd-move", "rtd-frontend", "rtd-app"];
   const out = [];
 
   for (const d of dirs) {
@@ -168,7 +168,7 @@ function collectSkills() {
       const title = formatTitle(path.basename(file, path.extname(file)));
 
       out.push({
-        section: "Sui Developer Skills",
+        section: "Rtd Developer Skills",
         subsection: d,
         title,
         url: joinUrl(baseUrl, rel.replace(/\.mdx?$/, "") + ".md")
@@ -190,19 +190,19 @@ grouped["Move"] = [
     title: "Move Language Reference",
     url: "https://move-book.com/llms.txt",
     description:
-      "Complete reference for the Move programming language as used on Sui. " +
+      "Complete reference for the Move programming language as used on Rtd. " +
       "Covers syntax, types, functions, structs, abilities (copy, drop, store, key), " +
-      "generics, ownership and the Sui object model, entry functions, public functions, " +
+      "generics, ownership and the Rtd object model, entry functions, public functions, " +
       "module structure, error handling, events, and testing with the Move test framework. " +
       "Includes best practices for safe and efficient contracts, object creation and transfer, " +
       "capability patterns, witness patterns, and hot potato patterns. " +
-      "Essential reference for all Move smart contract development on Sui."
+      "Essential reference for all Move smart contract development on Rtd."
   }
 ];
 
 // ── Skills (pinned) ──────────────────────────────────────────────────────────
 const skills = collectSkills();
-if (skills.length) grouped["Sui Developer Skills"] = skills;
+if (skills.length) grouped["Rtd Developer Skills"] = skills;
 
 // ── Markdown pages ───────────────────────────────────────────────────────────
 
@@ -310,10 +310,10 @@ function build(ratio = 1, { includeFull = false } = {}) {
   const lines = [];
 
   // Static header (LLM optimized)
-  lines.push("# Sui Documentation for LLMs", "");
+  lines.push("# Rtd Documentation for LLMs", "");
   lines.push(
-    "> Comprehensive reference for Sui blockchain development, including Move smart contract programming, " +
-    "Sui framework concepts, frontend integration, and fullstack application architecture. " +
+    "> Comprehensive reference for Rtd blockchain development, including Move smart contract programming, " +
+    "Rtd framework concepts, frontend integration, and fullstack application architecture. " +
     "Designed for efficient retrieval and grounding by large language models.",
     ""
   );

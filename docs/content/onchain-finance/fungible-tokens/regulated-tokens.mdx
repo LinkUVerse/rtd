@@ -1,7 +1,7 @@
 ---
 title: Regulated Currencies
 description: >-
-  Create regulated currencies on Sui using the Coin Registry system with deny
+  Create regulated currencies on Rtd using the Coin Registry system with deny
   list capabilities for access control.
 keywords:
   - regulated coin list
@@ -13,11 +13,11 @@ keywords:
   - token example
   - create a token
   - how to create token
-  - SUI token standards
+  - RTD token standards
   - coin registry
 goal:
   description: >-
-    Reader can create regulated currencies on Sui using the Coin Registry system
+    Reader can create regulated currencies on Rtd using the Coin Registry system
     with deny list capabilities for access control
   requires:
     - has_frontmatter:
@@ -40,9 +40,9 @@ builder_paths:
     step: Regulated tokens
     stage: Tokens
 questions:
-  - What is Regulated Currencies in Sui?
+  - What is Regulated Currencies in Rtd?
   - How do I create regulated currency?
-  - How does regulated currencies work on Sui?
+  - How does regulated currencies work on Rtd?
 answer: >-
   Regulated currencies are assets with access control managed through a **deny
   list**. A deny list identifies addresses that cannot send or receive that
@@ -51,7 +51,7 @@ answer: >-
 
 Regulated currencies are assets with access control managed through a **deny list**. A deny list identifies addresses that cannot send or receive that asset. For example, stablecoins are a type of regulated currency.
 
-To create regulated currencies on Sui, the Currency Standard's Coin Registry provides regulatory features through the `sui::coin_registry` module. It has built-in support for global pause functionality and ecosystem integration.
+To create regulated currencies on Rtd, the Currency Standard's Coin Registry provides regulatory features through the `rtd::coin_registry` module. It has built-in support for global pause functionality and ecosystem integration.
 
 Advantages of these regulatory features include:
 
@@ -62,7 +62,7 @@ Advantages of these regulatory features include:
 
 ## `DenyList`
 
-The `DenyList` is a shared object on the network. An address with `DenyCapV2` can access it to specify a list of addresses that cannot use a Sui core type. The primary use case for `DenyList` focuses on limiting access to coins or currencies of a specific type. Regulated coins on Sui satisfy regulations that require the ability to prevent known bad actors from accessing those coins.
+The `DenyList` is a shared object on the network. An address with `DenyCapV2` can access it to specify a list of addresses that cannot use a Rtd core type. The primary use case for `DenyList` focuses on limiting access to coins or currencies of a specific type. Regulated coins on Rtd satisfy regulations that require the ability to prevent known bad actors from accessing those coins.
 
 :::info
 
@@ -70,7 +70,7 @@ The `DenyList` object is a system object at address `0x403`. You cannot create i
 
 :::
 
-To learn about available features, see [Currency Standard](/onchain-finance/fungible-tokens/currency) and the `coin_registry` module in the Sui framework.
+To learn about available features, see [Currency Standard](/onchain-finance/fungible-tokens/currency) and the `coin_registry` module in the Rtd framework.
 
 ## Create regulated currency
 
@@ -105,14 +105,14 @@ The example uses a single file to create the smart contract for the project (`re
 
 | **Constant name** | **Description** |
 | --- | --- |
-| `PACKAGE_ID` | Object ID of the package you publish. This data is part of the response that Sui provides on publish. |
-| `ADMIN_SECRET_KEY` | The secret key for the address that publishes the package. You can use `sui keytool export --key-identity <SUI_ADDRESS>` or a wallet UI to get the value. Do not expose the value to the public. |
+| `PACKAGE_ID` | Object ID of the package you publish. This data is part of the response that Rtd provides on publish. |
+| `ADMIN_SECRET_KEY` | The secret key for the address that publishes the package. You can use `rtd keytool export --key-identity <RTD_ADDRESS>` or a wallet UI to get the value. Do not expose the value to the public. |
 | `ADMIN_ADDRESS` | The address that publishes the contract. |
-| `DENY_CAP_ID` | Deny capability object ID. This data is part of the response that Sui provides on publish. |
-| `TREASURY_CAP_ID` | The treasury cap object ID that allows the bearer to mint new coins. This data is part of the response that Sui provides on publish. |
+| `DENY_CAP_ID` | Deny capability object ID. This data is part of the response that Rtd provides on publish. |
+| `TREASURY_CAP_ID` | The treasury cap object ID that allows the bearer to mint new coins. This data is part of the response that Rtd provides on publish. |
 | `MODULE_NAME` | The name of the module you publish. |
 | `COIN_NAME` | The name of your regulated coin. |
-| `SUI_FULLNODE_URL` | The URL to the full node network that processes transactions. For Testnet this value is `https://fullnode.testnet.sui.io:443`. |
+| `RTD_FULLNODE_URL` | The URL to the full node network that processes transactions. For Testnet this value is `https://fullnode.testnet.rtd.io:443`. |
 
 :::caution
 
@@ -138,7 +138,7 @@ The TypeScript and Rust clients handle the call to the `coin` package `mint` fun
 
 </Tabs>
 
-For all `Coin` functions available, see the Sui framework [`coin` module documentation](https://github.com/MystenLabs/sui/blob/main/crates/sui-framework/docs/sui/coin.md). The most common functions follow:
+For all `Coin` functions available, see the Rtd framework [`coin` module documentation](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/docs/rtd/coin.md). The most common functions follow:
 
 <details>
 
@@ -148,7 +148,7 @@ For all `Coin` functions available, see the Sui framework [`coin` module documen
 
 </summary>
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/coin.move" mode="code" fun="mint" />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="mint" />
 
 </details>
 <details>
@@ -159,7 +159,7 @@ For all `Coin` functions available, see the Sui framework [`coin` module documen
 
 </summary>
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/coin.move" mode="code" fun="mint_balance" />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="mint_balance" />
 
 </details>
 
@@ -171,7 +171,7 @@ For all `Coin` functions available, see the Sui framework [`coin` module documen
 
 </summary>
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/coin.move" mode="code" fun="mint_and_transfer" />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="mint_and_transfer" />
 
 </details>
 
@@ -183,7 +183,7 @@ For all `Coin` functions available, see the Sui framework [`coin` module documen
 
 </summary>
 
-<ImportContent source="crates/sui-framework/packages/sui-framework/sources/coin.move" mode="code" fun="burn" />
+<ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="burn" />
 
 </details>
 

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! RoundProber periodically checks each peer for the latest rounds they received and accepted
@@ -20,8 +20,8 @@ use std::{sync::Arc, time::Duration};
 
 use consensus_types::block::Round;
 use futures::stream::{FuturesUnordered, StreamExt as _};
-use mysten_common::sync::notify_once::NotifyOnce;
-use mysten_metrics::monitored_scope;
+use linku_common::sync::notify_once::NotifyOnce;
+use linku_metrics::monitored_scope;
 use parking_lot::RwLock;
 use tokio::{task::JoinHandle, time::MissedTickBehavior};
 

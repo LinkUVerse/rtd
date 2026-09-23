@@ -43,8 +43,8 @@ env:
   # skip is a fail-safe, NOT a security boundary — the RO role still trusts
   # pull_request (Decision A). The extensions branch is deliberately untrusted
   # (dormant; see AWS_OIDC_MIGRATION_INVENTORY.md). No workflow_dispatch here, so no
-  # override-ref clause. Keep in sync with the sui-sccache-{rw,ro}-github trusts.
-  SCCACHE_ROLE: ${{ (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/sui-') && endsWith(github.ref, '-release'))) && 'arn:aws:iam::011083325127:role/sui-sccache-rw-github' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && 'arn:aws:iam::011083325127:role/sui-sccache-ro-github' || '' }}
+  # override-ref clause. Keep in sync with the rtd-sccache-{rw,ro}-github trusts.
+  SCCACHE_ROLE: ${{ (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && 'arn:aws:iam::011083325127:role/rtd-sccache-rw-github' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && 'arn:aws:iam::011083325127:role/rtd-sccache-ro-github' || '' }}
 
 jobs:
   diff:
@@ -69,7 +69,7 @@ jobs:
       # Tests written with #[sim_test] are often flaky if run as #[tokio::test] - this var
       # causes #[sim_test] to only run under the deterministic `simtest` job, and not the
       # non-deterministic `test` job.
-      SUI_SKIP_SIMTESTS: 1
+      RTD_SKIP_SIMTESTS: 1
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:

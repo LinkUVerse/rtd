@@ -2,7 +2,7 @@
 title: Consuming Price Feeds
 sidebar_label: Consuming Price Feeds
 description: >-
-  Read Pyth and Switchboard price feeds on Sui: fetch a signed update, apply it
+  Read Pyth and Switchboard price feeds on Rtd: fetch a signed update, apply it
   onchain, and read it in one transaction, with working Testnet TypeScript and
   the stale-price rejection.
 keywords:
@@ -37,9 +37,9 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I read a Pyth price feed on Sui?
+  - How do I read a Pyth price feed on Rtd?
   - How do I update a Pyth price before reading it?
-  - How do I read a Switchboard feed on Sui?
+  - How do I read a Switchboard feed on Rtd?
   - What happens when a price feed is stale?
 answer: >-
   Fetch a signed update from Hermes, apply it to the feed's PriceInfoObject with
@@ -55,7 +55,7 @@ builder_paths:
     stage: Oracles
 ---
 
-Both Pyth and Switchboard on Sui are pull oracles: a transaction fetches a fresh signed update offchain, applies it onchain, and reads it, in that order, atomically. This walkthrough reads a Pyth feed end to end on Testnet, then shows the Switchboard on-demand variant.
+Both Pyth and Switchboard on Rtd are pull oracles: a transaction fetches a fresh signed update offchain, applies it onchain, and reads it, in that order, atomically. This walkthrough reads a Pyth feed end to end on Testnet, then shows the Switchboard on-demand variant.
 
 The TypeScript samples live in the `examples/oracle-adapter/ts` package and type-check with `tsc --noEmit`. They pin the network's package and object IDs in a config module rather than inline, so a rotated ID is a one-line change:
 
@@ -63,15 +63,15 @@ The TypeScript samples live in the `examples/oracle-adapter/ts` package and type
 
 :::caution
 
-The Pyth Sui SDK talks JSON-RPC, but the Mysten Testnet fullnode serves gRPC, so the default `getFullnodeUrl('testnet')` returns 404 for every SDK call. Point `rpcUrl` at a JSON-RPC provider or your own node. Every Testnet Pyth consumer hits this, and the failure looks like an unrelated 404 rather than an RPC-protocol mismatch. For the same reason, these samples use a JSON-RPC client rather than the `SuiGrpcClient` that the rest of this documentation uses.
+The Pyth Rtd SDK talks JSON-RPC, but the LinkU Testnet fullnode serves gRPC, so the default `getFullnodeUrl('testnet')` returns 404 for every SDK call. Point `rpcUrl` at a JSON-RPC provider or your own node. Every Testnet Pyth consumer hits this, and the failure looks like an unrelated 404 rather than an RPC-protocol mismatch. For the same reason, these samples use a JSON-RPC client rather than the `RtdGrpcClient` that the rest of this documentation uses.
 
 :::
 
-The Pyth and Wormhole state object IDs and the Hermes endpoint come from the [Pyth Sui addresses](https://docs.pyth.network/price-feeds/contract-addresses/sui); feed IDs come from the [Pyth feed list](https://pyth.network/developers/price-feed-ids).
+The Pyth and Wormhole state object IDs and the Hermes endpoint come from the [Pyth Rtd addresses](https://docs.pyth.network/price-feeds/contract-addresses/rtd); feed IDs come from the [Pyth feed list](https://pyth.network/developers/price-feed-ids).
 
 ## Set up the clients
 
-Three clients: a Sui RPC client, the Pyth onchain client (which builds the Wormhole-verify and price-update commands), and a Hermes connection (which serves the signed offchain updates).
+Three clients: a Rtd RPC client, the Pyth onchain client (which builds the Wormhole-verify and price-update commands), and a Hermes connection (which serves the signed offchain updates).
 
 <ImportContent source="examples/oracle-adapter/ts/src/client.ts" mode="code" tag="client" />
 
@@ -81,7 +81,7 @@ Fetch the latest update for your feed from Hermes, apply it with `updatePriceFee
 
 <ImportContent source="examples/oracle-adapter/ts/src/read.ts" mode="code" tag="update-read" />
 
-**Observe:** the transaction succeeds and the read returns a current price. Running this against Testnet for `SUI/USD` returns a price near the live market rate (for example a magnitude of `68005477` at exponent `-8`, or about `0.68` USD) with a confidence interval around `0.1%` of the price. The read goes through the adapter's staleness bound, so a price the update failed to refresh aborts rather than reading old.
+**Observe:** the transaction succeeds and the read returns a current price. Running this against Testnet for `RTD/USD` returns a price near the live market rate (for example a magnitude of `68005477` at exponent `-8`, or about `0.68` USD) with a confidence interval around `0.1%` of the price. The read goes through the adapter's staleness bound, so a price the update failed to refresh aborts rather than reading old.
 
 ## The stale-price rejection
 
@@ -97,6 +97,6 @@ Switchboard is also pull, with a different shape. Instead of a shared price obje
 
 <ImportContent source="examples/oracle-adapter/ts/src/switchboard.ts" mode="code" tag="switchboard" />
 
-`current_result` returns a `CurrentResult` exposing the median `result()` (a `Decimal`) along with `min_timestamp_ms()` and `max_timestamp_ms()`. Unlike Pyth's `get_price_no_older_than`, it does not gate on age, so the consumer checks the timestamps against the clock itself. See the [Switchboard Sui docs](https://docs.switchboard.xyz/product-documentation/data-feeds/sui) for feed creation and the on-demand flow.
+`current_result` returns a `CurrentResult` exposing the median `result()` (a `Decimal`) along with `min_timestamp_ms()` and `max_timestamp_ms()`. Unlike Pyth's `get_price_no_older_than`, it does not gate on age, so the consumer checks the timestamps against the clock itself. See the [Switchboard Rtd docs](https://docs.switchboard.xyz/product-documentation/data-feeds/rtd) for feed creation and the on-demand flow.
 
 Next, wrap a provider read behind a single internal interface with the safety checks built in: [The Move adapter pattern](/onchain-finance/oracles/move-adapter).

@@ -35,9 +35,9 @@ builder_paths:
     step: Payment intents
     stage: Money Movement
 questions:
-  - What is a payment intent on Sui?
+  - What is a payment intent on Rtd?
   - Where can I find additional payment intent examples?
-  - How do payment intents work on Sui?
+  - How do payment intents work on Rtd?
 answer: >-
   Use programmable transaction blocks to compile multi-step payment workflows
   into a single atomic transaction.
@@ -63,9 +63,9 @@ The underlying PTB gives a payment intent the following guarantees:
 
 - **Composability:** Outputs of earlier commands feed into later ones without leaving the transaction. You do not need to wait for one transaction to confirm before building the next.
 
-- **Sponsored gas:** Apps can pay gas on behalf of users. A three-operation payment intent that costs around 0.005 USD is sponsorable at scale, which removes the need for users to hold SUI just to pay fees.
+- **Sponsored gas:** Apps can pay gas on behalf of users. A three-operation payment intent that costs around 0.005 USD is sponsorable at scale, which removes the need for users to hold RTD just to pay fees.
 
-- **Fast finality:** Sui consensus commits transactions in under a second, so a multi-step intent feels like a single action to the user.
+- **Fast finality:** Rtd consensus commits transactions in under a second, so a multi-step intent feels like a single action to the user.
 
 ## Anatomy of a payment intent
 
@@ -81,7 +81,7 @@ A payment intent moves through three phases:
 
 Consider this request:
 
-> Swap 10% into SUI, save 50% of my remaining USDC, then send 100 USDC to a contact named Alice.
+> Swap 10% into RTD, save 50% of my remaining USDC, then send 100 USDC to a contact named Alice.
 
 Starting balance: 2,000 USDC.
 
@@ -92,8 +92,8 @@ The app dispatches five reads in parallel:
 | **Read** | **Result** |
 |---|---|
 | Wallet balance | 2,000 USDC |
-| Cetus route for USDC to SUI | 200 USDC swaps to 212.77 SUI at 0.03% slippage |
-| NAVI USDsui pool | 8.4% APY, 48M USD TVL |
+| Cetus route for USDC to RTD | 200 USDC swaps to 212.77 RTD at 0.03% slippage |
+| NAVI USDrtd pool | 8.4% APY, 48M USD TVL |
 | Contact resolution for Alice | `0xa4bb…b27c`, verified |
 | Gas estimate | 0.005 USD, sponsored |
 
@@ -101,9 +101,9 @@ The app dispatches five reads in parallel:
 
 The planner orders the operations so that later math uses the correct inputs:
 
-1. Swap 200 USDC to SUI through Cetus. This is 10% of the starting balance.
+1. Swap 200 USDC to RTD through Cetus. This is 10% of the starting balance.
 
-1. Swap 900 USDC to USDsui and deposit into the NAVI pool. This is 50% of the 1,800 USDC that remains after step 1, not 50% of the original 2,000.
+1. Swap 900 USDC to USDrtd and deposit into the NAVI pool. This is 50% of the 1,800 USDC that remains after step 1, not 50% of the original 2,000.
 
 1. Transfer 100 USDC to `0xa4bb…b27c`.
 
@@ -115,9 +115,9 @@ The three operations compile into one payment intent. You sign once and the netw
 
 - **Available USDC:** 800 USD, instantly spendable.
 
-- **Earning USDsui:** 900 USD in the NAVI pool at 8.4% APY, accruing from the next block.
+- **Earning USDrtd:** 900 USD in the NAVI pool at 8.4% APY, accruing from the next block.
 
-- **Held SUI:** 212.77 SUI at the executed price.
+- **Held RTD:** 212.77 RTD at the executed price.
 
 Because the payment intent is atomic, a failure in any leg reverts all three operations. Failures include a slippage breach on the swap, a paused pool, or an invalid recipient. You never end up in a state where the swap completes but the deposit does not.
 
@@ -133,7 +133,7 @@ The pattern generalizes to any chain of payment operations. The intents below ea
 
 ### Deposit autosplit
 
-> When a deposit arrives, keep 1,000 USDC liquid, deposit 60% of the rest into a yield pool, and convert the remainder to SUI.
+> When a deposit arrives, keep 1,000 USDC liquid, deposit 60% of the rest into a yield pool, and convert the remainder to RTD.
 
 The trigger is an inbound transfer. The payment intent reads the new balance, subtracts the reserve, splits the remainder, and routes each portion. One signature covers the recurring rule.
 
@@ -145,7 +145,7 @@ Three transfers to three resolved contacts, batched atomically. If any recipient
 
 ### Rebalance
 
-> Sell enough SUI to bring my portfolio back to 70% USDC, 30% SUI.
+> Sell enough RTD to bring my portfolio back to 70% USDC, 30% RTD.
 
 The payment intent reads current balances and prices, computes the delta, and executes a single swap. The read and the swap are part of the same atomic unit, so the price you swap at is the price you read.
 

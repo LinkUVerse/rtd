@@ -32,9 +32,9 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Risk Ratio in Sui?
+  - What is Risk Ratio in Rtd?
   - What is a risk ratio?
-  - How does risk ratio work on Sui?
+  - How does risk ratio work on Rtd?
 answer: >-
   Risk ratios are the core mechanism that governs leverage limits and position
   safety in DeepBook Margin. Understanding these ratios is essential for
@@ -106,9 +106,9 @@ $$\text{Max Leverage} \approx \frac{1}{1 - \frac{1}{\text{Min Borrow Risk Ratio}
 | 1.5 | 3x |
 | 2.0 | 2x |
 
-## Example: SUI/USDC position lifecycle
+## Example: RTD/USDC position lifecycle
 
-Consider a SUI/USDC position with the following risk parameters:
+Consider a RTD/USDC position with the following risk parameters:
 - Min Withdraw Risk Ratio: 2.0
 - Min Borrow Risk Ratio: 1.25
 - Liquidation Risk Ratio: 1.1
@@ -116,23 +116,23 @@ Consider a SUI/USDC position with the following risk parameters:
 
 **Opening a position:**
 1. You deposit 100 USDC as collateral
-2. You borrow 400 USDC worth of SUI
-3. Total assets = 100 USDC collateral + 400 USDC worth of SUI = 500 USDC
+2. You borrow 400 USDC worth of RTD
+3. Total assets = 100 USDC collateral + 400 USDC worth of RTD = 500 USDC
 4. Total debt = 400 USDC
 5. Risk ratio = 500/400 = 1.25 (at the minimum borrow ratio)
-6. You now have 5x leveraged exposure to SUI
+6. You now have 5x leveraged exposure to RTD
 
 **Price moves in your favor:**
-1. SUI price increases 10%, your SUI is now worth 440 USDC
+1. RTD price increases 10%, your RTD is now worth 440 USDC
 2. Total assets = 100 + 440 = 540 USDC, debt is still 400 USDC
 3. Risk ratio = 540/400 = 1.35 (safer position)
 4. You can withdraw some profit, as long as ratio stays above 2.0
 
 **Price moves against you:**
-1. SUI price drops 10%, your SUI is now worth 360 USDC
+1. RTD price drops 10%, your RTD is now worth 360 USDC
 2. Total assets = 100 + 360 = 460 USDC, debt is still 400 USDC
 3. Risk ratio = 460/400 = 1.15 (approaching liquidation)
-4. If SUI drops further to 340 USDC worth, ratio = (100 + 340)/400 = 1.1 (liquidation threshold)
+4. If RTD drops further to 340 USDC worth, ratio = (100 + 340)/400 = 1.1 (liquidation threshold)
 5. Your position can now be liquidated by anyone
 6. Liquidator repays part of your debt and receives collateral plus a reward
 7. After liquidation, your remaining position has a risk ratio of 1.25

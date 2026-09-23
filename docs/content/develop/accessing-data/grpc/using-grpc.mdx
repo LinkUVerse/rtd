@@ -1,7 +1,7 @@
 ---
 title: Querying Data with gRPC
 description: >-
-  Learn how to query the Sui network using gRPC clients with grpcurl, Buf CLI,
+  Learn how to query the Rtd network using gRPC clients with grpcurl, Buf CLI,
   TypeScript, Go, and Python, including how to use field masks to control
   response fields.
 keywords:
@@ -11,10 +11,10 @@ keywords:
   - typescript grpc
   - golang grpc
   - python grpc
-  - sui grpc tutorial
+  - rtd grpc tutorial
 goal:
   description: >-
-    Reader can use gRPC clients for the Sui network with grpcurl, Buf CLI, and
+    Reader can use gRPC clients for the Rtd network with grpcurl, Buf CLI, and
     popular programming languages
   requires:
     - has_frontmatter:
@@ -49,25 +49,25 @@ builder_paths:
     stage: Ship
 questions:
   - How do I query data with grpc?
-  - What is Querying Data with gRPC in Sui?
+  - What is Querying Data with gRPC in Rtd?
   - Why should I use querying data with grpc?
 answer: >-
-  Learn how to use gRPC clients for the Sui network with grpcurl, Buf CLI, and
+  Learn how to use gRPC clients for the Rtd network with grpcurl, Buf CLI, and
   popular programming languages.
 ---
 
 <AgentPrompt
-  prompt={"Convert this Sui JSON-RPC usage to the current gRPC API. Generate/use the client, map request/response types, and add a working example."}
+  prompt={"Convert this Rtd JSON-RPC usage to the current gRPC API. Generate/use the client, map request/response types, and add a working example."}
 />
 
-This guide provides practical examples for querying the Sui network using gRPC. For core concepts, see the [corresponding concepts page](/develop/accessing-data/grpc/what-is-grpc).
+This guide provides practical examples for querying the Rtd network using gRPC. For core concepts, see the [corresponding concepts page](/develop/accessing-data/grpc/what-is-grpc).
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] Obtain access to a [gRPC](/develop/accessing-data/grpc)-enabled Sui full node. Check the [list of RPC and data providers](https://www.notion.so/mystenlabs/RPC-providers-offering-future-Sui-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) that support gRPC on their full nodes, and contact a provider directly to request access.
+- [x] Obtain access to a [gRPC](/develop/accessing-data/grpc)-enabled Rtd full node. Check the [list of RPC and data providers](https://www.notion.so/linkuverse/RPC-providers-offering-future-Rtd-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) that support gRPC on their full nodes, and contact a provider directly to request access.
 
-If your provider does not support gRPC, ask them to enable it or contact the Sui Foundation team on Discord or Telegram for help.
+If your provider does not support gRPC, ask them to enable it or contact the Rtd Foundation team on Discord or Telegram for help.
 
 </TabItem>
 </Tabs>
@@ -76,11 +76,11 @@ If your provider does not support gRPC, ask them to enable it or contact the Sui
 
 A [`FieldMask` in protocol buffers](https://protobuf.dev/reference/protobuf/google.protobuf/#field-mask) is a mechanism used to specify a subset of fields within a message that should be read, updated, or returned. Instead of retrieving the entire object, a client can request only the specific fields they need by providing a list of field paths. This improves performance and reduces unnecessary data transfer.
 
-In the Sui gRPC API, `FieldMask`s are used in requests like `GetTransaction`, `GetObject`, and so on to control which parts are included in the response (like the `effects` and `events` of a transaction).
+In the Rtd gRPC API, `FieldMask`s are used in requests like `GetTransaction`, `GetObject`, and so on to control which parts are included in the response (like the `effects` and `events` of a transaction).
 
 Field masks are defined using `google.protobuf.FieldMask` and typically appear in the request message as `read_mask`. You can pass an explicit value of `*` to request all fields.
 
-If you omit `read_mask`, the server applies a method-specific default that returns a minimal subset of fields (for example, `object_id,version,digest` for `GetObject`). Pass `*` explicitly to request all fields. See [`read_mask_defaults.rs`](https://github.com/MystenLabs/sui/blob/main/crates/sui-rpc-api/src/read_mask_defaults.rs) for the full list of defaults.
+If you omit `read_mask`, the server applies a method-specific default that returns a minimal subset of fields (for example, `object_id,version,digest` for `GetObject`). Pass `*` explicitly to request all fields. See [`read_mask_defaults.rs`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-rpc-api/src/read_mask_defaults.rs) for the full list of defaults.
 
 - Each field path in the mask must match the field structure of the response proto message. Nested fields are supported using dot notation.
 
@@ -90,7 +90,7 @@ If you omit `read_mask`, the server applies a method-specific default that retur
 
 ### Field path reference {#field-path-reference}
 
-The following tables list commonly used `read_mask` field paths for each service method. Field paths follow the proto message structure defined in the [`sui-apis` proto source](https://github.com/MystenLabs/sui-apis/tree/main/proto) and support dot notation for nested fields.
+The following tables list commonly used `read_mask` field paths for each service method. Field paths follow the proto message structure defined in the [`rtd-apis` proto source](https://github.com/LinkUVerse/rtd-apis/tree/main/proto) and support dot notation for nested fields.
 
 #### `LedgerService.GetObject` / `BatchGetObjects`
 
@@ -145,20 +145,20 @@ The following tables list commonly used `read_mask` field paths for each service
 
 ### Connection and buffer limits {#connection-limits}
 
-The following limits are configured in the Sui full node source code and apply to all gRPC endpoints unless the operator overrides them:
+The following limits are configured in the Rtd full node source code and apply to all gRPC endpoints unless the operator overrides them:
 
 | Limit type | Default value | Source |
 | --- | --- | --- |
-| Connection max age | 4 hours (server sends GOAWAY) | [`DEFAULT_MAX_CONNECTION_AGE`](https://github.com/MystenLabs/sui/blob/main/crates/sui-config/src/rpc_config.rs) |
-| gRPC timeout (unary) | 60 seconds | [`DEFAULT_GRPC_TIMEOUT`](https://github.com/MystenLabs/sui/blob/main/crates/sui-config/src/rpc_config.rs) |
-| Subscription buffer | 1,024 items per subscriber | [`CHECKPOINT_MAILBOX_SIZE`](https://github.com/MystenLabs/sui/blob/main/crates/sui-rpc-api/src/subscription/mod.rs) |
-| Max subscribers | 1,024 | [`DEFAULT_MAX_SUBSCRIBERS`](https://github.com/MystenLabs/sui/blob/main/crates/sui-rpc-api/src/subscription/mod.rs) |
+| Connection max age | 4 hours (server sends GOAWAY) | [`DEFAULT_MAX_CONNECTION_AGE`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-config/src/rpc_config.rs) |
+| gRPC timeout (unary) | 60 seconds | [`DEFAULT_GRPC_TIMEOUT`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-config/src/rpc_config.rs) |
+| Subscription buffer | 1,024 items per subscriber | [`CHECKPOINT_MAILBOX_SIZE`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-rpc-api/src/subscription/mod.rs) |
+| Max subscribers | 1,024 | [`DEFAULT_MAX_SUBSCRIBERS`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-rpc-api/src/subscription/mod.rs) |
 
-The public Sui Foundation endpoints at `fullnode.<network>.sui.io` are behind load balancers that impose additional rate limits (requests per second, concurrent streams, and message size caps) beyond what the node itself configures. Contact your provider for their specific limits, or check the full node's `grpc` configuration section if you operate your own node.
+The public Rtd Foundation endpoints at `fullnode.<network>.rtd.io` are behind load balancers that impose additional rate limits (requests per second, concurrent streams, and message size caps) beyond what the node itself configures. Contact your provider for their specific limits, or check the full node's `grpc` configuration section if you operate your own node.
 
 ## Field presence
 
-When using gRPC with Sui, it's important to understand how [field presence](https://github.com/protocolbuffers/protobuf/blob/main/docs/field_presence.md) works, especially when dealing with `proto3` syntax. In `proto3`, primitive fields like numbers, booleans, and strings are always initialized to a default value if not present in the message. This means you cannot tell whether a value is explicitly set or just left out. To give you that distinction, Sui marks all fields as `optional`, even if they are required by the API.
+When using gRPC with Rtd, it's important to understand how [field presence](https://github.com/protocolbuffers/protobuf/blob/main/docs/field_presence.md) works, especially when dealing with `proto3` syntax. In `proto3`, primitive fields like numbers, booleans, and strings are always initialized to a default value if not present in the message. This means you cannot tell whether a value is explicitly set or just left out. To give you that distinction, Rtd marks all fields as `optional`, even if they are required by the API.
 
 As a user of the API, this lets you detect whether a field value is actually provided or just defaulted and write clients that can perform partial updates or simulate intent like distinguishing between an explicitly empty input versus a missing one.
 
@@ -170,13 +170,13 @@ If a field is marked `optional` in the proto, it might still be **required** for
 
 ## Encoding
 
-In the Sui gRPC API, identifiers with standard human-readable formats are represented as `string`s in the proto schema:
+In the Rtd gRPC API, identifiers with standard human-readable formats are represented as `string`s in the proto schema:
 
 - `Address` and `ObjectId`: Represented as 64 hexadecimal characters with a leading `0x`.
 
 - `Digest`s: Represented as [Base58](https://learnmeabitcoin.com/technical/keys/base58/).
 
-- `TypeTag` and `StructTag`: Represented in their canonical string format (such as  `0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI>`)
+- `TypeTag` and `StructTag`: Represented in their canonical string format (such as  `0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>`)
 
 ## Pagination
 
@@ -190,31 +190,31 @@ Make sure to keep all other parameters in your request the same between paginate
 
 ## Errors
 
-The Sui gRPC services follow the [richer error model](https://grpc.io/docs/guides/error/#richer-error-model) defined in [AIP-193](https://google.aip.dev/193). When an RPC returns a non-OK status code, detailed error information is typically included in the `grpc-status-details-bin` header. This header contains a `google.rpc.Status` message encoded in Base64.
+The Rtd gRPC services follow the [richer error model](https://grpc.io/docs/guides/error/#richer-error-model) defined in [AIP-193](https://google.aip.dev/193). When an RPC returns a non-OK status code, detailed error information is typically included in the `grpc-status-details-bin` header. This header contains a `google.rpc.Status` message encoded in Base64.
 
 You can decode this message to access structured error details, which might include specific causes, context, or metadata. This makes it easier to understand and handle errors programmatically in your client applications.
 
 ## HTTP headers
 
-In many gRPC responses, the Sui API includes additional metadata in the form of HTTP headers. These headers provide contextual information about the current network state and might be useful for debugging, telemetry, or understanding the data's freshness.
+In many gRPC responses, the Rtd API includes additional metadata in the form of HTTP headers. These headers provide contextual information about the current network state and might be useful for debugging, telemetry, or understanding the data's freshness.
 
 Here are the headers you might encounter:
 
-- `x-sui-chain-id`: The chain ID of the current network.
+- `x-rtd-chain-id`: The chain ID of the current network.
 
-- `x-sui-chain`: A human-readable name for the current network (`mainnet`, `testnet`, or `devnet`).
+- `x-rtd-chain`: A human-readable name for the current network (`mainnet`, `testnet`, or `devnet`).
 
-- `x-sui-checkpoint-height`: The height of the latest checkpoint at the time of the response.
+- `x-rtd-checkpoint-height`: The height of the latest checkpoint at the time of the response.
 
-- `x-sui-lowest-available-checkpoint`: The earliest checkpoint for which transaction and checkpoint data can still be queried.
+- `x-rtd-lowest-available-checkpoint`: The earliest checkpoint for which transaction and checkpoint data can still be queried.
 
-- `x-sui-lowest-available-checkpoint-objects`: The earliest checkpoint from which object data (input and output) is available.
+- `x-rtd-lowest-available-checkpoint-objects`: The earliest checkpoint from which object data (input and output) is available.
 
-- `x-sui-epoch`: The current epoch of the network.
+- `x-rtd-epoch`: The current epoch of the network.
 
-- `x-sui-timestamp-ms`: The network timestamp in milliseconds since the Unix epoch.
+- `x-rtd-timestamp-ms`: The network timestamp in milliseconds since the Unix epoch.
 
-- `x-sui-timestamp`: The network timestamp in milliseconds since the Unix epoch in human-readable [RFC 3339](https://datatracker.ietf.org/doc/html/rfc3339) format.
+- `x-rtd-timestamp`: The network timestamp in milliseconds since the Unix epoch in human-readable [RFC 3339](https://datatracker.ietf.org/doc/html/rfc3339) format.
 
 Not all headers are guaranteed to be present in every API response. They are only included when applicable to the given RPC.
 
@@ -228,42 +228,42 @@ Interact with gRPC by using [`grpcurl`](https://github.com/fullstorydev/grpcurl)
 $ grpcurl <FULL_NODE_URL> list
 ```
 
-The port on Sui Foundation managed full nodes is `443`. 
+The port on Rtd Foundation managed full nodes is `443`. 
 
 ### List available APIs in the `LedgerService`
 
 ```shell
-$ grpcurl <FULL_NODE_URL> list sui.rpc.v2.LedgerService
+$ grpcurl <FULL_NODE_URL> list rtd.rpc.v2.LedgerService
 ```
 
 ### Get the events and effects details of a particular transaction
 
 ```shell
-$ grpcurl -d '{ "digest": "J4NvV5iQZQFm1xKPYv9ffDCCPW6cZ4yFKsCqFUiDX5L4" }' <FULL_NODE_URL> sui.rpc.v2.LedgerService/GetTransaction
+$ grpcurl -d '{ "digest": "J4NvV5iQZQFm1xKPYv9ffDCCPW6cZ4yFKsCqFUiDX5L4" }' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/GetTransaction
 ```
 
 ### Get the transactions in a particular checkpoint
 
 ```shell
-$ grpcurl -d '{ "sequence_number": "164329987", "read_mask": { "paths": ["transactions"]} }' <FULL_NODE_URL> sui.rpc.v2.LedgerService/GetCheckpoint
+$ grpcurl -d '{ "sequence_number": "164329987", "read_mask": { "paths": ["transactions"]} }' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/GetCheckpoint
 ```
 
 ### Get the latest information for a coin type
 
 ```shell
-$ grpcurl -d '{ "coin_type": "0x2::sui::SUI" }' <FULL_NODE_URL> sui.rpc.v2.StateService/GetCoinInfo
+$ grpcurl -d '{ "coin_type": "0x2::rtd::RTD" }' <FULL_NODE_URL> rtd.rpc.v2.StateService/GetCoinInfo
 ```
 
 ### List the objects owned by a particular address
 
 ```shell
-$ grpcurl -d '{ "owner": "0x94096a6a54129234237759c66e6ef1037224fb3102a0ae29d33b490281c8e4d5" }' <FULL_NODE_URL> sui.rpc.v2.StateService/ListOwnedObjects
+$ grpcurl -d '{ "owner": "0x94096a6a54129234237759c66e6ef1037224fb3102a0ae29d33b490281c8e4d5" }' <FULL_NODE_URL> rtd.rpc.v2.StateService/ListOwnedObjects
 ```
 
 ### List the dynamic fields in a particular object
 
 ```shell
-$ grpcurl -d '{ "parent": "0xb57fba584a700a5bcb40991e1b2e6bf68b0f3896d767a0da92e69de73de226ac" }' <FULL_NODE_URL> sui.rpc.v2.StateService/ListDynamicFields
+$ grpcurl -d '{ "parent": "0xb57fba584a700a5bcb40991e1b2e6bf68b0f3896d767a0da92e69de73de226ac" }' <FULL_NODE_URL> rtd.rpc.v2.StateService/ListDynamicFields
 ```
 
 ### List transactions matching a filter {#ledger-history-list-apis}
@@ -283,7 +283,7 @@ $ grpcurl -d '{
       }]
     }]
   }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/ListTransactions
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/ListTransactions
 ```
 
 ### List events matching a filter
@@ -303,7 +303,7 @@ $ grpcurl -d '{
       }]
     }]
   }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/ListEvents
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/ListEvents
 ```
 
 ### List checkpoints
@@ -317,7 +317,7 @@ $ grpcurl -d '{
   "start_checkpoint": "1000000",
   "end_checkpoint": "1000010",
   "read_mask": { "paths": ["digest", "summary"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/ListCheckpoints
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/ListCheckpoints
 ```
 
 ## Access streaming data with Buf
@@ -327,7 +327,7 @@ $ grpcurl -d '{
 ### Subscribe to checkpoints
 
 ```shell
-$ buf curl --protocol grpc https://<FULL_NODE_URL>/sui.rpc.v2.SubscriptionService/SubscribeCheckpoints -d '{ "readMask": "sequenceNumber,digest,summary.timestamp" }'  --timeout 1m
+$ buf curl --protocol grpc https://<FULL_NODE_URL>/rtd.rpc.v2.SubscriptionService/SubscribeCheckpoints -d '{ "readMask": "sequenceNumber,digest,summary.timestamp" }'  --timeout 1m
 ```
 
 ### Subscribe to transactions with a filter
@@ -338,7 +338,7 @@ Run the following command:
 
 ```shell
 $ buf curl --protocol grpc \
-  https://<FULL_NODE_URL>/sui.rpc.v2.SubscriptionService/SubscribeTransactions \
+  https://<FULL_NODE_URL>/rtd.rpc.v2.SubscriptionService/SubscribeTransactions \
   -d '{
     "filter": {
       "terms": [{
@@ -359,7 +359,7 @@ Run the following command:
 
 ```shell
 $ buf curl --protocol grpc \
-  https://<FULL_NODE_URL>/sui.rpc.v2.SubscriptionService/SubscribeEvents \
+  https://<FULL_NODE_URL>/rtd.rpc.v2.SubscriptionService/SubscribeEvents \
   -d '{
     "filter": {
       "terms": [{
@@ -387,7 +387,7 @@ Every response frame in a list API stream includes a `watermark` with a `cursor`
 
 To paginate, take the `cursor` from the latest `watermark` in the stream and pass it as `options.after` (for ascending order) or `options.before` (for descending order) in your next request. The `watermark` also tells you how much of the checkpoint range has been covered, which is useful when a sparse filter produces few or no matching items.
 
-For operator-level configuration of these APIs (timeouts, item limits, scan budgets), see [Ledger history configuration](/operators/full-node/sui-full-node#ledger-history-configuration).
+For operator-level configuration of these APIs (timeouts, item limits, scan budgets), see [Ledger history configuration](/operators/full-node/rtd-full-node#ledger-history-configuration).
 
 ## Add a gRPC client to your project
 
@@ -396,7 +396,7 @@ For operator-level configuration of these APIs (timeouts, item limits, scan budg
 Reach for one of the [supported SDKs](/develop/accessing-data/data-serving#supported-sdks) before hand-rolling a gRPC client. The examples below cover the cases those SDKs do not serve.
 :::
 
-Each example adds a Sui gRPC client to a project you already have. All 3 need the `sui/rpc/v2` proto files, so download them from [the sui-apis repo](https://github.com/MystenLabs/sui-apis/tree/main/proto) into a `protos/` directory at your project root before you start.
+Each example adds a Rtd gRPC client to a project you already have. All 3 need the `rtd/rpc/v2` proto files, so download them from [the rtd-apis repo](https://github.com/LinkUVerse/rtd-apis/tree/main/proto) into a `protos/` directory at your project root before you start.
 
 <Tabs groupId="language">
 
@@ -416,7 +416,7 @@ The client resolves protos relative to its own directory, so your tree should lo
 ```shell
 .
 ├── protos/
-│   └── sui/
+│   └── rtd/
 │       └── rpc/
 │           └── v2/
 │               ├── ledger_service.proto
@@ -434,7 +434,7 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
 
-const PROTO_PATH = path.join(__dirname, 'protos/sui/rpc/v2/ledger_service.proto');
+const PROTO_PATH = path.join(__dirname, 'protos/rtd/rpc/v2/ledger_service.proto');
 
 // Load proto definitions
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
@@ -446,8 +446,8 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   includeDirs: [path.join(__dirname, 'protos')],
 });
 
-const suiProto = grpc.loadPackageDefinition(packageDefinition) as any;
-const LedgerService = suiProto.sui.rpc.v2.LedgerService;
+const rtdProto = grpc.loadPackageDefinition(packageDefinition) as any;
+const LedgerService = rtdProto.rtd.rpc.v2.LedgerService;
 
 // Create gRPC client
 const client = new LedgerService(
@@ -517,7 +517,7 @@ require (
 With the `v2` protos in `protos/`, run:
 
 ```shell
-protoc --proto_path=./protos --go_out=. --go-grpc_out=. protos/sui/rpc/v2/ledger_service.proto
+protoc --proto_path=./protos --go_out=. --go-grpc_out=. protos/rtd/rpc/v2/ledger_service.proto
 ```
 
 #### Query events and effects for a transaction
@@ -535,7 +535,7 @@ import (
     "google.golang.org/grpc"
     "google.golang.org/grpc/credentials"
     
-    pb "your_project/sui/rpc/v2" // adjust path based on where your generated .pb.go files are
+    pb "your_project/rtd/rpc/v2" // adjust path based on where your generated .pb.go files are
 )
 
 func main() {
@@ -582,10 +582,10 @@ Once `go.mod` is set up and you have generated the gRPC code (`*.pb.go`, `*_grpc
 go run main.go
 ```
 
-If you see errors like `cannot find package`, ensure you've generated the proto files and imported them correctly. If your generated files are in a nested directory like `sui/rpc/v2`, your import in `main.go` should match:
+If you see errors like `cannot find package`, ensure you've generated the proto files and imported them correctly. If your generated files are in a nested directory like `rtd/rpc/v2`, your import in `main.go` should match:
 
 ```go
-import pb "your_project/sui/rpc/v2"
+import pb "your_project/rtd/rpc/v2"
 ```
 
 You can replace `your_project` with a module name or relative import path depending on how your `go.mod` is defined.
@@ -612,14 +612,14 @@ pip install grpcio grpcio-tools protobuf
 With the `v2` protos in `protos/`, run:
 
 ```shell
-python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=. ./protos/sui/rpc/v2/ledger_service.proto
+python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=. ./protos/rtd/rpc/v2/ledger_service.proto
 ```
 
 #### Query events and effects for a transaction
 
 ```python
 import grpc
-from sui.rpc.v2 import ledger_service_pb2, ledger_service_pb2_grpc
+from rtd.rpc.v2 import ledger_service_pb2, ledger_service_pb2_grpc
 
 def main():
     # Create secure channel to port 443
@@ -651,7 +651,7 @@ if __name__ == "__main__":
 python client.py
 ```
 
-The import paths like `sui.rpc.v2.ledger_service_pb2` depend on your proto structure. You might need to adjust `__init__.py` files or `$PYTHONPATH` to ensure proper module resolution.
+The import paths like `rtd.rpc.v2.ledger_service_pb2` depend on your proto structure. You might need to adjust `__init__.py` files or `$PYTHONPATH` to ensure proper module resolution.
 
 The example assumes that gRPC is available on port `443` which requires SSL. Digest in the request is directly provided in the `Base58` format, but check if you need to decode from your source format.
 

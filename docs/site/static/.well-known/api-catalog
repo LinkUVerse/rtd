@@ -1,91 +1,91 @@
 {
   "linkset": [
     {
-      "anchor": "https://docs.sui.io/references/sui-api",
+      "anchor": "https://docs.rtd.io/references/rtd-api",
       "service-doc": [
         {
-          "href": "https://docs.sui.io/references/sui-api",
+          "href": "https://docs.rtd.io/references/rtd-api",
           "type": "text/html",
-          "title": "Sui JSON-RPC API Documentation"
+          "title": "Rtd JSON-RPC API Documentation"
         }
       ],
       "service-desc": [
         {
-          "href": "https://docs.sui.io/open-spec/mainnet/openrpc.json",
+          "href": "https://docs.rtd.io/open-spec/mainnet/openrpc.json",
           "type": "application/json",
-          "title": "Sui JSON-RPC OpenRPC Specification (Mainnet)"
+          "title": "Rtd JSON-RPC OpenRPC Specification (Mainnet)"
         },
         {
-          "href": "https://docs.sui.io/open-spec/testnet/openrpc.json",
+          "href": "https://docs.rtd.io/open-spec/testnet/openrpc.json",
           "type": "application/json",
-          "title": "Sui JSON-RPC OpenRPC Specification (Testnet)"
+          "title": "Rtd JSON-RPC OpenRPC Specification (Testnet)"
         },
         {
-          "href": "https://docs.sui.io/open-spec/devnet/openrpc.json",
+          "href": "https://docs.rtd.io/open-spec/devnet/openrpc.json",
           "type": "application/json",
-          "title": "Sui JSON-RPC OpenRPC Specification (Devnet)"
+          "title": "Rtd JSON-RPC OpenRPC Specification (Devnet)"
         }
       ]
     },
     {
-      "anchor": "https://fullnode.mainnet.sui.io:443",
+      "anchor": "https://fullnode.mainnet.rtd.io:443",
       "service-doc": [
         {
-          "href": "https://docs.sui.io/references/sui-api",
+          "href": "https://docs.rtd.io/references/rtd-api",
           "type": "text/html",
-          "title": "Sui JSON-RPC API Documentation"
+          "title": "Rtd JSON-RPC API Documentation"
         }
       ],
       "service-desc": [
         {
-          "href": "https://docs.sui.io/open-spec/mainnet/openrpc.json",
+          "href": "https://docs.rtd.io/open-spec/mainnet/openrpc.json",
           "type": "application/json",
-          "title": "Sui JSON-RPC OpenRPC Specification"
+          "title": "Rtd JSON-RPC OpenRPC Specification"
         }
       ]
     },
     {
-      "anchor": "https://graphql.mainnet.sui.io/graphql",
+      "anchor": "https://graphql.mainnet.rtd.io/graphql",
       "service-doc": [
         {
-          "href": "https://docs.sui.io/references/sui-graphql",
+          "href": "https://docs.rtd.io/references/rtd-graphql",
           "type": "text/html",
-          "title": "Sui GraphQL RPC Documentation"
+          "title": "Rtd GraphQL RPC Documentation"
         }
       ]
     },
     {
-      "anchor": "https://graphql.testnet.sui.io/graphql",
+      "anchor": "https://graphql.testnet.rtd.io/graphql",
       "service-doc": [
         {
-          "href": "https://docs.sui.io/references/sui-graphql",
+          "href": "https://docs.rtd.io/references/rtd-graphql",
           "type": "text/html",
-          "title": "Sui GraphQL RPC Documentation (Testnet)"
+          "title": "Rtd GraphQL RPC Documentation (Testnet)"
         }
       ]
     },
     {
-      "anchor": "https://docs.sui.io",
+      "anchor": "https://docs.rtd.io",
       "service-doc": [
         {
-          "href": "https://docs.sui.io/llms.txt",
+          "href": "https://docs.rtd.io/llms.txt",
           "type": "text/plain",
           "title": "LLM-optimized documentation index"
         },
         {
-          "href": "https://docs.sui.io/references/framework",
+          "href": "https://docs.rtd.io/references/framework",
           "type": "text/html",
-          "title": "Sui Move Framework Reference"
+          "title": "Rtd Move Framework Reference"
         },
         {
-          "href": "https://docs.sui.io/references/cli",
+          "href": "https://docs.rtd.io/references/cli",
           "type": "text/html",
-          "title": "Sui CLI Reference"
+          "title": "Rtd CLI Reference"
         },
         {
-          "href": "https://docs.sui.io/references/sui-sdks",
+          "href": "https://docs.rtd.io/references/rtd-sdks",
           "type": "text/html",
-          "title": "Sui SDK Reference"
+          "title": "Rtd SDK Reference"
         }
       ]
     }

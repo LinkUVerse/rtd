@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Automatically update all snapshots. This is needed when the framework is changed or when protocol
@@ -46,13 +46,13 @@ fi
 INSTA=(cargo insta test --test-runner nextest)
 
 cd "$ROOT"
-UPDATE=1 cargo nextest run -p sui-framework --test build-system-packages
+UPDATE=1 cargo nextest run -p rtd-framework --test build-system-packages
 "${INSTA[@]}" \
-    -p sui-protocol-config \
-    -p sui-swarm-config \
-    -p sui-open-rpc \
-    -p sui-types
-"${INSTA[@]}" -p sui-core -- snapshot_tests
-"${INSTA[@]}" -p sui-indexer-alt-graphql -- test_schema_sdl_export
-"${INSTA[@]}" --features staging -p sui-indexer-alt-graphql -- test_schema_sdl_export
+    -p rtd-protocol-config \
+    -p rtd-swarm-config \
+    -p rtd-open-rpc \
+    -p rtd-types
+"${INSTA[@]}" -p rtd-core -- snapshot_tests
+"${INSTA[@]}" -p rtd-indexer-alt-graphql -- test_schema_sdl_export
+"${INSTA[@]}" --features staging -p rtd-indexer-alt-graphql -- test_schema_sdl_export
 exit 0

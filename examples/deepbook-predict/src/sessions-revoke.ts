@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#sessions-revoke
-import { bcs } from '@mysten/sui/bcs';
-import { Transaction } from '@mysten/sui/transactions';
+import { bcs } from '@linku/rtd/bcs';
+import { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 import { sessions, wrapperId } from './sessions-authorize.js';
 

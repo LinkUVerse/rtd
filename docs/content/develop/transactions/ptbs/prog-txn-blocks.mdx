@@ -2,7 +2,7 @@
 title: What is a PTB?
 description: >-
   Programmable transaction blocks are a group of commands that complete a
-  transaction on Sui.
+  transaction on Rtd.
 keywords:
   - programmable transaction blocks
   - transaction blocks
@@ -19,7 +19,7 @@ keywords:
 goal:
   description: >-
     Reader understands programmable transaction blocks are a group of commands
-    that complete a transaction on Sui
+    that complete a transaction on Rtd
   requires:
     - has_frontmatter:
         - title
@@ -48,8 +48,8 @@ builder_paths_source:
   dashboard: 'https://docs-analytics-dashboard.vercel.app/evals'
   snapshot: '2026-07-10'
 questions:
-  - What is a PTB in Sui?
-  - How does a ptb work on Sui?
+  - What is a PTB in Rtd?
+  - How does a ptb work on Rtd?
   - Why should I use a ptb?
 answer: >-
   If you connect to Localnet, verify your local node is running first. See
@@ -62,7 +62,7 @@ If you connect to Localnet, verify your local node is running first. See [Connec
 
 :::
 
-Transactions on Sui are composed of groups of commands that execute on inputs to define the result of the transaction. Referred to as **programmable transaction blocks (PTBs)**, these groups of commands define all user transactions on Sui. PTBs allow a user to call multiple Move functions, manage their objects, and manage their coins in a single transaction without publishing a new Move package. Designed with automation and transaction builders in mind, PTBs are a lightweight and flexible way of generating transactions. 
+Transactions on Rtd are composed of groups of commands that execute on inputs to define the result of the transaction. Referred to as **programmable transaction blocks (PTBs)**, these groups of commands define all user transactions on Rtd. PTBs allow a user to call multiple Move functions, manage their objects, and manage their coins in a single transaction without publishing a new Move package. Designed with automation and transaction builders in mind, PTBs are a lightweight and flexible way of generating transactions. 
 
 However, more intricate programming patterns, such as loops, are not supported. In such cases, you must publish a new Move package.
 
@@ -99,7 +99,7 @@ Looking closer at the two main components:
 
   - Example: `tx.transferObjects([tx.object(thing1), tx.object(thing2)], tx.pure.address(myAddress))`
 
-- `tx.moveCall({ target, arguments, typeArguments })`: Executes a Move call. Returns whatever the Sui Move call returns.
+- `tx.moveCall({ target, arguments, typeArguments })`: Executes a Move call. Returns whatever the Rtd Move call returns.
 
   - Example: `tx.moveCall({ target: '0x2::devnet_nft::mint', arguments: [tx.pure.string(name), tx.pure.string(description), tx.pure.string(image)] })`
 - `tx.makeMoveVec({ type, elements })`: Constructs a vector of objects that can be passed into a moveCall. This is required as there's no other way to define a vector as an input.
@@ -128,11 +128,11 @@ The `Argument` enum has 4 variants:
 
 - `Input(u16)`: References an input by its index. For example, with inputs `[Object1, Object2, Pure1, Object3]`, use `Input(0)` for `Object1` and `Input(2)` for `Pure1`.
 
-- `GasCoin`: References the SUI coin used to pay for gas. When using address balance gas payment (empty gas payment list), `GasCoin` references a synthetic coin created from the sender or sponsor address balance. **This is separate from other inputs because it has special restrictions**:
+- `GasCoin`: References the RTD coin used to pay for gas. When using address balance gas payment (empty gas payment list), `GasCoin` references a synthetic coin created from the sender or sponsor address balance. **This is separate from other inputs because it has special restrictions**:
 
     - `&mut` or `&` usage anywhere.
-    - Only by value through `TransferObjects` or `sui::coin::send_funds`
-        - If you need an owned `Coin<SUI>` from the `GasCoin`, first use `SplitCoins`.
+    - Only by value through `TransferObjects` or `rtd::coin::send_funds`
+        - If you need an owned `Coin<RTD>` from the `GasCoin`, first use `SplitCoins`.
 
 - `NestedResult(u16, u16)`: References a result from a previous command. The first index specifies the command, the second specifies which result from that command. For example, if command 1 returns `[Value1, Value2]`, use `NestedResult(1, 0)` for `Value1` and `NestedResult(1, 1)` for `Value2`.
 
@@ -146,7 +146,7 @@ For the execution of PTBs, the input vector is populated by the input objects or
 
 At the beginning of execution, the PTB runtime loads the input objects into the input array. The network already verifies the objects, checking rules like existence and valid ownership. The pure value bytes are also loaded into the array but not validated until usage.
 
-The most important consideration at this stage is the effects on the gas coin. At the beginning of execution, the system withdraws the maximum gas budget (in terms of SUI) from the gas coin. The system returns any unused gas to the gas coin at the end of execution, even if the coin has changed owners.
+The most important consideration at this stage is the effects on the gas coin. At the beginning of execution, the system withdraws the maximum gas budget (in terms of RTD) from the gas coin. The system returns any unused gas to the gas coin at the end of execution, even if the coin has changed owners.
 
 ### Object consumption 
 
@@ -172,7 +172,7 @@ Each argument can be used by reference or by value. The usage is based on the ty
 
 - If the signature expects an `&T`, the runtime checks the argument has type `T` and it is then immutably borrowed.
 
-- If the signature expects a `T`, the runtime verifies the argument has type `T`, then copies the value if `T: copy` or moves it otherwise. Objects are always moved because `sui::object::UID` does not have the `copy` ability.
+- If the signature expects a `T`, the runtime verifies the argument has type `T`, then copies the value if `T: copy` or moves it otherwise. Objects are always moved because `rtd::object::UID` does not have the `copy` ability.
 
 The transaction fails if an argument is used in any form after being moved. There is no way to restore an argument to its position (its input or result index) after it is moved.
 
@@ -192,7 +192,7 @@ Borrowing follows additional rules to ensure safe reference usage:
 
 #### Special object handling
 
-Object inputs have the type `T` of the underlying object. `ObjectArg::Receiving` inputs are the exception and have type `sui::transfer::Receiving<T>`. This wrapper indicates the object is owned by another object, not the sender. Call `sui::transfer::receive` with the parent object to unwrap it and prove ownership.
+Object inputs have the type `T` of the underlying object. `ObjectArg::Receiving` inputs are the exception and have type `rtd::transfer::Receiving<T>`. This wrapper indicates the object is owned by another object, not the sender. Call `rtd::transfer::receive` with the parent object to unwrap it and prove ownership.
 
 Shared objects have restrictions on by value usage to ensure they remain shared or are deleted by the end of the transaction:
 
@@ -216,7 +216,7 @@ Previously, `entry` functions had signature restrictions that limited their para
 Move calls cannot return references (`&T` or `&mut T`).
 
 **Private generics:**
-Some framework functions have type parameters that can only be instantiated with types defined in the same module. Since PTBs are not modules, they cannot supply these types and therefore cannot call these functions directly. For example, certain `sui::transfer` functions like `transfer` and `share_object` require a type defined in the calling module, and as such cannot be called from a PTB. Instead, use the `public_transfer` and `public_share_object` variants.
+Some framework functions have type parameters that can only be instantiated with types defined in the same module. Since PTBs are not modules, they cannot supply these types and therefore cannot call these functions directly. For example, certain `rtd::transfer` functions like `transfer` and `share_object` require a type defined in the calling module, and as such cannot be called from a PTB. Instead, use the `public_transfer` and `public_share_object` variants.
 
 **`TxContext` handling:**
 `TxContext` parameters (`&TxContext` or `&mut TxContext`) are automatically injected by the runtime; callers do not supply them. `TxContext` can appear at any position in the parameter list, and a function can have multiple `TxContext` parameters as long as they are immutable (`&TxContext`). These parameters are not counted toward the user-supplied argument count for indexing purposes.
@@ -267,7 +267,7 @@ In this invalid PTB, the `HotPotato` from command 0 is still alive in the same c
 
 ```rust
 // Invalid PTB
-// Input 0: Coin<SUI>
+// Input 0: Coin<RTD>
 // cliques: { Input(0) } => 0
 0: ex::m::hot(Input(0));
 // cliques: { Input(0), Result(0) } => 1
@@ -279,7 +279,7 @@ However, if the hot potato is consumed before calling `spend`, the clique's coun
 
 ```rust
 // Valid PTB
-// Input 0: Coin<SUI>
+// Input 0: Coin<RTD>
 // cliques: { Input(0) } => 0
 0: ex::m::hot(Input(0));
 // cliques: { Input(0), Result(0) } => 1
@@ -295,9 +295,9 @@ module flash::loan;
 
 public struct Loan { amount: u64 }
 
-public fun issue(bank: &mut Bank, amount: u64): (Balance<SUI>, Loan) { ERROR }
+public fun issue(bank: &mut Bank, amount: u64): (Balance<RTD>, Loan) { ERROR }
 
-public fun repay(bank: &mut Bank, loan: Loan, repayment: Balance<SUI>) { ERROR }
+public fun repay(bank: &mut Bank, loan: Loan, repayment: Balance<RTD>) { ERROR }
 ```
 
 ```rust
@@ -306,10 +306,10 @@ public fun repay(bank: &mut Bank, loan: Loan, repayment: Balance<SUI>) { ERROR }
 // cliques: { Input(0) } => 0, { Input(1) } => 0
 0: flash::loan::issue(Input(0), Input(1))
 // cliques: { Input(0), Input(1), NestedResult(0,0), NestedResult(0,1) } => 1
-1: sui::coin::from_balance(NestedResult(0,0));
+1: rtd::coin::from_balance(NestedResult(0,0));
 // cliques: { Input(0), Input(1), NestedResult(0,1), Result(1) } => 1
 2: ex::m::spend(Result(1)); // INVALID: Result(1)'s clique has count > 0
-3: sui::coin::into_balance(Result(1));
+3: rtd::coin::into_balance(Result(1));
 4: flash::loan::repay(Input(0), NestedResult(0,1), Result(3));
 ```
 
@@ -325,14 +325,14 @@ Both commands embed their module bytes and dependency IDs directly in the comman
 
 **Publish:**
 
-- Returns a single `sui::package::UpgradeCap`.
+- Returns a single `rtd::package::UpgradeCap`.
 - After the package is staged, the runtime calls each module's `init` function (if present) in the order the modules are provided (in the vector of serialized bytes). `init` receives `&mut TxContext` and optionally a one-time witness. Additional `init` arguments are not yet supported but are planned.
 - The package is available to `init` functions during execution. It is staged before they run.
 
 **Upgrade:**
 
-- Takes exactly one PTB argument: a `sui::package::UpgradeTicket` (by value).
-- Returns a single `sui::package::UpgradeReceipt`.
+- Takes exactly one PTB argument: a `rtd::package::UpgradeTicket` (by value).
+- Returns a single `rtd::package::UpgradeReceipt`.
 - Does not call `init` functions. Newly added modules in an upgrade cannot have `init` functions.
 - The module digest and package ID in the ticket must match exactly.
 - The upgrade policy (compatible, additive, dep-only) is enforced from the ticket.
@@ -361,9 +361,9 @@ At the end of execution, the remaining values are checked and effects for the tr
 
 **For gas:**
 
-Any remaining SUI deducted from the gas coin at the beginning of execution is returned to the coin, even if the owner has changed. The maximum possible gas is deducted at the beginning of execution, and unused gas is returned at the end (all in SUI). Because the gas coin can only be taken by value with `TransferObjects`, it has not been wrapped or deleted.
+Any remaining RTD deducted from the gas coin at the beginning of execution is returned to the coin, even if the owner has changed. The maximum possible gas is deducted at the beginning of execution, and unused gas is returned at the end (all in RTD). Because the gas coin can only be taken by value with `TransferObjects`, it has not been wrapped or deleted.
 
-The total effects (created, mutated, and deleted objects) are then passed out of the execution layer and applied by the Sui network.
+The total effects (created, mutated, and deleted objects) are then passed out of the execution layer and applied by the Rtd network.
 
 ## Execution example 
 
@@ -382,13 +382,13 @@ Suppose you want to buy 2 items from a marketplace costing `100 MIST`. You keep 
     SplitCoins(GasCoin, [Input(2)]),
     MoveCall("some_package", "some_marketplace", "buy_two", [], [Input(1), NestedResult(0, 0)]),
     TransferObjects([GasCoin, NestedResult(1, 0)], Input(0)),
-    MoveCall("sui", "tx_context", "sender", [], []),
+    MoveCall("rtd", "tx_context", "sender", [], []),
     TransferObjects([NestedResult(1, 1)], NestedResult(3, 0)),
   ]
 }
 ```
 
-The inputs include the friend's address, the marketplace object, and the coin split value. The commands split off the coin, call the marketplace function, send the gas coin and one object, grab your address (through `sui::tx_context::sender`), and send the remaining object to yourself.
+The inputs include the friend's address, the marketplace object, and the coin split value. The commands split off the coin, call the marketplace function, send the gas coin and one object, grab your address (through `rtd::tx_context::sender`), and send the remaining object to yourself.
 
 **Command 0: `SplitCoins(GasCoin, [Input(2)])`**
 
@@ -397,11 +397,11 @@ Accesses the gas coin by mutable reference and loads `Input(2)` as `100u64` (cop
 | State | Value |
 | :---- | :---- |
 | Gas coin balance | `499,900 MIST` |
-| Result | `[Coin<SUI> { id: new_coin, value: 100 }]` |
+| Result | `[Coin<RTD> { id: new_coin, value: 100 }]` |
 
 **Command 1: `MoveCall("some_package", "some_marketplace", "buy_two", ...)`**
 
-Calls `buy_two(marketplace: &mut Marketplace, coin: Coin<SUI>, ctx: &mut TxContext): (Item, Item)`. Uses `Input(1)` by mutable reference (marketplace) and `NestedResult(0, 0)` by value (coin is moved and consumed).
+Calls `buy_two(marketplace: &mut Marketplace, coin: Coin<RTD>, ctx: &mut TxContext): (Item, Item)`. Uses `Input(1)` by mutable reference (marketplace) and `NestedResult(0, 0)` by value (coin is moved and consumed).
 
 | State | Value |
 | :---- | :---- |
@@ -418,7 +418,7 @@ Transfers the gas coin and first item to `0x808`. Both objects are taken by valu
 | `Results[1][0]` | moved |
 | Result | `[]` |
 
-**Command 3: `MoveCall("sui", "tx_context", "sender", [], [])`**
+**Command 3: `MoveCall("rtd", "tx_context", "sender", [], [])`**
 
 Calls `sender(ctx: &TxContext): address`. Returns the sender's address.
 
@@ -438,7 +438,7 @@ Transfers the second item to the sender. The item is moved by value; the address
 #### Initial state
 
 ```rust
-Gas Coin: Coin<SUI> { id: gas_coin, balance: 1_000_000u64 }
+Gas Coin: Coin<RTD> { id: gas_coin, balance: 1_000_000u64 }
 Inputs: [Pure(@0x808), Marketplace { id: market_id }, Pure(100u64)]
 Results: []
 ```
@@ -446,7 +446,7 @@ Results: []
 After maximum gas budget of `500_000` is deducted:
 
 ```rust
-Gas Coin: Coin<SUI> { id: gas_coin, balance: 500_000u64 }
+Gas Coin: Coin<RTD> { id: gas_coin, balance: 500_000u64 }
 ```
 
 #### Final state

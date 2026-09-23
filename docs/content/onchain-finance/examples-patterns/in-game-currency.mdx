@@ -1,7 +1,7 @@
 ---
 title: In-Game Currencies
 description: >-
-  Use the Sui Closed-Loop Token standard to create assets that you can use as
+  Use the Rtd Closed-Loop Token standard to create assets that you can use as
   currency within a game application.
 keywords:
   - closed-loop tokens
@@ -13,10 +13,10 @@ keywords:
   - token example
   - create a token
   - how to create token
-  - SUI token standards
+  - RTD token standards
 goal:
   description: >-
-    Reader can use the Sui Closed-Loop Token standard to create assets that you
+    Reader can use the Rtd Closed-Loop Token standard to create assets that you
     can use as currency within a game application
   requires:
     - pattern: '```'
@@ -34,15 +34,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is In-Game Currencies in Sui?
-  - How does in-game currencies work on Sui?
+  - What is In-Game Currencies in Rtd?
+  - How does in-game currencies work on Rtd?
   - Why should I use in-game currencies?
 answer: >-
-  Use the Sui Closed-Loop Token standard to create assets that you can use as
+  Use the Rtd Closed-Loop Token standard to create assets that you can use as
   currency within a game application.
 ---
 
-In-game currencies can use [closed-loop tokens](/onchain-finance/closed-loop-token) to create assets that players earn and spend within your game's economy. You mint the currency on Sui, but players can only use it within the workflows you define (for example, buying items, upgrading characters, or trading with other players through a governed marketplace). Common examples include gems, diamonds, credits, and gold.
+In-game currencies can use [closed-loop tokens](/onchain-finance/closed-loop-token) to create assets that players earn and spend within your game's economy. You mint the currency on Rtd, but players can only use it within the workflows you define (for example, buying items, upgrading characters, or trading with other players through a governed marketplace). Common examples include gems, diamonds, credits, and gold.
 
 Closed-loop tokens differ from standard `Coin` types because they restrict what actions holders can perform. You configure a [`TokenPolicy`](/onchain-finance/closed-loop-token/token-policy) with rules that gate minting, spending, and transferring. This lets you control the game economy onchain while preventing players from extracting currency outside the game's intended flows.
 
@@ -52,7 +52,7 @@ This example implements a governance-controlled currency called King Credits. Tr
 
 To create the King Credits currency, initialize the currency using the `coin_registry::new_currency_with_otw` module and configure the currency policy with `token::add_rule_for_action`:
 
-<ImportContent source="I3/king_credits/sources/king_credits.move" mode="code" org="MystenLabs" repo="sui-move-bootcamp" branch="solution" noComments />
+<ImportContent source="I3/king_credits/sources/king_credits.move" mode="code" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" noComments />
 
 :::info
 
@@ -66,7 +66,7 @@ In another Move package, implement the `add_rule_config` function to initialize 
 
 The `add_council_member` and `remove_council_member` functions add and remove members from the council. The `prove` function checks whether the request sender is a council member and adds an approval for the rule if they are:
 
-<ImportContent source="I3/king_credits/sources/crown_council_rule.move" mode="code" org="MystenLabs" repo="sui-move-bootcamp" branch="solution" noComments />
+<ImportContent source="I3/king_credits/sources/crown_council_rule.move" mode="code" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" noComments />
 
 ## Deploy and test
 
@@ -74,7 +74,7 @@ To deploy the King Credits currency:
 
 1. Build both packages (the currency and the council rule):
    ```sh
-   $ sui move build
+   $ rtd move build
    ```
 2. Publish the currency package first, then publish the council rule package (which depends on the currency package).
 3. After publishing, the `init` function runs automatically and creates the `TreasuryCap`, `TokenPolicy`, and initial token configuration.
@@ -97,4 +97,4 @@ Use governance-controlled in-game currencies when:
 
 For currencies that do not need transfer approval, use the [loyalty tokens](/onchain-finance/examples-patterns/loyalty-tokens) pattern instead, which uses simpler spend-only rules.
 
-[View the full example on GitHub](https://github.com/MystenLabs/sui-move-bootcamp/tree/solution/I3).
+[View the full example on GitHub](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/I3).

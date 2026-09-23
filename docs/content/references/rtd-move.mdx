@@ -1,0 +1,42 @@
+---
+title: Move References
+description: >-
+  Move references for Rtd, including auto-generated framework documentation from
+  the rtd move summary command, the Rtd Framework, The Move Book, and The Move
+  Reference.
+keywords:
+  - move
+  - move reference
+  - move book
+pagination_prev: null
+goal:
+  description: >-
+    Reader can find links to Move language references, the Move Book, and Rtd
+    framework docs
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - min_words: 100
+      label: Needs more reference content
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Move References in Rtd?
+  - Where can I find the move references reference?
+  - How does move references work on Rtd?
+answer: Learn more about Move.
+---
+
+:::info
+The content below is auto-generated from the Move framework using the `rtd move summary` command (available in Rtd v1.70 and later). To regenerate this content, run `rtd move summary` in the relevant framework package directory and update the snippet source accordingly. This content should be regenerated as part of each release cycle to stay current.
+:::
+
+<ImportContent source="move-summary" mode="snippet" />
+
+- [Rtd Framework](/references/framework): Provides `cargo doc`-generated content for core Rtd modules. 
+- [The Move Book](https://move-book.com): A definitive guide for learning the Move language on Rtd. 
+- [The Move Reference](https://move-book.com/reference): Architecture and syntax reference for the Move language.

@@ -30,20 +30,20 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Bring Your Own Store (BYOS) in Sui?
-  - How does bring your own store (byos) work on Sui?
+  - What is Bring Your Own Store (BYOS) in Rtd?
+  - How does bring your own store (byos) work on Rtd?
   - Why should I use bring your own store (byos)?
 answer: Implement a custom storage backend for the customer indexer framework.
 ---
 
-The `IndexerCluster` provides a convenient way to get started with PostgreSQL, but you might want to use a different database or storage system. This requires using the manual `Indexer` class and implementing custom `Store` and `Connection` traits from `sui-indexer-alt-framework-store-traits`.
+The `IndexerCluster` provides a convenient way to get started with PostgreSQL, but you might want to use a different database or storage system. This requires using the manual `Indexer` class and implementing custom `Store` and `Connection` traits from `rtd-indexer-alt-framework-store-traits`.
 
 <details>
 <summary>
-`lib.rs` in `sui-indexer-alt-framework-store-traits`
+`lib.rs` in `rtd-indexer-alt-framework-store-traits`
 </summary>
 
-<ImportContent source="crates/sui-indexer-alt-framework-store-traits/src/lib.rs" mode="code" trait="Connection,Store" />
+<ImportContent source="crates/rtd-indexer-alt-framework-store-traits/src/lib.rs" mode="code" trait="Connection,Store" />
 
 </details>
 
@@ -64,7 +64,7 @@ To implement BYOS, you need to:
 ###step Define your store structure
 
 ```rust
-use sui_indexer_alt_framework::store::{Store, Connection};
+use rtd_indexer_alt_framework::store::{Store, Connection};
 use async_trait::async_trait;
 
 #[derive(Clone)]
@@ -124,17 +124,17 @@ impl Connection for MyCustomConnection<'_> {
 }
 ```
 
-For a complete reference, study the `sui-pg-db` implementation on `Connection`:
+For a complete reference, study the `rtd-pg-db` implementation on `Connection`:
 
-<ImportContent source="crates/sui-pg-db/src/store.rs" mode="code" impl="Connection" />
+<ImportContent source="crates/rtd-pg-db/src/store.rs" mode="code" impl="Connection" />
 
 ###step Use manual indexer
 
 Replace `IndexerCluster` with manual `Indexer`:
 
 ```rust
-use sui_indexer_alt_framework::{Indexer, IndexerArgs};
-use sui_indexer_alt_framework::ingestion::{
+use rtd_indexer_alt_framework::{Indexer, IndexerArgs};
+use rtd_indexer_alt_framework::ingestion::{
     ClientArgs, IngestionConfig,
     ingestion_client::IngestionClientArgs,
     streaming_client::StreamingClientArgs,
@@ -153,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
                 // Use the full-retention Testnet GCS bucket for checkpoint
                 // catch-up and streaming fallback. The public Testnet HTTPS
                 // checkpoint endpoint has 30-day retention only.
-                remote_store_gcs: Some("mysten-testnet-checkpoints-use4".to_string()),
+                remote_store_gcs: Some("linku-testnet-checkpoints-use4".to_string()),
                 // This is the programmatic equivalent of passing
                 // --remote-store-header="x-goog-user-project:my-project"
                 // to the indexer framework CLI.
@@ -166,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
             streaming: StreamingClientArgs {
                 // Public-good Testnet endpoint for testing only. Production
                 // indexers must use a fullnode endpoint from an RPC provider.
-                streaming_url: Some("https://fullnode.testnet.sui.io:443".parse()?),
+                streaming_url: Some("https://fullnode.testnet.rtd.io:443".parse()?),
                 ..Default::default()
             },
             ..Default::default()
@@ -192,13 +192,13 @@ The public-good fullnode URL in this example is for testing only. For production
 
 ### Example: ClickHouse implementation
 
-For a complete working example of BYOS with [ClickHouse](https://clickhouse.com/) (a high-performance columnar database for analytics), see the [example project in the Sui repo](https://github.com/MystenLabs/sui/tree/main/examples/rust/clickhouse-sui-indexer).
+For a complete working example of BYOS with [ClickHouse](https://clickhouse.com/) (a high-performance columnar database for analytics), see the [example project in the Rtd repo](https://github.com/LinkUVerse/rtd/tree/main/examples/rust/clickhouse-rtd-indexer).
 
 <details>
 <summary>
 ClickHouse example README
 </summary>
-<ImportContent source="examples/rust/clickhouse-sui-indexer/README.md" mode="code" style="md" />
+<ImportContent source="examples/rust/clickhouse-rtd-indexer/README.md" mode="code" style="md" />
 </details>
 
 This example demonstrates:
@@ -215,7 +215,7 @@ The example includes 3 main components:
     <summary>
     `store.rs`
     </summary>
-    <ImportContent source="examples/rust/clickhouse-sui-indexer/src/store.rs" mode="code" />
+    <ImportContent source="examples/rust/clickhouse-rtd-indexer/src/store.rs" mode="code" />
     </details>
 
 1. `handlers.rs` - `TxDigest` handler processing checkpoint data.
@@ -224,7 +224,7 @@ The example includes 3 main components:
     <summary>
     `handlers.rs`
     </summary>
-    <ImportContent source="examples/rust/clickhouse-sui-indexer/src/handlers.rs" mode="code" />
+    <ImportContent source="examples/rust/clickhouse-rtd-indexer/src/handlers.rs" mode="code" />
     </details>
 
 1. `main.rs` - Manual indexer setup with ClickHouse backend.
@@ -233,12 +233,12 @@ The example includes 3 main components:
     <summary>
     `main.rs`
     </summary>
-    <ImportContent source="examples/rust/clickhouse-sui-indexer/src/main.rs" mode="code" />
+    <ImportContent source="examples/rust/clickhouse-rtd-indexer/src/main.rs" mode="code" />
     </details>
 
 ## Deserializing Move events {#deserialize}
 
-When Move smart contracts execute on Sui, they can emit events using the `sui::event` module. These events are stored in checkpoints as **BCS-serialized bytes** that your indexer needs to deserialize to extract meaningful data.
+When Move smart contracts execute on Rtd, they can emit events using the `rtd::event` module. These events are stored in checkpoints as **BCS-serialized bytes** that your indexer needs to deserialize to extract meaningful data.
 
 ### Why deserialization is needed
 
@@ -246,7 +246,7 @@ Move contracts emit events like the following:
 
 ```move
 // Move smart contract
-use sui::event;
+use rtd::event;
 
 public fun transfer_balance(...) {
     event::emit(BalanceEvent {
@@ -272,11 +272,11 @@ In checkpoint data, these events arrive as **raw BCS bytes** that need to be con
 
 1. Define the `Event` struct in Rust.
 
-    Define the same structure in Rust as declared in Move. You can do this manually or use [`move-binding`](https://github.com/MystenLabs/move-binding) to auto-generate it from onchain packages.
+    Define the same structure in Rust as declared in Move. You can do this manually or use [`move-binding`](https://github.com/LinkUVerse/move-binding) to auto-generate it from onchain packages.
 
     ```rust
     use serde::Deserialize;
-    use sui_indexer_alt_framework::types::base_types::ObjectID;
+    use rtd_indexer_alt_framework::types::base_types::ObjectID;
 
     #[derive(Deserialize, Debug)]
     struct BalanceEvent {

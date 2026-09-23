@@ -147,7 +147,7 @@
 .why {
   display: grid;
   width: 100%;
-  max-width: var(--sui-max-width-desktop);
+  max-width: var(--rtd-max-width-desktop);
   grid-template-columns: 2fr 4fr;
   column-gap: .5rem;
   margin: 0 auto;
@@ -158,7 +158,7 @@
 .TwoColParagraph {
   display: flex;
   flex-direction: column;
-  max-width: var(--sui-max-width-desktop);
+  max-width: var(--rtd-max-width-desktop);
   margin: 5rem auto;
   padding: 0 1rem;
 }

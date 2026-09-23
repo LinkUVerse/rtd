@@ -1,0 +1,129 @@
+---
+title: Rtd MCP Server
+description: >-
+  Connect the Rtd documentation MCP server to your IDE so AI coding assistants
+  can search Rtd developer documentation without leaving your editor.
+keywords:
+  - MCP
+  - Model Context Protocol
+  - AI coding
+  - Claude Code
+  - Cursor
+  - VS Code
+  - IDE
+  - documentation search
+  - Rtd development tools
+goal:
+  description: >-
+    Reader can connect the Rtd MCP server to Claude Code, Cursor, or VS Code
+    and use it to search Rtd documentation from within their editor
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - How do I set up the Rtd MCP server in my IDE?
+  - How do I use the Rtd MCP server with Claude Code?
+  - How do I use the Rtd MCP server with Cursor?
+  - How do I use the Rtd MCP server with VS Code?
+  - What tools does the Rtd MCP server provide?
+answer: >-
+  The Rtd MCP server at rtd.mcp.kapa.ai provides semantic search across Rtd
+  developer documentation. Connect it to Claude Code, Cursor, or VS Code to
+  search docs directly from your editor.
+---
+
+The Rtd MCP server provides AI coding assistants with direct access to Rtd developer documentation and other important source material such as blogs, GitHub source code, and example apps. The Rtd MCP server does not use data cached longer than a few hours, so your agent has access to the most up to date content when referencing the MCP server. Other agents may cache source information for several weeks before crawling an updated version, leading to instances where a feature may be released on Mainnet but your agent isn't aware of it. 
+
+You connect the server to your IDE so your AI assistant can search and retrieve Rtd documentation without leaving your editor.
+
+The server is hosted at `https://rtd.mcp.kapa.ai` and exposes 2 tools:
+
+- **`search_rtd_knowledge_sources`:** Searches across all Rtd documentation and returns ranked results with source URLs and content.
+
+- **`get_rtd_knowledge_documents`:** Fetches full documents by exact URL for deeper context.
+
+## Connect the Rtd MCP server
+
+<Tabs groupId="ide">
+
+<TabItem value="claude-code" label="Claude Code">
+
+Run the following command in your terminal:
+
+```sh
+$ claude mcp add --transport http rtd-docs https://rtd.mcp.kapa.ai
+```
+
+Start Claude Code and run `/mcp` to verify the connection. Authenticate through your browser when prompted ([Kapa MCP docs](https://docs.kapa.ai/integrations/mcp/overview)).
+
+</TabItem>
+
+<TabItem value="cursor" label="Cursor">
+
+Create or update the `.cursor/mcp.json` file in your project root with the following configuration:
+
+```json
+{
+  "mcpServers": {
+    "rtd-docs": {
+      "type": "http",
+      "url": "https://rtd.mcp.kapa.ai"
+    }
+  }
+}
+```
+
+Restart Cursor to load the new MCP server. Authenticate through your browser when prompted ([Kapa MCP docs](https://docs.kapa.ai/integrations/mcp/overview)).
+
+</TabItem>
+
+<TabItem value="vscode" label="VS Code">
+
+Create or update the `.vscode/mcp.json` file in your project root with the following configuration (requires VS Code 1.102 or later with GitHub Copilot):
+
+```json
+{
+  "servers": {
+    "rtd-docs": {
+      "type": "http",
+      "url": "https://rtd.mcp.kapa.ai"
+    }
+  }
+}
+```
+
+Restart VS Code to load the new MCP server. Authenticate through your browser when prompted ([Kapa MCP docs](https://docs.kapa.ai/integrations/mcp/overview)).
+
+</TabItem>
+
+</Tabs>
+
+## Authentication
+
+The Rtd MCP server uses OAuth authentication through Google or GitHub. When you connect for the first time, your IDE opens a browser window for authentication. After you authenticate, the server associates your identity with rate limits ([Kapa MCP overview](https://docs.kapa.ai/integrations/mcp/overview)).
+
+## Rate limits
+
+The server enforces per-user rate limits ([Kapa MCP overview](https://docs.kapa.ai/integrations/mcp/overview)):
+
+| **Tool** | **Per-user daily limit** |
+|---|---|
+| `search_rtd_knowledge_sources` | 300 requests per day |
+| `get_rtd_knowledge_documents` | 300 requests per day |
+
+## Verify the connection
+
+After configuring the MCP server, verify that your IDE can access it:
+
+1. Open your AI assistant in the IDE.
+2. Ask a question about Rtd development (for example, "How do programmable transaction blocks work on Rtd?").
+3. Confirm that the assistant references Rtd documentation in its response.
+
+If the connection fails, check that the URL `https://rtd.mcp.kapa.ai` is accessible from your network and that you completed the browser authentication step.

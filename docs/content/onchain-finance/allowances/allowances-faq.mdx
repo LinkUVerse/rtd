@@ -2,7 +2,7 @@
 title: Allowances FAQ
 sidebar_label: FAQ
 description: >-
-  Answers to common questions about Sui allowances, including how rate-limit
+  Answers to common questions about Rtd allowances, including how rate-limit
   windows and UTC timestamps behave, what happens on revocation, who pays gas,
   and what the sign-time checks cover.
 keywords:
@@ -80,25 +80,25 @@ No. Each window starts with the full limit and anything unused at the end of the
 
 #### What happens to an in-flight spend during revocation?
 
-Revocation deletes the allowance. Sui rejects any spend that reaches the network after that, and a spend that was already in flight fails when it executes. Either way, no funds move after the revoke takes effect.
+Revocation deletes the allowance. Rtd rejects any spend that reaches the network after that, and a spend that was already in flight fails when it executes. Either way, no funds move after the revoke takes effect.
 
 #### What is the difference between expiration and revocation?
 
-An expired allowance still exists. A spend against it fails during execution, so the spender pays gas, and the object stays onchain until the funder revokes it. Revocation deletes the object, so Sui rejects later spends before execution and returns the storage rebate to the funder. Set an expiration as a backstop, and revoke when you want the allowance gone.
+An expired allowance still exists. A spend against it fails during execution, so the spender pays gas, and the object stays onchain until the funder revokes it. Revocation deletes the object, so Rtd rejects later spends before execution and returns the storage rebate to the funder. Set an expiration as a backstop, and revoke when you want the allowance gone.
 
 ## Spending and gas
 
 #### Who pays gas for a spend?
 
-The spender. A spending transaction is a normal transaction sent and signed by the spender, and gas comes from the spender's gas coin or SUI address balance. Sui debits the funder's balance only by the amount spent. A [sponsor](/develop/transaction-payment/sponsor-txn) can pay the gas, as for any other transaction.
+The spender. A spending transaction is a normal transaction sent and signed by the spender, and gas comes from the spender's gas coin or RTD address balance. Rtd debits the funder's balance only by the amount spent. A [sponsor](/develop/transaction-payment/sponsor-txn) can pay the gas, as for any other transaction.
 
 #### Can the spender take more than the declared amount?
 
-No. The spending transaction declares an amount in advance, and that is the most it can take. The `sui::allowance` module checks every limit against the live allowance during execution, so a client cannot build a transaction that bypasses them.
+No. The spending transaction declares an amount in advance, and that is the most it can take. The `rtd::allowance` module checks every limit against the live allowance during execution, so a client cannot build a transaction that bypasses them.
 
 #### What if the funder's balance is lower than the declared amount?
 
-The spend fails and Sui charges nothing, neither the funder's balance nor the allowance's counters. An allowance never guarantees that funds are available, only that the spender might take them if they are.
+The spend fails and Rtd charges nothing, neither the funder's balance nor the allowance's counters. An allowance never guarantees that funds are available, only that the spender might take them if they are.
 
 ## Changing an allowance
 

@@ -1,5 +1,5 @@
 ---
-title: Sui Validator Alert Reference
+title: Rtd Validator Alert Reference
 sidebar_label: Alert Reference
 description: >-
   A collection of the Prometheus Alertmanager rules that trigger alerts and
@@ -31,15 +31,15 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What Prometheus alerts should I configure for a Sui validator?
-  - How do I set up Alertmanager for Sui validator monitoring?
-  - What are the critical alert thresholds for Sui validators?
+  - What Prometheus alerts should I configure for a Rtd validator?
+  - How do I set up Alertmanager for Rtd validator monitoring?
+  - What are the critical alert thresholds for Rtd validators?
 answer: >-
   A collection of the Prometheus Alertmanager rules that trigger alerts and
   warnings on Validator and Full nodes.
 ---
 
-When running a Sui Validator or full node, it is recommended to monitor the health of the nodes and set up alerts on problems.
+When running a Rtd Validator or full node, it is recommended to monitor the health of the nodes and set up alerts on problems.
 Besides alerting on crashes and other common issues, you might also want to configure alerting based on the following example rules.
 
 The following sections cover the alert queries, but the details are meant to be customized to suit your infrastructure.
@@ -65,7 +65,7 @@ Node is not staying up longer than 60s. Possible reasons:
 - Incorrect configuration.
 - Software bug.
 
-Please notify Sui community on Discord if this cannot be resolved on your own.
+Please notify Rtd community on Discord if this cannot be resolved on your own.
 
 ### Consensus proposals failure
 
@@ -110,7 +110,7 @@ is_safe_mode > 0.5
 ```
 
 Usually this issue is outside the control of validator or full node operators.
-Please notify Sui community on Discord when this is observed.
+Please notify Rtd community on Discord when this is observed.
 
 ## Non-urgent and warning alerts
 
@@ -129,4 +129,4 @@ system_invariant_violations > 0
 ```
 
 Usually this issue is outside the control of validator or full node operators.
-Please notify Sui community on Discord when this is observed.
+Please notify Rtd community on Discord when this is observed.

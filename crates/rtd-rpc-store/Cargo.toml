@@ -1,0 +1,39 @@
+[package]
+name = "rtd-rpc-store"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+bcs.workspace = true
+bytes.workspace = true
+fdlimit.workspace = true
+lru.workspace = true
+move-core-types.workspace = true
+prometheus.workspace = true
+prost.workspace = true
+roaring.workspace = true
+rocksdb = { version = "0.22.0", default-features = false, features = ["snappy", "lz4", "zstd", "zlib", "multi-threaded-cf"] }
+serde.workspace = true
+rtd-consistent-store.workspace = true
+rtd-execution.workspace = true
+rtd-futures.workspace = true
+rtd-indexer-alt-framework = { workspace = true, default-features = false }
+rtd-inverted-index.workspace = true
+rtd-protocol-config.workspace = true
+rtd-types.workspace = true
+tokio = { workspace = true, features = ["time", "rt"] }
+tracing.workspace = true
+typed-store-error.workspace = true
+
+[dev-dependencies]
+futures.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

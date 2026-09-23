@@ -9,7 +9,7 @@ keywords:
   - deepbook v3
   - typescript
   - typescript SDK
-  - mysten/deepbook
+  - linku/deepbook
   - deepbookV3 SDK
   - Coin
   - Pool
@@ -42,7 +42,7 @@ builder_paths:
     stage: DeFi Primitives
 questions:
   - How do I use the DeepBookV3 SDK?
-  - What is DeepBookV3 SDK in Sui?
+  - What is DeepBookV3 SDK in Rtd?
   - What methods does the DeepBookV3 SDK provide?
 answer: >-
   The DeepBookV3 TypeScript SDK abstracts away the transaction calls, allowing
@@ -51,22 +51,22 @@ answer: >-
 
 The DeepBookV3 TypeScript SDK abstracts away the transaction calls, allowing for direct interactions with the `DeepBook` package.
 
-- [SDK repository](https://github.com/MystenLabs/ts-sdks/tree/main/packages/deepbook-v3)
-- [NPM version](https://www.npmjs.com/package/@mysten/deepbook-v3)
+- [SDK repository](https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3)
+- [NPM version](https://www.npmjs.com/package/@linku/deepbook-v3)
 
 ## Install
 
-To use the SDK in your projects, install the `@mysten/deepbook` package.
+To use the SDK in your projects, install the `@linku/deepbook` package.
 
 ```sh npm2yarn
-npm install @mysten/deepbook-v3
+npm install @linku/deepbook-v3
 ```
 
 The package root covers DeepBook spot and margin, and it imports none of the 3 subpaths the same package ships:
 
-- `@mysten/deepbook-v3/predict`: DeepBook Predict, covering markets and quotes, positions, PLP liquidity, and client-side pricing. See [DeepBook Predict SDK](/onchain-finance/deepbook/deepbook-predict-sdk).
-- `@mysten/deepbook-v3/account`: The shared onchain account primitive that Predict and the DeepBook core account wrapper build on. See [Predict Accounts SDK](/onchain-finance/deepbook/deepbook-predict-sdk/accounts#account-subpath).
-- `@mysten/deepbook-v3/sessions`: Time-limited trading sessions that let an ephemeral key trade for an account until a fixed expiry. See [Predict Sessions SDK](/onchain-finance/deepbook/deepbook-predict-sdk/sessions).
+- `@linku/deepbook-v3/predict`: DeepBook Predict, covering markets and quotes, positions, PLP liquidity, and client-side pricing. See [DeepBook Predict SDK](/onchain-finance/deepbook/deepbook-predict-sdk).
+- `@linku/deepbook-v3/account`: The shared onchain account primitive that Predict and the DeepBook core account wrapper build on. See [Predict Accounts SDK](/onchain-finance/deepbook/deepbook-predict-sdk/accounts#account-subpath).
+- `@linku/deepbook-v3/sessions`: Time-limited trading sessions that let an ephemeral key trade for an account until a fixed expiry. See [Predict Sessions SDK](/onchain-finance/deepbook/deepbook-predict-sdk/sessions).
 
 Each subpath exports the deployed IDs for its own surface through `getConfig`, `getAccountConfig`, and `getSessionsConfig`, for both Testnet and Mainnet, so you never transcribe an ID by hand.
 
@@ -80,21 +80,21 @@ The DeepBookV3 SDK includes a constants file (`/utils/constants.ts`) that mainta
 </summary>
 
 ```ts reference
-https://github.com/MystenLabs/ts-sdks/blob/main/packages/deepbook-v3/src/utils/constants.ts
+https://github.com/LinkUVerse/ts-sdks/blob/main/packages/deepbook-v3/src/utils/constants.ts
 ```
 
 </details>
 
 ## DeepBookClient
 
-To work with DeepBookV3, use the client extension to add DeepBook functionality to a Sui client. The [Sui TypeScript SDK](https://sdk.mystenlabs.com/typescript) provides the `SuiGrpcClient` and key functionality necessary to process transactions. The following example imports those libraries, as well.
+To work with DeepBookV3, use the client extension to add DeepBook functionality to a Rtd client. The [Rtd TypeScript SDK](https://sdk.linkuverse.com/typescript) provides the `RtdGrpcClient` and key functionality necessary to process transactions. The following example imports those libraries, as well.
 
 ```tsx
-import { deepbook, type DeepBookClient } from '@mysten/deepbook-v3';
-import type { ClientWithExtensions } from '@mysten/sui/client';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { deepbook, type DeepBookClient } from '@linku/deepbook-v3';
+import type { ClientWithExtensions } from '@linku/rtd/client';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
 class DeepBookMarketMaker {
 	client: ClientWithExtensions<{ deepbook: DeepBookClient }>;
@@ -102,12 +102,12 @@ class DeepBookMarketMaker {
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.client = new SuiGrpcClient({
+		this.client = new RtdGrpcClient({
 			network: env,
 			baseUrl:
 				env === 'mainnet'
-					? 'https://fullnode.mainnet.sui.io:443'
-					: 'https://fullnode.testnet.sui.io:443',
+					? 'https://fullnode.mainnet.rtd.io:443'
+					: 'https://fullnode.testnet.rtd.io:443',
 		}).$extend(
 			deepbook({
 				address: this.getActiveAddress(),
@@ -116,14 +116,14 @@ class DeepBookMarketMaker {
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { scheme, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { scheme, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (scheme === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported scheme: ${scheme}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 }
 ```
@@ -139,12 +139,12 @@ Before placing any trade, you must supply a balance manager address to the clien
 Example using an existing balance manager:
 
 ```tsx
-import { deepbook, type DeepBookClient } from '@mysten/deepbook-v3';
-import type { ClientWithExtensions } from '@mysten/sui/client';
-import type { BalanceManager } from '@mysten/deepbook-v3';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { deepbook, type DeepBookClient } from '@linku/deepbook-v3';
+import type { ClientWithExtensions } from '@linku/rtd/client';
+import type { BalanceManager } from '@linku/deepbook-v3';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 import { config } from 'dotenv';
 
 config();
@@ -157,12 +157,12 @@ class DeepBookMarketMaker {
 
 	constructor(privateKey: string, env: 'testnet' | 'mainnet') {
 		this.keypair = this.getSignerFromPK(privateKey);
-		this.client = new SuiGrpcClient({
+		this.client = new RtdGrpcClient({
 			network: env,
 			baseUrl:
 				env === 'mainnet'
-					? 'https://fullnode.mainnet.sui.io:443'
-					: 'https://fullnode.testnet.sui.io:443',
+					? 'https://fullnode.mainnet.rtd.io:443'
+					: 'https://fullnode.testnet.rtd.io:443',
 		}).$extend(
 			deepbook({
 				address: this.getActiveAddress(),
@@ -172,14 +172,14 @@ class DeepBookMarketMaker {
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { scheme, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { scheme, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (scheme === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported scheme: ${scheme}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 
 	getBalanceManagers(): { [key: string]: BalanceManager } {
@@ -201,13 +201,13 @@ class DeepBookMarketMaker {
 Example creating a balance manager:
 
 ```tsx
-import { deepbook, type DeepBookClient } from '@mysten/deepbook-v3';
-import type { ClientWithExtensions } from '@mysten/sui/client';
-import type { BalanceManager } from '@mysten/deepbook-v3';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { deepbook, type DeepBookClient } from '@linku/deepbook-v3';
+import type { ClientWithExtensions } from '@linku/rtd/client';
+import type { BalanceManager } from '@linku/deepbook-v3';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 
 const BALANCE_MANAGER_KEY = 'MANAGER_1';
 
@@ -223,12 +223,12 @@ class DeepBookMarketMaker {
 	}
 
 	#createClient(env: 'testnet' | 'mainnet', balanceManagers?: { [key: string]: BalanceManager }) {
-		return new SuiGrpcClient({
+		return new RtdGrpcClient({
 			network: env,
 			baseUrl:
 				env === 'mainnet'
-					? 'https://fullnode.mainnet.sui.io:443'
-					: 'https://fullnode.testnet.sui.io:443',
+					? 'https://fullnode.mainnet.rtd.io:443'
+					: 'https://fullnode.testnet.rtd.io:443',
 		}).$extend(
 			deepbook({
 				address: this.getActiveAddress(),
@@ -238,14 +238,14 @@ class DeepBookMarketMaker {
 	}
 
 	getSignerFromPK = (privateKey: string): Ed25519Keypair => {
-		const { scheme, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { scheme, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (scheme === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported scheme: ${scheme}`);
 	};
 
 	getActiveAddress() {
-		return this.keypair.toSuiAddress();
+		return this.keypair.toRtdAddress();
 	}
 
 	async createBalanceManagerAndReinitialize() {
@@ -290,14 +290,14 @@ The SDK comes with four default coins on Testnet and five default coins on Mainn
 **Default Testnet coins**
 
 - DEEP
-- SUI
+- RTD
 - DBUSDC
 - DBUSDT
 
 **Default Mainnet coins**
 
 - DEEP
-- SUI
+- RTD
 - USDC
 - USDT
 - WETH
@@ -309,14 +309,14 @@ You can also initialize the SDK with custom coins to interact with pools that ar
 Similar to coins, the SDK comes with default pools. You can provide a `PoolMap` during construction to override this behavior.
 
 ```tsx
-import { deepbook, type DeepBookClient } from '@mysten/deepbook-v3';
-import type { ClientWithExtensions } from '@mysten/sui/client';
-import type { BalanceManager } from '@mysten/deepbook-v3';
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import type { Keypair } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import type { Transaction } from '@mysten/sui/transactions';
+import { deepbook, type DeepBookClient } from '@linku/deepbook-v3';
+import type { ClientWithExtensions } from '@linku/rtd/client';
+import type { BalanceManager } from '@linku/deepbook-v3';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
+import type { Keypair } from '@linku/rtd/cryptography';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import type { Transaction } from '@linku/rtd/transactions';
 
 export class DeepBookMarketMaker {
 	keypair: Keypair;
@@ -334,12 +334,12 @@ export class DeepBookMarketMaker {
 			this.keypair = keypair;
 		}
 
-		this.client = new SuiGrpcClient({
+		this.client = new RtdGrpcClient({
 			network: env,
 			baseUrl:
 				env === 'mainnet'
-					? 'https://fullnode.mainnet.sui.io:443'
-					: 'https://fullnode.testnet.sui.io:443',
+					? 'https://fullnode.mainnet.rtd.io:443'
+					: 'https://fullnode.testnet.rtd.io:443',
 		}).$extend(
 			deepbook({
 				address: this.getActiveAddress(),
@@ -350,7 +350,7 @@ export class DeepBookMarketMaker {
 	}
 
 	static #getSignerFromPK = (privateKey: string) => {
-		const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
+		const { schema, secretKey } = decodeRtdPrivateKey(privateKey);
 		if (schema === 'ED25519') return Ed25519Keypair.fromSecretKey(secretKey);
 
 		throw new Error(`Unsupported schema: ${schema}`);
@@ -369,7 +369,7 @@ export class DeepBookMarketMaker {
 	};
 
 	getActiveAddress() {
-		return this.keypair.getPublicKey().toSuiAddress();
+		return this.keypair.getPublicKey().toRtdAddress();
 	}
 }
 ```
@@ -379,7 +379,7 @@ export class DeepBookMarketMaker {
 The following example uses the default pools and coins provided.
 
 ```tsx
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 import { DeepBookMarketMaker } from './deepbookMarketMaker.js';
 
@@ -398,8 +398,8 @@ import { DeepBookMarketMaker } from './deepbookMarketMaker.js';
 	const tx = new Transaction();
 
 	// Read only call
-	console.log(await mmClient.client.deepbook.checkManagerBalance('MANAGER_1', 'SUI'));
-	console.log(await mmClient.client.deepbook.getLevel2Range('SUI_DBUSDC', 0.1, 100, true));
+	console.log(await mmClient.client.deepbook.checkManagerBalance('MANAGER_1', 'RTD'));
+	console.log(await mmClient.client.deepbook.getLevel2Range('RTD_DBUSDC', 0.1, 100, true));
 
 	// Balance manager contract call
 	mmClient.client.deepbook.balanceManager.depositIntoManager('MANAGER_1', 'DBUSDT', 10000)(tx);
@@ -433,21 +433,21 @@ The referral multiplier must be a multiple of 0.1 (such as 0.1, 0.2, or 0.3) and
 // Mint a new referral for a specific pool
 // multiplier determines the portion of fees allocated to the referrer
 // Valid values: 0.1, 0.2, 0.3, ... up to 2.0
-client.deepbook.mintReferral('SUI_DBUSDC', 0.1)(tx);
+client.deepbook.mintReferral('RTD_DBUSDC', 0.1)(tx);
 
 // Update the multiplier for an existing referral
-client.deepbook.updatePoolReferralMultiplier('SUI_DBUSDC', referralId, 0.2)(tx);
+client.deepbook.updatePoolReferralMultiplier('RTD_DBUSDC', referralId, 0.2)(tx);
 
 // Claim accumulated referral rewards (returns base, quote, and DEEP coins)
 const { baseRewards, quoteRewards, deepRewards } = tx.add(
-	client.deepbook.claimPoolReferralRewards('SUI_DBUSDC', referralId)
+	client.deepbook.claimPoolReferralRewards('RTD_DBUSDC', referralId)
 );
 
 // Get the current balances for a referral
-client.deepbook.getPoolReferralBalances('SUI_DBUSDC', referralId)(tx);
+client.deepbook.getPoolReferralBalances('RTD_DBUSDC', referralId)(tx);
 
 // Get the multiplier for a referral
-client.deepbook.poolReferralMultiplier('SUI_DBUSDC', referralId)(tx);
+client.deepbook.poolReferralMultiplier('RTD_DBUSDC', referralId)(tx);
 ```
 
 ### Balance manager referral functions
@@ -463,10 +463,10 @@ const tradeCap = tx.add(client.deepbook.balanceManager.mintTradeCap('MANAGER_1')
 client.deepbook.balanceManager.setBalanceManagerReferral('MANAGER_1', referralId, tradeCap)(tx);
 
 // Unset the referral for a specific pool
-client.deepbook.balanceManager.unsetBalanceManagerReferral('MANAGER_1', 'SUI_DBUSDC', tradeCap)(tx);
+client.deepbook.balanceManager.unsetBalanceManagerReferral('MANAGER_1', 'RTD_DBUSDC', tradeCap)(tx);
 
 // Get the referral ID associated with a balance manager for a specific pool
-client.deepbook.balanceManager.getBalanceManagerReferralId('MANAGER_1', 'SUI_DBUSDC')(tx);
+client.deepbook.balanceManager.getBalanceManagerReferralId('MANAGER_1', 'RTD_DBUSDC')(tx);
 
 // Get the owner of a referral
 client.deepbook.balanceManager.balanceManagerReferralOwner(referralId)(tx);

@@ -1,0 +1,22 @@
+[package]
+name = "rtd-indexer-alt-object-store"
+edition = "2024"
+version.workspace = true
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+object_store.workspace = true
+rtd-indexer-alt-framework-store-traits.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+rtd-indexer-alt-framework-store-traits = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

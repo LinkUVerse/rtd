@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 """Dual-execution replay orchestration.
@@ -41,10 +41,10 @@ STATE_FILENAME = ".dual-replay.json"
 VALID_DIFF_MODES = ("strict", "status-only", "gas-only", "status-and-gas")
 MARKER = "// DUAL_REPLAY_INJECTED"
 
-LATEST_RS = "sui-execution/src/latest.rs"
-GAS_RS = "crates/sui-types/src/gas.rs"
-GAS_V2_RS = "crates/sui-types/src/gas_model/gas_v2.rs"
-GAS_TABLES_RS = "crates/sui-types/src/gas_model/tables.rs"
+LATEST_RS = "rtd-execution/src/latest.rs"
+GAS_RS = "crates/rtd-types/src/gas.rs"
+GAS_V2_RS = "crates/rtd-types/src/gas_model/gas_v2.rs"
+GAS_TABLES_RS = "crates/rtd-types/src/gas_model/tables.rs"
 EXECUTION_LAYER = "scripts/execution_layer.py"
 
 # Exit codes by failing step. The driver uses these to dispatch recovery.
@@ -70,13 +70,13 @@ pub(crate) struct Executor(
 
 TPL_EXECUTOR_IMPL = """\
 impl Executor {
-    pub(crate) fn new(protocol_config: &ProtocolConfig, silent: bool) -> Result<Self, SuiError> {
+    pub(crate) fn new(protocol_config: &ProtocolConfig, silent: bool) -> Result<Self, RtdError> {
         let tip_runtime = Arc::new(new_move_runtime(
             all_natives(silent, protocol_config),
             protocol_config,
         )?);
-        let base_runtime = Arc::new(sui_adapter_${cut_pkg}::adapter::new_move_runtime(
-            sui_move_natives_${cut_pkg}::all_natives(silent, protocol_config),
+        let base_runtime = Arc::new(rtd_adapter_${cut_pkg}::adapter::new_move_runtime(
+            rtd_move_natives_${cut_pkg}::all_natives(silent, protocol_config),
             protocol_config,
         )?);
         Ok(Executor(tip_runtime, base_runtime))
@@ -108,7 +108,7 @@ TPL_FN_NORMAL_BODY = """\
         let tip_ns = tip_start.elapsed().as_nanos() as u64;
         let base_start = std::time::Instant::now();
         let base = {
-            use sui_adapter_${cut_pkg} as base_adapter;
+            use rtd_adapter_${cut_pkg} as base_adapter;
             base_adapter::execution_engine::execute_transaction_to_effects::<
                 base_adapter::execution_mode::Normal,
             >(
@@ -169,7 +169,7 @@ TPL_FN_NORMAL_WITH_ERR_BODY = """\
         let tip_ns = tip_start.elapsed().as_nanos() as u64;
         let base_start = std::time::Instant::now();
         let base = {
-            use sui_adapter_${cut_pkg} as base_adapter;
+            use rtd_adapter_${cut_pkg} as base_adapter;
             base_adapter::execution_engine::execute_transaction_to_effects::<
                 base_adapter::execution_mode::Normal<ExecutionError>,
             >(
@@ -212,18 +212,18 @@ mod latest_dual_replay {
     use std::io::{BufWriter, Write};
     use std::path::Path;
     use std::sync::{Mutex, OnceLock};
-    use sui_types::digests::TransactionDigest;
-    use sui_types::effects::{TransactionEffects, TransactionEffectsAPI};
-    use sui_types::execution_status::ExecutionStatus;
-    use sui_types::gas::{SuiGasStatus, SuiGasStatusAPI};
-    use sui_types::inner_temporary_store::InnerTemporaryStore;
+    use rtd_types::digests::TransactionDigest;
+    use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
+    use rtd_types::execution_status::ExecutionStatus;
+    use rtd_types::gas::{RtdGasStatus, RtdGasStatusAPI};
+    use rtd_types::inner_temporary_store::InnerTemporaryStore;
 
     const OUTPUT_DIR: &str = "${output_dir}";
     const GAS_TOLERANCE_PCT: f64 = ${gas_tolerance}_f64;
     const TIMINGS_FILE: &str = "${timings_file}";
     const TIMINGS_FLUSH_EVERY: usize = 500;
 
-    type View<'a> = (&'a InnerTemporaryStore, &'a SuiGasStatus, &'a TransactionEffects);
+    type View<'a> = (&'a InnerTemporaryStore, &'a RtdGasStatus, &'a TransactionEffects);
 
     pub(super) fn compare_dual_replay(
         base: View<'_>,
@@ -531,7 +531,7 @@ RE_FN_NORMAL_WITH_ERR = re.compile(
 def do_inject(repo: Path, state: State) -> None:
     _inject_latest_rs(repo, state)
     _ensure_gas_clone(repo)
-    _ensure_sui_execution_serde_json_dep(repo)
+    _ensure_rtd_execution_serde_json_dep(repo)
 
 
 def _inject_latest_rs(repo: Path, state: State) -> None:
@@ -722,14 +722,14 @@ def _matching(src: str, open_idx: int, open_c: str, close_c: str) -> int:
     return -1
 
 
-# The dual-exec body clones `SuiGasStatus` (gas.rs enum). That cascades through
+# The dual-exec body clones `RtdGasStatus` (gas.rs enum). That cascades through
 # its field types — every nested type that participates in `Clone` must derive it.
 # This list is the empirical minimum from running the pipeline against current
 # HEAD; extend if a future tip introduces another field type that breaks.
 GAS_CLONE_TARGETS = [
-    (GAS_RS, "SuiGasStatus", "enum"),
-    (GAS_V2_RS, "SuiGasStatus", "struct"),
-    (GAS_V2_RS, "SuiCostTable", "struct"),
+    (GAS_RS, "RtdGasStatus", "enum"),
+    (GAS_V2_RS, "RtdGasStatus", "struct"),
+    (GAS_V2_RS, "RtdCostTable", "struct"),
     (GAS_V2_RS, "ComputationBucket", "struct"),
     (GAS_TABLES_RS, "GasStatus", "struct"),
 ]
@@ -770,21 +770,21 @@ def _ensure_clone_derive(path: Path, type_name: str, kind: str) -> None:
 
 
 # The injected `latest_dual_replay` helper module calls `serde_json::to_string_pretty`
-# on `TransactionEffects`. `sui-execution` doesn't depend on `serde_json` by default
+# on `TransactionEffects`. `rtd-execution` doesn't depend on `serde_json` by default
 # at HEAD, so the cargo check fails until we add it. Idempotent.
-RE_SUI_EXECUTION_DEPS_HEADER = re.compile(r"^\[dependencies\]\s*$", re.MULTILINE)
-SUI_EXECUTION_CARGO_TOML = "sui-execution/Cargo.toml"
+RE_RTD_EXECUTION_DEPS_HEADER = re.compile(r"^\[dependencies\]\s*$", re.MULTILINE)
+RTD_EXECUTION_CARGO_TOML = "rtd-execution/Cargo.toml"
 
 
-def _ensure_sui_execution_serde_json_dep(repo: Path) -> None:
-    path = repo / SUI_EXECUTION_CARGO_TOML
+def _ensure_rtd_execution_serde_json_dep(repo: Path) -> None:
+    path = repo / RTD_EXECUTION_CARGO_TOML
     src = path.read_text()
     if re.search(r"^serde_json\b", src, re.MULTILINE):
         return
-    m = RE_SUI_EXECUTION_DEPS_HEADER.search(src)
+    m = RE_RTD_EXECUTION_DEPS_HEADER.search(src)
     if not m:
         raise InjectError(
-            f"anchor `[dependencies]` not found in {SUI_EXECUTION_CARGO_TOML}"
+            f"anchor `[dependencies]` not found in {RTD_EXECUTION_CARGO_TOML}"
         )
     insert_at = m.end()
     # `\n` after the header, then our line, then resume with the rest. The original
@@ -800,7 +800,7 @@ def _ensure_sui_execution_serde_json_dep(repo: Path) -> None:
 
 
 def do_build(repo: Path) -> None:
-    cmd = ["cargo", "check", "-p", "sui-execution", "-p", "sui-types"]
+    cmd = ["cargo", "check", "-p", "rtd-execution", "-p", "rtd-types"]
     r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
     if r.returncode != 0:
         # Truncate to the last 200 stderr lines — rustc diagnostics land here.
@@ -815,7 +815,7 @@ COMMIT_FIXED_PATHS = [
     GAS_RS,
     GAS_V2_RS,
     GAS_TABLES_RS,
-    "sui-execution/Cargo.toml",
+    "rtd-execution/Cargo.toml",
     "Cargo.toml",
     "external-crates/move/Cargo.toml",
 ]
@@ -824,12 +824,12 @@ COMMIT_FIXED_PATHS = [
 def do_commit(repo: Path, state: State) -> str:
     paths = [p for p in COMMIT_FIXED_PATHS if (repo / p).exists()]
     # Per-cut-name paths created by `scripts/execution_layer.py cut`:
-    #   - sui-execution/<cut>/             generated crate tree
-    #   - sui-execution/src/<cut>.rs       module wiring file (untracked until staged)
+    #   - rtd-execution/<cut>/             generated crate tree
+    #   - rtd-execution/src/<cut>.rs       module wiring file (untracked until staged)
     #   - external-crates/.../<cut>/       generated Move crate tree
     for p in (
-        f"sui-execution/historical-versions/{state.cut_name}",
-        f"sui-execution/src/{state.cut_name}.rs",
+        f"rtd-execution/historical-versions/{state.cut_name}",
+        f"rtd-execution/src/{state.cut_name}.rs",
         f"external-crates/move/historical-versions/{state.cut_name}",
     ):
         if (repo / p).exists():
@@ -880,7 +880,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_flags(p_cut, base_required=False)
     p_inject = sub.add_parser("inject", help="rewrite latest.rs and gas types")
     _add_flags(p_inject, base_required=False)
-    sub.add_parser("build", help="cargo check -p sui-execution -p sui-types")
+    sub.add_parser("build", help="cargo check -p rtd-execution -p rtd-types")
     sub.add_parser("commit", help="stage changes and commit")
     return parser
 

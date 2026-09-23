@@ -1,15 +1,15 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{Result, anyhow};
 use tracing::debug;
 
-use sui_sdk::rpc_types::{
-    SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponseQuery, SuiRawData,
+use rtd_sdk::rpc_types::{
+    RtdObjectDataFilter, RtdObjectDataOptions, RtdObjectResponseQuery, RtdRawData,
 };
-use sui_sdk::types::base_types::{ObjectID, ObjectRef, SuiAddress};
-use sui_sdk::types::gas_coin::GasCoin;
-use sui_sdk::SuiClient;
+use rtd_sdk::types::base_types::{ObjectID, ObjectRef, RtdAddress};
+use rtd_sdk::types::gas_coin::GasCoin;
+use rtd_sdk::RtdClient;
 
 pub const DEFAULT_GAS_BUDGET: u64 = 10_000_000;
 
@@ -20,8 +20,8 @@ pub struct GasRet {
 }
 
 pub async fn select_gas(
-    client: &SuiClient,
-    signer_addr: SuiAddress,
+    client: &RtdClient,
+    signer_addr: RtdAddress,
     input_gas: Option<ObjectID>,
     budget: Option<u64>,
     exclude_objects: Vec<ObjectID>,
@@ -49,7 +49,7 @@ pub async fn select_gas(
     if let Some(gas) = input_gas {
         let read_api = client.read_api();
         let object = read_api
-            .get_object_with_options(gas, SuiObjectDataOptions::new())
+            .get_object_with_options(gas, RtdObjectDataOptions::new())
             .await?
             .object_ref_if_exists()
             .ok_or(anyhow!("No object-ref"))?;
@@ -64,9 +64,9 @@ pub async fn select_gas(
     let gas_objs = read_api
         .get_owned_objects(
             signer_addr,
-            Some(SuiObjectResponseQuery {
-                filter: Some(SuiObjectDataFilter::StructType(GasCoin::type_())),
-                options: Some(SuiObjectDataOptions::new().with_bcs()),
+            Some(RtdObjectResponseQuery {
+                filter: Some(RtdObjectDataFilter::StructType(GasCoin::type_())),
+                options: Some(RtdObjectDataOptions::new().with_bcs()),
             }),
             None,
             None,
@@ -75,7 +75,7 @@ pub async fn select_gas(
         .data;
 
     for obj in gas_objs {
-        let SuiRawData::MoveObject(raw_obj) = &obj
+        let RtdRawData::MoveObject(raw_obj) = &obj
             .data
             .as_ref()
             .ok_or_else(|| anyhow!("data field is unexpectedly empty"))?

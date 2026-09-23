@@ -1,6 +1,6 @@
 ---
 title: Querying Historical Data with Archival Service
-description: Query historical Sui network data through the Archival Service gRPC API.
+description: Query historical Rtd network data through the Archival Service gRPC API.
 keywords:
   - archival store
   - archival service
@@ -8,10 +8,10 @@ keywords:
   - grpc
   - ledger service
   - bigtable
-  - sui-kv-rpc
+  - rtd-kv-rpc
 goal:
   description: >-
-    Reader can query historical Sui network data through the Archival Service
+    Reader can query historical Rtd network data through the Archival Service
     gRPC API
   requires:
     - has_frontmatter:
@@ -35,11 +35,11 @@ questions:
   - How do I query historical data with archival service?
   - How do I query the service?
   - How do I run your own instance?
-  - What is Querying Historical Data with Archival Service in Sui?
-answer: Query historical Sui network data through the Archival Service gRPC API.
+  - What is Querying Historical Data with Archival Service in Rtd?
+answer: Query historical Rtd network data through the Archival Service gRPC API.
 ---
 
-The Archival Service provides access to historical Sui network data through the same [`LedgerService`](/references/fullnode-protocol) gRPC API available on full nodes. Use it as an explicit gRPC endpoint when a full node has pruned the data you need, or as a dedicated source for historical queries. Full node gRPC endpoints do not automatically fall back to Archival Service endpoints.
+The Archival Service provides access to historical Rtd network data through the same [`LedgerService`](/references/fullnode-protocol) gRPC API available on full nodes. Use it as an explicit gRPC endpoint when a full node has pruned the data you need, or as a dedicated source for historical queries. Full node gRPC endpoints do not automatically fall back to Archival Service endpoints.
 
 For core concepts, see the [Archival Store and Service concepts page](/develop/accessing-data/archival-store).
 
@@ -57,16 +57,16 @@ Treat archival and historical data as a data-access convenience, not as proof. W
 
 ## Public endpoints
 
-The Sui Foundation operates an Archival Service as a public good:
+The Rtd Foundation operates an Archival Service as a public good:
 
-- Testnet: `archive.testnet.sui.io`
-- Mainnet: `archive.mainnet.sui.io`
+- Testnet: `archive.testnet.rtd.io`
+- Mainnet: `archive.mainnet.rtd.io`
 
 These endpoints have strict rate limits.
 
 ## Querying the service
 
-The Archival Service exposes the same [`LedgerService`](/references/fullnode-protocol) gRPC API as a Sui full node. Query it using any gRPC client by pointing at an Archival Service endpoint instead of a full node. GraphQL deployments can route supported historical lookups to Archival when the operator configures it; gRPC clients must choose the Archival Service URL explicitly.
+The Archival Service exposes the same [`LedgerService`](/references/fullnode-protocol) gRPC API as a Rtd full node. Query it using any gRPC client by pointing at an Archival Service endpoint instead of a full node. GraphQL deployments can route supported historical lookups to Archival when the operator configures it; gRPC clients must choose the Archival Service URL explicitly.
 
 See [Using gRPC](/develop/accessing-data/grpc/using-grpc) for detailed examples with `grpcurl`, Buf CLI, TypeScript, Go, and Python.
 
@@ -75,14 +75,14 @@ For example, to fetch a historical transaction using `grpcurl`:
 ```shell
 grpcurl -d '{
   "digest": "BASE58_TX_DIGEST"
-}' archive.testnet.sui.io:443 sui.rpc.v2.LedgerService/GetTransaction
+}' archive.testnet.rtd.io:443 rtd.rpc.v2.LedgerService/GetTransaction
 ```
 
 ## Using the Archival Service as a fallback
 
 Apps can query the Archival Service when a full node returns retention-related errors. This application-level fallback does not implicitly happen inside the full node.
 
-If the full node returns `NOT_FOUND` for data that should exist, retry against an Archival Service endpoint such as `archive.mainnet.sui.io:443`.
+If the full node returns `NOT_FOUND` for data that should exist, retry against an Archival Service endpoint such as `archive.mainnet.rtd.io:443`.
 
 ## Running your own instance
 

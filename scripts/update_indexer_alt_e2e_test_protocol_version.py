@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -60,7 +60,7 @@ def replace_protocol_version_in_repo(
 ):
     for root, dirs, files in os.walk(repo_path):
         for file in files:
-            if "sui-indexer-alt-e2e-tests" in root.split(os.sep):
+            if "rtd-indexer-alt-e2e-tests" in root.split(os.sep):
                 if file.endswith(".move"):
                     file_path = os.path.join(root, file)
                     replace_protocol_version_in_file(
@@ -70,7 +70,7 @@ def replace_protocol_version_in_repo(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Replace protocol version in sui-graphql-e2e-tests tests."
+        description="Replace protocol version in rtd-graphql-e2e-tests tests."
     )
     parser.add_argument(
         "--yes-to-all",
@@ -92,5 +92,5 @@ if __name__ == "__main__":
     )
     if not args.dry_run:
         print(
-            f"Next step. Running `env UB=1 cargo nextest run` in `crates/sui-graphql-e2e-tests` to update all the snapshots."
+            f"Next step. Running `env UB=1 cargo nextest run` in `crates/rtd-graphql-e2e-tests` to update all the snapshots."
         )

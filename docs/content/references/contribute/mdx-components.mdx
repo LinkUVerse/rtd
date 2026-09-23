@@ -1,6 +1,6 @@
 ---
 title: MDX Components
-description: Extensions to the Sui docs rendering engine.
+description: Extensions to the Rtd docs rendering engine.
 keywords:
   - MDX
   - components
@@ -10,7 +10,7 @@ keywords:
   - contributing
 goal:
   description: >-
-    Contributor can use the custom MDX components available in Sui docs, such as
+    Contributor can use the custom MDX components available in Rtd docs, such as
     tabs, admonitions, and ImportContent
   requires:
     - has_frontmatter:
@@ -28,13 +28,13 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is MDX Components in Sui?
+  - What is MDX Components in Rtd?
   - Where can I find the mdx components reference?
-  - How does mdx components work on Sui?
-answer: Extensions to the Sui docs rendering engine.
+  - How does mdx components work on Rtd?
+answer: Extensions to the Rtd docs rendering engine.
 ---
 
-The Sui developer documentation uses the MarkdownX (`.mdx`) format for all pages. MDX allows [JSX within Markdown content](https://mdxjs.com/). The site uses Docusaurus, an open-source framework that provides built-in features like admonitions and Mermaid diagrams. It also utilizes community plugins and custom components the documentation team developed. While none of these features are required in a contribution, you can include them if they enhance the reader’s experience.
+The Rtd developer documentation uses the MarkdownX (`.mdx`) format for all pages. MDX allows [JSX within Markdown content](https://mdxjs.com/). The site uses Docusaurus, an open-source framework that provides built-in features like admonitions and Mermaid diagrams. It also utilizes community plugins and custom components the documentation team developed. While none of these features are required in a contribution, you can include them if they enhance the reader’s experience.
 
 ## Custom frontmatter
 
@@ -85,7 +85,7 @@ Used for end-to-end tutorials. Adds an admonition box at the top indicating the 
 ```yaml
 ---
 title: A Guide
-description: A guide on how to do this thing in Sui.
+description: A guide on how to do this thing in Rtd.
 effort: medium
 ---
 ```
@@ -201,9 +201,9 @@ For guides and tutorials that have prerequisite requirements, the prerequisite t
 If a guide or tutorial uses the following prerequisites: 
 
 ```
-- [x] [Install the latest version of Sui](/getting-started/onboarding/sui-install).
+- [x] [Install the latest version of Rtd](/getting-started/onboarding/rtd-install).
 
-- [x] Set up your Sui account and CLI environment. 
+- [x] Set up your Rtd account and CLI environment. 
 
 - [x] Obtain test tokens. 
 ```
@@ -241,9 +241,9 @@ The effective use of `<ImportContent />` often requires code comments in the sou
 When including sections of code, understand that the code might change from what you reference during document creation to what a reader eventually consumes. Assume other processes will update the accompanying content, but be mindful of the possibility of changing code when considering the level of detail in your instruction. You can take comfort in the knowledge that the code is always valid, though.
 
 
-#### Referencing files within the Sui monorepo 
+#### Referencing files within the Rtd monorepo 
 
-Reference files through their path from the repository root, without a leading `sui/`. For example, `source="examples/move/hero/sources/example.move"`.
+Reference files through their path from the repository root, without a leading `rtd/`. For example, `source="examples/move/hero/sources/example.move"`.
 
 #### Referencing files from other repos 
 
@@ -252,8 +252,8 @@ To reference a file in another repository, add the `org` and `repo` arguments. T
 ```jsx
 <ImportContent
   source="/move/hello-world/sources/greeting.move"
-  org="MystenLabs"
-  repo="sui-stack-hello-world"
+  org="LinkUVerse"
+  repo="rtd-stack-hello-world"
   mode="code"
 />
 ```
@@ -261,12 +261,12 @@ To reference a file in another repository, add the `org` and `repo` arguments. T
 Pin a branch whenever the example must stay stable, because the default branch can change underneath the page:
 
 ```jsx
-<ImportContent source="I2/fixed_supply/sources/silver.move" org="MystenLabs" repo="sui-move-bootcamp" branch="solution" mode="code" />
+<ImportContent source="I2/fixed_supply/sources/silver.move" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" mode="code" />
 ```
 
 #### How to use
 
-1. Set the `source` argument to the relative path of the file. Do not include the `sui` root. 
+1. Set the `source` argument to the relative path of the file. Do not include the `rtd` root. 
 1. Set the `mode` argument to `code`.
 1. Include options as needed.
 

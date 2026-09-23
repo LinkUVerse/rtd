@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 echo "Running simulator tests at commit $(git rev-parse HEAD)"
@@ -44,8 +44,8 @@ mkdir -p "$LOG_DIR/e2e"
 
 scripts/simtest/seed-search.py \
   --package consensus-simtests \
-  --package sui-core \
-  --package sui-e2e-tests \
+  --package rtd-core \
+  --package rtd-e2e-tests \
   --num-seeds "$TEST_NUM" \
   --seed-start "$SEED" \
   --concurrency "$NUM_CPUS" \
@@ -56,7 +56,7 @@ scripts/simtest/seed-search.py \
 PHASE1_EXIT=${PIPESTATUS[0]}
 
 # Clean up temp files from the e2e phase to prevent /tmp (tmpfs) from filling up.
-rm -rf /tmp/tmp.* /tmp/.tmp* /tmp/sui-* 2>/dev/null
+rm -rf /tmp/tmp.* /tmp/.tmp* /tmp/rtd-* 2>/dev/null
 
 echo ""
 echo "============================================="
@@ -75,7 +75,7 @@ for SUB_SEED in `seq 1 $NUM_CPUS`; do
   SIM_STRESS_TEST_DURATION_SECS=300 \
   scripts/simtest/cargo-simtest simtest \
     --color always \
-    --package sui-benchmark \
+    --package rtd-benchmark \
     --test-threads 1 \
     --profile simtestnightly \
     > "$LOG_FILE" 2>&1 &
@@ -86,7 +86,7 @@ done
 wait
 
 # Clean up temp files from the stress phase before running determinism tests.
-rm -rf /tmp/tmp.* /tmp/.tmp* /tmp/sui-* 2>/dev/null
+rm -rf /tmp/tmp.* /tmp/.tmp* /tmp/rtd-* 2>/dev/null
 
 echo ""
 echo "==========================="
@@ -128,7 +128,7 @@ fi
 # signal-killed tests with status tokens other than FAIL/TIMEOUT — e.g.
 # `SIGABRT [time] pkg::bin::test`, and similarly SIGSEGV, SIGBUS, SIGKILL,
 # SIGTRAP, SIGFPE, SIGSYS, plus LEAK for goroutine/thread leaks. Today
-# sui-benchmark's `test_simulated_load_large_consensus_commit_prologue_size`
+# rtd-benchmark's `test_simulated_load_large_consensus_commit_prologue_size`
 # SIGABRTs in ~50% of stress iterations on main and silently passes as a
 # result. Same regex is used in collect-failures.sh — keep them in sync.
 if grep -EqHn 'TIMEOUT|FAIL' "$LOG_DIR"/log-* "$LOG_DIR"/determinism-log 2>/dev/null; then

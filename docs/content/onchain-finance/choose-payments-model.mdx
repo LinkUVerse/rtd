@@ -1,7 +1,7 @@
 ---
 title: Choose a Payment Model
 description: >-
-  Compare basic transfers and Payment Kit for Sui payment integrations, learn
+  Compare basic transfers and Payment Kit for Rtd payment integrations, learn
   when to use address balances versus coin objects, and pick a gas strategy
   from user-pays, gasless stablecoin, or sponsored transactions.
 keywords:
@@ -23,7 +23,7 @@ goal:
   description: >-
     Reader can choose between basic transfer and Payment Kit, decide whether
     to use address balances or coin objects, and select a gas strategy for
-    their Sui payment integration.
+    their Rtd payment integration.
   requires:
     - has_frontmatter:
         - title
@@ -49,14 +49,14 @@ builder_paths:
     step: Choose payments model
     stage: Money Movement
 questions:
-  - How do I choose a payment model on Sui?
-  - What is the difference between basic transfer and Payment Kit on Sui?
+  - How do I choose a payment model on Rtd?
+  - What is the difference between basic transfer and Payment Kit on Rtd?
   - Should I use address balances or coin objects for payments?
-  - How do I pay gas for a payment transaction on Sui?
-  - What is a gasless stablecoin transfer on Sui?
-  - How do sponsored transactions work for Sui payments?
+  - How do I pay gas for a payment transaction on Rtd?
+  - What is a gasless stablecoin transfer on Rtd?
+  - How do sponsored transactions work for Rtd payments?
 answer: >-
-  Sui supports two main payment models out of the box. Basic transfers move
+  Rtd supports two main payment models out of the box. Basic transfers move
   value directly using balance::send_funds (address balances) or
   transferObjects (coin objects), with no receipts or duplicate prevention.
   Payment Kit adds structured PaymentReceipt objects, duplicate prevention
@@ -68,7 +68,7 @@ answer: >-
   version lookups.
 ---
 
-Sui supports a range of payment models, from direct transfers to structured checkout flows built on Payment Kit. The right choice depends on whether you need receipts, duplicate prevention, or custom spending logic. Most integrations start from one of the common models below, and many combine several in a single transaction.
+Rtd supports a range of payment models, from direct transfers to structured checkout flows built on Payment Kit. The right choice depends on whether you need receipts, duplicate prevention, or custom spending logic. Most integrations start from one of the common models below, and many combine several in a single transaction.
 
 | | **Basic transfer** | **Payment Kit** |
 |---|---|---|
@@ -141,15 +141,15 @@ Duplicate prevention relies on a `PaymentKey` derived from the nonce, amount, co
 Payment Kit defines a transaction URI format that wallets parse into a ready-to-sign payment. Include the `registry` parameter to route through a registry, or omit it to process an ephemeral payment:
 
 ```
-sui:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+rtd:pay?receiver=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
     &amount=1000000000
-    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI
+    &coinType=0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD
     &nonce=550e8400-e29b-41d4-a716-446655440000
     &label=Coffee%20Shop
     &registry=default-payment-registry
 ```
 
-Percent-encode every parameter value according to RFC 3986. The `amount` value is the native amount of the coin type, so 1000000000 MIST represents 1 SUI.
+Percent-encode every parameter value according to RFC 3986. The `amount` value is the native amount of the coin type, so 1000000000 MIST represents 1 RTD.
 
 :::tip
 
@@ -161,10 +161,10 @@ Verify the receiver, amount, coin type, and package ID against your own expected
 
 These 4 mistakes account for most payment integration bugs:
 
-- **Integer math only:** SUI has 9 decimals (1 SUI = 1,000,000,000 MIST). Never use floating-point arithmetic on token amounts. Always work in the smallest unit, MIST for SUI, and convert for display only.
-- **Per-coin-type decimals:** Not all tokens use 9 decimals. USDC on Sui has 6 decimals. Always check `CoinMetadata.decimals` for the specific coin type before you convert between human-readable and onchain amounts.
+- **Integer math only:** RTD has 9 decimals (1 RTD = 1,000,000,000 MIST). Never use floating-point arithmetic on token amounts. Always work in the smallest unit, MIST for RTD, and convert for display only.
+- **Per-coin-type decimals:** Not all tokens use 9 decimals. USDC on Rtd has 6 decimals. Always check `CoinMetadata.decimals` for the specific coin type before you convert between human-readable and onchain amounts.
 - **Coin selection and merging:** A user might hold several `Coin` objects of the same type. If the payment requires more than any single coin holds, merge them first with `tx.mergeCoins()` in your transaction, or use `tx.splitCoins()` to extract the exact amount you need.
-- **Gas coin reservation:** If you pay gas in SUI and also transfer SUI in the same transaction, the transaction implicitly uses the gas coin for gas. Split the transfer amount from the gas coin rather than selecting a separate SUI coin object, which avoids `insufficient gas` errors.
+- **Gas coin reservation:** If you pay gas in RTD and also transfer RTD in the same transaction, the transaction implicitly uses the gas coin for gas. Split the transfer amount from the gas coin rather than selecting a separate RTD coin object, which avoids `insufficient gas` errors.
 
 ## Gas strategies
 
@@ -172,27 +172,27 @@ Every payment transaction needs gas, except for qualifying stablecoin transfers.
 
 ### User pays gas
 
-The sender pays in SUI. This option takes the least work to implement, but your users must hold SUI. See [Gas Fees](/develop/transaction-payment/gas-in-sui).
+The sender pays in RTD. This option takes the least work to implement, but your users must hold RTD. See [Gas Fees](/develop/transaction-payment/gas-in-rtd).
 
 ### Gasless stablecoin transfer
 
-For allowlisted stablecoins sent through `balance::send_funds`, the network waives gas fees entirely, so the sender needs no SUI. Protocol configuration governs the allowlist, which currently includes USDC, USDsui, USDY, FDUSD, AUSD, USDB, and Ethena USDe. A transaction qualifies only when all of the following hold:
+For allowlisted stablecoins sent through `balance::send_funds`, the network waives gas fees entirely, so the sender needs no RTD. Protocol configuration governs the allowlist, which currently includes USDC, USDrtd, USDY, FDUSD, AUSD, USDB, and Ethena USDe. A transaction qualifies only when all of the following hold:
 
 - The transaction consists of allowlisted `balance` or `coin` operations, primarily `0x2::balance::send_funds<T>`, on an allowlisted stablecoin type.
 - `gasPayment` is empty and `gasPrice` is 0.
 - The transaction writes no objects, and it consumes or converts all input coins to address balances.
 
-Build the transfer with `SuiGrpcClient`, which detects eligibility during simulation and sets the gas price and budget to 0 for you:
+Build the transfer with `RtdGrpcClient`, which detects eligibility during simulation and sets the gas price and budget to 0 for you:
 
 ```tsx title='gasless-transfer.ts'
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Transaction } from '@mysten/sui/transactions';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Transaction } from '@linku/rtd/transactions';
 
 const USDC = '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC';
 
-const client = new SuiGrpcClient({
+const client = new RtdGrpcClient({
 	network: 'mainnet',
-	baseUrl: 'https://fullnode.mainnet.sui.io:443',
+	baseUrl: 'https://fullnode.mainnet.rtd.io:443',
 });
 
 const tx = new Transaction();

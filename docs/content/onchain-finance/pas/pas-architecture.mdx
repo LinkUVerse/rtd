@@ -2,7 +2,7 @@
 title: What is Permissioned Asset Standard?
 description: >-
   Learn how the Permissioned Asset Standard (PAS) enforces restricted asset
-  movement on Sui through Accounts, Policies, and programmable approval logic.
+  movement on Rtd through Accounts, Policies, and programmable approval logic.
 keywords:
   - PAS
   - Permissioned Asset Standard
@@ -15,7 +15,7 @@ keywords:
 goal:
   description: >-
     Reader can learn how the Permissioned Asset Standard (PAS) enforces
-    restricted asset movement on Sui through Accounts
+    restricted asset movement on Rtd through Accounts
   requires:
     - has_frontmatter:
         - title
@@ -32,22 +32,22 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Permissioned Asset Standard in Sui?
-  - How does permissioned asset standard work on Sui?
+  - What is Permissioned Asset Standard in Rtd?
+  - How does permissioned asset standard work on Rtd?
   - Why should I use permissioned asset standard?
 answer: >-
-  On Sui, any object with the `store` ability can be freely transferred by its
+  On Rtd, any object with the `store` ability can be freely transferred by its
   owner. `Balance` and `Coin` both have `store`, meaning if you hold them, you
   can send them anywhere on the network with no restrictions.
 ---
 
-On Sui, any object with the `store` ability can be freely transferred by its owner. `Balance` and `Coin` both have `store`, meaning if you hold them, you can send them anywhere on the network with no restrictions.
+On Rtd, any object with the `store` ability can be freely transferred by its owner. `Balance` and `Coin` both have `store`, meaning if you hold them, you can send them anywhere on the network with no restrictions.
 
 This works well for general-purpose assets, but creates a problem for regulated assets that need transfer controls, compliance checks, or issuer oversight.
 
 The Permissioned Asset Standard (PAS) solves this by proxying asset ownership through **Accounts:** objects that hold assets and enforce a closed-loop system where every movement is gated by programmable approval logic.
 
-You can use PAS through the [TypeScript package](https://www.npmjs.com/package/@mysten/pas) or learn more in the [GitHub repo](https://github.com/MystenLabs/pas).
+You can use PAS through the [TypeScript package](https://www.npmjs.com/package/@linku/pas) or learn more in the [GitHub repo](https://github.com/LinkUVerse/pas).
 
 ## How it works
 
@@ -92,7 +92,7 @@ Namespace (shared, singleton)
 └── Templates             ← derived from (namespace_id, TemplateKey)
 ```
 
-All objects use derived addresses (`sui::derived_object`), making them deterministic and queryable without onchain lookups.
+All objects use derived addresses (`rtd::derived_object`), making them deterministic and queryable without onchain lookups.
 
 ### Namespace
 
@@ -181,7 +181,7 @@ For example, a `TransferApproval` witness struct defined in your contracts:
 
 ## Balance tracking
 
-PAS uses Sui [Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances):
+PAS uses Rtd [Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances):
 
 ### How balances are stored
 

@@ -11,7 +11,7 @@ keywords:
   - events
   - checkpoint streaming
   - batch
-  - sui grpc examples
+  - rtd grpc examples
   - grpc migration examples
   - replace json-rpc with grpc
   - grpc event query
@@ -56,12 +56,12 @@ builder_paths:
     stage: Ship
     eval: covered
 questions:
-  - How do I migrate from JSON-RPC to gRPC on Sui?
-  - How do I query events with gRPC instead of suix_queryEvents?
+  - How do I migrate from JSON-RPC to gRPC on Rtd?
+  - How do I query events with gRPC instead of rtdx_queryEvents?
   - How do I stream checkpoints with gRPC instead of WebSocket subscriptions?
   - How do I batch-fetch objects or transactions with gRPC?
-  - What is the gRPC equivalent of sui_getObject?
-  - How do I list owned coins with gRPC instead of suix_getCoins?
+  - What is the gRPC equivalent of rtd_getObject?
+  - How do I list owned coins with gRPC instead of rtdx_getCoins?
   - How do I subscribe to events with gRPC?
 answer: >-
   Replace each JSON-RPC call with the corresponding gRPC service method: use
@@ -85,7 +85,7 @@ Each recipe pairs a JSON-RPC call with its gRPC replacement and explains the key
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] Install the `@mysten/sui` TypeScript SDK by running `npm install @mysten/sui`.
+- [x] Install the `@linku/rtd` TypeScript SDK by running `npm install @linku/rtd`.
 - [x] Obtain access to a gRPC-enabled full node and note its endpoint.
 
 </TabItem>
@@ -94,9 +94,9 @@ Each recipe pairs a JSON-RPC call with its gRPC replacement and explains the key
 Create a client once and reuse it:
 
 ```ts
-import { SuiGrpcClient } from '@mysten/sui/grpc';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
 
-const client = new SuiGrpcClient({
+const client = new RtdGrpcClient({
   baseUrl: '<FULL_NODE_URL>',
   network: 'mainnet',
 });
@@ -106,7 +106,7 @@ For `grpcurl` and Buf CLI examples, replace `<FULL_NODE_URL>` with your provider
 
 ## Get a single object
 
-Replace `sui_getObject` with `LedgerService.GetObject`. Use a [field mask](/develop/accessing-data/grpc/using-grpc#field-masks) to request only the fields you need.
+Replace `rtd_getObject` with `LedgerService.GetObject`. Use a [field mask](/develop/accessing-data/grpc/using-grpc#field-masks) to request only the fields you need.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -117,7 +117,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getObject",
+    "method": "rtd_getObject",
     "params": [
       "0xOBJECT_ID",
       { "showContent": true, "showOwner": true }
@@ -146,7 +146,7 @@ console.log('Content:', object.content);
 $ grpcurl -d '{
   "object_id": "0xOBJECT_ID",
   "read_mask": { "paths": ["content", "owner"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/GetObject
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/GetObject
 ```
 
 </TabItem>
@@ -159,7 +159,7 @@ The gRPC call differs from the JSON-RPC call in the following ways:
 
 ## Batch-fetch objects
 
-Replace `sui_multiGetObjects` with `LedgerService.BatchGetObjects`. The top-level `read_mask` applies to all objects in the batch.
+Replace `rtd_multiGetObjects` with `LedgerService.BatchGetObjects`. The top-level `read_mask` applies to all objects in the batch.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -170,7 +170,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_multiGetObjects",
+    "method": "rtd_multiGetObjects",
     "params": [
       ["0xOBJECT_A", "0xOBJECT_B", "0xOBJECT_C"],
       { "showContent": true }
@@ -207,7 +207,7 @@ $ grpcurl -d '{
     { "object_id": "0xOBJECT_C" }
   ],
   "read_mask": { "paths": ["content"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/BatchGetObjects
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/BatchGetObjects
 ```
 
 </TabItem>
@@ -220,7 +220,7 @@ The gRPC call differs from the JSON-RPC call in the following ways:
 
 ## Get a transaction
 
-Replace `sui_getTransactionBlock` with `LedgerService.GetTransaction`.
+Replace `rtd_getTransactionBlock` with `LedgerService.GetTransaction`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -231,7 +231,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getTransactionBlock",
+    "method": "rtd_getTransactionBlock",
     "params": [
       "J4NvV5iQZQFm1xKPYv9ffDCCPW6cZ4yFKsCqFUiDX5L4",
       { "showEffects": true, "showEvents": true }
@@ -261,7 +261,7 @@ if (result.$kind === 'Transaction') {
 $ grpcurl -d '{
   "digest": "J4NvV5iQZQFm1xKPYv9ffDCCPW6cZ4yFKsCqFUiDX5L4",
   "read_mask": { "paths": ["effects", "events"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/GetTransaction
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/GetTransaction
 ```
 
 </TabItem>
@@ -274,7 +274,7 @@ The gRPC call differs from the JSON-RPC call in the following ways:
 
 ## Batch-fetch transactions
 
-Replace `sui_multiGetTransactionBlocks` with `LedgerService.BatchGetTransactions`.
+Replace `rtd_multiGetTransactionBlocks` with `LedgerService.BatchGetTransactions`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -285,7 +285,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_multiGetTransactionBlocks",
+    "method": "rtd_multiGetTransactionBlocks",
     "params": [
       ["DIGEST_A", "DIGEST_B"],
       { "showEffects": true, "showEvents": true }
@@ -318,7 +318,7 @@ for (const tx of response.transactions) {
 $ grpcurl -d '{
   "digests": ["DIGEST_A", "DIGEST_B"],
   "read_mask": { "paths": ["effects", "events"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/BatchGetTransactions
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/BatchGetTransactions
 ```
 
 </TabItem>
@@ -328,11 +328,11 @@ The same `read_mask` rules apply as for batch objects: the service respects only
 
 ## List and paginate transactions
 
-Replace `suix_queryTransactionBlocks` with `LedgerService.ListTransactions` for filtered, paginated queries over a checkpoint range. Unlike `StateService` list APIs (which return a single page), `ListTransactions` returns a server-side stream. Each response frame carries a `watermark` with a resume `cursor`, and the final frame includes a `QueryEnd` with the reason the stream ended.
+Replace `rtdx_queryTransactionBlocks` with `LedgerService.ListTransactions` for filtered, paginated queries over a checkpoint range. Unlike `StateService` list APIs (which return a single page), `ListTransactions` returns a server-side stream. Each response frame carries a `watermark` with a resume `cursor`, and the final frame includes a `QueryEnd` with the reason the stream ended.
 
 :::info
 
-The `@mysten/sui` TypeScript SDK (v2.23.1+) exposes `client.listTransactions()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listTransactions()`. The `grpcurl` example below shows the raw protobuf JSON request shape.
+The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `client.listTransactions()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listTransactions()`. The `grpcurl` example below shows the raw protobuf JSON request shape.
 
 :::
 
@@ -351,7 +351,7 @@ $ grpcurl -d '{
   },
   "options": { "limit": 50 },
   "read_mask": { "paths": ["digest", "effects"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/ListTransactions
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/ListTransactions
 ```
 
 </TabItem>
@@ -373,7 +373,7 @@ The List APIs differ from JSON-RPC pagination in the following ways:
 
 ## Query events
 
-JSON-RPC uses `suix_queryEvents` with filters such as `MoveModule`, `MoveEventType`, `Sender`, and `Transaction`. gRPC provides `LedgerService.ListEvents` for paginated, filtered historical queries and `SubscriptionService.SubscribeEvents` for live streaming with the same filters. You can also read events from a specific transaction.
+JSON-RPC uses `rtdx_queryEvents` with filters such as `MoveModule`, `MoveEventType`, `Sender`, and `Transaction`. gRPC provides `LedgerService.ListEvents` for paginated, filtered historical queries and `SubscriptionService.SubscribeEvents` for live streaming with the same filters. You can also read events from a specific transaction.
 ### Events from a known transaction
 
 If you know the transaction digest, fetch the transaction with events included.
@@ -387,7 +387,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_queryEvents",
+    "method": "rtdx_queryEvents",
     "params": [
       { "Transaction": "8NB8sXb4m9PJhCyLB7eVH4onqQWoFFzVUrqPoYUhcQe2" },
       null, 50, false
@@ -417,7 +417,7 @@ if (result.$kind === 'Transaction') {
 
 ### Live event streaming
 
-Replace `sui_subscribeEvent` (WebSocket) with `SubscriptionService.SubscribeEvents`. The JSON-RPC WebSocket subscription APIs have been deprecated since mid-2024, so migrate any remaining WebSocket subscriptions to gRPC streaming. The server filters events before it sends them, so your client receives only matching events.
+Replace `rtd_subscribeEvent` (WebSocket) with `SubscriptionService.SubscribeEvents`. The JSON-RPC WebSocket subscription APIs have been deprecated since mid-2024, so migrate any remaining WebSocket subscriptions to gRPC streaming. The server filters events before it sends them, so your client receives only matching events.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC WebSocket (deprecated)">
@@ -428,7 +428,7 @@ const ws = new WebSocket('wss://<FULL_NODE_URL>/websocket');
 ws.send(JSON.stringify({
   jsonrpc: '2.0',
   id: 1,
-  method: 'sui_subscribeEvent',
+  method: 'rtd_subscribeEvent',
   params: [{ MoveEventType: '<PACKAGE>::module::MyEvent' }],
 }));
 ws.onmessage = (msg) => console.log(JSON.parse(msg.data));
@@ -439,7 +439,7 @@ ws.onmessage = (msg) => console.log(JSON.parse(msg.data));
 
 :::info
 
-The `@mysten/sui` TypeScript SDK (v2.23.1+) exposes `SubscribeEvents` through the proto client at `client.subscriptionService.subscribeEvents()`. The Buf CLI example below shows the raw protobuf JSON request shape.
+The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `SubscribeEvents` through the proto client at `client.subscriptionService.subscribeEvents()`. The Buf CLI example below shows the raw protobuf JSON request shape.
 
 :::
 
@@ -469,7 +469,7 @@ for await (const response of stream.responses) {
 
 ```sh
 $ buf curl --protocol grpc \
-  https://<FULL_NODE_URL>/sui.rpc.v2.SubscriptionService/SubscribeEvents \
+  https://<FULL_NODE_URL>/rtd.rpc.v2.SubscriptionService/SubscribeEvents \
   -d '{
     "filter": {
       "terms": [{
@@ -493,14 +493,14 @@ The gRPC subscription differs from the JSON-RPC subscription in the following wa
 
 ### Query events over a checkpoint range
 
-Use `LedgerService.ListEvents` to retrieve events matching an `EventFilter` across a range of checkpoints. This method replaces the paginated `suix_queryEvents` pattern.
+Use `LedgerService.ListEvents` to retrieve events matching an `EventFilter` across a range of checkpoints. This method replaces the paginated `rtdx_queryEvents` pattern.
 
 <Tabs groupId="transport">
 <TabItem value="grpc-proto" label="gRPC (proto client)">
 
 :::info
 
-The `@mysten/sui` TypeScript SDK (v2.23.1+) exposes `client.listEvents()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listEvents()`. The `grpcurl` example in the next tab shows the raw protobuf JSON request shape.
+The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `client.listEvents()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listEvents()`. The `grpcurl` example in the next tab shows the raw protobuf JSON request shape.
 
 :::
 
@@ -542,7 +542,7 @@ $ grpcurl -d '{
       }]
     }]
   }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/ListEvents
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/ListEvents
 ```
 
 </TabItem>
@@ -550,7 +550,7 @@ $ grpcurl -d '{
 
 ## Stream checkpoints
 
-Replace `sui_getCheckpoints` polling with `SubscriptionService.SubscribeCheckpoints` for a real-time, ordered stream, or `LedgerService.ListCheckpoints` for paginated queries over a checkpoint range.
+Replace `rtd_getCheckpoints` polling with `SubscriptionService.SubscribeCheckpoints` for a real-time, ordered stream, or `LedgerService.ListCheckpoints` for paginated queries over a checkpoint range.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC polling (deprecated)">
@@ -564,7 +564,7 @@ while (true) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       jsonrpc: '2.0', id: 1,
-      method: 'sui_getCheckpoints',
+      method: 'rtd_getCheckpoints',
       params: [cursor, 10, false],
     }),
   });
@@ -600,7 +600,7 @@ for await (const response of responses) {
 
 ```sh
 $ buf curl --protocol grpc \
-  https://<FULL_NODE_URL>/sui.rpc.v2.SubscriptionService/SubscribeCheckpoints \
+  https://<FULL_NODE_URL>/rtd.rpc.v2.SubscriptionService/SubscribeCheckpoints \
   -d '{ "readMask": "sequenceNumber,digest,summary.timestamp" }' \
   --timeout 5m
 ```
@@ -621,7 +621,7 @@ Use `SubscriptionService.SubscribeTransactions` for a real-time, filtered stream
 
 :::info
 
-The `@mysten/sui` TypeScript SDK (v2.23.1+) exposes `SubscribeTransactions` through the proto client at `client.subscriptionService.subscribeTransactions()`. The Buf CLI example below shows the raw protobuf JSON request shape.
+The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `SubscribeTransactions` through the proto client at `client.subscriptionService.subscribeTransactions()`. The Buf CLI example below shows the raw protobuf JSON request shape.
 
 :::
 
@@ -630,7 +630,7 @@ The `@mysten/sui` TypeScript SDK (v2.23.1+) exposes `SubscribeTransactions` thro
 
 ```sh
 $ buf curl --protocol grpc \
-  https://<FULL_NODE_URL>/sui.rpc.v2.SubscriptionService/SubscribeTransactions \
+  https://<FULL_NODE_URL>/rtd.rpc.v2.SubscriptionService/SubscribeTransactions \
   -d '{
     "filter": {
       "terms": [{
@@ -651,7 +651,7 @@ Subscriptions begin at the current tip of the chain. A filtered subscription sta
 
 ## Look up a single checkpoint
 
-Replace `sui_getCheckpoint` with `LedgerService.GetCheckpoint`.
+Replace `rtd_getCheckpoint` with `LedgerService.GetCheckpoint`.
 
 :::info
 
@@ -668,7 +668,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_getCheckpoint",
+    "method": "rtd_getCheckpoint",
     "params": ["CHECKPOINT_SEQUENCE_NUMBER"]
   }'
 ```
@@ -698,7 +698,7 @@ console.log('Total transactions:', response.checkpoint?.summary?.totalNetworkTra
 $ grpcurl -d '{
   "sequence_number": "CHECKPOINT_SEQUENCE_NUMBER",
   "read_mask": { "paths": ["digest", "summary"] }
-}' <FULL_NODE_URL> sui.rpc.v2.LedgerService/GetCheckpoint
+}' <FULL_NODE_URL> rtd.rpc.v2.LedgerService/GetCheckpoint
 ```
 
 </TabItem>
@@ -706,7 +706,7 @@ $ grpcurl -d '{
 
 ## Get balances
 
-Replace `suix_getBalance` and `suix_getAllBalances` with `StateService.GetBalance` and `StateService.ListBalances`.
+Replace `rtdx_getBalance` and `rtdx_getAllBalances` with `StateService.GetBalance` and `StateService.ListBalances`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -719,8 +719,8 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getBalance",
-    "params": ["<ADDRESS>", "0x2::sui::SUI"]
+    "method": "rtdx_getBalance",
+    "params": ["<ADDRESS>", "0x2::rtd::RTD"]
   }'
 ```
 
@@ -732,7 +732,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getAllBalances",
+    "method": "rtdx_getAllBalances",
     "params": ["<ADDRESS>"]
   }'
 ```
@@ -744,7 +744,7 @@ $ curl -X POST <FULL_NODE_URL> \
 // Single coin type
 const { balance } = await client.core.getBalance({
   owner: '<ADDRESS>',
-  coinType: '0x2::sui::SUI',
+  coinType: '0x2::rtd::RTD',
 });
 console.log('Total balance:', balance.balance);
 console.log('Coin balance:', balance.coinBalance);
@@ -767,8 +767,8 @@ To query a single coin type, run the following command:
 ```sh
 $ grpcurl -d '{
   "owner": "<ADDRESS>",
-  "coin_type": "0x2::sui::SUI"
-}' <FULL_NODE_URL> sui.rpc.v2.StateService/GetBalance
+  "coin_type": "0x2::rtd::RTD"
+}' <FULL_NODE_URL> rtd.rpc.v2.StateService/GetBalance
 ```
 
 To query all coin types, run the following command:
@@ -776,7 +776,7 @@ To query all coin types, run the following command:
 ```sh
 $ grpcurl -d '{
   "owner": "<ADDRESS>"
-}' <FULL_NODE_URL> sui.rpc.v2.StateService/ListBalances
+}' <FULL_NODE_URL> rtd.rpc.v2.StateService/ListBalances
 ```
 
 </TabItem>
@@ -786,7 +786,7 @@ gRPC separates `coinBalance` (coin objects) and `addressBalance` (accumulator). 
 
 ## List owned coins
 
-Replace `suix_getCoins` and `suix_getAllCoins` with `StateService.ListOwnedObjects` filtered by coin type.
+Replace `rtdx_getCoins` and `rtdx_getAllCoins` with `StateService.ListOwnedObjects` filtered by coin type.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -797,8 +797,8 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getCoins",
-    "params": ["<ADDRESS>", "0x2::sui::SUI", null, 50]
+    "method": "rtdx_getCoins",
+    "params": ["<ADDRESS>", "0x2::rtd::RTD", null, 50]
   }'
 ```
 
@@ -806,10 +806,10 @@ $ curl -X POST <FULL_NODE_URL> \
 <TabItem value="grpc-sdk" label="gRPC (TypeScript SDK)">
 
 ```ts
-// List SUI coin objects
+// List RTD coin objects
 const page = await client.core.listOwnedObjects({
   owner: '<ADDRESS>',
-  type: '0x2::coin::Coin<0x2::sui::SUI>',
+  type: '0x2::coin::Coin<0x2::rtd::RTD>',
   limit: 50,
 });
 
@@ -821,7 +821,7 @@ for (const obj of page.objects) {
 if (page.hasNextPage) {
   const nextPage = await client.core.listOwnedObjects({
     owner: '<ADDRESS>',
-    type: '0x2::coin::Coin<0x2::sui::SUI>',
+    type: '0x2::coin::Coin<0x2::rtd::RTD>',
     limit: 50,
     cursor: page.cursor,
   });
@@ -834,8 +834,8 @@ if (page.hasNextPage) {
 ```sh
 $ grpcurl -d '{
   "owner": "<ADDRESS>",
-  "object_type": "0x2::coin::Coin<0x2::sui::SUI>"
-}' <FULL_NODE_URL> sui.rpc.v2.StateService/ListOwnedObjects
+  "object_type": "0x2::coin::Coin<0x2::rtd::RTD>"
+}' <FULL_NODE_URL> rtd.rpc.v2.StateService/ListOwnedObjects
 ```
 
 </TabItem>
@@ -849,7 +849,7 @@ The gRPC approach differs from the JSON-RPC approach in the following ways:
 
 ## List dynamic fields
 
-Replace `suix_getDynamicFields` with `StateService.ListDynamicFields`.
+Replace `rtdx_getDynamicFields` with `StateService.ListDynamicFields`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -860,7 +860,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getDynamicFields",
+    "method": "rtdx_getDynamicFields",
     "params": ["0xPARENT_OBJECT_ID", null, 50]
   }'
 ```
@@ -886,17 +886,17 @@ for (const field of page.dynamicFields) {
 ```sh
 $ grpcurl -d '{
   "parent": "0xPARENT_OBJECT_ID"
-}' <FULL_NODE_URL> sui.rpc.v2.StateService/ListDynamicFields
+}' <FULL_NODE_URL> rtd.rpc.v2.StateService/ListDynamicFields
 ```
 
 </TabItem>
 </Tabs>
 
-For `suix_getDynamicFieldObject`, derive the dynamic field's object ID locally from the parent ID and field name, then call `LedgerService.GetObject`. You do not need `ListDynamicFields` when you already know the field name.
+For `rtdx_getDynamicFieldObject`, derive the dynamic field's object ID locally from the parent ID and field name, then call `LedgerService.GetObject`. You do not need `ListDynamicFields` when you already know the field name.
 
 ## Execute a transaction
 
-Replace `sui_executeTransactionBlock` with `TransactionExecutionService.ExecuteTransaction`.
+Replace `rtd_executeTransactionBlock` with `TransactionExecutionService.ExecuteTransaction`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -907,7 +907,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_executeTransactionBlock",
+    "method": "rtd_executeTransactionBlock",
     "params": [
       "BASE64_TX_BYTES",
       ["BASE64_SIGNATURE"],
@@ -920,7 +920,7 @@ $ curl -X POST <FULL_NODE_URL> \
 <TabItem value="grpc-sdk" label="gRPC (TypeScript SDK)">
 
 ```ts
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 // Build and sign a transaction (see PTB docs for details)
 const tx = new Transaction();
@@ -955,11 +955,11 @@ Replace the JSON-RPC `signAndExecuteTransactionBlock` pattern with `signAndExecu
 
 ```ts
 // Old JSON-RPC pattern
-import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { RtdClient, getFullnodeUrl } from '@linku/rtd/client';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 
-const client = new SuiClient({ url: getFullnodeUrl('mainnet') });
+const client = new RtdClient({ url: getFullnodeUrl('mainnet') });
 const keypair = new Ed25519Keypair();
 
 const tx = new Transaction();
@@ -977,19 +977,19 @@ console.log('Digest:', result.digest);
 <TabItem value="grpc-sdk" label="gRPC (TypeScript SDK)">
 
 ```ts
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { Transaction } from '@mysten/sui/transactions';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { Transaction } from '@linku/rtd/transactions';
 
-const client = new SuiGrpcClient({
+const client = new RtdGrpcClient({
   baseUrl: '<FULL_NODE_URL>',
   network: 'mainnet',
 });
 const keypair = new Ed25519Keypair();
 
-// Build a PTB: split 0.001 SUI and transfer to a recipient
+// Build a PTB: split 0.001 RTD and transfer to a recipient
 const tx = new Transaction();
-const [coin] = tx.splitCoins(tx.gas, [1_000_000]); // 0.001 SUI in MIST
+const [coin] = tx.splitCoins(tx.gas, [1_000_000]); // 0.001 RTD in MIST
 tx.transferObjects([coin], '<RECIPIENT_ADDRESS>');
 
 // signAndExecuteTransaction handles build, gas resolution, signing, and execution
@@ -1025,7 +1025,7 @@ For sponsored transactions or when you need to select specific gas coins, set ga
 const { referenceGasPrice } = await client.core.getReferenceGasPrice();
 
 const tx = new Transaction();
-tx.setSender(keypair.toSuiAddress());
+tx.setSender(keypair.toRtdAddress());
 tx.setGasPrice(BigInt(referenceGasPrice));
 tx.setGasBudget(10_000_000);
 
@@ -1055,7 +1055,7 @@ For sponsored transactions, both the sender and sponsor must sign the same full 
 
 ## Simulate a transaction (dry run)
 
-Replace `sui_dryRunTransactionBlock` and `sui_devInspectTransactionBlock` with `TransactionExecutionService.SimulateTransaction`.
+Replace `rtd_dryRunTransactionBlock` and `rtd_devInspectTransactionBlock` with `TransactionExecutionService.SimulateTransaction`.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -1066,7 +1066,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sui_dryRunTransactionBlock",
+    "method": "rtd_dryRunTransactionBlock",
     "params": ["BASE64_TX_BYTES"]
   }'
 ```
@@ -1091,7 +1091,7 @@ if (result.$kind === 'Transaction') {
 
 ## Get reference gas price
 
-Replace `suix_getReferenceGasPrice` with `getReferenceGasPrice` on the SDK, or call `LedgerService.GetEpoch` through `grpcurl` and read the `reference_gas_price` field.
+Replace `rtdx_getReferenceGasPrice` with `getReferenceGasPrice` on the SDK, or call `LedgerService.GetEpoch` through `grpcurl` and read the `reference_gas_price` field.
 
 <Tabs groupId="transport">
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
@@ -1102,7 +1102,7 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_getReferenceGasPrice",
+    "method": "rtdx_getReferenceGasPrice",
     "params": []
   }'
 ```
@@ -1120,13 +1120,13 @@ console.log('Reference gas price:', referenceGasPrice);
 
 ```sh
 $ grpcurl -d '{ "read_mask": { "paths": ["reference_gas_price"] } }' \
-  <FULL_NODE_URL> sui.rpc.v2.LedgerService/GetEpoch
+  <FULL_NODE_URL> rtd.rpc.v2.LedgerService/GetEpoch
 ```
 
 </TabItem>
 </Tabs>
 
-## Resolve a SuiNS name
+## Resolve a RtdNS name
 
 Replace JSON-RPC name resolution with `NameService.LookupName` and `NameService.ReverseLookupName`.
 
@@ -1141,8 +1141,8 @@ $ curl -X POST <FULL_NODE_URL> \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "suix_resolveNameServiceAddress",
-    "params": ["example.sui"]
+    "method": "rtdx_resolveNameServiceAddress",
+    "params": ["example.rtd"]
   }'
 ```
 
@@ -1152,15 +1152,15 @@ $ curl -X POST <FULL_NODE_URL> \
 To resolve a name to an address, run the following command:
 
 ```sh
-$ grpcurl -d '{ "name": "example.sui" }' \
-  <FULL_NODE_URL> sui.rpc.v2.NameService/LookupName
+$ grpcurl -d '{ "name": "example.rtd" }' \
+  <FULL_NODE_URL> rtd.rpc.v2.NameService/LookupName
 ```
 
 To resolve an address to a name, run the following command:
 
 ```sh
 $ grpcurl -d '{ "address": "<ADDRESS>" }' \
-  <FULL_NODE_URL> sui.rpc.v2.NameService/ReverseLookupName
+  <FULL_NODE_URL> rtd.rpc.v2.NameService/ReverseLookupName
 ```
 
 </TabItem>
@@ -1168,7 +1168,7 @@ $ grpcurl -d '{ "address": "<ADDRESS>" }' \
 
 ## Get validator APY
 
-JSON-RPC provided `suix_getValidatorsApy` as a convenience method. Neither gRPC nor GraphQL has a direct APY field or method. Validator APY is derived from staking pool exchange rate history stored in dynamic fields on each validator's system-state object. The legacy `suix_getValidatorsApy` used a compounding calculation across up to 30 epoch samples with outlier filtering, so a simple two-epoch ratio does not reproduce the same values.
+JSON-RPC provided `rtdx_getValidatorsApy` as a convenience method. Neither gRPC nor GraphQL has a direct APY field or method. Validator APY is derived from staking pool exchange rate history stored in dynamic fields on each validator's system-state object. The legacy `rtdx_getValidatorsApy` used a compounding calculation across up to 30 epoch samples with outlier filtering, so a simple two-epoch ratio does not reproduce the same values.
 
 To compute validator APY after migration:
 
@@ -1176,7 +1176,7 @@ To compute validator APY after migration:
 2. Read each validator's staking pool exchange rate history from the dynamic fields on the pool's `exchange_rates` table.
 3. Apply a compounding formula across multiple epoch samples.
 
-See [issue #23832](https://github.com/MystenLabs/sui/issues/23832) for the recommended computation and the legacy implementation as a reference.
+See [issue #23832](https://github.com/LinkUVerse/rtd/issues/23832) for the recommended computation and the legacy implementation as a reference.
 
 ## Common patterns
 
@@ -1262,12 +1262,12 @@ Implement `backfillCheckpoints` with `ListCheckpoints`, treating its end checkpo
 Use the cursor from each response to request the next page:
 
 ```ts
-import type { SuiClientTypes } from '@mysten/sui';
+import type { RtdClientTypes } from '@linku/rtd';
 
 let cursor: string | null = null;
 
 do {
-  const page: SuiClientTypes.ListOwnedObjectsResponse = await client.core.listOwnedObjects({
+  const page: RtdClientTypes.ListOwnedObjectsResponse = await client.core.listOwnedObjects({
     owner: '<ADDRESS>',
     limit: 50,
     cursor,
@@ -1286,15 +1286,15 @@ do {
 A full node returns `NOT_FOUND` for data outside its retention window. Fall back to the [Archival Store](/develop/accessing-data/archival-store) for historical lookups:
 
 ```ts
-import { SuiGrpcClient } from '@mysten/sui/grpc';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
 
-const fullNode = new SuiGrpcClient({
+const fullNode = new RtdGrpcClient({
   baseUrl: '<FULL_NODE_URL>',
   network: 'mainnet',
 });
 
-const archive = new SuiGrpcClient({
-  baseUrl: 'https://archive.mainnet.sui.io:443',
+const archive = new RtdGrpcClient({
+  baseUrl: 'https://archive.mainnet.rtd.io:443',
   network: 'mainnet',
 });
 
@@ -1326,7 +1326,7 @@ async function getTransaction(digest: string) {
 
 gRPC streams can terminate for several reasons. Understanding the server's connection lifecycle helps you build reliable streaming clients.
 
-**Connection age limits (GOAWAY):** The Sui full node closes connections after a configurable maximum age (default: 4 hours). When a connection reaches this limit, the server sends a GOAWAY frame, stops accepting new streams, and gives in-flight requests a grace period (default: 10 minutes) to complete. Clients observe this as a stream termination. Implement automatic reconnection with backfill from your last processed checkpoint, as shown in [Reconnect a checkpoint stream](#reconnect-a-checkpoint-stream).
+**Connection age limits (GOAWAY):** The Rtd full node closes connections after a configurable maximum age (default: 4 hours). When a connection reaches this limit, the server sends a GOAWAY frame, stops accepting new streams, and gives in-flight requests a grace period (default: 10 minutes) to complete. Clients observe this as a stream termination. Implement automatic reconnection with backfill from your last processed checkpoint, as shown in [Reconnect a checkpoint stream](#reconnect-a-checkpoint-stream).
 
 **Slow consumer eviction:** The server buffers up to 256 items per subscriber. If your client cannot keep up and the buffer fills, the server drops the subscription immediately without a graceful close. To avoid this:
 - Process items asynchronously. Write to a queue and process from the queue in a separate worker.
@@ -1337,4 +1337,4 @@ gRPC streams can terminate for several reasons. Understanding the server's conne
 
 **Server-side timeout:** Unary requests use the general gRPC timeout, which defaults to 60 seconds. Each streaming `List*` API has its own configurable `timeout-ms`; the full node configuration examples use 5 seconds. This deadline covers the entire list stream, so a long backfill can end even after returning frames. Resume from the latest `watermark.cursor` while preserving the original upper bound. Network, proxy, and GOAWAY interruptions require the same cursor-based recovery.
 
-**Public endpoint limitations:** The public URLs at `https://fullnode.<network>.sui.io` are behind load balancers that impose their own connection timeouts and rate limits beyond what the Sui node configures. Long-running streams are more likely to be interrupted on public endpoints. For production streaming workloads, run your own [Sui full node](/operators/full-node/sui-full-node) or use a provider with a dedicated gRPC endpoint.
+**Public endpoint limitations:** The public URLs at `https://fullnode.<network>.rtd.io` are behind load balancers that impose their own connection timeouts and rate limits beyond what the Rtd node configures. Long-running streams are more likely to be interrupted on public endpoints. For production streaming workloads, run your own [Rtd full node](/operators/full-node/rtd-full-node) or use a provider with a dedicated gRPC endpoint.

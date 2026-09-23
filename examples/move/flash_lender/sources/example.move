@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// A flash loan that works for any Coin type
 module flash_lender::example;
 
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, Coin};
+use rtd::balance::{Self, Balance};
+use rtd::coin::{Self, Coin};
 
 /// A shared object offering flash loans to any buyer willing to pay `fee`.
 public struct FlashLender<phantom T> has key {
@@ -164,9 +164,9 @@ public fun update_fee<T>(self: &mut FlashLender<T>, admin: &AdminCap, new_fee: u
 
 // === Tests ===
 #[test_only]
-use sui::sui::SUI;
+use rtd::rtd::RTD;
 #[test_only]
-use sui::test_scenario as ts;
+use rtd::test_scenario as ts;
 
 #[test_only]
 const ADMIN: address = @0xAD;
@@ -180,7 +180,7 @@ fun test_flash_loan() {
     // Admin creates a flash lender with 100 coins and a fee of 1 coin.
     {
         ts.next_tx(ADMIN);
-        let coin = coin::mint_for_testing<SUI>(100, ts.ctx());
+        let coin = coin::mint_for_testing<RTD>(100, ts.ctx());
         let bal = coin.into_balance();
         let cap = new(bal, 1, ts.ctx());
         transfer::public_transfer(cap, ADMIN);
@@ -190,11 +190,11 @@ fun test_flash_loan() {
     {
         ts.next_tx(ALICE);
 
-        let mut lender: FlashLender<SUI> = ts.take_shared();
+        let mut lender: FlashLender<RTD> = ts.take_shared();
         let (loan, receipt) = lender.loan(10, ts.ctx());
 
         // Simulate Alice making enough profit to repay.
-        let mut profit = coin::mint_for_testing<SUI>(1, ts.ctx());
+        let mut profit = coin::mint_for_testing<RTD>(1, ts.ctx());
         profit.join(loan);
 
         lender.repay(profit, receipt);
@@ -205,7 +205,7 @@ fun test_flash_loan() {
     {
         ts.next_tx(ADMIN);
         let cap = ts.take_from_sender();
-        let mut lender: FlashLender<SUI> = ts.take_shared();
+        let mut lender: FlashLender<RTD> = ts.take_shared();
 
         // Max loan increased because of the fee payment
         assert!(lender.max_loan() == 101, 0);

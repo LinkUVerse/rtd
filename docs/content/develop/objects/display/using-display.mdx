@@ -9,8 +9,8 @@ keywords:
   - display
   - display properties
   - object properties
-  - 'sui::display'
-  - Sui utility objects
+  - 'rtd::display'
+  - Rtd utility objects
 goal:
   description: >-
     Reader understands an Object Display must be explicitly created and then
@@ -32,16 +32,16 @@ goal:
       label: Needs answer summary for AI citation
 questions:
   - How do I create displays?
-  - What is Creating Displays in Sui?
-  - How does creating displays work on Sui?
+  - What is Creating Displays in Rtd?
+  - How does creating displays work on Rtd?
 answer: >-
   Object Display V2 is the current Object Display standard. If you manage a
-  display from Move code, use the `sui::display_registry` APIs.
+  display from Move code, use the `rtd::display_registry` APIs.
 ---
 
 :::info
 
-Object Display V2 is the current Object Display standard. If you manage a display from Move code, use the `sui::display_registry` APIs.
+Object Display V2 is the current Object Display standard. If you manage a display from Move code, use the `rtd::display_registry` APIs.
 
 A system snapshot migration migrated existing V1 displays to V2. If you need to manage a migrated display, claim the capability when you are ready (see [Migrating to V2](#migrating-to-v2)).
 
@@ -79,7 +79,7 @@ In Object Display V1, you could have N displays per type and had to use events t
 
 The `display_registry::new_with_publisher<T>` call creates a V2 `Display<T>` and `DisplayCap<T>` for a type. The display object has a deterministic derived ID, and the capability authorizes future updates.
 ```move
-module sui::display_registry;
+module rtd::display_registry;
 
 public fun new_with_publisher<T>(
     registry: &mut DisplayRegistry,
@@ -90,7 +90,7 @@ public fun new_with_publisher<T>(
 
 After you create the `Display<T>`, set its fields with `display_registry::set`, remove fields with `display_registry::unset`, or clear all fields with `display_registry::clear`. Each update requires the matching `DisplayCap<T>`.
 ```move
-module sui::display_registry;
+module rtd::display_registry;
 
 public fun set<T>(
     display: &mut Display<T>,
@@ -114,7 +114,7 @@ The following are examples of Object Display patterns. You can explore and inter
 
 This example demonstrates an object with static metadata that is set once during the object's mint event. If the metadata standard evolves and some ecosystem projects add new features for some properties, this object always stays in its original form and might require backward-compatible changes.
 ```move
-module sui::devnet_nft;
+module rtd::devnet_nft;
 
 use std::string::String;
 
@@ -148,9 +148,9 @@ public struct CapyItem has key, store {
 }
 ```
 
-### Sui utility objects
+### Rtd utility objects
 
-In Sui, utility objects enable authorization for capabilities. Almost all modules have features that can be accessed only with the required capability. Generic modules allow one capability per application, such as a marketplace. Some capabilities mark ownership of a shared object onchain, or access the shared data from another account.
+In Rtd, utility objects enable authorization for capabilities. Almost all modules have features that can be accessed only with the required capability. Generic modules allow one capability per application, such as a marketplace. Some capabilities mark ownership of a shared object onchain, or access the shared data from another account.
 
 With capabilities, it is important to provide a meaningful description of objects to facilitate user interface implementation. This helps avoid accidentally transferring the wrong object when objects are similar. It also provides a user-friendly description of items that users see.
 

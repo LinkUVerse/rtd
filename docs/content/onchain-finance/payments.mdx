@@ -1,7 +1,7 @@
 ---
 title: Payments
 description: >-
-  Overview of payment approaches on Sui: reading balances, constructing payment
+  Overview of payment approaches on Rtd: reading balances, constructing payment
   intents, sponsoring gas fees, gasless stablecoin transfers, and production
   payment verification with Payment Kit.
 keywords:
@@ -15,7 +15,7 @@ keywords:
   - address balances
 goal:
   description: >-
-    Reader can integrate payment flows on Sui, from reading and managing
+    Reader can integrate payment flows on Rtd, from reading and managing
     balances to sponsoring gasless transactions
   requires:
     - has_frontmatter:
@@ -30,20 +30,20 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Payments in Sui?
-  - How does payments work on Sui?
+  - What is Payments in Rtd?
+  - How does payments work on Rtd?
   - Why should I use payments?
 answer: >-
   Integrate payment flows into your application, from reading and managing
   address balances to sponsoring gasless transactions for your users.
 ---
 
-Sui provides multiple primitives for building payment flows, from reading balances and constructing multi-step transactions to sponsoring gas fees on behalf of your users. The approach you choose depends on your use case:
+Rtd provides multiple primitives for building payment flows, from reading balances and constructing multi-step transactions to sponsoring gas fees on behalf of your users. The approach you choose depends on your use case:
 
 - **Reading balances:** Query [address balances](/onchain-finance/asset-custody/address-balances) to display a user's holdings or verify sufficient funds before processing a payment.
 - **Constructing payments:** Use [payment intents](/onchain-finance/payment-intents) to compose multi-step payment workflows (split coins, transfer, merge) into a single atomic [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks).
 - **Sponsoring gas:** Use [sponsored transactions](/develop/transaction-payment/sponsor-txn) so your users pay no gas fees. This is common for onboarding flows and stablecoin transfers where you want a Web2-like experience.
-- **Gasless stablecoin transfers:** Sui supports [zero-fee stablecoin transfers](/develop/transaction-payment/gasless-stablecoin-transfers) for eligible transactions, removing gas costs entirely for supported assets.
+- **Gasless stablecoin transfers:** Rtd supports [zero-fee stablecoin transfers](/develop/transaction-payment/gasless-stablecoin-transfers) for eligible transactions, removing gas costs entirely for supported assets.
 - **Recurring and delegated spending:** Use [allowances](/onchain-finance/allowances) to let a service, agent, or team member pull from a user's address balance within limits the user sets and can revoke.
 - **Payment verification:** The [Payment Kit](/onchain-finance/payment-kit) provides secure payment verification, receipt management, and duplicate prevention for production payment systems.
 
@@ -60,6 +60,6 @@ Sui provides multiple primitives for building payment flows, from reading balanc
 
 :::info Regulatory considerations
 
-Payment applications might be subject to KYC, AML, and money-transmitter licensing requirements depending on your jurisdiction and business model. These requirements are outside the scope of Sui documentation. Consult qualified legal counsel before launching a payment product.
+Payment applications might be subject to KYC, AML, and money-transmitter licensing requirements depending on your jurisdiction and business model. These requirements are outside the scope of Rtd documentation. Consult qualified legal counsel before launching a payment product.
 
 :::

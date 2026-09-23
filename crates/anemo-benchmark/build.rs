@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -24,7 +24,7 @@ fn main() -> Result<()> {
 }
 
 fn build_anemo_services(out_dir: &Path) {
-    let codec_path = "mysten_network::codec::anemo::BcsSnappyCodec";
+    let codec_path = "linku_network::codec::anemo::BcsSnappyCodec";
 
     let bench = anemo_build::manual::Service::builder()
         .name("Benchmark")

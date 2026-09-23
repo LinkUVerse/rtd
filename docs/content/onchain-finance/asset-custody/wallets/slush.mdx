@@ -2,7 +2,7 @@
 title: Slush
 description: >-
   Learn about Slush Wallet, its features, and how to integrate it into your
-  wallet or app using the Slush Wallet SDK and Sui dApp Kit.
+  wallet or app using the Slush Wallet SDK and Rtd dApp Kit.
 keywords:
   - slush
   - slush wallet
@@ -33,22 +33,22 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Slush in Sui?
-  - How does slush work on Sui?
+  - What is Slush in Rtd?
+  - How does slush work on Rtd?
   - Why should I use slush?
 answer: >-
-  Slush is the official Sui wallet built by Mysten Labs, available as a Chrome
+  Slush is the official Rtd wallet built by LinkU Labs, available as a Chrome
   browser extension, an iOS app, an Android app, and a web app at
   [slush.app](https://slush.app).
 ---
 
-Slush is the official Sui wallet built by Mysten Labs, available as a Chrome browser extension, an iOS app, an Android app, and a web app at [slush.app](https://slush.app).
+Slush is the official Rtd wallet built by LinkU Labs, available as a Chrome browser extension, an iOS app, an Android app, and a web app at [slush.app](https://slush.app).
 
 ## Slush basics
 
 Slush Wallet gives users two ways to create and access an account:
 
-- **Social login** uses [zero-knowledge login (zkLogin)](/sui-stack/zklogin-integration/zklogin) to derive a Sui address from an OAuth credential (Google, Apple, Facebook, or Twitch). No recovery passphrase is required. This is the recommended login method for users who are new to wallets, because key management is fully abstracted.
+- **Social login** uses [zero-knowledge login (zkLogin)](/rtd-stack/zklogin-integration/zklogin) to derive a Rtd address from an OAuth credential (Google, Apple, Facebook, or Twitch). No recovery passphrase is required. This is the recommended login method for users who are new to wallets, because key management is fully abstracted.
 
 - **Recovery passphrase** creates a standard self-custodial account. The user holds the private key locally and is responsible for backing up the recovery passphrase. This is the recommended path for users who want full, independent control of their keys.
 
@@ -57,17 +57,17 @@ Both account types are supported simultaneously. A single Slush Wallet can hold 
 Additional features available in Slush Wallet include:
 
 - [**Slush Links**](https://slush.app/guides/use-slush-links): Send tokens or NFTs to anyone through a shareable link or QR code, with no recipient address required.
-- [**Staking**](/develop/sui-architecture/tokenomics-overview): Delegate SUI to a validator and earn staking rewards directly from the wallet.
+- [**Staking**](/develop/rtd-architecture/tokenomics-overview): Delegate RTD to a validator and earn staking rewards directly from the wallet.
 - **Swaps**: Exchange tokens in-app without leaving the wallet.
-- **App browser**: Browse and connect to Sui apps from inside the mobile app.
+- **App browser**: Browse and connect to Rtd apps from inside the mobile app.
 
 ## Slush Wallet SDK
 
-The [`@mysten/slush-wallet` SDK](https://sdk.mystenlabs.com/slush-wallet) lets you add Slush Wallet support to your own wallet interface or app. The Slush browser extension and native mobile app work automatically through the [Wallet Standard](/onchain-finance/asset-custody/wallets/wallet-standard) and do not require this SDK. The SDK is only required if you want to support the Slush web app as a connection option.
+The [`@linku/slush-wallet` SDK](https://sdk.linkuverse.com/slush-wallet) lets you add Slush Wallet support to your own wallet interface or app. The Slush browser extension and native mobile app work automatically through the [Wallet Standard](/onchain-finance/asset-custody/wallets/wallet-standard) and do not require this SDK. The SDK is only required if you want to support the Slush web app as a connection option.
 
 ### Install
 ```bash
-pnpm install @mysten/slush-wallet
+pnpm install @linku/slush-wallet
 ```
 
 ### Register the Slush web wallet
@@ -77,7 +77,7 @@ Call `registerSlushWallet` once, as early as possible in your application's life
 <ImportContent
   source="/packages/slush-wallet/src/wallet/index.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="registerSlushWallet"
   noComments
@@ -98,19 +98,19 @@ To check whether the connected wallet is Slush Wallet, compare the wallet name a
 <ImportContent
   source="/packages/slush-wallet/src/wallet/index.ts"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   variable="SLUSH_WALLET_NAME"
 />
 
-## Sui dApp Kit integration
+## Rtd dApp Kit integration
 
-The [Sui dApp Kit](https://sdk.mystenlabs.com/dapp-kit) provides built-in opt-in support for Slush Wallet. Pass `slushWalletConfig` to `createDAppKit` to enable it. The `name` field is required and is shown to the user during the connection flow.
+The [Rtd dApp Kit](https://sdk.linkuverse.com/dapp-kit) provides built-in opt-in support for Slush Wallet. Pass `slushWalletConfig` to `createDAppKit` to enable it. The `name` field is required and is shown to the user during the connection flow.
 
 <ImportContent
   source="/packages/dapp-kit/packages/dapp-kit-react/src/components/DAppKitProvider.tsx"
   mode="code"
-  org="MystenLabs"
+  org="LinkUVerse"
   repo="ts-sdks"
   fun="DAppKitProvider"
   noComments
@@ -122,4 +122,4 @@ Users who have the Slush browser extension installed see only the extension in t
 
 Deep linking lets external apps, websites, and services open Slush Wallet directly to a specific screen or trigger a specific action, such as a token swap, a payment, or an app browser session. Slush supports universal links through the `my.slush.app` domain and custom URL scheme links through `slush://`. Deep linking is not supported for the Slush browser extension.
 
-For the full route reference, parameter tables, platform-specific implementation examples, and troubleshooting guidance, refer to the [Slush Wallet SDK docs on deep linking](https://sdk.mystenlabs.com/slush-wallet/deep-linking).
+For the full route reference, parameter tables, platform-specific implementation examples, and troubleshooting guidance, refer to the [Slush Wallet SDK docs on deep linking](https://sdk.linkuverse.com/slush-wallet/deep-linking).

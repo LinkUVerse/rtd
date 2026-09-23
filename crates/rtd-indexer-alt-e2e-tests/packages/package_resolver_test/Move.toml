@@ -1,0 +1,9 @@
+[package]
+name = "package_resolver_test"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+package_resolver_test = "0x0"

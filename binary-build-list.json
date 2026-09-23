@@ -1,18 +1,18 @@
 {
     "release_binaries": [
-        "sui",
-        "sui-node",
-        "sui-tool",
-        "sui-faucet",
-        "sui-bridge",
-        "sui-bridge-cli",
-        "sui-fork",
+        "rtd",
+        "rtd-node",
+        "rtd-tool",
+        "rtd-faucet",
+        "rtd-bridge",
+        "rtd-bridge-cli",
+        "rtd-fork",
         "move-analyzer"
     ],
     "internal_binaries": [
         "stress",
-        "sui-proxy",
-        "sui-metric-checker",
-        "sui-analytics-indexer"
+        "rtd-proxy",
+        "rtd-metric-checker",
+        "rtd-analytics-indexer"
 	]
 }

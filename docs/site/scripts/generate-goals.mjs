@@ -1,5 +1,5 @@
 /*
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 */
 
@@ -72,7 +72,7 @@ function countWords(body) {
 function getArchetype(relPath, data, body) {
   // Skip snippets and auto-generated graphql reference
   if (relPath.startsWith('snippets/')) return 'skip';
-  if (relPath.includes('sui-graphql/beta/reference/')) return 'skip';
+  if (relPath.includes('rtd-graphql/beta/reference/')) return 'skip';
 
   // Category index pages (just a landing/nav page)
   if (relPath.endsWith('/index.mdx') || relPath.match(/^[^/]+\.mdx$/)) {
@@ -83,7 +83,7 @@ function getArchetype(relPath, data, body) {
   // Getting started
   if (relPath.startsWith('getting-started/onboarding/')) return 'onboarding';
   if (relPath.startsWith('getting-started/examples/')) return 'example';
-  if (relPath.startsWith('getting-started/sui-for-')) return 'migration';
+  if (relPath.startsWith('getting-started/rtd-for-')) return 'migration';
   if (relPath === 'getting-started/dev-cheat-sheet.mdx') return 'cheatsheet';
   if (relPath === 'getting-started/tooling.mdx') return 'catalog';
 
@@ -116,8 +116,8 @@ function getArchetype(relPath, data, body) {
     return 'guide';
   }
 
-  // Sui stack
-  if (relPath.startsWith('sui-stack/')) return 'guide';
+  // Rtd stack
+  if (relPath.startsWith('rtd-stack/')) return 'guide';
 
   return 'guide';
 }
@@ -180,7 +180,7 @@ function generateOnboardingGoal(title, body, headings, codeBlocks, h2s, relPath)
 
   // Onboarding pages should link to the next step
   const onboardingOrder = [
-    'sui-install', 'configure-sui-client', 'get-address',
+    'rtd-install', 'configure-rtd-client', 'get-address',
     'get-coins', 'hello-world', 'app-frontends'
   ];
   const basename = path.basename(relPath, '.mdx');
@@ -195,7 +195,7 @@ function generateOnboardingGoal(title, body, headings, codeBlocks, h2s, relPath)
 
   // Page-specific checks based on what the page teaches
   if (hasPattern(body, 'install|suiup')) {
-    requires.push({ pattern: 'sui --version|sui -V', min: 1, label: 'Shows how to verify installation' });
+    requires.push({ pattern: 'rtd --version|rtd -V', min: 1, label: 'Shows how to verify installation' });
   }
   if (hasPattern(body, 'address') && hasPattern(body, 'new-address|keystore')) {
     requires.push({ pattern: 'recovery phrase|mnemonic', min: 1, label: 'Explains recovery phrase security' });
@@ -203,7 +203,7 @@ function generateOnboardingGoal(title, body, headings, codeBlocks, h2s, relPath)
   if (hasPattern(body, 'faucet')) {
     requires.push({ pattern: 'balance|gas', min: 1, label: 'Shows how to verify token receipt' });
   }
-  if (hasPattern(body, 'sui move build|sui client publish')) {
+  if (hasPattern(body, 'rtd move build|rtd client publish')) {
     requires.push({ pattern: '```move', min: 1, label: 'Has Move source code' });
     requires.push({ headings: [{ pattern: 'Build' }, { pattern: 'Publish' }], label: 'Has build and publish sections' });
   }
@@ -276,7 +276,7 @@ function generateMigrationGoal(title, body, headings) {
   }
 
   return {
-    description: `Reader can map familiar ${platform || 'platform'} concepts to their Sui equivalents`,
+    description: `Reader can map familiar ${platform || 'platform'} concepts to their Rtd equivalents`,
     requires,
   };
 }
@@ -309,7 +309,7 @@ function generateCheatsheetGoal(title, headings, wc) {
 
 function generateCatalogGoal(title, wc) {
   return {
-    description: `Reader can find the right tool for their Sui development task`,
+    description: `Reader can find the right tool for their Rtd development task`,
     requires: [
       { min_words: 1000, label: 'Comprehensive tool listings' },
       { pattern: 'https?://', min: 10, label: 'Links to external tool sites' },
@@ -391,7 +391,7 @@ function generateCliReferenceGoal(title, body) {
 
   requires.push({ has_frontmatter: ['title', 'description'] });
   requires.push({ pattern: '```', min: 1, label: 'Has command examples' });
-  requires.push({ pattern: 'sui ', min: 2, label: 'Shows CLI command usage' });
+  requires.push({ pattern: 'rtd ', min: 2, label: 'Shows CLI command usage' });
 
   return {
     description: `Reader can use the ${title.toLowerCase()} CLI commands`,

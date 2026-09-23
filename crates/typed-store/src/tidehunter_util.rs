@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{DBMetrics, StorageType, rocks::MetricConf, util::ensure_database_type};
 use bincode::Options;
-use mysten_metrics::RegistryID;
+use linku_metrics::RegistryID;
 use prometheus::{HistogramTimer, Registry};
 use serde::de::DeserializeOwned;
 use std::env;

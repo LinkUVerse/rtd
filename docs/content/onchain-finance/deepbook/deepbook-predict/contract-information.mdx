@@ -42,22 +42,22 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - Which package and object IDs does DeepBook Predict use on Sui Mainnet and Testnet?
+  - Which package and object IDs does DeepBook Predict use on Rtd Mainnet and Testnet?
   - What is the DeepBook Predict quote coin on Mainnet and on Testnet?
   - What units and market cadences do the DeepBook Predict deployments use?
   - Which servers return DeepBook Predict market, oracle, and account data?
 answer: >-
-  DeepBook Predict runs as the deepbook-predict-mainnet deployment on Sui
-  Mainnet and the deepbook-predict-testnet deployment on Sui Testnet. Each
+  DeepBook Predict runs as the deepbook-predict-mainnet deployment on Rtd
+  Mainnet and the deepbook-predict-testnet deployment on Rtd Testnet. Each
   publishes 7 packages and shares its own Registry, ProtocolConfig,
   PoolVault, OracleRegistry, and AccountRegistry objects. Mainnet quotes in
   native USDC and Testnet in a mintable test USDC that displays as DUSDC. Both
   scale probabilities, prices, and rates by 1e9 and run BTC markets on the 1m
-  and 5m cadences. The @mysten/deepbook-v3 SDK ships both deployments and reads
+  and 5m cadences. The @linku/deepbook-v3 SDK ships both deployments and reads
   every value without an indexer.
 ---
 
-DeepBook Predict runs on Sui Mainnet and Sui Testnet as 2 separate deployments, `deepbook-predict-mainnet` and `deepbook-predict-testnet`. Version 2.5.0 or later of [`@mysten/deepbook-v3`](https://www.npmjs.com/package/@mysten/deepbook-v3) carries both, so `getConfig` returns the identifiers on this page for either network. The Mainnet publish comes from DeepBookV3 source commit [`7b169bde`](https://github.com/MystenLabs/deepbookv3/tree/7b169bde2c2a25fee3ac9aa4686e346309bfe570/packages/predict), and the Testnet publish from source commit [`4d752fb8`](https://github.com/MystenLabs/deepbookv3/tree/4d752fb82d909a821c85bcc5d3963725efb546f4/packages/predict). The 2 source commits carry byte-identical Move sources, so one source pin serves both networks.
+DeepBook Predict runs on Rtd Mainnet and Rtd Testnet as 2 separate deployments, `deepbook-predict-mainnet` and `deepbook-predict-testnet`. Version 2.5.0 or later of [`@linku/deepbook-v3`](https://www.npmjs.com/package/@linku/deepbook-v3) carries both, so `getConfig` returns the identifiers on this page for either network. The Mainnet publish comes from DeepBookV3 source commit [`7b169bde`](https://github.com/LinkUVerse/deepbookv3/tree/7b169bde2c2a25fee3ac9aa4686e346309bfe570/packages/predict), and the Testnet publish from source commit [`4d752fb8`](https://github.com/LinkUVerse/deepbookv3/tree/4d752fb82d909a821c85bcc5d3963725efb546f4/packages/predict). The 2 source commits carry byte-identical Move sources, so one source pin serves both networks.
 
 :::caution
 
@@ -282,9 +282,9 @@ The tables stay here for readers who still work against `predict-8-21`, and beca
 
 | **Service** | **Base URL** | **Primary data** |
 | --- | --- | --- |
-| Predict | `https://predict-server-v4.testnet.mystenlabs.com` | Markets, market state, positions, vault state, protocol events, and indexed configuration |
-| Propbook | `https://propbook-server-v4.testnet.mystenlabs.com` | Oracle bindings, Pyth observations, and Block Scholes spot, forward, and SVI observations |
-| Account | `https://account-server-v4.testnet.mystenlabs.com` | Account custody state, balances, activity, portfolio, and app authorizations |
+| Predict | `https://predict-server-v4.testnet.linkuverse.com` | Markets, market state, positions, vault state, protocol events, and indexed configuration |
+| Propbook | `https://propbook-server-v4.testnet.linkuverse.com` | Oracle bindings, Pyth observations, and Block Scholes spot, forward, and SVI observations |
+| Account | `https://account-server-v4.testnet.linkuverse.com` | Account custody state, balances, activity, portfolio, and app authorizations |
 
 These hostnames are operational Testnet endpoints. They are not part of any audited manifest, and their operators can retire or repoint them independently of the onchain packages. Confirm which deployment a service indexes before you build on it: its `/markets` response names the Predict package through the market IDs it returns.
 
@@ -309,7 +309,7 @@ The `GET /events` listing includes `liquidated-order-redeemed`, `deep-staked`, `
 Market discovery returns the creation record for each live market. The following sample shows only the market's identity and cadence terms, and its values come from an earlier deployment:
 
 ```bash
-$ curl 'https://predict-server-v4.testnet.mystenlabs.com/markets?active=true&limit=1'
+$ curl 'https://predict-server-v4.testnet.linkuverse.com/markets?active=true&limit=1'
 ```
 
 ```json
@@ -361,7 +361,7 @@ Account and position paths key on the canonical account ID, not on the shared `A
 
 You have 2 routes to that ID:
 
-- **Derive it from the owner address:** `new SessionsContract(getSessionsConfig(network)).deriveAccountId(owner)`, from the `@mysten/deepbook-v3/sessions` subpath, computes it offchain with no chain read. `client.predict` exposes only `wrapperIdFor`, which returns the wrapper, so the Predict client alone cannot produce this ID.
+- **Derive it from the owner address:** `new SessionsContract(getSessionsConfig(network)).deriveAccountId(owner)`, from the `@linku/deepbook-v3/sessions` subpath, computes it offchain with no chain read. `client.predict` exposes only `wrapperIdFor`, which returns the wrapper, so the Predict client alone cannot produce this ID.
 - **Read it off an event:** Every Predict order event carries the account ID in its `account_id` field, and `decode.createManager(result)` returns it as `accountId`.
 
 :::caution
@@ -379,9 +379,9 @@ Take every path from the tables on this page rather than guessing at one. The pl
 Check `/status` on each service before relying on recent data:
 
 ```bash
-$ curl 'https://predict-server-v4.testnet.mystenlabs.com/status'
-$ curl 'https://propbook-server-v4.testnet.mystenlabs.com/status'
-$ curl 'https://account-server-v4.testnet.mystenlabs.com/status'
+$ curl 'https://predict-server-v4.testnet.linkuverse.com/status'
+$ curl 'https://propbook-server-v4.testnet.linkuverse.com/status'
+$ curl 'https://account-server-v4.testnet.linkuverse.com/status'
 ```
 
 Each response reports `status`, the latest onchain checkpoint, and every pipeline's indexed checkpoint and time lag. Treat a non-`OK` status, or an unexpectedly old pipeline you depend on, as incomplete recent data rather than as an empty application state.
@@ -403,7 +403,7 @@ The SDK carries both deployments' identifiers, so keep them in a single network-
 
 The 2 deployments run the same contracts and the same initial configuration. What differs is around them:
 
-- **Quote asset and funding:** Testnet quotes in a test coin you can request for free, and Testnet SUI is free. Mainnet quotes in native USDC, there is no faucet, and any top-up path that assumes free replenishment needs replacing.
+- **Quote asset and funding:** Testnet quotes in a test coin you can request for free, and Testnet RTD is free. Mainnet quotes in native USDC, there is no faucet, and any top-up path that assumes free replenishment needs replacing.
 - **Activity:** As of 2026-09-14 no market has opened or settled on either network since the markets created at deployment expired on 2026-09-12. The Mainnet pool holds only the bootstrap minimum. `read.markets()` lists live-and-unsettled markets, which includes an expired market nobody has settled, so check each entry's expiry before you quote against it.
 - **Read services:** None exists for either current deployment as of 2026-09-14.
 - **DeepBook core authorization:** The session spot wrappers work on Testnet and not yet on Mainnet, per [App authorization](#app-authorization).
@@ -443,14 +443,14 @@ The `SupplyFilled` and `WithdrawFilled` payloads name their quote amounts `usdc_
 
 ### Stream events over gRPC
 
-Stream Predict events with `SubscriptionService.SubscribeEvents`, filtering on the Predict package ID, and page the same events historically with `LedgerService.ListEvents` under an identical filter. Sui full nodes no longer serve the older WebSocket subscription API, so do not build on `sui_subscribeEvent`.
+Stream Predict events with `SubscriptionService.SubscribeEvents`, filtering on the Predict package ID, and page the same events historically with `LedgerService.ListEvents` under an identical filter. Rtd full nodes no longer serve the older WebSocket subscription API, so do not build on `rtd_subscribeEvent`.
 
-Subscribe to market creation and settlement on Testnet. For Mainnet, swap in the Mainnet Predict package ID and `fullnode.mainnet.sui.io:443`:
+Subscribe to market creation and settlement on Testnet. For Mainnet, swap in the Mainnet Predict package ID and `fullnode.mainnet.rtd.io:443`:
 
 ```shell
 $ PACKAGE=0x59d71119e990573a738dd3ff9c4c7d28d6893af69c87c1a7f3a2e90e280ce2f4
-$ ENDPOINT=fullnode.testnet.sui.io:443
-$ METHOD=sui.rpc.v2.SubscriptionService/SubscribeEvents
+$ ENDPOINT=fullnode.testnet.rtd.io:443
+$ METHOD=rtd.rpc.v2.SubscriptionService/SubscribeEvents
 
 $ grpcurl -format text -d "
 read_mask {
@@ -481,7 +481,7 @@ filter {
 " "$ENDPOINT" "$METHOD"
 ```
 
-Swap the method for `sui.rpc.v2.LedgerService/ListEvents` to page the same events historically. The filter is disjunctive normal form, so the server ORs the `terms` blocks: the request above matches either event type and scopes both to one deployment.
+Swap the method for `rtd.rpc.v2.LedgerService/ListEvents` to page the same events historically. The filter is disjunctive normal form, so the server ORs the `terms` blocks: the request above matches either event type and scopes both to one deployment.
 
 Subscriptions begin at the current tip and accept no resume point, so recovering events missed during a disconnect always requires a `ListEvents` backfill. Those mechanics are the same for every gRPC event consumer, and the gRPC pages document them once, for all of them:
 
@@ -498,14 +498,14 @@ The links below pin every module to DeepBookV3 `main` at `76b11922f3144be5bdaacb
 
 | **Area** | **Source** |
 | --- | --- |
-| Markets, quoting, trading, and settlement | [`packages/predict/sources/expiry_market.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/expiry_market.move) |
-| Market catalog, cadences, and capabilities | [`packages/predict/sources/registry/registry.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/registry/registry.move) |
-| Protocol configuration and gating | [`packages/predict/sources/config/protocol_config.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/config/protocol_config.move) |
-| PLP pool, liquidity queues, and valuation | [`packages/predict/sources/plp/plp.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/plp/plp.move) |
-| Pool valuation capability | [`packages/predict/sources/capabilities/pool_valuation_cap.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/capabilities/pool_valuation_cap.move) |
-| Account custody and authorization | [`packages/account/sources/account.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/account/sources/account.move) |
-| Oracle registry and bindings | [`packages/propbook/sources/registry.move`](https://github.com/MystenLabs/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/propbook/sources/registry.move) |
-| Pyth and Block Scholes feeds | [`packages/propbook/sources/feeds`](https://github.com/MystenLabs/deepbookv3/tree/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/propbook/sources/feeds) |
+| Markets, quoting, trading, and settlement | [`packages/predict/sources/expiry_market.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/expiry_market.move) |
+| Market catalog, cadences, and capabilities | [`packages/predict/sources/registry/registry.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/registry/registry.move) |
+| Protocol configuration and gating | [`packages/predict/sources/config/protocol_config.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/config/protocol_config.move) |
+| PLP pool, liquidity queues, and valuation | [`packages/predict/sources/plp/plp.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/plp/plp.move) |
+| Pool valuation capability | [`packages/predict/sources/capabilities/pool_valuation_cap.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/predict/sources/capabilities/pool_valuation_cap.move) |
+| Account custody and authorization | [`packages/account/sources/account.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/account/sources/account.move) |
+| Oracle registry and bindings | [`packages/propbook/sources/registry.move`](https://github.com/LinkUVerse/deepbookv3/blob/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/propbook/sources/registry.move) |
+| Pyth and Block Scholes feeds | [`packages/propbook/sources/feeds`](https://github.com/LinkUVerse/deepbookv3/tree/76b11922f3144be5bdaacb66c38c7c3524a02ff3/packages/propbook/sources/feeds) |
 
 ### Find the page for a Move abort {#abort-module-map}
 

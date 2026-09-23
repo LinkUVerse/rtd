@@ -41,7 +41,7 @@ pub struct VerifierConfig {
     /// Reject system-package functions with an `&mut TxContext` parameter
     /// that return any `&mut _` unless the parameter list also contains a
     /// non-`TxContext` `&mut U`. User packages are exempt. See
-    /// `sui_verifier::tx_context_restrictions_verifier`.
+    /// `rtd_verifier::tx_context_restrictions_verifier`.
     pub framework_tx_context_mut_restrictions: bool,
     pub disallow_jump_orphans: bool,
     pub max_generic_instantiation_type_nodes_per_function: Option<usize>,

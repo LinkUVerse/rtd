@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fmt;
 
 use fastcrypto::encoding::{Base64, Encoding};
 use serde::Deserialize;
-use sui_types::{
+use rtd_types::{
     base_types::{ObjectRef, SequenceNumber},
     digests::ObjectDigest,
     object::Owner,

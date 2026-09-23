@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Remark plugin that injects description and keywords into auto-generated
@@ -15,8 +15,8 @@ function graphqlFrontmatterPlugin() {
     const title = fm.title || fm.id || "";
 
     // Derive the GraphQL category from the file path.
-    // Paths look like: references/sui-api/sui-graphql/beta/reference/operations/queries/address.mdx
-    //                   references/sui-api/sui-graphql/beta/reference/types/objects/gas-coin.mdx
+    // Paths look like: references/rtd-api/rtd-graphql/beta/reference/operations/queries/address.mdx
+    //                   references/rtd-api/rtd-graphql/beta/reference/types/objects/gas-coin.mdx
     const filePath = file.history?.[0] || "";
     let category = "type";
     if (filePath.includes("/operations/queries/")) {
@@ -40,16 +40,16 @@ function graphqlFrontmatterPlugin() {
     }
 
     if (!fm.description) {
-      fm.description = `Reference documentation for the ${title} ${category} in the Sui GraphQL API.`;
+      fm.description = `Reference documentation for the ${title} ${category} in the Rtd GraphQL API.`;
     }
 
     if (!fm.keywords) {
       fm.keywords = [
-        "sui graphql",
+        "rtd graphql",
         "graphql api",
         title,
         category,
-        "sui graphql reference",
+        "rtd graphql reference",
       ];
     }
   };

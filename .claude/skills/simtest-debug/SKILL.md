@@ -1,6 +1,6 @@
 ---
 name: simtest-debug
-description: Debug deterministic Sui simtest failures with structured experiments, logging-only changes, and NOTEBOOK.md observations.
+description: Debug deterministic Rtd simtest failures with structured experiments, logging-only changes, and NOTEBOOK.md observations.
 ---
 
 # Debug a simtest failure
@@ -13,7 +13,7 @@ Debugs a simtest failure using logging and the scientific method.
 /debug-simtest <repro command or test>
 ```
 
-Example: `/debug-simtest MSIM_TEST_SEED=1768248386016 RUST_LOG=sui=debug,info cargo simtest --test address_balance_tests test_deposit_and_withdraw`
+Example: `/debug-simtest MSIM_TEST_SEED=1768248386016 RUST_LOG=rtd=debug,info cargo simtest --test address_balance_tests test_deposit_and_withdraw`
 Example: `/debug-simtest test_deposit_and_withdraw
 
 ## Arguments
@@ -76,7 +76,7 @@ If only a test name was provided, find a repro as follows:
 
 ### 3. Run the test.
 
-Run the repro command. If `RUST_LOG=...` is missing, add `RUST_LOG=sui=debug,info`. if `--no-capture` is missing, add it.
+Run the repro command. If `RUST_LOG=...` is missing, add `RUST_LOG=rtd=debug,info`. if `--no-capture` is missing, add it.
 Redirect the test output to a file named `experiment_N.log` where N is the iteration number. Do not run the test in the background or use a timeout. It may run for a long time, but it will finish.
 
 ### 4. Examine the output and make observations.

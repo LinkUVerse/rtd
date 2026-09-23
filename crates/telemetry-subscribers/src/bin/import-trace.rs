@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use bytes::Buf;
@@ -52,7 +52,7 @@ async fn main() {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        format!("sui-node-{}", timestamp)
+        format!("rtd-node-{}", timestamp)
     });
 
     println!("importing trace with service name {:?}", service_name);

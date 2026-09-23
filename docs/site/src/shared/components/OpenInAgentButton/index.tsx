@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /**
@@ -155,7 +155,7 @@ const PROMPT_PRESETS: Record<string, (code: string, lang: string) => string> = {
     return `Explain this${l} code:\n\n\`\`\`${lang}\n${code}\n\`\`\``;
   },
   build: (code, lang) =>
-    `Use this prompt for building on Sui:\n\n\`\`\`${lang}\n${code}\n\`\`\``,
+    `Use this prompt for building on Rtd:\n\n\`\`\`${lang}\n${code}\n\`\`\``,
 };
 
 const DEFAULT_PRESET = "explain";

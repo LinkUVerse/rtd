@@ -1,7 +1,7 @@
 ---
 title: Object Display V2 Syntax
 description: >-
-  Learn how to use Display V2 format strings to render Sui Move object values
+  Learn how to use Display V2 format strings to render Rtd Move object values
   into human-readable strings, JSON, or encoded representations.
 keywords:
   - display
@@ -11,7 +11,7 @@ keywords:
   - rendering
 goal:
   description: >-
-    Reader can use Display V2 format strings to render Sui Move object values
+    Reader can use Display V2 format strings to render Rtd Move object values
     into human-readable strings, JSON
   requires:
     - has_frontmatter:
@@ -28,22 +28,22 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Object Display V2 Syntax in Sui?
+  - What is Object Display V2 Syntax in Rtd?
   - Where can I find the object display v2 syntax reference?
-  - How does object display v2 syntax work on Sui?
+  - How does object display v2 syntax work on Rtd?
 answer: >-
-  Display V2 is a template language for rendering Sui Move object values into
+  Display V2 is a template language for rendering Rtd Move object values into
   human-readable strings, JSON, or encoded representations.
 ---
 
-Display V2 is a template language for rendering Sui Move object values into human-readable strings, JSON, or encoded representations. A `Display` object defines a set of key-value pairs where both keys and values are **format strings**.
+Display V2 is a template language for rendering Rtd Move object values into human-readable strings, JSON, or encoded representations. A `Display` object defines a set of key-value pairs where both keys and values are **format strings**.
 
 ## Format strings
 
 A format string is a mix of literal text and **expressions** delimited by `{` and `}`.
 
 ```
-Hello, {name}! You have {balance} SUI.
+Hello, {name}! You have {balance} RTD.
 ```
 
 To output a literal brace, double it: `{{` produces `{`, `}}` produces `}`.
@@ -127,7 +127,7 @@ Each `->` access costs 1 object load from the budget.
 
 ### Dynamic object field access (`=>`)
 
-Load a dynamic object field (the value is a full Sui object):
+Load a dynamic object field (the value is a full Rtd object):
 
 ```
 {parent=>['key']}       — dynamic object field with string key 'key'

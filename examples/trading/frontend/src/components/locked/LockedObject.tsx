@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { CONSTANTS } from "@/constants";
-import { useSuiClientQuery } from "@mysten/dapp-kit";
+import { useRtdClientQuery } from "@linku/dapp-kit";
 import { Locked } from "./partials/Locked";
-import { SuiObjectData } from "@mysten/sui/client";
+import { RtdObjectData } from "@linku/rtd/client";
 
 /**
  * Acts as a wrapper between the `Locked` object fetched from API
@@ -20,7 +20,7 @@ export function LockedObject({
   itemId,
   hideControls,
 }: {
-  object: SuiObjectData;
+  object: RtdObjectData;
   itemId?: string;
   hideControls?: boolean;
 }) {
@@ -34,7 +34,7 @@ export function LockedObject({
     return object.owner.AddressOwner;
   };
 
-  const getKeyId = (item: SuiObjectData) => {
+  const getKeyId = (item: RtdObjectData) => {
     if (
       !(item.content?.dataType === "moveObject") ||
       !("key" in item.content.fields)
@@ -44,7 +44,7 @@ export function LockedObject({
   };
 
   // Get the itemID for the locked object (We've saved it as a DOF on the SC).
-  const suiObjectId = useSuiClientQuery(
+  const rtdObjectId = useRtdClientQuery(
     "getDynamicFieldObject",
     {
       parentId: object.objectId,
@@ -64,7 +64,7 @@ export function LockedObject({
   return (
     <Locked
       locked={{
-        itemId: itemId || suiObjectId.data?.objectId!,
+        itemId: itemId || rtdObjectId.data?.objectId!,
         objectId: object.objectId,
         keyId: getKeyId(object),
         creator: owner(),

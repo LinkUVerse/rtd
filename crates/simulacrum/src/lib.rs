@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A `Simulacrum` of Sui.
+//! A `Simulacrum` of Rtd.
 //!
 //! The word simulacrum is latin for "likeness, semblance", it is also a spell in D&D which creates
 //! a copy of a creature which then follows the player's commands and wishes. As such this crate
-//! provides the [`Simulacrum`] type which is a implementation or instantiation of a sui
+//! provides the [`Simulacrum`] type which is a implementation or instantiation of a rtd
 //! blockchain, one which doesn't do anything unless acted upon.
 //!
 //! [`Simulacrum`]: crate::Simulacrum
@@ -18,36 +18,36 @@ use anyhow::{Context, Result, anyhow, ensure};
 use fastcrypto::traits::Signer;
 use prost::Message;
 use rand::rngs::OsRng;
-use sui_config::verifier_signing_config::VerifierSigningConfig;
-use sui_config::{genesis, transaction_deny_config::TransactionDenyConfig};
-use sui_framework_snapshot::load_bytecode_snapshot;
-use sui_protocol_config::{ProtocolConfig, ProtocolVersion};
-use sui_rpc::field::{FieldMask, FieldMaskUtil};
-use sui_rpc::merge::Merge;
-use sui_rpc::proto::sui::rpc;
-use sui_swarm_config::genesis_config::AccountConfig;
-use sui_swarm_config::network_config::NetworkConfig;
-use sui_swarm_config::network_config_builder::ConfigBuilder;
-use sui_types::base_types::{AuthorityName, ObjectID, ObjectRef, SequenceNumber, VersionNumber};
-use sui_types::crypto::{AccountKeyPair, AuthoritySignature, get_account_key_pair};
-use sui_types::digests::{ChainIdentifier, ConsensusCommitDigest};
-use sui_types::effects::TransactionEffectsAPI;
-use sui_types::messages_consensus::ConsensusDeterminedVersionAssignments;
-use sui_types::object::{Object, Owner};
-use sui_types::storage::ObjectKey;
-use sui_types::storage::{
+use rtd_config::verifier_signing_config::VerifierSigningConfig;
+use rtd_config::{genesis, transaction_deny_config::TransactionDenyConfig};
+use rtd_framework_snapshot::load_bytecode_snapshot;
+use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
+use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::merge::Merge;
+use rtd_rpc::proto::rtd::rpc;
+use rtd_swarm_config::genesis_config::AccountConfig;
+use rtd_swarm_config::network_config::NetworkConfig;
+use rtd_swarm_config::network_config_builder::ConfigBuilder;
+use rtd_types::base_types::{AuthorityName, ObjectID, ObjectRef, SequenceNumber, VersionNumber};
+use rtd_types::crypto::{AccountKeyPair, AuthoritySignature, get_account_key_pair};
+use rtd_types::digests::{ChainIdentifier, ConsensusCommitDigest};
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::messages_consensus::ConsensusDeterminedVersionAssignments;
+use rtd_types::object::{Object, Owner};
+use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
+use rtd_types::storage::ObjectKey;
+use rtd_types::storage::{
     BackingPackageStore, ObjectStore, PackageObject, ReadStore, RpcStateReader,
     RuntimeObjectResolver,
 };
-use sui_types::sui_system_state::epoch_start_sui_system_state::EpochStartSystemState;
-use sui_types::transaction::EndOfEpochTransactionKind;
-use sui_types::{
-    SUI_ACCUMULATOR_ROOT_OBJECT_ID,
-    base_types::{EpochId, SuiAddress},
+use rtd_types::transaction::EndOfEpochTransactionKind;
+use rtd_types::{
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+    base_types::{EpochId, RtdAddress},
     committee::Committee,
     effects::TransactionEffects,
-    error::{ExecutionError, SuiResult},
-    gas_coin::MIST_PER_SUI,
+    error::{ExecutionError, RtdResult},
+    gas_coin::MIST_PER_RTD,
     inner_temporary_store::InnerTemporaryStore,
     messages_checkpoint::{EndOfEpochData, VerifiedCheckpoint},
     signature::VerifyParams,
@@ -58,12 +58,12 @@ pub use self::epoch_state::EpochState;
 pub use self::store::SimulatorStore;
 pub use self::store::in_mem_store::InMemoryStore;
 use self::store::in_mem_store::KeyStore;
-use sui_core::mock_checkpoint_builder::{MockCheckpointBuilder, ValidatorKeypairProvider};
-use sui_types::messages_checkpoint::{CheckpointContents, CheckpointSequenceNumber};
-use sui_types::sui_system_state::SuiSystemState;
-use sui_types::transaction_executor::SimulateTransactionResult;
-pub use sui_types::transaction_executor::TransactionChecks;
-use sui_types::{
+use rtd_core::mock_checkpoint_builder::{MockCheckpointBuilder, ValidatorKeypairProvider};
+use rtd_types::messages_checkpoint::{CheckpointContents, CheckpointSequenceNumber};
+use rtd_types::rtd_system_state::RtdSystemState;
+use rtd_types::transaction_executor::SimulateTransactionResult;
+pub use rtd_types::transaction_executor::TransactionChecks;
+use rtd_types::{
     gas_coin::GasCoin,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     transaction::{GasData, TransactionData, TransactionKind},
@@ -97,9 +97,9 @@ pub struct AdvanceEpochConfig {
 mod epoch_state;
 pub mod store;
 
-/// A `Simulacrum` of Sui.
+/// A `Simulacrum` of Rtd.
 ///
-/// This type represents a simulated instantiation of a Sui blockchain that needs to be driven
+/// This type represents a simulated instantiation of a Rtd blockchain that needs to be driven
 /// manually, that is time doesn't advance and checkpoints are not formed unless explicitly
 /// requested.
 ///
@@ -198,7 +198,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
 
         let genesis = &config.genesis;
         let chain_identifier = (*genesis.checkpoint().digest()).into();
-        let epoch_state = EpochState::new(genesis.sui_system_object(), chain_identifier);
+        let epoch_state = EpochState::new(genesis.rtd_system_object(), chain_identifier);
 
         Self {
             rng,
@@ -223,7 +223,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
     pub fn new_from_custom_state(
         keystore: KeyStore,
         checkpoint: VerifiedCheckpoint,
-        system_state: SuiSystemState,
+        system_state: RtdSystemState,
         chain_identifier: ChainIdentifier,
         config: &NetworkConfig,
         store: S,
@@ -250,7 +250,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
         transaction: TransactionData,
         checks: TransactionChecks,
         allow_mock_gas_coin: bool,
-    ) -> SuiResult<SimulateTransactionResult>
+    ) -> RtdResult<SimulateTransactionResult>
     where
         S: Send + Sync,
     {
@@ -378,7 +378,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
                 .iter()
                 .chain(std::iter::once(&barrier_effects))
                 .flat_map(TransactionEffectsAPI::object_changes)
-                .filter(|change| change.id == SUI_ACCUMULATOR_ROOT_OBJECT_ID)
+                .filter(|change| change.id == RTD_ACCUMULATOR_ROOT_OBJECT_ID)
                 .filter_map(|change| change.input_version)
                 .collect();
             self.epoch_state
@@ -544,7 +544,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
         self.epoch_state.epoch_start_state()
     }
 
-    pub fn system_state(&self) -> SuiSystemState {
+    pub fn system_state(&self) -> RtdSystemState {
         self.store.get_system_state()
     }
 
@@ -571,14 +571,14 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
     ///
     /// ```
     /// use simulacrum::Simulacrum;
-    /// use sui_types::base_types::SuiAddress;
-    /// use sui_types::gas_coin::MIST_PER_SUI;
+    /// use rtd_types::base_types::RtdAddress;
+    /// use rtd_types::gas_coin::MIST_PER_RTD;
     ///
     /// # fn main() {
     /// let mut simulacrum = Simulacrum::new();
-    /// let (account, kp, gas) = simulacrum.funded_account(MIST_PER_SUI).unwrap();
+    /// let (account, kp, gas) = simulacrum.funded_account(MIST_PER_RTD).unwrap();
     ///
-    /// // `account` is a fresh SuiAddress that owns a Coin<SUI> object with single SUI in it,
+    /// // `account` is a fresh RtdAddress that owns a Coin<RTD> object with single RTD in it,
     /// // referred to by `gas`.
     /// // ...
     /// # }
@@ -586,7 +586,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
     pub fn funded_account(
         &mut self,
         amount: u64,
-    ) -> Result<(SuiAddress, AccountKeyPair, ObjectRef)> {
+    ) -> Result<(RtdAddress, AccountKeyPair, ObjectRef)> {
         let (address, key) = get_account_key_pair();
         let fx = self.request_gas(address, amount)?;
         ensure!(fx.status().is_ok(), "Failed to request gas for account");
@@ -606,19 +606,19 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
     ///
     /// ```
     /// use simulacrum::Simulacrum;
-    /// use sui_types::base_types::SuiAddress;
-    /// use sui_types::gas_coin::MIST_PER_SUI;
+    /// use rtd_types::base_types::RtdAddress;
+    /// use rtd_types::gas_coin::MIST_PER_RTD;
     ///
     /// # fn main() {
     /// let mut simulacrum = Simulacrum::new();
-    /// let address = SuiAddress::generate(simulacrum.rng());
-    /// simulacrum.request_gas(address, MIST_PER_SUI).unwrap();
+    /// let address = RtdAddress::generate(simulacrum.rng());
+    /// simulacrum.request_gas(address, MIST_PER_RTD).unwrap();
     ///
-    /// // `account` now has a Coin<SUI> object with single SUI in it.
+    /// // `account` now has a Coin<RTD> object with single RTD in it.
     /// // ...
     /// # }
     /// ```
-    pub fn request_gas(&mut self, address: SuiAddress, amount: u64) -> Result<TransactionEffects> {
+    pub fn request_gas(&mut self, address: RtdAddress, amount: u64) -> Result<TransactionEffects> {
         // For right now we'll just use the first account as the `faucet` account. We may want to
         // explicitly cordon off the faucet account from the rest of the accounts though.
         let (sender, key) = self.keystore().accounts().next().unwrap();
@@ -626,29 +626,29 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
             .store()
             .owned_objects(*sender)
             .find(|object| {
-                object.is_gas_coin() && object.get_coin_value_unsafe() > amount + MIST_PER_SUI
+                object.is_gas_coin() && object.get_coin_value_unsafe() > amount + MIST_PER_RTD
             })
             .ok_or_else(|| {
                 anyhow!("unable to find a coin with enough to satisfy request for {amount} Mist")
             })?;
 
-        let gas_data = sui_types::transaction::GasData {
+        let gas_data = rtd_types::transaction::GasData {
             payment: vec![object.compute_object_reference()],
             owner: *sender,
             price: self.reference_gas_price(),
-            budget: MIST_PER_SUI,
+            budget: MIST_PER_RTD,
         };
 
         let pt = {
             let mut builder =
-                sui_types::programmable_transaction_builder::ProgrammableTransactionBuilder::new();
-            builder.transfer_sui(address, Some(amount));
+                rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder::new();
+            builder.transfer_rtd(address, Some(amount));
             builder.finish()
         };
 
-        let kind = sui_types::transaction::TransactionKind::ProgrammableTransaction(pt);
+        let kind = rtd_types::transaction::TransactionKind::ProgrammableTransaction(pt);
         let tx_data =
-            sui_types::transaction::TransactionData::new_with_gas_data(kind, *sender, gas_data);
+            rtd_types::transaction::TransactionData::new_with_gas_data(kind, *sender, gas_data);
         let tx = Transaction::from_data_and_signer(tx_data, vec![key]);
 
         self.execute_transaction(tx).map(|x| x.0)
@@ -762,7 +762,7 @@ impl<T, V: store::SimulatorStore> ObjectStore for Simulacrum<T, V> {
 }
 
 impl<T, V: store::SimulatorStore> BackingPackageStore for Simulacrum<T, V> {
-    fn get_package_object(&self, package_id: &ObjectID) -> SuiResult<Option<PackageObject>> {
+    fn get_package_object(&self, package_id: &ObjectID) -> RtdResult<Option<PackageObject>> {
         self.store.get_package_object(package_id)
     }
 }
@@ -773,7 +773,7 @@ impl<T, V: store::SimulatorStore> RuntimeObjectResolver for Simulacrum<T, V> {
         parent: &ObjectID,
         child: &ObjectID,
         child_version_upper_bound: SequenceNumber,
-    ) -> SuiResult<Option<Object>> {
+    ) -> RtdResult<Option<Object>> {
         self.store
             .read_child_object(parent, child, child_version_upper_bound)
     }
@@ -784,7 +784,7 @@ impl<T, V: store::SimulatorStore> RuntimeObjectResolver for Simulacrum<T, V> {
         receiving_object_id: &ObjectID,
         receive_object_at_version: SequenceNumber,
         epoch_id: EpochId,
-    ) -> SuiResult<Option<Object>> {
+    ) -> RtdResult<Option<Object>> {
         self.store.get_object_received_at_version(
             owner,
             receiving_object_id,
@@ -797,34 +797,34 @@ impl<T, V: store::SimulatorStore> RuntimeObjectResolver for Simulacrum<T, V> {
 impl<T, V: store::SimulatorStore> ReadStore for Simulacrum<T, V> {
     fn get_committee(
         &self,
-        _epoch: sui_types::committee::EpochId,
+        _epoch: rtd_types::committee::EpochId,
     ) -> Option<std::sync::Arc<Committee>> {
         todo!()
     }
 
-    fn get_latest_checkpoint(&self) -> sui_types::storage::error::Result<VerifiedCheckpoint> {
+    fn get_latest_checkpoint(&self) -> rtd_types::storage::error::Result<VerifiedCheckpoint> {
         Ok(self.store().get_highest_checkpint().unwrap())
     }
 
-    fn get_latest_epoch_id(&self) -> sui_types::storage::error::Result<EpochId> {
+    fn get_latest_epoch_id(&self) -> rtd_types::storage::error::Result<EpochId> {
         Ok(self.epoch_state.epoch())
     }
 
     fn get_highest_verified_checkpoint(
         &self,
-    ) -> sui_types::storage::error::Result<VerifiedCheckpoint> {
+    ) -> rtd_types::storage::error::Result<VerifiedCheckpoint> {
         todo!()
     }
 
     fn get_highest_synced_checkpoint(
         &self,
-    ) -> sui_types::storage::error::Result<VerifiedCheckpoint> {
+    ) -> rtd_types::storage::error::Result<VerifiedCheckpoint> {
         todo!()
     }
 
     fn get_lowest_available_checkpoint(
         &self,
-    ) -> sui_types::storage::error::Result<sui_types::messages_checkpoint::CheckpointSequenceNumber>
+    ) -> rtd_types::storage::error::Result<rtd_types::messages_checkpoint::CheckpointSequenceNumber>
     {
         // TODO wire this up to the underlying sim store, for now this will work since we never
         // prune the sim store
@@ -833,14 +833,14 @@ impl<T, V: store::SimulatorStore> ReadStore for Simulacrum<T, V> {
 
     fn get_checkpoint_by_digest(
         &self,
-        digest: &sui_types::messages_checkpoint::CheckpointDigest,
+        digest: &rtd_types::messages_checkpoint::CheckpointDigest,
     ) -> Option<VerifiedCheckpoint> {
         self.store().get_checkpoint_by_digest(digest)
     }
 
     fn get_checkpoint_by_sequence_number(
         &self,
-        sequence_number: sui_types::messages_checkpoint::CheckpointSequenceNumber,
+        sequence_number: rtd_types::messages_checkpoint::CheckpointSequenceNumber,
     ) -> Option<VerifiedCheckpoint> {
         self.store()
             .get_checkpoint_by_sequence_number(sequence_number)
@@ -848,57 +848,57 @@ impl<T, V: store::SimulatorStore> ReadStore for Simulacrum<T, V> {
 
     fn get_checkpoint_contents_by_digest(
         &self,
-        digest: &sui_types::messages_checkpoint::CheckpointContentsDigest,
-    ) -> Option<sui_types::messages_checkpoint::CheckpointContents> {
+        digest: &rtd_types::messages_checkpoint::CheckpointContentsDigest,
+    ) -> Option<rtd_types::messages_checkpoint::CheckpointContents> {
         self.store().get_checkpoint_contents(digest)
     }
 
     fn get_checkpoint_contents_by_sequence_number(
         &self,
-        _sequence_number: sui_types::messages_checkpoint::CheckpointSequenceNumber,
-    ) -> Option<sui_types::messages_checkpoint::CheckpointContents> {
+        _sequence_number: rtd_types::messages_checkpoint::CheckpointSequenceNumber,
+    ) -> Option<rtd_types::messages_checkpoint::CheckpointContents> {
         todo!()
     }
 
     fn get_transaction(
         &self,
-        tx_digest: &sui_types::digests::TransactionDigest,
+        tx_digest: &rtd_types::digests::TransactionDigest,
     ) -> Option<Arc<VerifiedTransaction>> {
         self.store().get_transaction(tx_digest).map(Arc::new)
     }
 
     fn get_transaction_effects(
         &self,
-        tx_digest: &sui_types::digests::TransactionDigest,
+        tx_digest: &rtd_types::digests::TransactionDigest,
     ) -> Option<TransactionEffects> {
         self.store().get_transaction_effects(tx_digest)
     }
 
     fn get_events(
         &self,
-        event_digest: &sui_types::digests::TransactionDigest,
-    ) -> Option<sui_types::effects::TransactionEvents> {
+        event_digest: &rtd_types::digests::TransactionDigest,
+    ) -> Option<rtd_types::effects::TransactionEvents> {
         self.store().get_transaction_events(event_digest)
     }
 
     fn get_full_checkpoint_contents(
         &self,
-        _sequence_number: Option<sui_types::messages_checkpoint::CheckpointSequenceNumber>,
-        _digest: &sui_types::messages_checkpoint::CheckpointContentsDigest,
-    ) -> Option<sui_types::messages_checkpoint::VersionedFullCheckpointContents> {
+        _sequence_number: Option<rtd_types::messages_checkpoint::CheckpointSequenceNumber>,
+        _digest: &rtd_types::messages_checkpoint::CheckpointContentsDigest,
+    ) -> Option<rtd_types::messages_checkpoint::VersionedFullCheckpointContents> {
         todo!()
     }
 
     fn get_unchanged_loaded_runtime_objects(
         &self,
-        _digest: &sui_types::digests::TransactionDigest,
+        _digest: &rtd_types::digests::TransactionDigest,
     ) -> Option<Vec<ObjectKey>> {
         None
     }
 
     fn get_transaction_checkpoint(
         &self,
-        _digest: &sui_types::digests::TransactionDigest,
+        _digest: &rtd_types::digests::TransactionDigest,
     ) -> Option<CheckpointSequenceNumber> {
         None
     }
@@ -907,13 +907,13 @@ impl<T, V: store::SimulatorStore> ReadStore for Simulacrum<T, V> {
 impl<T: Send + Sync, V: store::SimulatorStore + Send + Sync> RpcStateReader for Simulacrum<T, V> {
     fn get_lowest_available_checkpoint_objects(
         &self,
-    ) -> sui_types::storage::error::Result<CheckpointSequenceNumber> {
+    ) -> rtd_types::storage::error::Result<CheckpointSequenceNumber> {
         Ok(0)
     }
 
     fn get_chain_identifier(
         &self,
-    ) -> sui_types::storage::error::Result<sui_types::digests::ChainIdentifier> {
+    ) -> rtd_types::storage::error::Result<rtd_types::digests::ChainIdentifier> {
         Ok(self
             .store()
             .get_checkpoint_by_sequence_number(0)
@@ -923,15 +923,15 @@ impl<T: Send + Sync, V: store::SimulatorStore + Send + Sync> RpcStateReader for 
             .into())
     }
 
-    fn indexes(&self) -> Option<&dyn sui_types::storage::RpcIndexes> {
+    fn indexes(&self) -> Option<&dyn rtd_types::storage::RpcIndexes> {
         None
     }
 
     fn get_struct_layout_with_overlay(
         &self,
         _: &move_core_types::language_storage::StructTag,
-        _overlay: &sui_types::full_checkpoint_content::ObjectSet,
-    ) -> sui_types::storage::error::Result<Option<move_core_types::annotated_value::MoveTypeLayout>>
+        _overlay: &rtd_types::full_checkpoint_content::ObjectSet,
+    ) -> rtd_types::storage::error::Result<Option<move_core_types::annotated_value::MoveTypeLayout>>
     {
         Ok(None)
     }
@@ -940,9 +940,9 @@ impl<T: Send + Sync, V: store::SimulatorStore + Send + Sync> RpcStateReader for 
 impl Simulacrum {
     /// Generate a random transfer transaction.
     /// TODO: This is here today to make it easier to write tests. But we should utilize all the
-    /// existing code for generating transactions in sui-test-transaction-builder by defining a trait
+    /// existing code for generating transactions in rtd-test-transaction-builder by defining a trait
     /// that both WalletContext and Simulacrum implement. Then we can remove this function.
-    pub fn transfer_txn(&mut self, recipient: SuiAddress) -> (Transaction, u64) {
+    pub fn transfer_txn(&mut self, recipient: RtdAddress) -> (Transaction, u64) {
         let (sender, key) = self.keystore().accounts().next().unwrap();
         let sender = *sender;
 
@@ -956,7 +956,7 @@ impl Simulacrum {
 
         let pt = {
             let mut builder = ProgrammableTransactionBuilder::new();
-            builder.transfer_sui(recipient, Some(transfer_amount));
+            builder.transfer_rtd(recipient, Some(transfer_amount));
             builder.finish()
         };
 
@@ -978,8 +978,8 @@ mod tests {
     use std::time::Duration;
 
     use rand::{SeedableRng, rngs::StdRng};
-    use sui_types::{
-        base_types::SuiAddress, effects::TransactionEffectsAPI, gas_coin::GasCoin,
+    use rtd_types::{
+        base_types::RtdAddress, effects::TransactionEffectsAPI, gas_coin::GasCoin,
         transaction::TransactionDataAPI,
     };
 
@@ -1054,7 +1054,7 @@ mod tests {
     #[test]
     fn simulate_transaction_does_not_commit_outputs() {
         let mut sim = Simulacrum::new();
-        let recipient = SuiAddress::random_for_testing_only();
+        let recipient = RtdAddress::random_for_testing_only();
         let (tx, _) = sim.transfer_txn(recipient);
         let transaction = tx.data().transaction_data().clone();
         let transaction_digest = transaction.digest();
@@ -1095,8 +1095,8 @@ mod tests {
 
     #[test]
     fn simulate_transaction_uses_custom_chain_identifier() {
-        use sui_types::digests::get_testnet_chain_identifier;
-        use sui_types::transaction::TransactionExpiration;
+        use rtd_types::digests::CheckpointDigest;
+        use rtd_types::transaction::TransactionExpiration;
 
         let mut rng = OsRng;
         let config = ConfigBuilder::new_with_temp_dir()
@@ -1104,7 +1104,9 @@ mod tests {
             .with_chain_start_timestamp_ms(1)
             .deterministic_committee_size(NonZeroUsize::MIN)
             .build();
-        let chain_identifier = get_testnet_chain_identifier();
+        let mut custom_digest = *config.genesis.checkpoint().digest().inner();
+        custom_digest[0] ^= 0xff;
+        let chain_identifier = ChainIdentifier::from(CheckpointDigest::new(custom_digest));
         assert_ne!(
             chain_identifier,
             ChainIdentifier::from(*config.genesis.checkpoint().digest()),
@@ -1115,14 +1117,14 @@ mod tests {
         let mut sim = Simulacrum::new_from_custom_state(
             keystore,
             config.genesis.checkpoint(),
-            config.genesis.sui_system_object(),
+            config.genesis.rtd_system_object(),
             chain_identifier,
             &config,
             store,
             rng,
         );
 
-        let (tx, _) = sim.transfer_txn(SuiAddress::random_for_testing_only());
+        let (tx, _) = sim.transfer_txn(RtdAddress::random_for_testing_only());
         let mut transaction = tx.data().transaction_data().clone();
         *transaction.expiration_mut_for_testing() = TransactionExpiration::ValidDuring {
             min_epoch: Some(0),
@@ -1142,7 +1144,7 @@ mod tests {
     #[test]
     fn transfer() {
         let mut sim = Simulacrum::new();
-        let recipient = SuiAddress::random_for_testing_only();
+        let recipient = RtdAddress::random_for_testing_only();
         let (tx, transfer_amount) = sim.transfer_txn(recipient);
 
         let gas_id = tx.data().transaction_data().gas_data().payment[0].0;

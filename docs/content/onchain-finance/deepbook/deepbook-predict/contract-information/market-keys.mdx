@@ -75,7 +75,7 @@ public fun reference_tick_source_timestamp_ms(market: &ExpiryMarket): u64
 <ImportContent
 	source="packages/predict/sources/expiry_market.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="tick_size,admission_tick_size,reference_tick,reference_tick_source_timestamp_ms"
@@ -89,7 +89,7 @@ The only conversion in the other direction is `range_codec::strike_from_tick`, w
 <ImportContent
 	source="packages/predict/sources/strike_exposure/range_codec.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="strike_from_tick"
@@ -174,7 +174,7 @@ The `reference_tick` is the one finite strike a market admits off the admission 
 <ImportContent
 	source="packages/predict/sources/expiry_market.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="set_reference_tick"
@@ -191,7 +191,7 @@ Grid state lives in the market's `StrikeExposure`, which has no public functions
 <ImportContent
 	source="packages/predict/sources/strike_exposure/strike_exposure.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="StrikeExposure"
@@ -249,7 +249,7 @@ The `sequence` counter is expiry-local, so an order ID is unique only within one
 <ImportContent
 	source="packages/predict/sources/order.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="Order"
@@ -287,7 +287,7 @@ public fun expiry_market_id(
 <ImportContent
 	source="packages/predict/sources/registry/registry.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	fun="expiry_market_id"
@@ -304,7 +304,7 @@ The registry stores those IDs in a `Table` keyed by `market_manager::MarketKey`,
 <ImportContent
 	source="packages/predict/sources/registry/market_manager.move"
 	mode="code"
-	org="MystenLabs"
+	org="LinkUVerse"
 	repo="deepbookv3"
 	branch="76b11922f3144be5bdaacb66c38c7c3524a02ff3"
 	struct="MarketKey"
@@ -314,7 +314,7 @@ The registry stores those IDs in a `Table` keyed by `market_manager::MarketKey`,
 
 ## Ticks in the TypeScript SDK {#sdk}
 
-The `@mysten/deepbook-v3/predict` subpath converts USD strikes to these ticks, admission-checks each finite boundary before it builds a transaction, and exports `POS_INF_TICK` and `binaryRangeTicks`, as [Predict Markets and Pricing SDK](/onchain-finance/deepbook/deepbook-predict-sdk/markets#ticks) describes. For directional and range mints that start from a market descriptor, see [Predict Positions SDK](/onchain-finance/deepbook/deepbook-predict-sdk/positions#examples).
+The `@linku/deepbook-v3/predict` subpath converts USD strikes to these ticks, admission-checks each finite boundary before it builds a transaction, and exports `POS_INF_TICK` and `binaryRangeTicks`, as [Predict Markets and Pricing SDK](/onchain-finance/deepbook/deepbook-predict-sdk/markets#ticks) describes. For directional and range mints that start from a market descriptor, see [Predict Positions SDK](/onchain-finance/deepbook/deepbook-predict-sdk/positions#examples).
 
 ## Error codes {#error-codes}
 

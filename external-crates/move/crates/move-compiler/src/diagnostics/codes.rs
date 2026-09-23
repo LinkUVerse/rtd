@@ -19,8 +19,8 @@ pub enum Severity {
 pub enum DiagnosticOrigin {
     Compiler,
     Lint,
-    SuiCompiler,
-    SuiLint,
+    RtdCompiler,
+    RtdLint,
     UpgradeCompatibility,
 }
 
@@ -29,8 +29,8 @@ impl DiagnosticOrigin {
         match self {
             Self::Compiler => "C",
             Self::Lint => "L",
-            Self::SuiCompiler => "SC",
-            Self::SuiLint => "SL",
+            Self::RtdCompiler => "SC",
+            Self::RtdLint => "SL",
             Self::UpgradeCompatibility => "UC",
         }
     }

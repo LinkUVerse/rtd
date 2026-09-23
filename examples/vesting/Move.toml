@@ -3,7 +3,7 @@ name = "vesting"
 edition = "2024.beta"
 
 [dependencies]
-Sui = { local = "../../crates/sui-framework/packages/sui-framework"  }
+Rtd = { local = "../../crates/rtd-framework/packages/rtd-framework"  }
 
 [addresses]
 vesting = "0x0"

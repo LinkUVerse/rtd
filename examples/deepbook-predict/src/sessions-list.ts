@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#sessions-list
-import type { SessionGrant } from '@mysten/deepbook-v3/sessions';
-import { MAX_SESSIONS_PER_ACCOUNT, SessionsContract } from '@mysten/deepbook-v3/sessions';
-import { ObjectError } from '@mysten/sui/client';
-import { Transaction } from '@mysten/sui/transactions';
+import type { SessionGrant } from '@linku/deepbook-v3/sessions';
+import { MAX_SESSIONS_PER_ACCOUNT, SessionsContract } from '@linku/deepbook-v3/sessions';
+import { ObjectError } from '@linku/rtd/client';
+import { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 import { sessions, wrapperId } from './sessions-authorize.js';
 

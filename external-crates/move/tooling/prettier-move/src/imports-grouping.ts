@@ -194,7 +194,7 @@ export function collectImports(node: Node): GroupedImports {
             case UseDeclaration.UseModuleMembers: {
                 const children = import_.nonFormattingChildren;
                 // the package is a `module_identifier` for named addresses
-                // (`use sui::{...}`) and a `num_literal` for numeric ones
+                // (`use rtd::{...}`) and a `num_literal` for numeric ones
                 // (`use 0x2::{...}`)
                 const isGroupedByPackage = ['module_identifier', 'num_literal'].includes(
                     children[0]!.type,

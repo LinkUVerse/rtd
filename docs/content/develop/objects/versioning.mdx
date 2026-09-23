@@ -2,7 +2,7 @@
 title: Object Versioning
 sidebar_label: Versioning
 description: >-
-  Sui versions every onchain object by (ID, version) pair using Lamport
+  Rtd versions every onchain object by (ID, version) pair using Lamport
   timestamps, with objects versioned either through the fastpath or through
   consensus depending on their ownership type.
 keywords:
@@ -13,10 +13,10 @@ keywords:
   - object ownership
   - dynamic fields
   - wrapped objects
-  - Sui objects
+  - Rtd objects
 goal:
   description: >-
-    Reader understands how Sui versions objects by (ID, version) and the
+    Reader understands how Rtd versions objects by (ID, version) and the
     fastpath versus consensus versioning paths
   requires:
     - has_frontmatter:
@@ -37,11 +37,11 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Object Versioning in Sui?
-  - How does object versioning work on Sui?
+  - What is Object Versioning in Rtd?
+  - How does object versioning work on Rtd?
   - Why should I use object versioning?
 answer: >-
-  Sui provides `Table` and `Bag` collections built using dynamic fields, but
+  Rtd provides `Table` and `Bag` collections built using dynamic fields, but
   with additional support to count the number of entries they contain to protect
   against accidental deletion when non-empty.
 ---
@@ -58,9 +58,9 @@ Versions are strictly increasing and (`ID`, `version`) pairs are never re-used. 
 
 ## Object versioning paths
 
-Objects on Sui are versioned either through the [fastpath](#fastpath-objects) or through [consensus](/develop/sui-architecture/consensus). The choice affects object ownership options and has performance trade-offs.
+Objects on Rtd are versioned either through the [fastpath](#fastpath-objects) or through [consensus](/develop/rtd-architecture/consensus). The choice affects object ownership options and has performance trade-offs.
 
-Sui uses [Lamport timestamps](https://en.wikipedia.org/wiki/Lamport_timestamp) in its versioning algorithm. This guarantees versions are never re-used: a transaction sets the new version for all objects it touches to `1 + max(version of all input objects)`. For example, a transaction transferring object `O` at version 5 using gas object `G` at version 3 updates both to version `1 + max(5, 3) = 6`.
+Rtd uses [Lamport timestamps](https://en.wikipedia.org/wiki/Lamport_timestamp) in its versioning algorithm. This guarantees versions are never re-used: a transaction sets the new version for all objects it touches to `1 + max(version of all input objects)`. For example, a transaction transferring object `O` at version 5 using gas object `G` at version 3 updates both to version `1 + max(5, 3) = 6`.
 
 ## Fastpath objects
 

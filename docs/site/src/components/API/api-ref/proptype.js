@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React from "react";
@@ -24,7 +24,7 @@ const PropType = (props) => {
 
   let allof = "";
   if (typeof proptype[1].allOf !== "undefined" && proptype[1].allOf.length === 1) {
-    allof = proptype[1].allOf[0]?.["$ref"] ? getRef(proptype[1].allOf[0]["$ref"]) : "SuiERR";
+    allof = proptype[1].allOf[0]?.["$ref"] ? getRef(proptype[1].allOf[0]["$ref"]) : "RtdERR";
   }
 
   let array = "";
@@ -32,7 +32,7 @@ const PropType = (props) => {
     const items = proptype[1].items;
     if (items?.items) {
       const a = items.items
-        .map((i) => (i["$ref"] ? getRef(i["$ref"]) : i.type ?? "SuiERR"))
+        .map((i) => (i["$ref"] ? getRef(i["$ref"]) : i.type ?? "RtdERR"))
         .filter(Boolean);
       array = a.join(", ");
     } else if (items?.type === "string") {

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, {
@@ -130,7 +130,7 @@ export default function CodeWalkthrough({
   const cleanCode = useMemo(() => {
     if (!code) return "";
     return code
-      .replace(/^\/\/\s*Copyright.*Mysten Labs.*\n\/\/\s*SPDX-License.*?\n?$/gim, "")
+      .replace(/^\/\/\s*Copyright.*LinkU Labs.*\n\/\/\s*SPDX-License.*?\n?$/gim, "")
       .replace(/^\s*\n/, "");
   }, [code]);
 

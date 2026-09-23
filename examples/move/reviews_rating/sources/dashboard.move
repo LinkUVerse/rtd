@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module reviews_rating::dashboard;
 
 use std::string::String;
-use sui::dynamic_field as df;
+use rtd::dynamic_field as df;
 
 /// Dashboard is a collection of services
 public struct Dashboard has key, store {

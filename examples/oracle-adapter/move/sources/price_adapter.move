@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// A provider-neutral price adapter over Pyth price feeds.
@@ -15,7 +15,7 @@ use pyth::i64;
 use pyth::price::{Self as pyth_price, Price as PythPrice};
 use pyth::price_info::PriceInfoObject;
 use pyth::pyth;
-use sui::clock::{Self, Clock};
+use rtd::clock::{Self, Clock};
 
 const EPriceNegative: u64 = 1;
 const EZeroPrice: u64 = 2;

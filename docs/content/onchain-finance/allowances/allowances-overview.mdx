@@ -4,7 +4,7 @@ sidebar_label: Overview
 description: >-
   Allowances let an address authorize another address to spend from its
   address balance within limits it sets. Learn what allowances enable and how
-  Sui authorizes and enforces a spend.
+  Rtd authorizes and enforces a spend.
 keywords:
   - allowances
   - delegated spending
@@ -42,7 +42,7 @@ builder_paths:
     step: Allowances
     stage: Authorization
 questions:
-  - What are allowances in Sui?
+  - What are allowances in Rtd?
   - How does an allowance differ from transferring funds to another wallet?
   - What limits can I set on an allowance?
   - What is the difference between a direct and an app-bound allowance?
@@ -67,7 +67,7 @@ An allowance has 4 parts:
 - **Limits:** How much, how often, and for how long.
 - **Revocation:** The funder can cancel at any time.
 
-Think of it as the standing authorization you give a card network: it records who can charge you, and up to what, until you say otherwise. Funds stay in the funder's balance, and Sui debits them only at the moment of a successful spend. There is no escrow, no pre-funding, and no separate wallet to fund.
+Think of it as the standing authorization you give a card network: it records who can charge you, and up to what, until you say otherwise. Funds stay in the funder's balance, and Rtd debits them only at the moment of a successful spend. There is no escrow, no pre-funding, and no separate wallet to fund.
 
 ## What allowances enable
 
@@ -91,11 +91,11 @@ Per-merchant limits come from an app-bound allowance, where your own Move module
 
 ## How allowances work
 
-1. **The funder grants it.** In one transaction, the funder names the spender, the coin, and the limits. Sui records the allowance as a [shared object](/develop/objects/object-ownership/shared) and gives the funder an `AllowanceCap`, a revocation capability that cannot be transferred.
+1. **The funder grants it.** In one transaction, the funder names the spender, the coin, and the limits. Rtd records the allowance as a [shared object](/develop/objects/object-ownership/shared) and gives the funder an `AllowanceCap`, a revocation capability that cannot be transferred.
 2. **The spender uses it.** The spender sends a normal transaction that declares a withdrawal of a given amount from the funder under the allowance. The spender signs it and pays for it. The funder does not sign anything and does not need to be online.
-3. **Sui checks it.** The spend goes through only if the allowance is valid and the amount fits its limits. Otherwise, no money moves.
+3. **Rtd checks it.** The spend goes through only if the allowance is valid and the amount fits its limits. Otherwise, no money moves.
 
-At any point, the funder can revoke. Revoking deletes the allowance, and Sui rejects any later spend against it.
+At any point, the funder can revoke. Revoking deletes the allowance, and Rtd rejects any later spend against it.
 
 For the API and code samples, see [Using Allowances](/onchain-finance/allowances/using-allowances).
 
@@ -122,7 +122,7 @@ Rate-limit windows are fixed. A 30-day limit renews every 30 days from the first
 
 ## What the funder can rely on
 
-- Only the named spender, and for app-bound allowances only through the named app, can pull funds. Every spending transaction names the funder, so wallets can show which balance Sui debits.
+- Only the named spender, and for app-bound allowances only through the named app, can pull funds. Every spending transaction names the funder, so wallets can show which balance Rtd debits.
 - Nothing can exceed the caps or run outside the time window.
 - Revocation is immediate and final.
 - Funds never leave the balance until a spend succeeds. An unused allowance costs nothing and locks nothing.

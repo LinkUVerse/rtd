@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -8,19 +8,19 @@ use std::{
 
 use crate::{TestCluster, TestClusterBuilder};
 use move_core_types::identifier::Identifier;
-use sui_keys::keystore::AccountKeystore;
-use sui_protocol_config::{OverrideGuard, ProtocolConfig, ProtocolVersion};
-use sui_test_transaction_builder::{FundSource, TestTransactionBuilder};
-use sui_types::{
-    SUI_FRAMEWORK_PACKAGE_ID, TypeTag,
+use rtd_keys::keystore::AccountKeystore;
+use rtd_protocol_config::{OverrideGuard, ProtocolConfig, ProtocolVersion};
+use rtd_test_transaction_builder::{FundSource, TestTransactionBuilder};
+use rtd_types::{
+    RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
     accumulator_metadata::get_accumulator_object_count,
     accumulator_root::{AccumulatorValue, U128},
     balance::Balance,
-    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, SuiAddress},
+    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
     coin_reservation::ParsedObjectRefWithdrawal,
     digests::{ChainIdentifier, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI},
-    error::SuiResult,
+    error::RtdResult,
     gas_coin::GAS,
     object::Owner,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
@@ -113,7 +113,7 @@ pub struct TestEnv {
     _guard: Option<OverrideGuard>,
     pub rgp: u64,
     pub chain_id: ChainIdentifier,
-    pub gas_objects: BTreeMap<SuiAddress, Vec<ObjectRef>>,
+    pub gas_objects: BTreeMap<RtdAddress, Vec<ObjectRef>>,
 }
 
 impl TestEnv {
@@ -137,10 +137,10 @@ impl TestEnv {
         }
     }
 
-    pub async fn fund_one_address_balance(&mut self, address: SuiAddress, amount: u64) {
+    pub async fn fund_one_address_balance(&mut self, address: RtdAddress, amount: u64) {
         let gas = self.gas_objects[&address][0];
         let tx = TestTransactionBuilder::new(address, gas, self.rgp)
-            .transfer_sui_to_address_balance(FundSource::coin(gas), vec![(amount, address)])
+            .transfer_rtd_to_address_balance(FundSource::coin(gas), vec![(amount, address)])
             .build();
         let (digest, effects) = self
             .cluster
@@ -160,38 +160,38 @@ impl TestEnv {
         }
     }
 
-    pub fn get_sender(&self, index: usize) -> SuiAddress {
+    pub fn get_sender(&self, index: usize) -> RtdAddress {
         self.gas_objects.keys().copied().nth(index).unwrap()
     }
 
-    pub fn get_sender_and_gas(&self, index: usize) -> (SuiAddress, ObjectRef) {
+    pub fn get_sender_and_gas(&self, index: usize) -> (RtdAddress, ObjectRef) {
         let sender = self.get_sender(index);
         let gas = self.gas_objects[&sender][0];
         (sender, gas)
     }
 
-    pub fn get_sender_and_all_gas(&self, index: usize) -> (SuiAddress, Vec<ObjectRef>) {
+    pub fn get_sender_and_all_gas(&self, index: usize) -> (RtdAddress, Vec<ObjectRef>) {
         let sender = self.get_sender(index);
         let gas = self.gas_objects[&sender].clone();
         (sender, gas)
     }
 
-    pub fn get_all_senders(&self) -> Vec<SuiAddress> {
+    pub fn get_all_senders(&self) -> Vec<RtdAddress> {
         self.cluster.wallet.get_addresses()
     }
 
-    pub fn get_gas_for_sender(&self, sender: SuiAddress) -> Vec<ObjectRef> {
+    pub fn get_gas_for_sender(&self, sender: RtdAddress) -> Vec<ObjectRef> {
         self.gas_objects.get(&sender).unwrap().clone()
     }
 
-    pub fn tx_builder(&self, sender: SuiAddress) -> TestTransactionBuilder {
+    pub fn tx_builder(&self, sender: RtdAddress) -> TestTransactionBuilder {
         let gas = self.gas_objects.get(&sender).unwrap()[0];
         TestTransactionBuilder::new(sender, gas, self.rgp)
     }
 
     pub fn tx_builder_with_gas(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         gas: ObjectRef,
     ) -> TestTransactionBuilder {
         TestTransactionBuilder::new(sender, gas, self.rgp)
@@ -199,7 +199,7 @@ impl TestEnv {
 
     pub fn tx_builder_with_gas_objects(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         gas_objects: Vec<ObjectRef>,
     ) -> TestTransactionBuilder {
         TestTransactionBuilder::new_with_gas_objects(sender, gas_objects, self.rgp)
@@ -208,7 +208,7 @@ impl TestEnv {
     pub async fn exec_tx_directly(
         &mut self,
         tx: TransactionData,
-    ) -> SuiResult<(TransactionDigest, TransactionEffects)> {
+    ) -> RtdResult<(TransactionDigest, TransactionEffects)> {
         let res = self
             .cluster
             .sign_and_execute_transaction_directly(&tx)
@@ -235,7 +235,7 @@ impl TestEnv {
         package_ref.0
     }
 
-    pub async fn setup_custom_coin(&mut self) -> (SuiAddress, TypeTag) {
+    pub async fn setup_custom_coin(&mut self) -> (RtdAddress, TypeTag) {
         let (publisher, package_id, _) = self.publish_coins_package().await;
         let coin_a_type: TypeTag = format!("{}::coin_a::COIN_A", package_id).parse().unwrap();
         (publisher, coin_a_type)
@@ -243,7 +243,7 @@ impl TestEnv {
 
     /// Publish the coins package and return (publisher, package_id, coin_type, treasury_cap_ref).
     /// The MINTABLE_COIN TreasuryCap is unfrozen so new Coin objects can be minted.
-    pub async fn setup_mintable_coin(&mut self) -> (SuiAddress, ObjectID, TypeTag, ObjectRef) {
+    pub async fn setup_mintable_coin(&mut self) -> (RtdAddress, ObjectID, TypeTag, ObjectRef) {
         let (publisher, package_id, effects) = self.publish_coins_package().await;
         let coin_type: TypeTag = format!("{}::mintable_coin::MINTABLE_COIN", package_id)
             .parse()
@@ -253,9 +253,9 @@ impl TestEnv {
     }
 
     /// Publish the coins test package and return (publisher, package_id, effects).
-    async fn publish_coins_package(&mut self) -> (SuiAddress, ObjectID, TransactionEffects) {
+    async fn publish_coins_package(&mut self) -> (RtdAddress, ObjectID, TransactionEffects) {
         let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.extend(["..", "sui-e2e-tests", "tests", "data", "coins"]);
+        path.extend(["..", "rtd-e2e-tests", "tests", "data", "coins"]);
         let (publisher, gas) = self
             .cluster
             .wallet
@@ -314,11 +314,11 @@ impl TestEnv {
     /// Returns the updated `TreasuryCap` ref and the new `Coin` object ref.
     pub async fn mint_coin(
         &mut self,
-        publisher: SuiAddress,
+        publisher: RtdAddress,
         package_id: ObjectID,
         treasury_cap_ref: ObjectRef,
         amount: u64,
-        recipient: SuiAddress,
+        recipient: RtdAddress,
     ) -> (ObjectRef, ObjectRef) {
         let tx = self
             .tx_builder(publisher)
@@ -356,18 +356,18 @@ impl TestEnv {
 
     pub fn encode_coin_reservation(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         epoch: u64,
         amount: u64,
     ) -> ObjectRef {
-        let accumulator_obj_id = get_sui_accumulator_object_id(sender);
+        let accumulator_obj_id = get_rtd_accumulator_object_id(sender);
         ParsedObjectRefWithdrawal::new(accumulator_obj_id, epoch, amount)
             .encode(SequenceNumber::new(), self.chain_id)
     }
 
     pub fn encode_coin_reservation_for_type(
         &self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         epoch: u64,
         amount: u64,
         coin_type: TypeTag,
@@ -380,13 +380,13 @@ impl TestEnv {
     /// Transfer a portion of a coin to one or more addresses.
     pub async fn transfer_from_coin_to_address_balance(
         &mut self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         coin: ObjectRef,
-        amounts_and_recipients: Vec<(u64, SuiAddress)>,
-    ) -> SuiResult<(TransactionDigest, TransactionEffects)> {
+        amounts_and_recipients: Vec<(u64, RtdAddress)>,
+    ) -> RtdResult<(TransactionDigest, TransactionEffects)> {
         let tx = self
             .tx_builder(sender)
-            .transfer_sui_to_address_balance(FundSource::coin(coin), amounts_and_recipients)
+            .transfer_rtd_to_address_balance(FundSource::coin(coin), amounts_and_recipients)
             .build();
         let res = self.exec_tx_directly(tx).await;
         self.update_all_gas().await;
@@ -396,10 +396,10 @@ impl TestEnv {
     /// Transfer the entire coin to a single address.
     pub async fn transfer_coin_to_address_balance(
         &mut self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         coin: ObjectRef,
-        recipient: SuiAddress,
-    ) -> SuiResult<(TransactionDigest, TransactionEffects)> {
+        recipient: RtdAddress,
+    ) -> RtdResult<(TransactionDigest, TransactionEffects)> {
         let tx = self
             .tx_builder(sender)
             .transfer(FullObjectRef::from_fastpath_ref(coin), recipient)
@@ -409,8 +409,8 @@ impl TestEnv {
         res
     }
 
-    pub fn verify_accumulator_exists(&self, owner: SuiAddress, expected_balance: u64) {
-        self.cluster.fullnode_handle.sui_node.with(|node| {
+    pub fn verify_accumulator_exists(&self, owner: RtdAddress, expected_balance: u64) {
+        self.cluster.fullnode_handle.rtd_node.with(|node| {
             let state = node.state();
             let runtime_object_resolver = state.get_runtime_object_resolver().as_ref();
             verify_accumulator_exists(runtime_object_resolver, owner, expected_balance);
@@ -419,7 +419,7 @@ impl TestEnv {
 
     /// Verify the accumulator object count after settlement.
     pub fn verify_accumulator_object_count(&self, expected_object_count: u64) {
-        self.cluster.fullnode_handle.sui_node.with(|node| {
+        self.cluster.fullnode_handle.rtd_node.with(|node| {
             let state = node.state();
 
             let object_count = get_accumulator_object_count(state.get_object_store().as_ref())
@@ -429,8 +429,8 @@ impl TestEnv {
         });
     }
 
-    /// Get the balance of the owner's SUI address balance.
-    pub fn get_sui_balance_ab(&self, owner: SuiAddress) -> u64 {
+    /// Get the balance of the owner's RTD address balance.
+    pub fn get_rtd_balance_ab(&self, owner: RtdAddress) -> u64 {
         self.get_balance_ab(owner, GAS::type_tag())
     }
 
@@ -446,8 +446,8 @@ impl TestEnv {
     }
 
     /// Get the balance of the owner's address balance for a given coin type.
-    pub fn get_balance_ab(&self, owner: SuiAddress, coin_type: TypeTag) -> u64 {
-        let db_balance = self.cluster.fullnode_handle.sui_node.with({
+    pub fn get_balance_ab(&self, owner: RtdAddress, coin_type: TypeTag) -> u64 {
+        let db_balance = self.cluster.fullnode_handle.rtd_node.with({
             let coin_type = coin_type.clone();
             move |node| {
                 let state = node.state();
@@ -477,13 +477,13 @@ impl TestEnv {
         db_balance
     }
 
-    /// Get the total balance of SUI owned by the address (including address balance and coins).
-    pub async fn get_sui_balance(&self, owner: SuiAddress) -> u64 {
+    /// Get the total balance of RTD owned by the address (including address balance and coins).
+    pub async fn get_rtd_balance(&self, owner: RtdAddress) -> u64 {
         self.get_balance_for_coin_type(owner, GAS::type_tag()).await
     }
 
     /// Get the total balance of a given coin type owned by the address (including address balance and coins).
-    pub async fn get_balance_for_coin_type(&self, owner: SuiAddress, coin_type: TypeTag) -> u64 {
+    pub async fn get_balance_for_coin_type(&self, owner: RtdAddress, coin_type: TypeTag) -> u64 {
         let client = self.cluster.grpc_client();
         let rpc_balance = client
             .get_balance(owner, &coin_type.to_canonical_string(true).parse().unwrap())
@@ -492,13 +492,13 @@ impl TestEnv {
         rpc_balance.balance()
     }
 
-    pub fn verify_accumulator_removed(&self, owner: SuiAddress) {
-        self.cluster.fullnode_handle.sui_node.with(|node| {
+    pub fn verify_accumulator_removed(&self, owner: RtdAddress) {
+        self.cluster.fullnode_handle.rtd_node.with(|node| {
             let state = node.state();
             let runtime_object_resolver = state.get_runtime_object_resolver().as_ref();
-            let sui_coin_type = Balance::type_tag(GAS::type_tag());
+            let rtd_coin_type = Balance::type_tag(GAS::type_tag());
             assert!(
-                !AccumulatorValue::exists(runtime_object_resolver, None, owner, &sui_coin_type)
+                !AccumulatorValue::exists(runtime_object_resolver, None, owner, &rtd_coin_type)
                     .unwrap(),
                 "Accumulator value should have been removed"
             );
@@ -513,8 +513,8 @@ impl TestEnv {
         &self,
         amount: u64,
         token_type: TypeTag,
-        sender: SuiAddress,
-        recipient: SuiAddress,
+        sender: RtdAddress,
+        recipient: RtdAddress,
         nonce: u32,
         epoch: u64,
     ) -> TransactionData {
@@ -522,7 +522,7 @@ impl TestEnv {
         let withdraw_arg = FundsWithdrawalArg::balance_from_sender(amount, token_type.clone());
         let withdraw_arg = builder.funds_withdrawal(withdraw_arg).unwrap();
         let balance = builder.programmable_move_call(
-            SUI_FRAMEWORK_PACKAGE_ID,
+            RTD_FRAMEWORK_PACKAGE_ID,
             Identifier::new("balance").unwrap(),
             Identifier::new("redeem_funds").unwrap(),
             vec![token_type.clone()],
@@ -530,7 +530,7 @@ impl TestEnv {
         );
         let recipient_arg = builder.pure(recipient).unwrap();
         builder.programmable_move_call(
-            SUI_FRAMEWORK_PACKAGE_ID,
+            RTD_FRAMEWORK_PACKAGE_ID,
             Identifier::new("balance").unwrap(),
             Identifier::new("send_funds").unwrap(),
             vec![token_type],
@@ -543,7 +543,7 @@ impl TestEnv {
     pub fn gasless_transaction_data(
         &self,
         tx_kind: TransactionKind,
-        sender: SuiAddress,
+        sender: RtdAddress,
         nonce: u32,
         epoch: u64,
     ) -> TransactionData {
@@ -595,7 +595,7 @@ impl TestEnv {
 
         let tx = self
             .tx_builder(sender)
-            .transfer_sui_to_address_balance(
+            .transfer_rtd_to_address_balance(
                 FundSource::coin(self.get_sender_and_gas(0).1),
                 vec![(amount, vault_id.into())],
             )
@@ -609,11 +609,11 @@ impl TestEnv {
     /// Publish the trusted_coin package and return (package_id, coin_type, treasury_cap).
     pub async fn publish_trusted_coin(
         &mut self,
-        sender: SuiAddress,
+        sender: RtdAddress,
     ) -> (ObjectID, TypeTag, ObjectRef) {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.pop();
-        path.extend(["sui-e2e-tests", "tests", "rpc", "data", "trusted_coin"]);
+        path.extend(["rtd-e2e-tests", "tests", "rpc", "data", "trusted_coin"]);
 
         let tx = self.tx_builder(sender).publish_async(path).await.build();
         let (_, effects) = self.exec_tx_directly(tx).await.unwrap();
@@ -630,7 +630,7 @@ impl TestEnv {
                 let object = self
                     .cluster
                     .fullnode_handle
-                    .sui_node
+                    .rtd_node
                     .with_async(|node| async move { node.state().get_object(&obj_ref.0).unwrap() })
                     .await;
                 if object.type_().unwrap().name().as_str() == "TreasuryCap" {
@@ -650,7 +650,7 @@ impl TestEnv {
     /// Mint a trusted coin. Returns (coin_ref, updated_treasury_cap).
     pub async fn mint_trusted_coin(
         &mut self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         package_id: ObjectID,
         treasury_cap: ObjectRef,
         amount: u64,
@@ -689,9 +689,9 @@ impl TestEnv {
     /// Transfer a coin to recipient.
     pub async fn transfer_coin(
         &mut self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         coin: ObjectRef,
-        recipient: SuiAddress,
+        recipient: RtdAddress,
     ) {
         let tx = self
             .tx_builder(sender)
@@ -700,25 +700,25 @@ impl TestEnv {
         self.exec_tx_directly(tx).await.unwrap();
     }
 
-    /// Transfer SUI from sender's gas to recipient.
-    pub async fn transfer_sui(&mut self, sender: SuiAddress, recipient: SuiAddress, amount: u64) {
+    /// Transfer RTD from sender's gas to recipient.
+    pub async fn transfer_rtd(&mut self, sender: RtdAddress, recipient: RtdAddress, amount: u64) {
         let tx = self
             .tx_builder(sender)
-            .transfer_sui(Some(amount), recipient)
+            .transfer_rtd(Some(amount), recipient)
             .build();
         self.exec_tx_directly(tx).await.unwrap();
     }
 
-    /// Transfer SUI from sender's gas to recipient's address balance.
-    pub async fn transfer_sui_to_address_balance(
+    /// Transfer RTD from sender's gas to recipient's address balance.
+    pub async fn transfer_rtd_to_address_balance(
         &mut self,
-        sender: SuiAddress,
-        recipient: SuiAddress,
+        sender: RtdAddress,
+        recipient: RtdAddress,
         amount: u64,
     ) {
         let gas = self.gas_objects[&sender][0];
         let tx = TestTransactionBuilder::new(sender, gas, self.rgp)
-            .transfer_sui_to_address_balance(FundSource::coin(gas), vec![(amount, recipient)])
+            .transfer_rtd_to_address_balance(FundSource::coin(gas), vec![(amount, recipient)])
             .build();
         self.exec_tx_directly(tx).await.unwrap();
     }
@@ -726,8 +726,8 @@ impl TestEnv {
     /// Convenience: publish trusted_coin and set up coins for recipient per config.
     pub async fn publish_trusted_coin_and_setup(
         &mut self,
-        funder: SuiAddress,
-        recipient: SuiAddress,
+        funder: RtdAddress,
+        recipient: RtdAddress,
         config: &CoinTypeConfig,
         coin_amount: u64,
     ) -> (ObjectID, TypeTag) {
@@ -762,7 +762,7 @@ impl TestEnv {
     /// Legacy: publish trusted_coin with one real coin and address balance for sender.
     pub async fn publish_and_mint_trusted_coin(
         &mut self,
-        sender: SuiAddress,
+        sender: RtdAddress,
         amount: u64,
     ) -> (ObjectID, TypeTag) {
         let config = CoinTypeConfig {
@@ -783,11 +783,11 @@ pub struct CoinTypeConfig {
     pub has_address_balance: bool,
 }
 
-pub fn get_sui_accumulator_object_id(sender: SuiAddress) -> ObjectID {
+pub fn get_rtd_accumulator_object_id(sender: RtdAddress) -> ObjectID {
     get_accumulator_object_id(sender, GAS::type_tag())
 }
 
-pub fn get_accumulator_object_id(sender: SuiAddress, coin_type: TypeTag) -> ObjectID {
+pub fn get_accumulator_object_id(sender: RtdAddress, coin_type: TypeTag) -> ObjectID {
     *AccumulatorValue::get_field_id(sender, &Balance::type_tag(coin_type))
         .unwrap()
         .inner()
@@ -795,34 +795,34 @@ pub fn get_accumulator_object_id(sender: SuiAddress, coin_type: TypeTag) -> Obje
 
 pub fn get_balance(
     runtime_object_resolver: &dyn RuntimeObjectResolver,
-    owner: SuiAddress,
+    owner: RtdAddress,
     coin_type: TypeTag,
 ) -> u64 {
-    sui_core::accumulators::balances::get_balance(owner, runtime_object_resolver, coin_type)
+    rtd_core::accumulators::balances::get_balance(owner, runtime_object_resolver, coin_type)
         .unwrap()
 }
 
-pub fn get_sui_balance(
+pub fn get_rtd_balance(
     runtime_object_resolver: &dyn RuntimeObjectResolver,
-    owner: SuiAddress,
+    owner: RtdAddress,
 ) -> u64 {
     get_balance(runtime_object_resolver, owner, GAS::type_tag())
 }
 
 pub fn verify_accumulator_exists(
     runtime_object_resolver: &dyn RuntimeObjectResolver,
-    owner: SuiAddress,
+    owner: RtdAddress,
     expected_balance: u64,
 ) {
-    let sui_coin_type = Balance::type_tag(GAS::type_tag());
+    let rtd_coin_type = Balance::type_tag(GAS::type_tag());
 
     assert!(
-        AccumulatorValue::exists(runtime_object_resolver, None, owner, &sui_coin_type).unwrap(),
+        AccumulatorValue::exists(runtime_object_resolver, None, owner, &rtd_coin_type).unwrap(),
         "Accumulator value should have been created"
     );
 
     let accumulator_object =
-        AccumulatorValue::load_object(runtime_object_resolver, None, owner, &sui_coin_type)
+        AccumulatorValue::load_object(runtime_object_resolver, None, owner, &rtd_coin_type)
             .expect("read cannot fail")
             .expect("accumulator should exist");
 
@@ -836,7 +836,7 @@ pub fn verify_accumulator_exists(
     );
 
     let accumulator_value =
-        AccumulatorValue::load(runtime_object_resolver, None, owner, &sui_coin_type)
+        AccumulatorValue::load(runtime_object_resolver, None, owner, &rtd_coin_type)
             .expect("read cannot fail")
             .expect("accumulator should exist");
 

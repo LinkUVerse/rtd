@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! Pinned system packages handed to a `MoveRuntime` at construction time.
 //!
-//! `SystemPackages` is the public input — built by the host (e.g. `sui-adapter`) and passed in
+//! `SystemPackages` is the public input — built by the host (e.g. `rtd-adapter`) and passed in
 //! exactly once. The runtime drives it through the standard load/verify/JIT pipeline and pins
 //! each successful install in the cache for the lifetime of that runtime. The JIT translator
 //! consults the pinned set to rewrite cross-package calls into them as direct function pointers;

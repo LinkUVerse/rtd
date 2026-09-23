@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useEffect, useState } from "react";
@@ -56,7 +56,7 @@ export default function GraphqlBetaLink({ title }) {
           <>
             ⚠️ This is the <strong className="mx-2">alpha</strong> version. The
             operation or type does not exist in the{" "}
-            <a href="/references/sui-api/sui-graphql/beta/reference">
+            <a href="/references/rtd-api/rtd-graphql/beta/reference">
               beta version
             </a>
             .

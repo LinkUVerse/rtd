@@ -1,0 +1,57 @@
+[package]
+name = "rtd-kv-rpc"
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-stream.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+bcs.workspace = true
+bin-version.workspace = true
+bytes.workspace = true
+clap.workspace = true
+dashmap.workspace = true
+futures.workspace = true
+move-core-types.workspace = true
+linku-common.workspace = true
+linku-metrics.workspace = true
+linku-network.workspace = true
+rtd-http.workspace = true
+prometheus.workspace = true
+prost-types.workspace = true
+rustls.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+rtd-futures.workspace = true
+rtd-inverted-index.workspace = true
+rtd-kvstore.workspace = true
+rtd-package-resolver.workspace = true
+rtd-protocol-config.workspace = true
+rtd-rpc.workspace = true
+rtd-rpc-api.workspace = true
+rtd-rpc-cursor.workspace = true
+rtd-types.workspace = true
+telemetry-subscribers.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tonic.workspace = true
+tonic-prost.workspace = true
+tonic-reflection.workspace = true
+prost.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# `test-util` powers `#[tokio::test(start_paused = true)]` in the limiter tests.
+tokio = { workspace = true, features = ["test-util"] }
+# Enables the in-memory mock BigTable server for the real-stage resolver tests.
+rtd-kvstore = { workspace = true, features = ["testing"] }

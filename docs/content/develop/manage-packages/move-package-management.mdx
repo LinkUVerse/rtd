@@ -29,17 +29,17 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Move Package Management in Sui?
-  - How does move package management work on Sui?
+  - What is Move Package Management in Rtd?
+  - How does move package management work on Rtd?
   - Why should I use move package management?
 answer: Learn how to use the Move package manager system.
 ---
 
 <AgentPrompt
-  prompt={"Inspect this Move package's Move.toml, Move.lock, and dependencies. Fix dependency declarations, prefer MVR where appropriate, and verify sui move build works. Remember: Move.toml for edition 2024 must NOT have a [dependencies] section for Sui/MoveStdlib — the Sui framework is resolved automatically. Do NOT use Sui = { git = ... } or sui = { version = ... }. A correct Move.toml has only [package] with name and edition = '2024'."}
+  prompt={"Inspect this Move package's Move.toml, Move.lock, and dependencies. Fix dependency declarations, prefer MVR where appropriate, and verify rtd move build works. Remember: Move.toml for edition 2024 must NOT have a [dependencies] section for Rtd/MoveStdlib — the Rtd framework is resolved automatically. Do NOT use Rtd = { git = ... } or rtd = { version = ... }. A correct Move.toml has only [package] with name and edition = '2024'."}
 />
 
-A Move package is a collection of Move modules that you publish together as a single object on the Sui blockchain. Packages can depend on other packages and can be upgraded over time while maintaining their onchain identity. The Move package manager helps you manage dependencies and publish packages to the network.
+A Move package is a collection of Move modules that you publish together as a single object on the Rtd blockchain. Packages can depend on other packages and can be upgraded over time while maintaining their onchain identity. The Move package manager helps you manage dependencies and publish packages to the network.
 
 :::info
 
@@ -49,7 +49,7 @@ Version 1.63 introduced major changes to the Move package system. This document 
 
 :::warning Active environment not found
 
-If the CLI displays `Your active environment is not present in Move.toml`, the most likely cause is that you are on a local or ephemeral network (Localnet, Devnet). These networks should not be added to the `[environments]` section. Instead, use `sui client test-publish` to publish on ephemeral networks.
+If the CLI displays `Your active environment is not present in Move.toml`, the most likely cause is that you are on a local or ephemeral network (Localnet, Devnet). These networks should not be added to the `[environments]` section. Instead, use `rtd client test-publish` to publish on ephemeral networks.
 
 If you do need to add a persistent environment (for example, a custom Devnet deployment), add an `[environments]` section with the chain ID:
 
@@ -58,7 +58,7 @@ If you do need to add a persistent environment (for example, a custom Devnet dep
 devnet = "aba3e445"
 ```
 
-Use `sui client chain-identifier` to find the chain ID for your network. The command displays both Base58 and Hex formats. You can use either one in the `[environments]` section. Note that `mainnet` and `testnet` are implicitly available and do not need to be listed.
+Use `rtd client chain-identifier` to find the chain ID for your network. The command displays both Base58 and Hex formats. You can use either one in the `[environments]` section. Note that `mainnet` and `testnet` are implicitly available and do not need to be listed.
 
 :::
 
@@ -70,7 +70,7 @@ When you build a Move package for the first time, the package management system 
 
 For example, the manifest might specify a dependency on a branch of a git repository. The package system pins that dependency to a specific commit so that subsequent builds use exactly the same source.
 
-You should commit the `Move.lock` file to source control so that your collaborators, CI jobs, and users who want to verify the source code are all using the same dependency versions. The package system only repins the dependencies if your manifest file changes or if you run the `sui move update-deps` command. You should never edit `Move.lock` manually.
+You should commit the `Move.lock` file to source control so that your collaborators, CI jobs, and users who want to verify the source code are all using the same dependency versions. The package system only repins the dependencies if your manifest file changes or if you run the `rtd move update-deps` command. You should never edit `Move.lock` manually.
 
 The third file that the package management system uses is the publication file (`Published.toml`). Each time you publish your package, the package system updates this file with metadata about the publication, such as its onchain address, upgrade capability address, and information about the compiler version used to build the package. The `Published.toml` file should be committed to source control.
 
@@ -116,7 +116,7 @@ The Move package system supports 4 types of dependencies, each suited for differ
  - Move registry (`mvr`) dependencies are the recommended way to depend on published packages from the ecosystem.
  - Local dependencies are used when a single repository contains multiple packages.
  - Git dependencies can be used to depend on packages that have not yet been published to Move registry.
- - System dependencies are used for built-in packages that are part of Sui.
+ - System dependencies are used for built-in packages that are part of Rtd.
 
 The remainder of this section describes these dependency types in detail.
 
@@ -146,14 +146,14 @@ Git dependencies can be used to depend on packages stored in git repositories. A
 
 ```toml
 [dependencies]
-usdc = { git = "https://github.com/circlefin/stablecoin-sui.git", subdir = "packages/usdc", rev = "master" }
+usdc = { git = "https://github.com/circlefin/stablecoin-rtd.git", subdir = "packages/usdc", rev = "master" }
 ```
 
 Manifest files are written in TOML, which also allows you to expand inline tables. The preceding example is equivalent to:
 
 ```toml
 [dependencies.usdc]
-git = "https://github.com/circlefin/stablecoin-sui.git"
+git = "https://github.com/circlefin/stablecoin-rtd.git"
 subdir = "packages/usdc"
 rev = "master"
 ```
@@ -172,14 +172,14 @@ System dependencies do not exist in the old system, and implicit dependencies wo
 
 :::
 
-Several packages are built into Sui. The `system` dependency type can be used to depend on these packages. The available system packages are `std`, `sui`, `sui_system`, `bridge`, and `deepbook`.
+Several packages are built into Rtd. The `system` dependency type can be used to depend on these packages. The available system packages are `std`, `rtd`, `rtd_system`, `bridge`, and `deepbook`.
 
 However:
 
- - The `std` and `sui` packages are implicitly included unless you write `implicit-dependencies = false` in your `[package]` section. You do not need to explicitly include them.
+ - The `std` and `rtd` packages are implicitly included unless you write `implicit-dependencies = false` in your `[package]` section. You do not need to explicitly include them.
  - The `deepbook` system package is for the deprecated DeepBook version 2. New applications should use DeepBook version 3 by adding `deepbook = { mvr = "@deepbook/core" }`.
 
-To include a system dependency, write `{ system = "<name>" }`. For example, to use `sui_system`, add `sui_system = { system = "sui_system" }` to your `[dependencies]` section.
+To include a system dependency, write `{ system = "<name>" }`. For example, to use `rtd_system`, add `rtd_system = { system = "rtd_system" }` to your `[dependencies]` section.
 
 ### Advanced dependency configuration
 
@@ -242,7 +242,7 @@ The `modes` field lets you add dependencies that are only used in specific modes
 ascii = { r.mvr = "@potatoes/ascii", modes = ["test"] }
 ```
 
-This dependency is included whenever you run `sui move test` or pass `-m test` to any `sui move` command.
+This dependency is included whenever you run `rtd move test` or pass `-m test` to any `rtd move` command.
 
 :::info
 
@@ -271,7 +271,7 @@ devnet = "aba3e445"
 
 The right-hand side of the entry is the chain identifier for the network. Chain IDs accept either **Hex** (short form, such as `aba3e445`) or **Base58** (full genesis digest, such as `69WiPg3DAQhKenaFN9I6pYc7MYk...`) format interchangeably. The two formats are compared automatically, so a Hex short form in the manifest matches a Base58 full form from the CLI, and vice versa.
 
-You can find the chain ID using `sui client chain-identifier`, which displays both formats:
+You can find the chain ID using `rtd client chain-identifier`, which displays both formats:
 
 ```
 Base58: 69WiPg3DAQhKenaFN9I6pYc7MYk...
@@ -302,10 +302,10 @@ You can replace dependencies in different environments using the `[dep-replaceme
 
 ```toml
 [dependencies]
-codec = { git = "https://github.com/sui-potatoes/app.git", subdir = "packages/codec", rev = "codec@testnet-v2" }
+codec = { git = "https://github.com/rtd-potatoes/app.git", subdir = "packages/codec", rev = "codec@testnet-v2" }
 
 [dep-replacements.mainnet]
-codec = { git = "https://github.com/sui-potatoes/app.git", subdir = "packages/codec", rev = "codec@mainnet-v2" }
+codec = { git = "https://github.com/rtd-potatoes/app.git", subdir = "packages/codec", rev = "codec@mainnet-v2" }
 ```
 
 This is easier to achieve if you are using `mvr`, which automatically resolves the Mainnet or Testnet version depending on the build environment:
@@ -339,17 +339,17 @@ The `original-id` field should contain the address of the first version of the p
 
 ### Building and testing packages
 
-When you run `sui move build` or `sui move test`, the system ensures you have all dependencies cached in your `~/.move` directory. It first checks whether the lockfile is current, and if the lockfile is not current, it repins all of the dependencies for your build environment. It then checks whether the packages are cached, and if not it downloads them.
+When you run `rtd move build` or `rtd move test`, the system ensures you have all dependencies cached in your `~/.move` directory. It first checks whether the lockfile is current, and if the lockfile is not current, it repins all of the dependencies for your build environment. It then checks whether the packages are cached, and if not it downloads them.
 
 The system always fetches after pinning, so you do not need to connect to a network unless a dependency needs repinning because the manifest changed or you ran `update-deps`.
 
 ### Updating dependencies
 
-Run `sui move update-deps` to repin all of your dependencies. This redownloads the latest compatible versions without changing your manifest file.
+Run `rtd move update-deps` to repin all of your dependencies. This redownloads the latest compatible versions without changing your manifest file.
 
 ### Publishing and upgrading
 
-During normal package publication and upgrades (`sui client publish` or `sui client upgrade`), the system rechecks that the dependencies are published on the given network and that the relevant chain IDs are consistent. The system also ensures that the additional onchain linkage requirements are satisfied. For example, onchain packages can have extra dependencies in their linkage that they do not actually use, so the system needs to include the onchain linkages.
+During normal package publication and upgrades (`rtd client publish` or `rtd client upgrade`), the system rechecks that the dependencies are published on the given network and that the relevant chain IDs are consistent. The system also ensures that the additional onchain linkage requirements are satisfied. For example, onchain packages can have extra dependencies in their linkage that they do not actually use, so the system needs to include the onchain linkages.
 
 The system updates the publication file (`Published.toml`) to include the updated publication information. The publication file contains an entry for each environment that has a published version of the package. The entry contains the published address, original ID (the address of the first version of the package), the version number, the upgrade capability, and information about the build configuration that can be used for source validation. Here is an example publication file:
 
@@ -360,7 +360,7 @@ original-id = "0x9c11913b6be956a7020cb9e120f03f396e52c3b766164c6163569ac9d7fabe0
 published-at = "0x9c11913b6be956a7020cb9e120f03f396e52c3b766164c6163569ac9d7fabe06"
 version = 2
 toolchain-version = "<toolchain-version>"
-build-config = { flavor = "sui", edition = "2024" }
+build-config = { flavor = "rtd", edition = "2024" }
 upgrade-capability = "0x34f7cf31a0a12f81252ab947cb51146bc8138fa5adb3f1fe38e244734319d73c"
 
 [published.testnet]
@@ -369,14 +369,14 @@ published-at = "0x9813c40d93200714a1f7c9b9733ebb537e7dc60fd4b29148f7bcc0e8577938
 original-id = "0x9813c40d93200714a1f7c9b9733ebb537e7dc60fd4b29148f7bcc0e857793813"
 version = 1
 toolchain-version = "<toolchain-version>"
-build-config = { flavor = "sui", edition = "2024" }
+build-config = { flavor = "rtd", edition = "2024" }
 upgrade-capability = "0x34f7cf31a0a12f81252ab947cb51146bc8138fa5adb3f1fe38e244734319d73c"
 
 ```
 
 You should commit the publication file to source control so that other packages can depend on your package.
 
-You can also publish or upgrade using the `sui client ptb` command. See [Building Programmable Transaction Blocks](/develop/transactions/ptbs/building-ptb) for details.
+You can also publish or upgrade using the `rtd client ptb` command. See [Building Programmable Transaction Blocks](/develop/transactions/ptbs/building-ptb) for details.
 
 :::info
 
@@ -394,16 +394,16 @@ The old package management system does not support ephemeral publication.
 
 By design, the `Published.toml` file should only record publications to persistent environments like Mainnet and Testnet. Do not commit addresses for ephemeral publications on local networks or Devnet to source control.
 
-Instead, the package manager supports ephemeral publication of a package and its dependencies for testing. The `sui client test-publish` command works like a normal publish, except that the system reads the publication addresses for packages and writes them to a separate file.
+Instead, the package manager supports ephemeral publication of a package and its dependencies for testing. The `rtd client test-publish` command works like a normal publish, except that the system reads the publication addresses for packages and writes them to a separate file.
 
-The command `sui client test-publish --pubfile-path <pubfile> --build-env <env>` builds the root package for the `<env>` environment (see [the build environment](#the-build-environment)) and then publishes it to a chain using the addresses from the ephemeral publication file `<pubfile>`.
+The command `rtd client test-publish --pubfile-path <pubfile> --build-env <env>` builds the root package for the `<env>` environment (see [the build environment](#the-build-environment)) and then publishes it to a chain using the addresses from the ephemeral publication file `<pubfile>`.
 
 If `<pubfile>` is omitted, it defaults to `Pub.<env-name>.toml` where `<env-name>` is the name of the active CLI environment, irrespective of the environments defined in the manifest. This file contains the addresses to use for publication.
 
-You can also prepare bytecode for publication without actually publishing it by passing `--pubfile-path <pubfile>` to `sui move build --dump-bytecode-as-base64`:
+You can also prepare bytecode for publication without actually publishing it by passing `--pubfile-path <pubfile>` to `rtd move build --dump-bytecode-as-base64`:
 
 ```sh
-sui move build --dump-bytecode-as-base64 --pubfile-path Pub.localnet.toml --build-env testnet
+rtd move build --dump-bytecode-as-base64 --pubfile-path Pub.localnet.toml --build-env testnet
 ```
 
 The format of an ephemeral publication file is as follows:
@@ -449,7 +449,7 @@ Although publication files and ephemeral publication files are similar, they hol
 | **Contents** | Your package addresses only | Package and dependency addresses |
 | **Scope** | Multiple networks in 1 file | Single network per file |
 | **Commit to source control** | Yes, because others can depend on your package | No, because it contains local development data |
-| **Created by** | `sui client publish` | `sui client test-publish` |
+| **Created by** | `rtd client publish` | `rtd client test-publish` |
 
 ### The build environment
 
@@ -460,8 +460,8 @@ If `--build-env <env>` is omitted, it defaults to the `build-env` name of the fi
 For example, if you want to build and publish the Testnet version of your package on Localnet, you would switch your CLI's active environment to Localnet, and run with `--build-env testnet`:
 
 ```sh
-sui client switch --env localnet
-sui client test-publish --build-env testnet
+rtd client switch --env localnet
+rtd client test-publish --build-env testnet
 ```
 
 ### Ephemerally publishing dependencies
@@ -472,10 +472,10 @@ To manually publish your dependencies, use the same ephemeral publication file w
 
 ```sh
 cd packages/a
-sui client test-publish --build-env testnet --pubfile-path ../Pub.localnet.toml
+rtd client test-publish --build-env testnet --pubfile-path ../Pub.localnet.toml
 
 cd ../b
-sui client test-publish --build-env testnet --pubfile-path ../Pub.localnet.toml
+rtd client test-publish --build-env testnet --pubfile-path ../Pub.localnet.toml
 ```
 
 When you publish `a`, the `packages/Pub.localnet.toml` file is updated with an entry with `a`'s Localnet address. Then when you publish `b`, it takes `a`'s address from `packages/Pub.localnet.toml`, and also writes `b`'s Localnet address.
@@ -484,7 +484,7 @@ You can also automate this process using the `--publish-unpublished-deps` comman
 
 ```sh
 cd packages/b
-sui client test-publish --build-env testnet --publish-unpublished-deps`
+rtd client test-publish --build-env testnet --publish-unpublished-deps`
 ```
 
 This creates a fresh publication of each of `a`'s dependencies, then publishes `a`, and records all of the addresses to `Pub.localnet.toml`.
@@ -496,9 +496,9 @@ The system identifies entries of an ephemeral publication file by the `source` f
 
 For iterative development on Localnet:
 
-1. Start the local network: `sui start --with-faucet --force-regenesis`
-1. Publish with test-publish (no permanent record): `sui client test-publish`
-1. After each code change, re-run `sui client test-publish` for a fresh deployment.
+1. Start the local network: `rtd start --with-faucet --force-regenesis`
+1. Publish with test-publish (no permanent record): `rtd client test-publish`
+1. After each code change, re-run `rtd client test-publish` for a fresh deployment.
 
 Use `test-publish` for Localnet because it avoids polluting `Published.toml` with ephemeral addresses that change on every genesis reset.
 
@@ -508,11 +508,11 @@ To publish a package from TypeScript, first build it with the CLI, then submit t
 
 ```typescript
 import { execSync } from 'child_process';
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 // Build and get compiled modules + dependencies
 const { modules, dependencies } = JSON.parse(
-  execSync('sui move build --dump-bytecode-as-base64 --path ./your_package', {
+  execSync('rtd move build --dump-bytecode-as-base64 --path ./your_package', {
     encoding: 'utf-8',
   }),
 );
@@ -524,7 +524,7 @@ tx.transferObjects([upgradeCap], tx.pure.address(senderAddress));
 
 ## Reading publish output
 
-After running `sui client publish --json`, the response includes:
+After running `rtd client publish --json`, the response includes:
 
 | Field              | Description                                  |
 |--------------------|----------------------------------------------|
@@ -538,15 +538,15 @@ To get human-readable event data, query the transaction through the RPC with `sh
 To capture only the JSON output (without build logs), redirect stderr:
 
 ```sh
-$ sui client publish --json 2>/dev/null | jq '.objectChanges[] | select(.type == "published")'
+$ rtd client publish --json 2>/dev/null | jq '.objectChanges[] | select(.type == "published")'
 ```
 
 :::info Automatic framework dependencies
 
-The `Sui` and `MoveStdlib` packages are automatically included as dependencies. You do not need to list them in `[dependencies]`.
+The `Rtd` and `MoveStdlib` packages are automatically included as dependencies. You do not need to list them in `[dependencies]`.
 
 :::
 
 ## Register your package on `mvr`
 
-Once you have published your package, you should consider adding it to the Move registry so that others can easily depend on it. See [the Move registry documentation](https://docs.suins.io/move-registry/managing-package-info) for more information.
+Once you have published your package, you should consider adding it to the Move registry so that others can easily depend on it. See [the Move registry documentation](https://docs.rtdns.io/move-registry/managing-package-info) for more information.

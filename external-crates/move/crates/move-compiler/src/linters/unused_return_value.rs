@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Flags discarded return values of calls with no `&mut` arg (Sui: ignoring `(&mut) TxContext`).
+//! Flags discarded return values of calls with no `&mut` arg (Rtd: ignoring `(&mut) TxContext`).
 //! `IgnoreAndPop` of a `Fresh` value warns immediately; otherwise a `Bound` value alive in a
 //! return block's post-state on every return path warns once per originating call.
 
@@ -26,7 +26,7 @@ use crate::{
     },
     linters::StyleCodes,
     parser::ast::Ability_,
-    sui_mode::{SUI_ADDR_VALUE, TX_CONTEXT_MODULE_NAME, TX_CONTEXT_TYPE_NAME},
+    rtd_mode::{RTD_ADDR_VALUE, TX_CONTEXT_MODULE_NAME, TX_CONTEXT_TYPE_NAME},
 };
 use move_ir_types::location::*;
 use std::collections::BTreeMap;
@@ -34,7 +34,7 @@ use std::collections::BTreeMap;
 pub(crate) struct UnusedReturnValue;
 
 pub(crate) struct UnusedReturnValueAI {
-    is_sui: bool,
+    is_rtd: bool,
 }
 
 /// Function unique index derived from the block label + command index within the block
@@ -45,7 +45,7 @@ pub(crate) type CommandIndex = (Label, usize);
 pub(crate) struct CallSite {
     /// The location
     loc: Loc,
-    /// In Sui mode, was an &mut TxContext present but excluded
+    /// In Rtd mode, was an &mut TxContext present but excluded
     tx_context_exempted: bool,
 }
 
@@ -86,8 +86,8 @@ impl SimpleAbsIntConstructor for UnusedReturnValue {
         {
             return None;
         }
-        let is_sui = context.env.package_config(context.package).flavor == Flavor::Sui;
-        Some(UnusedReturnValueAI { is_sui })
+        let is_rtd = context.env.package_config(context.package).flavor == Flavor::Rtd;
+        Some(UnusedReturnValueAI { is_rtd })
     }
 }
 
@@ -179,7 +179,7 @@ impl SimpleAbsInt for UnusedReturnValueAI {
         f: &ModuleCall,
         _args: Vec<Value>,
     ) -> Option<Vec<Value>> {
-        let purity = call_purity(self.is_sui, f);
+        let purity = call_purity(self.is_rtd, f);
         let mk_value = |st: &SingleType| {
             let tx_context_exempted = match purity {
                 Purity::Mutable => return Value::Other,
@@ -278,24 +278,24 @@ impl SimpleExecutionContext for ExecutionContext {
 enum Purity {
     /// No `&mut` arguments
     Pure {
-        /// In Sui flavor, was there an excluded `&mut TxContext`
+        /// In Rtd flavor, was there an excluded `&mut TxContext`
         tx_context_exempted: bool,
     },
     /// At least one `&mut` argument
     Mutable,
 }
 
-fn call_purity(is_sui: bool, f: &ModuleCall) -> Purity {
+fn call_purity(is_rtd: bool, f: &ModuleCall) -> Purity {
     let mut tx_context_exempted = false;
     for arg in &f.arguments {
         let Type_::Single(sp!(_, SingleType_::Ref(true, bt))) = &arg.ty.value else {
             continue;
         };
-        let is_tx_context = is_sui
+        let is_tx_context = is_rtd
             && bt
                 .value
                 .is_apply(
-                    &SUI_ADDR_VALUE,
+                    &RTD_ADDR_VALUE,
                     TX_CONTEXT_MODULE_NAME,
                     TX_CONTEXT_TYPE_NAME,
                 )

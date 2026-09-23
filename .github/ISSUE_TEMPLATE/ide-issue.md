@@ -13,17 +13,17 @@ Describe your setup:
 * IDE/editor: <specify IDE/editor version>
 * Move analyzer version: <specify `move-analyzer` version>
 
-When using Move VS Code [extension](https://marketplace.visualstudio.com/items?itemName=mysten.move), make sure to use the most recent version of both VS Code (or equivalent editor, such as Cursor) and the Move VS Code extension. Additionally, provide the content of the **Move Client** tab. To access this data, select **View** -> **Output** from the main menu and open the appropriate tab from the drop down menu. The output should look similar to the following:
+When using Move VS Code [extension](https://marketplace.visualstudio.com/items?itemName=linku.move), make sure to use the most recent version of both VS Code (or equivalent editor, such as Cursor) and the Move VS Code extension. Additionally, provide the content of the **Move Client** tab. To access this data, select **View** -> **Output** from the main menu and open the appropriate tab from the drop down menu. The output should look similar to the following:
 
 ``` shell
-INFO [10/21/2025, 10:16:14 AM]: mysten.move version 1.0.33
+INFO [10/21/2025, 10:16:14 AM]: linku.move version 1.0.33
 INFO [10/21/2025, 10:16:14 AM]: Creating extension context
-INFO [10/21/2025, 10:16:14 AM]: configuration: {"auto-imports":true,"force-bundled":false,"inlay-hints":{"type":false,"param":false},"lint":"default","server":{"path":null},"sui":{"path":"/opt/homebrew/bin/sui"},"trace":{"server":"off"}}
+INFO [10/21/2025, 10:16:14 AM]: configuration: {"auto-imports":true,"force-bundled":false,"inlay-hints":{"type":false,"param":false},"lint":"default","server":{"path":null},"rtd":{"path":"/opt/homebrew/bin/rtd"},"trace":{"server":"off"}}
 INFO [10/21/2025, 10:16:14 AM]: Installing language server
 INFO [10/21/2025, 10:16:14 AM]: Bundled version: 1.60.0
 INFO [10/21/2025, 10:16:14 AM]: Standalone version: 1.60.0
 INFO [10/21/2025, 10:16:14 AM]: CLI version: 1.58.2
-INFO [10/21/2025, 10:16:14 AM]: Setting v1.60.0 of standalone move-analyzer installed at '~/.sui/bin/move-analyzer' as the highest one
+INFO [10/21/2025, 10:16:14 AM]: Setting v1.60.0 of standalone move-analyzer installed at '~/.rtd/bin/move-analyzer' as the highest one
 INFO [10/21/2025, 10:16:14 AM]: Starting client...
 ```
 
@@ -65,7 +65,7 @@ When using the Move VS Code extension, provide the content of the **Move** tab. 
 
 ``` shell
 using standard allocator
-Starting language server '~/.sui/bin/move-analyzer' communicating via stdio...
+Starting language server '~/.rtd/bin/move-analyzer' communicating via stdio...
 linting level Default
 parent process monitoring enabled for PID: 31866
 auto imports during auto-completion enabled: true
@@ -78,13 +78,13 @@ scheduled run
 text document notification handled
 symbolication started
 symbolicating "~/deepbookv3/packages/deepbook"
-[note] Dependencies on Bridge, MoveStdlib, Sui, and SuiSystem are automatically added, but this feature is disabled for your package because you have explicitly included dependencies on Sui. Consider removing these dependencies from Move.toml.
+[note] Dependencies on Bridge, MoveStdlib, Rtd, and RtdSystem are automatically added, but this feature is disabled for your package because you have explicitly included dependencies on Rtd. Consider removing these dependencies from Move.toml.
 on_document_symbol_request: "~/deepbookv3/packages/deepbook/sources/balance_manager.move"
 no cached deps for "~/deepbookv3/packages/deepbook"
 pre-compiling dep MoveStdlib
-inserting new dep into cache for "~/.move/https___github_com_MystenLabs_sui_git_framework__mainnet/crates/sui-framework/packages/move-stdlib"
-pre-compiling dep Sui
-inserting new dep into cache for "~/.move/https___github_com_MystenLabs_sui_git_framework__mainnet/crates/sui-framework/packages/sui-framework"
+inserting new dep into cache for "~/.move/https___github_com_LinkUVerse_rtd_git_framework__mainnet/crates/rtd-framework/packages/move-stdlib"
+pre-compiling dep Rtd
+inserting new dep into cache for "~/.move/https___github_com_LinkUVerse_rtd_git_framework__mainnet/crates/rtd-framework/packages/rtd-framework"
 pre-compiling dep token
 inserting new dep into cache for "~/deepbookv3/packages/deepbook/../token"
 compiled to parsed AST

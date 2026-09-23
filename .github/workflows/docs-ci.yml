@@ -1,4 +1,4 @@
-name: Build and Deploy docs.sui.io
+name: Build and Deploy docs.rtd.io
 
 on:
   push:

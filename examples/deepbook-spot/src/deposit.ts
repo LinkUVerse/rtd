@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#deposit
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import type { DeepBookTestnetClient } from './client.js';
 
 // Deposit any accepted coin into the BalanceManager, addressed by SDK coin key
-// (for example 'DEEP' or 'SUI'). The amount is in whole coins; the SDK scales it
+// (for example 'DEEP' or 'RTD'). The amount is in whole coins; the SDK scales it
 // to the coin's decimals.
 export function depositAsset(
 	client: DeepBookTestnetClient,
@@ -25,7 +25,7 @@ export function depositAsset(
 // with coinWithBalance, which throws at build time otherwise:
 //   Insufficient balance of <coin> for owner <address>. Required: X, Available: Y
 // Size the deposit to your actual balance, and leave a reserve when the coin is
-// SUI so gas still has funds.
+// RTD so gas still has funds.
 export async function safeDepositAmount(
 	client: DeepBookTestnetClient,
 	owner: string,

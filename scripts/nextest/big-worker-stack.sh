@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
 # cargo-nextest setup script (see .config/nextest.toml).
@@ -7,7 +7,7 @@
 # Gives the matched tests' spawned threads — including tokio runtime workers — an
 # 8 MiB stack instead of the std/tokio default of 2 MiB. Rust 1.96 enlarged
 # unoptimized async state-machine frames by ~45%, which overflows the 2 MiB tokio
-# worker stack in several sui-indexer-alt-e2e-tests binaries (e.g. deeply-nested
+# worker stack in several rtd-indexer-alt-e2e-tests binaries (e.g. deeply-nested
 # async-graphql resolution in `transactional_tests`, JSON-RPC coin tests).
 #
 # Setup scripts run at test-execution time only, so this does NOT affect the

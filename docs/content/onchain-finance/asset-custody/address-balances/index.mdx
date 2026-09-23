@@ -2,7 +2,7 @@
 title: Address Balances
 description: >-
   Address balances introduce a canonical balance system for fungible assets tied
-  to Sui addresses, replacing coin-selection complexity with a single per-address
+  to Rtd addresses, replacing coin-selection complexity with a single per-address
   accumulator value.
 keywords:
   - address balances
@@ -35,26 +35,26 @@ builder_paths:
     step: Address balances
     stage: Wallets & Funding
 questions:
-  - What are address balances on Sui?
-  - How does the accumulator model work on Sui?
+  - What are address balances on Rtd?
+  - How does the accumulator model work on Rtd?
   - What is the difference between coin objects and address balances?
   - How does gas payment work with address balances?
   - What is SIP-58?
   - When should I use coin objects vs address balances?
 answer: >-
   Address balances introduce a canonical balance system for fungible assets tied
-  to Sui addresses. The accumulator model maintains one value per (address,
+  to Rtd addresses. The accumulator model maintains one value per (address,
   coin type) pair, eliminating coin selection and enabling stateless transaction
   construction.
 ---
 
-Address balances introduce a canonical balance system for fungible assets tied to Sui addresses. This replaces the UTXO-style `Coin<T>` model with direct address-owned balances, simplifying transaction construction and eliminating coin selection complexity.
+Address balances introduce a canonical balance system for fungible assets tied to Rtd addresses. This replaces the UTXO-style `Coin<T>` model with direct address-owned balances, simplifying transaction construction and eliminating coin selection complexity.
 
-For the full specification, see [SIP-58: Sui Address Balances](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md).
+For the full specification, see [SIP-58: Rtd Address Balances](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md).
 
 ## How address balances work
 
-Previously, Sui computed balances by summing the values of all `Coin<T>` objects owned by an address. Transferring funds required selecting specific coin objects, merging them if necessary, splitting the desired amount, and handling the remainder. This created complexity for wallets and applications and caused contention when multiple transactions competed for the same coin objects.
+Previously, Rtd computed balances by summing the values of all `Coin<T>` objects owned by an address. Transferring funds required selecting specific coin objects, merging them if necessary, splitting the desired amount, and handling the remainder. This created complexity for wallets and applications and caused contention when multiple transactions competed for the same coin objects.
 
 With address balances, each address has at most one **accumulator value** for each coin type `T`. The accumulator is not an object you own. It is a per-address value maintained by the protocol:
 
@@ -77,16 +77,16 @@ The total fungible balance of an address for coin type `T` is:
 | **Concurrency** | Contention when multiple transactions use the same coin | No contention: each transaction operates on the accumulator independently |
 | **Deposits** | Create new `Coin<T>` objects at the recipient address | Merge automatically into the existing balance |
 | **DeFi compatibility** | Accepted by Move functions that take `Coin<T>` parameters | Withdraw to a `Coin<T>` first, then pass to Move functions |
-| **Gas payment** | Select SUI coin objects with `setGasPayment` | Pay directly from SUI address balance with no coin selection |
+| **Gas payment** | Select RTD coin objects with `setGasPayment` | Pay directly from RTD address balance with no coin selection |
 | **Wrapping** | Can be wrapped inside other objects | Cannot be wrapped (not an object) |
 
 ## Gas payment from address balances
 
-SUI address balances can pay for gas directly, removing the need for coin selection entirely. When you pay gas from an address balance:
+RTD address balances can pay for gas directly, removing the need for coin selection entirely. When you pay gas from an address balance:
 
 - The transaction includes a `ValidDuring` expiration field that restricts it to a range of epochs, preventing stale transactions from executing.
 - A **nonce** field ensures each gas payment is unique, preventing replay.
-- No `Coin<SUI>` objects need to be provided. The protocol deducts gas from the address balance automatically.
+- No `Coin<RTD>` objects need to be provided. The protocol deducts gas from the address balance automatically.
 
 This is especially useful for [sponsored transactions](/develop/transaction-payment/sponsor-txn), where the sponsor can pay gas from their address balance without coordinating coin objects.
 
@@ -103,7 +103,7 @@ The protocol periodically reconciles these events through **settlement transacti
 
 From a developer's perspective, settlement is transparent. You interact with address balances through the SDK and CLI, and the protocol handles reconciliation automatically. The `derive_balance_changes` algorithm in the SDK computes the net effect of a transaction by combining object-level changes with accumulator events.
 
-For the formal specification of the settlement mechanism, see [SIP-58](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md).
+For the formal specification of the settlement mechanism, see [SIP-58](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md).
 
 ## When to use which
 

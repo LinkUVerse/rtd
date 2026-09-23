@@ -2,7 +2,7 @@
 title: Spot Trading Workflow
 sidebar_label: Spot Trading Workflow
 description: >-
-  Hands-on DeepBook spot walkthrough on Sui Testnet: create a BalanceManager,
+  Hands-on DeepBook spot walkthrough on Rtd Testnet: create a BalanceManager,
   deposit, place a limit order, read status and fills, fill your own order,
   cancel, and withdraw, with real transactions to observe at each step.
 keywords:
@@ -50,15 +50,15 @@ builder_paths:
     stage: DeFi SDK
 ---
 
-Run a complete DeepBook spot order lifecycle on Sui Testnet with real transactions: create a `BalanceManager`, deposit, place a resting limit order, read its status, cancel it, then place a maker order and fill it with your own taker order, and withdraw. Each onchain step lists what to observe, so the page doubles as a verification checklist.
+Run a complete DeepBook spot order lifecycle on Rtd Testnet with real transactions: create a `BalanceManager`, deposit, place a resting limit order, read its status, cancel it, then place a maker order and fill it with your own taker order, and withdraw. Each onchain step lists what to observe, so the page doubles as a verification checklist.
 
-It uses the `DEEP_SUI` pool, which you can fund by finishing the [Fees and Funding](/onchain-finance/deepbook/deepbookv3/fees-and-funding) flow (Testnet SUI plus DEEP). The samples live in the `examples/deepbook-spot` package, type-checked with `tsc --noEmit` against `@mysten/deepbook-v3` and `@mysten/sui`, and reference pools and coins by SDK key rather than hardcoding onchain IDs.
+It uses the `DEEP_RTD` pool, which you can fund by finishing the [Fees and Funding](/onchain-finance/deepbook/deepbookv3/fees-and-funding) flow (Testnet RTD plus DEEP). The samples live in the `examples/deepbook-spot` package, type-checked with `tsc --noEmit` against `@linku/deepbook-v3` and `@linku/rtd`, and reference pools and coins by SDK key rather than hardcoding onchain IDs.
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
-- [x] A current CLI: run `suiup update sui`, then `sui --version` to confirm it (a stale CLI causes version-skew errors).
-- [x] Testnet SUI and DEEP on your address, from [Fees and Funding](/onchain-finance/deepbook/deepbookv3/fees-and-funding#obtain-testnet-deep-usdc-and-sui).
-- [x] The SDK installed: `npm install @mysten/deepbook-v3 @mysten/sui`.
+- [x] A current CLI: run `suiup update rtd`, then `rtd --version` to confirm it (a stale CLI causes version-skew errors).
+- [x] Testnet RTD and DEEP on your address, from [Fees and Funding](/onchain-finance/deepbook/deepbookv3/fees-and-funding#obtain-testnet-deep-usdc-and-rtd).
+- [x] The SDK installed: `npm install @linku/deepbook-v3 @linku/rtd`.
 </TabItem>
 </Tabs>
 
@@ -96,13 +96,13 @@ Size the amount to your wallet balance. `depositIntoManager` sources coins with 
 
 :::info
 
-`DEEP_SUI` is a whitelisted pool, so it charges no trading fee and deducts no DEEP. The `payWithDeep` flag has no effect here. On a fee-paying pool, the pool deducts DEEP from your manager on each fill, sized by its floating DEEP price, so keep DEEP in the manager. See [How the DEEP fee is sized](/onchain-finance/deepbook/deepbookv3/fees-and-funding#how-the-deep-fee-is-sized) and [Pay fees in DEEP or the input token](/onchain-finance/deepbook/deepbookv3/fees-and-funding#pay-fees-in-deep-or-the-input-token).
+`DEEP_RTD` is a whitelisted pool, so it charges no trading fee and deducts no DEEP. The `payWithDeep` flag has no effect here. On a fee-paying pool, the pool deducts DEEP from your manager on each fill, sized by its floating DEEP price, so keep DEEP in the manager. See [How the DEEP fee is sized](/onchain-finance/deepbook/deepbookv3/fees-and-funding#how-the-deep-fee-is-sized) and [Pay fees in DEEP or the input token](/onchain-finance/deepbook/deepbookv3/fees-and-funding#pay-fees-in-deep-or-the-input-token).
 
 :::
 
 ## Place a limit order
 
-Place a resting maker ask. `POST_ONLY` guarantees the order rests instead of taking: if it would cross the book, the pool does not place it, so you never pay a taker fee by accident. Price and quantity must respect the pool's tick size and lot size (`DEEP_SUI`: tick `0.00001`, lot `1`, minimum size `10` DEEP). The `clientOrderId` is your own tag for the order: the SDK types it as a string, but the contract encodes it as `u64`, so pass a numeric string such as a timestamp, not a label like `order-1`.
+Place a resting maker ask. `POST_ONLY` guarantees the order rests instead of taking: if it would cross the book, the pool does not place it, so you never pay a taker fee by accident. Price and quantity must respect the pool's tick size and lot size (`DEEP_RTD`: tick `0.00001`, lot `1`, minimum size `10` DEEP). The `clientOrderId` is your own tag for the order: the SDK types it as a string, but the contract encodes it as `u64`, so pass a numeric string such as a timestamp, not a label like `order-1`.
 
 <ImportContent source="examples/deepbook-spot/src/place-order.ts" mode="code" tag="place-maker" />
 
@@ -148,7 +148,7 @@ Funds you deposit or earn live in the manager, a shared object, until you withdr
 
 ### Find stranded funds
 
-If a later deposit fails for insufficient funds even though you funded the key, the funds are usually sitting in another manager, not lost, because each manager is a shared object that keeps what you deposit. List the managers you have created (persist each ID when you create it, or scan your creation transactions with `suix_queryTransactionBlocks` filtered by `FromAddress`) and check their balances:
+If a later deposit fails for insufficient funds even though you funded the key, the funds are usually sitting in another manager, not lost, because each manager is a shared object that keeps what you deposit. List the managers you have created (persist each ID when you create it, or scan your creation transactions with `rtdx_queryTransactionBlocks` filtered by `FromAddress`) and check their balances:
 
 <ImportContent source="examples/deepbook-spot/src/manager.ts" mode="code" tag="report-managers" />
 

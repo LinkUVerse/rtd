@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import React, { useState, useEffect } from "react";
@@ -25,7 +25,7 @@ const NetworkSelect = () => {
     window.dispatchEvent(new Event("storage"));
   }, [selection]);
 
-  const rpcUrl = `https://fullnode.${selection}.sui.io:443`;
+  const rpcUrl = `https://fullnode.${selection}.rtd.io:443`;
 
   return (
     <StyledEngineProvider injectFirst>
@@ -38,7 +38,7 @@ const NetworkSelect = () => {
             value={selection}
             label="Network"
             onChange={(e) => setSelection(e.target.value)}
-            className="dark:text-white dark:bg-sui-ghost-dark"
+            className="dark:text-white dark:bg-rtd-ghost-dark"
           >
             {NETWORKS.map((n) => (
               <MenuItem key={n.value} value={n.value}>

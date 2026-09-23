@@ -32,7 +32,7 @@ goal:
       label: Needs answer summary for AI citation
 questions:
   - Should I use address-owned objects or a shared object?
-  - How do I build a trustless swap on Sui?
+  - How do I build a trustless swap on Rtd?
   - What are the trade-offs between owned and shared objects?
 answer: >-
   Address-owned objects avoid contention but need a third-party custodian to
@@ -54,7 +54,7 @@ module escrow::lock {
 
 Any `T: store` can be locked to get a `Locked<T>` and a corresponding `Key`. Unlocking consumes the key, so any tampering with the locked value is detectable by monitoring the key's ID.
 
-View the [complete code](https://github.com/MystenLabs/sui/blob/main/examples/trading/contracts/escrow/sources/lock.move) on GitHub.
+View the [complete code](https://github.com/LinkUVerse/rtd/blob/main/examples/trading/contracts/escrow/sources/lock.move) on GitHub.
 
 ## Fastpath: address-owned objects
 

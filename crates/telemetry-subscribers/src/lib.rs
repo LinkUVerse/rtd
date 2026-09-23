@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use atomic_float::AtomicF64;
@@ -151,7 +151,7 @@ impl LogFormat {
 }
 
 /// A per-target output route: *additionally* write `target`'s logs to `file`. Configured via
-/// the `RUST_LOG_TAILS` env var, e.g. `graphql_request=/var/log/sui/graphql_request.jsonl`.
+/// the `RUST_LOG_TAILS` env var, e.g. `graphql_request=/var/log/rtd/graphql_request.jsonl`.
 #[derive(Clone, Debug)]
 pub struct LogTail {
     pub target: String,
@@ -448,7 +448,7 @@ fn parse_log_tail_entry(entry: &str) -> LogTail {
     }
     panic!(
         "telemetry: invalid RUST_LOG_TAILS entry {entry:?}: a `=file` path is \
-         required, e.g. `graphql_request=/var/log/sui/graphql_request.jsonl`"
+         required, e.g. `graphql_request=/var/log/rtd/graphql_request.jsonl`"
     )
 }
 
@@ -666,7 +666,7 @@ impl TelemetryConfig {
         let mut file_output = CachedOpenFile::new::<&str>(None).unwrap();
         let mut provider = None;
         let sampler = SamplingFilter::new(config.sample_rate);
-        let service_name = env::var("OTEL_SERVICE_NAME").unwrap_or("sui-node".to_owned());
+        let service_name = env::var("OTEL_SERVICE_NAME").unwrap_or("rtd-node".to_owned());
 
         if config.enable_otlp_tracing {
             let trace_file = env::var("TRACE_FILE").ok();

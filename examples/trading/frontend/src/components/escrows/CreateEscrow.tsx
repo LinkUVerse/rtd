@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 import { ApiLockedObject } from "@/types/types";
-import { useCurrentAccount, useSuiClientInfiniteQuery } from "@mysten/dapp-kit";
-import { formatAddress } from "@mysten/sui/utils";
+import { useCurrentAccount, useRtdClientInfiniteQuery } from "@linku/dapp-kit";
+import { formatAddress } from "@linku/rtd/utils";
 import { Avatar, Button, Select } from "@radix-ui/themes";
 import { InfiniteScrollArea } from "@/components/InfiniteScrollArea";
 import { useState } from "react";
@@ -21,7 +21,7 @@ export function CreateEscrow({ locked }: { locked: ApiLockedObject }) {
   const { mutate: createEscrowMutation, isPending } = useCreateEscrowMutation();
 
   const { data, fetchNextPage, isFetchingNextPage, hasNextPage, refetch } =
-    useSuiClientInfiniteQuery(
+    useRtdClientInfiniteQuery(
       "getOwnedObjects",
       {
         owner: account?.address!,

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#redeem
@@ -9,8 +9,8 @@ import type {
 	OpenPosition,
 	RedeemQuote,
 	RedeemReceipt,
-} from '@mysten/deepbook-v3/predict';
-import type { Transaction } from '@mysten/sui/transactions';
+} from '@linku/deepbook-v3/predict';
+import type { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 import { UNDERLYING } from './config.js';
 

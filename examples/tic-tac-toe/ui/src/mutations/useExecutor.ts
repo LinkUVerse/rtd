@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
-import { SuiClient, SuiTransactionBlockResponse } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
+import { useSignAndExecuteTransaction, useRtdClient } from "@linku/dapp-kit";
+import { RtdClient, RtdTransactionBlockResponse } from "@linku/rtd/client";
+import { Transaction } from "@linku/rtd/transactions";
 
-type Options = Omit<Parameters<SuiClient["getTransactionBlock"]>[0], "digest"> & {
+type Options = Omit<Parameters<RtdClient["getTransactionBlock"]>[0], "digest"> & {
     tx: Transaction;
 };
 
@@ -19,7 +19,7 @@ type ExecuteCallback = ({
     signature: string;
 }) => Promise<ExecuteResponse>;
 
-type ResponseCallback = (tx: SuiTransactionBlockResponse) => void | Promise<void>;
+type ResponseCallback = (tx: RtdTransactionBlockResponse) => void | Promise<void>;
 type Executor = (options: Options, then: ResponseCallback) => void;
 
 type ExecutorResult = {
@@ -37,7 +37,7 @@ type ExecutorResult = {
  * and then doing something with them.
  */
 export function useExecutor({ execute }: { execute?: ExecuteCallback } = {}): ExecutorResult {
-    const client = useSuiClient();
+    const client = useRtdClient();
     const {
         mutate: signAndExecute,
         status,

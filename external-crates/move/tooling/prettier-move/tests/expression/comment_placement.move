@@ -22,7 +22,7 @@ fun unit_comments() {
 }
 
 fun global_access() {
-    ::sui::coin::zero();
+    ::rtd::coin::zero();
     ::std::vector::empty<u64>();
 }
 

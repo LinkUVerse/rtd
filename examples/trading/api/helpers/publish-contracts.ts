@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { publishPackage } from '../sui-utils';
+import { publishPackage } from '../rtd-utils';
 
 /// A demo showing how we could publish the escrow contract
 /// and our DEMO objects contract.

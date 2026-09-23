@@ -119,7 +119,7 @@ impl CompiledPackage {
                 .collect()
         } else {
             // Collect all module IDs from the current package to be published (module names are not
-            // sufficient as we may have modules with the same names in user code and in Sui
+            // sufficient as we may have modules with the same names in user code and in Rtd
             // framework which would result in the latter being pulled into a set of modules to be
             // published).
             let self_modules: HashSet<_> = self

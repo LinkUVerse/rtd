@@ -96,7 +96,7 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "$TITLE" \
-            --reviewer "ebmifa,amnn,lxfind,bmwill,mwtian,mystenmark,stefan-mysten" \
+            --reviewer "ebmifa,amnn,lxfind,bmwill,mwtian,linkumark,stefan-linku" \
             --body-file /tmp/pr-body.md
 
       - name: Report advisories that need manual attention

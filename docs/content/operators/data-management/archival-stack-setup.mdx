@@ -31,8 +31,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - How do I set up the Sui Archival Store and Service?
-  - What are the components of the Sui archival stack?
+  - How do I set up the Rtd Archival Store and Service?
+  - What are the components of the Rtd archival stack?
   - How do I run the archival indexer in production?
 answer: >-
   See [Archival Store and Service](/develop/accessing-data/archival-store) for
@@ -45,14 +45,14 @@ See [Archival Store and Service](/develop/accessing-data/archival-store) for mor
 ## Architecture overview
 
 1. **Google Cloud Bigtable**: The backing store that holds all historical chain data across 14 tables.
-2. **`sui-kvstore-alt`** (Indexer): Reads checkpoints from the remote checkpoint store and writes processed data to Bigtable.
-3. **`sui-kv-rpc`** (Archival Service): A gRPC server that reads from Bigtable and exposes the [`LedgerService`](/references/fullnode-protocol) API to clients.
+2. **`rtd-kvstore-alt`** (Indexer): Reads checkpoints from the remote checkpoint store and writes processed data to Bigtable.
+3. **`rtd-kv-rpc`** (Archival Service): A gRPC server that reads from Bigtable and exposes the [`LedgerService`](/references/fullnode-protocol) API to clients.
 
 ```mermaid
 graph LR
-    A[Sui Fullnode] --> B[sui-kvstore-alt]
+    A[Rtd Fullnode] --> B[rtd-kvstore-alt]
     B --> C[Bigtable]
-    C --> D[sui-kv-rpc]
+    C --> D[rtd-kv-rpc]
     D --> E[gRPC Clients]
 ```
 
@@ -64,9 +64,9 @@ graph LR
   - **Read/write account** for the indexer; requires `roles/bigtable.user`.
   - **Read-only account** for the gRPC service; requires `roles/bigtable.reader`.
 - A checkpoint bucket for your network, for history:
-  - **Mainnet:** `--remote-store-gcs mysten-mainnet-checkpoints-use4` (Requester Pays).
-  - **Testnet:** `--remote-store-gcs mysten-testnet-checkpoints-use4` (Requester Pays).
-- A [Sui full node](/operators/full-node/sui-full-node) with gRPC enabled, for the tip.
+  - **Mainnet:** `--remote-store-gcs linku-mainnet-checkpoints-use4` (Requester Pays).
+  - **Testnet:** `--remote-store-gcs linku-testnet-checkpoints-use4` (Requester Pays).
+- A [Rtd full node](/operators/full-node/rtd-full-node) with gRPC enabled, for the tip.
 
 </TabItem>
 </Tabs>
@@ -83,7 +83,7 @@ Both binaries authenticate to GCP using [Application Default Credentials (ADC)](
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
 
-The public HTTPS endpoints (`https://checkpoints.mainnet.sui.io`, `https://checkpoints.testnet.sui.io`) keep only the latest 30 days. Use the GCS buckets above for backfill.
+The public HTTPS endpoints (`https://checkpoints.mainnet.rtd.io`, `https://checkpoints.testnet.rtd.io`) keep only the latest 30 days. Use the GCS buckets above for backfill.
 
 ## Bigtable setup
 
@@ -96,11 +96,11 @@ Create a Bigtable instance in your GCP project. See the [Bigtable documentation]
 | Storage type | SSD. HDD is untested and not recommended. |
 | Node count | Enable autoscaling. See [Scaling](#scaling). |
 
-**Do not use Bigtable replication for this deployment.** Run a separate Bigtable instance, `sui-kvstore-alt` indexer, and `sui-kv-rpc` service in each region.
+**Do not use Bigtable replication for this deployment.** Run a separate Bigtable instance, `rtd-kvstore-alt` indexer, and `rtd-kv-rpc` service in each region.
 
 ### Create tables
 
-Create these 14 tables, each with a single column family `sui` and `maxversions=1`:
+Create these 14 tables, each with a single column family `rtd` and `maxversions=1`:
 
 | Table | Description |
 |-------|-------------|
@@ -125,8 +125,8 @@ for table in checkpoints checkpoints_by_digest transactions objects epochs \
     packages_by_checkpoint system_packages tx_seq_digest \
     transaction_bitmap_index event_bitmap_index; do
   cbt -project <GCP_PROJECT> -instance <INSTANCE_ID> createtable "$table"
-  cbt -project <GCP_PROJECT> -instance <INSTANCE_ID> createfamily "$table" sui
-  cbt -project <GCP_PROJECT> -instance <INSTANCE_ID> setgcpolicy "$table" sui maxversions=1
+  cbt -project <GCP_PROJECT> -instance <INSTANCE_ID> createfamily "$table" rtd
+  cbt -project <GCP_PROJECT> -instance <INSTANCE_ID> setgcpolicy "$table" rtd maxversions=1
 done
 ```
 
@@ -170,24 +170,24 @@ Configure automated backups. Daily with 7-day retention is a reasonable default.
 
 ## Indexer setup
 
-`sui-kvstore-alt` reads checkpoints and writes to Bigtable through 14 pipelines.
+`rtd-kvstore-alt` reads checkpoints and writes to Bigtable through 14 pipelines.
 
 | | CPU | Memory |
 |---|---|---|
 | At the tip | 1 core | 1 GB |
 | Backfilling | 16 cores | 32 GB |
 
-### Run `sui-kvstore-alt`
+### Run `rtd-kvstore-alt`
 
 ```sh
-sui-kvstore-alt \
+rtd-kvstore-alt \
     --chain mainnet \
     my-bigtable-instance \
-    --remote-store-gcs mysten-mainnet-checkpoints-use4 \
+    --remote-store-gcs linku-mainnet-checkpoints-use4 \
     --streaming-url http://my-fullnode:9000
 ```
 
-For Testnet, use `--chain testnet` with `--remote-store-gcs mysten-testnet-checkpoints-use4`.
+For Testnet, use `--chain testnet` with `--remote-store-gcs linku-testnet-checkpoints-use4`.
 
 That one command backfills from genesis and then indexes at the tip. There is no separate backfill config and no cutover. Do not set `--rpc-api-url`.
 
@@ -217,7 +217,7 @@ Exactly one checkpoint source is allowed (`--remote-store-gcs`, `--remote-store-
 
 :::info
 
-Mysten Labs plans to enable requester-pays on the public checkpoint buckets in the future. Streaming from your own full node avoids these costs.
+LinkU Labs plans to enable requester-pays on the public checkpoint buckets in the future. Streaming from your own full node avoids these costs.
 
 :::
 
@@ -317,12 +317,12 @@ Bigtable writes are idempotent, so you can run several instances at the tip for 
 
 ## Archival service setup
 
-`sui-kv-rpc` is a gRPC server that reads from Bigtable and exposes the [`LedgerService`](/references/fullnode-protocol) API.
+`rtd-kv-rpc` is a gRPC server that reads from Bigtable and exposes the [`LedgerService`](/references/fullnode-protocol) API.
 
-### Run `sui-kv-rpc`
+### Run `rtd-kv-rpc`
 
 ```sh
-sui-kv-rpc --config /etc/sui-kv-rpc/config.toml
+rtd-kv-rpc --config /etc/rtd-kv-rpc/config.toml
 ```
 
 `instance-id` is the only required setting:
@@ -331,13 +331,13 @@ sui-kv-rpc --config /etc/sui-kv-rpc/config.toml
 instance-id = "my-bigtable-instance"
 address = "[::]:8000"
 metrics-host = "0.0.0.0"
-credentials = "/etc/sui-kv-rpc/bigtable-ro-sa.json"
+credentials = "/etc/rtd-kv-rpc/bigtable-ro-sa.json"
 tls-cert = "/secrets/cert.pem"
 tls-key = "/secrets/key.pem"
 enable-list-apis = true
 ```
 
-Run `sui-kv-rpc --config-schema` to print the full JSON Schema with per-field documentation.
+Run `rtd-kv-rpc --config-schema` to print the full JSON Schema with per-field documentation.
 
 #### Configuration reference
 
@@ -388,7 +388,7 @@ The `[stages.tx-seq-digest]`, `[stages.transactions]`, `[stages.objects]`, and `
 
 ### gRPC API
 
-Same [`LedgerService`](/references/fullnode-protocol) API as a Sui full node, so existing gRPC clients work by changing the endpoint URL. Server reflection is enabled.
+Same [`LedgerService`](/references/fullnode-protocol) API as a Rtd full node, so existing gRPC clients work by changing the endpoint URL. Server reflection is enabled.
 
 | Method | Description | Limit |
 |--------|-------------|-------|
@@ -431,10 +431,10 @@ The indexer exports the standard [indexer framework metrics](/develop/accessing-
 
 ```yaml
 scrape_configs:
-  - job_name: sui-kvstore
+  - job_name: rtd-kvstore
     static_configs:
       - targets: ['<INDEXER_HOST>:9184']
-  - job_name: sui-kv-rpc
+  - job_name: rtd-kv-rpc
     static_configs:
       - targets: ['<RPC_HOST>:9184']
 ```
@@ -487,4 +487,4 @@ The `kv_*` read metrics are labeled `client` and `table`.
 | Environment | `RUST_LOG` |
 |-------------|-----------|
 | Production | `info` |
-| Debugging | `info,sui_kvstore=debug,sui_indexer_alt_framework=debug` |
+| Debugging | `info,rtd_kvstore=debug,rtd_indexer_alt_framework=debug` |

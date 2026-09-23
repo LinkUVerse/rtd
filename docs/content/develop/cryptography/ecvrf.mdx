@@ -32,8 +32,8 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Elliptic Curve Verifiable Random Function in Sui?
-  - How does elliptic curve verifiable random function work on Sui?
+  - What is Elliptic Curve Verifiable Random Function in Rtd?
+  - How does elliptic curve verifiable random function work on Rtd?
   - Why should I use elliptic curve verifiable random function?
 answer: >-
   Elliptic curve verifiable random function is a cryptographic algorithm that
@@ -45,11 +45,11 @@ A verifiable random function (VRF) is a cryptographic primitive that enables you
 
 ## VRF construction
 
-The VRF used in the Move API in Sui is an elliptic curve VRF (ECVRF) following the [CFRG VRF draft specifications version 15](https://datatracker.ietf.org/doc/draft-irtf-cfrg-vrf/15/). It uses [Ristretto255](https://ristretto.group) elliptic curve group construction with the SHA-512 hash function. The nonce is generated according to [RFC6979](https://www.rfc-editor.org/info/rfc6979).
+The VRF used in the Move API in Rtd is an elliptic curve VRF (ECVRF) following the [CFRG VRF draft specifications version 15](https://datatracker.ietf.org/doc/draft-irtf-cfrg-vrf/15/). It uses [Ristretto255](https://ristretto.group) elliptic curve group construction with the SHA-512 hash function. The nonce is generated according to [RFC6979](https://www.rfc-editor.org/info/rfc6979).
 
-Any implementation following the same specifications with suite string `sui_vrf` (see section 5 in the [VRF specs](https://datatracker.ietf.org/doc/draft-irtf-cfrg-vrf/15/)) can be used to compute VRF output and generate proofs.
+Any implementation following the same specifications with suite string `rtd_vrf` (see section 5 in the [VRF specs](https://datatracker.ietf.org/doc/draft-irtf-cfrg-vrf/15/)) can be used to compute VRF output and generate proofs.
 
-The [fastcrypto](https://github.com/MystenLabs/fastcrypto) library provides a CLI tool for such an implementation and is used in the following example.
+The [fastcrypto](https://github.com/LinkUVerse/fastcrypto) library provides a CLI tool for such an implementation and is used in the following example.
 
 ### Generate keys
 
@@ -81,12 +81,12 @@ Output: 2b7e45821d80567761e8bb3fc519efe5ad80cdb4423227289f960319bbcf6eea1aef30c0
 
 ### Verify proof
 
-You can verify the proof and output in a smart contract using `sui::ecvrf::ecvrf_verify` from the Sui Move framework:
+You can verify the proof and output in a smart contract using `rtd::ecvrf::ecvrf_verify` from the Rtd Move framework:
 
 ```move
 module math::ecvrf_test {
-    use sui::ecvrf;
-    use sui::event;
+    use rtd::ecvrf;
+    use rtd::event;
 
     /// Event on whether the output is verified
     public struct VerifiedEvent has copy, drop {

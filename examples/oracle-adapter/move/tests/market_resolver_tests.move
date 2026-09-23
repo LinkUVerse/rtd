@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
 module oracle_adapter::market_resolver_tests;
 
 use oracle_adapter::market_resolver as mr;
-use sui::clock;
+use rtd::clock;
 
 // `resolve` touches a PriceInfoObject, which a test cannot mint, so it is
 // verified by Testnet execution. These tests cover the resolvability guard: too

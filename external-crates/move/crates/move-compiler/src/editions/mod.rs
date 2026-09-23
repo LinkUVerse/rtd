@@ -58,7 +58,7 @@ pub enum FeatureGate {
     CrossModuleConstants,
 }
 
-/// Compiler flavor — selects syntax and semantic rules (e.g. `Core` vs `Sui`).
+/// Compiler flavor — selects syntax and semantic rules (e.g. `Core` vs `Rtd`).
 ///
 /// Note: this is distinct from [`move_package_alt::MoveFlavor`], which parameterizes the package
 /// management system (system dependencies, default environments, on-chain fetching).
@@ -66,7 +66,7 @@ pub enum FeatureGate {
 pub enum Flavor {
     #[default]
     Core,
-    Sui,
+    Rtd,
 }
 
 pub const UPGRADE_NOTE: &str = "You can update the edition in the 'Move.toml', or via command line flag if invoking the \
@@ -294,8 +294,8 @@ impl Edition {
 
 impl Flavor {
     pub const CORE: &'static str = "core";
-    pub const SUI: &'static str = "sui";
-    pub const ALL: &'static [Self] = &[Self::Core, Self::Sui];
+    pub const RTD: &'static str = "rtd";
+    pub const ALL: &'static [Self] = &[Self::Core, Self::Rtd];
 }
 
 impl FeatureGate {
@@ -360,7 +360,7 @@ impl FromStr for Flavor {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             Self::CORE => Self::Core,
-            Self::SUI => Self::Sui,
+            Self::RTD => Self::Rtd,
             _ => anyhow::bail!(
                 "Unknown flavor \"{s}\". Expected one of: {}",
                 Self::ALL
@@ -410,7 +410,7 @@ impl Display for Flavor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Flavor::Core => write!(f, "{}", Self::CORE),
-            Flavor::Sui => write!(f, "{}", Self::SUI),
+            Flavor::Rtd => write!(f, "{}", Self::RTD),
         }
     }
 }

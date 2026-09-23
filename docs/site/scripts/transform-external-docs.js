@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Transforms fetched external documentation into Docusaurus-compatible MDX.
@@ -125,7 +125,7 @@ function extractDescription(content) {
 }
 
 function generateKeywords(slug, title, configName) {
-  const base = [configName, `sui-stack-${configName}`];
+  const base = [configName, `rtd-stack-${configName}`];
   // Add slug-derived keywords
   const slugWords = slug
     .split("-")
@@ -349,7 +349,7 @@ function rewriteRepoRelativeLinks(content, repo, branch) {
   );
 
   // Rewrite ../../<path> links (pointing to source code in the repo) to GitHub URLs
-  // These are relative links from docs/sui-stack-messaging/ going up to the repo root
+  // These are relative links from docs/rtd-stack-messaging/ going up to the repo root
   result = result.replace(
     /\[([^\]]*)\]\((?:\.\.\/)+([^)]+)\)/g,
     (match, text, relPath) => {
@@ -437,7 +437,7 @@ function processSource(name, config) {
   // Build the file map
   const fileMap = buildFileMap(config, sourceDir);
 
-  // Files to preserve (manually maintained in the Sui docs repo)
+  // Files to preserve (manually maintained in the Rtd docs repo)
   const preserve = new Set(config.preserve || []);
 
   // Ensure target directory exists
