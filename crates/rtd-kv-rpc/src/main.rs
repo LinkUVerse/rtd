@@ -35,11 +35,11 @@ struct App {
     // The flags below are deprecated. They remain for backwards compatibility:
     // each takes precedence over the config file when set, and logs a
     // deprecation warning. Prefer setting them in the config file.
-    /// (deprecated) Path to GCP service account JSON key file. If not provided,
-    /// uses Application Default Credentials.
+    /// (deprecated, unsupported) Cloud credentials are rejected by the
+    /// self-hosted HBase gateway client.
     #[clap(long)]
     credentials: Option<String>,
-    /// (deprecated) BigTable instance id.
+    /// (deprecated) Logical self-hosted HBase instance id.
     instance_id: Option<String>,
     /// (deprecated) gRPC listen address.
     address: Option<String>,
@@ -53,7 +53,7 @@ struct App {
     /// (deprecated) PEM TLS private key path.
     #[clap(long = "tls-key")]
     tls_key: Option<String>,
-    /// (deprecated) GCP project id for the BigTable instance.
+    /// (deprecated) Logical self-hosted HBase project id.
     #[clap(long = "bigtable-project")]
     bigtable_project: Option<String>,
     /// (deprecated)
@@ -232,14 +232,14 @@ async fn main() -> Result<()> {
         plaintext_address: config.plaintext_address().map(str::parse).transpose()?,
     };
 
-    tokio::spawn(async {
+    let health_listener = tokio::net::TcpListener::bind(config.health_address())
+        .await
+        .with_context(|| format!("can't bind health endpoint at {}", config.health_address()))?;
+    tokio::spawn(async move {
         let web_server = Router::new().route("/health", get(health_check));
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:8081")
+        axum::serve(health_listener, web_server.into_make_service())
             .await
-            .expect("can't bind to the healthcheck port");
-        axum::serve(listener, web_server.into_make_service())
-            .await
-            .expect("healh check service failed");
+            .expect("health check service failed");
     });
 
     let addr = config.address().parse()?;

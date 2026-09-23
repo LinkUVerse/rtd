@@ -349,6 +349,7 @@ impl LedgerHistoryConfig {
 const DEFAULT_ADDRESS: &str = "[::1]:8000";
 const DEFAULT_METRICS_HOST: &str = "127.0.0.1";
 const DEFAULT_METRICS_PORT: u16 = 9184;
+const DEFAULT_HEALTH_ADDRESS: &str = "0.0.0.0:8081";
 
 /// Root archival KV RPC config, deserialized from TOML by `--config`.
 ///
@@ -358,20 +359,19 @@ const DEFAULT_METRICS_PORT: u16 = 9184;
 #[derive(Clone, Debug, Default, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub struct KvRpcConfig {
-    /// BigTable instance id to read from.
+    /// Logical instance id served by the self-hosted HBase compatibility gateway.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instance_id: Option<String>,
 
-    /// GCP project id for the BigTable instance (defaults to the token
-    /// provider's project).
+    /// Logical project id for the self-hosted HBase gateway (defaults to `rtd`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bigtable_project: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app_profile_id: Option<String>,
 
-    /// Path to a GCP service account JSON key file. If unset, Application
-    /// Default Credentials are used.
+    /// Deprecated legacy credentials path. Cloud credentials are rejected by
+    /// the self-hosted gateway client; leave this unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credentials: Option<String>,
 
@@ -390,6 +390,10 @@ pub struct KvRpcConfig {
     /// Port the Prometheus metrics server binds to. Defaults to `9184`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metrics_port: Option<u16>,
+
+    /// Address of the HTTP health endpoint. Defaults to `0.0.0.0:8081`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_address: Option<String>,
 
     /// PEM TLS certificate path. TLS is enabled only when both cert and key are
     /// set and non-empty.
@@ -498,6 +502,12 @@ impl KvRpcConfig {
         self.metrics_port.unwrap_or(DEFAULT_METRICS_PORT)
     }
 
+    pub fn health_address(&self) -> &str {
+        self.health_address
+            .as_deref()
+            .unwrap_or(DEFAULT_HEALTH_ADDRESS)
+    }
+
     pub fn channel_timeout(&self) -> Option<Duration> {
         self.bigtable_channel_timeout_ms.map(Duration::from_millis)
     }
@@ -551,10 +561,18 @@ impl KvRpcConfig {
     /// shared read-pipeline knobs (concurrency and per-stage chunk/fan-out) and
     /// delegates to [`LedgerHistoryConfig::validate`] for the list-API knobs.
     pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.health_address() != self.address(),
+            "health_address must differ from address",
+        );
         if let Some(plaintext) = self.plaintext_address() {
             anyhow::ensure!(
                 plaintext != self.address(),
                 "plaintext_address must differ from address",
+            );
+            anyhow::ensure!(
+                plaintext != self.health_address(),
+                "plaintext_address must differ from health_address",
             );
         }
         anyhow::ensure!(
@@ -743,6 +761,27 @@ plaintext-address = "127.0.0.1:8001"
             .validate()
             .expect_err("plaintext_address == address must fail");
         assert!(err.to_string().contains("plaintext_address"), "{err}");
+    }
+
+    #[test]
+    fn health_address_defaults_and_accepts_local_override() {
+        assert_eq!(KvRpcConfig::default().health_address(), "0.0.0.0:8081");
+        let cfg: KvRpcConfig = toml::from_str(
+            "instance-id = \"archive-dev\"\naddress = \"127.0.0.1:39180\"\nhealth-address = \"127.0.0.1:39182\"",
+        )
+        .unwrap();
+        assert_eq!(cfg.health_address(), "127.0.0.1:39182");
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn health_address_cannot_share_grpc_listener() {
+        let cfg = KvRpcConfig {
+            address: Some("127.0.0.1:39180".to_string()),
+            health_address: Some("127.0.0.1:39180".to_string()),
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
     }
 
     #[test]
