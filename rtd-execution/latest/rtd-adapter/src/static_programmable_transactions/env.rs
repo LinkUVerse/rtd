@@ -35,7 +35,6 @@ use move_vm_runtime::{
     execution::{self as vm_runtime, vm::MoveVM},
     runtime::MoveRuntime,
 };
-use std::{cell::OnceCell, marker::PhantomData, rc::Rc};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
     Identifier, RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
@@ -51,6 +50,7 @@ use rtd_types::{
     object::Object,
     type_input::{StructInput, TypeInput},
 };
+use std::{cell::OnceCell, marker::PhantomData, rc::Rc};
 
 pub struct Env<'pc, 'vm, 'state, 'linkage, 'extensions, Mode>
 where

@@ -18,9 +18,9 @@ use move_vm_types::{
     pop_arg,
     values::{Struct, Value, Vector},
 };
+use rtd_types::{TypeTag, base_types::MoveObjectType};
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::{TypeTag, base_types::MoveObjectType};
 use tracing::{error, instrument};
 
 const E_BCS_SERIALIZATION_FAILURE: u64 = 2;

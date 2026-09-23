@@ -10,8 +10,8 @@ use rand::{
     distributions::{Distribution, Uniform},
     rngs::OsRng,
 };
-use std::collections::{HashMap, HashSet};
 use rtd_test_transaction_builder::make_transfer_rtd_transaction;
+use std::collections::{HashMap, HashSet};
 use tokio::time::{Duration, Instant, sleep};
 use tracing::{debug, trace};
 

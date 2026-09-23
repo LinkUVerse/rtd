@@ -7,13 +7,13 @@ use move_vm_runtime::{
     cache::move_cache::ResolvedPackageResult, runtime::MoveRuntime,
     validation::verification::ast::Package as VerifiedPackage,
 };
-use std::{rc::Rc, sync::Arc};
 use rtd_types::{
     base_types::ObjectID,
     error::{ExecutionError, RtdErrorKind, RtdResult},
     execution_status::ExecutionErrorKind,
     move_package::MovePackage,
 };
+use std::{rc::Rc, sync::Arc};
 
 /// The `CachedPackageStore` is a `PackageStore` implementation that uses a `MoveRuntime` to
 /// fetch and cache packages. It also uses an underlying `TransactionPackageStore` to fetch packages

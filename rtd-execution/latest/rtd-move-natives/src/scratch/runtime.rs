@@ -5,8 +5,8 @@ use better_any::{Tid, TidAble};
 use move_core_types::account_address::AccountAddress;
 use move_vm_runtime::execution::{Type, values::Value};
 use move_vm_runtime::natives::extensions::NativeExtensionMarker;
-use std::collections::BTreeMap;
 use rtd_protocol_config::ProtocolConfig;
+use std::collections::BTreeMap;
 
 /// A single scratch entry: the runtime type of the stored value alongside the value itself. The
 /// type is retained so reads and removes can verify the caller's requested type matches what was

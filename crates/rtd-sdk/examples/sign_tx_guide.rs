@@ -14,7 +14,6 @@ use fastcrypto::{
     traits::{EncodeDecodeBase64, KeyPair},
 };
 use rand::{SeedableRng, rngs::StdRng};
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_sdk::{
     RtdClientBuilder,
     rpc_types::RtdTransactionBlockResponseOptions,
@@ -23,14 +22,15 @@ use rtd_sdk::{
         transaction::TransactionData,
     },
 };
-use rtd_types::crypto::Signer;
 use rtd_types::crypto::RtdSignature;
+use rtd_types::crypto::Signer;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::signature::GenericSignature;
 use rtd_types::{
     base_types::RtdAddress,
     crypto::{RtdKeyPair, get_key_pair_from_rng},
 };
+use shared_crypto::intent::{Intent, IntentMessage};
 
 /// This example walks through the Rust SDK use case described in
 /// https://github.com/LinkUVerse/rtd/blob/main/docs/content/develop/transactions/transaction-auth/auth-overview.mdx

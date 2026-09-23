@@ -13,18 +13,18 @@ use std::sync::Mutex;
 
 use clap::*;
 use fastcrypto::encoding::{Base58, Encoding, Hex};
+use linku_common::in_integration_test;
 use move_binary_format::{
     binary_config::{BinaryConfig, TableConfig},
     file_format_common::VERSION_1,
 };
 use move_core_types::account_address::AccountAddress;
 use move_vm_config::verifier::VerifierConfig;
-use linku_common::in_integration_test;
-use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
 use rtd_protocol_config_macros::{
     ProtocolConfigAccessors, ProtocolConfigFeatureFlagsGetters, ProtocolConfigOverride,
 };
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use tracing::{info, warn};
 
 pub mod reachability;
@@ -5389,7 +5389,11 @@ mod test {
         for chain in [Chain::Mainnet, Chain::Testnet, Chain::Unknown] {
             let config = ProtocolConfig::get_for_version(ProtocolVersion::MAX, chain);
             assert!(config.gasless_allowed_token_types().is_empty());
-            assert!(config.include_special_package_amendments_as_option().is_none());
+            assert!(
+                config
+                    .include_special_package_amendments_as_option()
+                    .is_none()
+            );
         }
     }
 

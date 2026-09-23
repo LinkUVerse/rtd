@@ -10,11 +10,11 @@ use async_graphql::scalar;
 use move_binary_format::file_format::Ability;
 use move_binary_format::file_format::AbilitySet;
 use move_core_types::annotated_value as A;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_package_resolver::error::Error as ResolverError;
 use rtd_types::TypeTag;
 use rtd_types::type_input::TypeInput;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::error::RpcError;
 use crate::error::bad_user_input;

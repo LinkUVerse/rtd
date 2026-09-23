@@ -10,11 +10,11 @@ use dashmap::DashMap;
 use fs::File;
 use linku_common::fatal;
 use prometheus::IntGauge;
+use rtd_types::error::{RtdError, RtdErrorKind};
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Add;
 use std::sync::Arc;
-use rtd_types::error::{RtdError, RtdErrorKind};
 
 use self::metrics::TrafficControllerMetrics;
 use crate::traffic_controller::nodefw_client::{BlockAddress, BlockAddresses, NodeFWClient};
@@ -24,11 +24,11 @@ use crate::traffic_controller::policies::{
 use linku_metrics::spawn_monitored_task;
 use parking_lot::Mutex as ParkingLotMutex;
 use rand::Rng;
-use std::fmt::Debug;
-use std::time::{Duration, Instant, SystemTime};
 use rtd_types::traffic_control::{
     PolicyConfig, PolicyType, RemoteFirewallConfig, TrafficControlReconfigParams, Weight,
 };
+use std::fmt::Debug;
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Mutex, RwLock, mpsc};
 use tracing::{debug, error, info, trace, warn};

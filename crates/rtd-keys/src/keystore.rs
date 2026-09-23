@@ -16,6 +16,11 @@ use bip39::{Language, Mnemonic, Seed};
 use colored::Colorize as _;
 use rand::{SeedableRng, rngs::StdRng};
 use regex::Regex;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::get_key_pair_from_rng;
+use rtd_types::crypto::{
+    EncodeDecodeBase64, PublicKey, RtdKeyPair, Signature, SignatureScheme, enum_dispatch,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use shared_crypto::intent::{Intent, IntentMessage};
 use std::collections::{BTreeMap, HashSet};
@@ -26,11 +31,6 @@ use std::io::BufReader;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use rtd_types::base_types::RtdAddress;
-use rtd_types::crypto::get_key_pair_from_rng;
-use rtd_types::crypto::{
-    EncodeDecodeBase64, PublicKey, Signature, SignatureScheme, RtdKeyPair, enum_dispatch,
-};
 
 pub const ALIASES_FILE_EXTENSION: &str = "aliases";
 

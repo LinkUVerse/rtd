@@ -12,15 +12,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use bincode::Options;
 use itertools::Itertools;
-use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
 use parking_lot::ArcMutexGuard;
 use prometheus::{
     IntCounter, IntCounterVec, Registry, register_int_counter_vec_with_registry,
     register_int_counter_with_registry,
 };
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use rtd_types::accumulator_event::AccumulatorEvent;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use typed_store::TypedStoreError;
 use typed_store::rocksdb::compaction_filter::Decision;
 
@@ -28,7 +28,7 @@ use rtd_json_rpc_types::{RtdObjectDataFilter, TransactionFilter};
 use rtd_storage::mutex_table::MutexTable;
 use rtd_storage::sharded_lru::ShardedLruCache;
 use rtd_types::base_types::{
-    ObjectDigest, ObjectID, SequenceNumber, RtdAddress, TransactionDigest, TxSequenceNumber,
+    ObjectDigest, ObjectID, RtdAddress, SequenceNumber, TransactionDigest, TxSequenceNumber,
 };
 use rtd_types::base_types::{ObjectInfo, ObjectRef};
 use rtd_types::digests::TransactionEventsDigest;
@@ -2276,13 +2276,13 @@ mod tests {
     use super::ObjectIndexChanges;
     use move_core_types::account_address::AccountAddress;
     use prometheus::Registry;
-    use std::collections::BTreeMap;
     use rtd_types::base_types::{ObjectInfo, ObjectType, RtdAddress};
     use rtd_types::digests::TransactionDigest;
     use rtd_types::effects::TransactionEvents;
     use rtd_types::gas_coin::GAS;
     use rtd_types::object;
     use rtd_types::object::Owner;
+    use std::collections::BTreeMap;
 
     #[tokio::test]
     async fn test_index_cache() -> anyhow::Result<()> {

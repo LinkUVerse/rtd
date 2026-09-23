@@ -17,16 +17,16 @@ use crate::{
 };
 use move_binary_format::file_format::Visibility;
 use move_vm_runtime::validation::verification::ast::Package as VerifiedPackage;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
     Identifier,
     base_types::ObjectID,
     error::ExecutionErrorTrait,
     execution_status::{ExecutionErrorKind, PackageUpgradeError},
+};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
 };
 
 /// Replace each command's per-call linkage with a single linkage shared by the whole transaction.

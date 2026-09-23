@@ -8,7 +8,7 @@ use std::str::FromStr;
 use rtd_rpc::client::Client;
 use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
 use rtd_sdk_types::{Address, StructTag};
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::gas_coin::GAS;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rpc_proto_conversions::ObjectReferenceExt;

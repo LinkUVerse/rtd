@@ -17,11 +17,11 @@ use strum_macros::EnumString;
 use anyhow::Result;
 use async_trait::async_trait;
 use core::default::Default;
-use std::time::Duration;
 use rtd_types::{
     base_types::RtdAddress, digests::TransactionDigest,
     messages_checkpoint::CheckpointSequenceNumber,
 };
+use std::time::Duration;
 
 use crate::load_test::LoadTestConfig;
 pub use rpc_command_processor::{

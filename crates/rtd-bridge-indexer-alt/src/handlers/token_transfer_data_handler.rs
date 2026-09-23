@@ -5,7 +5,6 @@ use crate::struct_tag;
 use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
 use move_core_types::language_storage::StructTag;
-use std::sync::Arc;
 use rtd_bridge::events::{MoveTokenDepositedEvent, MoveTokenDepositedEventV2};
 use rtd_bridge_schema::models::TokenTransferData;
 use rtd_bridge_schema::schema::token_transfer_data;
@@ -14,6 +13,7 @@ use rtd_indexer_alt_framework::postgres::Connection;
 use rtd_indexer_alt_framework::postgres::handler::Handler;
 use rtd_indexer_alt_framework::types::BRIDGE_ADDRESS;
 use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use std::sync::Arc;
 use tracing::info;
 
 pub struct TokenTransferDataHandler {

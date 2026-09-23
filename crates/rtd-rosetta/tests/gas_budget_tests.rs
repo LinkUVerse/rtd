@@ -11,7 +11,7 @@ use rtd_rosetta::types::{
     ConstructionCombineRequest, ConstructionCombineResponse, ConstructionMetadataRequest,
     ConstructionMetadataResponse, ConstructionPayloadsRequest, ConstructionPayloadsResponse,
     ConstructionPreprocessRequest, ConstructionPreprocessResponse, ConstructionSubmitRequest,
-    NetworkIdentifier, PreprocessMetadata, Signature, SignatureType, RtdEnv,
+    NetworkIdentifier, PreprocessMetadata, RtdEnv, Signature, SignatureType,
     TransactionIdentifierResponse,
 };
 use rtd_rpc::client::Client as GrpcClient;

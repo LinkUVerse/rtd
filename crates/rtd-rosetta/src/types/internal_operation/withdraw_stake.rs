@@ -3,9 +3,9 @@
 
 use async_trait::async_trait;
 use prost_types::FieldMask;
+use rtd_rpc::client::Client;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use rtd_rpc::client::Client;
 
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::{GetObjectRequest, ListOwnedObjectsRequest};

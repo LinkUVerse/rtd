@@ -7,8 +7,6 @@ pub use checked::*;
 
 #[rtd_macros::with_checked_arithmetic]
 mod checked {
-    use std::collections::{BTreeMap, HashSet};
-    use std::sync::Arc;
     use rtd_config::verifier_signing_config::VerifierSigningConfig;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::base_types::{ObjectID, ObjectRef};
@@ -28,13 +26,15 @@ mod checked {
         RTD_DISPLAY_REGISTRY_OBJECT_ID, RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
     };
     use rtd_types::{
-        base_types::{SequenceNumber, RtdAddress},
+        base_types::{RtdAddress, SequenceNumber},
         coin_reservation::ParsedDigest,
         error::RtdError,
         fp_bail, fp_ensure,
         gas::RtdGasStatus,
         object::{Object, Owner},
     };
+    use std::collections::{BTreeMap, HashSet};
+    use std::sync::Arc;
     use tracing::error;
     use tracing::instrument;
 

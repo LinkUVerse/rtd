@@ -7,12 +7,12 @@ use super::{
 };
 use anemo::{PeerId, Request, Response, types::PeerInfo};
 use rand::seq::IteratorRandom;
+use rtd_config::p2p::AccessType;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, OnceLock, RwLock},
 };
-use rtd_config::p2p::AccessType;
 use tokio::sync::mpsc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

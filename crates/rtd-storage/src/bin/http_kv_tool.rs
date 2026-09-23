@@ -3,21 +3,21 @@
 
 use clap::*;
 use linku_common::ZipDebugEqIteratorExt;
-use std::str::FromStr;
-use std::sync::Arc;
 use rtd_storage::http_key_value_store::*;
 use rtd_storage::key_value_store::TransactionKeyValueStore;
 use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
 use rtd_types::base_types::ObjectID;
 use rtd_types::digests::{CheckpointDigest, TransactionDigest};
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(rename_all = "kebab-case")]
 enum Command {
     Fetch {
-        // default value of 'https://transactions.rtd.io/'
-        #[arg(short, long, default_value = "https://transactions.rtd.io/mainnet")]
+        // The RTD transaction archive must be configured explicitly.
+        #[arg(short, long)]
         base_url: String,
 
         #[arg(short, long)]
@@ -141,7 +141,7 @@ impl Command {
             }
             Command::DecodeKey { url } => {
                 // url may look like
-                // https://transactions.rtd.io/mainnet/jlkqmZbVuunngIyy2vjBOJSETrM56EH_kIc5wuLvDydN_x0GAAAAAA/ob
+                // https://archive.example.invalid/jlkqmZbVuunngIyy2vjBOJSETrM56EH_kIc5wuLvDydN_x0GAAAAAA/ob
                 // extract the digest and type
                 let parts: Vec<_> = url.split('/').collect();
 

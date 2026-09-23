@@ -10,6 +10,11 @@ use fastcrypto::hash::{HashFunction, Sha3_256};
 use futures::StreamExt;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use rtd_types::committee::Committee;
+use rtd_types::messages_checkpoint::{
+    CertifiedCheckpointSummary, CheckpointSequenceNumber, VerifiedCheckpoint,
+};
+use rtd_types::storage::WriteStore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -19,11 +24,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs, io};
-use rtd_types::committee::Committee;
-use rtd_types::messages_checkpoint::{
-    CertifiedCheckpointSummary, CheckpointSequenceNumber, VerifiedCheckpoint,
-};
-use rtd_types::storage::WriteStore;
 use tracing::debug;
 
 pub mod blob;

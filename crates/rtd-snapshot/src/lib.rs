@@ -17,12 +17,6 @@ use indicatif::ProgressStyle;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
 use object_store::path::Path;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
 use rtd_core::authority::authority_store_tables::LiveObject;
 use rtd_core::authority::epoch_start_configuration::EpochFlag;
@@ -39,6 +33,12 @@ use rtd_types::messages_checkpoint::ECMHLiveObjectSetDigest;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
 use rtd_types::rtd_system_state::get_rtd_system_state;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tokio::time::Instant;
 
 /// The following describes the format of an object file (*.obj) used for persisting live rtd objects.

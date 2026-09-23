@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{RTD_DEVNET_URL, RTD_LOCAL_NETWORK_URL, RTD_MAINNET_URL, RTD_TESTNET_URL};
+use crate::RTD_LOCAL_NETWORK_URL;
 use rtd_config::Config;
 use rtd_keys::keystore::{AccountKeystore, Keystore};
 use rtd_rpc_api::Client;
@@ -100,6 +100,12 @@ pub struct RtdEnv {
 
 impl RtdEnv {
     pub fn create_grpc_client(&self) -> Result<Client, anyhow::Error> {
+        if self.rpc.trim().is_empty() {
+            return Err(anyhow!(
+                "RPC URL for environment '{}' is not configured; set its rpc field in client.yaml",
+                self.alias
+            ));
+        }
         let mut client = Client::new(&self.rpc)?;
 
         if let Some(basic_auth) = &self.basic_auth {
@@ -120,7 +126,7 @@ impl RtdEnv {
     pub fn devnet() -> Self {
         Self {
             alias: "devnet".to_string(),
-            rpc: RTD_DEVNET_URL.into(),
+            rpc: std::env::var("RTD_DEVNET_RPC_URL").unwrap_or_default(),
             ws: None,
             basic_auth: None,
             chain_id: None,
@@ -129,7 +135,7 @@ impl RtdEnv {
     pub fn testnet() -> Self {
         Self {
             alias: "testnet".to_string(),
-            rpc: RTD_TESTNET_URL.into(),
+            rpc: std::env::var("RTD_TESTNET_RPC_URL").unwrap_or_default(),
             ws: None,
             basic_auth: None,
             chain_id: get_testnet_chain_identifier().map(|id| id.to_string()),
@@ -149,7 +155,7 @@ impl RtdEnv {
     pub fn mainnet() -> Self {
         Self {
             alias: "mainnet".to_string(),
-            rpc: RTD_MAINNET_URL.into(),
+            rpc: std::env::var("RTD_MAINNET_RPC_URL").unwrap_or_default(),
             ws: None,
             basic_auth: None,
             chain_id: get_mainnet_chain_identifier().map(|id| id.to_string()),
@@ -199,5 +205,18 @@ impl Display for RtdClientConfig {
             write!(writer, "{}", env)?;
         }
         write!(f, "{}", writer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unconfigured_environment_fails_before_connecting() {
+        let mut env = RtdEnv::localnet();
+        env.rpc.clear();
+        let err = env.create_grpc_client().err().unwrap();
+        assert!(err.to_string().contains("not configured"));
     }
 }

@@ -5,8 +5,8 @@ use prometheus::{
     Histogram, IntGauge, Registry, register_histogram_with_registry,
     register_int_gauge_with_registry,
 };
-use std::sync::Arc;
 use rtd_types::{committee::EpochId, crypto::RandomnessRound};
+use std::sync::Arc;
 use tap::Pipe;
 
 #[derive(Clone)]

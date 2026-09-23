@@ -11,7 +11,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::info;
 
-use simulacrum::SimulatorStore;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::RtdError;
 use rtd_types::error::RtdErrorKind;
@@ -26,6 +25,7 @@ use rtd_types::transaction_driver_types::TransactionSubmissionError;
 use rtd_types::transaction_executor::SimulateTransactionResult;
 use rtd_types::transaction_executor::TransactionChecks;
 use rtd_types::transaction_executor::TransactionExecutor;
+use simulacrum::SimulatorStore;
 
 use crate::context::Context;
 

@@ -14,11 +14,12 @@ done
 # Put the dependent package, as the depending will be published too via --with-unpublished-dependencies
 MOVE_PACKAGE_PATH=./move
 
-rtd client switch --env testnet
+NETWORK="${RTD_FULLNODE_URL:-}"
+if [[ -z "$NETWORK" ]]; then
+  echo "Set RTD_FULLNODE_URL to the JSON-RPC endpoint of your RTD testnet"
+  exit 1
+fi
 
-NETWORK="https://rpc.testnet.rtd.io:443"
-FAUCET="https://faucet.testnet.rtd.io/gas"
-    
 rtd client switch --env testnet
 
 ADMIN_ADDRESS=$(rtd client active-address)

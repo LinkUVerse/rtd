@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::str::FromStr;
 use rtd_rpc::field::{FieldMask, FieldMaskTree, FieldMaskUtil};
 use rtd_rpc::proto::rtd::rpc::v2::{
     BatchGetTransactionsRequest, BatchGetTransactionsResponse, ExecutedTransaction,
@@ -12,6 +11,7 @@ use rtd_rpc_api::{
     proto::google::rpc::bad_request::FieldViolation,
 };
 use rtd_types::base_types::TransactionDigest;
+use std::str::FromStr;
 
 use crate::bigtable_client::BigTableClient;
 use crate::config::{PipelineStage, StagesConfig};

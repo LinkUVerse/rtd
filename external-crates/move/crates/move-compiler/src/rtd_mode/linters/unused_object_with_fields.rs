@@ -54,8 +54,8 @@ use crate::{
     },
     naming::ast::StructFields,
     parser::ast::Ability_,
-    shared::program_info::TypingProgramInfo,
     rtd_mode::linters::RtdLintCode,
+    shared::program_info::TypingProgramInfo,
 };
 use move_ir_types::location::*;
 use std::collections::{BTreeMap, BTreeSet};

@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use crate::execution_mode::ExecutionMode;
 use crate::sp;
 use crate::static_programmable_transactions::{env::Env, typing::ast as T};
-use move_binary_format::file_format::Visibility;
 use linku_common::ZipDebugEqIteratorExt;
+use move_binary_format::file_format::Visibility;
 use rtd_types::error::{ExecutionErrorTrait, SafeIndex};
 use rtd_types::execution_status::{CommandArgumentError, ExecutionErrorKind};
 

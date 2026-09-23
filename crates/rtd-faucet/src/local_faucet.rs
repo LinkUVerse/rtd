@@ -16,7 +16,6 @@ use crate::FaucetConfig;
 use crate::FaucetError;
 
 use crate::CoinInfo;
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_sdk::types::{
@@ -25,6 +24,7 @@ use rtd_sdk::types::{
     transaction::{Transaction, TransactionData},
 };
 use rtd_sdk::wallet_context::WalletContext;
+use shared_crypto::intent::Intent;
 
 const GAS_BUDGET: u64 = 10_000_000;
 const NUM_RETRIES: u8 = 2;

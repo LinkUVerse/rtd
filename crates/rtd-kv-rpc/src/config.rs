@@ -8,10 +8,10 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_inverted_index::SkipPolicy;
 use rtd_kvstore::PoolConfig;
+use serde::Deserialize;
+use serde::Serialize;
 
 const DEFAULT_LEDGER_HISTORY_METHOD_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_RENDER_AHEAD: usize = 4;

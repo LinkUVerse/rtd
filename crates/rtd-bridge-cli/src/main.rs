@@ -6,14 +6,6 @@ use alloy::providers::Provider;
 use clap::*;
 use fastcrypto::encoding::{Encoding, Hex};
 use linku_common::ZipDebugEqIteratorExt;
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentMessage;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::str::from_utf8;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_bridge::client::bridge_authority_aggregator::BridgeAuthorityAggregator;
 use rtd_bridge::crypto::{BridgeAuthorityPublicKey, BridgeAuthorityPublicKeyBytes};
 use rtd_bridge::eth_transaction_builder::build_eth_transaction;
@@ -41,6 +33,14 @@ use rtd_types::crypto::AuthorityPublicKeyBytes;
 use rtd_types::crypto::Signature;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::transaction::Transaction;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentMessage;
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::str::FromStr;
+use std::str::from_utf8;
+use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -1,5 +1,9 @@
 # DeepBook spot examples
 
+These third-party examples require a DeepBook deployment and an SDK release
+configured for the same RTD chain. Set `RTD_DEEPBOOK_GRPC_URL` to its RTD
+Testnet gRPC endpoint. No public fullnode or DeepBook package IDs are assumed.
+
 Runnable TypeScript sources for the DeepBook spot docs (fees, funding, and — in
 later work — the hands-on order workflow). The docs pull each chunk in with
 `<ImportContent mode="code" tag="..." />`, so published samples stay tied to code

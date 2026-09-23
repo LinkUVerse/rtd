@@ -5,7 +5,6 @@
 
 use anyhow::anyhow;
 use consensus_core::CommitIndex;
-use std::fmt;
 use rtd_types::{
     base_types::EpochId,
     digests::{
@@ -13,6 +12,7 @@ use rtd_types::{
     },
     messages_checkpoint::CheckpointSequenceNumber,
 };
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VfsPath {

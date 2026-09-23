@@ -8,13 +8,13 @@ use async_trait::async_trait;
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
 
-use simulacrum::Simulacrum;
-use simulacrum::SimulatorStore as _;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::CheckpointError;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::CheckpointResult;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientTrait;
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::storage::ReadStore as _;
+use simulacrum::Simulacrum;
+use simulacrum::SimulatorStore as _;
 
 use crate::store::ForkStore;
 

@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use futures::future::OptionFuture;
 use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::language_storage::StructTag;
-use serde_json::Value as Json;
 use rtd_display::v1::Format;
 use rtd_indexer_alt_reader::displays::DisplayKey;
 use rtd_json_rpc_types::DisplayFieldsResponse;
@@ -30,6 +29,7 @@ use rtd_types::display_registry;
 use rtd_types::error::RtdObjectResponseError;
 use rtd_types::object::Data;
 use rtd_types::object::Object;
+use serde_json::Value as Json;
 use tokio::join;
 
 use crate::context::Context;

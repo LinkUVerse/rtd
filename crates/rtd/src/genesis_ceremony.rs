@@ -5,7 +5,6 @@ use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use fastcrypto::encoding::{Encoding, Hex};
-use std::path::PathBuf;
 use rtd_config::{RTD_GENESIS_FILENAME, genesis::UnsignedGenesis};
 use rtd_genesis_builder::Builder;
 use rtd_types::multiaddr::Multiaddr;
@@ -17,6 +16,7 @@ use rtd_types::{
     },
     message_envelope::Message,
 };
+use std::path::PathBuf;
 
 use rtd_keys::keypair_file::{
     read_authority_keypair_from_file, read_keypair_from_file, read_network_keypair_from_file,

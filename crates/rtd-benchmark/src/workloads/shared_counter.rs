@@ -16,13 +16,13 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use rand::Rng;
 use rand::seq::SliceRandom;
-use std::sync::Arc;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::crypto::get_key_pair;
 use rtd_types::{
     base_types::{ObjectDigest, ObjectID, SequenceNumber},
     transaction::Transaction,
 };
+use std::sync::Arc;
 use tracing::{debug, error, info};
 
 /// The max amount of gas units needed for a payload.

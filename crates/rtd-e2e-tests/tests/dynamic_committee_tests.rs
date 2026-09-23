@@ -3,13 +3,9 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use move_core_types::ident_str;
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::ident_str;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
 use rtd_core::authority::AuthorityState;
 use rtd_macros::*;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
@@ -19,11 +15,11 @@ use rtd_types::{
     governance::StakedRtd,
     object::{Object, Owner},
     programmable_transaction_builder::ProgrammableTransactionBuilder,
-    storage::ObjectStore,
     rtd_system_state::{
         RtdSystemStateTrait,
         rtd_system_state_summary::{RtdSystemStateSummary, RtdValidatorSummary},
     },
+    storage::ObjectStore,
     transaction::{
         Argument, Command, ObjectArg, ProgrammableTransaction,
         TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE, TransactionData,
@@ -32,6 +28,10 @@ use rtd_types::{
 use rtd_types::{
     base_types::SequenceNumber,
     effects::{TransactionEffects, TransactionEffectsAPI},
+};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
 };
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;

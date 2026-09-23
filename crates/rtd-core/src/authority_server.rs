@@ -7,23 +7,16 @@ use async_trait::async_trait;
 use fastcrypto::traits::KeyPair;
 use futures::{TryFutureExt, future};
 use itertools::Itertools as _;
-use moka::sync::Cache;
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::{assert_reachable, debug_fatal};
 use linku_metrics::spawn_monitored_task;
+use moka::sync::Cache;
 use parking_lot::Mutex;
 use prometheus::{
     Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, Registry,
     register_gauge_with_registry, register_histogram_vec_with_registry,
     register_histogram_with_registry, register_int_counter_vec_with_registry,
     register_int_counter_with_registry, register_int_gauge_with_registry,
-};
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-    time::{Duration, Instant, SystemTime},
 };
 use rtd_network::{
     api::{Validator, ValidatorServer},
@@ -60,6 +53,13 @@ use rtd_types::{
     messages_checkpoint::{
         CheckpointRequest, CheckpointRequestV2, CheckpointResponse, CheckpointResponseV2,
     },
+};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
 };
 use tokio::time::timeout;
 use tonic::metadata::{Ascii, MetadataValue};

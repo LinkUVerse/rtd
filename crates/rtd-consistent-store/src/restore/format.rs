@@ -21,12 +21,12 @@ use anyhow::ensure;
 use fastcrypto::hash::HashFunction;
 use fastcrypto::hash::Sha3_256;
 use integer_encoding::VarIntReader as _;
-use serde::Deserialize;
 use rtd_storage::blob::Blob;
 use rtd_storage::blob::BlobEncoding;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::SequenceNumber;
 use rtd_types::object::Object;
+use serde::Deserialize;
 use zstd::stream::read::Decoder;
 
 const EPOCH_MANIFEST_MAGIC: u32 = 0x00C0FFEE;

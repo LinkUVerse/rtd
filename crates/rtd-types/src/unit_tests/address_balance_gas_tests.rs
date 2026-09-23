@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::{
-    base_types::{ObjectID, SequenceNumber, RtdAddress, random_object_ref},
+    base_types::{ObjectID, RtdAddress, SequenceNumber, random_object_ref},
     coin_reservation::ParsedObjectRefWithdrawal,
     digests::{ChainIdentifier, CheckpointDigest, ObjectDigest},
     error::UserInputError,

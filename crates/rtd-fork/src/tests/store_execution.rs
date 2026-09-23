@@ -19,9 +19,6 @@ use wiremock::matchers::body_string_contains;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
-use simulacrum::Simulacrum;
-use simulacrum::store::SimulatorStore;
-use simulacrum::store::in_mem_store::KeyStore;
 use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
 use rtd_types::base_types::RtdAddress;
@@ -46,6 +43,9 @@ use rtd_types::transaction::GasData;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
 use rtd_types::transaction::TransactionKind;
+use simulacrum::Simulacrum;
+use simulacrum::store::SimulatorStore;
+use simulacrum::store::in_mem_store::KeyStore;
 
 use super::*;
 use crate::seed::SeedEntry;

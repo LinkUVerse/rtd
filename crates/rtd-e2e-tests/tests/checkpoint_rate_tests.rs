@@ -1,9 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::time::Duration;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tracing::info;
 

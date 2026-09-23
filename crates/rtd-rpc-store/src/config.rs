@@ -19,9 +19,9 @@
 
 use std::time::Duration;
 
+use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use serde::Deserialize;
 use serde::Serialize;
-use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 
 /// Top-level configuration for the `rtd-rpc-store` indexer
 /// service. Parses from TOML; every field has a sensible default

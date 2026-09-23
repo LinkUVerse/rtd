@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::effects::{InputConsensusObject, TransactionEffects};
 use rtd_types::storage::ObjectKey;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use tracing::trace;
 
 pub struct CausalOrder {

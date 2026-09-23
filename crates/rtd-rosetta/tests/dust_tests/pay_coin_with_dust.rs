@@ -6,12 +6,12 @@ use std::path::Path;
 
 use crate::test_utils::wait_for_transaction;
 use prost_types::FieldMask;
-use serde_json::json;
 use rtd_rosetta::CoinMetadataCache;
 use rtd_rosetta::operations::Operations;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+use serde_json::json;
 use test_cluster::TestClusterBuilder;
 
 use super::rosetta_client::start_rosetta_test_server;

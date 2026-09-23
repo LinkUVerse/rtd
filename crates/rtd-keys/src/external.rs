@@ -16,6 +16,8 @@ use fastcrypto::traits::{EncodeDecodeBase64, VerifyingKey};
 use jsonrpc::client::{Endpoint, JsonRpcError};
 use jsonrpc::types::RemoteError;
 use mockall::{automock, predicate::*};
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::{PublicKey, RtdKeyPair, RtdSignature, RtdSignatureInner, Signature};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value as JsonValue, json};
 use shared_crypto::intent::{Intent, IntentMessage};
@@ -23,8 +25,6 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::process::Stdio;
-use rtd_types::base_types::RtdAddress;
-use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair, RtdSignature, RtdSignatureInner};
 use tokio::process::Command;
 
 // TODO: Remove this legacy Ledger fallback after supported ledger-signer versions return
@@ -770,15 +770,15 @@ mod tests {
     use mockall::predicate::eq;
     use rand::prelude::StdRng;
     use rand::{SeedableRng, thread_rng};
+    use rtd_types::base_types::RtdAddress;
+    use rtd_types::crypto::SignatureScheme::{ED25519, Secp256k1};
+    use rtd_types::crypto::{PublicKey, RtdKeyPair, Signature};
     use serde_json::Value as JsonValue;
     use serde_json::{Value, json};
     use shared_crypto::intent::{Intent, IntentMessage};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::str::FromStr;
-    use rtd_types::base_types::RtdAddress;
-    use rtd_types::crypto::SignatureScheme::{ED25519, Secp256k1};
-    use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair};
     use tempfile::TempDir;
 
     const PUBLIC_KEY: &str = "ALJ0GaLcBTTwTTh5dvyc6xaxwrjkG1spQzlL+W4CGLqG";

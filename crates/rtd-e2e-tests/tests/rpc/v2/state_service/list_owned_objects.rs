@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
-use std::path::PathBuf;
 use rtd_macros::sim_test;
 use rtd_move_build::BuildConfig;
 use rtd_rpc::Client;
@@ -15,6 +14,7 @@ use rtd_sdk_types::TypeTag;
 use rtd_types::Identifier;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{CallArg, ObjectArg, TransactionData, TransactionKind};
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[sim_test]

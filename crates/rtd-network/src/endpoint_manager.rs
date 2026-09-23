@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
 use linku_network::Multiaddr;
-use serde::{Deserialize, Serialize};
 use rtd_types::crypto::{NetworkPublicKey, ToFromBytes};
 use rtd_types::error::RtdResult;
+use serde::{Deserialize, Serialize};
 use tap::TapFallible;
 use tracing::{info, warn};
 
@@ -172,8 +172,8 @@ impl AddressSource {
 mod tests {
     use super::*;
     use fastcrypto::traits::KeyPair;
-    use std::sync::{Arc, Mutex};
     use rtd_types::crypto::{NetworkKeyPair, get_key_pair};
+    use std::sync::{Arc, Mutex};
 
     type UpdateEntry = (NetworkPublicKey, Vec<Multiaddr>);
     // Mock consensus address updater for testing

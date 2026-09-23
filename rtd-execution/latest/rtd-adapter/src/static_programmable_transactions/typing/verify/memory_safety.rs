@@ -15,8 +15,8 @@ use crate::{
         typing::ast::{self as T, Type},
     },
 };
-use move_regex_borrow_graph::{MeterError, meter::DummyMeter, references::Ref};
 use linku_common::ZipDebugEqIteratorExt;
+use move_regex_borrow_graph::{MeterError, meter::DummyMeter, references::Ref};
 use rtd_types::{
     base_types::TxContextKind,
     error::{ExecutionErrorTrait, SafeIndex},

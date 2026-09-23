@@ -10,9 +10,9 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 
-use simulacrum::Simulacrum;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use simulacrum::Simulacrum;
 
 use crate::services::ServiceManager;
 use crate::store::ForkStore;

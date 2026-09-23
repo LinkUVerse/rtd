@@ -14,7 +14,6 @@ use consensus_core::{CommitConsumerMonitor, CommitIndex, CommitRef};
 use consensus_types::block::BlockRef;
 use consensus_types::block::TransactionIndex;
 use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
-use lru::LruCache;
 use linku_common::{
     assert_reachable, assert_sometimes, debug_fatal, random_util::randomize_cache_capacity_in_tests,
 };
@@ -23,8 +22,8 @@ use linku_metrics::{
     monitored_mpsc::{self, UnboundedReceiver},
     monitored_scope, spawn_monitored_task,
 };
+use lru::LruCache;
 use parking_lot::RwLockWriteGuard;
-use serde::{Deserialize, Serialize};
 use rtd_config::node::CongestionLogConfig;
 use rtd_macros::{fail_point, fail_point_arg, fail_point_if};
 use rtd_protocol_config::{
@@ -56,6 +55,7 @@ use rtd_types::{
         TransactionKey, VerifiedTransaction, WithAliases,
     },
 };
+use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, instrument, trace, warn};
 

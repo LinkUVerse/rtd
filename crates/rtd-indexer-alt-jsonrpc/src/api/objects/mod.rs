@@ -14,8 +14,8 @@ use rtd_json_rpc_types::RtdPastObjectResponse;
 use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
 use rtd_types::base_types::ObjectID;
-use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 
 use crate::api::objects::error::Error;
 use crate::api::rpc_module::RpcModule;

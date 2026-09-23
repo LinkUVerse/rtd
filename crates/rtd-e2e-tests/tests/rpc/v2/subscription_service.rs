@@ -3,7 +3,6 @@
 
 use crate::transfer_coin;
 use prost::bytes::Bytes;
-use std::path::PathBuf;
 use rtd_macros::sim_test;
 use rtd_rpc::Client;
 use rtd_rpc::field::FieldMask;
@@ -17,6 +16,7 @@ use rtd_types::base_types::ObjectRef;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::TransactionData;
+use std::path::PathBuf;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 use tokio_stream::StreamExt;

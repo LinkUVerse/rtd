@@ -3,14 +3,14 @@
 
 use anyhow::bail;
 use fastcrypto::traits::ToFromBytes;
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{
     AuthorityPublicKey, AuthorityPublicKeyBytes, AuthoritySignature, NetworkPublicKey,
     verify_proof_of_possession,
 };
 use rtd_types::multiaddr::Multiaddr;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 const MAX_VALIDATOR_METADATA_LENGTH: usize = 256;
 

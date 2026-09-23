@@ -6,8 +6,8 @@ use std::process::Command;
 
 use fastcrypto::encoding::{Base64, Encoding};
 use move_binary_format::CompiledModule;
-use serde::Deserialize;
 use rtd_types::base_types::ObjectID;
+use serde::Deserialize;
 
 use crate::error::Error;
 

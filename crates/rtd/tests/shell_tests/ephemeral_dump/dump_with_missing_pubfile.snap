@@ -43,8 +43,8 @@ exit_code: 0
 ----- stdout -----
 === should fail because of unknown build-env ===
 Active environment `localnet` does not correspond to any of environments defined for the package. Specify the environment by passing one of the following:
-	-e testnet
 	-e mainnet
+	-e testnet
 === should succeed ===
 BUILDING dep_pkg
 

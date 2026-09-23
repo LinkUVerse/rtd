@@ -10,9 +10,6 @@ use crate::events::init_all_struct_tags;
 use crate::metrics::BridgeMetrics;
 use crate::monitor::{self, BridgeMonitor};
 use crate::orchestrator::BridgeOrchestrator;
-use crate::server::handler::BridgeRequestHandler;
-use crate::server::{BridgeNodePublicMetadata, run_server};
-use crate::storage::BridgeOrchestratorTables;
 use crate::rtd_bridge_watchdog::eth_bridge_status::EthBridgeStatus;
 use crate::rtd_bridge_watchdog::eth_vault_balance::{EthereumVaultBalance, VaultAsset};
 use crate::rtd_bridge_watchdog::metrics::WatchdogMetrics;
@@ -21,6 +18,9 @@ use crate::rtd_bridge_watchdog::total_supplies::TotalSupplies;
 use crate::rtd_bridge_watchdog::{BridgeWatchDog, Observable};
 use crate::rtd_client::RtdBridgeClient;
 use crate::rtd_syncer::RtdSyncer;
+use crate::server::handler::BridgeRequestHandler;
+use crate::server::{BridgeNodePublicMetadata, run_server};
+use crate::storage::BridgeOrchestratorTables;
 use crate::types::BridgeCommittee;
 use crate::utils::{
     EthProvider, get_committee_voting_power_by_name, get_eth_contract_addresses,
@@ -30,16 +30,16 @@ use alloy::primitives::Address as EthAddress;
 use arc_swap::ArcSwap;
 use linku_common::ZipDebugEqIteratorExt;
 use linku_metrics::spawn_logged_monitored_task;
-use std::collections::{BTreeMap, HashMap};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_types::Identifier;
 use rtd_types::bridge::{
     BRIDGE_COMMITTEE_MODULE_NAME, BRIDGE_LIMITER_MODULE_NAME, BRIDGE_MODULE_NAME,
     BRIDGE_TREASURY_MODULE_NAME,
 };
 use rtd_types::event::EventID;
+use std::collections::{BTreeMap, HashMap};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::JoinHandle;
 use tracing::info;
 

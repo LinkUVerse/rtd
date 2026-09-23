@@ -10,10 +10,10 @@ use async_graphql::Scalar;
 use async_graphql::ScalarType;
 use async_graphql::Value;
 use move_core_types::account_address::AccountAddress;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::RtdAddress as NativeRtdAddress;
+use serde::Deserialize;
+use serde::Serialize;
 
 const RTD_ADDRESS_LENGTH: usize = 32;
 

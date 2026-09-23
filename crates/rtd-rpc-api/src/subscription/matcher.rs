@@ -630,13 +630,13 @@ mod tests {
     use move_core_types::account_address::AccountAddress;
     use move_core_types::identifier::Identifier;
     use move_core_types::language_storage::StructTag;
-    use std::sync::atomic::Ordering;
     use rtd_inverted_index::BitmapQuery;
     use rtd_rpc::proto::rtd::rpc::v2 as proto;
     use rtd_types::base_types::ObjectID;
     use rtd_types::base_types::RtdAddress;
     use rtd_types::event::Event;
     use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
+    use std::sync::atomic::Ordering;
 
     /// Interval high enough that no test below triggers a tick incidentally.
     const NO_TICK: u32 = 1000;

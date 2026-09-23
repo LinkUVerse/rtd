@@ -9,9 +9,6 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use reqwest::Client;
-use serde_json::Value;
-use serde_json::json;
-use simulacrum::Simulacrum;
 use rtd_indexer_alt::config::ConcurrentLayer;
 use rtd_indexer_alt::config::IndexerConfig;
 use rtd_indexer_alt::config::PipelineLayer;
@@ -25,6 +22,9 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
+use serde_json::Value;
+use serde_json::json;
+use simulacrum::Simulacrum;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;

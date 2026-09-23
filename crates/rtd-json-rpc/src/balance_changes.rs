@@ -241,10 +241,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
     use rtd_types::accumulator_root::AccumulatorValue as AccumulatorValueRoot;
     use rtd_types::balance::Balance;
-    use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
     use rtd_types::digests::TransactionDigest;
     use rtd_types::effects::{
         AccumulatorAddress, AccumulatorOperation, AccumulatorValue, AccumulatorWriteV1,
@@ -254,6 +253,7 @@ mod tests {
     use rtd_types::gas::GasCostSummary;
     use rtd_types::gas_coin::GAS;
     use rtd_types::object::MoveObject;
+    use std::collections::BTreeMap;
 
     struct MockObjectProvider {
         objects: HashMap<(ObjectID, SequenceNumber), Object>,

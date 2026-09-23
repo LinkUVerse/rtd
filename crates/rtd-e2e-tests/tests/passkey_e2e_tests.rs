@@ -15,8 +15,6 @@ use passkey_types::{
         PublicKeyCredentialUserEntity, UserVerificationRequirement,
     },
 };
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::net::SocketAddr;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::sim_test;
 use rtd_test_transaction_builder::TestTransactionBuilder;
@@ -32,6 +30,8 @@ use rtd_types::{
     passkey_authenticator::{PasskeyAuthenticator, to_signing_message},
     transaction::TransactionData,
 };
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::net::SocketAddr;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 use url::Url;

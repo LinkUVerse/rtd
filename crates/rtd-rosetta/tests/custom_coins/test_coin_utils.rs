@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::{AccountKeystore, Keystore};
 use rtd_move_build::BuildConfig;
 use rtd_rpc::client::Client as GrpcClient;
@@ -18,6 +17,7 @@ use rtd_types::transaction::{
     Command, ObjectArg, Transaction, TransactionData, TransactionDataAPI,
 };
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID, TypeTag};
+use shared_crypto::intent::Intent;
 
 const DEFAULT_GAS_BUDGET: u64 = 900_000_000;
 pub const TEST_COIN_DECIMALS: u64 = 6;

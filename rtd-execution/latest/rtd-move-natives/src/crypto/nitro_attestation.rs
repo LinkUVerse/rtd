@@ -15,8 +15,8 @@ use move_vm_runtime::{
     natives::functions::NativeResult,
     pop_arg,
 };
-use std::collections::{BTreeMap, VecDeque};
 use rtd_types::nitro_attestation::{parse_nitro_attestation, verify_nitro_attestation};
+use std::collections::{BTreeMap, VecDeque};
 
 pub const NOT_SUPPORTED_ERROR: u64 = 0;
 pub const PARSE_ERROR: u64 = 1;

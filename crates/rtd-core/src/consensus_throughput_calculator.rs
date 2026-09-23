@@ -3,12 +3,12 @@
 
 use arc_swap::ArcSwap;
 use parking_lot::Mutex;
-use std::collections::{BTreeMap, VecDeque};
-use std::num::NonZeroU64;
-use std::sync::Arc;
 use rtd_protocol_config::Chain;
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::messages_consensus::TimestampMs;
+use std::collections::{BTreeMap, VecDeque};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 use tracing::{debug, warn};
 
 use crate::authority::AuthorityMetrics;

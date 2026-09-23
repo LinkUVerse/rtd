@@ -10,9 +10,6 @@ use core::panic;
 use fastcrypto::encoding::Base64;
 use jsonrpsee::{core::client::ClientT, rpc_params};
 use move_core_types::identifier::Identifier;
-use std::fs::File;
-use std::num::NonZeroUsize;
-use std::time::Duration;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_core::authority_client::make_network_authority_clients_with_network_config;
 use rtd_core::traffic_controller::{
@@ -43,6 +40,9 @@ use rtd_types::{
     },
     transaction_driver_types::ExecuteTransactionRequestType,
 };
+use std::fs::File;
+use std::num::NonZeroUsize;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 #[tokio::test]

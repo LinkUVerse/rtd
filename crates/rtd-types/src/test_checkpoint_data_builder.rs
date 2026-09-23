@@ -5,15 +5,15 @@ use move_core_types::{
     ident_str,
     language_storage::{StructTag, TypeTag},
 };
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use rtd_sdk_types::CheckpointTimestamp;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::messages_checkpoint::CheckpointCommitment;
 use crate::{
     RTD_SYSTEM_ADDRESS,
     base_types::{
-        ExecutionDigests, ObjectID, ObjectRef, SequenceNumber, RtdAddress, dbg_addr,
+        ExecutionDigests, ObjectID, ObjectRef, RtdAddress, SequenceNumber, dbg_addr,
         random_object_ref,
     },
     committee::Committee,

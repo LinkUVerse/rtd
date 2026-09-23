@@ -15,6 +15,6 @@ success: false
 exit_code: 1
 ----- stdout -----
 == should fail and ask user to provide -e ==
-Could not determine the correct dependencies to use for `devnet`; pass one of `--build-env testnet` or `--build-env mainnet`.
+Could not determine the correct dependencies to use for `devnet`; pass one of `--build-env mainnet` or `--build-env testnet`.
 
 ----- stderr -----

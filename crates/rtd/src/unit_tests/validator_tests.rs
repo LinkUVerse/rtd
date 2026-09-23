@@ -6,10 +6,10 @@ use crate::validator_commands::{
 };
 use anyhow::Ok;
 use fastcrypto::encoding::{Base64, Encoding};
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_types::crypto::RtdKeyPair;
 use rtd_types::transaction::TransactionData;
 use rtd_types::{base_types::RtdAddress, crypto::Signature, transaction::Transaction};
+use shared_crypto::intent::{Intent, IntentMessage};
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]

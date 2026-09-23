@@ -6,8 +6,8 @@ use crate::{
     static_programmable_transactions::{env::Env, typing::ast as T},
 };
 use indexmap::IndexSet;
-use std::rc::Rc;
 use rtd_types::error::ExecutionError;
+use std::rc::Rc;
 
 /// A dot-star like extension, but with a unique identifier. Deltas can be compared between
 /// different Deltas of the same command, otherwise they behave like .* in the regex based

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prometheus::Registry;
-use simulacrum::Simulacrum;
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
 use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcArgs;
@@ -22,6 +21,7 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
+use simulacrum::Simulacrum;
 
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
 

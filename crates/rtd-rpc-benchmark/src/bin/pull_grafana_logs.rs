@@ -193,7 +193,7 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn Error>> {
     let grafana_url = env::var("GRAFANA_LOGS_URL")
-        .unwrap_or_else(|_| "https://metrics.rtd.io/loki/api/v1/query_range".to_string());
+        .map_err(|_| "Set GRAFANA_LOGS_URL to the verified RTD Loki query endpoint")?;
     let net = env::var("NET").unwrap_or_else(|_| "mainnet".to_string());
     let namespace = if net == "testnet" {
         "rpc-testnet".to_string()

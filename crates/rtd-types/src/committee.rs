@@ -14,12 +14,12 @@ use once_cell::sync::OnceCell;
 use rand::rngs::{StdRng, ThreadRng};
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
+pub use rtd_protocol_config::ProtocolVersion;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
-pub use rtd_protocol_config::ProtocolVersion;
 
 pub type EpochId = u64;
 

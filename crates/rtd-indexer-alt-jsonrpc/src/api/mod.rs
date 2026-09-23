@@ -3,8 +3,8 @@
 
 use rtd_json_rpc_types::ObjectChange as RtdObjectChange;
 use rtd_types::base_types::ObjectID;
-use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::digests::ObjectDigest;
 use rtd_types::effects::IDOperation;
 use rtd_types::object::Object;

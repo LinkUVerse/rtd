@@ -9,11 +9,11 @@ use enum_dispatch::enum_dispatch;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::TypeTag;
 use prost_types::FieldMask;
-use serde::{Deserialize, Serialize};
 use rtd_rpc::client::Client;
 use rtd_rpc::proto::rtd::rpc::v2::{
     BatchGetObjectsRequest, GetObjectRequest, Object, get_object_result,
 };
+use serde::{Deserialize, Serialize};
 
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::{
@@ -22,7 +22,7 @@ use rtd_rpc::proto::rtd::rpc::v2::{
     simulate_transaction_request::TransactionChecks, transaction_kind,
 };
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
 use rtd_types::transaction::{
     Argument, CallArg, Command, FundsWithdrawalArg, ProgrammableTransaction, TransactionData,

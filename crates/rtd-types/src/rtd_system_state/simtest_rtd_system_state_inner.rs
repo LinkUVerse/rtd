@@ -8,7 +8,6 @@ use crate::committee::{CommitteeWithNetworkMetadata, NetworkMetadata};
 use crate::crypto::{AuthorityPublicKey, AuthorityPublicKeyBytes, NetworkPublicKey};
 use crate::error::RtdError;
 use crate::gas::GasCostSummary;
-use crate::storage::ObjectStore;
 use crate::rtd_system_state::epoch_start_rtd_system_state::{
     EpochStartSystemState, EpochStartValidatorInfoV1,
 };
@@ -16,6 +15,7 @@ use crate::rtd_system_state::rtd_system_state_summary::{
     RtdSystemStateSummary, RtdValidatorSummary,
 };
 use crate::rtd_system_state::{AdvanceEpochParams, RtdSystemStateTrait};
+use crate::storage::ObjectStore;
 use fastcrypto::traits::ToFromBytes;
 use linku_network::Multiaddr;
 use once_cell::sync::OnceCell;

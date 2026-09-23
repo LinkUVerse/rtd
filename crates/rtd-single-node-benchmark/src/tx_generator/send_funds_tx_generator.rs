@@ -4,12 +4,12 @@
 use crate::mock_account::Account;
 use crate::tx_generator::TxGenerator;
 use move_core_types::identifier::Identifier;
-use std::sync::atomic::{AtomicU32, Ordering};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::gas_coin::GAS;
 use rtd_types::transaction::{DEFAULT_VALIDATOR_GAS_PRICE, FundsWithdrawalArg, Transaction};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub struct SendFundsTxGenerator {
     chain_identifier: ChainIdentifier,

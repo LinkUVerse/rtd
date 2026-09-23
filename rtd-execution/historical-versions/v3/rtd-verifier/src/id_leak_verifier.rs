@@ -25,7 +25,6 @@ use move_bytecode_verifier::absint::{
 };
 use move_bytecode_verifier_meter::{Meter, Scope};
 use move_core_types::{ident_str, vm_status::StatusCode};
-use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 use rtd_types::bridge::BRIDGE_MODULE_NAME;
 use rtd_types::deny_list_v1::{DENY_LIST_CREATE_FUNC, DENY_LIST_MODULE};
 use rtd_types::{
@@ -38,6 +37,7 @@ use rtd_types::{
     randomness_state::RANDOMNESS_MODULE_NAME,
     rtd_system_state::RTD_SYSTEM_MODULE_NAME,
 };
+use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 
 use crate::{
     FunctionIdent, TEST_SCENARIO_MODULE_NAME, check_for_verifier_timeout,

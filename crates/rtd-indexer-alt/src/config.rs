@@ -3,8 +3,6 @@
 
 use std::num::NonZeroUsize;
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_framework::config::ConcurrencyConfig;
 use rtd_indexer_alt_framework::ingestion::IngestionConfig;
 use rtd_indexer_alt_framework::pipeline;
@@ -12,6 +10,8 @@ use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
 use rtd_indexer_alt_framework::pipeline::concurrent::PrunerConfig;
 use rtd_indexer_alt_framework::pipeline::sequential::SequentialConfig;
+use serde::Deserialize;
+use serde::Serialize;
 use tracing::warn;
 
 /// Trait for merging configuration structs together.

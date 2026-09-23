@@ -8,12 +8,12 @@ use std::sync::Arc;
 use anyhow::Result;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
-use serde::Deserialize;
-use serde::Serialize;
-use strum_macros::EnumIter;
 use rtd_indexer_alt_framework::Indexer;
 use rtd_indexer_alt_framework::pipeline::Processor;
 use rtd_indexer_alt_framework::pipeline::sequential::SequentialConfig;
+use serde::Deserialize;
+use serde::Serialize;
+use strum_macros::EnumIter;
 
 use crate::config::PipelineConfig;
 use crate::handlers::AnalyticsHandler;

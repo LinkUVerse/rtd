@@ -4,9 +4,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use itertools::Itertools;
+use linku_common::fatal;
 use move_core_types::ident_str;
 use move_core_types::u256::U256;
-use linku_common::fatal;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::accumulator_root::{

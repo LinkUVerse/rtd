@@ -1239,11 +1239,11 @@ mod test {
     use rtd_config::node::DEFAULT_COMMISSION_RATE;
     use rtd_config::node::DEFAULT_VALIDATOR_GAS_PRICE;
     use rtd_types::base_types::RtdAddress;
-    use rtd_types::gas_coin::GasCoin;
     use rtd_types::crypto::{
         AccountKeyPair, AuthorityKeyPair, NetworkKeyPair, generate_proof_of_possession,
         get_key_pair_from_rng,
     };
+    use rtd_types::gas_coin::GasCoin;
 
     #[test]
     #[should_panic(expected = "predates RTD genesis")]

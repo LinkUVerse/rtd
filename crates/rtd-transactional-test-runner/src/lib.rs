@@ -26,11 +26,6 @@ mod testing_imports {
     pub use super::simulator_persisted_store::PersistedStore;
     pub use super::test_adapter::{PRE_COMPILED, RtdTestAdapter};
     pub use rand::rngs::StdRng;
-    pub use simulacrum::AdvanceEpochConfig;
-    pub use simulacrum::Simulacrum;
-    pub use simulacrum::SimulatorStore;
-    pub use std::path::Path;
-    pub use std::sync::Arc;
     pub use rtd_core::authority::AuthorityState;
     pub use rtd_core::authority::authority_per_epoch_store::CertLockGuard;
     pub use rtd_core::authority::authority_test_utils::submit_and_execute_with_error;
@@ -56,13 +51,18 @@ mod testing_imports {
     pub use rtd_types::messages_checkpoint::CheckpointContentsDigest;
     pub use rtd_types::messages_checkpoint::VerifiedCheckpoint;
     pub use rtd_types::object::Object;
-    pub use rtd_types::storage::ObjectStore;
-    pub use rtd_types::storage::ReadStore;
     pub use rtd_types::rtd_system_state::RtdSystemStateTrait;
     pub use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
+    pub use rtd_types::storage::ObjectStore;
+    pub use rtd_types::storage::ReadStore;
     pub use rtd_types::transaction::Transaction;
     pub use rtd_types::transaction::TransactionKind;
     pub use rtd_types::transaction::{InputObjects, TransactionData};
+    pub use simulacrum::AdvanceEpochConfig;
+    pub use simulacrum::Simulacrum;
+    pub use simulacrum::SimulatorStore;
+    pub use std::path::Path;
+    pub use std::sync::Arc;
 }
 #[cfg(feature = "testing")]
 use testing_imports::*;

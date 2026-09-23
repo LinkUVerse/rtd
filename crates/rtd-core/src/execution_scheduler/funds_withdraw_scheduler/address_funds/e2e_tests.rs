@@ -17,7 +17,7 @@ use rtd_types::base_types::ObjectID;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::execution_params::FundsWithdrawStatus;
 use rtd_types::{
-    base_types::{SequenceNumber, RtdAddress},
+    base_types::{RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_account_key_pair},
     executable_transaction::VerifiedExecutableTransaction,
     gas_coin::GAS,

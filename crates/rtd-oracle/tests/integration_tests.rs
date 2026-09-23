@@ -4,7 +4,6 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
 use rtd_move_build::BuildConfig;
 use rtd_rpc_api::Client;
@@ -19,6 +18,7 @@ use rtd_types::base_types::{ObjectRef, SequenceNumber};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::{TypeTag, parse_rtd_type_tag};
+use shared_crypto::intent::Intent;
 
 // Integration tests for RTD Oracle, these test can be run manually on local or remote testnet.
 #[ignore]
@@ -317,7 +317,7 @@ async fn test_consume_oracle_data() {
         }))
         .unwrap();
     let ticker = builder
-            .input(CallArg::Pure(bcs::to_bytes("RTDUSD".as_bytes()).unwrap()))
+        .input(CallArg::Pure(bcs::to_bytes("RTDUSD".as_bytes()).unwrap()))
         .unwrap();
     let data = builder.programmable_move_call(
         package,
@@ -409,7 +409,9 @@ async fn get_gas(client: &Client, sender: RtdAddress) -> (ObjectRef, u64) {
 }
 
 async fn init_test_client() -> (Client, Keystore, RtdAddress) {
-    let client = Client::new("https://rpc.devnet.rtd.io:443").unwrap();
+    let rpc_url = std::env::var("RTD_ORACLE_TEST_RPC_URL")
+        .expect("Set RTD_ORACLE_TEST_RPC_URL to a funded RTD test network");
+    let client = Client::new(&rpc_url).unwrap();
 
     let keystore = Keystore::File(
         FileBasedKeystore::load_or_create(

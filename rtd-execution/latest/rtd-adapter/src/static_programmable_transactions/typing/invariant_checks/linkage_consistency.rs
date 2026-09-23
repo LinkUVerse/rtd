@@ -18,8 +18,8 @@ use crate::{
     },
 };
 use move_binary_format::file_format::Visibility;
-use std::rc::Rc;
 use rtd_types::{base_types::ObjectID, error::ExecutionErrorTrait};
+use std::rc::Rc;
 
 pub fn verify<Mode: ExecutionMode>(
     env: &env::Env<Mode>,

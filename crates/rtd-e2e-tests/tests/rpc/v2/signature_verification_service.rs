@@ -6,7 +6,6 @@ use fastcrypto::traits::KeyPair;
 use fastcrypto_zkp::bn254::zk_login::ZkLoginInputs;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_macros::sim_test;
 use rtd_rpc::proto::rtd::rpc::v2::Bcs;
 use rtd_rpc::proto::rtd::rpc::v2::UserSignature;
@@ -15,13 +14,14 @@ use rtd_rpc::proto::rtd::rpc::v2::signature_verification_service_client::Signatu
 use rtd_rpc::proto::rtd::rpc::v2::{ActiveJwk, Jwk, JwkId};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectDigest, ObjectID, RtdAddress};
-use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair};
+use rtd_types::crypto::{PublicKey, RtdKeyPair, Signature};
 use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::TransactionData;
 use rtd_types::utils::{
     PINNED_PROOF_ADDRESS_SEED, PINNED_V1_PROOF_JSON, PINNED_V2_PROOF_JSON, pinned_jwks,
 };
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
+use shared_crypto::intent::{Intent, IntentMessage};
 use test_cluster::TestClusterBuilder;
 
 #[sim_test]

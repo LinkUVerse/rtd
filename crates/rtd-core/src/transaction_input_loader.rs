@@ -9,8 +9,6 @@ use crate::{
     transaction_simulation::SimulationInputLoader,
 };
 use linku_common::{ZipDebugEqIteratorExt, izip_debug_eq};
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use rtd_types::{
     base_types::{EpochId, FullObjectID, ObjectRef, TransactionDigest},
     error::{RtdError, RtdResult, UserInputError},
@@ -20,6 +18,8 @@ use rtd_types::{
         ReceivingObjectReadResult, ReceivingObjectReadResultKind, ReceivingObjects, TransactionKey,
     },
 };
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use tracing::instrument;
 
 pub(crate) struct TransactionInputLoader {

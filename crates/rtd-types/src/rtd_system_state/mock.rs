@@ -8,7 +8,7 @@ use crate::dynamic_field::{derive_dynamic_field_id, serialize_dynamic_field};
 use crate::id::UID;
 use crate::object::{MoveObject, Object, Owner};
 use crate::rtd_system_state::rtd_system_state_inner_v1::{
-    StakeSubsidyV1, StorageFundV1, RtdSystemStateInnerV1, SystemParametersV1, ValidatorSetV1,
+    RtdSystemStateInnerV1, StakeSubsidyV1, StorageFundV1, SystemParametersV1, ValidatorSetV1,
 };
 use crate::rtd_system_state::rtd_system_state_inner_v2::{
     RtdSystemStateInnerV2, SystemParametersV2,

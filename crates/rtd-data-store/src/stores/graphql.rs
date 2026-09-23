@@ -13,6 +13,13 @@ use anyhow::{Context, Error, Result};
 use cynic::{GraphQlResponse, Operation};
 use linku_common::ZipDebugEqIteratorExt;
 use reqwest::header::USER_AGENT;
+use rtd_types::{
+    committee::ProtocolVersion,
+    effects::TransactionEffects,
+    object::Object,
+    supported_protocol_versions::{Chain, ProtocolConfig},
+    transaction::TransactionData,
+};
 use std::time::Instant;
 use std::{
     collections::BTreeMap,
@@ -20,13 +27,6 @@ use std::{
         RwLock,
         atomic::{AtomicU64, Ordering},
     },
-};
-use rtd_types::{
-    committee::ProtocolVersion,
-    effects::TransactionEffects,
-    object::Object,
-    supported_protocol_versions::{Chain, ProtocolConfig},
-    transaction::TransactionData,
 };
 use tracing::{debug, debug_span};
 
@@ -250,7 +250,7 @@ impl DataStore {
             .connect_timeout(std::time::Duration::from_secs(3))
             .timeout(std::time::Duration::from_secs(5))
             .build()?;
-        let url = node.gql_url();
+        let url = node.gql_url().map_err(anyhow::Error::msg)?;
         let rpc =
             reqwest::Url::parse(url).context(format!("Failed to parse GQL RPC URL {}", url))?;
         let epoch_map = RwLock::new(BTreeMap::new());

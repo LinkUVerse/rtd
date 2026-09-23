@@ -15,11 +15,11 @@ use move_core_types::{
     language_storage::{StructTag, TypeTag},
     u256::U256,
 };
+use rtd_types::{base_types::ObjectID, digests::Digest};
 use serde::{
     Serialize,
     ser::{SerializeSeq, SerializeTuple},
 };
-use rtd_types::{base_types::ObjectID, digests::Digest};
 use winnow::{
     Parser,
     ascii::{hex_digit1, multispace0},

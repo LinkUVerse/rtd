@@ -12,7 +12,7 @@ use move_compiler::{
     expansion::{
         ast::{self as E, AbilitySet, ModuleIdent_, Value, Value_, Visibility},
         name_validation::{
-            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES,
+            IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES, IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES,
             ModuleMemberKind,
         },
     },

@@ -12,11 +12,11 @@ use crate::crypto::{
 use crate::events::*;
 use crate::metrics::BridgeMetrics;
 use crate::node::run_bridge_node;
-use crate::server::BridgeNodePublicMetadata;
 use crate::rtd_client::{RtdBridgeClient, RtdClientInner};
 use crate::rtd_transaction_builder::{
     build_add_tokens_on_rtd_transaction, build_committee_register_transaction,
 };
+use crate::server::BridgeNodePublicMetadata;
 use crate::types::{
     BridgeAction, BridgeActionStatus, BridgeCommitteeValiditySignInfo, CertifiedBridgeAction,
     RtdToEthTokenTransfer, RtdToEthTokenTransferV2, VerifiedCertifiedBridgeAction,
@@ -30,22 +30,13 @@ use alloy::rpc::types::TransactionReceipt;
 use anyhow::anyhow;
 use futures::Future;
 use futures::future::join_all;
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::ident_str;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use linku_common::ZipDebugEqIteratorExt;
 use prometheus::Registry;
 use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs;
-use std::fs::{DirBuilder, File};
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
-use std::str::FromStr;
-use std::sync::Arc;
 use rtd_config::local_ip_utils::get_available_port;
 use rtd_rpc_api::Client;
 use rtd_rpc_api::client::ExecutedTransaction;
@@ -67,6 +58,15 @@ use rtd_types::transaction::{
     CallArg, ObjectArg, SharedObjectMutability, Transaction, TransactionData,
 };
 use rtd_types::{BRIDGE_PACKAGE_ID, RTD_BRIDGE_OBJECT_ID};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs;
+use std::fs::{DirBuilder, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command};
+use std::str::FromStr;
+use std::sync::Arc;
 use tap::TapFallible;
 use tempfile::tempdir;
 use test_cluster::{TestCluster, TestClusterBuilder};

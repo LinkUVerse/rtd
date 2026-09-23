@@ -7,17 +7,8 @@
 //! (mainnet, testnet, or custom) and provides URL resolution for both
 //! GraphQL and JSON-RPC endpoints.
 
-use std::str::FromStr;
 use rtd_types::supported_protocol_versions::Chain;
-
-/// GraphQL endpoint for Rtd mainnet.
-pub const MAINNET_GQL_URL: &str = "https://graphql.mainnet.rtd.io/graphql";
-/// GraphQL endpoint for Rtd testnet.
-pub const TESTNET_GQL_URL: &str = "https://graphql.testnet.rtd.io/graphql";
-/// JSON-RPC endpoint for Rtd mainnet.
-pub const MAINNET_RPC_URL: &str = "https://fullnode.mainnet.rtd.io:443";
-/// JSON-RPC endpoint for Rtd testnet.
-pub const TESTNET_RPC_URL: &str = "https://fullnode.testnet.rtd.io:443";
+use std::str::FromStr;
 
 /// Represents a Rtd network node configuration.
 ///
@@ -51,23 +42,27 @@ impl Node {
         }
     }
 
-    /// Returns the GraphQL endpoint URL for this node.
-    pub fn gql_url(&self) -> &str {
+    /// Returns the GraphQL endpoint URL, or an error for an undeployed public network.
+    pub fn gql_url(&self) -> Result<&str, String> {
         match self {
-            Node::Mainnet => MAINNET_GQL_URL,
-            Node::Testnet => TESTNET_GQL_URL,
+            Node::Mainnet | Node::Testnet => Err(format!(
+                "No public RTD {} GraphQL endpoint is configured; pass a custom URL",
+                self.network_name()
+            )),
             // For custom, assume it's already a GraphQL URL
-            Node::Custom(url) => url.as_str(),
+            Node::Custom(url) => Ok(url.as_str()),
         }
     }
 
-    /// Returns the JSON-RPC endpoint URL for this node.
-    pub fn node_url(&self) -> &str {
+    /// Returns the JSON-RPC endpoint URL, or an error for an undeployed public network.
+    pub fn node_url(&self) -> Result<&str, String> {
         match self {
-            Node::Mainnet => MAINNET_RPC_URL,
-            Node::Testnet => TESTNET_RPC_URL,
+            Node::Mainnet | Node::Testnet => Err(format!(
+                "No public RTD {} RPC endpoint is configured; pass a custom URL",
+                self.network_name()
+            )),
             // For custom, assume it's already an RPC URL
-            Node::Custom(url) => url.as_str(),
+            Node::Custom(url) => Ok(url.as_str()),
         }
     }
 }
@@ -77,8 +72,9 @@ impl FromStr for Node {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "mainnet" => Ok(Node::Mainnet),
-            "testnet" => Ok(Node::Testnet),
+            "mainnet" | "testnet" => Err(format!(
+                "No public RTD {s} endpoint is configured; pass an explicit node URL"
+            )),
             _ => Ok(Node::Custom(s.to_string())),
         }
     }
@@ -92,7 +88,8 @@ mod tests {
     fn custom_gql_url_returns_provided_url() {
         let url = "https://graphql.devnet.example.com/graphql";
         let node = Node::Custom(url.to_string());
-        assert_eq!(node.gql_url(), url);
+        assert_eq!(node.gql_url().unwrap(), url);
+        assert_eq!(node.node_url().unwrap(), url);
     }
 
     #[test]
@@ -101,6 +98,17 @@ mod tests {
         match Node::from_str(url).unwrap() {
             Node::Custom(s) => assert_eq!(s, url),
             other => panic!("expected Custom, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn undeployed_networks_cannot_resolve_to_remote_urls() {
+        for network in ["mainnet", "testnet"] {
+            assert!(Node::from_str(network).is_err());
+        }
+        for node in [Node::Mainnet, Node::Testnet] {
+            assert!(node.gql_url().is_err());
+            assert!(node.node_url().is_err());
         }
     }
 }

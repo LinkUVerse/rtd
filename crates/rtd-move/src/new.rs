@@ -30,9 +30,6 @@ impl New {
                 module {name}::{name};
                 */
 
-                // For Move coding conventions, see
-                // https://docs.rtd.io/develop/write-move/move-best-practices
-
                 "#,
             ),
         )?;

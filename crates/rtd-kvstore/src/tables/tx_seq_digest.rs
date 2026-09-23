@@ -22,9 +22,9 @@ use anyhow::bail;
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use integer_encoding::VarInt;
-use std::ops::Range;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use std::ops::Range;
 
 pub const NAME: &str = "tx_seq_digest";
 pub const SCHEMA_VERSION: u32 = 1;

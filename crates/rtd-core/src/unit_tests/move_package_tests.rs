@@ -4,7 +4,6 @@
 use move_binary_format::file_format::CompiledModule;
 use move_core_types::account_address::AccountAddress;
 
-use std::{collections::BTreeMap, path::PathBuf};
 use rtd_move_build::{BuildConfig, CompiledPackage};
 use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_types::{
@@ -14,6 +13,7 @@ use rtd_types::{
     move_package::{MovePackage, TypeOrigin, UpgradeInfo},
     object::{Data, OBJECT_START_VERSION, Object},
 };
+use std::{collections::BTreeMap, path::PathBuf};
 
 macro_rules! type_origin_table {
     {} => { Vec::new() };

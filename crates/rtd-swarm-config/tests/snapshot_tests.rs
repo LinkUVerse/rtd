@@ -20,7 +20,6 @@ use fastcrypto::traits::KeyPair;
 use insta::assert_yaml_snapshot;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use std::num::NonZeroUsize;
 use rtd_config::genesis::{GenesisCeremonyParameters, TokenDistributionScheduleBuilder};
 use rtd_config::node::{DEFAULT_COMMISSION_RATE, DEFAULT_VALIDATOR_GAS_PRICE};
 use rtd_genesis_builder::Builder;
@@ -32,6 +31,7 @@ use rtd_types::crypto::{
     get_key_pair_from_rng,
 };
 use rtd_types::multiaddr::Multiaddr;
+use std::num::NonZeroUsize;
 
 #[test]
 #[cfg_attr(msim, ignore)]
@@ -108,9 +108,9 @@ fn populated_genesis_snapshot_matches() {
 #[test]
 #[cfg_attr(msim, ignore)]
 fn network_config_snapshot_matches() {
+    use rtd_swarm_config::network_config_builder::ConfigBuilder;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::path::PathBuf;
-    use rtd_swarm_config::network_config_builder::ConfigBuilder;
 
     let temp_dir = tempfile::tempdir().unwrap();
     let committee_size = 7;

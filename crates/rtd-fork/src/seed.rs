@@ -373,11 +373,11 @@ async fn resolve_seeds(
 mod tests {
     use std::path::Path;
 
-    use serde_json::json;
     use rtd_types::base_types::SequenceNumber;
     use rtd_types::digests::CheckpointDigest;
     use rtd_types::object::Object;
     use rtd_types::object::Owner;
+    use serde_json::json;
     use wiremock::Mock;
     use wiremock::MockServer;
     use wiremock::ResponseTemplate;

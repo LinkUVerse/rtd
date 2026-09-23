@@ -16,7 +16,6 @@ use clap::*;
 use fastcrypto::ed25519::Ed25519KeyPair;
 use fastcrypto::traits::{KeyPair, ToFromBytes};
 use move_core_types::ident_str;
-use std::path::{Path, PathBuf};
 use rtd_config::node::{AuthorityKeyPairWithPath, KeyPairWithPath};
 use rtd_config::{Config, NodeConfig, PersistedConfig, local_ip_utils};
 use rtd_keys::keypair_file::read_keypair_from_file;
@@ -30,6 +29,7 @@ use rtd_types::transaction::{
     CallArg, TEST_ONLY_GAS_UNIT_FOR_GENERIC, Transaction, TransactionData,
 };
 use rtd_types::{RTD_SYSTEM_PACKAGE_ID, committee::EpochId, crypto::get_authority_key_pair};
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 #[derive(Parser)]

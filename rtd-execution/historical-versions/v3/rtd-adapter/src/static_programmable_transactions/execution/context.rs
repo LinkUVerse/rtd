@@ -38,12 +38,6 @@ use move_vm_types::{
     gas::{GasMeter, SimpleInstruction},
     values::{VMValueCast, Value as VMValue},
 };
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-    rc::Rc,
-    sync::Arc,
-};
 use rtd_move_natives::object_runtime::{
     self, LoadedRuntimeObject, ObjectRuntime, RuntimeResults, get_all_uids, max_event_error,
 };
@@ -58,6 +52,12 @@ use rtd_types::{
     object::{MoveObject, Object, Owner},
 };
 use rtd_verifier::INIT_FN_NAME;
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+    sync::Arc,
+};
 use tracing::instrument;
 
 macro_rules! unwrap {

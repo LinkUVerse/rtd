@@ -10,9 +10,9 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::time::Duration;
 
+use rtd_types::base_types::ObjectID;
 use serde_json::Value;
 use serde_json::json;
-use rtd_types::base_types::ObjectID;
 use tokio_stream::StreamExt;
 
 use crate::testing::SubscriptionTestCluster;

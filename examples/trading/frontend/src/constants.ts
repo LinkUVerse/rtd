@@ -1,11 +1,16 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-// You can choose a different env (e.g. using a .env file, or a predefined list)
-/** @ts-ignore */
-import demoContract from "../../api/demo-contract.json";
-/** @ts-ignore */
-import escrowContract from "../../api/escrow-contract.json";
+function requiredPackageId(name: string): string {
+  const value = import.meta.env[name]?.trim();
+  if (!value || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`${name} must contain a package ID deployed on this RTD network`);
+  }
+  return value;
+}
+
+const escrowContract = { packageId: requiredPackageId("VITE_RTD_ESCROW_PACKAGE_ID") };
+const demoContract = { packageId: requiredPackageId("VITE_RTD_DEMO_PACKAGE_ID") };
 
 export enum QueryKey {
   Locked = "locked",
@@ -24,5 +29,5 @@ export const CONSTANTS = {
     ...demoContract,
     demoBearType: `${demoContract.packageId}::demo_bear::DemoBear`,
   },
-  apiEndpoint: "http://localhost:3000/",
+  apiEndpoint: import.meta.env.VITE_RTD_API_URL || "http://localhost:3000/",
 };

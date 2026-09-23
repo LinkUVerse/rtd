@@ -1,5 +1,9 @@
 # DeepBook Margin examples
 
+These third-party examples require a DeepBook Margin deployment and an SDK
+release configured for the same RTD chain. Set `RTD_DEEPBOOK_GRPC_URL` to its
+RTD Testnet gRPC endpoint. No public fullnode or margin package IDs are assumed.
+
 Runnable TypeScript sources for the DeepBook Margin docs (the leveraged position
 workflow). The docs pull each chunk in with
 `<ImportContent mode="code" tag="..." />`, so published samples stay tied to code

@@ -15,7 +15,6 @@ use crate::{
 };
 use move_trace_format::format::MoveTraceBuilder;
 use move_vm_runtime::move_vm::MoveVM;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
     base_types::TxContext,
@@ -25,6 +24,7 @@ use rtd_types::{
     storage::{BackingPackageStore, StorageView},
     transaction::ProgrammableTransaction,
 };
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 // TODO we might replace this with a new one
 pub use crate::data_store::legacy::linkage_view::LinkageView;

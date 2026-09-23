@@ -20,12 +20,12 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Range;
 use std::sync::Arc;
 
-use move_vm_runtime::runtime::MoveRuntime;
 use linku_common::debug_fatal;
+use move_vm_runtime::runtime::MoveRuntime;
 
 use rtd_types::TypeTag;
 use rtd_types::allowance::parse_allowance_object;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::effects::{AccumulatorOperation, AccumulatorValue};
 use rtd_types::error::{ExecutionError, RtdResult};
 use rtd_types::execution::DynamicallyLoadedObjectMetadata;

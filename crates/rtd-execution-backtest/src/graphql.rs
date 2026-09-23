@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{Context as _, Result, bail};
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use rtd_data_store::Node;
 use rtd_data_store::stores::DataStore;
 use rtd_data_store::{ObjectKey, ObjectStore as _, VersionQuery};
 use rtd_types::SYSTEM_PACKAGE_ADDRESSES;
 use rtd_types::base_types::ObjectID;
 use rtd_types::object::Object;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// Reads objects at a historical checkpoint over GraphQL.
 pub(crate) struct GqlClient {

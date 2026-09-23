@@ -29,13 +29,6 @@ use num_bigint::BigUint;
 use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use serde::Serialize;
-use serde_json::json;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope, PersonalMessage};
-use std::fmt::{Debug, Display, Formatter};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use rtd_keys::key_derive::generate_new_key;
 use rtd_keys::key_identity::KeyIdentity;
 use rtd_keys::keypair_file::{
@@ -48,7 +41,7 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::committee::EpochId;
 use rtd_types::crypto::{DefaultHash, PublicKey};
 use rtd_types::crypto::{
-    EncodeDecodeBase64, Signature, SignatureScheme, RtdKeyPair, ZkLoginPublicIdentifier,
+    EncodeDecodeBase64, RtdKeyPair, Signature, SignatureScheme, ZkLoginPublicIdentifier,
     get_authority_key_pair,
 };
 use rtd_types::error::RtdResult;
@@ -58,6 +51,13 @@ use rtd_types::signature::{GenericSignature, VerifyParams};
 use rtd_types::signature_verification::VerifiedDigestCache;
 use rtd_types::transaction::{TransactionData, TransactionDataAPI};
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
+use serde::Serialize;
+use serde_json::json;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope, PersonalMessage};
+use std::fmt::{Debug, Display, Formatter};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tabled::builder::Builder;
 use tabled::settings::Rotate;
 use tabled::settings::{Modify, Width, object::Rows};
@@ -984,14 +984,16 @@ impl KeyToolCommand {
                 .unwrap()
                 .jwt;
 
-                // call prover-dev for zklogin inputs
+                // Use a prover that was deployed and verified for this RTD network.
+                let prover_url = std::env::var("RTD_ZKLOGIN_PROVER_URL")
+                    .map_err(|_| anyhow!("Set RTD_ZKLOGIN_PROVER_URL before signing"))?;
                 let reader = get_proof(
                     &parsed_token,
                     max_epoch,
                     &jwt_randomness,
                     &kp_bigint,
                     user_salt,
-                    "https://prover-dev.linkuverse.com/v1",
+                    &prover_url,
                 )
                 .await
                 .unwrap();

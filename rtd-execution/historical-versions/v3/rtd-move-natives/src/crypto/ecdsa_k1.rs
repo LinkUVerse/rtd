@@ -24,9 +24,9 @@ use move_vm_types::{
 };
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rtd_types::crypto::KeypairTraits;
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::crypto::KeypairTraits;
 
 pub const FAIL_TO_RECOVER_PUBKEY: u64 = 0;
 pub const INVALID_SIGNATURE: u64 = 1;

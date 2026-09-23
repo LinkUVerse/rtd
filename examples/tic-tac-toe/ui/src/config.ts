@@ -13,31 +13,35 @@ const { networkConfig, useNetworkVariable } = createNetworkConfig({
     localnet: {
         url: getFullnodeUrl("localnet"),
         variables: {
-            explorer: (id: string) => `https://explorer.polymedia.app/object/${id}/?network=local`,
+            explorer: explorerUrl(import.meta.env.VITE_RTD_LOCALNET_EXPLORER_URL),
             ...LocalnetPackage,
         },
     },
-    devnet: {
-        url: getFullnodeUrl("devnet"),
+    ...(import.meta.env.VITE_RTD_DEVNET_RPC_URL ? { devnet: {
+        url: import.meta.env.VITE_RTD_DEVNET_RPC_URL,
         variables: {
-            explorer: (id: string) => `https://suiscan.xyz/devnet/object/${id}/`,
+            explorer: explorerUrl(import.meta.env.VITE_RTD_DEVNET_EXPLORER_URL),
             ...DevnetPackage,
         },
-    },
-    testnet: {
-        url: getFullnodeUrl("testnet"),
+    } } : {}),
+    ...(import.meta.env.VITE_RTD_TESTNET_RPC_URL ? { testnet: {
+        url: import.meta.env.VITE_RTD_TESTNET_RPC_URL,
         variables: {
-            explorer: (id: string) => `https://suiscan.xyz/testnet/object/${id}/`,
+            explorer: explorerUrl(import.meta.env.VITE_RTD_TESTNET_EXPLORER_URL),
             ...TestnetPackage,
         },
-    },
-    mainnet: {
-        url: getFullnodeUrl("mainnet"),
+    } } : {}),
+    ...(import.meta.env.VITE_RTD_MAINNET_RPC_URL ? { mainnet: {
+        url: import.meta.env.VITE_RTD_MAINNET_RPC_URL,
         variables: {
-            explorer: (id: string) => `https://suiscan.xyz/mainnet/object/${id}/`,
+            explorer: explorerUrl(import.meta.env.VITE_RTD_MAINNET_EXPLORER_URL),
             ...MainnetPackage,
         },
-    },
+    } } : {}),
 });
+
+function explorerUrl(base: string | undefined): (id: string) => string | undefined {
+    return (id) => base?.trim() ? `${base.replace(/\/$/, "")}/object/${encodeURIComponent(id)}` : undefined;
+}
 
 export { networkConfig, useNetworkVariable };

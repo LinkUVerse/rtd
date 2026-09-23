@@ -1838,12 +1838,12 @@ mod tests {
     use async_trait::async_trait;
     use move_binary_format::file_format::Ability;
     use move_core_types::ident_str;
+    use rtd_types::base_types::random_object_ref;
+    use rtd_types::transaction::ObjectArg;
     use std::path::PathBuf;
     use std::str::FromStr;
     use std::sync::Arc;
     use std::sync::RwLock;
-    use rtd_types::base_types::random_object_ref;
-    use rtd_types::transaction::ObjectArg;
 
     use move_compiler::compiled_unit::NamedCompiledModule;
     use rtd_move_build::BuildConfig;

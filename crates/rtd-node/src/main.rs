@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::{ArgGroup, Parser};
+use rtd_rpc_api::ServerVersion;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use rtd_rpc_api::ServerVersion;
 use tokio::sync::broadcast;
 use tokio::time::sleep;
 use tracing::{error, info};

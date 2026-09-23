@@ -4,8 +4,6 @@
 use arc_swap::Guard;
 use async_trait::async_trait;
 use move_core_types::language_storage::TypeTag;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 use rtd_core::accumulators::balances::{get_all_balances_for_owner, get_balance};
 use rtd_core::authority::AuthorityState;
 use rtd_core::authority::authority_per_epoch_store::AuthorityPerEpochStore;
@@ -22,7 +20,7 @@ use rtd_storage::key_value_store::{
 use rtd_types::accumulator_root::AccumulatorKey;
 use rtd_types::balance::Balance;
 use rtd_types::base_types::{
-    MoveObjectType, ObjectID, ObjectInfo, ObjectRef, SequenceNumber, RtdAddress,
+    MoveObjectType, ObjectID, ObjectInfo, ObjectRef, RtdAddress, SequenceNumber,
 };
 use rtd_types::bridge::Bridge;
 use rtd_types::coin_reservation;
@@ -38,10 +36,12 @@ use rtd_types::messages_checkpoint::{
     VerifiedCheckpoint,
 };
 use rtd_types::object::{MoveObject, Object, ObjectRead, Owner, PastObjectRead};
-use rtd_types::storage::{BackingPackageStore, ObjectStore, WriteKind};
 use rtd_types::rtd_serde::BigInt;
 use rtd_types::rtd_system_state::RtdSystemState;
+use rtd_types::storage::{BackingPackageStore, ObjectStore, WriteKind};
 use rtd_types::transaction::{Transaction, TransactionData, TransactionKind};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::task::JoinError;
 

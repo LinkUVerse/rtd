@@ -9,7 +9,6 @@ use crate::struct_tag;
 use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
 use move_core_types::language_storage::StructTag;
-use std::sync::Arc;
 use rtd_bridge::events::{
     MoveTokenDepositedEvent, MoveTokenDepositedEventV2, MoveTokenTransferApproved,
     MoveTokenTransferClaimed,
@@ -23,6 +22,7 @@ use rtd_indexer_alt_framework::types::BRIDGE_ADDRESS;
 use rtd_indexer_alt_framework::types::effects::TransactionEffectsAPI;
 use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
 use rtd_indexer_alt_framework::types::transaction::TransactionDataAPI;
+use std::sync::Arc;
 use tracing::info;
 
 pub struct TokenTransferHandler {

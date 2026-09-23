@@ -9,16 +9,16 @@ use move_core_types::{
     resolver::ModuleResolver,
 };
 use move_vm_types::data_store::LinkageResolver;
+use rtd_types::{
+    base_types::ObjectID,
+    error::{ExecutionError, RtdError, RtdResult},
+    move_package::{MovePackage, TypeOrigin, UpgradeInfo},
+};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     rc::Rc,
     str::FromStr,
-};
-use rtd_types::{
-    base_types::ObjectID,
-    error::{ExecutionError, RtdError, RtdResult},
-    move_package::{MovePackage, TypeOrigin, UpgradeInfo},
 };
 
 /// Exposes module and linkage resolution to the Move runtime.  The first by delegating to

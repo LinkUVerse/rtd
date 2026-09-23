@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use linku_common::ZipDebugEqIteratorExt;
 use miette::Severity;
 use move_binary_format::{
     CompiledModule, binary_config::BinaryConfig, file_format::SignatureToken,
@@ -28,8 +29,6 @@ use move_core_types::{
     },
 };
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
-use linku_common::ZipDebugEqIteratorExt;
-use std::{collections::BTreeMap, path::Path};
 use rtd_json::{is_receiving_argument, primitive_type};
 use rtd_rpc_api::Client;
 use rtd_sdk::wallet_context::WalletContext;
@@ -43,6 +42,7 @@ use rtd_types::{
     resolve_address,
     transaction::{self as Tx, ObjectArg},
 };
+use std::{collections::BTreeMap, path::Path};
 
 use super::{
     ast::{ModuleAccess as PTBModuleAccess, ParsedPTBCommand, Program},

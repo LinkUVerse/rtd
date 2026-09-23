@@ -19,9 +19,9 @@ use move_vm_runtime::{
     natives::functions::NativeResult,
 };
 use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
+use rtd_types::{base_types::ObjectID, error::VMMemoryLimitExceededSubStatusCode};
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::{base_types::ObjectID, error::VMMemoryLimitExceededSubStatusCode};
 
 pub const NOT_SUPPORTED: u64 = 0;
 

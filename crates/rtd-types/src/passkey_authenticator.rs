@@ -1,13 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use crate::crypto::PublicKey;
-use crate::crypto::Secp256r1RtdSignature;
 use crate::crypto::RtdSignatureInner;
+use crate::crypto::Secp256r1RtdSignature;
 use crate::error::RtdErrorKind;
 use crate::signature_verification::VerifiedDigestCache;
 use crate::{
     base_types::{EpochId, RtdAddress},
-    crypto::{DefaultHash, Signature, SignatureScheme, RtdSignature},
+    crypto::{DefaultHash, RtdSignature, Signature, SignatureScheme},
     digests::ZKLoginInputsDigest,
     error::{RtdError, RtdResult},
     signature::{AuthenticatorTrait, VerifyParams},

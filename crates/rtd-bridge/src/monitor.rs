@@ -18,11 +18,11 @@ use crate::rtd_client::{RtdClient, RtdClientInner};
 use crate::types::{BridgeCommittee, IsBridgePaused};
 use arc_swap::ArcSwap;
 use futures::StreamExt;
-use std::collections::HashMap;
-use std::sync::Arc;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::proto::rtd::rpc::v2::{Checkpoint, SubscribeCheckpointsRequest};
 use rtd_types::TypeTag;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::{error, info, warn};
 

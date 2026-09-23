@@ -20,12 +20,13 @@ docker exec clickhouse-dev clickhouse-client --query "GRANT CREATE, INSERT, SELE
 ### 3. Run the indexer
 
 ```bash
-cargo run -- --remote-store-url https://checkpoints.testnet.rtd.io --last-checkpoint=10
+cargo run -- --remote-store-url "$RTD_CHECKPOINT_STORE_URL" --last-checkpoint=10
 ```
 
-That's it! The indexer will:
+Set `RTD_CHECKPOINT_STORE_URL` to a checkpoint store for the RTD network you
+intend to index. Once configured, the indexer will:
 - Create the necessary tables automatically
-- Fetch checkpoints from the Rtd testnet
+- Fetch checkpoints from that RTD network
 - Write transaction data to ClickHouse
 
 ## Verify Data

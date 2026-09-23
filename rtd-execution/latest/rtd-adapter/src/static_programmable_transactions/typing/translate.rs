@@ -16,7 +16,6 @@ use crate::{
 use indexmap::{IndexMap, IndexSet};
 use move_binary_format::file_format::{Ability, AbilitySet};
 use move_core_types::account_address::AccountAddress;
-use std::rc::Rc;
 use rtd_types::{
     balance::RESOLVED_BALANCE_STRUCT,
     base_types::{ObjectRef, TxContextKind},
@@ -25,6 +24,7 @@ use rtd_types::{
     execution_status::{CommandArgumentError, ExecutionErrorKind},
     funds_accumulator::RESOLVED_WITHDRAWAL_STRUCT,
 };
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SplatLocation {
@@ -1141,8 +1141,8 @@ mod scope_references {
         sp,
         static_programmable_transactions::typing::ast::{self as T, Type},
     };
-    use std::collections::BTreeSet;
     use rtd_protocol_config::ProtocolConfig;
+    use std::collections::BTreeSet;
 
     struct Context<'pc> {
         protocol_config: &'pc ProtocolConfig,

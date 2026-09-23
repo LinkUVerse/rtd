@@ -8,7 +8,6 @@ use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
-use serde_json::Value;
 use rtd_indexer_alt_schema::epochs::StoredFeatureFlag;
 use rtd_indexer_alt_schema::epochs::StoredProtocolConfig;
 use rtd_indexer_alt_schema::schema::kv_epoch_starts;
@@ -20,6 +19,7 @@ use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
 use rtd_protocol_config::ProtocolVersion;
 use rtd_types::rtd_serde::BigInt;
+use serde_json::Value;
 
 use crate::api::rpc_module::RpcModule;
 use crate::context::Context;

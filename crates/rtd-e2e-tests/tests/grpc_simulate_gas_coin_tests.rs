@@ -1004,13 +1004,13 @@ async fn test_resolve_handles_coin_reservation_in_ptb_input() {
 
 #[sim_test]
 async fn test_estimated_budget_excludes_mock_gas_coin_storage_for_address_balance() {
-    use shared_crypto::intent::Intent;
     use rtd_keys::keystore::AccountKeystore;
     use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
     use rtd_rpc::proto::rtd::rpc::v2::{
         Argument, Command, GasPayment, Input, ProgrammableTransaction, SimulateTransactionRequest,
         Transaction, TransactionKind, TransferObjects,
     };
+    use shared_crypto::intent::Intent;
 
     let test_env = TestEnvBuilder::new().build().await;
 

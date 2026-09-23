@@ -722,7 +722,6 @@ mod tests {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use rtd_config::genesis::Genesis;
     use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
     use rtd_types::epoch_data::EpochData;
@@ -732,6 +731,7 @@ mod test {
     use rtd_types::metrics::ExecutionMetrics;
     use rtd_types::rtd_system_state::RtdSystemStateTrait;
     use rtd_types::transaction::CheckedInputObjects;
+    use std::sync::Arc;
 
     #[test]
     fn roundtrip() {

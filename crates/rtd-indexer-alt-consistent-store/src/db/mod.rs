@@ -16,10 +16,10 @@ use anyhow::Context;
 use bincode::Encode;
 use rocksdb::AsColumnFamilyRef;
 use rocksdb::properties;
+use rtd_indexer_alt_framework::store::CommitterWatermark;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use rtd_indexer_alt_framework::store::CommitterWatermark;
 
 use crate::db::error::Error;
 

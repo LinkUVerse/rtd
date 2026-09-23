@@ -15,8 +15,8 @@ use crate::{
     parser::ast::{
         ConstantName, DatatypeName, DocComment, Field, FunctionName, TargetKind, VariantName,
     },
-    shared::{unique_map::UniqueMap, *},
     rtd_mode::info::{RtdInfo, RtdModInfo},
+    shared::{unique_map::UniqueMap, *},
     typing::ast::{self as T},
 };
 use move_core_types::runtime_value;

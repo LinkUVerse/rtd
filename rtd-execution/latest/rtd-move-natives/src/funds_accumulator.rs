@@ -18,13 +18,13 @@ use move_vm_runtime::{
     native_charge_gas_early_exit,
     natives::functions::{NativeContext, NativeResult},
 };
-use smallvec::smallvec;
 use rtd_types::{
     accumulator_root::check_accumulator_type_bounds,
     base_types::{ObjectID, RtdAddress},
     funds_accumulator::E_OBJECT_FUNDS_INSUFFICIENT,
     storage::ObjectFundsSufficiency,
 };
+use smallvec::smallvec;
 
 use crate::{
     NativesCostTable,

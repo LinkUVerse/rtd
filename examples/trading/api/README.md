@@ -5,8 +5,11 @@ to efficiently serve on-chain data for our app.
 
 The demo indexer uses polling to watch for new events.
 
-Everything is pre-configured on Testnet, but can be tweaked to work on any other network.
-You can change the network by creating a `.env` file with the variable `NETWORK=<mainnet|testnet|devnet|localnet>`
+The example defaults to localnet. For a remote RTD network, set
+`NETWORK=<mainnet|testnet|devnet>` and `RTD_RPC_URL` to a JSON-RPC endpoint
+serving that network. Publish the contracts there first; the generated
+`escrow-contract.json` and `demo-contract.json` are local outputs and no
+upstream package IDs are valid on RTD.
 
 ## Installation
 
@@ -102,11 +105,10 @@ Available query parameters:
 | recipient | string            |
 | sender    | string            |
 
-> Example Query: Get only active escrows for address (5 per page)
-> `0xfe09cf0b3d77678b99250572624bf74fe3b12af915c5db95f0ed5d755612eb68`
+> Example Query: Get only active escrows for an address created on your RTD network (5 per page).
 
 ```
-curl --location 'http://localhost:3000/escrows?limit=5&recipient=0xfe09cf0b3d77678b99250572624bf74fe3b12af915c5db95f0ed5d755612eb68&cancelled=false&swapped=false'
+curl --get 'http://localhost:3000/escrows' --data-urlencode 'limit=5' --data-urlencode "recipient=$RTD_RECIPIENT_ADDRESS" --data-urlencode 'cancelled=false' --data-urlencode 'swapped=false'
 ```
 
 ## Event Indexer

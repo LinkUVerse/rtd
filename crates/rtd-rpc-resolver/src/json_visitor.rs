@@ -14,13 +14,13 @@ use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::annotated_value::MoveValue;
 use move_core_types::annotated_visitor as AV;
 use move_core_types::language_storage::TypeTag;
-use serde_json::Value;
 use rtd_package_resolver::PackageStore;
 use rtd_package_resolver::Resolver;
 use rtd_package_resolver::error::Error as ResolverError;
 use rtd_types::event::Event;
 use rtd_types::object::option_visitor as OV;
 use rtd_types::object::rpc_visitor as RV;
+use serde_json::Value;
 
 /// Error type for JSON visitor operations
 #[derive(thiserror::Error, Debug)]

@@ -3,8 +3,6 @@
 
 #[cfg(msim)]
 mod sim_only_tests {
-    use std::path::PathBuf;
-    use std::time::Duration;
     use rtd_macros::sim_test;
     use rtd_node::RtdNode;
     use rtd_test_transaction_builder::publish_package;
@@ -12,6 +10,8 @@ mod sim_only_tests {
     use rtd_types::effects::TransactionEffectsAPI;
     use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
     use rtd_types::{base_types::ObjectID, digests::TransactionDigest};
+    use std::path::PathBuf;
+    use std::time::Duration;
     use test_cluster::{TestCluster, TestClusterBuilder};
     use tokio::time::timeout;
 

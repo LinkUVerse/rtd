@@ -10,8 +10,6 @@ use anyhow::bail;
 use move_core_types::ident_str;
 use move_core_types::language_storage::StructTag;
 use move_core_types::u256::U256;
-use serde::Deserialize;
-use serde_json::json;
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
 use rtd_types::TypeTag;
 use rtd_types::base_types::ObjectDigest;
@@ -32,6 +30,8 @@ use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
 use rtd_types::transaction::TransactionKind;
+use serde::Deserialize;
+use serde_json::json;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::find;

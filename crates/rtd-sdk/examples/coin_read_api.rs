@@ -11,7 +11,7 @@ use utils::setup_for_read;
 // check if it has coins and request coins from the faucet if there aren't any.
 // If there is no wallet, it will create a wallet and two addresses, set one address as active,
 // and add 1 RTD to the active address.
-// By default, the example will use the Rtd testnet network (fullnode.testnet.rtd.io:443).
+// Set RTD_TESTNET_RPC_URL to a verified RTD testnet fullnode before running.
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {

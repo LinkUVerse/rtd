@@ -2,6 +2,11 @@
 
 This is an extension of the [Custom Indexer guide](https://docs.rtd.io/guides/developer/advanced/custom-indexer) to show how to index Walrus blobs and their associated `Metadata` dynamic fields.
 
+Walrus is a separate service. This example requires a Walrus deployment on
+RTD, its `Metadata` type, and a checkpoint store for the same RTD network.
+Set `RTD_WALRUS_METADATA_TYPE` to the deployed dynamic-field StructTag and
+`RTD_CHECKPOINT_STORE_URL` to the actual checkpoint store before running.
+
 ## Quickstart
 
 Given a service that allows users to upload blog posts to Walrus and creates an associated `Metadata` dynamic field with `view_count`, `title`, and `publisher` (Rtd address that created the Walrus blob), you can write a corresponding indexer that commits these attributes to a store of your choice to emulate a blog post platform. Then, users can:
@@ -16,7 +21,8 @@ To run the indexer:
 
 ```sh
 RUST_LOG=info cargo run --release -- \
-    --remote-store-url https://checkpoints.mainnet.rtd.io
+    --remote-store-url "$RTD_CHECKPOINT_STORE_URL" \
+    --metadata-dynamic-field-type "$RTD_WALRUS_METADATA_TYPE"
 ```
 
 Other useful commands:
@@ -48,7 +54,8 @@ The Blog Post pipeline is a sequential pipeline that writes the latest state of 
 
 ## Chain-agnostic Indexer
 
-For the purpose of this guide, the StructTag of the `Metadata` dynamic field is hardcoded in `main.rs`. Ideally, in a production deployment, this should be a value that is passed to the service.
+The StructTag of the `Metadata` dynamic field is passed to the service through
+`--metadata-dynamic-field-type` or `RTD_WALRUS_METADATA_TYPE`.
 
 ## Defaults
 
@@ -81,30 +88,15 @@ impl Default for IngestionConfig {
 This means that by default, the blog post pipeline will have a write concurrency of 5, and the adaptive ingestion controller throttles fetch concurrency as the pipeline's subscriber channel fills.
 
 ## Follow-Along
-The following uploads the `blog_post.rs` file to Walrus, and runs the indexer locally with `--last-checkpoint` to verify that the indexer is working correctly.
+After deploying Walrus on your RTD network, upload a blob and use the IDs
+returned by that deployment. Then run the indexer through a checkpoint that
+contains the metadata update:
 
-```
+```sh
 walrus store src/handlers/blog_post.rs
-
-# Blob ID: IPYp_WbBwnNRTqeiYtvA6VQ0XUkS6m3ActV-0PIQfjQ
-# Rtd object ID: 0xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3
-
-# Checkpoint 178907908
-walrus set-blob-attribute 0xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3 --attr view_count 5 --attr title "Blog post module" --attr publisher "0xfe9c7a465f63388e5b95c8fd2db857fad4356fc873f96900f4d8b6e7fc1e760e"
-
-walrus get-blob-attribute 0xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3
-# Attribute
-# view_count: 5
-# title: Blog post module
-# blob_id: IPYp_WbBwnNRTqeiYtvA6VQ0XUkS6m3ActV-0PIQfjQ
-# publisher: 0xfe9c7a465f63388e5b95c8fd2db857fad4356fc873f96900f4d8b6e7fc1e760e
+walrus set-blob-attribute "$RTD_BLOB_OBJECT_ID" --attr view_count 5 --attr title "Blog post module" --attr publisher "$RTD_PUBLISHER_ADDRESS"
+walrus get-blob-attribute "$RTD_BLOB_OBJECT_ID"
 ```
 
-Attributes then modified again at 178908405 and 178908459
-
-You should ultimately see something like:
-```
-                          dynamic_field_id                          | df_version |                             publisher                              |                            blob_obj_id                             | view_count |      title
---------------------------------------------------------------------+------------+--------------------------------------------------------------------+--------------------------------------------------------------------+------------+------------------
- \x40b5ae12e780ae815d7b0956281291253c02f227657fe2b7a8ccf003a5f597f7 |  608253371 | \xfe9c7a465f63388e5b95c8fd2db857fad4356fc873f96900f4d8b6e7fc1e760e | \xcfb3d474c9a510fde93262d4b7de66cad62a2005a54f31a63e96f3033f465ed3 |         10 | Blog Post Module
- ```
+The row written by the indexer must reference the actual blob object and
+publisher from that RTD network. No upstream checkpoint or object ID applies.

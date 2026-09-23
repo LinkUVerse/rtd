@@ -7,10 +7,6 @@ use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Encoding;
 use jsonrpsee::core::Serialize;
 use reqwest::Client;
-use serde::Deserialize;
-use serde::de::DeserializeOwned;
-use serde_json::Value;
-use serde_json::json;
 use rtd_framework::BuiltInFramework;
 use rtd_indexer_alt::BootstrapGenesis;
 use rtd_indexer_alt::config::IndexerConfig;
@@ -27,6 +23,10 @@ use rtd_types::rtd_system_state::rtd_system_state_inner_v1::RtdSystemStateInnerV
 use rtd_types::rtd_system_state::rtd_system_state_inner_v2::RtdSystemStateInnerV2;
 use rtd_types::test_checkpoint_data_builder::AdvanceEpochConfig;
 use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use serde_json::json;
 
 use rtd_indexer_alt_e2e_tests::OffchainCluster;
 use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;

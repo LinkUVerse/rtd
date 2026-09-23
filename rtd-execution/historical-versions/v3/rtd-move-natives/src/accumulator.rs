@@ -11,9 +11,9 @@ use move_vm_runtime::{native_charge_gas_early_exit, native_functions::NativeCont
 use move_vm_types::{
     loaded_data::runtime_types::Type, natives::function::NativeResult, values::Value,
 };
+use rtd_types::base_types::ObjectID;
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::base_types::ObjectID;
 
 pub fn emit_deposit_event(
     context: &mut NativeContext,

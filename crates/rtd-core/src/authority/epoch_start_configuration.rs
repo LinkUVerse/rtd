@@ -2,27 +2,27 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use enum_dispatch::enum_dispatch;
+use rtd_config::NodeConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use rtd_config::NodeConfig;
 
-use std::fmt;
 use rtd_types::base_types::{ObjectID, SequenceNumber};
 use rtd_types::bridge::is_bridge_committee_initiated;
 use rtd_types::epoch_data::EpochData;
 use rtd_types::error::RtdResult;
 use rtd_types::messages_checkpoint::{CheckpointDigest, CheckpointTimestamp};
 use rtd_types::object::Owner;
-use rtd_types::storage::ObjectStore;
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::{
     EpochStartSystemState, EpochStartSystemStateTrait,
 };
+use rtd_types::storage::ObjectStore;
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID,
     RTD_AUTHENTICATOR_STATE_OBJECT_ID, RTD_BRIDGE_OBJECT_ID, RTD_COIN_REGISTRY_OBJECT_ID,
     RTD_DENY_LIST_OBJECT_ID, RTD_DISPLAY_REGISTRY_OBJECT_ID,
     RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID, RTD_RANDOMNESS_STATE_OBJECT_ID,
 };
+use std::fmt;
 
 /// Well-known shared system objects whose initial shared version is recorded in
 /// the epoch start configuration. To make a new system object's initial shared

@@ -3,13 +3,13 @@
 
 use std::collections::BTreeMap;
 
+use rtd_protocol_config::{ProtocolConfig, ProtocolConfigValue, ProtocolVersion};
+use rtd_types::rtd_serde::Readable;
+use rtd_types::rtd_serde::{AsProtocolVersion, BigInt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::DisplayFromStr;
 use serde_with::serde_as;
-use rtd_protocol_config::{ProtocolConfig, ProtocolConfigValue, ProtocolVersion};
-use rtd_types::rtd_serde::Readable;
-use rtd_types::rtd_serde::{AsProtocolVersion, BigInt};
 
 #[serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq)]

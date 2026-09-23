@@ -2,3 +2,7 @@
 name = "dep_pkg"
 edition = "2024"
 implicit-dependencies = false
+
+[environments]
+testnet = "01234567"
+mainnet = "89abcdef"

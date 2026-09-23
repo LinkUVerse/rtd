@@ -5,7 +5,6 @@ use crate::authority::StableSyncAuthoritySigner;
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::consensus_adapter::SubmitToConsensus;
 use async_trait::async_trait;
-use std::sync::Arc;
 use rtd_types::base_types::AuthorityName;
 use rtd_types::error::RtdResult;
 use rtd_types::message_envelope::Message;
@@ -14,6 +13,7 @@ use rtd_types::messages_checkpoint::{
     SignedCheckpointSummary, VerifiedCheckpoint,
 };
 use rtd_types::messages_consensus::ConsensusTransaction;
+use std::sync::Arc;
 use tracing::{debug, info, instrument, trace};
 
 use super::{CheckpointMetrics, CheckpointStore};

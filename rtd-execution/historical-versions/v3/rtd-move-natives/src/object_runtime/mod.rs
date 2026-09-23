@@ -27,17 +27,13 @@ use move_vm_types::{
     values::{GlobalValue, Value},
 };
 use object_store::{ActiveChildObject, ChildObjectStore};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
 use rtd_protocol_config::{LimitThresholdCrossed, ProtocolConfig, check_limit_by_meter};
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID,
     RTD_AUTHENTICATOR_STATE_OBJECT_ID, RTD_BRIDGE_OBJECT_ID, RTD_CLOCK_OBJECT_ID,
     RTD_COIN_REGISTRY_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID, RTD_DISPLAY_REGISTRY_OBJECT_ID,
     RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID, TypeTag,
-    base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress},
+    base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber},
     committee::EpochId,
     error::{ExecutionError, VMMemoryLimitExceededSubStatusCode},
     execution::DynamicallyLoadedObjectMetadata,
@@ -46,6 +42,10 @@ use rtd_types::{
     metrics::ExecutionMetrics,
     object::{MoveObject, Owner},
     storage::RuntimeObjectResolver,
+};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
 };
 use tracing::error;
 

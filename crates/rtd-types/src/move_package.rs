@@ -25,13 +25,13 @@ use move_core_types::{
     language_storage::StructTag,
 };
 use once_cell::sync::Lazy;
+use rtd_protocol_config::ProtocolConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::Bytes;
 use serde_with::serde_as;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
-use rtd_protocol_config::ProtocolConfig;
 
 // TODO: robust MovePackage tests
 // #[cfg(test)]

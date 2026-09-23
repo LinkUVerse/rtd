@@ -3,10 +3,10 @@
 
 use std::num::NonZeroUsize;
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_framework as framework;
 use rtd_indexer_alt_framework::pipeline::CommitterConfig;
+use serde::Deserialize;
+use serde::Serialize;
 use tracing::warn;
 
 use crate::DbConfig;

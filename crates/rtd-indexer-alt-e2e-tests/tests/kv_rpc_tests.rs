@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use move_core_types::ident_str;
-use simulacrum::Simulacrum;
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
 use rtd_kv_rpc::KvRpcConfig;
@@ -60,6 +59,7 @@ use rtd_types::object::Owner;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
+use simulacrum::Simulacrum;
 use tonic::transport::Channel;
 
 /// 5 RTD gas budget

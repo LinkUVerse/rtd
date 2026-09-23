@@ -9,9 +9,6 @@ use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use roaring::RoaringBitmap;
-use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
-use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
-use std::str::FromStr;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{
     AggregateAuthoritySignature, AuthorityQuorumSignInfo, AuthorityStrongQuorumSignInfo,
@@ -49,7 +46,7 @@ use rtd_types::{
     },
     crypto::{
         AccountKeyPair, AuthorityKeyPair, AuthorityPublicKeyBytes, AuthoritySignature,
-        KeypairTraits, Signature, RtdKeyPair, get_key_pair, get_key_pair_from_rng,
+        KeypairTraits, RtdKeyPair, Signature, get_key_pair, get_key_pair_from_rng,
     },
     multisig::{MultiSig, MultiSigPublicKey},
     object::{Data, Owner},
@@ -64,6 +61,9 @@ use rtd_types::{
     effects::{IDOperation, ObjectIn, ObjectOut, TransactionEffects, UnchangedConsensusKind},
     utils::DEFAULT_ADDRESS_SEED,
 };
+use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
+use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
+use std::str::FromStr;
 
 fn get_registry() -> Result<Registry> {
     let config = TracerConfig::default()

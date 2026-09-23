@@ -9,7 +9,7 @@ use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::FundSource;
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID,
-    base_types::{SequenceNumber, RtdAddress},
+    base_types::{RtdAddress, SequenceNumber},
     effects::{TransactionEffects, TransactionEffectsAPI, UnchangedConsensusKind},
     gas_coin::MIST_PER_RTD,
     object::Owner,

@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::StructTag;
-use std::str::FromStr;
-use std::time::Duration;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_light_client::authenticated_events::AuthenticatedEvent;
 use rtd_light_client::authenticated_events::mmr::apply_stream_updates;
@@ -36,6 +34,8 @@ use rtd_types::object::Object;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::TransactionData;
 use rtd_types::{MoveTypeTagTraitGeneric, RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_FRAMEWORK_ADDRESS};
+use std::str::FromStr;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 /// Test cluster config that enables ledger history indexing, which is what

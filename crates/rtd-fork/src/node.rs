@@ -10,13 +10,6 @@ use std::str::FromStr;
 
 use rtd_types::supported_protocol_versions::Chain;
 
-/// GraphQL endpoint for Rtd mainnet.
-pub(crate) const MAINNET_GQL_URL: &str = "https://graphql.mainnet.rtd.io/graphql";
-/// GraphQL endpoint for Rtd testnet.
-pub(crate) const TESTNET_GQL_URL: &str = "https://graphql.testnet.rtd.io/graphql";
-/// GraphQL endpoint for Rtd devnet.
-pub(crate) const DEVNET_GQL_URL: &str = "https://graphql.devnet.rtd.io/graphql";
-
 /// Represents a Rtd network node configuration.
 ///
 /// Used to specify which network the data store should connect to.
@@ -53,13 +46,14 @@ impl Node {
         }
     }
 
-    /// Returns the GraphQL endpoint URL for this node.
-    pub(crate) fn gql_url(&self) -> &str {
+    /// Returns the GraphQL endpoint URL, or an error for an undeployed public network.
+    pub(crate) fn gql_url(&self) -> Result<&str, String> {
         match self {
-            Node::Mainnet => MAINNET_GQL_URL,
-            Node::Testnet => TESTNET_GQL_URL,
-            Node::Devnet => DEVNET_GQL_URL,
-            Node::Custom(url) => url.as_str(),
+            Node::Mainnet | Node::Testnet | Node::Devnet => Err(format!(
+                "No public RTD {} GraphQL endpoint is configured; pass a custom URL",
+                self.network_name()
+            )),
+            Node::Custom(url) => Ok(url.as_str()),
         }
     }
 }
@@ -69,10 +63,31 @@ impl FromStr for Node {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "mainnet" => Ok(Node::Mainnet),
-            "testnet" => Ok(Node::Testnet),
-            "devnet" => Ok(Node::Devnet),
+            "mainnet" | "testnet" | "devnet" => Err(format!(
+                "No public RTD {s} endpoint is configured; pass a custom GraphQL URL"
+            )),
             _ => Ok(Node::Custom(s.to_string())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn undeployed_networks_require_an_explicit_url() {
+        for network in ["mainnet", "testnet", "devnet"] {
+            assert!(Node::from_str(network).is_err());
+        }
+        for node in [Node::Mainnet, Node::Testnet, Node::Devnet] {
+            assert!(node.gql_url().is_err());
+        }
+        assert_eq!(
+            Node::Custom("http://localhost:9000/graphql".into())
+                .gql_url()
+                .unwrap(),
+            "http://localhost:9000/graphql"
+        );
     }
 }

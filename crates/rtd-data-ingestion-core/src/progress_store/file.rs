@@ -4,9 +4,9 @@
 use crate::progress_store::ProgressStore;
 use anyhow::Result;
 use async_trait::async_trait;
+use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use serde_json::{Number, Value};
 use std::path::PathBuf;
-use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 
 pub struct FileProgressStore {
     path: PathBuf,

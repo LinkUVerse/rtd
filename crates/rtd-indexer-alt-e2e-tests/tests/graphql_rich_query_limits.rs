@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use reqwest::Client;
-use serde_json::json;
 use rtd_indexer_alt_graphql::config::Limits;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Argument;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
+use serde_json::json;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 

@@ -12,12 +12,12 @@ use crate::base_types::RtdAddress;
 use crate::error::{UserInputError, UserInputResult};
 use crate::id::UID;
 use crate::object::Object;
+use linku_common::debug_fatal;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::ident_str;
 use move_core_types::identifier::IdentStr;
 use move_core_types::language_storage::{StructTag, TypeTag};
 use move_core_types::u256::U256;
-use linku_common::debug_fatal;
 use serde::{Deserialize, Serialize};
 
 pub const ALLOWANCE_MODULE_NAME: &IdentStr = ident_str!("allowance");

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prometheus::Registry;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Weak};
 use rtd_config::NodeConfig;
 use rtd_node::{RtdNode, RtdNodeHandle};
 use rtd_types::base_types::ConciseableName;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tracing::{info, trace};
 

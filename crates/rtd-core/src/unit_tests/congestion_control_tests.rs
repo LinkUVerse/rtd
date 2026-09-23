@@ -16,7 +16,6 @@ use crate::{
     move_call,
 };
 use move_core_types::ident_str;
-use std::sync::Arc;
 use rtd_macros::{register_fail_point_arg, sim_test};
 use rtd_protocol_config::{
     Chain, ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
@@ -30,12 +29,13 @@ use rtd_types::transaction::PlainTransactionWithClaims;
 use rtd_types::transaction::VerifiedTransaction;
 use rtd_types::transaction::{ObjectArg, SharedObjectMutability};
 use rtd_types::{
-    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_key_pair},
     execution_status::{CongestedObjects, ExecutionErrorKind},
     object::Object,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
 };
+use std::sync::Arc;
 
 pub const TEST_ONLY_GAS_PRICE: u64 = 1000;
 pub const TEST_ONLY_GAS_UNIT: u64 = 10_000;

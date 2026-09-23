@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
-use move_core_types::{account_address::AccountAddress, ident_str, identifier::IdentStr};
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::{account_address::AccountAddress, ident_str, identifier::IdentStr};
 use serde::{Deserialize, Serialize};
 
 use crate::base_types::SequenceNumber;

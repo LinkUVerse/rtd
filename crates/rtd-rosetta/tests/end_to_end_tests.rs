@@ -4,22 +4,22 @@
 use anyhow::{Result, anyhow};
 use prost_types::FieldMask;
 use rosetta_client::start_rosetta_test_server;
-use serde_json::json;
-use shared_crypto::intent::Intent;
-use std::collections::HashMap;
-use std::num::NonZeroUsize;
-use std::str::FromStr;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_rosetta::CoinMetadataCache;
 use rtd_rosetta::operations::Operations;
 use rtd_rosetta::types::{
     AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, Currency, NetworkIdentifier,
-    SubAccount, SubAccountType, RtdEnv,
+    RtdEnv, SubAccount, SubAccountType,
 };
 use rtd_rosetta::types::{Currencies, OperationType, TransactionIdentifierResponse};
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::{GetCheckpointRequest, GetEpochRequest, GetTransactionRequest};
+use serde_json::json;
+use shared_crypto::intent::Intent;
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::str::FromStr;
 
 mod test_utils;
 use rtd_swarm_config::genesis_config::{DEFAULT_GAS_AMOUNT, DEFAULT_NUMBER_OF_OBJECT_PER_ACCOUNT};

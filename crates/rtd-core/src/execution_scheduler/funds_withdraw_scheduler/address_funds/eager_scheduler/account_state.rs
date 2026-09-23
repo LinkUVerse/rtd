@@ -183,10 +183,10 @@ impl ReservedFunds {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
     use rtd_types::{
         accumulator_root::AccumulatorObjId, base_types::ObjectID, digests::TransactionDigest,
     };
+    use std::collections::BTreeMap;
     use tokio::sync::oneshot;
 
     use crate::execution_scheduler::funds_withdraw_scheduler::{ScheduleStatus, TxFundsWithdraw};

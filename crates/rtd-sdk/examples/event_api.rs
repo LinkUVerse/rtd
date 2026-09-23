@@ -33,9 +33,11 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("{:?}", query_events);
     println!(" *** Query events ***\n ");
 
+    let ws_url = std::env::var("RTD_TESTNET_WS_URL")?;
+    let rpc_url = std::env::var("RTD_TESTNET_RPC_URL")?;
     let ws = RtdClientBuilder::default()
-        .ws_url("wss://rpc.testnet.rtd.io:443")
-        .build("https://fullnode.testnet.rtd.io:443")
+        .ws_url(&ws_url)
+        .build(&rpc_url)
         .await?;
     println!("WS version {:?}", ws.api_version());
 

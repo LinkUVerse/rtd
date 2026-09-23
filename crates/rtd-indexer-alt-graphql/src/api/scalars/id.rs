@@ -7,12 +7,12 @@ use async_graphql::ScalarType;
 use async_graphql::Value;
 use fastcrypto::encoding::Base64;
 use fastcrypto::encoding::Encoding;
-use serde::Deserialize;
-use serde::Serialize;
-use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::RtdAddress as NativeRtdAddress;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::digests::ObjectDigest;
 use rtd_types::digests::TransactionDigest;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Serialize, Deserialize)]
 pub(crate) enum Id {

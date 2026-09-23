@@ -10,8 +10,6 @@ use crate::workloads::workload::{ExpectedFailureType, STORAGE_COST_PER_COIN, Wor
 use crate::workloads::{Gas, GasCoinConfig, WorkloadBuilderInfo, WorkloadParams};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::Arc;
 use rtd_core::test_utils::make_pay_rtd_transaction;
 use rtd_types::base_types::{ObjectID, SequenceNumber};
 use rtd_types::digests::ObjectDigest;
@@ -22,6 +20,8 @@ use rtd_types::{
     crypto::get_key_pair,
     transaction::Transaction,
 };
+use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{debug, error};
 
 /// Value of each address's "primary coin" in mist. The first transaction gives

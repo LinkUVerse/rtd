@@ -1,5 +1,11 @@
 # DeepBook Predict examples
 
+These examples are inactive until DeepBook Predict and its SDK deployment
+record are available on RTD. Set `RTD_PREDICT_NETWORK`,
+`RTD_PREDICT_GRPC_URL`, `RTD_PREDICT_DEPLOYMENT`, and `RTD_CHAIN_ID` from that
+deployment. The example checks the SDK deployment name and chain ID before
+using its package and object IDs.
+
 TypeScript sources for the DeepBook Predict docs. The docs pull these files in
 with `<ImportContent mode="code" tag="..." />`, so the published samples stay
 tied to code that type-checks.

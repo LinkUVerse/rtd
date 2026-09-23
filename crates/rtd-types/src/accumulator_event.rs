@@ -1,9 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use linku_common::{fatal, in_test_configuration};
 use move_core_types::ident_str;
 use move_core_types::identifier::IdentStr;
-use linku_common::{fatal, in_test_configuration};
 
 use crate::TypeTag;
 use crate::accumulator_root::AccumulatorObjId;

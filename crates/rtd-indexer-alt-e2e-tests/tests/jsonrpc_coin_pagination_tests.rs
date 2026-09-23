@@ -1,8 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::Deserialize;
-use serde_json::json;
 use rtd_json_rpc_types::Coin;
 use rtd_json_rpc_types::Page;
 use rtd_types::base_types::ObjectRef;
@@ -15,6 +13,8 @@ use rtd_types::transaction::GasData;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
 use rtd_types::transaction::TransactionKind;
+use serde::Deserialize;
+use serde_json::json;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::find;

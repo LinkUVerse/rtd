@@ -4,8 +4,6 @@
 #[cfg(msim)]
 mod test {
     use linku_network::anemo_connection_monitor::ConnectionStatus;
-    use std::collections::HashSet;
-    use std::time::Duration;
     use rtd_macros::sim_test;
     use rtd_node::RtdNodeHandle;
     use rtd_simulator::anemo;
@@ -13,6 +11,8 @@ mod test {
     use rtd_types::crypto::KeypairTraits;
     use rtd_types::effects::TransactionEffectsAPI;
     use rtd_types::object::Owner;
+    use std::collections::HashSet;
+    use std::time::Duration;
     use test_cluster::{TestCluster, TestClusterBuilder};
     use tokio::time::sleep;
     use tracing::info;

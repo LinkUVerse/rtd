@@ -10,10 +10,9 @@ use jsonrpsee::{
     PendingSubscriptionSink, RpcModule,
     core::{RpcResult, SubscriptionResult},
 };
+use linku_metrics::spawn_monitored_task;
 use move_bytecode_utils::layout::TypeLayoutBuilder;
 use move_core_types::language_storage::TypeTag;
-use linku_metrics::spawn_monitored_task;
-use serde::Serialize;
 use rtd_core::authority::AuthorityState;
 use rtd_json::RtdJsonValue;
 use rtd_json_rpc_api::{
@@ -35,6 +34,7 @@ use rtd_types::{
     error::RtdObjectResponseError,
     event::EventID,
 };
+use serde::Serialize;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::{instrument, warn};
 

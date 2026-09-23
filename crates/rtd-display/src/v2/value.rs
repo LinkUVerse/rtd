@@ -14,10 +14,6 @@ use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
 use move_core_types::u256::U256;
-use serde::Serialize;
-use serde::ser::SerializeSeq as _;
-use serde::ser::SerializeTuple as _;
-use serde::ser::SerializeTupleVariant;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::RESOLVED_UTF8_STR;
 use rtd_types::base_types::RtdAddress;
@@ -32,6 +28,10 @@ use rtd_types::id::ID;
 use rtd_types::id::UID;
 use rtd_types::object::rpc_visitor as RV;
 use rtd_types::object::rpc_visitor::Meter as _;
+use serde::Serialize;
+use serde::ser::SerializeSeq as _;
+use serde::ser::SerializeTuple as _;
+use serde::ser::SerializeTupleVariant;
 
 use crate::v2::error::FormatError;
 use crate::v2::parser::Base64Modifier;
@@ -917,8 +917,6 @@ pub(crate) mod tests {
     use move_core_types::annotated_value::MoveStructLayout;
     use move_core_types::annotated_value::MoveTypeLayout as L;
     use move_core_types::identifier::Identifier;
-    use serde_json::Value as Json;
-    use serde_json::json;
     use rtd_types::MOVE_STDLIB_ADDRESS;
     use rtd_types::base_types::STD_ASCII_MODULE_NAME;
     use rtd_types::base_types::STD_ASCII_STRUCT_NAME;
@@ -928,6 +926,8 @@ pub(crate) mod tests {
     use rtd_types::dynamic_field::derive_dynamic_field_id;
     use rtd_types::id::ID;
     use rtd_types::id::UID;
+    use serde_json::Value as Json;
+    use serde_json::json;
 
     use super::*;
 

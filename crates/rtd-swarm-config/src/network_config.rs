@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 use rtd_config::{Config, NodeConfig, genesis};
 use rtd_types::committee::CommitteeWithNetworkMetadata;
 use rtd_types::crypto::AccountKeyPair;
 use rtd_types::multiaddr::Multiaddr;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 /// This is a config that is used for testing or local use as it contains the config and keys for
 /// all validators

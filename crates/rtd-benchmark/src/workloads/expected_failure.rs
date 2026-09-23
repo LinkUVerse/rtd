@@ -14,14 +14,14 @@ use crate::workloads::{Gas, GasCoinConfig, Workload, WorkloadBuilderInfo, Worklo
 use async_trait::async_trait;
 use linku_common::ZipDebugEqIteratorExt;
 use rand::seq::IteratorRandom;
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::Arc;
 use rtd_core::test_utils::make_transfer_object_transaction;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{AccountKeyPair, Ed25519RtdSignature};
 use rtd_types::signature::GenericSignature;
 use rtd_types::{base_types::ObjectRef, crypto::get_key_pair, transaction::Transaction};
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
 use tracing::debug;
 
 #[derive(Debug, Clone)]

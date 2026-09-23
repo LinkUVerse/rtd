@@ -5,12 +5,12 @@ use crate::authenticated_events::ClientError;
 use crate::proof::ocs::OCSInclusionProof;
 use fastcrypto::hash::Blake2b256;
 use fastcrypto::merkle::{MerkleProof as FastcryptoMerkleProof, Node};
-use std::str::FromStr;
 use rtd_rpc::proto::rtd::rpc::v2alpha::{
     MerkleNode as ProtoMerkleNode, MerkleProof as ProtoMerkleProof,
     OcsInclusionProof as ProtoOcsInclusionProof, merkle_node,
 };
 use rtd_types::base_types::{ObjectID, ObjectRef};
+use std::str::FromStr;
 
 pub(super) fn proto_object_ref_to_rtd_object_ref(
     proto: &rtd_rpc::proto::rtd::rpc::v2::ObjectReference,

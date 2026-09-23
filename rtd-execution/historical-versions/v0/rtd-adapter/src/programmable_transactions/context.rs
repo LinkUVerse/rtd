@@ -42,7 +42,7 @@ mod checked {
     use rtd_types::storage::PackageObject;
     use rtd_types::{
         balance::Balance,
-        base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress, TxContext},
+        base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber, TxContext},
         coin::Coin,
         error::{command_argument_error, ExecutionError},
         event::Event,

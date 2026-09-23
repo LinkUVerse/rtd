@@ -5,7 +5,7 @@ use super::{MultiSigPublicKey, ThresholdUnit, WeightUnit};
 use crate::{
     base_types::RtdAddress,
     crypto::{
-        Ed25519RtdSignature, PublicKey, Signature, RtdKeyPair, RtdSignatureInner,
+        Ed25519RtdSignature, PublicKey, RtdKeyPair, RtdSignatureInner, Signature,
         ZkLoginPublicIdentifier, get_key_pair, get_key_pair_from_rng,
     },
     multisig::{MAX_SIGNER_IN_MULTISIG, MultiSig, as_indices},

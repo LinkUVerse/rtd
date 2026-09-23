@@ -17,11 +17,6 @@ use fastcrypto::hash::{HashFunction, Keccak256};
 use num_enum::TryFromPrimitive;
 use rand::Rng;
 use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
-use shared_crypto::intent::IntentScope;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
-use strum_macros::Display;
 use rtd_types::TypeTag;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::bridge::{
@@ -40,6 +35,11 @@ use rtd_types::committee::StakeUnit;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::digests::{Digest, TransactionDigest};
 use rtd_types::message_envelope::{Envelope, Message, VerifiedEnvelope};
+use serde::{Deserialize, Serialize};
+use shared_crypto::intent::IntentScope;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
+use strum_macros::Display;
 
 pub const BRIDGE_AUTHORITY_TOTAL_VOTING_POWER: u64 = 10000;
 
@@ -773,9 +773,9 @@ mod tests {
     use crate::test_utils::get_test_rtd_to_eth_bridge_action;
     use alloy::primitives::Address as EthAddress;
     use fastcrypto::traits::KeyPair;
-    use std::collections::HashSet;
     use rtd_types::bridge::TOKEN_ID_BTC;
     use rtd_types::crypto::get_key_pair;
+    use std::collections::HashSet;
 
     use super::*;
 

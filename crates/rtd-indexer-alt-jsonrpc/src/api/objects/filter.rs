@@ -3,10 +3,6 @@
 
 use anyhow::Context as _;
 use move_core_types::language_storage::StructTag;
-use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
-use serde_with::serde_as;
 use rtd_indexer_alt_reader::consistent_reader::proto::owner::OwnerKind;
 use rtd_json_rpc_types::Page as PageResponse;
 use rtd_json_rpc_types::RtdObjectDataOptions;
@@ -17,6 +13,10 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::dynamic_field::DYNAMIC_FIELD_FIELD_STRUCT_NAME;
 use rtd_types::dynamic_field::DYNAMIC_FIELD_MODULE_NAME;
 use rtd_types::rtd_serde::RtdStructTag;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde::Serialize;
+use serde_with::serde_as;
 
 use crate::api::objects::error::Error;
 use crate::context::Context;

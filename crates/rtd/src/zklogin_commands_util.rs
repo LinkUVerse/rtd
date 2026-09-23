@@ -13,12 +13,6 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use regex::Regex;
 use reqwest::Client;
-use serde_json::json;
-use shared_crypto::intent::Intent;
-use std::io;
-use std::io::Write;
-use std::thread::sleep;
-use std::time::Duration;
 use rtd_keys::keystore::{AccountKeystore, Keystore};
 use rtd_types::base_types::RtdAddress;
 use rtd_types::committee::EpochId;
@@ -28,6 +22,12 @@ use rtd_types::multisig::{MultiSig, MultiSigPublicKey};
 use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::Transaction;
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
+use serde_json::json;
+use shared_crypto::intent::Intent;
+use std::io;
+use std::io::Write;
+use std::thread::sleep;
+use std::time::Duration;
 
 /// Read a line from stdin, parse the id_token field and return.
 pub fn read_cli_line() -> Result<String, anyhow::Error> {
@@ -76,10 +76,12 @@ pub async fn perform_zk_login_test_tx(
     test_multisig: bool, // if true, put zklogin in a multisig address with another traditional pubkey.
     sign_with_sk: bool, // if true, submit tx with the traditional sig, otherwise submit with zklogin sig.
 ) -> Result<String, anyhow::Error> {
-    let (gas_url, fullnode_url) = get_config(network);
-    let user_salt = get_salt(parsed_token, "https://salt.api.linkuverse.com/get_salt")
-        .await
-        .unwrap_or("129390038577185583942388216820280642146".to_string());
+    let (gas_url, fullnode_url) = get_config(network)?;
+    let salt_url = std::env::var("RTD_ZKLOGIN_SALT_URL")
+        .map_err(|_| anyhow!("Set RTD_ZKLOGIN_SALT_URL to a verified RTD salt service"))?;
+    let prover_url = std::env::var("RTD_ZKLOGIN_PROVER_URL")
+        .map_err(|_| anyhow!("Set RTD_ZKLOGIN_PROVER_URL to a verified RTD prover"))?;
+    let user_salt = get_salt(parsed_token, &salt_url).await?;
     println!("User salt: {user_salt}");
     let reader = get_proof(
         parsed_token,
@@ -87,7 +89,7 @@ pub async fn perform_zk_login_test_tx(
         jwt_randomness,
         kp_bigint,
         &user_salt,
-        "https://prover-dev.linkuverse.com/v1",
+        &prover_url,
     )
     .await
     .map_err(|e| anyhow!("Failed to get proof {e}"))?;
@@ -119,9 +121,9 @@ pub async fn perform_zk_login_test_tx(
     println!("Sender: {:?}", sender);
 
     // Request some coin from faucet and build a test transaction.
-    let mut rtd = rtd_rpc_api::Client::new(fullnode_url)?;
-    request_tokens_from_faucet(sender, gas_url).await?; // transfer coin
-    request_tokens_from_faucet(sender, gas_url).await?; // gas coin
+    let mut rtd = rtd_rpc_api::Client::new(&fullnode_url)?;
+    request_tokens_from_faucet(sender, &gas_url).await?; // transfer coin
+    request_tokens_from_faucet(sender, &gas_url).await?; // gas coin
     sleep(Duration::from_secs(10));
 
     let response = rtd
@@ -212,13 +214,18 @@ pub async fn perform_zk_login_test_tx(
     Ok(transaction_response.transaction.digest().base58_encode())
 }
 
-fn get_config(network: &str) -> (&str, &str) {
+fn get_config(network: &str) -> Result<(String, String), anyhow::Error> {
     match network {
-        "devnet" => (
-            "https://faucet.devnet.rtd.io/v2/gas",
-            "https://rpc.devnet.rtd.io:443",
-        ),
-        "localnet" => ("http://127.0.0.1:9123/v2/gas", "http://127.0.0.1:9000"),
-        _ => panic!("Invalid network"),
+        "devnet" => Ok((
+            std::env::var("RTD_DEVNET_FAUCET_URL")
+                .map_err(|_| anyhow!("Set RTD_DEVNET_FAUCET_URL to a verified RTD faucet"))?,
+            std::env::var("RTD_DEVNET_RPC_URL")
+                .map_err(|_| anyhow!("Set RTD_DEVNET_RPC_URL to a verified RTD fullnode"))?,
+        )),
+        "localnet" => Ok((
+            "http://127.0.0.1:9123/v2/gas".to_string(),
+            "http://127.0.0.1:9000".to_string(),
+        )),
+        _ => anyhow::bail!("Invalid RTD network: {network}"),
     }
 }

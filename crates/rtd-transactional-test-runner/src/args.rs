@@ -23,7 +23,7 @@ use move_transactional_test_runner::tasks::{RunCommand, SyntaxChoice};
 use rtd_protocol_config::Chain;
 use rtd_types::accumulator_root::AccumulatorValue;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{SequenceNumber, RtdAddress};
+use rtd_types::base_types::{RtdAddress, SequenceNumber};
 use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
 use rtd_types::move_package::UpgradePolicy;
 use rtd_types::object::{Object, Owner};

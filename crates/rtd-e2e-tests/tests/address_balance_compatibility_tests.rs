@@ -6,7 +6,7 @@ use rtd_macros::*;
 use rtd_simulator::has_mainnet_protocol_config_override;
 use rtd_test_transaction_builder::{FundSource, TestTransactionBuilder};
 use rtd_types::{
-    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     coin_reservation::ParsedObjectRefWithdrawal,
     digests::CheckpointDigest,
     effects::TransactionEffectsAPI,
@@ -1045,9 +1045,9 @@ async fn test_coin_reservation_rejected_in_sponsored_transaction() {
     if has_mainnet_protocol_config_override() {
         return;
     }
-    use shared_crypto::intent::Intent;
     use rtd_keys::keystore::AccountKeystore;
     use rtd_types::transaction::{GasData, ProgrammableTransaction, Transaction, TransactionData};
+    use shared_crypto::intent::Intent;
 
     let mut test_env = TestEnvBuilder::new()
         .with_proto_override_cb(Box::new(|_, mut cfg| {

@@ -25,14 +25,14 @@ use crate::{
     },
     naming::ast::BuiltinTypeName_,
     parser::ast::{Ability_, DatatypeName},
-    shared::{
-        Identifier,
-        program_info::{DatatypeKind, TypingProgramInfo},
-    },
     rtd_mode::{
         RTD_ADDR_VALUE, TX_CONTEXT_MODULE_NAME, TX_CONTEXT_TYPE_NAME,
         info::TransferKind,
-        linters::{PUBLIC_SHARE_FUN, SHARE_FUN, RtdLintCode, TRANSFER_MOD_NAME, type_abilities},
+        linters::{PUBLIC_SHARE_FUN, RtdLintCode, SHARE_FUN, TRANSFER_MOD_NAME, type_abilities},
+    },
+    shared::{
+        Identifier,
+        program_info::{DatatypeKind, TypingProgramInfo},
     },
 };
 use move_core_types::account_address::AccountAddress;

@@ -12,7 +12,6 @@ use executor::Executor;
 use proptest::collection::vec;
 use proptest::test_runner::TestRunner;
 use rand::Rng;
-use std::fmt::Debug;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::crypto::AccountKeyPair;
@@ -20,6 +19,7 @@ use rtd_types::crypto::get_key_pair;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::object::{MoveObject, OBJECT_START_VERSION, Object, Owner};
 use rtd_types::{gas_coin::TOTAL_SUPPLY_MIST, transaction::GasData};
+use std::fmt::Debug;
 
 use proptest::prelude::*;
 use rand::{SeedableRng, rngs::StdRng};

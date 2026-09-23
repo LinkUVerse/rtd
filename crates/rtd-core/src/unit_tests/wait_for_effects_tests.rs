@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use consensus_types::block::{BlockRef, PING_TRANSACTION_INDEX, TransactionIndex};
 use fastcrypto::traits::KeyPair;
-use shared_crypto::intent::{Intent, IntentScope};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectRef, RtdAddress, TransactionDigest};
 use rtd_types::committee::EpochId;
@@ -21,6 +20,7 @@ use rtd_types::messages_grpc::{PingType, WaitForEffectsRequest, WaitForEffectsRe
 use rtd_types::object::Object;
 use rtd_types::transaction::VerifiedTransaction;
 use rtd_types::utils::to_sender_signed_transaction;
+use shared_crypto::intent::{Intent, IntentScope};
 
 use super::AuthorityServerHandle;
 use crate::authority::consensus_tx_status_cache::{

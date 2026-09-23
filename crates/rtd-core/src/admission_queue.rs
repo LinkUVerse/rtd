@@ -12,17 +12,17 @@ use prometheus::{
     register_int_counter_vec_with_registry, register_int_counter_with_registry,
     register_int_gauge_vec_with_registry, register_int_gauge_with_registry,
 };
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::net::IpAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 use rtd_macros::handle_fail_point_if;
 use rtd_network::tonic;
 use rtd_types::error::{RtdError, RtdErrorKind, RtdResult};
 use rtd_types::messages_consensus::{
     ConsensusPosition, ConsensusTransaction, ConsensusTransactionKey,
 };
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::net::IpAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 

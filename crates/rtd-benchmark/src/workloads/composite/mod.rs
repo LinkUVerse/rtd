@@ -32,16 +32,12 @@ use operations::{
     ResourceRequest, add_allowance_issue_commands,
 };
 use rand::Rng;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::TypeTag;
 use rtd_types::accumulator_root::AccumulatorValue;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
 use rtd_types::digests::TransactionDigest;
@@ -55,6 +51,10 @@ use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID,
     RTD_RANDOMNESS_STATE_OBJECT_ID,
 };
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tracing::{debug, info, trace};
 
 use super::MultiGas;

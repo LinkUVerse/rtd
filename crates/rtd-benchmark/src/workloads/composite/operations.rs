@@ -1,13 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use move_core_types::u256::U256;
 use linku_common::random::get_rng;
+use move_core_types::u256::U256;
 use rand::Rng;
 use rtd_types::TypeTag;
 use rtd_types::accumulator_root::AccumulatorValue;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
 use rtd_types::committee::EpochId;
 use rtd_types::digests::ChainIdentifier;

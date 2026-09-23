@@ -3,7 +3,6 @@
 
 use super::config::{ClusterTestOpt, Env};
 use async_trait::async_trait;
-use std::path::Path;
 use rtd_config::Config;
 use rtd_config::{PersistedConfig, RTD_KEYSTORE_FILENAME, RTD_NETWORK_CONFIG};
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
@@ -16,20 +15,10 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::KeypairTraits;
 use rtd_types::crypto::RtdKeyPair;
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
+use std::path::Path;
 use tempfile::tempdir;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
-
-const DEVNET_FAUCET_ADDR: &str = "https://faucet.devnet.rtd.io:443";
-const STAGING_FAUCET_ADDR: &str = "https://faucet.staging.rtd.io:443";
-const CONTINUOUS_FAUCET_ADDR: &str = "https://faucet.ci.rtd.io:443";
-const CONTINUOUS_NOMAD_FAUCET_ADDR: &str = "https://faucet.nomad.ci.rtd.io:443";
-const TESTNET_FAUCET_ADDR: &str = "https://faucet.testnet.rtd.io:443";
-const DEVNET_FULLNODE_ADDR: &str = "https://rpc.devnet.rtd.io:443";
-const STAGING_FULLNODE_ADDR: &str = "https://fullnode.staging.rtd.io:443";
-const CONTINUOUS_FULLNODE_ADDR: &str = "https://fullnode.ci.rtd.io:443";
-const CONTINUOUS_NOMAD_FULLNODE_ADDR: &str = "https://fullnode.nomad.ci.rtd.io:443";
-const TESTNET_FULLNODE_ADDR: &str = "https://fullnode.testnet.rtd.io:443";
 
 pub struct ClusterFactory;
 
@@ -74,39 +63,41 @@ pub struct RemoteRunningCluster {
 #[async_trait]
 impl Cluster for RemoteRunningCluster {
     async fn start(options: &ClusterTestOpt) -> Result<Self, anyhow::Error> {
-        let (fullnode_url, faucet_url) = match options.env {
-            Env::Devnet => (
-                String::from(DEVNET_FULLNODE_ADDR),
-                String::from(DEVNET_FAUCET_ADDR),
-            ),
-            Env::Staging => (
-                String::from(STAGING_FULLNODE_ADDR),
-                String::from(STAGING_FAUCET_ADDR),
-            ),
-            Env::Ci => (
-                String::from(CONTINUOUS_FULLNODE_ADDR),
-                String::from(CONTINUOUS_FAUCET_ADDR),
-            ),
-            Env::CiNomad => (
-                String::from(CONTINUOUS_NOMAD_FULLNODE_ADDR),
-                String::from(CONTINUOUS_NOMAD_FAUCET_ADDR),
-            ),
-            Env::Testnet => (
-                String::from(TESTNET_FULLNODE_ADDR),
-                String::from(TESTNET_FAUCET_ADDR),
-            ),
-            Env::CustomRemote => (
-                options
-                    .fullnode_address
-                    .clone()
-                    .expect("Expect 'fullnode_address' for Env::Custom"),
-                options
-                    .faucet_address
-                    .clone()
-                    .expect("Expect 'faucet_address' for Env::Custom"),
-            ),
+        match options.env {
+            Env::Devnet
+            | Env::Staging
+            | Env::Ci
+            | Env::CiNomad
+            | Env::Testnet
+            | Env::CustomRemote => {}
             Env::NewLocal => unreachable!("NewLocal shouldn't use RemoteRunningCluster"),
-        };
+        }
+
+        let fullnode_url = options
+            .fullnode_address
+            .as_deref()
+            .filter(|url| !url.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No public RTD {:?} fullnode is configured; pass --fullnode-address",
+                    options.env
+                )
+            })?
+            .to_owned();
+        let faucet_url = options
+            .faucet_address
+            .as_deref()
+            .filter(|url| !url.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No public RTD {:?} faucet is configured; pass --faucet-address",
+                    options.env
+                )
+            })?
+            .to_owned();
+
+        reqwest::Url::parse(&fullnode_url)?;
+        reqwest::Url::parse(&faucet_url)?;
 
         // TODO: test connectivity before proceeding?
 
@@ -259,6 +250,28 @@ impl Cluster for Box<dyn Cluster + Send + Sync> {
 
     fn config_directory(&self) -> &Path {
         (**self).config_directory()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn remote_cluster_requires_explicit_endpoints() {
+        let mut options = ClusterTestOpt::new_local();
+        options.env = Env::Testnet;
+        let err = RemoteRunningCluster::start(&options).await.err().unwrap();
+        assert!(err.to_string().contains("--fullnode-address"));
+
+        options.fullnode_address = Some("http://127.0.0.1:9000".into());
+        let err = RemoteRunningCluster::start(&options).await.err().unwrap();
+        assert!(err.to_string().contains("--faucet-address"));
+
+        options.faucet_address = Some("http://127.0.0.1:9123".into());
+        let cluster = RemoteRunningCluster::start(&options).await.unwrap();
+        assert_eq!(cluster.fullnode_url(), "http://127.0.0.1:9000");
+        assert_eq!(cluster.remote_faucet_url(), Some("http://127.0.0.1:9123"));
     }
 }
 

@@ -4,10 +4,10 @@
 use anyhow::Context;
 use bincode::Decode;
 use bincode::Encode;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::End;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::End;
 
 use crate::db::iter::FwdIter;
 use crate::db::iter::RevIter;

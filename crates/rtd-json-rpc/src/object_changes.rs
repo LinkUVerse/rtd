@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use rtd_json_rpc_types::ObjectChange;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::effects::ObjectRemoveKind;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::object::Owner;

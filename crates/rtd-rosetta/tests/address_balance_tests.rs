@@ -11,7 +11,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use prost_types::FieldMask;
-use serde_json::json;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_rosetta::CoinMetadataCache;
 use rtd_rosetta::operations::Operations;
@@ -30,6 +29,7 @@ use rtd_types::rpc_proto_conversions::ObjectReferenceExt;
 use rtd_types::rtd_sdk_types_conversions::type_tag_sdk_to_core;
 use rtd_types::transaction::{Command, TransactionData, TransactionDataAPI};
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID};
+use serde_json::json;
 use test_cluster::TestClusterBuilder;
 
 mod test_utils;
@@ -2423,8 +2423,6 @@ async fn test_pay_coin_gasless_change_below_min_falls_back() {
 /// parsed into Operations.
 #[tokio::test]
 async fn test_address_balance_gas_payment_parsing() {
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
     use rtd_rpc::proto::rtd::rpc::v2::{
         BalanceChange, Bcs, ExecutedTransaction, GetTransactionResponse, Transaction,
         TransactionEffects,
@@ -2436,6 +2434,8 @@ async fn test_address_balance_gas_payment_parsing() {
     use rtd_types::execution_status::ExecutionStatus;
     use rtd_types::gas::GasCostSummary;
     use rtd_types::utils::to_sender_signed_transaction;
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
 
     let test_cluster = TestClusterBuilder::new()
         .with_num_validators(1)

@@ -28,6 +28,13 @@ Client dApp using the following tools:
 
 ## Starting your dApp
 
+No package is pre-deployed on RTD. Publish the Move package with
+`../scripts/publish.sh <environment>` before using the game. Remote RPC URLs
+must be set as `VITE_RTD_DEVNET_RPC_URL`, `VITE_RTD_TESTNET_RPC_URL`, or
+`VITE_RTD_MAINNET_RPC_URL` as appropriate. If a remote URL is absent, the
+example does not expose that network. Optional `VITE_RTD_<NETWORK>_EXPLORER_URL` values enable object links;
+without them, the UI displays copyable IDs.
+
 To install dependencies you can run
 
 ```bash

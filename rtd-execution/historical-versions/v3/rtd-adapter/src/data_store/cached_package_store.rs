@@ -4,16 +4,16 @@
 use crate::data_store::PackageStore;
 use indexmap::IndexMap;
 use move_core_types::identifier::IdentStr;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-    rc::Rc,
-};
 use rtd_types::{
     base_types::ObjectID,
     error::{ExecutionError, RtdResult},
     move_package::MovePackage,
     storage::BackingPackageStore,
+};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
 };
 
 /// A package store that caches packages in memory and indexes type origins. This is useful for

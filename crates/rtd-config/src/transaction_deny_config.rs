@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 
-use serde::{Deserialize, Serialize};
 use rtd_types::base_types::{AuthorityName, ObjectID, RtdAddress};
 pub use rtd_types::transaction_deny_rules::{DenyElementKind, TransactionDenyRules};
+use serde::{Deserialize, Serialize};
 
 use crate::dynamic_transaction_signing_checks::{
     DynamicCheckRunnerContext, DynamicCheckRunnerError,

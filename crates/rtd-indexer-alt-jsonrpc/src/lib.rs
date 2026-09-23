@@ -10,7 +10,6 @@ use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::ServerBuilder;
 use prometheus::Registry;
-use serde_json::json;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_reader::consistent_reader::ConsistentReaderArgs;
 use rtd_indexer_alt_reader::fullnode_client::FullnodeArgs;
@@ -20,6 +19,7 @@ use rtd_indexer_alt_reader::pg_reader::db::DbArgs;
 use rtd_indexer_alt_reader::system_package_task::SystemPackageTask;
 use rtd_indexer_alt_reader::system_package_task::SystemPackageTaskArgs;
 use rtd_open_rpc::Project;
+use serde_json::json;
 use tower_http::catch_panic;
 use tower_layer::Identity;
 use tracing::info;
@@ -339,11 +339,11 @@ mod tests {
     use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
     use jsonrpsee::types::error::METHOD_NOT_FOUND_CODE;
     use reqwest::Client;
-    use serde_json::Value;
-    use serde_json::json;
     use rtd_open_rpc::Module;
     use rtd_open_rpc_macros::open_rpc;
     use rtd_pg_db::temp::get_available_port;
+    use serde_json::Value;
+    use serde_json::json;
 
     use super::*;
 

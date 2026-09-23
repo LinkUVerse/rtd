@@ -9,8 +9,8 @@ use move_vm_runtime::{
     shared::types::{OriginalId, VersionId},
     validation::verification::ast::Package as VerifiedPackage,
 };
-use std::{collections::BTreeMap, sync::Arc};
 use rtd_types::{base_types::ObjectID, error::RtdResult};
+use std::{collections::BTreeMap, sync::Arc};
 
 /// The VM-independent package metadata required for linkage analysis.
 pub trait PackageMetadata {

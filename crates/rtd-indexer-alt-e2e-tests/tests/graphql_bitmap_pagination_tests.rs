@@ -8,8 +8,6 @@ use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Base64;
 use fastcrypto::encoding::Encoding;
 use move_core_types::identifier::Identifier;
-use serde_json::Value;
-use serde_json::json;
 use rtd_framework::BuiltInFramework;
 use rtd_indexer_alt::BootstrapGenesis;
 use rtd_indexer_alt::config::IndexerConfig;
@@ -32,6 +30,8 @@ use rtd_types::rtd_system_state::mock;
 use rtd_types::rtd_system_state::rtd_system_state_inner_v2::RtdSystemStateInnerV2;
 use rtd_types::test_checkpoint_data_builder::AdvanceEpochConfig;
 use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
+use serde_json::Value;
+use serde_json::json;
 use tempfile::TempDir;
 
 /// Build an `OffchainCluster` with the List APIs enabled and a `BootstrapGenesis` config so the

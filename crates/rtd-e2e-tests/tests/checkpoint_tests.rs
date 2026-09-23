@@ -3,11 +3,6 @@
 
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::register_debug_fatal_handler;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
 use rtd_macros::register_fail_point_arg;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
@@ -17,6 +12,11 @@ use rtd_types::address_alias::get_address_alias_state_obj_initial_shared_version
 use rtd_types::base_types::AuthorityName;
 use rtd_types::transaction::{Argument, CallArg, Command, ObjectArg};
 use rtd_types::{RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tokio::time::sleep;
 use tracing::info;

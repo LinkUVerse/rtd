@@ -10,12 +10,12 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use async_graphql::connection::CursorType;
-use serde_json::Value;
-use serde_json::json;
 use rtd_indexer_alt_graphql::CTransaction;
 use rtd_rpc_cursor::CursorToken;
 use rtd_rpc_cursor::Position;
 use rtd_types::base_types::RtdAddress;
+use serde_json::Value;
+use serde_json::json;
 use test_cluster::TestCluster;
 use tokio_stream::StreamExt;
 

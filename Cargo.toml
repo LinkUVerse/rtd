@@ -654,9 +654,9 @@ anemo-cli = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4e
 anemo-tower = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
 
 # core-types from the new sdk for use in gRPC
-rtd-sdk-types = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "1aed5776c9d957f08d06bde07664993d70825c93", features = [ "hash", "serde" ] }
-rtd-crypto = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "1aed5776c9d957f08d06bde07664993d70825c93", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
-rtd-rpc = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "1aed5776c9d957f08d06bde07664993d70825c93", features = [ "unstable" ] }
+rtd-sdk-types = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "hash", "serde" ] }
+rtd-crypto = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
+rtd-rpc = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "unstable" ] }
 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }

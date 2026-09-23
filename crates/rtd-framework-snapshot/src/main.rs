@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::env;
-use std::fs;
-use std::path::PathBuf;
 use rtd_framework::{BuiltInFramework, SystemPackage};
 use rtd_framework_snapshot::{SnapshotPackage, update_bytecode_snapshot_manifest};
 use rtd_protocol_config::ProtocolVersion;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
 
 // Define the `GIT_FULL_SHA_REVISION` const
 bin_version::git_revision!();

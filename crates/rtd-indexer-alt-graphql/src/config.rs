@@ -5,8 +5,6 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_reader::ledger_grpc_reader::MAX_BATCH_GET_OBJECTS;
 use rtd_indexer_alt_reader::ledger_grpc_reader::MAX_BATCH_GET_TRANSACTIONS;
 use rtd_name_service::NameServiceConfig;
@@ -15,6 +13,8 @@ use rtd_protocol_config::ProtocolConfig;
 use rtd_protocol_config::ProtocolVersion;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::RtdAddress;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::extensions::query_limits::QueryLimitsConfig;
 use crate::extensions::timeout::TimeoutConfig;

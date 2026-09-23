@@ -18,9 +18,6 @@ use async_trait::async_trait;
 use futures::stream::StreamExt;
 use linku_metrics::spawn_monitored_task;
 use prometheus::IntGauge;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_bridge::abi::{
     EthBridgeCommitteeEvents, EthBridgeConfigEvents, EthBridgeEvent, EthBridgeLimiterEvents,
     EthRtdBridgeEvents,
@@ -33,6 +30,9 @@ use rtd_bridge::retry_with_max_elapsed_time;
 use rtd_bridge::types::{EthEvent, RawEthLog};
 use rtd_bridge::utils::{EthProvider, EthWsProvider, get_eth_provider, get_eth_ws_provider};
 use rtd_bridge_schema::models::GovernanceActionType;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 use tap::tap::TapFallible;
 use tokio::select;
 use tokio::task::JoinHandle;

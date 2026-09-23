@@ -11,14 +11,14 @@ use anemo::types::PeerAffinity;
 use anemo::{PeerId, types::PeerInfo};
 use anemo_tower::rate_limit;
 use fastcrypto::traits::KeyPair;
+use rtd_config::p2p::P2pConfig;
+use rtd_types::crypto::NetworkKeyPair;
+use rtd_types::multiaddr::Multiaddr;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Arc, OnceLock, RwLock},
 };
-use rtd_config::p2p::P2pConfig;
-use rtd_types::crypto::NetworkKeyPair;
-use rtd_types::multiaddr::Multiaddr;
 use tap::{Pipe, TapFallible};
 use tokio::{
     sync::{mpsc, oneshot},

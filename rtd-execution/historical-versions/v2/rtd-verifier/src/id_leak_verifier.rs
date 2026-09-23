@@ -27,7 +27,6 @@ use move_bytecode_verifier_meter::{Meter, Scope};
 use move_core_types::{
     account_address::AccountAddress, ident_str, identifier::IdentStr, vm_status::StatusCode,
 };
-use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 use rtd_types::bridge::BRIDGE_MODULE_NAME;
 use rtd_types::deny_list_v1::{DENY_LIST_CREATE_FUNC, DENY_LIST_MODULE};
 use rtd_types::{
@@ -39,6 +38,7 @@ use rtd_types::{
     rtd_system_state::RTD_SYSTEM_MODULE_NAME,
     BRIDGE_ADDRESS, RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_ADDRESS,
 };
+use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 
 use crate::{
     check_for_verifier_timeout, to_verification_timeout_error, verification_failure,

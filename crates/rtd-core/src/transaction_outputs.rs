@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashSet};
-use std::sync::Arc;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::base_types::FullObjectID;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents};
@@ -11,6 +9,8 @@ use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::inner_temporary_store::{InnerTemporaryStore, WrittenObjects};
 use rtd_types::storage::{FullObjectKey, MarkerValue, ObjectKey};
 use rtd_types::transaction::{TransactionData, TransactionDataAPI, VerifiedTransaction};
+use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 /// TransactionOutputs
 #[derive(Debug)]

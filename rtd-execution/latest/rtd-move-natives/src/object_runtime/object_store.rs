@@ -5,10 +5,6 @@ use crate::object_runtime::{fingerprint::ObjectFingerprint, get_all_uids};
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::{annotated_value as A, runtime_value as R, vm_status::StatusCode};
 use move_vm_runtime::execution::values::{GlobalValue, StructRef, Value};
-use std::{
-    collections::{BTreeMap, btree_map},
-    sync::Arc,
-};
 use rtd_protocol_config::{LimitThresholdCrossed, ProtocolConfig, check_limit_by_meter};
 use rtd_types::{
     base_types::{MoveObjectType, ObjectID, SequenceNumber},
@@ -19,6 +15,10 @@ use rtd_types::{
     move_package::MovePackage,
     object::{Data, MoveObject, Object, Owner},
     storage::RuntimeObjectResolver,
+};
+use std::{
+    collections::{BTreeMap, btree_map},
+    sync::Arc,
 };
 
 pub(super) struct ChildObject {

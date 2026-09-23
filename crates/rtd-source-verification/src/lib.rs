@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 
 use colored::Colorize;
 use move_package_alt::schema::{Environment, Publication};
-use serde::Serialize;
 use rtd_package_alt::RtdFlavor;
 use rtd_rpc_api::Client;
 use rtd_types::base_types::ObjectID;
+use serde::Serialize;
 
 pub mod error;
 

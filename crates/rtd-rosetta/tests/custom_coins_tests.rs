@@ -9,10 +9,10 @@ mod test_coin_utils;
 use std::num::NonZeroUsize;
 
 use prost_types::FieldMask;
-use serde_json::json;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+use serde_json::json;
 
 use rtd_rosetta::operations::Operations;
 mod test_utils;

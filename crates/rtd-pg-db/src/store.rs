@@ -13,9 +13,9 @@ use diesel::sql_types::SingleValue;
 use diesel::sql_types::SqlType;
 use diesel_async::AsyncConnection;
 use diesel_async::RunQueryDsl;
-use scoped_futures::ScopedBoxFuture;
 use rtd_indexer_alt_framework_store_traits as store;
 use rtd_sql_macro::sql;
+use scoped_futures::ScopedBoxFuture;
 
 use crate::Connection;
 use crate::Db;

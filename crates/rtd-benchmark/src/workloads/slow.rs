@@ -14,7 +14,6 @@ use crate::workloads::{Gas, GasCoinConfig, workload::ExpectedFailureType};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use move_core_types::identifier::Identifier;
-use std::{sync::Arc, time::Duration};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::transaction::{ObjectArg, SharedObjectMutability};
 use rtd_types::{
@@ -23,6 +22,7 @@ use rtd_types::{
 };
 use rtd_types::{base_types::ObjectID, object::Owner};
 use rtd_types::{base_types::RtdAddress, crypto::get_key_pair, transaction::Transaction};
+use std::{sync::Arc, time::Duration};
 
 #[derive(Debug)]
 pub struct SlowTestPayload {

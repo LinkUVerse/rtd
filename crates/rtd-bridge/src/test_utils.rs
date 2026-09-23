@@ -6,11 +6,11 @@ use crate::crypto::{BridgeAuthorityKeyPair, BridgeAuthorityPublicKey, BridgeAuth
 use crate::eth_mock_provider::EthMockService;
 use crate::events::EmittedRtdToEthTokenBridgeV1;
 use crate::events::RtdBridgeEvent;
+use crate::rtd_transaction_builder::build_rtd_transaction;
 use crate::server::mock_handler::BridgeRequestMockHandler;
 use crate::server::mock_handler::run_mock_server;
-use crate::rtd_transaction_builder::build_rtd_transaction;
 use crate::types::{
-    BridgeAction, BridgeAuthority, EthToRtdBridgeAction, SignedBridgeAction, RtdToEthBridgeAction,
+    BridgeAction, BridgeAuthority, EthToRtdBridgeAction, RtdToEthBridgeAction, SignedBridgeAction,
 };
 use crate::types::{
     BridgeCommittee, BridgeCommitteeValiditySignInfo, CertifiedBridgeAction,
@@ -25,18 +25,14 @@ use alloy::sol_types::SolValue;
 use fastcrypto::encoding::{Encoding, Hex};
 use fastcrypto::traits::KeyPair;
 use hex_literal::hex;
-use move_core_types::language_storage::TypeTag;
 use linku_common::ZipDebugEqIteratorExt;
-use std::collections::{BTreeMap, HashMap};
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::net::SocketAddr;
+use move_core_types::language_storage::TypeTag;
 use rtd_config::local_ip_utils;
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::ObjectRef;
-use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::bridge::MoveTypeCommitteeMember;
 use rtd_types::bridge::{BridgeChainId, BridgeCommitteeSummary, TOKEN_ID_USDC};
 use rtd_types::crypto::ToFromBytes;
@@ -46,6 +42,10 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::object::Owner;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
 use rtd_types::{BRIDGE_PACKAGE_ID, RTD_BRIDGE_OBJECT_ID};
+use std::collections::{BTreeMap, HashMap};
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::SocketAddr;
 use tokio::task::JoinHandle;
 
 pub const DUMMY_MUTALBE_BRIDGE_OBJECT_ARG: ObjectArg = ObjectArg::SharedObject {

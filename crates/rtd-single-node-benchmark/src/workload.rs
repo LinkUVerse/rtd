@@ -6,9 +6,9 @@ use crate::command::WorkloadKind;
 use crate::tx_generator::{
     MoveTxGenerator, PackagePublishTxGenerator, SendFundsTxGenerator, TxGenerator,
 };
+use rtd_test_transaction_builder::PublishData;
 use std::path::PathBuf;
 use std::sync::Arc;
-use rtd_test_transaction_builder::PublishData;
 
 #[derive(Clone)]
 pub struct Workload {

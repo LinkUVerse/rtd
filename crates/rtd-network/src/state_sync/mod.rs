@@ -50,11 +50,6 @@
 use anemo::{PeerId, Request, Response, Result, types::PeerEvent};
 use futures::{FutureExt, StreamExt, stream::FuturesOrdered};
 use rand::Rng;
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, RwLock},
-    time::{Duration, Instant},
-};
 use rtd_config::p2p::StateSyncConfig;
 use rtd_types::{
     committee::Committee,
@@ -64,6 +59,11 @@ use rtd_types::{
         VerifiedCheckpoint, VerifiedCheckpointContents, VersionedFullCheckpointContents,
     },
     storage::WriteStore,
+};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, RwLock},
+    time::{Duration, Instant},
 };
 use tap::Pipe;
 use tokio::sync::oneshot;
@@ -90,11 +90,11 @@ pub use generated::{
     state_sync_client::StateSyncClient,
     state_sync_server::{StateSync, StateSyncServer},
 };
-pub use server::GetCheckpointAvailabilityResponse;
-pub use server::GetCheckpointSummaryRequest;
 use rtd_config::node::ArchiveReaderConfig;
 use rtd_storage::object_store::util::{build_object_store, fetch_checkpoint};
 use rtd_storage::verify_checkpoint;
+pub use server::GetCheckpointAvailabilityResponse;
+pub use server::GetCheckpointSummaryRequest;
 
 /// A handle to the StateSync subsystem.
 ///

@@ -718,12 +718,12 @@ mod tests {
 
     #[test]
     fn transaction_visitor_emits_package_write_marker() {
-        use std::collections::HashSet;
         use rtd_types::digests::TransactionDigest;
         use rtd_types::effects::TestEffectsBuilder;
         use rtd_types::full_checkpoint_content::ObjectSet;
         use rtd_types::move_package::MovePackage;
         use rtd_types::object::{Data, Object};
+        use std::collections::HashSet;
 
         // A BCS-encoded `MovePackage` (id 0x0..0, version 2) holding one module
         // "DUMMY" whose declared self-address is 0x0..0. We patch the id byte

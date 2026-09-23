@@ -6,9 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use prometheus::Registry;
+use rtd_futures::service::Service;
 use serde::Deserialize;
 use serde::Serialize;
-use rtd_futures::service::Service;
 use tokio::sync::mpsc;
 use tracing::warn;
 

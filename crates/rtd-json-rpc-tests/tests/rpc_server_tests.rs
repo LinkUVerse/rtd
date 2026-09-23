@@ -3,13 +3,6 @@
 
 #![allow(deprecated)]
 
-use serde_json::json;
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-#[cfg(not(msim))]
-use std::str::FromStr;
-use std::time::Duration;
 use rtd_json::{call_args, type_args};
 use rtd_json_rpc_api::{
     CoinReadApiClient, GovernanceReadApiClient, IndexerApiClient, ReadApiClient,
@@ -17,9 +10,10 @@ use rtd_json_rpc_api::{
 };
 use rtd_json_rpc_types::ObjectsPage;
 use rtd_json_rpc_types::{
-    Balance, CoinPage, DelegatedStake, StakeStatus, RtdCoinMetadata, RtdExecutionStatus,
-    RtdObjectDataOptions, RtdObjectResponse, RtdObjectResponseQuery, RtdTransactionBlockEffectsAPI,
-    RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions, TransactionBlockBytes,
+    Balance, CoinPage, DelegatedStake, RtdCoinMetadata, RtdExecutionStatus, RtdObjectDataOptions,
+    RtdObjectResponse, RtdObjectResponseQuery, RtdTransactionBlockEffectsAPI,
+    RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions, StakeStatus,
+    TransactionBlockBytes,
 };
 use rtd_json_rpc_types::{ObjectChange, ZkLoginIntentScope};
 use rtd_macros::sim_test;
@@ -40,6 +34,13 @@ use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
 use rtd_types::utils::load_test_vectors;
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
 use rtd_types::{RTD_DISPLAY_REGISTRY_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, parse_rtd_struct_tag};
+use serde_json::json;
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+#[cfg(not(msim))]
+use std::str::FromStr;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tokio::time::sleep;
 

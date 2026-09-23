@@ -6,9 +6,9 @@ use object_store::aws::AmazonS3ConfigKey;
 use object_store::gcp::GoogleConfigKey;
 use object_store::path::Path;
 use object_store::{ClientOptions, ObjectStore, ObjectStoreExt, RetryConfig};
+use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use std::str::FromStr;
 use std::time::Duration;
-use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use url::Url;
 
 pub fn create_remote_store_client(

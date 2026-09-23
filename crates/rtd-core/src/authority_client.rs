@@ -7,10 +7,6 @@ use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use linku_network::config::Config;
 use parking_lot::Mutex;
-use std::collections::BTreeMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use rtd_network::{api::ValidatorClient, tonic};
 use rtd_types::base_types::AuthorityName;
 use rtd_types::committee::CommitteeWithNetworkMetadata;
@@ -21,6 +17,10 @@ use rtd_types::messages_checkpoint::{
 };
 use rtd_types::multiaddr::Multiaddr;
 use rtd_types::rtd_system_state::RtdSystemState;
+use std::collections::BTreeMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tap::TapFallible;
 
 use crate::authority_client::tonic::IntoRequest;

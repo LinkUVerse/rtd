@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { publishPackage } from '../rtd-utils';
+import { ACTIVE_NETWORK, publishPackage } from '../rtd-utils';
 
 /// A demo showing how we could publish the escrow contract
 /// and our DEMO objects contract.
@@ -10,13 +10,13 @@ import { publishPackage } from '../rtd-utils';
 (async () => {
 	await publishPackage({
 		packagePath: __dirname + '/../../contracts/escrow',
-		network: 'testnet',
+		network: ACTIVE_NETWORK,
 		exportFileName: 'escrow-contract',
 	});
 
 	await publishPackage({
 		packagePath: __dirname + '/../../contracts/demo',
-		network: 'testnet',
+		network: ACTIVE_NETWORK,
 		exportFileName: 'demo-contract',
 	});
 })();

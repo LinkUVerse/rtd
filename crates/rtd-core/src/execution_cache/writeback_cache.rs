@@ -53,18 +53,13 @@ use crate::transaction_outputs::TransactionOutputs;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry as DashMapEntry;
 use futures::{FutureExt, future::BoxFuture};
-use moka::sync::SegmentedCache as MokaCache;
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::debug_fatal;
 use linku_common::random_util::randomize_cache_capacity_in_tests;
 use linku_common::sync::notify_read::NotifyRead;
+use moka::sync::SegmentedCache as MokaCache;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::collections::{BTreeMap, HashSet};
-use std::hash::Hash;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use std::time::Instant;
 use rtd_config::ExecutionCacheConfig;
 use rtd_macros::fail_point;
 use rtd_protocol_config::ProtocolVersion;
@@ -86,11 +81,16 @@ use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::message_envelope::Message;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::object::Object;
+use rtd_types::rtd_system_state::{RtdSystemState, get_rtd_system_state};
 use rtd_types::storage::{
     FullObjectKey, InputKey, MarkerValue, ObjectKey, ObjectOrTombstone, ObjectStore, PackageObject,
 };
-use rtd_types::rtd_system_state::{RtdSystemState, get_rtd_system_state};
 use rtd_types::transaction::{TransactionDataAPI, VerifiedTransaction};
+use std::collections::{BTreeMap, HashSet};
+use std::hash::Hash;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::time::Instant;
 use tap::TapOptional;
 use tracing::{debug, info, instrument, trace, warn};
 

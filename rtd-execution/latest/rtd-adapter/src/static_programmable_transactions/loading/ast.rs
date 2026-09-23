@@ -18,13 +18,13 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     u256::U256,
 };
-use std::{collections::BTreeSet, rc::Rc};
 use rtd_types::{
     Identifier, TypeTag,
     base_types::{ObjectID, ObjectRef, RESOLVED_TX_CONTEXT, SequenceNumber, TxContextKind},
     object::ObjectPermissions,
 };
 use rtd_verifier::INIT_FN_NAME;
+use std::{collections::BTreeSet, rc::Rc};
 
 //**************************************************************************************************
 // AST Nodes

@@ -6,10 +6,6 @@ use std::str::FromStr;
 
 use move_core_types::ident_str;
 use reqwest::Client;
-use serde::Deserialize;
-use serde_json::Value;
-use serde_json::json;
-use simulacrum::Simulacrum;
 use rtd_indexer_alt_jsonrpc::config::ObjectsConfig;
 use rtd_indexer_alt_jsonrpc::config::RpcConfig as JsonRpcConfig;
 use rtd_json_rpc_types::Page;
@@ -22,6 +18,10 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
+use serde::Deserialize;
+use serde_json::Value;
+use serde_json::json;
+use simulacrum::Simulacrum;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;

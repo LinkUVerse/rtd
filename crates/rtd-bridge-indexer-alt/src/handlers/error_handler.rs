@@ -4,7 +4,6 @@
 use crate::handlers::is_bridge_txn;
 use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
-use std::sync::Arc;
 use rtd_bridge_schema::models::RtdErrorTransactions;
 use rtd_bridge_schema::schema::rtd_error_transactions;
 use rtd_indexer_alt_framework::pipeline::Processor;
@@ -14,6 +13,7 @@ use rtd_indexer_alt_framework::types::effects::TransactionEffectsAPI;
 use rtd_indexer_alt_framework::types::execution_status::{ExecutionFailure, ExecutionStatus};
 use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
 use rtd_indexer_alt_framework::types::transaction::TransactionDataAPI;
+use std::sync::Arc;
 
 pub struct ErrorTransactionHandler;
 

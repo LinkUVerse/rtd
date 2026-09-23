@@ -44,7 +44,6 @@ use anyhow::bail;
 use async_trait::async_trait;
 use bytes::Bytes;
 use prometheus::Registry;
-use scoped_futures::ScopedBoxFuture;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use rtd_indexer_alt_framework_store_traits::ConcurrentConnection;
@@ -56,6 +55,7 @@ use rtd_indexer_alt_framework_store_traits::ReaderWatermark;
 use rtd_indexer_alt_framework_store_traits::SequentialConnection;
 use rtd_indexer_alt_framework_store_traits::SequentialStore;
 use rtd_indexer_alt_framework_store_traits::Store;
+use scoped_futures::ScopedBoxFuture;
 
 use bitmap_committer::BitmapCommitter;
 use bitmap_committer::BitmapCommitterHandle;

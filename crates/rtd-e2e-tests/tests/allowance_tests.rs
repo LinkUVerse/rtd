@@ -12,7 +12,7 @@ use rtd_simulator::has_mainnet_protocol_config_override;
 use rtd_types::{
     MOVE_STDLIB_PACKAGE_ID, RTD_CLOCK_OBJECT_ID, RTD_CLOCK_OBJECT_SHARED_VERSION,
     RTD_FRAMEWORK_PACKAGE_ID,
-    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     effects::TransactionEffectsAPI,
     execution_status::{ExecutionFailure, ExecutionFailureStatus, ExecutionStatus},
     gas_coin::GAS,

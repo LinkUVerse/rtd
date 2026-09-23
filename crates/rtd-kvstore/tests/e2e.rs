@@ -7,10 +7,10 @@
 //! creates the required tables, and tears everything down when done.
 //! Tests require `gcloud`, `cbt`, and the BigTable emulator on PATH.
 
+use rtd_inverted_index::event_seq;
 use std::collections::HashSet;
 use std::ops::Range;
 use std::time::Duration;
-use rtd_inverted_index::event_seq;
 
 use anyhow::Context;
 use anyhow::Result;

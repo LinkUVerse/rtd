@@ -9,8 +9,8 @@ use crate::{
     },
 };
 use move_vm_runtime::shared::linkage_context::LinkageContext;
-use std::{borrow::Borrow, collections::BTreeMap, rc::Rc};
 use rtd_types::{base_types::ObjectID, error::ExecutionErrorTrait};
+use std::{borrow::Borrow, collections::BTreeMap, rc::Rc};
 
 #[derive(Clone, Debug)]
 pub struct ExecutableLinkage(pub Rc<ResolvedLinkage>);

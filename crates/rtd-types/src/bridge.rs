@@ -8,9 +8,9 @@ use crate::collection_types::LinkedTableNode;
 use crate::dynamic_field::{Field, get_dynamic_field_from_store};
 use crate::error::{RtdError, RtdErrorKind, RtdResult};
 use crate::object::Owner;
-use crate::storage::ObjectStore;
 use crate::rtd_serde::BigInt;
 use crate::rtd_serde::Readable;
+use crate::storage::ObjectStore;
 use crate::versioned::Versioned;
 use crate::{
     base_types::RtdAddress,

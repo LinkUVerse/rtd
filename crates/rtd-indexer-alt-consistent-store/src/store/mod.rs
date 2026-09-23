@@ -9,13 +9,13 @@ use anyhow::Context as _;
 use anyhow::anyhow;
 use anyhow::bail;
 use prometheus::Registry;
-use scoped_futures::ScopedBoxFuture;
 use rtd_indexer_alt_framework::service::Service;
 use rtd_indexer_alt_framework::store::CommitterWatermark;
 use rtd_indexer_alt_framework::store::InitWatermark;
 use rtd_indexer_alt_framework::store::SequentialConnection;
 use rtd_indexer_alt_framework::store::Store as _;
 use rtd_indexer_alt_framework::store::{self};
+use scoped_futures::ScopedBoxFuture;
 
 use crate::db::Db;
 use crate::db::Watermark;
@@ -226,9 +226,9 @@ mod tests {
     use std::future::Future;
     use std::time::Duration;
 
-    use scoped_futures::ScopedFutureExt;
     use rtd_indexer_alt_framework::store::Connection as _;
     use rtd_indexer_alt_framework::store::SequentialStore;
+    use scoped_futures::ScopedFutureExt;
     use tokio::time::error::Elapsed;
     use tokio::time::{self};
 

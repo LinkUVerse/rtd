@@ -6,8 +6,8 @@
 use crate::rtd_bridge_watchdog::Observable;
 use async_trait::async_trait;
 use prometheus::IntGaugeVec;
-use std::collections::BTreeMap;
 use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoRequest;
+use std::collections::BTreeMap;
 
 use tokio::time::Duration;
 use tracing::{error, info};

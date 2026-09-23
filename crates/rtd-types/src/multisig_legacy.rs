@@ -6,9 +6,9 @@ use crate::{
     digests::ZKLoginInputsDigest,
     error::RtdErrorKind,
     multisig::{MultiSig, MultiSigPublicKey},
+    rtd_serde::RtdBitmap,
     signature::{AuthenticatorTrait, GenericSignature, VerifyParams},
     signature_verification::VerifiedDigestCache,
-    rtd_serde::RtdBitmap,
 };
 pub use enum_dispatch::enum_dispatch;
 use fastcrypto::{

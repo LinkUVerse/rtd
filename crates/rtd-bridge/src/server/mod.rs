@@ -23,11 +23,11 @@ use axum::routing::get;
 use fastcrypto::ed25519::Ed25519PublicKey;
 use fastcrypto::encoding::{Encoding, Hex};
 use fastcrypto::traits::ToFromBytes;
+use rtd_types::TypeTag;
+use rtd_types::bridge::BridgeChainId;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use rtd_types::TypeTag;
-use rtd_types::bridge::BridgeChainId;
 use tracing::{info, instrument};
 
 pub mod governance_verifier;

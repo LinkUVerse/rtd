@@ -38,11 +38,6 @@ pub mod tx_metadata_by_seq;
 pub mod tx_seq_by_digest;
 pub mod type_filter;
 
-use std::collections::BTreeMap;
-use std::path::Path;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
 use rtd_consistent_store::CfDescriptor;
 use rtd_consistent_store::CfOptionsResolver;
 use rtd_consistent_store::CfTuning;
@@ -57,6 +52,11 @@ use rtd_consistent_store::Snapshot;
 use rtd_consistent_store::WriteStallConfig;
 use rtd_consistent_store::error::OpenError;
 use rtd_consistent_store::reader::Reader;
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 /// Typed handles to every CF in the `rtd-rpc-store` layout.
 pub struct RpcStoreSchema<R: Reader = Db> {

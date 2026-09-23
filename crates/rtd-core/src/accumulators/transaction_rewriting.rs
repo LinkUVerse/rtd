@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_types::base_types::{SequenceNumber, RtdAddress};
+use rtd_types::base_types::{RtdAddress, SequenceNumber};
 use rtd_types::coin_reservation::{CoinReservationResolverTrait, ParsedObjectRefWithdrawal};
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::error::UserInputResult;

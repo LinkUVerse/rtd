@@ -6,13 +6,13 @@ pub use checked::*;
 #[rtd_macros::with_checked_arithmetic]
 mod checked {
 
+    use rtd_types::storage::StorageView;
     use std::collections::BTreeSet;
     use std::{
         borrow::Borrow,
         collections::{BTreeMap, HashMap},
         sync::Arc,
     };
-    use rtd_types::storage::StorageView;
 
     use crate::adapter::new_native_extensions;
     use crate::error::convert_vm_error;

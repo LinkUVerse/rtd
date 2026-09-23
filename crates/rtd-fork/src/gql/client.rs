@@ -110,8 +110,9 @@ pub struct GraphQLClient {
 impl GraphQLClient {
     /// Create a new GraphQL client
     pub fn new(node: Node, version: &str) -> Result<Self, Error> {
-        let rpc = reqwest::Url::parse(node.gql_url())
-            .with_context(|| format!("invalid GraphQL URL '{}'", node.gql_url()))?;
+        let url = node.gql_url().map_err(anyhow::Error::msg)?;
+        let rpc =
+            reqwest::Url::parse(url).with_context(|| format!("invalid GraphQL URL '{url}'"))?;
         Ok(Self {
             client: reqwest::Client::new(),
             node,
@@ -287,8 +288,8 @@ mod tests {
     use cynic::QueryBuilder;
     use fastcrypto::encoding::Base64 as FastCryptoBase64;
     use itertools::Itertools as _;
-    use serde_json::json;
     use rtd_types::{base_types::ObjectID, test_checkpoint_data_builder::TestCheckpointBuilder};
+    use serde_json::json;
     use wiremock::matchers::{body_partial_json, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 

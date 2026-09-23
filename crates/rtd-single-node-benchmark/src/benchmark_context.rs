@@ -10,19 +10,19 @@ use crate::tx_generator::{RootObjectCreateTxGenerator, TxGenerator};
 use crate::workload::Workload;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use std::collections::{BTreeMap, HashMap};
-use std::ops::Deref;
-use std::sync::Arc;
 use rtd_config::node::RunWithRange;
 use rtd_core::authority::shared_object_version_manager::{AssignedTxAndVersions, AssignedVersions};
 use rtd_test_transaction_builder::{PublishData, TestTransactionBuilder};
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::gas_coin::GAS;
 use rtd_types::transaction::DEFAULT_VALIDATOR_GAS_PRICE;
 use rtd_types::transaction::{Argument, Command, Transaction, TransactionKey};
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID};
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Deref;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 pub struct BenchmarkContext {

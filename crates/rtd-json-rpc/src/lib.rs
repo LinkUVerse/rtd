@@ -11,9 +11,9 @@ use jsonrpsee::RpcModule;
 use metrics::Metrics;
 use metrics::MetricsLayer;
 use prometheus::Registry;
-use std::time::Duration;
 use rtd_core::traffic_controller::TrafficController;
 use rtd_types::traffic_control::PolicyConfig;
+use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
@@ -60,7 +60,7 @@ pub fn rtd_rpc_doc(version: &str) -> Project {
     Project::new(
         version,
         "Rtd JSON-RPC",
-        "Rtd JSON-RPC API for interaction with Rtd Full node. Make RPC calls using https://fullnode.NETWORK.rtd.io:443, where NETWORK is the network you want to use (testnet, devnet, mainnet). By default, local networks use port 9000.",
+        "Rtd JSON-RPC API for interaction with an Rtd fullnode. Configure the endpoint for your deployed RTD network explicitly; local networks use port 9000 by default.",
         "LinkU Labs",
         "https://linkuverse.com",
         "build@linkuverse.com",

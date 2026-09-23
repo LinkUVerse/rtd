@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::{
-    base_types::{FullObjectID, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{FullObjectID, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_key_pair},
     effects::TransactionEffects,
     execution_status::{CommandArgumentError, ExecutionErrorKind},

@@ -11,8 +11,8 @@ use object_store::ObjectStoreExt;
 use object_store::RetryConfig;
 use object_store::path::Path as ObjectPath;
 use prometheus::IntCounter;
-use serde::de::DeserializeOwned;
 use rtd_types::digests::ChainIdentifier;
+use serde::de::DeserializeOwned;
 
 use crate::ingestion::decode;
 use crate::ingestion::ingestion_client::CheckpointError;

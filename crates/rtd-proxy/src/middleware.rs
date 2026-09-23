@@ -15,8 +15,8 @@ use bytes::Buf;
 use hyper::header::CONTENT_ENCODING;
 use once_cell::sync::Lazy;
 use prometheus::{CounterVec, proto::MetricFamily, register_counter_vec};
-use std::sync::Arc;
 use rtd_tls::TlsConnectionInfo;
+use std::sync::Arc;
 use tracing::error;
 
 static MIDDLEWARE_OPS: Lazy<CounterVec> = Lazy::new(|| {

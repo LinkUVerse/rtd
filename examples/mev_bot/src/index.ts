@@ -91,8 +91,15 @@ const PoolCreated = bcs.struct('PoolCreated', {
 	// We don't need other fields for the mev bot
 });
 
-// Create a client connected to the Rtd network
-const client = new RtdClient({ url: 'https://rtd-mainnet.linkuverse.com/json-rpc' });
+const rpcUrl = process.env.RTD_JSON_RPC_URL;
+const deepbookPackageId = process.env.RTD_DEEPBOOK_V2_PACKAGE_ID;
+const inspectSender = process.env.RTD_INSPECT_SENDER;
+if (!rpcUrl || !deepbookPackageId || !/^0x[0-9a-fA-F]{1,64}$/.test(deepbookPackageId) ||
+	!inspectSender || !/^0x[0-9a-fA-F]{1,64}$/.test(inspectSender)) {
+	throw new Error('Configure RTD_JSON_RPC_URL, RTD_DEEPBOOK_V2_PACKAGE_ID and RTD_INSPECT_SENDER for a deployed RTD DeepBook V2 market');
+}
+
+const client = new RtdClient({ url: rpcUrl });
 
 // Retrieve all DeepBook pools using the PoolCreated events
 let allPools = await retrieveAllPools();
@@ -116,12 +123,12 @@ console.log(`Total estimated storage fee rebate: ${rebate / 1e9} RTD`);
 // Implementer Todo : sign and execute the transaction
 
 async function retrieveAllPools() {
-	let page = await client.queryEvents({ query: { MoveEventType: '0xdee9::clob_v2::PoolCreated' } });
+	let page = await client.queryEvents({ query: { MoveEventType: `${deepbookPackageId}::clob_v2::PoolCreated` } });
 	let data = page.data;
 	while (page.hasNextPage) {
 		page = await client.queryEvents({
 			query: {
-				MoveEventType: '0xdee9::clob_v2::PoolCreated',
+				MoveEventType: `${deepbookPackageId}::clob_v2::PoolCreated`,
 			},
 			cursor: page.nextCursor,
 		});
@@ -210,14 +217,14 @@ async function createCleanUpTransaction(poolOrders: { pool: any; expiredOrders: 
 		let orderOwnerVec = tx.makeMoveVec({ elements: orderOwners, type: 'address' });
 
 		tx.moveCall({
-			target: `0xdee9::clob_v2::clean_up_expired_orders`,
+			target: `${deepbookPackageId}::clob_v2::clean_up_expired_orders`,
 			arguments: [tx.object(poolOrder.pool.pool_id), tx.object('0x6'), orderIdVec, orderOwnerVec],
 			typeArguments: [poolOrder.pool.base_asset, poolOrder.pool.quote_asset],
 		});
 	}
 	let result = await client.devInspectTransactionBlock({
 		transactionBlock: tx,
-		sender: '0xbab1ae46252d520bb8d82e6d8f2b83acb9c1c4226944516b4c6c45b0d00ef17d',
+		sender: inspectSender,
 	});
 
 	let costSummary = result.effects.gasUsed;

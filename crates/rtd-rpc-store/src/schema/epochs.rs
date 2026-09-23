@@ -16,9 +16,9 @@ use rtd_consistent_store::error::Error;
 use rtd_consistent_store::reader::Reader;
 use rtd_types::committee::Committee;
 use rtd_types::committee::EpochId;
-use rtd_types::storage::EpochInfo;
 use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
+use rtd_types::storage::EpochInfo;
 
 use crate::proto::StoredEpoch;
 use crate::schema::primitives::U64Be;

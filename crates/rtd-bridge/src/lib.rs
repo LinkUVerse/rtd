@@ -17,12 +17,12 @@ pub mod metrics;
 pub mod monitor;
 pub mod node;
 pub mod orchestrator;
-pub mod server;
-pub mod storage;
 pub mod rtd_bridge_watchdog;
 pub mod rtd_client;
 pub mod rtd_syncer;
 pub mod rtd_transaction_builder;
+pub mod server;
+pub mod storage;
 pub mod types;
 pub mod utils;
 

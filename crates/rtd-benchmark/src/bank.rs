@@ -8,11 +8,11 @@ use crate::workloads::workload::{MAX_BUDGET, Workload, WorkloadBuilder};
 use crate::workloads::{Gas, GasCoinConfig};
 use anyhow::{Error, Result};
 use itertools::Itertools;
-use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 use rtd_core::test_utils::{make_pay_rtd_transaction, make_transfer_rtd_transaction};
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::AccountKeyPair;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use tracing::info;
 
 /// Bank is used for generating gas for running the benchmark.

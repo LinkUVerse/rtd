@@ -7,10 +7,10 @@ use crate::{
     execution_cache::ObjectCacheRead, safe_client::SafeClientMetricsBase,
 };
 use async_trait::async_trait;
-use std::sync::Arc;
 use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
+use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 use tracing::{info, warn};
 

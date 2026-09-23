@@ -4,7 +4,7 @@
 use super::ObjectStore;
 use super::error::Result;
 use crate::balance_change::{BalanceChange, derive_balance_changes};
-use crate::base_types::{EpochId, ObjectID, ObjectType, SequenceNumber, RtdAddress};
+use crate::base_types::{EpochId, ObjectID, ObjectType, RtdAddress, SequenceNumber};
 use crate::committee::Committee;
 use crate::digests::{
     ChainIdentifier, CheckpointContentsDigest, CheckpointDigest, TransactionDigest,
@@ -19,10 +19,10 @@ use crate::messages_checkpoint::{
 use crate::object::Object;
 use crate::storage::ObjectKey;
 use crate::transaction::{TransactionData, VerifiedTransaction};
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
-use linku_common::ZipDebugEqIteratorExt;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{BTreeSet, HashMap};

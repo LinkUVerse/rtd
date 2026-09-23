@@ -4,7 +4,6 @@
 use crate::{TestCaseImpl, TestContext};
 use async_trait::async_trait;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use serde_json::json;
 use rtd_json::RtdJsonValue;
 use rtd_move_build::test_utils::compile_managed_coin_package;
 use rtd_rpc_api::client::ExecutedTransaction;
@@ -14,6 +13,7 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::gas_coin::{GAS, GasCoin};
 use rtd_types::object::Owner;
 use rtd_types::{Identifier, RTD_FRAMEWORK_ADDRESS};
+use serde_json::json;
 use tracing::info;
 
 pub struct CoinIndexTest;

@@ -3,20 +3,20 @@
 
 use insta::assert_debug_snapshot;
 use move_core_types::language_storage::StructTag;
-use serde::Deserialize;
-use serde_json::json;
 use rtd_types::Identifier;
 use rtd_types::RTD_COIN_REGISTRY_ADDRESS;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::ObjectRef;
-use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::coin::CoinMetadata;
 use rtd_types::coin::TreasuryCap;
 use rtd_types::deny_list_v2::DenyCapV2;
 use rtd_types::digests::ObjectDigest;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::object::Owner;
+use serde::Deserialize;
+use serde_json::json;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::coin_registry::LegacyCoinOutputs;

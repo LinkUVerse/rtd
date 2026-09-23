@@ -13,8 +13,6 @@ use crate::proof::ocs::{OCSProof, OCSTarget};
 use epoch_cache::EpochCache;
 use futures::stream::Stream;
 use move_core_types::identifier::Identifier;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
 use rtd_rpc::proto::rtd::rpc::v2::{Event as ProtoEvent, GetCheckpointRequest, GetEpochRequest};
@@ -26,6 +24,8 @@ use rtd_types::accumulator_root::{EventStreamHead, derive_event_stream_head_obje
 use rtd_types::base_types::RtdAddress;
 use rtd_types::committee::Committee;
 use rtd_types::event::Event;
+use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tonic::transport::Channel;
 

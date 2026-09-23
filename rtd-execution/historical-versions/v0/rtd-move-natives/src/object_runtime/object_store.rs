@@ -9,10 +9,6 @@ use move_vm_types::{
     loaded_data::runtime_types::Type,
     values::{GlobalValue, StructRef, Value},
 };
-use std::{
-    collections::{btree_map, BTreeMap},
-    sync::Arc,
-};
 use rtd_protocol_config::{check_limit_by_meter, LimitThresholdCrossed};
 use rtd_types::{
     base_types::{MoveObjectType, ObjectID, SequenceNumber},
@@ -20,6 +16,10 @@ use rtd_types::{
     metrics::ExecutionMetrics,
     object::{Data, MoveObject, Object, Owner},
     storage::RuntimeObjectResolver,
+};
+use std::{
+    collections::{btree_map, BTreeMap},
+    sync::Arc,
 };
 
 use super::get_all_uids;

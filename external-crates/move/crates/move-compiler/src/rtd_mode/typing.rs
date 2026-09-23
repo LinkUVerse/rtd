@@ -16,8 +16,8 @@ use crate::{
         TypeName_, UNIT_TYPE,
     },
     parser::ast::{Ability_, DatatypeName, DocComment, FunctionName, TargetKind},
-    shared::{CompilationEnv, Identifier, program_info::TypingProgramInfo},
     rtd_mode::*,
+    shared::{CompilationEnv, Identifier, program_info::TypingProgramInfo},
     typing::{
         ast::{self as T, ModuleCall},
         core::{Subst, error_format, error_format_},

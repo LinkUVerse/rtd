@@ -23,7 +23,7 @@ use serde_with::serde_as;
 
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::{
-    ObjectDigest, ObjectID, ObjectInfo, ObjectRef, ObjectType, SequenceNumber, RtdAddress,
+    ObjectDigest, ObjectID, ObjectInfo, ObjectRef, ObjectType, RtdAddress, SequenceNumber,
     TransactionDigest,
 };
 use rtd_types::error::{
@@ -34,8 +34,8 @@ use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::move_package::{MovePackage, TypeOrigin, UpgradeInfo};
 use rtd_types::object::{Data, MoveObject, Object, ObjectInner, ObjectRead, Owner};
 use rtd_types::rtd_serde::BigInt;
-use rtd_types::rtd_serde::SequenceNumber as AsSequenceNumber;
 use rtd_types::rtd_serde::RtdStructTag;
+use rtd_types::rtd_serde::SequenceNumber as AsSequenceNumber;
 
 use crate::{Page, RtdMoveStruct, RtdMoveValue};
 
@@ -202,7 +202,7 @@ pub struct RtdObjectData {
     pub storage_rebate: Option<u64>,
     /// The Display metadata for frontend UI rendering, default to be None unless RtdObjectDataOptions.showContent is set to true
     /// This can also be None if the struct type does not have Display defined
-    /// See more details in <https://forums.rtd.io/t/nft-object-display-proposal/4872>
+    /// Display fields are defined by the object's Move type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display: Option<DisplayFieldsResponse>,
     /// Move object content or package content, default to be None unless RtdObjectDataOptions.showContent is set to true

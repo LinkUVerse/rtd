@@ -1,10 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_move_build::BuildConfig;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{TransactionData, TransactionKind};
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]

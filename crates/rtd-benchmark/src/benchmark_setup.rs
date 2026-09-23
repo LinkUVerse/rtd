@@ -8,13 +8,13 @@ use crate::{BenchmarkProxyMetrics, FullNodeProxy, LocalValidatorAggregatorProxy,
 use anyhow::{Context, Result, anyhow, bail};
 use prometheus::Registry;
 use rand::seq::SliceRandom;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::thread::JoinHandle;
 use rtd_types::base_types::ObjectID;
 use rtd_types::object::Owner;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{Argument, Command, ObjectArg, TransactionData};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::thread::JoinHandle;
 use tokio::runtime::Builder;
 use tokio::sync::{Barrier, oneshot};
 use tracing::info;

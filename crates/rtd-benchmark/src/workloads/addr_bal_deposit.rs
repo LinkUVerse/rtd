@@ -9,8 +9,6 @@ use crate::workloads::{Gas, GasCoinConfig, WorkloadBuilderInfo, WorkloadParams};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use futures::future::join_all;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
@@ -18,6 +16,8 @@ use rtd_types::digests::ChainIdentifier;
 use rtd_types::gas_coin::GAS;
 use rtd_types::transaction::{Argument, Command, FundsWithdrawalArg, Transaction};
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use tracing::info;
 
 const GAS_BUDGET: u64 = 50_000_000;

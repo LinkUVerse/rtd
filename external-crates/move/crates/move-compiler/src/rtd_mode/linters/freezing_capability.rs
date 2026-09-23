@@ -7,11 +7,11 @@
 use crate::{
     diag,
     naming::ast::TypeName_,
-    shared::Identifier,
     rtd_mode::{
         RTD_ADDR_VALUE,
         linters::{FREEZE_FUN, PUBLIC_FREEZE_FUN, RtdLintCode, TRANSFER_MOD_NAME},
     },
+    shared::Identifier,
     typing::{ast as T, core, visitor::simple_visitor},
 };
 use move_core_types::account_address::AccountAddress;

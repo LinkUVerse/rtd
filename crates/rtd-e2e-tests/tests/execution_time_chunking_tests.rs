@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::identifier::Identifier;
-use std::num::NonZeroU32;
-use std::time::Duration;
 use rtd_config::node::ExecutionTimeObserverConfig;
 use rtd_core::authority::execution_time_estimator::{
     EXTRA_FIELD_EXECUTION_TIME_ESTIMATES_CHUNK_COUNT_KEY, EXTRA_FIELD_EXECUTION_TIME_ESTIMATES_KEY,
@@ -13,7 +11,7 @@ use rtd_macros::sim_test;
 use rtd_protocol_config::{
     ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
 };
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::dynamic_field::get_dynamic_field_from_store;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::execution::ExecutionTimeObservationChunkKey;
@@ -22,6 +20,8 @@ use rtd_types::rtd_system_state;
 use rtd_types::transaction::{
     SharedObjectMutability, StoredExecutionTimeObservations, TransactionData,
 };
+use std::num::NonZeroU32;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 async fn setup_test_cluster_with_chunking() -> TestCluster {

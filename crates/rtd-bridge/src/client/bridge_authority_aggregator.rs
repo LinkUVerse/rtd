@@ -13,16 +13,16 @@ use crate::types::{
     BridgeAction, BridgeCommittee, CertifiedBridgeAction, VerifiedCertifiedBridgeAction,
     VerifiedSignedBridgeAction,
 };
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::btree_map::Entry;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_authority_aggregation::ReduceOutput;
 use rtd_authority_aggregation::{SigRequestPrefs, quorum_map_then_reduce_with_timeout_and_prefs};
 use rtd_types::base_types::ConciseableName;
 use rtd_types::committee::StakeUnit;
 use rtd_types::committee::TOTAL_VOTING_POWER;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::collections::btree_map::Entry;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 const TOTAL_TIMEOUT_MS: u64 = 5_000;

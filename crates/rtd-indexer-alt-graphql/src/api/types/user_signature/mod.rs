@@ -6,7 +6,7 @@ pub(crate) mod passkey;
 pub(crate) mod zklogin;
 
 use async_graphql::{Object, SimpleObject, Union};
-use rtd_types::crypto::{SignatureScheme as NativeSignatureScheme, RtdSignature};
+use rtd_types::crypto::{RtdSignature, SignatureScheme as NativeSignatureScheme};
 use rtd_types::multisig::MultiSig;
 use rtd_types::signature::GenericSignature;
 

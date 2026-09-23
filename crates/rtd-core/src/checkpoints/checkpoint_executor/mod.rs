@@ -21,7 +21,6 @@
 use futures::StreamExt;
 use linku_common::{ZipDebugEqIteratorExt, debug_fatal, fatal, izip_debug_eq};
 use parking_lot::Mutex;
-use std::{sync::Arc, time::Instant};
 use rtd_types::base_types::SequenceNumber;
 use rtd_types::crypto::RandomnessRound;
 use rtd_types::messages_checkpoint::{CheckpointContents, CheckpointSequenceNumber};
@@ -30,6 +29,7 @@ use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID,
     node_role::{FullNodeSyncMode, NodeRole},
 };
+use std::{sync::Arc, time::Instant};
 
 use rtd_config::node::{CheckpointExecutorConfig, RunWithRange};
 use rtd_macros::fail_point;
@@ -370,9 +370,8 @@ impl CheckpointExecutor {
             .update_highest_certified_checkpoint(sequence_number);
 
         if checkpoint.is_last_checkpoint_of_epoch() && sequence_number > 0 {
-            let _wait_for_previous_checkpoints_guard = linku_metrics::monitored_scope(
-                "CheckpointExecutor::wait_for_previous_checkpoints",
-            );
+            let _wait_for_previous_checkpoints_guard =
+                linku_metrics::monitored_scope("CheckpointExecutor::wait_for_previous_checkpoints");
 
             info!(
                 "Reached end of epoch checkpoint, waiting for all previous checkpoints to be executed"
@@ -635,8 +634,7 @@ impl CheckpointExecutor {
         pipeline_handle: &mut PipelineHandle,
     ) -> CheckpointExecutionState {
         let (ckpt_state, tx_data, unexecuted_tx_digests) = {
-            let _scope =
-                linku_metrics::monitored_scope("CheckpointExecutor::execute_transactions");
+            let _scope = linku_metrics::monitored_scope("CheckpointExecutor::execute_transactions");
             let (ckpt_state, tx_data) = self.load_checkpoint_transactions(checkpoint, None);
             let unexecuted_tx_digests = self.schedule_transaction_execution(&ckpt_state, &tx_data);
             (ckpt_state, tx_data, unexecuted_tx_digests)

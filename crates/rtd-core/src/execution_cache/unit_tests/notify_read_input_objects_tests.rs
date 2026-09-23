@@ -5,15 +5,15 @@ use crate::authority::authority_store_tables::AuthorityPerpetualTables;
 
 use super::*;
 use futures::FutureExt;
-use std::path::Path;
-use std::time::Duration;
 use rtd_framework::BuiltInFramework;
 use rtd_move_build::BuildConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
-use rtd_types::base_types::{ConsensusObjectVersion, ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ConsensusObjectVersion, ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::object::{Object, Owner};
 use rtd_types::storage::{BackingStore, InputKey, TrackingBackingStore};
+use std::path::Path;
+use std::time::Duration;
 use tempfile::tempdir;
 use tokio::time::timeout;
 

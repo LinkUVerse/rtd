@@ -12,14 +12,14 @@ use crate::workloads::{Gas, GasCoinConfig, WorkloadBuilderInfo, WorkloadParams};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_core::test_utils::make_transfer_rtd_transaction;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
 use rtd_types::gas_coin::MIST_PER_RTD;
 use rtd_types::transaction::Transaction;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, warn};
 
 #[derive(Debug)]

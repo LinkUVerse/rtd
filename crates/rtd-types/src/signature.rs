@@ -3,7 +3,7 @@
 
 use crate::committee::EpochId;
 use crate::crypto::{
-    CompressedSignature, PasskeyAuthenticatorAsBytes, PublicKey, SignatureScheme, RtdSignature,
+    CompressedSignature, PasskeyAuthenticatorAsBytes, PublicKey, RtdSignature, SignatureScheme,
     ZkLoginAuthenticatorAsBytes,
 };
 use crate::digests::ZKLoginInputsDigest;

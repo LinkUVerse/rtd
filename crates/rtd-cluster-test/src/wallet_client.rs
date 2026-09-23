@@ -4,13 +4,13 @@
 use crate::cluster::new_wallet_context_from_cluster;
 
 use super::Cluster;
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_rpc_api::Client as GrpcClient;
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{KeypairTraits, Signature};
 use rtd_types::transaction::TransactionData;
+use shared_crypto::intent::Intent;
 use tracing::{Instrument, info_span};
 
 /// Wraps a `WalletContext` for the test user. The wallet context already caches

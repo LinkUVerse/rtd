@@ -10,8 +10,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use move_core_types::language_storage::StructTag;
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::language_storage::StructTag;
 use rtd_kvstore::{CheckpointData, TransactionData};
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::merge::Merge;
@@ -349,7 +349,6 @@ fn object_type_to_string(object_type: rtd_types::base_types::ObjectType) -> Stri
 mod tests {
     use super::*;
     use move_core_types::account_address::AccountAddress;
-    use std::sync::Arc;
     use rtd_kvstore::TransactionData as KvTransactionData;
     use rtd_package_resolver::{Package, PackageStore, Resolver};
     use rtd_rpc::field::{FieldMask, FieldMaskUtil};
@@ -367,6 +366,7 @@ mod tests {
         TransactionData as RtdTransactionData, TransactionKind,
     };
     use rtd_types::type_input::{StructInput, TypeInput};
+    use std::sync::Arc;
 
     use crate::v2::test_utils::{
         assert_identity_only_object_mask, canonical_transaction_object_keys, kv_transaction_data,

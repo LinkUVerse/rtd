@@ -3,17 +3,17 @@
 
 use crate::authority::AuthorityState;
 use linku_metrics::monitored_scope;
+use rtd_config::node::AuthorityOverloadConfig;
+use rtd_types::digests::TransactionDigest;
+use rtd_types::error::RtdErrorKind;
+use rtd_types::error::RtdResult;
+use rtd_types::fp_bail;
 use std::cmp::{max, min};
 use std::hash::Hasher;
 use std::sync::Weak;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
-use rtd_config::node::AuthorityOverloadConfig;
-use rtd_types::digests::TransactionDigest;
-use rtd_types::error::RtdErrorKind;
-use rtd_types::error::RtdResult;
-use rtd_types::fp_bail;
 use tokio::time::sleep;
 use tracing::{debug, info};
 use twox_hash::XxHash64;
@@ -269,8 +269,8 @@ mod tests {
         Rng, SeedableRng,
         rngs::{OsRng, StdRng},
     };
-    use std::sync::Arc;
     use rtd_macros::sim_test;
+    use std::sync::Arc;
     use tokio::sync::mpsc::UnboundedReceiver;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::mpsc::unbounded_channel;

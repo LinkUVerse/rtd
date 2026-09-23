@@ -8,8 +8,8 @@ use move_core_types::{
     resolver::ModuleResolver, vm_status::StatusCode,
 };
 use move_vm_types::data_store::DataStore;
-use std::rc::Rc;
 use rtd_types::{base_types::ObjectID, error::RtdResult, move_package::MovePackage};
+use std::rc::Rc;
 
 // Implementation of the `DataStore` trait for the Move VM.
 // When used during execution it may have a list of new packages that have

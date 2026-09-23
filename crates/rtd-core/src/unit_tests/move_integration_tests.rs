@@ -31,10 +31,10 @@ use rtd_types::{
     executable_transaction::VerifiedExecutableTransaction,
 };
 
-use std::{collections::HashSet, path::PathBuf};
-use std::{env, str::FromStr};
 use rtd_types::execution_status::{CommandArgumentError, ExecutionFailure, ExecutionStatus};
 use rtd_types::move_package::UpgradeCap;
+use std::{collections::HashSet, path::PathBuf};
+use std::{env, str::FromStr};
 
 #[tokio::test]
 #[cfg_attr(msim, ignore)]

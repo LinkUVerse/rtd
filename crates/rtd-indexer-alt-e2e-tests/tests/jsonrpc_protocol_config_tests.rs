@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use reqwest::Client;
-use serde_json::Value;
-use serde_json::json;
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_protocol_config::Chain;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_protocol_config::ProtocolVersion;
+use serde_json::Value;
+use serde_json::json;
 
 async fn get_protocol_config(cluster: &FullCluster, params: Value) -> Value {
     let query = json!({

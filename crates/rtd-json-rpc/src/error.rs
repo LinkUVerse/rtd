@@ -8,7 +8,6 @@ use itertools::Itertools;
 use jsonrpsee::core::ClientError as RpcError;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use std::collections::BTreeMap;
 use rtd_json_rpc_api::{TRANSACTION_EXECUTION_CLIENT_ERROR_CODE, TRANSIENT_ERROR_CODE};
 use rtd_name_service::NameServiceError;
 use rtd_types::committee::{QUORUM_THRESHOLD, TOTAL_VOTING_POWER};
@@ -16,6 +15,7 @@ use rtd_types::error::{
     ErrorCategory, RtdError, RtdErrorKind, RtdObjectResponseError, UserInputError,
 };
 use rtd_types::transaction_driver_types::TransactionSubmissionError;
+use std::collections::BTreeMap;
 use thiserror::Error;
 use tokio::task::JoinError;
 

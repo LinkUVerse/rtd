@@ -10,14 +10,14 @@ use crate::validator_client_monitor::{
 use arc_swap::ArcSwap;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
+use rtd_config::validator_client_monitor_config::ValidatorClientMonitorConfig;
+use rtd_types::committee::Committee;
+use rtd_types::{base_types::AuthorityName, messages_grpc::ValidatorHealthRequest};
 use std::collections::HashMap;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use rtd_config::validator_client_monitor_config::ValidatorClientMonitorConfig;
-use rtd_types::committee::Committee;
-use rtd_types::{base_types::AuthorityName, messages_grpc::ValidatorHealthRequest};
 use tokio::{
     task::JoinSet,
     time::{interval, timeout},

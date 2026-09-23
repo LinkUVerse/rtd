@@ -14,8 +14,6 @@ use async_graphql::dataloader::DataLoader;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel::sql_types::Bool;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_reader::packages::CheckpointBoundedOriginalPackageKey;
 use rtd_indexer_alt_reader::packages::PackageOriginalIdKey;
 use rtd_indexer_alt_reader::packages::VersionedOriginalPackageKey;
@@ -29,6 +27,8 @@ use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::RtdAddress as NativeRtdAddress;
 use rtd_types::move_package::MovePackage as NativeMovePackage;
 use rtd_types::object::Object as NativeObject;
+use serde::Deserialize;
+use serde::Serialize;
 use tokio::sync::OnceCell;
 
 use crate::api::scalars::base64::Base64;

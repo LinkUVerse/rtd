@@ -58,13 +58,13 @@ use anyhow::Context as _;
 use anyhow::anyhow;
 use anyhow::bail;
 use async_trait::async_trait;
-use scoped_futures::ScopedBoxFuture;
 use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use rtd_indexer_alt_framework_store_traits::InitWatermark;
 use rtd_indexer_alt_framework_store_traits::SequentialConnection;
 use rtd_indexer_alt_framework_store_traits::SequentialStore;
 use rtd_indexer_alt_framework_store_traits::Store as _;
 use rtd_indexer_alt_framework_store_traits::{self as store_traits};
+use scoped_futures::ScopedBoxFuture;
 use tokio::task::JoinSet;
 
 use crate::Batch;
@@ -349,9 +349,9 @@ impl<S: Send + Sync> SequentialConnection for Connection<'_, S> {}
 
 #[cfg(test)]
 mod tests {
-    use scoped_futures::ScopedFutureExt;
     use rtd_indexer_alt_framework_store_traits::Connection as _;
     use rtd_indexer_alt_framework_store_traits::Store as _;
+    use scoped_futures::ScopedFutureExt;
     use tempfile::TempDir;
 
     use super::*;

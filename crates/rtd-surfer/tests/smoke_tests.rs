@@ -1,9 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use rtd_macros::sim_test;
 use std::path::PathBuf;
 use std::time::Duration;
-use rtd_macros::sim_test;
 
 #[sim_test]
 async fn smoke_test() {

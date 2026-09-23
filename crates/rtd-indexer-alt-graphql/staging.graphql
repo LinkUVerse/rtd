@@ -3955,7 +3955,7 @@ type Query {
 	"""
 	Simulate a transaction to preview its effects without executing it on chain.
 	
-	Accepts a JSON transaction matching the [Rtd gRPC API schema](https://docs.rtd.io/references/fullnode-protocol#rtd-rpc-v2-Transaction).
+	Accepts a JSON transaction matching the RTD gRPC `Transaction` schema.
 	The JSON format allows for partial transaction specification where certain fields can be automatically resolved by the server.
 	
 	Alternatively, for already serialized transactions, you can pass BCS-encoded data:
@@ -4086,6 +4086,11 @@ enum RegulatedState {
 	"""
 	UNREGULATED
 }
+
+"""
+String containing 32 byte hex-encoded address, with a leading '0x'. Leading zeroes can be omitted on input but will always appear in outputs (RtdAddress in output is guaranteed to be 66 characters long).
+"""
+scalar RtdAddress
 
 """
 A Secp256k1 public key.
@@ -4382,11 +4387,6 @@ type Subscription {
 	"""
 	transactions(filter: TransactionFilter, after: String): TransactionEdge!
 }
-
-"""
-String containing 32 byte hex-encoded address, with a leading '0x'. Leading zeroes can be omitted on input but will always appear in outputs (RtdAddress in output is guaranteed to be 66 characters long).
-"""
-scalar RtdAddress
 
 """
 Future behavior of a currency's supply.

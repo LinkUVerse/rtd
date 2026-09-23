@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use fastcrypto::traits::Signer;
-use std::mem;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::{AuthorityName, VerifiedExecutionData};
 use rtd_types::committee::Committee;
@@ -16,6 +15,7 @@ use rtd_types::messages_checkpoint::{
 };
 use rtd_types::object::OBJECT_START_VERSION;
 use rtd_types::transaction::{Transaction, VerifiedTransaction};
+use std::mem;
 
 use crate::accumulators::{self, AccumulatorSettlementTxBuilder};
 use crate::checkpoints::CheckpointHeight;

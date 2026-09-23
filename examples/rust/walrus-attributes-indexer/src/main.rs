@@ -4,20 +4,20 @@
 use anyhow::bail;
 use clap::Parser;
 use rtd_indexer_alt_framework::{
-    Result,
     cluster::{self, IndexerClusterBuilder},
     pipeline::sequential::SequentialConfig,
     service::Error,
+    Result,
 };
 use url::Url;
-use walrus_attributes_indexer::{MIGRATIONS, handlers::BlogPostPipeline};
-
-// Indexers should be chain agnostic, so in a production deployment, this should be a value that
-// is passed to the service, rather than hardcoded here.
-const METADATA_DYNAMIC_FIELD_TYPE: &str = "0x2::dynamic_field::Field<vector<u8>, 0xfdc88f7d7cf30afab2f82e8380d11ee8f70efb90e863d1de8616fae1bb09ea77::metadata::Metadata>";
+use walrus_attributes_indexer::{handlers::BlogPostPipeline, MIGRATIONS};
 
 #[derive(clap::Parser, Debug)]
 struct WalrusIndexerArgs {
+    /// StructTag of Metadata in a Walrus deployment on this RTD network.
+    #[clap(long, env = "RTD_WALRUS_METADATA_TYPE")]
+    metadata_dynamic_field_type: String,
+
     #[clap(
         long,
         default_value = "postgres://postgres:postgrespw@localhost:5432/walrus_attributes"
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
         .build()
         .await?;
 
-    let blog_post_pipeline = BlogPostPipeline::new(METADATA_DYNAMIC_FIELD_TYPE).unwrap();
+    let blog_post_pipeline = BlogPostPipeline::new(&args.metadata_dynamic_field_type)?;
 
     // Other pipelines can be easily added with `.sequential_pipeline()` or
     // `.concurrent_pipeline()`.

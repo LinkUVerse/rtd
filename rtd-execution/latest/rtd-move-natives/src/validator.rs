@@ -9,9 +9,9 @@ use move_vm_runtime::{
     execution::Type, execution::values::Value, natives::functions::NativeResult,
 };
 use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
+use rtd_types::rtd_system_state::rtd_system_state_inner_v1::ValidatorMetadataV1;
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::rtd_system_state::rtd_system_state_inner_v1::ValidatorMetadataV1;
 
 #[derive(Clone, Debug)]
 pub struct ValidatorValidateMetadataBcsCostParams {

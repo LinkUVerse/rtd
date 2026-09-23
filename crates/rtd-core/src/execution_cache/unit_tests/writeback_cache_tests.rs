@@ -5,17 +5,6 @@ use prometheus::default_registry;
 #[cfg(not(tidehunter))]
 use rand::Rng;
 use rand::{SeedableRng, rngs::StdRng};
-#[cfg(not(tidehunter))]
-use std::time::{Duration, Instant};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    future::Future,
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU32, Ordering},
-    },
-};
 use rtd_framework::BuiltInFramework;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::{
@@ -27,6 +16,17 @@ use rtd_types::{
 use rtd_types::{
     effects::{TestEffectsBuilder, TransactionEffectsAPI},
     event::Event,
+};
+#[cfg(not(tidehunter))]
+use std::time::{Duration, Instant};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    future::Future,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
 };
 use tokio::sync::RwLock;
 

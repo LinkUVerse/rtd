@@ -10,9 +10,9 @@ use move_vm_runtime::{
     pop_arg,
 };
 use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
+use rtd_types::{base_types::ObjectID, digests::TransactionDigest};
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::{base_types::ObjectID, digests::TransactionDigest};
 
 use crate::{
     NativesCostTable, get_extension, get_extension_mut, object_runtime::ObjectRuntime,

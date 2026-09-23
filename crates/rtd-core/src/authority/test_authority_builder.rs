@@ -24,8 +24,6 @@ use crate::randomness_round_receiver::RandomnessRoundReceiverHandle;
 use crate::signature_verifier::SignatureVerifierMetrics;
 use fastcrypto::traits::KeyPair;
 use prometheus::Registry;
-use std::path::PathBuf;
-use std::sync::Arc;
 use rtd_config::ExecutionCacheConfig;
 use rtd_config::certificate_deny_config::CertificateDenyConfig;
 use rtd_config::genesis::Genesis;
@@ -47,6 +45,8 @@ use rtd_types::object::Object;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
 use rtd_types::transaction::VerifiedTransaction;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Default, Clone)]
 pub struct TestAuthorityBuilder<'a> {

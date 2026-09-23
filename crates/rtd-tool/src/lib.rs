@@ -8,15 +8,6 @@ use fastcrypto::traits::ToFromBytes;
 use futures::future::AbortHandle;
 use futures::future::join_all;
 use itertools::Itertools;
-use std::collections::BTreeMap;
-use std::fmt::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
-use std::{fs, io};
 use rtd_config::{NodeConfig, genesis::Genesis};
 use rtd_core::authority_client::{AuthorityAPI, NetworkAuthorityClient};
 use rtd_core::execution_cache::build_execution_cache_from_env;
@@ -34,6 +25,15 @@ use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::messages_grpc::LayoutGenerationOption;
 use rtd_types::multiaddr::Multiaddr;
 use rtd_types::{base_types::*, object::Owner};
+use std::collections::BTreeMap;
+use std::fmt::Write;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::num::NonZeroUsize;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::time::Duration;
+use std::{fs, io};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -45,7 +45,6 @@ use fastcrypto::hash::MultisetHash;
 use futures::{StreamExt, TryStreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use prometheus::Registry;
-use serde::{Deserialize, Serialize};
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use rtd_core::authority::AuthorityStore;
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
@@ -62,6 +61,7 @@ use rtd_types::messages_grpc::{
     ObjectInfoRequest, ObjectInfoRequestKind, ObjectInfoResponse, TransactionInfoRequest,
     TransactionStatus,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::formal_snapshot_util::read_summaries_for_list_no_verify;
 use rtd_core::authority::authority_store_pruner::PrunerWatermarks;

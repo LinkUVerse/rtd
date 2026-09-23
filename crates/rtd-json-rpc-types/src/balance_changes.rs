@@ -1,13 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use move_core_types::language_storage::TypeTag;
+use rtd_types::object::Owner;
+use rtd_types::rtd_serde::RtdTypeTag;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::DisplayFromStr;
 use serde_with::serde_as;
 use std::fmt::{Display, Formatter, Result};
-use rtd_types::object::Owner;
-use rtd_types::rtd_serde::RtdTypeTag;
 
 #[serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]

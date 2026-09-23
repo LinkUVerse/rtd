@@ -1,11 +1,11 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::RtdAddress;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub use rtd_name_service::NameServiceConfig;
 

@@ -12,6 +12,7 @@ use move_command_line_common::error_bitset::ErrorBitset;
 use move_core_types::annotated_value::{MoveStruct, MoveValue, MoveVariant};
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::StructTag;
+use rtd_macros::EnumVariantOrder;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -20,7 +21,6 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::Hash;
-use rtd_macros::EnumVariantOrder;
 use tracing::warn;
 
 use rtd_types::base_types::{ObjectID, RtdAddress};

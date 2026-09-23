@@ -14,7 +14,6 @@ use crate::{
 use indexmap::{IndexMap, IndexSet};
 use move_binary_format::file_format::{Ability, AbilitySet};
 use move_core_types::account_address::AccountAddress;
-use std::rc::Rc;
 use rtd_types::{
     balance::RESOLVED_BALANCE_STRUCT,
     base_types::{ObjectID, ObjectRef, TxContextKind},
@@ -23,6 +22,7 @@ use rtd_types::{
     execution_status::{CommandArgumentError, ExecutionErrorKind},
     funds_accumulator::RESOLVED_WITHDRAWAL_STRUCT,
 };
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SplatLocation {

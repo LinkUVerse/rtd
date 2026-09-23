@@ -6,13 +6,13 @@ use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
+use linku_common::debug_fatal;
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::layout::TypeLayoutBuilder;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::annotated_value::{MoveStruct, MoveStructLayout, MoveTypeLayout, MoveValue};
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
-use linku_common::debug_fatal;
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ use crate::layout_resolver::LayoutResolver;
 use crate::move_package::MovePackage;
 use crate::{
     base_types::{
-        ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest,
+        ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest,
     },
     gas_coin::GasCoin,
 };

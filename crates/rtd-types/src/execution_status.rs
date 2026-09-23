@@ -6,10 +6,10 @@ use crate::base_types::RtdAddress;
 use crate::error::{BoxError, ExecutionError, ExecutionErrorMetadata, ExecutionErrorTrait};
 use move_binary_format::file_format::{CodeOffset, TypeParameterIndex};
 use move_core_types::language_storage::ModuleId;
+use rtd_macros::EnumVariantOrder;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
-use rtd_macros::EnumVariantOrder;
 use thiserror::Error;
 
 #[cfg(test)]

@@ -8,18 +8,18 @@ use crate::retry_with_max_elapsed_time;
 use crate::types::IsBridgePaused;
 use arc_swap::ArcSwap;
 use linku_metrics::spawn_logged_monitored_task;
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_json_rpc_types::RtdExecutionStatus;
 use rtd_types::TypeTag;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::{
     base_types::{ObjectID, ObjectRef, RtdAddress},
-    crypto::{Signature, RtdKeyPair},
+    crypto::{RtdKeyPair, Signature},
     digests::TransactionDigest,
     gas_coin::GasCoin,
     object::Owner,
     transaction::Transaction,
 };
+use shared_crypto::intent::{Intent, IntentMessage};
 
 use crate::events::{
     TokenTransferAlreadyApproved, TokenTransferAlreadyClaimed, TokenTransferApproved,
@@ -29,9 +29,9 @@ use crate::metrics::BridgeMetrics;
 use crate::{
     client::bridge_authority_aggregator::BridgeAuthorityAggregator,
     error::BridgeError,
-    storage::BridgeOrchestratorTables,
     rtd_client::{ExecuteTransactionResult, RtdClient, RtdClientInner},
     rtd_transaction_builder::build_rtd_transaction,
+    storage::BridgeOrchestratorTables,
     types::{BridgeAction, BridgeActionStatus, VerifiedCertifiedBridgeAction},
 };
 use std::collections::HashMap;
@@ -234,9 +234,7 @@ where
     async fn handle_signing_task(
         semaphore: &Arc<Semaphore>,
         auth_agg: &Arc<ArcSwap<BridgeAuthorityAggregator>>,
-        signing_queue_sender: &linku_metrics::metered_channel::Sender<
-            BridgeActionExecutionWrapper,
-        >,
+        signing_queue_sender: &linku_metrics::metered_channel::Sender<BridgeActionExecutionWrapper>,
         execution_queue_sender: &linku_metrics::metered_channel::Sender<
             CertifiedBridgeActionExecutionWrapper,
         >,
@@ -730,21 +728,21 @@ mod tests {
     use fastcrypto::traits::KeyPair;
     use linku_common::ZipDebugEqIteratorExt;
     use prometheus::Registry;
-    use std::collections::{BTreeMap, HashMap};
-    use std::str::FromStr;
     use rtd_json_rpc_types::RtdEvent;
     use rtd_types::TypeTag;
     use rtd_types::crypto::get_key_pair;
     use rtd_types::gas_coin::GasCoin;
     use rtd_types::{base_types::random_object_ref, transaction::TransactionData};
+    use std::collections::{BTreeMap, HashMap};
+    use std::str::FromStr;
 
     use crate::{
         crypto::{
             BridgeAuthorityKeyPair, BridgeAuthorityPublicKeyBytes,
             BridgeAuthorityRecoverableSignature,
         },
-        server::mock_handler::BridgeRequestMockHandler,
         rtd_mock_client::RtdMockClient,
+        server::mock_handler::BridgeRequestMockHandler,
         test_utils::{
             get_test_authorities_and_run_mock_bridge_server, get_test_eth_to_rtd_bridge_action,
             get_test_rtd_to_eth_bridge_action, sign_action_with_key,

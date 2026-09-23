@@ -21,8 +21,6 @@ pub mod vfs;
 use anyhow::{Context, bail};
 use clap::Parser;
 use consensus_core::storage::rocksdb_store::RocksDBStore;
-use std::path::PathBuf;
-use std::sync::Arc;
 use rtd_core::{
     authority::{
         authority_store_pruner::PrunerWatermarks, authority_store_tables::AuthorityPerpetualTables,
@@ -31,6 +29,8 @@ use rtd_core::{
     epoch::committee_store::CommitteeStore,
 };
 use rtd_types::committee::Committee;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use self::{backend::Backend, direct::DirectBackend, proxy::ProxyBackend};
 

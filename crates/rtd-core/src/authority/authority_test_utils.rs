@@ -17,9 +17,9 @@ use super::shared_object_version_manager::Schedulable;
 #[cfg(test)]
 use linku_common::ZipDebugEqIteratorExt;
 #[cfg(test)]
-use std::collections::HashMap;
-#[cfg(test)]
 use rtd_types::transaction::TransactionKey;
+#[cfg(test)]
+use std::collections::HashMap;
 
 // =============================================================================
 // MFP (Mysticeti Fast Path) Test Helpers

@@ -652,9 +652,9 @@ mod tests {
     use axum::routing::post;
     use insta::assert_snapshot;
     use reqwest::Client;
+    use rtd_pg_db::temp::get_available_port;
     use serde_json::Value;
     use serde_json::json;
-    use rtd_pg_db::temp::get_available_port;
 
     use crate::error::code;
     use crate::extensions::logging::Session;

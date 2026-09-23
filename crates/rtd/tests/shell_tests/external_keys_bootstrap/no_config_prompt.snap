@@ -56,17 +56,15 @@ external_keys:
   External: <SANDBOX_DIR>/config/external.keystore
 envs:
   - alias: testnet
-    rpc: "https://fullnode.testnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
-    chain_id: 01234567
   - alias: mainnet
-    rpc: "https://fullnode.mainnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
-    chain_id: 89abcdef
   - alias: devnet
-    rpc: "https://fullnode.devnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
   - alias: local

@@ -19,8 +19,6 @@ use fastcrypto::encoding::Encoding;
 use fastcrypto::encoding::Hex;
 use move_core_types::language_storage::StructTag;
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use rtd_json_rpc_types::RtdEvent;
 use rtd_types::BRIDGE_PACKAGE_ID;
 use rtd_types::TypeTag;
@@ -33,6 +31,8 @@ use rtd_types::collection_types::VecMap;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::event::Event;
 use rtd_types::parse_rtd_type_tag;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 // `TokendDepositedEvent` emitted in bridge.move
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]

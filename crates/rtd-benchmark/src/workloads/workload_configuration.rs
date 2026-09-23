@@ -16,10 +16,10 @@ use crate::workloads::{ExpectedFailureType, GroupID, WorkloadBuilderInfo, Worklo
 use anyhow::{Result, bail};
 use futures::future::join_all;
 use linku_common::ZipDebugEqIteratorExt;
+use rtd_types::base_types::RtdAddress;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use rtd_types::base_types::RtdAddress;
 use tracing::info;
 
 use super::adversarial::{AdversarialPayloadCfg, AdversarialWorkloadBuilder};

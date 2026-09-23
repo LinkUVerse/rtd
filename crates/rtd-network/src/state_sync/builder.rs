@@ -9,14 +9,14 @@ use super::{
 use crate::discovery;
 use anemo::codegen::InboundRequestLayer;
 use anemo_tower::{inflight_limit, rate_limit};
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
 use rtd_config::node::ArchiveReaderConfig;
 use rtd_config::p2p::StateSyncConfig;
 use rtd_types::messages_checkpoint::VerifiedCheckpoint;
 use rtd_types::storage::WriteStore;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 use tap::Pipe;
 use tokio::{
     sync::{broadcast, mpsc},

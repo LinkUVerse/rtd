@@ -11,8 +11,6 @@ use std::time::Duration;
 use anyhow::Context;
 use reqwest::Client;
 use reqwest::header::HeaderName;
-use serde_json::Value;
-use serde_json::json;
 use rtd_indexer_alt::config::IndexerConfig;
 use rtd_indexer_alt_framework::ingestion::ClientArgs;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientArgs;
@@ -24,6 +22,8 @@ use rtd_transactional_test_runner::run_tasks_with_adapter;
 use rtd_transactional_test_runner::test_adapter::OffChainConfig;
 use rtd_transactional_test_runner::test_adapter::PRE_COMPILED;
 use rtd_transactional_test_runner::test_adapter::RtdTestAdapter;
+use serde_json::Value;
+use serde_json::json;
 use tokio::join;
 
 use rtd_indexer_alt_e2e_tests::OffchainCluster;

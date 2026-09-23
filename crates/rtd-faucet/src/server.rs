@@ -12,6 +12,9 @@ use axum::{
     routing::{get, post},
 };
 use http::Method;
+use rtd_config::RTD_CLIENT_CONFIG;
+use rtd_futures::service::Service;
+use rtd_sdk::wallet_context::WalletContext;
 use std::{
     borrow::Cow,
     net::{IpAddr, SocketAddr},
@@ -19,9 +22,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use rtd_config::RTD_CLIENT_CONFIG;
-use rtd_futures::service::Service;
-use rtd_sdk::wallet_context::WalletContext;
 use tokio::sync::oneshot;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -154,8 +154,8 @@ pub async fn start_faucet(app_state: Arc<AppState>) -> anyhow::Result<Service> {
 mod tests {
     use super::*;
     use crate::LocalFaucet;
-    use serde_json::json;
     use rtd_sdk::types::base_types::RtdAddress;
+    use serde_json::json;
     use test_cluster::TestClusterBuilder;
 
     #[tokio::test]

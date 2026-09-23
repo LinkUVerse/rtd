@@ -11,10 +11,10 @@ use crate::e2e_tests::test_utils::{
 use crate::rtd_transaction_builder::build_rtd_transaction;
 use crate::types::{BridgeAction, BridgeActionStatus, EmergencyAction, EmergencyActionType};
 use alloy::primitives::{Address as EthAddress, U256};
-use std::sync::Arc;
 use rtd_types::bridge::{BridgeChainId, TOKEN_ID_ETH};
 use rtd_types::coin::Coin;
 use rtd_types::effects::TransactionEffectsAPI;
+use std::sync::Arc;
 use tracing::info;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]

@@ -3,6 +3,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use move_core_types::ident_str;
+use rtd_genesis_builder::validator_info::GenesisValidatorInfo;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt::{self, Debug, Display, Formatter, Write},
@@ -10,7 +11,6 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use rtd_genesis_builder::validator_info::GenesisValidatorInfo;
 use url::{ParseError, Url};
 
 use rtd_rpc::proto::rtd::rpc::v2 as proto;
@@ -35,8 +35,6 @@ use fastcrypto::{
     encoding::{Base64, Encoding},
     traits::KeyPair,
 };
-use serde::Serialize;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 use rtd_bridge::metrics::BridgeMetrics;
 use rtd_bridge::rtd_client::RtdClient as RtdBridgeClient;
 use rtd_bridge::rtd_transaction_builder::{
@@ -51,11 +49,13 @@ use rtd_keys::{
 };
 use rtd_keys::{keypair_file::read_key, keystore::AccountKeystore};
 use rtd_sdk::wallet_context::WalletContext;
-use rtd_types::crypto::{AuthorityKeyPair, NetworkKeyPair, SignatureScheme, RtdKeyPair};
+use rtd_types::crypto::{AuthorityKeyPair, NetworkKeyPair, RtdKeyPair, SignatureScheme};
 use rtd_types::crypto::{
     AuthorityPublicKeyBytes, generate_proof_of_possession, get_authority_key_pair,
 };
 use rtd_types::transaction::{CallArg, ObjectArg, Transaction, TransactionData};
+use serde::Serialize;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 
 #[path = "unit_tests/validator_tests.rs"]
 #[cfg(test)]

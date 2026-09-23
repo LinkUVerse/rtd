@@ -10,8 +10,6 @@ use prometheus::Registry;
 use prost::Message;
 use rand::SeedableRng;
 use rand::prelude::StdRng;
-use std::path::PathBuf;
-use std::time::Duration;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
@@ -25,6 +23,8 @@ use rtd_types::messages_checkpoint::{
     SignedCheckpointSummary,
 };
 use rtd_types::utils::make_committee_key;
+use std::path::PathBuf;
+use std::time::Duration;
 use tempfile::NamedTempFile;
 use tokio::sync::oneshot;
 

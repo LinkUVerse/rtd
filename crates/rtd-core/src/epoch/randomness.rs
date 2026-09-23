@@ -14,10 +14,6 @@ use linku_common::debug_fatal;
 use parking_lot::Mutex;
 use rand::SeedableRng;
 use rand::rngs::{OsRng, StdRng};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Weak};
-use std::time::Instant;
 use rtd_macros::fail_point_if;
 use rtd_network::randomness;
 use rtd_types::base_types::AuthorityName;
@@ -28,6 +24,10 @@ use rtd_types::messages_consensus::{
     ConsensusTransaction, Round, TimestampMs, VersionedDkgConfirmation, VersionedDkgMessage,
 };
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Weak};
+use std::time::Instant;
 use tokio::sync::OnceCell;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
@@ -1083,10 +1083,10 @@ mod tests {
     use fastcrypto::groups::bls12381;
     use fastcrypto::serde_helpers::ToFromByteArray;
     use fastcrypto_tbls::{mocked_dkg, nodes};
-    use std::num::NonZeroUsize;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_protocol_config::{Chain, ProtocolVersion};
     use rtd_types::{base_types::AuthorityName, messages_consensus::ConsensusTransactionKind};
+    use std::num::NonZeroUsize;
     use tokio::sync::mpsc;
     use typed_store::Map;
 

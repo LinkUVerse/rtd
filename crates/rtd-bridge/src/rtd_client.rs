@@ -13,10 +13,6 @@ use crate::types::{BridgeAction, BridgeAuthority, BridgeCommittee};
 use async_trait::async_trait;
 use core::panic;
 use fastcrypto::traits::ToFromBytes;
-use std::collections::HashMap;
-use std::str::from_utf8;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_json_rpc_types::BcsEvent;
 use rtd_json_rpc_types::RtdEvent;
 use rtd_json_rpc_types::RtdExecutionStatus;
@@ -51,6 +47,10 @@ use rtd_types::parse_rtd_type_tag;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::SharedObjectMutability;
 use rtd_types::transaction::Transaction;
+use std::collections::HashMap;
+use std::str::from_utf8;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::OnceCell;
 use tracing::{error, warn};
 
@@ -1091,12 +1091,12 @@ mod tests {
     };
     use alloy::primitives::Address as EthAddress;
     use move_core_types::account_address::AccountAddress;
-    use serde::{Deserialize, Serialize};
-    use std::str::FromStr;
     use rtd_json_rpc_types::BcsEvent;
     use rtd_types::base_types::RtdAddress;
     use rtd_types::bridge::{BridgeChainId, TOKEN_ID_RTD, TOKEN_ID_USDC};
     use rtd_types::crypto::get_key_pair;
+    use serde::{Deserialize, Serialize};
+    use std::str::FromStr;
 
     use super::*;
     use crate::events::{RtdToEthTokenBridgeV1, init_all_struct_tags};

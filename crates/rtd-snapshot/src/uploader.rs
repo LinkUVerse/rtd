@@ -10,10 +10,6 @@ use prometheus::{
     IntCounter, IntGauge, Registry, register_int_counter_with_registry,
     register_int_gauge_with_registry,
 };
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
 use rtd_core::checkpoints::CheckpointStore;
@@ -26,6 +22,10 @@ use rtd_storage::object_store::util::{
 };
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::messages_checkpoint::CheckpointCommitment::ECMHLiveObjectSetDigest;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 pub struct StateSnapshotUploaderMetrics {

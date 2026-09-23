@@ -1030,8 +1030,8 @@ mod tests {
         );
         assert_eq!(watermark_frames.value(), 1.0);
     }
-    use std::ops::Bound;
     use rtd_rpc_api::ledger_history::query_options::Ordering;
+    use std::ops::Bound;
 
     fn options(ordering: Ordering) -> QueryOptions {
         let mut request = rtd_rpc::proto::rtd::rpc::v2::QueryOptions::default();

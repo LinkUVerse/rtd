@@ -27,7 +27,7 @@ use rtd_rpc::proto::rtd::rpc::v2::command::Command;
 use rtd_rpc::proto::rtd::rpc::v2::input::InputKind;
 use rtd_rpc::proto::rtd::rpc::v2::transaction_kind::Data as TransactionKindData;
 use rtd_rpc::proto::rtd::rpc::v2::transaction_kind::Kind::ProgrammableTransaction as ProgrammableTransactionKind;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::governance::{ADD_STAKE_FUN_NAME, WITHDRAW_STAKE_FUN_NAME};
 use rtd_types::rtd_system_state::RTD_SYSTEM_MODULE_NAME;
@@ -2366,7 +2366,7 @@ mod tests {
     use crate::types::internal_operation::{consolidate_to_fungible_pt, merge_and_redeem_fss_pt};
     use rtd_rpc::proto::rtd::rpc::v2::Transaction;
     use rtd_types::Identifier;
-    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use rtd_types::transaction::{
         CallArg, Command as NativeCommand, ObjectArg, ProgrammableTransaction,
@@ -2614,8 +2614,8 @@ mod tests {
     /// A cache backed by a client that never connects, so every non-RTD coin
     /// lookup fails with a transport (transient) error.
     fn unreachable_cache() -> CoinMetadataCache {
-        use std::num::NonZeroUsize;
         use rtd_rpc::client::Client;
+        use std::num::NonZeroUsize;
         CoinMetadataCache::new(
             Client::new("http://127.0.0.1:1").unwrap(),
             NonZeroUsize::new(1).unwrap(),
@@ -2732,12 +2732,12 @@ mod tests {
     /// owner and attribute gas to it.
     #[tokio::test]
     async fn test_try_from_executed_transaction_deleted_gas_coin() -> Result<(), anyhow::Error> {
-        use std::num::NonZeroUsize;
         use rtd_rpc::client::Client;
         use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
         use rtd_rpc::proto::rtd::rpc::v2::{
             ChangedObject, ExecutedTransaction, ExecutionStatus, GasCostSummary, TransactionEffects,
         };
+        use std::num::NonZeroUsize;
 
         let sender = RtdAddress::random_for_testing_only();
         let recipient = RtdAddress::random_for_testing_only();

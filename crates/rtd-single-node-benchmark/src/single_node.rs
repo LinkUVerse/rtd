@@ -3,8 +3,6 @@
 
 use crate::command::Component;
 use crate::mock_storage::InMemoryObjectStore;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 use rtd_core::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use rtd_core::authority::authority_store_tables::LiveObject;
 use rtd_core::authority::shared_object_version_manager::{
@@ -30,6 +28,8 @@ use rtd_types::object::Object;
 use rtd_types::transaction::{
     DEFAULT_VALIDATOR_GAS_PRICE, Transaction, TransactionDataAPI, VerifiedTransaction,
 };
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SingleValidator {

@@ -15,11 +15,6 @@ use crate::replay_txn::ReplayTransaction;
 use anyhow::{Context, Error, anyhow};
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
 use move_trace_format::format::MoveTraceBuilder;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
 use rtd_data_store::{EpochStore, ObjectKey, ObjectStore, VersionQuery};
 use rtd_execution::Executor;
 use rtd_types::{
@@ -36,6 +31,11 @@ use rtd_types::{
     storage::{BackingPackageStore, PackageObject, ParentSync, RuntimeObjectResolver},
     supported_protocol_versions::ProtocolConfig,
     transaction::{CheckedInputObjects, TransactionData, TransactionDataAPI},
+};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
 };
 use tracing::{debug, debug_span, trace};
 

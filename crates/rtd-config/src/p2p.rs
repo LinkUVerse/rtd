@@ -3,11 +3,11 @@
 
 use std::{net::SocketAddr, num::NonZeroU32, path::PathBuf, time::Duration};
 
-use serde::{Deserialize, Serialize};
 use rtd_types::{
     messages_checkpoint::{CheckpointDigest, CheckpointSequenceNumber},
     multiaddr::Multiaddr,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]

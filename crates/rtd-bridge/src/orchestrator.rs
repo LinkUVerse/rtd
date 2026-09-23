@@ -12,9 +12,9 @@ use crate::action_executor::{
 };
 use crate::events::RtdBridgeEvent;
 use crate::metrics::BridgeMetrics;
-use crate::storage::BridgeOrchestratorTables;
 use crate::rtd_client::{RtdClient, RtdClientInner};
 use crate::rtd_syncer::GrpcSyncedEvents;
+use crate::storage::BridgeOrchestratorTables;
 use crate::types::EthLog;
 use alloy::primitives::Address as EthAddress;
 use linku_common::ZipDebugEqIteratorExt;
@@ -258,8 +258,8 @@ mod tests {
     };
     use alloy::primitives::TxHash;
     use prometheus::Registry;
-    use std::str::FromStr;
     use rtd_types::Identifier;
+    use std::str::FromStr;
 
     use super::*;
     use crate::events::RtdBridgeEvent;

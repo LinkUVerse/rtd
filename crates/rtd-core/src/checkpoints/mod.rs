@@ -3447,7 +3447,6 @@ fn poll_count<Fut>(future: Fut) -> PollCounter<Fut> {
 mod tests {
     use super::*;
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
-    use futures::FutureExt as _;
     use futures::future::BoxFuture;
     use rtd_macros::sim_test;
     use rtd_protocol_config::{Chain, ProtocolConfig};

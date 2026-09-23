@@ -11,11 +11,11 @@ use crate::{
     expansion::ast as E,
     naming::ast as N,
     parser::ast::{self as P, Ability_},
-    shared::{CompilationEnv, Identifier, program_info::TypingProgramInfo},
     rtd_mode::{
         RTD_ADDR_VALUE,
         linters::{FREEZE_FUN, PUBLIC_FREEZE_FUN, RtdLintCode, TRANSFER_MOD_NAME},
     },
+    shared::{CompilationEnv, Identifier, program_info::TypingProgramInfo},
     typing::{
         ast as T,
         visitor::{TypingVisitorConstructor, TypingVisitorContext},

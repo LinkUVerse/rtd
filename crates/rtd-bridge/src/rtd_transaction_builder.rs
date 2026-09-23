@@ -5,8 +5,6 @@ use crate::error::{BridgeError, BridgeResult};
 use crate::types::{BridgeAction, VerifiedCertifiedBridgeAction};
 use fastcrypto::traits::ToFromBytes;
 use move_core_types::ident_str;
-use std::collections::HashMap;
-use std::str::FromStr;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::bridge::{
     BRIDGE_CREATE_ADD_TOKEN_ON_RTD_MESSAGE_FUNCTION_NAME,
@@ -16,6 +14,8 @@ use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::CallArg;
 use rtd_types::transaction::{ObjectArg, TransactionData};
 use rtd_types::{BRIDGE_PACKAGE_ID, Identifier, TypeTag};
+use std::collections::HashMap;
+use std::str::FromStr;
 
 pub fn build_rtd_transaction(
     client_address: RtdAddress,
@@ -707,11 +707,11 @@ mod tests {
         },
     };
     use alloy::primitives::Address as EthAddress;
-    use std::collections::HashMap;
-    use std::sync::Arc;
     use rtd_types::bridge::{BridgeChainId, TOKEN_ID_BTC, TOKEN_ID_USDC};
     use rtd_types::crypto::ToFromBytes;
     use rtd_types::crypto::get_key_pair;
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
     async fn test_build_rtd_transaction_for_token_transfer() {

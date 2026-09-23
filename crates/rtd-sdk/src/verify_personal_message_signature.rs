@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use crate::error::Error;
-use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
 use rtd_rpc::Client;
 use rtd_rpc::proto::rtd::rpc::v2::{Bcs, UserSignature, VerifySignatureRequest};
 use rtd_types::{
@@ -12,6 +11,7 @@ use rtd_types::{
     signature::{AuthenticatorTrait, GenericSignature, VerifyParams},
     signature_verification::VerifiedDigestCache,
 };
+use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
 
 /// Verify a signature against a personal message bytes and the rtd address.
 /// RtdClient is required to pass in if zkLogin signature is supplied.

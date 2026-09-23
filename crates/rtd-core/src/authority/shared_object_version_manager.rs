@@ -8,9 +8,6 @@ use crate::authority::AuthorityPerEpochStore;
 use crate::authority::authority_per_epoch_store::CancelConsensusCertificateReason;
 use crate::execution_cache::ObjectCacheRead;
 use either::Either;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use rtd_types::RTD_ACCUMULATOR_ROOT_OBJECT_ID;
 use rtd_types::RTD_CLOCK_OBJECT_ID;
 use rtd_types::RTD_CLOCK_OBJECT_SHARED_VERSION;
@@ -33,6 +30,9 @@ use rtd_types::{
     IMPLICITLY_READ_SYSTEM_OBJECTS, RTD_RANDOMNESS_STATE_OBJECT_ID, base_types::SequenceNumber,
     error::RtdResult,
 };
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use tracing::trace;
 
 pub struct SharedObjVerManager {}
@@ -626,17 +626,17 @@ mod tests {
         ConsensusSharedObjVerAssignment, SharedObjVerManager,
     };
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
-    use std::collections::{BTreeMap, HashMap};
-    use std::sync::Arc;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_test_transaction_builder::TestTransactionBuilder;
-    use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
     use rtd_types::crypto::{RandomnessRound, get_account_key_pair};
     use rtd_types::digests::ObjectDigest;
     use rtd_types::effects::TestEffectsBuilder;
     use rtd_types::executable_transaction::{
         CertificateProof, ExecutableTransaction, VerifiedExecutableTransaction,
     };
+    use std::collections::{BTreeMap, HashMap};
+    use std::sync::Arc;
 
     use rtd_types::object::Object;
     use rtd_types::transaction::{ObjectArg, SenderSignedData, VerifiedTransaction};

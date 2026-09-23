@@ -40,9 +40,9 @@ use rtd_consistent_store::restore::metrics::RestoreMetrics;
 use rtd_consistent_store::restore_state;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_framework::pipeline::Processor;
-use rtd_types::storage::ObjectStore;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::get_rtd_system_state;
+use rtd_types::storage::ObjectStore;
 use tracing::info;
 use tracing::warn;
 

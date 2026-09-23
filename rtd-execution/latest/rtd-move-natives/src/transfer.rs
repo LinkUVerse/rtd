@@ -17,12 +17,12 @@ use move_vm_runtime::{
     execution::Type, execution::values::Value, natives::functions::NativeResult, pop_arg,
 };
 use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
-use smallvec::smallvec;
-use std::collections::VecDeque;
 use rtd_types::{
     base_types::{MoveObjectType, ObjectID, SequenceNumber},
     object::Owner,
 };
+use smallvec::smallvec;
+use std::collections::VecDeque;
 
 const E_SHARED_NON_NEW_OBJECT: u64 = 0;
 const E_BCS_SERIALIZATION_FAILURE: u64 = 1;

@@ -6,8 +6,8 @@
 
 use anyhow::{Context, bail};
 use indexmap::IndexMap;
-use move_core_types::{ident_str, identifier::Identifier, language_storage::TypeTag};
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::{ident_str, identifier::Identifier, language_storage::TypeTag};
 use serde::Serialize;
 
 use crate::{

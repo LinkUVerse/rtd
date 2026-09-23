@@ -44,7 +44,7 @@ NEW_LOWER="rtd"
 
 # SDK 依赖配置
 OLD_SDK_REV="618b6c8484a2394f73d9b5e21cce0ac228b2cf31"
-NEW_SDK_REV="1aed5776c9d957f08d06bde07664993d70825c93"
+NEW_SDK_REV="fd95c4566e88cda3c4e5e590deda4e6aff864700"
 
 ################################################################################
 # 全局变量
@@ -749,10 +749,15 @@ phase_14_cleanup_verify() {
             log_step "删除缓存: $dir"
             rm -rf "$dir"
         done
+
+        # 更名会改变 rustfmt 对 import 分组与顺序的判断；CI 的 rustfmt 门禁要求
+        # 对整个工作区重新排版，不能只格式化手工修改的 crate。
+        log_info "14.2 格式化 Rust 工作区..."
+        cargo fmt --all || return 1
     fi
 
-    # 14.2 检查遗漏的目录
-    log_info "14.2 检查遗漏的 ${OLD_LOWER}*/${OLD_BRAND_LOWER}* 目录..."
+    # 14.3 检查遗漏的目录
+    log_info "14.3 检查遗漏的 ${OLD_LOWER}*/${OLD_BRAND_LOWER}* 目录..."
     echo ""
     echo "=== 遗漏的目录 ==="
     find . -type d \( -name "${OLD_LOWER}-*" -o -name "${OLD_LOWER}_*" -o -name "${OLD_BRAND_LOWER}-*" -o -name "${OLD_BRAND_LOWER}_*" -o -name "${OLD_LOWER}" \) \
@@ -762,8 +767,8 @@ phase_14_cleanup_verify() {
         ! -path "./fork-instruct/*" \
         2>/dev/null || echo "  (无遗漏)"
 
-    # 14.3 检查遗漏的文件
-    log_info "14.3 检查遗漏的 ${OLD_LOWER}* 文件..."
+    # 14.4 检查遗漏的文件
+    log_info "14.4 检查遗漏的 ${OLD_LOWER}* 文件..."
     echo ""
     echo "=== 遗漏的文件 ==="
     find . -type f \( -name "${OLD_LOWER}_*.rs" -o -name "*_${OLD_LOWER}.rs" -o -name "*_${OLD_LOWER}_*.rs" -o -name "${OLD_LOWER}.*" -o -name "${OLD_LOWER}-*" \) \
@@ -774,8 +779,8 @@ phase_14_cleanup_verify() {
         ! -name "*.pdf" \
         2>/dev/null || echo "  (无遗漏)"
 
-    # 14.4 统计替换结果
-    log_info "14.4 统计文本替换结果..."
+    # 14.5 统计替换结果
+    log_info "14.5 统计文本替换结果..."
     echo ""
     echo "=== 新品牌统计 ==="
     echo "  - $NEW_ORG 出现次数: $(grep -r "$NEW_ORG" . --include="*.rs" --include="*.toml" --include="*.md" 2>/dev/null | grep -v ".git" | grep -v "target" | grep -v "fork-instruct" | wc -l | tr -d ' ')"

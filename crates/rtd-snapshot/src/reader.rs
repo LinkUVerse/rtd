@@ -15,15 +15,6 @@ use futures::{StreamExt, TryStreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use integer_encoding::VarIntReader;
 use object_store::path::Path;
-use std::collections::BTreeMap;
-use std::fs;
-use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
 use rtd_config::object_storage_config::ObjectStoreConfig;
 use rtd_core::authority::AuthorityStore;
 use rtd_core::authority::authority_store_tables::{AuthorityPerpetualTables, LiveObject};
@@ -34,6 +25,15 @@ use rtd_storage::object_store::util::path_to_filesystem;
 use rtd_storage::object_store::{ObjectStoreGetExt, ObjectStoreListExt, ObjectStorePutExt};
 use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber};
 use rtd_types::global_state_hash::GlobalStateHash;
+use std::collections::BTreeMap;
+use std::fs;
+use std::fs::File;
+use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::time::Duration;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -822,8 +822,8 @@ impl Iterator for LiveObjectIter {
 mod tests {
     use super::StateSnapshotReaderV1;
     use object_store::path::Path;
-    use std::fs;
     use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
+    use std::fs;
     use tempfile::TempDir;
 
     #[tokio::test]

@@ -36,6 +36,7 @@ use rocksdb::{
     properties,
 };
 use rocksdb::{DBPinnableSlice, LiveFile, checkpoint::Checkpoint};
+use rtd_macros::{fail_point, nondeterministic};
 use serde::{Serialize, de::DeserializeOwned};
 use std::ops::{Bound, Deref};
 use std::{
@@ -47,7 +48,6 @@ use std::{
     time::Duration,
 };
 use std::{collections::HashSet, ffi::CStr};
-use rtd_macros::{fail_point, nondeterministic};
 #[cfg(tidehunter)]
 use tidehunter::{db::Db as TideHunterDb, key_shape::KeySpace};
 use tokio::sync::oneshot;

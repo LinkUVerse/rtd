@@ -828,7 +828,7 @@ impl Query {
 
     /// Simulate a transaction to preview its effects without executing it on chain.
     ///
-    /// Accepts a JSON transaction matching the [Rtd gRPC API schema](https://docs.rtd.io/references/fullnode-protocol#rtd-rpc-v2-Transaction).
+    /// Accepts a JSON transaction matching the RTD gRPC `Transaction` schema.
     /// The JSON format allows for partial transaction specification where certain fields can be automatically resolved by the server.
     ///
     /// Alternatively, for already serialized transactions, you can pass BCS-encoded data:

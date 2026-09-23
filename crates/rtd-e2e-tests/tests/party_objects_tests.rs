@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rand::distributions::Distribution;
-use std::net::SocketAddr;
-use std::time::Duration;
 use rtd_macros::sim_test;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_test_transaction_builder::publish_basics_package_and_make_party_object;
@@ -11,6 +9,8 @@ use rtd_types::base_types::{FullObjectRef, RtdAddress};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::object::Owner;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
+use std::net::SocketAddr;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tracing::info;
 

@@ -7,9 +7,9 @@ use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{Output, ToSql};
 use diesel::sql_types::Text;
 use diesel::{AsExpression, FromSqlRow, Identifiable, Insertable, Queryable, Selectable};
+use rtd_field_count::FieldCount;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
-use rtd_field_count::FieldCount;
 
 use crate::schema::{
     governance_actions, progress_store, rtd_error_transactions, rtd_progress_store, token_transfer,

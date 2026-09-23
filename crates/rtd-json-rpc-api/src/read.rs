@@ -11,7 +11,7 @@ use rtd_json_rpc_types::{
 };
 use rtd_json_rpc_types::{ProtocolConfigResponse, ZkLoginIntentScope, ZkLoginVerifyResult};
 use rtd_open_rpc_macros::open_rpc;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress, TransactionDigest};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber, TransactionDigest};
 use rtd_types::rtd_serde::BigInt;
 
 #[open_rpc(namespace = "rtd", tag = "Read API")]

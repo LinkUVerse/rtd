@@ -3,10 +3,9 @@ name = "oracle_adapter"
 edition = "2024.beta"
 
 [dependencies]
-# Pinned to the resolved commit rather than the `rtd-contract-testnet` branch so
-# the dependency does not drift. This is the deployed Testnet Pyth package
-# (published-at 0xabf837...). See crates/rtd-framework-tests/tests/move_tests.rs
-# for why this example is excluded from the strict lint harness.
+# Historical upstream reference only. This package cannot be built or used on
+# RTD until an RTD-compatible Pyth package and matching state objects exist.
+# Replace this dependency with the verified RTD fork and commit before building.
 Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/rtd/contracts", rev = "62c7a5bc0fc857ba6417ad780190552d4919ceca" }
 
 [addresses]

@@ -11,13 +11,13 @@ use crate::{
     expansion::ast::{Fields, ModuleIdent},
     naming::ast as N,
     parser::ast::{Ability_, DatatypeName, DocComment, Field},
-    shared::{
-        program_info::{DatatypeKind, TypingProgramInfo},
-        unique_map::UniqueMap,
-    },
     rtd_mode::{
         OBJECT_MODULE_NAME, RTD_ADDR_VALUE, TRANSFER_FUNCTION_NAME, TRANSFER_MODULE_NAME,
         UID_TYPE_NAME,
+    },
+    shared::{
+        program_info::{DatatypeKind, TypingProgramInfo},
+        unique_map::UniqueMap,
     },
     typing::{ast as T, visitor::TypingVisitorContext},
 };

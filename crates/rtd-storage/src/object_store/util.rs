@@ -23,6 +23,9 @@ use object_store::{
 };
 use prost::Message;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_types::full_checkpoint_content::Checkpoint;
+use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::BTreeMap;
@@ -32,9 +35,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
-use rtd_types::full_checkpoint_content::Checkpoint;
-use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use tracing::{error, warn};
 use url::Url;
 
@@ -564,9 +564,9 @@ mod tests {
         MANIFEST_FILENAME, copy_recursively, delete_recursively, write_snapshot_manifest,
     };
     use object_store::path::Path;
+    use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
     use std::fs;
     use std::num::NonZeroUsize;
-    use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
     use tempfile::TempDir;
 
     #[tokio::test]

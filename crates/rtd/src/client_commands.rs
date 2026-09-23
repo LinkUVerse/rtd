@@ -9,6 +9,7 @@ use crate::{
     verifier_meter::{AccumulatingMeter, Accumulator},
 };
 use futures::{StreamExt, TryStreamExt};
+use rtd_rpc::proto::rtd::rpc::v2::{self as proto};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Debug, Display, Formatter, Write},
@@ -18,7 +19,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use rtd_rpc::proto::rtd::rpc::v2::{self as proto};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use bip32::DerivationPath;
@@ -41,12 +41,11 @@ use move_core_types::{
 use move_package_alt::{PackageLoader, read_publication, schema::ModeName};
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
 use prometheus::Registry;
-use serde::Serialize;
-use serde_json::{Value, json};
 use rtd_config::verifier_signing_config::VerifierSigningConfig;
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+use serde::Serialize;
+use serde_json::{Value, json};
 
-use shared_crypto::intent::Intent;
 use rtd_json::RtdJsonValue;
 use rtd_json_rpc_types::{
     BalanceChange as RpcBalanceChange, BcsEvent, Coin as RpcCoin, DryRunTransactionBlockResponse,
@@ -62,7 +61,7 @@ use rtd_rpc_api::{
     client::{ExecutedTransaction, SimulateTransactionResponse},
 };
 use rtd_sdk::{
-    RTD_DEVNET_URL, RTD_LOCAL_NETWORK_URL, RTD_LOCAL_NETWORK_URL_0, RTD_TESTNET_URL,
+    RTD_LOCAL_NETWORK_URL, RTD_LOCAL_NETWORK_URL_0,
     digests::chain_id_base58,
     rtd_client_config::{RtdClientConfig, RtdEnv},
     rtd_sdk_types::bcs::ToBcs,
@@ -70,7 +69,7 @@ use rtd_sdk::{
 };
 use rtd_types::{
     RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID,
-    base_types::{FullObjectID, ObjectID, ObjectRef, ObjectType, SequenceNumber, RtdAddress},
+    base_types::{FullObjectID, ObjectID, ObjectRef, ObjectType, RtdAddress, SequenceNumber},
     coin::{COIN_MODULE_NAME, COIN_STRUCT_NAME, Coin},
     crypto::{EmptySignInfo, SignatureScheme},
     digests::TransactionDigest,
@@ -86,14 +85,15 @@ use rtd_types::{
     object::{Object, Owner},
     parse_rtd_type_tag,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
-    signature::GenericSignature,
     rtd_sdk_types_conversions::type_tag_sdk_to_core,
+    signature::GenericSignature,
     transaction::{
         Argument, Command, FundsWithdrawalArg, GasData, ObjectArg, SenderSignedData,
         SharedObjectMutability, Transaction, TransactionData, TransactionDataAPI,
         TransactionExpiration, TransactionKind,
     },
 };
+use shared_crypto::intent::Intent;
 
 use json_to_table::json_to_table;
 use tabled::{
@@ -122,7 +122,7 @@ const NUM_CONCURRENCY_REQS: usize = 8;
 /// Rate limit for RPC calls to avoid being throttled by the server. This is equivalent to 20rps.
 const RATE_LIMIT_MILLIS: u64 = 50;
 /// Handed to users whose CLI has fallen behind the network's protocol version.
-const CLI_INSTALL_DOCS: &str = "https://docs.rtd.io/guides/developer/getting-started/rtd-install";
+const CLI_UPDATE_HINT: &str = "build and install a newer CLI from the current RTD source";
 
 pub(crate) static USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
@@ -471,7 +471,7 @@ pub enum RtdClientCommands {
         name = "test-publish",
         after_long_help = "The `test-publish` command is used to publish packages ephemerally, i.e. without recording the published addresses in the main `Published.toml` file. Running `rtd client test-publish --pubfile-path <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
                 \n\
-                See https://docs.rtd.io/guides/developer/packages/move-package-management for more information."
+                See `rtd move --help` and the package's Move.toml and Published.toml for build environment and publication settings."
     )]
     TestPublish(TestPublishArgs),
 
@@ -483,7 +483,7 @@ pub enum RtdClientCommands {
         name = "test-upgrade",
         after_long_help = "The `test-upgrade` command is used to upgrade ephemeral packages, for packages published using `test-publish` command. This does not write publication info to `Published.toml` file. Running `rtd client test-upgrade --pubfile-path <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
             \n\
-            See https://docs.rtd.io/guides/developer/packages/move-package-management for more information."
+            See `rtd move --help` and the package's Move.toml and Published.toml for build environment and publication settings."
     )]
     TestUpgrade(TestUpgradeArgs),
 
@@ -1019,7 +1019,7 @@ impl RtdClientCommands {
                     .map_err(|e| {
                         anyhow!(
                             "Cannot meter bytecode: {e}. Either pass a supported \
-                             --protocol-version, or install a newer CLI - {CLI_INSTALL_DOCS}"
+                             --protocol-version, or {CLI_UPDATE_HINT}"
                         )
                     })?;
 
@@ -1586,15 +1586,11 @@ impl RtdClientCommands {
             RtdClientCommands::Faucet { address, url } => {
                 let address = context.get_identity_address(address)?;
                 let url = if let Some(url) = url {
-                    ensure!(
-                        !url.starts_with("https://faucet.testnet.rtd.io"),
-                        "For testnet tokens, please use the Web UI: https://faucet.rtd.io/?address={address}"
-                    );
                     url
                 } else {
                     let active_env = context.get_active_env();
                     if let Ok(env) = active_env {
-                        find_faucet_url(address, &env.rpc)?
+                        find_faucet_url(&env.rpc)?
                     } else {
                         bail!("No URL for faucet was provided and there is no active network.")
                     }
@@ -3876,8 +3872,7 @@ async fn check_protocol_version_and_warn(client: &Client) -> Result<(), anyhow::
             format!(
                 "[warning] CLI's protocol version is {cli_protocol_version}, but the active \
                 network's protocol version is {on_chain_protocol_version}. \
-                \n Consider installing the latest version of the CLI - \
-                {CLI_INSTALL_DOCS} \n\n \
+                \n Consider {CLI_UPDATE_HINT}. \n\n \
                 If publishing/upgrading returns a dependency verification error, then install the \
                 latest CLI version."
             )
@@ -4526,35 +4521,46 @@ fn url_to_host(url: &str) -> anyhow::Result<String> {
         .ok_or_else(|| anyhow!("Cannot extract host from url: {}", url))
 }
 
-/// Find the faucet URL based on the RPC URL. It maps the public networks to their faucet URLs, for
-/// devnet and localnet. For testnet, it instructs the user to use the web UI.
-fn find_faucet_url(address: RtdAddress, rpc: &str) -> anyhow::Result<String> {
+/// Only a local network has a built-in faucet URL; remote networks require an explicit one.
+fn find_faucet_url(rpc: &str) -> anyhow::Result<String> {
+    ensure!(
+        !rpc.trim().is_empty(),
+        "The active network RPC URL is not configured"
+    );
     let host = url_to_host(rpc)?;
-    let devnet_host = url_to_host(RTD_DEVNET_URL)?;
-    let testnet_host = url_to_host(RTD_TESTNET_URL)?;
     let localhost = url_to_host(RTD_LOCAL_NETWORK_URL)?;
     let localhost_0 = url_to_host(RTD_LOCAL_NETWORK_URL_0)?;
-
-    if host == devnet_host {
-        return Ok("https://faucet.devnet.rtd.io/v2/gas".to_string());
-    }
-
-    if host == testnet_host {
-        bail!(
-            "For testnet tokens, please use the Web UI: https://faucet.rtd.io/?address={address}"
-        );
-    }
 
     if host == localhost || host == localhost_0 {
         Ok("http://127.0.0.1:9123/v2/gas".to_string())
     } else {
-        bail!("Cannot recognize the active network. Please provide the gas faucet full URL.")
+        bail!("No faucet URL is configured for this network; pass --url with the faucet URL")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn built_in_faucet_is_local_only() {
+        assert_eq!(
+            find_faucet_url(RTD_LOCAL_NETWORK_URL).unwrap(),
+            "http://127.0.0.1:9123/v2/gas"
+        );
+        assert!(
+            find_faucet_url("")
+                .unwrap_err()
+                .to_string()
+                .contains("not configured")
+        );
+        assert!(
+            find_faucet_url("https://rpc.example.com")
+                .unwrap_err()
+                .to_string()
+                .contains("--url")
+        );
+    }
 
     #[test]
     fn protocol_config_out_of_range_errors_instead_of_panicking() {

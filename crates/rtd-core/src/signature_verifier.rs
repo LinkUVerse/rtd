@@ -10,10 +10,8 @@ use linku_common::debug_fatal;
 use nonempty::NonEmpty;
 use parking_lot::RwLock;
 use prometheus::{IntCounter, Registry, register_int_counter_with_registry};
-use shared_crypto::intent::Intent;
-use std::sync::Arc;
 use rtd_types::address_alias;
-use rtd_types::base_types::{SequenceNumber, RtdAddress};
+use rtd_types::base_types::{RtdAddress, SequenceNumber};
 use rtd_types::digests::SenderSignedDataDigest;
 use rtd_types::digests::ZKLoginInputsDigest;
 use rtd_types::signature_verification::{
@@ -29,6 +27,8 @@ use rtd_types::{
     messages_checkpoint::SignedCheckpointSummary,
     signature::VerifyParams,
 };
+use shared_crypto::intent::Intent;
+use std::sync::Arc;
 use tracing::debug;
 
 /// Verifies signatures in ways that are faster than verifying each signature individually.

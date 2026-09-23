@@ -6,8 +6,6 @@ use self::index_search::{SearchRange, search_index};
 use crate::db_tool::db_dump::{compact, print_table_metadata, prune_checkpoints, prune_objects};
 use anyhow::{anyhow, bail};
 use clap::Parser;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use rtd_core::authority::authority_per_epoch_store::AuthorityEpochTables;
 use rtd_core::authority::authority_store_pruner::PrunerWatermarks;
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
@@ -16,6 +14,8 @@ use rtd_types::base_types::{EpochId, ObjectID};
 use rtd_types::digests::{CheckpointContentsDigest, TransactionDigest};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::messages_checkpoint::{CheckpointDigest, CheckpointSequenceNumber};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 #[cfg(not(tidehunter))]
 use typed_store::rocks::MetricConf;
 use typed_store::rocks::safe_drop_db;

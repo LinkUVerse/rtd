@@ -10,8 +10,8 @@ use move_vm_types::{
     pop_arg,
     values::{Struct, Value, Vector, VectorRef, VectorSpecialization},
 };
-use std::collections::{BTreeMap, VecDeque};
 use rtd_types::nitro_attestation::{parse_nitro_attestation, verify_nitro_attestation};
+use std::collections::{BTreeMap, VecDeque};
 
 use crate::{NativesCostTable, get_extension, object_runtime::ObjectRuntime};
 use move_vm_runtime::native_charge_gas_early_exit;

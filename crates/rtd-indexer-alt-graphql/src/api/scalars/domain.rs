@@ -4,9 +4,9 @@
 use std::ops::Deref;
 use std::str::FromStr;
 
+use rtd_name_service::Domain as NativeDomain;
 use serde::Deserialize;
 use serde::Serialize;
-use rtd_name_service::Domain as NativeDomain;
 
 use crate::api::scalars::impl_string_input;
 

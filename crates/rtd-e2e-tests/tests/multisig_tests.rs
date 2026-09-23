@@ -16,8 +16,6 @@ use passkey_types::{
         PublicKeyCredentialUserEntity, UserVerificationRequirement,
     },
 };
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::net::SocketAddr;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
@@ -28,7 +26,7 @@ use rtd_types::passkey_authenticator::{PasskeyAuthenticator, to_signing_message}
 use rtd_types::{
     base_types::RtdAddress,
     crypto::{
-        CompressedSignature, PublicKey, Signature, RtdKeyPair, ZkLoginAuthenticatorAsBytes,
+        CompressedSignature, PublicKey, RtdKeyPair, Signature, ZkLoginAuthenticatorAsBytes,
         ZkLoginPublicIdentifier, get_key_pair,
     },
     error::RtdResult,
@@ -44,6 +42,8 @@ use rtd_types::{
     error::RtdErrorKind,
 };
 use rtd_types::{effects::TransactionEffectsAPI, error::UserInputError};
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::net::SocketAddr;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use url::Url;
 async fn do_upgraded_multisig_test() -> RtdResult<SubmitTxResponse> {

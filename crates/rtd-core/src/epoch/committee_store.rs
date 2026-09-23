@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use rtd_types::base_types::ObjectID;
 use rtd_types::committee::{Committee, EpochId};
 use rtd_types::error::{RtdErrorKind, RtdResult};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use typed_store::rocks::{DBMap, DBOptions, MetricConf, default_db_options};
 use typed_store::rocksdb::Options;
 

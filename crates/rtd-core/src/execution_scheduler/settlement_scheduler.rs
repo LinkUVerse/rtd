@@ -16,7 +16,6 @@ use crate::{
 };
 use linku_metrics::{monitored_mpsc, spawn_monitored_task};
 use parking_lot::Mutex;
-use std::sync::Arc;
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID,
     base_types::TransactionDigest,
@@ -24,6 +23,7 @@ use rtd_types::{
     executable_transaction::VerifiedExecutableTransaction,
     transaction::{TransactionDataAPI, TransactionKey, VerifiedTransaction},
 };
+use std::sync::Arc;
 use tracing::{debug, error};
 
 #[derive(Clone)]

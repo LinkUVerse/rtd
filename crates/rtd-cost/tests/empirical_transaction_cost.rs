@@ -2,10 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use insta::assert_json_snapshot;
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::PathBuf};
-use strum_macros::Display;
-use strum_macros::EnumString;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_test_transaction_builder::publish_basics_package_and_make_counter;
@@ -22,6 +18,10 @@ use rtd_types::{
     gas::GasCostSummary,
     transaction::{CallArg, ObjectArg},
 };
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, path::PathBuf};
+use strum_macros::Display;
+use strum_macros::EnumString;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 #[derive(

@@ -12,8 +12,6 @@ use diesel::prelude::QueryableByName;
 use diesel::sql_types::BigInt;
 use itertools::Itertools;
 use prost_types::FieldMask;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::AlphaLedgerGrpcReader;
 use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::StreamPage;
 use rtd_indexer_alt_reader::kv_loader::KvLoader;
@@ -28,6 +26,8 @@ use rtd_sql_macro::query;
 use rtd_types::base_types::RtdAddress as NativeRtdAddress;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::event::Event as NativeEvent;
+use serde::Deserialize;
+use serde::Serialize;
 use tokio::sync::OnceCell;
 
 use crate::api::scalars::base64::Base64;

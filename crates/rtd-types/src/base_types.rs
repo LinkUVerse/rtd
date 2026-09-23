@@ -18,7 +18,7 @@ use crate::coin::TreasuryCap;
 use crate::coin_registry::Currency;
 pub use crate::committee::EpochId;
 use crate::crypto::{
-    AuthorityPublicKeyBytes, DefaultHash, PublicKey, SignatureScheme, RtdPublicKey, RtdSignature,
+    AuthorityPublicKeyBytes, DefaultHash, PublicKey, RtdPublicKey, RtdSignature, SignatureScheme,
 };
 pub use crate::digests::{ObjectDigest, TransactionDigest, TransactionEffectsDigest};
 use crate::dynamic_field::DynamicFieldInfo;
@@ -41,10 +41,10 @@ use crate::messages_checkpoint::CheckpointTimestamp;
 use crate::multisig::MultiSigPublicKey;
 use crate::object::{Object, Owner};
 use crate::parse_rtd_struct_tag;
-use crate::signature::GenericSignature;
 use crate::rtd_serde::Readable;
 use crate::rtd_serde::to_custom_deser_error;
 use crate::rtd_serde::to_rtd_struct_tag_string;
+use crate::signature::GenericSignature;
 use crate::transaction::Transaction;
 use crate::transaction::VerifiedTransaction;
 use crate::zk_login_authenticator::ZkLoginAuthenticator;
@@ -65,6 +65,7 @@ use move_core_types::language_storage::ModuleId;
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
 use rand::Rng;
+use rtd_protocol_config::ProtocolConfig;
 use schemars::JsonSchema;
 use serde::Deserializer;
 use serde::Serializer;
@@ -80,7 +81,6 @@ use std::cmp::max;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::str::FromStr;
-use rtd_protocol_config::ProtocolConfig;
 
 #[cfg(test)]
 #[path = "unit_tests/base_types_tests.rs"]

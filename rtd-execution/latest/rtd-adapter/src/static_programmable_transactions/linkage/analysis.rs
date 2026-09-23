@@ -17,12 +17,12 @@ use crate::{
 use move_binary_format::file_format::Visibility;
 use move_core_types::identifier::IdentStr;
 use move_vm_runtime::validation::verification::ast::Package as VerifiedPackage;
-use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
     base_types::ObjectID, error::ExecutionErrorTrait, execution_status::ExecutionErrorKind,
     transaction::ProgrammableTransaction,
 };
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct LinkageAnalyzer {

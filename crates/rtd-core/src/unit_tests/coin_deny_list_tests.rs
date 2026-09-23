@@ -8,7 +8,6 @@ use crate::authority::test_authority_builder::TestAuthorityBuilder;
 use move_core_types::ident_str;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use std::sync::Arc;
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_test_transaction_builder::{FundSource, TestTransactionBuilder};
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, dbg_addr};
@@ -26,6 +25,7 @@ use rtd_types::transaction::{
     Transaction, TransactionData,
 };
 use rtd_types::{RTD_DENY_LIST_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID};
+use std::sync::Arc;
 
 // Test that a regulated coin can be created and all the necessary objects are created with the right types.
 // Make sure that these types can be converted to Rust types.

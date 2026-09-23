@@ -20,6 +20,7 @@ use crate::{
         Ability_, BinOp, BinOp_, ConstantName, DatatypeName, DocComment, Field, FunctionName,
         TargetKind, UnaryOp_, VariantName,
     },
+    rtd_mode,
     shared::{
         ide::{DotAutocompleteInfo, IDEAnnotation, MacroCallInfo},
         known_attributes::{
@@ -31,7 +32,6 @@ use crate::{
         unique_map::UniqueMap,
         *,
     },
-    rtd_mode,
     typing::{
         ast::{self as T},
         core::{

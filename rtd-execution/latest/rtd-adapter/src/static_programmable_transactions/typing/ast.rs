@@ -12,8 +12,8 @@ use crate::{
 use indexmap::{IndexMap, IndexSet};
 use move_core_types::u256::U256;
 use move_vm_runtime::execution::values::VectorSpecialization;
-use std::cell::OnceCell;
 use rtd_types::base_types::{ObjectID, ObjectRef};
+use std::cell::OnceCell;
 
 //**************************************************************************************************
 // AST Nodes

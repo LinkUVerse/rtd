@@ -6,7 +6,6 @@ use super::{AuthenticatedEvent, AuthenticatedEventsClient, ClientConfig, ClientE
 use futures::StreamExt;
 use futures::stream::Stream;
 use linku_common::debug_fatal;
-use std::sync::Arc;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
 use rtd_rpc::proto::rtd::rpc::v2::{
@@ -16,6 +15,7 @@ use rtd_rpc::proto::rtd::rpc::v2::{
 };
 use rtd_types::accumulator_root::{EventCommitment, EventStreamHead};
 use rtd_types::base_types::{ObjectID, RtdAddress};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::transport::Channel;
 

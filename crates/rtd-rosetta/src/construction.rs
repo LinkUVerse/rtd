@@ -16,7 +16,6 @@ use rtd_rpc::proto::rtd::rpc::v2::{
     simulate_transaction_request::TransactionChecks,
 };
 
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{DefaultHash, SignatureScheme, ToFromBytes};
 use rtd_types::digests::TransactionDigest;
@@ -25,6 +24,7 @@ use rtd_types::signature_verification::{
     VerifiedDigestCache, verify_sender_signed_data_message_signatures,
 };
 use rtd_types::transaction::TransactionDataAPI;
+use shared_crypto::intent::{Intent, IntentMessage};
 
 use crate::errors::Error;
 use crate::operations::reconstruct_operations;

@@ -8,10 +8,6 @@ use move_vm_types::{
     effects::Op,
     values::{GlobalValue, StructRef, Value},
 };
-use std::{
-    collections::{BTreeMap, btree_map},
-    sync::Arc,
-};
 use rtd_protocol_config::{LimitThresholdCrossed, ProtocolConfig, check_limit_by_meter};
 use rtd_types::{
     base_types::{MoveObjectType, ObjectID, SequenceNumber},
@@ -21,6 +17,10 @@ use rtd_types::{
     metrics::ExecutionMetrics,
     object::{Data, MoveObject, Object, Owner},
     storage::RuntimeObjectResolver,
+};
+use std::{
+    collections::{BTreeMap, btree_map},
+    sync::Arc,
 };
 
 pub(super) struct ChildObject {

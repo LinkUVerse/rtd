@@ -9,13 +9,13 @@ use move_core_types::{
 use move_vm_runtime::{
     shared::types::VersionId, validation::verification::ast::Package as VerifiedPackage,
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc};
 use rtd_types::{
     base_types::ObjectID,
     error::{ExecutionError, RtdError, RtdResult},
     move_package::MovePackage,
     storage::BackingPackageStore,
 };
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// A `TransactionPackageStore` is a `ModuleResolver` that fetches packages from a backing store.
 /// It also tracks packages that are being published in the current transaction and allows

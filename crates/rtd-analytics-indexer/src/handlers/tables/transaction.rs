@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use rtd_indexer_alt_framework::pipeline::Processor;
-use rtd_types::base_types::{EpochId, ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{EpochId, ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::digests::ObjectDigest;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::effects::TransactionEffectsAPI;

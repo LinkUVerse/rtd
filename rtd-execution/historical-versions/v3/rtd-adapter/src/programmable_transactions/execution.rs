@@ -39,15 +39,6 @@ mod checked {
         session::{LoadedFunctionInstantiation, SerializedReturnValues},
     };
     use move_vm_types::loaded_data::runtime_types::{CachedDatatype, Type};
-    use serde::{Deserialize, de::DeserializeSeed};
-    use std::{
-        cell::{OnceCell, RefCell},
-        collections::{BTreeMap, BTreeSet},
-        fmt,
-        rc::Rc,
-        sync::Arc,
-        time::Instant,
-    };
     use rtd_move_natives::object_runtime::ObjectRuntime;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::storage::StorageView;
@@ -79,6 +70,15 @@ mod checked {
         INIT_FN_NAME,
         private_generics::{EVENT_MODULE, PRIVATE_TRANSFER_FUNCTIONS, TRANSFER_MODULE},
         private_generics_verifier_v2,
+    };
+    use serde::{Deserialize, de::DeserializeSeed};
+    use std::{
+        cell::{OnceCell, RefCell},
+        collections::{BTreeMap, BTreeSet},
+        fmt,
+        rc::Rc,
+        sync::Arc,
+        time::Instant,
     };
     use tracing::instrument;
 

@@ -24,6 +24,7 @@ mod checked {
         type_resolver::TypeTagResolver,
     };
     use indexmap::IndexSet;
+    use linku_common::debug_fatal;
     use move_binary_format::{
         CompiledModule,
         errors::{Location, PartialVMError, VMError, VMResult},
@@ -43,15 +44,7 @@ mod checked {
         session::{LoadedFunctionInstantiation, SerializedReturnValues},
     };
     use move_vm_types::{data_store::MoveResolver, loaded_data::runtime_types::Type};
-    use linku_common::debug_fatal;
     use nonempty::nonempty;
-    use std::{
-        borrow::Borrow,
-        cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashMap},
-        rc::Rc,
-        sync::Arc,
-    };
     use rtd_move_natives::object_runtime::{
         self, LoadedRuntimeObject, MoveAccumulatorEvent, MoveAccumulatorValue, ObjectRuntime,
         RuntimeResults, get_all_uids, max_event_error,
@@ -77,6 +70,13 @@ mod checked {
         transaction::{
             Argument, CallArg, FundsWithdrawalArg, ObjectArg, SharedObjectMutability, WithdrawFrom,
         },
+    };
+    use std::{
+        borrow::Borrow,
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet, HashMap},
+        rc::Rc,
+        sync::Arc,
     };
     use tracing::instrument;
 

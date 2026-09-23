@@ -533,12 +533,12 @@ mod tests {
     use fastcrypto::hash::Keccak256;
     use fastcrypto::traits::ToFromBytes;
     use prometheus::Registry;
-    use std::str::FromStr;
     use rtd_types::TypeTag;
     use rtd_types::base_types::{RtdAddress, TransactionDigest};
     use rtd_types::bridge::BridgeChainId;
     use rtd_types::bridge::TOKEN_ID_BTC;
     use rtd_types::bridge::TOKEN_ID_USDC;
+    use std::str::FromStr;
 
     use super::*;
 

@@ -18,7 +18,7 @@ use rtd_rpc::proto::rtd::rpc::v2::ExecutionStatus;
 use rtd_rpc::proto::rtd::rpc::v2::TransactionKind;
 use rtd_rpc::proto::rtd::rpc::v2::transaction_kind::Kind;
 use rtd_sdk_types::Address;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest};
 use rtd_types::crypto::PublicKey as RtdPublicKey;
 use rtd_types::crypto::SignatureScheme;
 use rtd_types::messages_checkpoint::CheckpointDigest;

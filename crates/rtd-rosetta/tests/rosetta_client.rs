@@ -22,7 +22,7 @@ use rtd_rosetta::types::{
     ConstructionCombineResponse, ConstructionMetadataRequest, ConstructionMetadataResponse,
     ConstructionPayloadsRequest, ConstructionPayloadsResponse, ConstructionPreprocessRequest,
     ConstructionPreprocessResponse, ConstructionSubmitRequest, Currencies, NetworkIdentifier,
-    PreprocessMetadata, Signature, SignatureType, SubAccount, SubAccountType, RtdEnv,
+    PreprocessMetadata, RtdEnv, Signature, SignatureType, SubAccount, SubAccountType,
     TransactionIdentifierResponse,
 };
 use rtd_rosetta::{RosettaOfflineServer, RosettaOnlineServer};

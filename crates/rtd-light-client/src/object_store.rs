@@ -4,10 +4,10 @@
 use crate::config::Config;
 use anyhow::Result;
 use async_trait::async_trait;
-use std::sync::Arc;
 use rtd_storage::object_store::util::fetch_checkpoint;
 use rtd_types::full_checkpoint_content::CheckpointData;
 use rtd_types::messages_checkpoint::CertifiedCheckpointSummary;
+use std::sync::Arc;
 use tracing::info;
 use url::Url;
 

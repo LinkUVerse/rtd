@@ -3,12 +3,12 @@
 
 use std::path::{Path, PathBuf};
 
+use linku_common::ZipDebugEqIteratorExt;
 use move_binary_format::{
     CompiledModule,
     compatibility::{self, Compatibility, InclusionCheck},
     normalized,
 };
-use linku_common::ZipDebugEqIteratorExt;
 use rtd_move_build::BuildConfig;
 
 pub const TEST_DIR: &str = "tests";

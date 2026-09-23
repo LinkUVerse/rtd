@@ -14,13 +14,13 @@ use crate::{
         typing::ast::{Command__, Commands, Type},
     },
 };
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::{annotated_value as A, language_storage::TypeTag};
 use move_trace_format::{
     format::{Effect, MoveTraceBuilder, RefType, TraceEvent, TypeTagWithRefs},
     value::{SerializableMoveValue, SimplifiedMoveStruct},
 };
 use move_vm_runtime::execution::values::Value as VMValue;
-use linku_common::ZipDebugEqIteratorExt;
 use rtd_types::{
     error::ExecutionError,
     ptb_trace::{

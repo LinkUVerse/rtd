@@ -20,9 +20,9 @@ use move_vm_runtime::{
     pop_arg,
     shared::views::{SizeConfig, ValueView},
 };
+use rtd_types::error::VMMemoryLimitExceededSubStatusCode;
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::error::VMMemoryLimitExceededSubStatusCode;
 use tracing::instrument;
 
 // These must match the error constants declared in `rtd::scratch`.

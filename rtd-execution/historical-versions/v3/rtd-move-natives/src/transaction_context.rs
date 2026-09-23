@@ -5,12 +5,12 @@ use better_any::{Tid, TidAble};
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::{account_address::AccountAddress, vm_status::StatusCode};
 use move_vm_runtime::native_extensions::NativeExtensionMarker;
-use std::{cell::RefCell, rc::Rc};
 use rtd_types::{
     base_types::{ObjectID, RtdAddress, TxContext},
     committee::EpochId,
     digests::TransactionDigest,
 };
+use std::{cell::RefCell, rc::Rc};
 
 // TransactionContext is a wrapper around TxContext that is exposed to NativeContextExtensions
 // in order to provide transaction context information to Move native functions.

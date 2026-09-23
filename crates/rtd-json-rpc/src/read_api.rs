@@ -17,20 +17,20 @@ use indexmap::map::IndexMap;
 use itertools::Itertools;
 use jsonrpsee::RpcModule;
 use jsonrpsee::core::RpcResult;
+use linku_common::ZipDebugEqIteratorExt;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::annotated_value::{MoveStructLayout, MoveTypeLayout};
 use move_core_types::language_storage::StructTag;
-use linku_common::ZipDebugEqIteratorExt;
 use once_cell::sync::Lazy;
-use serde_json::Value as Json;
-use shared_crypto::intent::{IntentMessage, PersonalMessage};
 use rtd_display::v1::Format;
 use rtd_json_rpc_types::ZkLoginIntentScope;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::signature::{GenericSignature, VerifyParams};
 use rtd_types::signature_verification::VerifiedDigestCache;
 use rtd_types::storage::ObjectKey;
+use serde_json::Value as Json;
+use shared_crypto::intent::{IntentMessage, PersonalMessage};
 use tap::TapFallible;
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -68,9 +68,9 @@ use crate::{
 };
 use fastcrypto::encoding::Encoding;
 use fastcrypto::traits::ToFromBytes;
-use shared_crypto::intent::Intent;
 use rtd_json_rpc_types::ZkLoginVerifyResult;
 use rtd_types::authenticator_state::{ActiveJwk, get_authenticator_state};
+use shared_crypto::intent::Intent;
 
 /// Default max depth used while converting rendered Display values to JSON.
 const DEFAULT_MAX_DISPLAY_MOVE_VALUE_DEPTH: usize = 32;
@@ -1594,7 +1594,6 @@ mod tests {
     use crate::authority_state::MockStateRead;
     use mockall::mock;
     use roaring::RoaringBitmap;
-    use std::collections::HashMap;
     use rtd_storage::key_value_store::{
         KVStoreCheckpointData, KVStoreTransactionData, TransactionKeyValueStoreTrait,
     };
@@ -1611,6 +1610,7 @@ mod tests {
     };
     use rtd_types::object::Object;
     use rtd_types::storage::ObjectKey;
+    use std::collections::HashMap;
 
     #[test]
     fn test_calculate_checkpoint_numbers() {

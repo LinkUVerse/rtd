@@ -16,8 +16,8 @@ use test_fuzz::runtime::num_traits::ToPrimitive;
 use rtd_framework::BuiltInFramework;
 use rtd_move_build::BuildConfig;
 use rtd_types::base_types::{
-    ObjectID, STD_ASCII_MODULE_NAME, STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME,
-    STD_OPTION_STRUCT_NAME, RtdAddress, TransactionDigest,
+    ObjectID, RtdAddress, STD_ASCII_MODULE_NAME, STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME,
+    STD_OPTION_STRUCT_NAME, TransactionDigest,
 };
 use rtd_types::dynamic_field::derive_dynamic_field_id;
 use rtd_types::gas_coin::GasCoin;

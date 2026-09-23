@@ -30,12 +30,12 @@
 
 use fastcrypto::encoding::Hex;
 use prost::Message;
-use serde::{Deserialize, Serialize};
 use rtd_rpc::proto::rtd::rpc::v2::Transaction as ProtoTransaction;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::TransactionData;
+use serde::{Deserialize, Serialize};
 
 use crate::Currency;
 use crate::errors::Error;
@@ -168,7 +168,7 @@ pub fn decode(hex: &Hex) -> Result<RosettaTransaction, Error> {
 mod tests {
     use super::*;
     use crate::RTD;
-    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use rtd_types::transaction::{TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData};
 

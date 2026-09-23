@@ -16,9 +16,6 @@ use wiremock::MockServer;
 
 use move_core_types::identifier::Identifier;
 use prometheus::Registry;
-use simulacrum::Simulacrum;
-use simulacrum::SimulatorStore;
-use simulacrum::store::in_mem_store::KeyStore;
 use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
@@ -49,6 +46,9 @@ use rtd_types::transaction_driver_types::ExecuteTransactionRequestV3;
 use rtd_types::transaction_driver_types::TransactionSubmissionError;
 use rtd_types::transaction_executor::TransactionChecks;
 use rtd_types::transaction_executor::TransactionExecutor;
+use simulacrum::Simulacrum;
+use simulacrum::SimulatorStore;
+use simulacrum::store::in_mem_store::KeyStore;
 
 use crate::context::Context;
 use crate::rpc::executor::ForkedTransactionExecutor;

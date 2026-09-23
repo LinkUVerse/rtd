@@ -5,8 +5,6 @@ use std::time::Duration;
 
 use anyhow::Context;
 use reqwest::Client;
-use serde_json::Value;
-use serde_json::json;
 use rtd_indexer_alt_e2e_tests::OffchainCluster;
 use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
 use rtd_indexer_alt_e2e_tests::local_ingestion_client_args;
@@ -32,6 +30,8 @@ use rtd_types::transaction::Command;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::TransactionData;
 use rtd_types::transaction::TransactionDataAPI;
+use serde_json::Value;
+use serde_json::json;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 use url::Url;

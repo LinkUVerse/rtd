@@ -1,9 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use rtd_http::middleware::grpc_timeout::GrpcTimeout;
 use std::convert::Infallible;
 use std::time::Duration;
-use rtd_http::middleware::grpc_timeout::GrpcTimeout;
 use tonic::server::NamedService;
 use tower::Service;
 use tower::layer::layer_fn;

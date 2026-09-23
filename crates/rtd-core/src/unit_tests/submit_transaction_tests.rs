@@ -13,7 +13,6 @@ use consensus_core::{BlockStatus, TransactionPool as _};
 use consensus_types::block::{BlockRef, PING_TRANSACTION_INDEX};
 use fastcrypto::traits::KeyPair;
 use nonempty::NonEmpty;
-use shared_crypto::intent::{Intent, IntentScope};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectRef, RtdAddress, random_object_ref};
 use rtd_types::crypto::{AccountKeyPair, AuthoritySignInfo, get_account_key_pair};
@@ -34,6 +33,7 @@ use rtd_types::transaction::{
     AllowedProposers, Transaction, TransactionDataAPI, TransactionExpiration, VerifiedTransaction,
 };
 use rtd_types::utils::to_sender_signed_transaction;
+use shared_crypto::intent::{Intent, IntentScope};
 
 use crate::admission_queue::AdmissionQueueMetrics;
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;

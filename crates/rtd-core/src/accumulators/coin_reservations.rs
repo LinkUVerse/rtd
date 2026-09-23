@@ -6,7 +6,7 @@ use std::sync::Arc;
 use moka::sync::Cache as MokaCache;
 use move_core_types::language_storage::TypeTag;
 use rtd_types::{
-    base_types::{ObjectID, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, RtdAddress, SequenceNumber},
     coin_reservation::{
         CoinReservationResolver, CoinReservationResolverTrait, ParsedObjectRefWithdrawal,
     },

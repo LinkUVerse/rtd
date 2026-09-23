@@ -3,8 +3,6 @@
 
 use async_trait::async_trait;
 use futures::FutureExt;
-use std::collections::HashMap;
-use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{
@@ -23,6 +21,8 @@ use rtd_types::messages_checkpoint::{
     SignedCheckpointSummary,
 };
 use rtd_types::transaction::Transaction;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use rtd_storage::http_key_value_store::*;
 use rtd_storage::key_value_store::*;
@@ -377,11 +377,11 @@ mod simtests {
     use super::*;
     use axum::routing::get;
     use axum::{body::Body, extract::Request, extract::State, response::Response};
+    use rtd_macros::sim_test;
+    use rtd_simulator::configs::constant_latency_ms;
     use std::net::SocketAddr;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
-    use rtd_macros::sim_test;
-    use rtd_simulator::configs::constant_latency_ms;
     use tracing::info;
 
     async fn svc(

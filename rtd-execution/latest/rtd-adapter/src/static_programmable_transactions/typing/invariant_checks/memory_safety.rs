@@ -937,8 +937,8 @@ mod legacy {
     };
     use indexmap::IndexSet;
     use linku_common::ZipDebugEqIteratorExt;
-    use std::rc::Rc;
     use rtd_types::error::ExecutionError;
+    use std::rc::Rc;
 
     /// An arbitrary extension of a reference, identified by the call and return index.
     /// Distinct returns from one call cannot overlap if either is mutable. Extensions from

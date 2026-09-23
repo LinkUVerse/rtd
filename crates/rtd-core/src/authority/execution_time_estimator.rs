@@ -16,13 +16,12 @@ use super::weighted_moving_average::WeightedMovingAverage;
 use crate::consensus_adapter::SubmitToConsensus;
 use governor::{Quota, RateLimiter, clock::MonotonicClock};
 use itertools::Itertools;
-use lru::LruCache;
 #[cfg(not(msim))]
 use linku_common::in_antithesis;
 use linku_common::{assert_reachable, debug_fatal, in_test_configuration};
 use linku_metrics::{monitored_scope, spawn_monitored_task};
+use lru::LruCache;
 use rand::{Rng, SeedableRng, random, rngs, thread_rng};
-use simple_moving_average::{SMA, SingleSumSMA};
 use rtd_config::node::ExecutionTimeObserverConfig;
 use rtd_protocol_config::{ExecutionTimeEstimateParams, PerObjectCongestionControlMode};
 use rtd_types::{
@@ -36,6 +35,7 @@ use rtd_types::{
         TransactionDataAPI, TransactionKind,
     },
 };
+use simple_moving_average::{SMA, SingleSumSMA};
 use tokio::{sync::mpsc, time::Instant};
 use tracing::{debug, info, trace, warn};
 
@@ -922,12 +922,12 @@ mod tests {
     use crate::consensus_adapter::{
         ConsensusAdapter, ConsensusAdapterMetrics, MockConsensusClient,
     };
-    use std::collections::BTreeMap;
     use rtd_protocol_config::ProtocolConfig;
-    use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
     use rtd_types::transaction::{
         Argument, CallArg, ObjectArg, ProgrammableMoveCall, SharedObjectMutability,
     };
+    use std::collections::BTreeMap;
     use {
         rand::{Rng, SeedableRng},
         rtd_protocol_config::ProtocolVersion,

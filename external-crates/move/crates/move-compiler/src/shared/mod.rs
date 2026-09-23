@@ -21,12 +21,12 @@ use crate::{
     hlir::ast as H,
     naming::ast::{self as N, Function, UseFuns},
     parser::ast::{self as P, FunctionName},
+    rtd_mode,
     shared::{
         files::{FileName, MappedFiles},
         ide::IDEInfo,
         unique_map::UniqueMap,
     },
-    rtd_mode,
     typing::{
         ast as T,
         visitor::{TypingVisitor, TypingVisitorObj},

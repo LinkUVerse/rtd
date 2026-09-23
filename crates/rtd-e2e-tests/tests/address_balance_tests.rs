@@ -3,14 +3,6 @@
 
 use move_core_types::{identifier::Identifier, u256::U256};
 use rand::{Rng, seq::SliceRandom};
-use shared_crypto::intent::Intent;
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
 use rtd_core::accumulators::balances::get_all_balances_for_owner;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::*;
@@ -22,7 +14,7 @@ use rtd_types::{
     RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
     accumulator_root::AccumulatorValue,
     balance::Balance,
-    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress, dbg_addr},
+    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber, dbg_addr},
     coin_reservation::{CoinReservationResolverTrait, ParsedObjectRefWithdrawal},
     digests::{ChainIdentifier, CheckpointDigest},
     effects::{InputConsensusObject, TransactionEffectsAPI},
@@ -36,6 +28,14 @@ use rtd_types::{
         Argument, CallArg, Command, FundsWithdrawalArg, GasData, ObjectArg, SharedObjectMutability,
         Transaction, TransactionData, TransactionDataAPI, TransactionDataV1, TransactionExpiration,
         TransactionKind, VerifiedTransaction, WithdrawalTypeArg,
+    },
+};
+use shared_crypto::intent::Intent;
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 use test_cluster::{

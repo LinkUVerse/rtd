@@ -4,7 +4,6 @@
 use move_binary_format::CompiledModule;
 use move_trace_format::format::MoveTraceBuilder;
 use move_vm_config::verifier::{MeterConfig, VerifierConfig};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::execution::ExecutionTiming;
 use rtd_types::execution_params::ExecutionOrEarlyError;
@@ -24,10 +23,11 @@ use rtd_types::{
     metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
 };
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use linku_common::debug_fatal;
 use move_bytecode_verifier_meter::Meter;
 use move_vm_runtime_latest::runtime::MoveRuntime;
-use linku_common::debug_fatal;
 use rtd_adapter_latest::adapter::{new_move_runtime, run_metered_move_bytecode_verifier};
 use rtd_adapter_latest::execution_engine::{
     ExecutionOutput, execute_genesis_state_update, execute_transaction_to_effects,

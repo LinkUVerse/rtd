@@ -6,9 +6,8 @@ use std::collections::BTreeSet;
 use move_binary_format::file_format::AbilitySet;
 use move_core_types::u256::U256;
 use move_vm_types::loaded_data::runtime_types::Type;
-use serde::Deserialize;
 use rtd_types::{
-    base_types::{ObjectID, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, RtdAddress, SequenceNumber},
     coin::Coin,
     error::ExecutionError,
     execution_status::{CommandArgumentError, ExecutionErrorKind},
@@ -16,6 +15,7 @@ use rtd_types::{
     object::Owner,
     transfer::Receiving,
 };
+use serde::Deserialize;
 
 #[derive(Clone, Debug)]
 pub enum Mutability {

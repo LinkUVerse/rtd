@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 use rtd_types::base_types::{AuthorityName, EpochId, ObjectID, RtdAddress};
 use rtd_types::committee::{Committee, StakeUnit};
 use rtd_types::rtd_serde::BigInt;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 /// RPC representation of the [Committee] type.
 #[serde_as]

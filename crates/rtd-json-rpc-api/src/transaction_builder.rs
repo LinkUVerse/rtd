@@ -128,7 +128,7 @@ pub trait TransactionBuilder {
         function: String,
         /// the type arguments of the Move function
         type_arguments: Vec<RtdTypeTag>,
-        /// the arguments to be passed into the Move function, in [RtdJson](https://docs.rtd.io/build/rtd-json) format
+        /// the arguments to be passed into the Move function, in `RtdJson` format
         arguments: Vec<RtdJsonValue>,
         /// gas object to be used in this transaction, node will pick one from the signer's possession if not provided
         gas: Option<ObjectID>,

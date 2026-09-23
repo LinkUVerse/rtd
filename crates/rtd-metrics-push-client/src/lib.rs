@@ -3,8 +3,8 @@
 
 use client::MetricsPushClient;
 use linku_metrics::RegistryService;
-use std::time::Duration;
 use rtd_types::crypto::NetworkKeyPair;
+use std::time::Duration;
 
 mod client;
 

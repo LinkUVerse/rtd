@@ -12,8 +12,6 @@ use consensus_core::storage::{Store, rocksdb_store::RocksDBStore};
 use consensus_core::{BlockAPI, CommitAPI, CommitRange};
 use futures::TryStreamExt;
 use futures::future::join_all;
-use std::path::PathBuf;
-use std::{collections::BTreeMap, env, sync::Arc};
 use rtd_config::genesis::Genesis;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_protocol_config::Chain;
@@ -21,6 +19,8 @@ use rtd_rpc_api::Client;
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::messages_consensus::ConsensusTransaction;
 use rtd_types::transaction::Transaction;
+use std::path::PathBuf;
+use std::{collections::BTreeMap, env, sync::Arc};
 use telemetry_subscribers::TracingHandle;
 
 use rtd_types::{
@@ -597,34 +597,16 @@ impl ToolCommand {
                 let num_parallel_downloads = num_parallel_downloads.unwrap_or(50).min(200);
                 let snapshot_bucket =
                     snapshot_bucket.or_else(|| match (network, no_sign_request) {
-                        (Chain::Mainnet, false) => Some(
-                            env::var("MAINNET_FORMAL_SIGNED_BUCKET")
-                                .unwrap_or("linku-mainnet-formal".to_string()),
-                        ),
+                        (Chain::Mainnet, false) => env::var("MAINNET_FORMAL_SIGNED_BUCKET").ok(),
                         (Chain::Mainnet, true) => env::var("MAINNET_FORMAL_UNSIGNED_BUCKET").ok(),
                         (Chain::Testnet, true) => env::var("TESTNET_FORMAL_UNSIGNED_BUCKET").ok(),
-                        (Chain::Testnet, _) => Some(
-                            env::var("TESTNET_FORMAL_SIGNED_BUCKET")
-                                .unwrap_or("linku-testnet-formal".to_string()),
-                        ),
+                        (Chain::Testnet, _) => env::var("TESTNET_FORMAL_SIGNED_BUCKET").ok(),
                         (Chain::Unknown, _) => {
                             panic!("Cannot generate default snapshot bucket for unknown network");
                         }
                     });
 
-                let aws_endpoint = env::var("AWS_SNAPSHOT_ENDPOINT").ok().or_else(|| {
-                    if no_sign_request {
-                        if network == Chain::Mainnet {
-                            Some("https://formal-snapshot.mainnet.rtd.io".to_string())
-                        } else if network == Chain::Testnet {
-                            Some("https://formal-snapshot.testnet.rtd.io".to_string())
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                });
+                let aws_endpoint = env::var("AWS_SNAPSHOT_ENDPOINT").ok();
 
                 let snapshot_bucket_type = if no_sign_request {
                     ObjectStoreType::S3
@@ -632,6 +614,15 @@ impl ToolCommand {
                     snapshot_bucket_type
                         .expect("You must set either --snapshot-bucket-type or --no-sign-request")
                 };
+                if !matches!(&snapshot_bucket_type, ObjectStoreType::File)
+                    && snapshot_bucket
+                        .as_ref()
+                        .is_none_or(|bucket| bucket.is_empty())
+                {
+                    anyhow::bail!(
+                        "Set --snapshot-bucket or the formal snapshot bucket environment variable for this RTD network"
+                    );
+                }
                 let snapshot_store_config = match snapshot_bucket_type {
                     ObjectStoreType::S3 => ObjectStoreConfig {
                         object_store: Some(ObjectStoreType::S3),
@@ -684,11 +675,11 @@ impl ToolCommand {
                     }
                 };
 
-                let ingestion_url = match network {
-                    Chain::Mainnet => "https://checkpoints.mainnet.rtd.io",
-                    Chain::Testnet => "https://checkpoints.testnet.rtd.io",
-                    _ => panic!("Cannot generate default ingestion url for unknown network"),
-                };
+                let ingestion_url = env::var("RTD_CHECKPOINT_INGESTION_URL").map_err(|_| {
+                    anyhow::anyhow!(
+                        "Set RTD_CHECKPOINT_INGESTION_URL to the verified RTD checkpoint archive"
+                    )
+                })?;
 
                 let latest_available_epoch =
                     latest.then_some(get_latest_available_epoch(&snapshot_store_config).await?);
@@ -711,7 +702,7 @@ impl ToolCommand {
                     epoch_to_download,
                     &genesis,
                     snapshot_store_config,
-                    ingestion_url,
+                    &ingestion_url,
                     num_parallel_downloads,
                     num_parallel_chunks,
                     network,

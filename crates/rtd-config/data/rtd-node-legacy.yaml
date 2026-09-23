@@ -96,7 +96,8 @@ state-snapshot-write-config:
   concurrency: 0
 indexer-max-subscriptions: null
 transaction-kv-store-read-config:
-  base-url: https://transactions.rtd.io/
+  # No public RTD transaction archive has been configured.
+  base-url: ""
   cache-size: 100000
 jwk-fetch-interval-seconds: 3600
 zklogin-oauth-providers:

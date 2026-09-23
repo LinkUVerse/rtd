@@ -7,11 +7,11 @@
 //! checkpoints to be executed, then exercises every shell command against the
 //! admin API (ls, cat/read in json/debug/bcs) across all navigable namespaces.
 
-use serde::Deserialize;
-use serde_json::Value as JsonValue;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::FullObjectRef;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use serde::Deserialize;
+use serde_json::Value as JsonValue;
 use test_cluster::TestClusterBuilder;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

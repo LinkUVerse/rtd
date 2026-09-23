@@ -21,10 +21,6 @@ use fastcrypto::secp256k1::Secp256k1KeyPair;
 use fastcrypto::traits::{EncodeDecodeBase64, KeyPair};
 use futures::future::join_all;
 use move_core_types::language_storage::StructTag;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
 use rtd_config::Config;
 use rtd_keys::keypair_file::read_key;
 use rtd_sdk::wallet_context::WalletContext;
@@ -40,6 +36,10 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rtd_system_state::rtd_system_state_summary::RtdSystemStateSummary;
 use rtd_types::transaction::{ObjectArg, TransactionData};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::Arc;
 use url::Url;
 
 pub struct EthBridgeContracts {

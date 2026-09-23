@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::RtdAddress;
-use crate::crypto::{Signer, RtdKeyPair};
+use crate::crypto::{RtdKeyPair, Signer};
 use crate::multisig::{MultiSig, MultiSigPublicKey};
 use crate::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use crate::transaction::{SenderSignedData, TEST_ONLY_GAS_UNIT_FOR_TRANSFER};

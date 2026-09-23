@@ -35,7 +35,6 @@ mod checked {
         session::{LoadedFunctionInstantiation, SerializedReturnValues},
     };
     use move_vm_types::loaded_data::runtime_types::{CachedDatatype, Type};
-    use serde::{de::DeserializeSeed, Deserialize};
     use rtd_move_natives::object_runtime::ObjectRuntime;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::execution_status::{CommandArgumentError, PackageUpgradeError};
@@ -62,6 +61,7 @@ mod checked {
         private_generics::{EVENT_MODULE, PRIVATE_TRANSFER_FUNCTIONS, TRANSFER_MODULE},
         INIT_FN_NAME,
     };
+    use serde::{de::DeserializeSeed, Deserialize};
 
     use crate::adapter::substitute_package_id;
     use crate::programmable_transactions::context::*;

@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_rpc::Client;
@@ -14,6 +13,7 @@ use rtd_types::gas_coin::GasCoin;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{Argument, CallArg, Command, ObjectArg, TransactionData};
 use rtd_types::{Identifier, base_types::RtdAddress};
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 const RTD_COIN_TYPE: &str =

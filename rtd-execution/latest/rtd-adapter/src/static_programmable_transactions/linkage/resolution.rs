@@ -5,12 +5,12 @@ use crate::{
     data_store::{PackageMetadata, PackageStore},
     static_programmable_transactions::linkage::config::ResolutionConfig,
 };
+use rtd_types::base_types::ObjectID;
+use rtd_types::{error::ExecutionErrorTrait, execution_status::ExecutionErrorKind};
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, btree_map::Entry},
 };
-use rtd_types::base_types::ObjectID;
-use rtd_types::{error::ExecutionErrorTrait, execution_status::ExecutionErrorKind};
 
 /// Unifiers. These are used to determine how to unify two packages.
 #[derive(Debug, Clone)]

@@ -4,9 +4,9 @@
 use clap::Parser;
 use move_cli::base::test::UnitTestResult;
 use move_package_alt_compilation::build_config::BuildConfig;
-use std::path::Path;
 use rtd_package_alt::RtdFlavor;
 use rtd_sdk::wallet_context::WalletContext;
+use std::path::Path;
 
 pub mod build;
 pub mod cache_package;

@@ -16,7 +16,7 @@ use rtd_types::{
     accumulator_metadata::get_accumulator_object_count,
     accumulator_root::{AccumulatorValue, U128},
     balance::Balance,
-    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     coin_reservation::ParsedObjectRefWithdrawal,
     digests::{ChainIdentifier, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI},

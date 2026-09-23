@@ -124,11 +124,11 @@ async fn test_transaction_pool_basic_flow_and_epoch_progress() {
 #[cfg(msim)]
 #[sim_test]
 async fn test_transaction_pool_eviction_and_rejection() {
+    use rtd_macros::{clear_fail_point, register_fail_point_if};
     use std::num::NonZeroUsize;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
-    use rtd_macros::{clear_fail_point, register_fail_point_if};
 
     let take_disabled = Arc::new(AtomicBool::new(true));
     let network_config = ConfigBuilder::new_with_temp_dir()
@@ -236,11 +236,11 @@ async fn test_transaction_pool_eviction_and_rejection() {
 #[cfg(msim)]
 #[sim_test]
 async fn test_transaction_pool_epoch_boundary_resolves_pending_submission() {
+    use rtd_macros::{clear_fail_point, register_fail_point_if};
     use std::num::NonZeroUsize;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
-    use rtd_macros::{clear_fail_point, register_fail_point_if};
 
     let take_disabled = Arc::new(AtomicBool::new(true));
     let network_config = ConfigBuilder::new_with_temp_dir()
@@ -310,11 +310,11 @@ async fn test_transaction_pool_epoch_boundary_resolves_pending_submission() {
 #[cfg(msim)]
 #[sim_test]
 async fn test_transaction_pool_epoch_store_swap_waits_for_new_pool() {
+    use rtd_macros::{clear_fail_point, register_fail_point_async};
     use std::num::NonZeroUsize;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
-    use rtd_macros::{clear_fail_point, register_fail_point_async};
     use tokio::sync::broadcast;
 
     let network_config = ConfigBuilder::new_with_temp_dir()

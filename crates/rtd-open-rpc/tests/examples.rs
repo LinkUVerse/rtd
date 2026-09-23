@@ -25,16 +25,16 @@ use rtd_json_rpc_types::{
     DevInspectResults, DynamicFieldPage, EventFilter, EventPage, MoveCallParams,
     MoveFunctionArgType, ObjectChange, ObjectValueKind::ByImmutableReference,
     ObjectValueKind::ByMutableReference, ObjectValueKind::ByValue, ObjectsPage, OwnedObjectRef,
-    Page, ProtocolConfigResponse, RPCTransactionRequestParams, Stake, StakeStatus, RtdCoinMetadata,
-    RtdCommittee, RtdData, RtdEvent, RtdExecutionStatus, RtdGetPastObjectRequest, RtdMoveAbility,
+    Page, ProtocolConfigResponse, RPCTransactionRequestParams, RtdCoinMetadata, RtdCommittee,
+    RtdData, RtdEvent, RtdExecutionStatus, RtdGetPastObjectRequest, RtdMoveAbility,
     RtdMoveAbilitySet, RtdMoveNormalizedFunction, RtdMoveNormalizedModule, RtdMoveNormalizedStruct,
     RtdMoveNormalizedType, RtdMoveVisibility, RtdObjectData, RtdObjectDataFilter,
     RtdObjectDataOptions, RtdObjectRef, RtdObjectResponse, RtdObjectResponseQuery, RtdParsedData,
     RtdPastObjectResponse, RtdTransactionBlock, RtdTransactionBlockData,
     RtdTransactionBlockEffects, RtdTransactionBlockEffectsV1, RtdTransactionBlockEvents,
     RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
-    RtdTransactionBlockResponseQuery, TransactionBlockBytes, TransactionBlocksPage,
-    TransactionFilter, TransferObjectParams,
+    RtdTransactionBlockResponseQuery, Stake, StakeStatus, TransactionBlockBytes,
+    TransactionBlocksPage, TransactionFilter, TransferObjectParams,
 };
 use rtd_json_rpc_types::{RtdTypeTag, ValidatorApy, ValidatorApys};
 use rtd_open_rpc::ExamplePairing;
@@ -43,7 +43,7 @@ use rtd_protocol_config::ProtocolConfig;
 use rtd_types::balance::Supply;
 use rtd_types::base_types::random_object_ref;
 use rtd_types::base_types::{
-    FullObjectRef, MoveObjectType, ObjectDigest, ObjectID, ObjectType, SequenceNumber, RtdAddress,
+    FullObjectRef, MoveObjectType, ObjectDigest, ObjectID, ObjectType, RtdAddress, SequenceNumber,
     TransactionDigest,
 };
 use rtd_types::committee::Committee;

@@ -14,12 +14,6 @@ use fastcrypto::encoding::{Encoding, Hex};
 use fastcrypto::traits::ToFromBytes;
 use humantime::parse_duration;
 use linku_network::Multiaddr;
-use serde::Deserialize;
-use std::sync::Arc;
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    str::FromStr,
-};
 use rtd_network::endpoint_manager::{AddressSource, EndpointId};
 use rtd_types::{
     base_types::{AuthorityName, ConciseableName},
@@ -27,6 +21,12 @@ use rtd_types::{
     digests::TransactionDigest,
     error::RtdErrorKind,
     traffic_control::TrafficControlReconfigParams,
+};
+use serde::Deserialize;
+use std::sync::Arc;
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
 };
 use telemetry_subscribers::TracingHandle;
 use tokio::sync::oneshot;

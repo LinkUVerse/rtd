@@ -7,12 +7,6 @@ use anyhow::anyhow;
 use move_core_types::identifier::Identifier;
 use prost_types::FieldMask;
 use rand::seq::{IteratorRandom, SliceRandom};
-use shared_crypto::intent::Intent;
-use signature::rand_core::OsRng;
-use std::collections::{BTreeMap, HashMap};
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::str::FromStr;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_keys::keystore::Keystore;
 use rtd_move_build::BuildConfig;
@@ -35,6 +29,12 @@ use rtd_types::transaction::{
     TEST_ONLY_GAS_UNIT_FOR_STAKING, TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction, TransactionData,
     TransactionDataAPI, TransactionKind,
 };
+use shared_crypto::intent::Intent;
+use signature::rand_core::OsRng;
+use std::collections::{BTreeMap, HashMap};
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::str::FromStr;
 use test_cluster::TestClusterBuilder;
 use test_utils::{execute_transaction, find_module_object, find_published_package, get_random_rtd};
 

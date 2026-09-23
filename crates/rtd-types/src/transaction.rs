@@ -20,8 +20,8 @@ use crate::coin_reservation::{
 use crate::committee::{Committee, EpochId, ProtocolVersion};
 use crate::crypto::{
     AuthoritySignInfo, AuthoritySignInfoTrait, AuthoritySignature, AuthorityStrongQuorumSignInfo,
-    DefaultHash, Ed25519RtdSignature, EmptySignInfo, RandomnessRound, Signature, Signer,
-    RtdSignatureInner, ToFromBytes, default_hash,
+    DefaultHash, Ed25519RtdSignature, EmptySignInfo, RandomnessRound, RtdSignatureInner, Signature,
+    Signer, ToFromBytes, default_hash,
 };
 use crate::digests::{AdditionalConsensusStateDigest, SenderSignedDataDigest};
 use crate::digests::{ChainIdentifier, ConsensusCommitDigest};
@@ -52,12 +52,13 @@ use crate::{
 use enum_dispatch::enum_dispatch;
 use fastcrypto::{encoding::Base64, hash::HashFunction};
 use itertools::{Either, Itertools};
+use linku_common::{ZipDebugEqIteratorExt, assert_reachable, debug_fatal};
 use move_core_types::account_address::AccountAddress;
 use move_core_types::identifier::IdentStr;
 use move_core_types::{ident_str, identifier};
 use move_core_types::{identifier::Identifier, language_storage::TypeTag};
-use linku_common::{ZipDebugEqIteratorExt, assert_reachable, debug_fatal};
 use nonempty::{NonEmpty, nonempty};
+use rtd_protocol_config::{PerObjectCongestionControlMode, ProtocolConfig};
 use serde::{Deserialize, Serialize};
 use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 use std::collections::btree_map::Entry;
@@ -72,7 +73,6 @@ use std::{
     iter,
 };
 use strum::IntoStaticStr;
-use rtd_protocol_config::{PerObjectCongestionControlMode, ProtocolConfig};
 use tap::Pipe;
 use tracing::trace;
 

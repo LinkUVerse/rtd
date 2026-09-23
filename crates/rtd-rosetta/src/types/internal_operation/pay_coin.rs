@@ -11,7 +11,7 @@ use rtd_rpc::client::Client;
 use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
 use rtd_sdk_types::{Address, TypeTag as SdkTypeTag};
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rpc_proto_conversions::ObjectReferenceExt;
 use rtd_types::rtd_sdk_types_conversions::type_tag_sdk_to_core;

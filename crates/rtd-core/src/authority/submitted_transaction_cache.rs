@@ -7,12 +7,12 @@ use prometheus::{
     Histogram, IntCounter, IntGauge, Registry, register_histogram_with_registry,
     register_int_counter_with_registry, register_int_gauge_with_registry,
 };
+use rtd_types::digests::TransactionDigest;
+use rtd_types::traffic_control::Weight;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use rtd_types::digests::TransactionDigest;
-use rtd_types::traffic_control::Weight;
 use tracing::debug;
 
 pub(crate) const DEFAULT_CACHE_CAPACITY: usize = 100_000;

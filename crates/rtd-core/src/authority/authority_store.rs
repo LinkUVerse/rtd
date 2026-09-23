@@ -22,11 +22,11 @@ use rtd_macros::fail_point_arg;
 use rtd_types::execution::TypeLayoutStore;
 use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::message_envelope::Message;
+use rtd_types::rtd_system_state::get_rtd_system_state;
 use rtd_types::storage::{
     BackingPackageStore, FullObjectKey, MarkerValue, ObjectKey, ObjectOrTombstone, ObjectStore,
     get_module, get_package,
 };
-use rtd_types::rtd_system_state::get_rtd_system_state;
 use rtd_types::{base_types::SequenceNumber, fp_ensure};
 use tokio::time::Instant;
 use tracing::{debug, info, trace};

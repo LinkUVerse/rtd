@@ -3,12 +3,12 @@
 
 use crate::validator_client_monitor::{OperationFeedback, OperationType};
 use linku_common::moving_window::MovingWindow;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::time::Duration;
 use rtd_config::validator_client_monitor_config::ValidatorClientMonitorConfig;
 use rtd_types::base_types::AuthorityName;
 use rtd_types::committee::Committee;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Duration;
 use tracing::debug;
 
 // TODO: A few optimization to consider:

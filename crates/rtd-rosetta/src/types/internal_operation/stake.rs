@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use rtd_rpc::client::Client;
 use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
 use rtd_sdk_types::{Address, StructTag};
 use rtd_types::gas_coin::GAS;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use rtd_types::RTD_SYSTEM_PACKAGE_ID;
 use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber};

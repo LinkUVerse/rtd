@@ -7,8 +7,8 @@
 //! deterministic runtime.
 
 use async_graphql::connection::CursorType;
-use serde_json::json;
 use rtd_indexer_alt_graphql::CheckpointToken;
+use serde_json::json;
 use tokio_stream::StreamExt;
 
 use crate::testing::SubscriptionTestCluster;

@@ -12,7 +12,6 @@ use crate::workloads::workload::{
 use crate::workloads::{Gas, WorkloadBuilderInfo, WorkloadParams};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
-use std::sync::Arc;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
 use rtd_types::object::Owner;
@@ -22,6 +21,7 @@ use rtd_types::{
     base_types::{ObjectID, SequenceNumber},
     transaction::Transaction,
 };
+use std::sync::Arc;
 use tracing::{error, info};
 
 /// The max amount of gas units needed for a payload.

@@ -57,15 +57,9 @@ mod sim_only_tests {
 
     use super::*;
     use fastcrypto::encoding::Base64;
+    use linku_common::register_debug_fatal_handler;
     use move_binary_format::CompiledModule;
     use move_core_types::ident_str;
-    use linku_common::register_debug_fatal_handler;
-    use std::path::PathBuf;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use std::{fs, io, path::Path};
     use rtd_core::authority::framework_injection;
     use rtd_framework::BuiltInFramework;
     use rtd_json_rpc_api::WriteApiClient;
@@ -90,7 +84,7 @@ mod sim_only_tests {
     use rtd_types::{
         MOVE_STDLIB_PACKAGE_ID, RTD_BRIDGE_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID,
         RTD_SYSTEM_PACKAGE_ID,
-        base_types::{SequenceNumber, RtdAddress},
+        base_types::{RtdAddress, SequenceNumber},
         digests::TransactionDigest,
         object::Object,
         programmable_transaction_builder::ProgrammableTransactionBuilder,
@@ -100,6 +94,12 @@ mod sim_only_tests {
         RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_AUTHENTICATOR_STATE_OBJECT_ID, RTD_CLOCK_OBJECT_ID,
         RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
     };
+    use std::path::PathBuf;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::{fs, io, path::Path};
     use tempfile::TempDir;
     use test_cluster::TestCluster;
     use tokio::time::{Duration, sleep};

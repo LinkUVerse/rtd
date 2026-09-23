@@ -9,7 +9,6 @@ use std::path::Path;
 
 use fastcrypto::encoding::Base64 as FastCryptoBase64;
 use move_core_types::ident_str;
-use serde_json::json;
 use rtd_types::base_types::ObjectID;
 use rtd_types::digests::CheckpointDigest;
 use rtd_types::event::Event;
@@ -21,6 +20,7 @@ use rtd_types::storage::ReadStore;
 use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
 use rtd_types::transaction::Transaction as RtdTransaction;
 use rtd_types::transaction::VerifiedTransaction;
+use serde_json::json;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;

@@ -4,8 +4,8 @@
 use clap::Parser;
 use move_cli::base::coverage;
 use move_package_alt_compilation::build_config::BuildConfig;
-use std::path::Path;
 use rtd_package_alt::RtdFlavor;
+use std::path::Path;
 
 #[derive(Parser)]
 #[group(id = "rtd-move-coverage")]

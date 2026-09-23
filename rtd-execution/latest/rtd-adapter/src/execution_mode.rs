@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::TypeTag;
-use std::marker::PhantomData;
 use rtd_types::error::{ExecutionError, ExecutionErrorTrait};
 use rtd_types::execution_status::ExecutionFailure;
 use rtd_types::{execution::ExecutionResult, transaction::Argument};
+use std::marker::PhantomData;
 
 pub type TransactionIndex = usize;
 

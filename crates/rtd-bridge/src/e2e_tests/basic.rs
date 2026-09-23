@@ -21,15 +21,15 @@ use crate::types::{AddTokensOnEvmAction, BridgeAction};
 use crate::utils::publish_and_register_coins_return_add_coins_on_rtd_action;
 use alloy::primitives::{Address as EthAddress, U256};
 use alloy::providers::Provider;
-use std::collections::HashSet;
-use std::path::Path;
-use std::sync::Arc;
 use rtd_types::bridge::{
     BridgeChainId, BridgeTokenMetadata, BridgeTrait, TOKEN_ID_ETH, get_bridge,
 };
 use rtd_types::coin::Coin;
 use rtd_types::crypto::get_key_pair;
 use rtd_types::effects::TransactionEffectsAPI;
+use std::collections::HashSet;
+use std::path::Path;
+use std::sync::Arc;
 use tracing::info;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]

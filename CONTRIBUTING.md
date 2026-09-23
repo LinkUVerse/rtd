@@ -11,7 +11,7 @@ We appreciate contributions, but **simple typo fixes (e.g., minor spelling error
 
 ## Documentation
 
-Found a small error or typo in the main documentation? Each page on the [docs.rtd.io](https://docs.rtd.io/) site includes an **Edit this page** link at the bottom that you can use to edit the page in GitHub. The content is located in the docs/content directory of the Rtd repo, so you can make a PR if you prefer. 
+Documentation source is in [`docs/content`](docs/content). The inherited site has not passed the RTD publication review; changes should identify any links or services that still belong to the upstream chain.
 
 For larger documentation issues, you can [create an issue](https://github.com/LinkUVerse/rtd/issues/new/choose) in GitHub. To fix the problem yourself, follow the [documentation contribution](./docs/content/references/contribute/contribution-process.mdx) guidelines.
 
@@ -21,17 +21,17 @@ Include examples where applicable.
 
 ## Reporting Issues
 
-Found a bug or security vulnerability? Please check the existing issues before opening a new one.
+Found a bug? Please check the existing issues before opening a new one. For vulnerabilities, follow [SECURITY.md](SECURITY.md) and do not include exploit details in a public issue.
 
 Provide as much detail as possible, including steps to reproduce the issue, expected behavior, and actual behavior.
 
 ## New Rtd features
 
-If you want to contribute code that creates a feature on Rtd, start with a [Rtd Improvement Proposal](https://github.com/rtd-foundation/sips/tree/main) before developing the logic.
+For significant protocol changes, discuss the design and compatibility impact with the maintainers before developing the logic.
 
 ## New Rtd Framework Contributions
 
-Want to contribute to the Rtd framework? See [CONTRIBUTING.md](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/CONTRIBUTING.md) for information related to `rtd-framework` crate contributions.
+Want to contribute to the Rtd framework? See the [framework contribution guide](crates/rtd-framework/CONTRIBUTING.md).
 
 ## Proposing Code Changes
 

@@ -4,7 +4,6 @@
 use crate::{randomness::*, utils};
 use fastcrypto::{groups::bls12381, serde_helpers::ToFromByteArray};
 use fastcrypto_tbls::{mocked_dkg, nodes};
-use std::collections::BTreeSet;
 use rtd_macros::sim_test;
 use rtd_swarm_config::test_utils::CommitteeFixture;
 use rtd_types::{
@@ -12,6 +11,7 @@ use rtd_types::{
     committee::Committee,
     crypto::{AuthorityPublicKeyBytes, ToFromBytes},
 };
+use std::collections::BTreeSet;
 use tracing::Instrument;
 
 type PkG = bls12381::G2Element;

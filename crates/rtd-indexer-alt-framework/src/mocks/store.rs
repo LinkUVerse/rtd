@@ -11,10 +11,10 @@ use std::time::Duration;
 use anyhow::ensure;
 use async_trait::async_trait;
 use dashmap::DashMap;
-use scoped_futures::ScopedBoxFuture;
 use rtd_indexer_alt_framework_store_traits::testing::mock_store::MockConnection;
 use rtd_indexer_alt_framework_store_traits::testing::mock_store::MockStore;
 use rtd_indexer_alt_framework_store_traits::testing::mock_store::MockWatermark;
+use scoped_futures::ScopedBoxFuture;
 
 use crate::store::CommitterWatermark;
 use crate::store::ConcurrentConnection;

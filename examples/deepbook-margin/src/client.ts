@@ -20,9 +20,9 @@ export function getKeypair(privateKey: string): Ed25519Keypair {
 	return Ed25519Keypair.fromSecretKey(secretKey);
 }
 
-// Testnet DeepBook client with margin enabled. On Testnet the SDK auto-loads the
-// margin package IDs, margin pools, and Pyth config, so you reference pools,
-// coins, and managers by key. Read-only calls (risk parameters, pool liquidity)
+// The SDK must contain RTD Testnet margin package IDs, pools, and Pyth config.
+// After verifying that deployment, reference pools, coins, and managers by key.
+// Read-only calls (risk parameters, pool liquidity)
 // work without a manager; borrowing and trading through a margin manager need
 // `marginManagers`. Supplying to a margin pool and staking use a spot
 // `BalanceManager`, so pass `balanceManagers` when you compose those legs.
@@ -33,9 +33,12 @@ export function marginClient(
 		balanceManagers?: { [key: string]: BalanceManager };
 	},
 ): DeepBookMarginClient {
+	const baseUrl = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+		.process?.env?.RTD_DEEPBOOK_GRPC_URL;
+	if (!baseUrl) throw new Error('RTD_DEEPBOOK_GRPC_URL is required for an RTD DeepBook deployment');
 	return new RtdGrpcClient({
 		network: 'testnet',
-		baseUrl: 'https://fullnode.testnet.rtd.io:443',
+		baseUrl,
 	}).$extend(deepbook({ address, ...options }));
 }
 // docs::/#client

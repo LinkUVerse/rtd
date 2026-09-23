@@ -6,7 +6,7 @@ use crate::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID,
     accumulator_event::AccumulatorEvent,
     balance::Balance,
-    base_types::{ObjectID, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, RtdAddress, SequenceNumber},
     digests::{Digest, TransactionDigest},
     dynamic_field::{
         BoundedDynamicFieldID, DYNAMIC_FIELD_FIELD_STRUCT_NAME, DYNAMIC_FIELD_MODULE_NAME,
@@ -23,8 +23,8 @@ use move_core_types::{
     language_storage::{StructTag, TypeTag},
     u256::U256,
 };
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use rtd_protocol_config::ProtocolConfig;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub const ACCUMULATOR_ROOT_MODULE: &IdentStr = ident_str!("accumulator");
 pub const ACCUMULATOR_METADATA_MODULE: &IdentStr = ident_str!("accumulator_metadata");

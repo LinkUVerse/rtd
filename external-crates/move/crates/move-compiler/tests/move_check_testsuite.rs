@@ -21,8 +21,8 @@ use move_compiler::{
     diagnostics::*,
     editions::{Edition, Flavor},
     linters::{self, LintLevel},
-    shared::{Flags, NumericalAddress, PackageConfig, PackagePaths},
     rtd_mode,
+    shared::{Flags, NumericalAddress, PackageConfig, PackagePaths},
 };
 use move_symbol_pool::Symbol;
 use serde::{Deserialize, Serialize};

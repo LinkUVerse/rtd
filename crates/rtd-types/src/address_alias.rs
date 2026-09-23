@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use linku_common::debug_fatal;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use linku_common::debug_fatal;
 use serde::{Deserialize, Serialize};
 
-use crate::base_types::{SequenceNumber, RtdAddress};
+use crate::base_types::{RtdAddress, SequenceNumber};
 use crate::collection_types::VecSet;
 use crate::error::{RtdErrorKind, RtdResult};
 use crate::object::Owner;

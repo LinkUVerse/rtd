@@ -34,7 +34,6 @@ use move_core_types::{
 };
 use move_vm_runtime::move_vm::MoveVM;
 use move_vm_types::{data_store::DataStore, loaded_data::runtime_types as vm_runtime_type};
-use std::{cell::OnceCell, rc::Rc, sync::Arc};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
     Identifier, RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
@@ -50,6 +49,7 @@ use rtd_types::{
     storage::StorageView,
     type_input::{StructInput, TypeInput},
 };
+use std::{cell::OnceCell, rc::Rc, sync::Arc};
 
 pub struct Env<'pc, 'vm, 'state, 'linkage> {
     pub protocol_config: &'pc ProtocolConfig,

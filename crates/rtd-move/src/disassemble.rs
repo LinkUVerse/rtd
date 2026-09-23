@@ -8,11 +8,11 @@ use move_cli::base;
 use move_disassembler::disassembler::Disassembler;
 use move_ir_types::location::Spanned;
 use move_package_alt_compilation::build_config::BuildConfig;
+use rtd_package_alt::RtdFlavor;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use std::path::PathBuf;
-use rtd_package_alt::RtdFlavor;
 
 #[derive(Parser)]
 #[group(id = "rtd-move-disassemmble")]

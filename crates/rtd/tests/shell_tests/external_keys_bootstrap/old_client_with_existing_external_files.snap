@@ -92,7 +92,7 @@ envs:
     rpc: "http://bogus.invalid/"
     ws: ~
     basic_auth: ~
-    chain_id: 01234567
+    chain_id: "01234567"
   - alias: mainnet
     rpc: "http://bogus.invalid/"
     ws: ~

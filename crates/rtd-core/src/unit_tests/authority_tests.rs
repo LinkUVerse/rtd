@@ -4,6 +4,7 @@
 
 use bcs;
 use insta::assert_snapshot;
+use linku_common::ZipDebugEqIteratorExt;
 use move_binary_format::{
     CompiledModule,
     file_format::{self, AddressIdentifierIndex, IdentifierIndex, ModuleHandle},
@@ -14,15 +15,14 @@ use move_core_types::language_storage::StructTag;
 use move_core_types::{
     account_address::AccountAddress, ident_str, identifier::Identifier, language_storage::TypeTag,
 };
-use linku_common::ZipDebugEqIteratorExt;
 use rand::seq::SliceRandom;
 use rand::{SeedableRng, prelude::StdRng};
+use rtd_test_transaction_builder::TestTransactionBuilder;
 use serde_json::json;
 use std::collections::HashSet;
 use std::fs;
 use std::str::FromStr;
 use std::{convert::TryInto, env};
-use rtd_test_transaction_builder::TestTransactionBuilder;
 
 use rtd_json_rpc_types::{
     RtdArgument, RtdExecutionResult, RtdExecutionStatus, RtdTransactionBlockEffectsAPI,
@@ -86,8 +86,8 @@ use super::*;
 
 pub use crate::authority::authority_test_utils::*;
 use crate::authority::shared_object_version_manager::AssignedVersions;
-use std::collections::HashMap;
 use rtd_types::transaction::TransactionKey;
+use std::collections::HashMap;
 
 fn handle_transaction_for_test(
     authority: &AuthorityState,

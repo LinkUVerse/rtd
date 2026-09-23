@@ -4,12 +4,12 @@
 use crate::mock_account::Account;
 use crate::tx_generator::TxGenerator;
 use move_core_types::identifier::Identifier;
-use std::collections::HashMap;
 use rtd_test_transaction_builder::TestTransactionBuilder;
-use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 use rtd_types::transaction::{
     CallArg, DEFAULT_VALIDATOR_GAS_PRICE, ObjectArg, SharedObjectMutability, Transaction,
 };
+use std::collections::HashMap;
 
 pub struct MoveTxGenerator {
     move_package: ObjectID,

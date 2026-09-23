@@ -1,8 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_core::authority_client::NetworkAuthorityClient;
 use rtd_core::test_utils::wait_for_tx;
 use rtd_core::transaction_driver::SubmitTransactionOptions;
@@ -22,6 +20,8 @@ use rtd_types::transaction_driver_types::{
     ExecuteTransactionRequestType, ExecuteTransactionRequestV3, ExecuteTransactionResponseV3,
     FinalizedEffects, IsTransactionExecutedLocally, TransactionSubmissionError,
 };
+use std::sync::Arc;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tokio::time::timeout;
 use tracing::info;

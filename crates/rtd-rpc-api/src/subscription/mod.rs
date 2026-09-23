@@ -3,12 +3,12 @@
 
 use crate::metrics::SubscriptionMetrics;
 use futures::{StreamExt, stream::FuturesUnordered};
+use rtd_inverted_index::BitmapQuery;
+use rtd_types::full_checkpoint_content::Checkpoint;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use rtd_inverted_index::BitmapQuery;
-use rtd_types::full_checkpoint_content::Checkpoint;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;

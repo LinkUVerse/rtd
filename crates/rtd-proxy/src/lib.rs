@@ -44,9 +44,9 @@ mod tests {
     use axum::routing::post;
     use prometheus::Encoder;
     use prometheus::PROTOBUF_FORMAT;
+    use rtd_tls::{ClientCertVerifier, TlsAcceptor};
     use std::net::TcpListener;
     use std::time::Duration;
-    use rtd_tls::{ClientCertVerifier, TlsAcceptor};
 
     async fn run_dummy_remote_write(listener: TcpListener) {
         /// i accept everything, send me the trash

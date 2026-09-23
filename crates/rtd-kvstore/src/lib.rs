@@ -15,8 +15,6 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use async_trait::async_trait;
 use prometheus::Registry;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_framework::Indexer;
 use rtd_indexer_alt_framework::IndexerArgs;
@@ -28,6 +26,8 @@ use rtd_indexer_alt_framework::ingestion::streaming_client::GrpcStreamingClient;
 use rtd_indexer_alt_framework::metrics::IngestionMetrics;
 use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub use crate::bigtable::client::CheckpointSpan;
 use crate::rate_limiter::CompositeRateLimiter;

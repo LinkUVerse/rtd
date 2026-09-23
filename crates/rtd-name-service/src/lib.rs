@@ -8,13 +8,13 @@ use std::str::FromStr;
 use move_core_types::ident_str;
 use move_core_types::identifier::IdentStr;
 use move_core_types::language_storage::StructTag;
-use serde::{Deserialize, Serialize};
 use rtd_types::TypeTag;
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::collection_types::VecMap;
 use rtd_types::dynamic_field::Field;
 use rtd_types::id::{ID, UID};
 use rtd_types::object::{MoveObject, Object};
+use serde::{Deserialize, Serialize};
 
 const NAME_SERVICE_DOMAIN_MODULE: &IdentStr = ident_str!("domain");
 const NAME_SERVICE_DOMAIN_STRUCT: &IdentStr = ident_str!("Domain");

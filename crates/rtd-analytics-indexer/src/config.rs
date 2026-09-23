@@ -7,13 +7,13 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_framework::config::ConcurrencyConfig;
 use rtd_indexer_alt_framework::ingestion::{IngestConcurrencyConfig, IngestionConfig};
 use rtd_indexer_alt_framework::pipeline;
 use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use rtd_indexer_alt_framework::pipeline::sequential::SequentialConfig;
+use serde::Deserialize;
+use serde::Serialize;
 use tracing::warn;
 
 use crate::pipeline::Pipeline;

@@ -11,8 +11,8 @@ use crate::{
         metering::{self, translation_meter::TranslationMeter},
     },
 };
-use move_core_types::{language_storage::StructTag, u256::U256};
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::{language_storage::StructTag, u256::U256};
 use rtd_types::{
     base_types::TxContext,
     error::ExecutionErrorTrait,

@@ -4,11 +4,11 @@ use crate::keytool::Key;
 use anyhow::anyhow;
 use clap::*;
 use json_to_table::{Orientation, json_to_table};
+use rtd_keys::external::{External, ProvisionMode};
+use rtd_keys::keystore::{AccountKeystore, GenerateOptions, GeneratedKey, Keystore};
 use serde::Serialize;
 use serde_json::json;
 use std::fmt::{Debug, Display, Formatter};
-use rtd_keys::external::{External, ProvisionMode};
-use rtd_keys::keystore::{AccountKeystore, GenerateOptions, GeneratedKey, Keystore};
 use tracing::info;
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -177,9 +177,9 @@ mod tests {
     use anyhow::Error;
     use async_trait::async_trait;
     use clap::Parser;
-    use serde_json::{Value, json};
     use rtd_keys::external::{CommandRunner, ExternalExecError};
     use rtd_keys::keystore::Keystore;
+    use serde_json::{Value, json};
     use tempfile::TempDir;
 
     use super::{CommandOutput, ExternalKeysCommand, ProvisionModeArg};

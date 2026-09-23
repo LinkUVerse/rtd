@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::ValidatorProxy;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use rtd_types::{
     base_types::EpochId,
     rtd_system_state::{RtdSystemState, RtdSystemStateTrait},
 };
+use std::sync::Arc;
+use std::time::Duration;
 use test_cluster::TestCluster;
 use tokio::sync::watch;
 use tokio::sync::watch::Receiver;

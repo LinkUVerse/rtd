@@ -27,13 +27,13 @@ use crate::{
         BaseType_, Label, ModuleCall, SingleType, SingleType_, Type, Type_, TypeName_, Var,
     },
     parser::ast::Ability_,
-    shared::Identifier,
     rtd_mode::RTD_ADDR_VALUE,
+    shared::Identifier,
 };
 use std::collections::BTreeMap;
 
 use super::{
-    FREEZE_FUN, INVALID_LOC, RECEIVE_FUN, SHARE_FUN, RtdLintCode, TRANSFER_FUN, TRANSFER_MOD_NAME,
+    FREEZE_FUN, INVALID_LOC, RECEIVE_FUN, RtdLintCode, SHARE_FUN, TRANSFER_FUN, TRANSFER_MOD_NAME,
 };
 
 const PRIVATE_OBJ_FUNCTIONS: &[(AccountAddress, &str, &str)] = &[

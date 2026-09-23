@@ -10,14 +10,6 @@ use move_package_alt_compilation::build_config::BuildConfig;
 use move_unit_test::{UnitTestingConfig, vm_test_setup::VMTestSetup};
 use move_vm_config::runtime::VMConfig;
 use move_vm_runtime::natives::extensions::NativeContextExtensions;
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    ops::{Deref, DerefMut},
-    path::Path,
-    rc::Rc,
-    sync::{Arc, LazyLock},
-};
 use rtd_adapter::gas_meter::RtdGasMeter;
 use rtd_move_build::decorate_warnings;
 use rtd_move_natives::{
@@ -33,6 +25,14 @@ use rtd_types::{
     gas::{RtdGasStatus, RtdGasStatusAPI},
     gas_model::{tables::GasStatus, units_types::Gas},
     metrics::ExecutionMetrics,
+};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    ops::{Deref, DerefMut},
+    path::Path,
+    rc::Rc,
+    sync::{Arc, LazyLock},
 };
 
 // Move unit tests will halt after executing this many steps. This is a protection to avoid divergence

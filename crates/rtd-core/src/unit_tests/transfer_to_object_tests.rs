@@ -8,7 +8,7 @@ use std::{
 
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::{
-    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_key_pair},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI},

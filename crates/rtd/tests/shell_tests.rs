@@ -4,11 +4,11 @@
 use fs_extra::dir::CopyOptions;
 use insta_cmd::get_cargo_bin;
 use move_command_line_common::insta_assert;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use rtd_config::{Config, RTD_CLIENT_CONFIG, RTD_KEYSTORE_FILENAME};
 use rtd_keys::keystore::{FileBasedKeystore, Keystore};
 use rtd_sdk::rtd_client_config::{RtdClientConfig, RtdEnv};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tempfile::TempDir;
 use test_cluster::TestClusterBuilder;
 

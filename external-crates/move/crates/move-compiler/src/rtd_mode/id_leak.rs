@@ -17,7 +17,6 @@ use crate::{
     expansion::ast::ModuleIdent,
     hlir::ast::{self as H, Exp, Label, ModuleCall, SingleType, Type, Type_, Var},
     parser::ast::{Ability_, TargetKind},
-    shared::{Identifier, program_info::TypingProgramInfo},
     rtd_mode::{
         ACCUMULATOR_CREATE, ACCUMULATOR_MODULE_NAME, ADDRESS_ALIAS_CREATE,
         ADDRESS_ALIAS_MODULE_NAME, AUTHENTICATOR_STATE_CREATE, AUTHENTICATOR_STATE_MODULE_NAME,
@@ -30,6 +29,7 @@ use crate::{
         RTD_SYSTEM_ADDR_VALUE, RTD_SYSTEM_CREATE, RTD_SYSTEM_MODULE_NAME,
         TEST_SCENARIO_MODULE_NAME, TS_NEW_OBJECT, UID_TYPE_NAME,
     },
+    shared::{Identifier, program_info::TypingProgramInfo},
 };
 use move_core_types::account_address::AccountAddress;
 use move_ir_types::location::*;

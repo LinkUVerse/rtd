@@ -52,9 +52,9 @@ use move_vm_types::{
     natives::function::NativeResult,
     values::{Struct, Value},
 };
-use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{MOVE_STDLIB_ADDRESS, RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_ADDRESS};
+use std::sync::Arc;
 use transfer::TransferReceiveObjectInternalCostParams;
 
 mod address;

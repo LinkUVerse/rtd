@@ -8,7 +8,6 @@ use move_core_types::ident_str;
 use move_core_types::u256::U256;
 use prometheus::Registry;
 use rand::rngs::OsRng;
-use simulacrum::Simulacrum;
 use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::CHECKPOINT_HEIGHT_METADATA;
 use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::ListOwnedObjectsRequest;
 use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::Owner;
@@ -30,6 +29,7 @@ use rtd_types::transaction::Argument;
 use rtd_types::transaction::Command;
 use rtd_types::transaction::Transaction;
 use rtd_types::transaction::TransactionData;
+use simulacrum::Simulacrum;
 
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_e2e_tests::find;

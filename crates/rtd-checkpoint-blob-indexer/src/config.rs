@@ -3,13 +3,13 @@
 
 use std::num::NonZeroUsize;
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_framework as framework;
 use rtd_indexer_alt_framework::config::ConcurrencyConfig;
 use rtd_indexer_alt_framework::pipeline;
 use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
+use serde::Deserialize;
+use serde::Serialize;
 use tracing::warn;
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]

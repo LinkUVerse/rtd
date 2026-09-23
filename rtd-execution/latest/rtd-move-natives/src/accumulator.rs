@@ -11,9 +11,9 @@ use move_core_types::account_address::AccountAddress;
 use move_vm_runtime::execution::{Type, values::Value};
 use move_vm_runtime::native_charge_gas_early_exit;
 use move_vm_runtime::natives::functions::{NativeContext, NativeResult};
+use rtd_types::base_types::ObjectID;
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::base_types::ObjectID;
 
 pub fn emit_deposit_event(
     context: &mut NativeContext,

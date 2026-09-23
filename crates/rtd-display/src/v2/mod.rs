@@ -288,7 +288,6 @@ mod tests {
     use move_core_types::annotated_value::MoveTypeLayout as L;
     use move_core_types::language_storage::TypeTag;
     use move_core_types::u256::U256;
-    use serde::Serialize;
     use rtd_types::base_types::move_ascii_str_layout;
     use rtd_types::base_types::move_utf8_str_layout;
     use rtd_types::base_types::url_layout;
@@ -296,6 +295,7 @@ mod tests {
     use rtd_types::dynamic_field::derive_dynamic_field_id;
     use rtd_types::id::ID;
     use rtd_types::id::UID;
+    use serde::Serialize;
     use tokio::sync::Barrier;
     use tokio::time::Duration;
 

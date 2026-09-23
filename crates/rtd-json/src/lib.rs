@@ -25,9 +25,9 @@ use serde_json::{Number, Value as JsonValue, json};
 
 use rtd_types::MOVE_STDLIB_ADDRESS;
 use rtd_types::base_types::{
-    ObjectID, RESOLVED_ASCII_STR, RESOLVED_STD_OPTION, RESOLVED_UTF8_STR, STD_ASCII_MODULE_NAME,
-    STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME, STD_OPTION_STRUCT_NAME, STD_UTF8_MODULE_NAME,
-    STD_UTF8_STRUCT_NAME, RtdAddress, TxContext, TxContextKind, is_primitive_type_tag,
+    ObjectID, RESOLVED_ASCII_STR, RESOLVED_STD_OPTION, RESOLVED_UTF8_STR, RtdAddress,
+    STD_ASCII_MODULE_NAME, STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME, STD_OPTION_STRUCT_NAME,
+    STD_UTF8_MODULE_NAME, STD_UTF8_STRUCT_NAME, TxContext, TxContextKind, is_primitive_type_tag,
     move_ascii_str_layout, move_utf8_str_layout,
 };
 use rtd_types::id::{self, ID, RESOLVED_RTD_ID};

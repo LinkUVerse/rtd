@@ -6,13 +6,13 @@ use linku_common::ZipDebugEqIteratorExt;
 use linku_common::fatal;
 use linku_metrics::monitored_scope;
 use prometheus::{IntGauge, Registry, register_int_gauge_with_registry};
-use serde::Serialize;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, VersionNumber};
 use rtd_types::committee::EpochId;
 use rtd_types::digests::{ObjectDigest, TransactionDigest};
 use rtd_types::in_memory_storage::InMemoryStorage;
 use rtd_types::storage::{ObjectKey, ObjectStore};
+use serde::Serialize;
 use tracing::debug;
 
 use std::collections::{HashMap, HashSet};

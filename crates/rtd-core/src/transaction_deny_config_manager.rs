@@ -26,8 +26,6 @@ use prometheus::{
     IntCounterVec, IntGauge, IntGaugeVec, Registry, register_int_counter_vec_with_registry,
     register_int_gauge_vec_with_registry, register_int_gauge_with_registry,
 };
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 use rtd_config::transaction_deny_config::{
     PeerDenySyncConfig, TransactionDenyConfig, ValidatorEligibility,
 };
@@ -39,6 +37,8 @@ use rtd_types::messages_consensus::{
     ConsensusTransaction, SharedTransactionDenyConfig, SharedTransactionDenyConfigV1,
 };
 use rtd_types::transaction_deny_rules::{DenyElement, DenyElementKind, TransactionDenyRules};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 use typed_store::Map;
 

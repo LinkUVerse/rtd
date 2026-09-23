@@ -4,8 +4,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use move_core_types::ident_str;
 use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::ident_str;
 use prost::bytes::Bytes;
 use prost_types::FieldMask;
 use rtd_macros::sim_test;

@@ -40,13 +40,13 @@ use rtd_types::digests::ChainIdentifier;
 use rtd_types::digests::CheckpointDigest;
 use rtd_types::error::RtdResult;
 use rtd_types::full_checkpoint_content::ObjectSet;
+use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::storage::BackingPackageStore;
 use rtd_types::storage::ObjectStore;
 use rtd_types::storage::OverlayBackingPackageStore;
 use rtd_types::storage::PackageObject;
 use rtd_types::storage::error::Error as StorageError;
 use rtd_types::storage::error::Result as StorageResult;
-use rtd_types::rtd_system_state::RtdSystemStateTrait;
 
 use crate::RpcStoreSchema;
 use crate::reader::RpcStoreReader;

@@ -3,13 +3,13 @@
 
 use moka::ops::compute::Op;
 use moka::sync::Cache;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use rtd_types::base_types::ObjectID;
 use rtd_types::effects::{InputConsensusObject, TransactionEffects, TransactionEffectsAPI};
 use rtd_types::execution_status::CongestedObjects;
 use rtd_types::messages_checkpoint::{CheckpointTimestamp, VerifiedCheckpoint};
 use rtd_types::transaction::{TransactionData, TransactionDataAPI};
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::execution_cache::TransactionCacheRead;
 

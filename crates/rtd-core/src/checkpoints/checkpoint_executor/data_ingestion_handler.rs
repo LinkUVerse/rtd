@@ -6,8 +6,6 @@ use linku_common::ZipDebugEqIteratorExt;
 use crate::checkpoints::checkpoint_executor::{CheckpointExecutionData, CheckpointTransactionData};
 use crate::execution_cache::TransactionCacheRead;
 use prost::Message;
-use std::collections::{BTreeSet, HashMap};
-use std::path::Path;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
@@ -16,6 +14,8 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::{RtdErrorKind, RtdResult};
 use rtd_types::full_checkpoint_content::{Checkpoint, ExecutedTransaction, ObjectSet};
 use rtd_types::storage::ObjectStore;
+use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
 
 pub(crate) fn store_checkpoint_locally(
     path: impl AsRef<Path>,

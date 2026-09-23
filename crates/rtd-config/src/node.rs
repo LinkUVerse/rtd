@@ -14,14 +14,6 @@ use linku_common::fatal;
 use nonzero_ext::nonzero;
 use once_cell::sync::OnceCell;
 use rand::rngs::OsRng;
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use std::collections::{BTreeMap, BTreeSet};
-use std::net::SocketAddr;
-use std::num::{NonZeroU32, NonZeroUsize};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_keys::keypair_file::{read_authority_keypair_from_file, read_keypair_from_file};
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::committee::EpochId;
@@ -33,6 +25,14 @@ use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::node_role::{FullNodeSyncMode, NodeRole};
 use rtd_types::supported_protocol_versions::{Chain, SupportedProtocolVersions};
 use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+use std::collections::{BTreeMap, BTreeSet};
+use std::net::SocketAddr;
+use std::num::{NonZeroU32, NonZeroUsize};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
 use rtd_types::crypto::{AccountKeyPair, AuthorityKeyPair, get_key_pair_from_rng};
 use rtd_types::multiaddr::Multiaddr;
@@ -891,7 +891,7 @@ impl Default for TransactionKeyValueStoreReadConfig {
 }
 
 fn default_base_url() -> String {
-    "https://transactions.rtd.io/".to_string()
+    String::new()
 }
 
 fn default_cache_size() -> u64 {
@@ -1955,6 +1955,7 @@ mod tests {
 
     use super::{
         AuthorityStorePruningConfig, ExecutionTimeObserverConfig, Genesis, StateArchiveConfig,
+        TransactionKeyValueStoreReadConfig,
     };
     use crate::NodeConfig;
 
@@ -1972,7 +1973,24 @@ mod tests {
     fn fullnode_template() {
         const TEMPLATE: &str = include_str!("../data/fullnode-template.yaml");
 
-        let _template: NodeConfig = serde_yaml::from_str(TEMPLATE).unwrap();
+        let template: NodeConfig = serde_yaml::from_str(TEMPLATE).unwrap();
+        assert!(
+            template
+                .transaction_kv_store_read_config
+                .base_url
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn transaction_kv_store_has_no_remote_default() {
+        assert!(
+            TransactionKeyValueStoreReadConfig::default()
+                .base_url
+                .is_empty()
+        );
+        let omitted: TransactionKeyValueStoreReadConfig = serde_yaml::from_str("{}").unwrap();
+        assert!(omitted.base_url.is_empty());
     }
 
     /// Tests that a legacy validator config (captured on 12/06/2024) can be parsed.
@@ -1981,6 +1999,12 @@ mod tests {
         const FILE: &str = include_str!("../data/rtd-node-legacy.yaml");
 
         let template: NodeConfig = serde_yaml::from_str(FILE).unwrap();
+        assert!(
+            template
+                .transaction_kv_store_read_config
+                .base_url
+                .is_empty()
+        );
         assert_eq!(
             template
                 .authority_store_pruning_config

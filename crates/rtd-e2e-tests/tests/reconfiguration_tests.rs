@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rand::rngs::OsRng;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_macros::sim_test;
 use rtd_node::RtdNodeHandle;
 use rtd_protocol_config::{Chain, ProtocolConfig};
@@ -25,6 +23,8 @@ use rtd_types::rtd_system_state::{
     rtd_system_state_summary::get_validator_by_pool_id,
 };
 use rtd_types::transaction::{Command, TransactionDataAPI, TransactionExpiration};
+use std::sync::Arc;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tokio::time::sleep;
 
@@ -148,8 +148,8 @@ async fn do_test_passive_reconfig(chain: Option<Chain>) {
 #[cfg(msim)]
 #[sim_test]
 async fn test_create_advance_epoch_tx_race() {
-    use std::sync::Arc;
     use rtd_macros::{register_fail_point, register_fail_point_async};
+    use std::sync::Arc;
     use tokio::sync::broadcast;
     use tracing::info;
 
@@ -772,11 +772,11 @@ async fn do_test_reconfig_with_committee_change_stress() {
 #[cfg(msim)]
 #[sim_test]
 async fn test_epoch_flag_upgrade() {
-    use std::collections::HashSet;
-    use std::sync::Mutex;
     use rtd_core::authority::epoch_start_configuration::EpochFlag;
     use rtd_core::authority::epoch_start_configuration::EpochStartConfigTrait;
     use rtd_macros::register_fail_point_arg;
+    use std::collections::HashSet;
+    use std::sync::Mutex;
 
     let initial_flags_nodes = Arc::new(Mutex::new(HashSet::new()));
     register_fail_point_arg("initial_epoch_flags", move || {
@@ -1121,12 +1121,12 @@ async fn try_request_add_validator(
 #[sim_test]
 async fn test_epoch_close_deadline_unsticks_divergent_stuck_deferred_transactions() {
     use linku_common::register_debug_fatal_handler;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use rtd_core::authority::transaction_deferral::DeferralKey;
     use rtd_types::executable_transaction::{
         VerifiedExecutableTransaction, VerifiedExecutableTransactionWithAliases,
     };
     use rtd_types::transaction::VerifiedTransaction;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     telemetry_subscribers::init_for_testing();
 

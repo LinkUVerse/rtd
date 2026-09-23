@@ -7,8 +7,6 @@
 use crate::key_value_store_metrics::KeyValueStoreMetrics;
 use async_trait::async_trait;
 use linku_common::ZipDebugEqIteratorExt;
-use std::sync::Arc;
-use std::time::Instant;
 use rtd_types::base_types::{ObjectID, SequenceNumber, VersionNumber};
 use rtd_types::digests::{CheckpointDigest, TransactionDigest};
 use rtd_types::effects::{TransactionEffects, TransactionEvents};
@@ -19,6 +17,8 @@ use rtd_types::messages_checkpoint::{
 use rtd_types::object::Object;
 use rtd_types::storage::ObjectKey;
 use rtd_types::transaction::Transaction;
+use std::sync::Arc;
+use std::time::Instant;
 use tracing::instrument;
 
 pub type KVStoreTransactionData = (Vec<Option<Transaction>>, Vec<Option<TransactionEffects>>);

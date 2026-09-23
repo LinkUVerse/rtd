@@ -25,9 +25,9 @@ use move_vm_types::{
     values::{StructRef, Value},
     views::{SizeConfig, ValueView},
 };
+use rtd_types::{base_types::MoveObjectType, dynamic_field::derive_dynamic_field_id};
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::{base_types::MoveObjectType, dynamic_field::derive_dynamic_field_id};
 use tracing::instrument;
 
 const E_KEY_DOES_NOT_EXIST: u64 = 1;

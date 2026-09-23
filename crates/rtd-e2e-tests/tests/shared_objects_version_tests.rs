@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_macros::*;
 use rtd_test_transaction_builder::publish_package;
 use rtd_types::RTD_FRAMEWORK_ADDRESS;
@@ -11,6 +10,7 @@ use rtd_types::effects::{TransactionEffects, TransactionEvents};
 use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::object::{OBJECT_START_VERSION, Owner};
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
+use std::path::PathBuf;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 #[sim_test]

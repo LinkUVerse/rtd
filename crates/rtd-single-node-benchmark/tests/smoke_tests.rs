@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
-use strum::IntoEnumIterator;
 use rtd_macros::sim_test;
 use rtd_single_node_benchmark::command::{Component, WorkloadKind};
 use rtd_single_node_benchmark::run_benchmark;
 use rtd_single_node_benchmark::workload::Workload;
+use std::path::PathBuf;
+use strum::IntoEnumIterator;
 
 #[sim_test]
 async fn benchmark_non_move_transactions_smoke_test() {

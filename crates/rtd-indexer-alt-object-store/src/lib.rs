@@ -14,8 +14,6 @@ use object_store::ObjectStoreExt as _;
 use object_store::PutMode;
 use object_store::PutPayload;
 use object_store::path::Path as ObjectPath;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use rtd_indexer_alt_framework_store_traits::ConcurrentConnection;
 use rtd_indexer_alt_framework_store_traits::ConcurrentStore;
@@ -24,6 +22,8 @@ use rtd_indexer_alt_framework_store_traits::InitWatermark;
 use rtd_indexer_alt_framework_store_traits::PrunerWatermark;
 use rtd_indexer_alt_framework_store_traits::ReaderWatermark;
 use rtd_indexer_alt_framework_store_traits::Store;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Clone)]
 pub struct ObjectStore {

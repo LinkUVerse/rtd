@@ -20,10 +20,6 @@ use move_core_types::identifier::Identifier;
 use rand::Rng;
 use rand::distributions::{Distribution, Standard};
 use regex::Regex;
-use std::str::FromStr;
-use std::sync::Arc;
-use strum::{EnumCount, IntoEnumIterator};
-use strum_macros::{EnumCount as EnumCountMacro, EnumIter};
 use rtd_move_build::{BuildConfig, CompiledPackage};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::{PublishData, TestTransactionBuilder};
@@ -34,6 +30,10 @@ use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
 use rtd_types::{base_types::ObjectID, object::Owner};
 use rtd_types::{base_types::RtdAddress, crypto::get_key_pair, transaction::Transaction};
 use rtd_types::{transaction::TransactionData, utils::to_sender_signed_transaction};
+use std::str::FromStr;
+use std::sync::Arc;
+use strum::{EnumCount, IntoEnumIterator};
+use strum_macros::{EnumCount as EnumCountMacro, EnumIter};
 use tracing::debug;
 
 /// Number of vectors to create in LargeTransientRuntimeVectors workload

@@ -36,9 +36,6 @@ use linku_common::debug_fatal;
 use linku_common::sync::notify_read::OwnedRegistration;
 use parking_lot::Mutex;
 use prometheus::IntGauge;
-use std::collections::{BTreeMap, VecDeque};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use rtd_macros::fail_point_if;
 use rtd_types::base_types::EpochId;
 use rtd_types::digests::TransactionDigest;
@@ -47,6 +44,9 @@ use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::messages_consensus::{
     ConsensusPosition, ConsensusTransaction, ConsensusTransactionKey,
 };
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, watch};
 use tracing::warn;
 

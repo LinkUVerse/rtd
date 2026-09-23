@@ -231,8 +231,8 @@ pub(crate) mod address_owned_objects_query {
     use cynic::QueryBuilder as _;
     use rtd_types::base_types::ObjectID;
     use rtd_types::base_types::ObjectRef;
-    use rtd_types::base_types::SequenceNumber;
     use rtd_types::base_types::RtdAddress as RtdAddressType;
+    use rtd_types::base_types::SequenceNumber;
     use rtd_types::digests::ObjectDigest;
     use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 
@@ -768,8 +768,8 @@ pub(crate) mod address_balances_query {
 pub(crate) mod object_seed_query {
     use rtd_types::base_types::ObjectID;
     use rtd_types::base_types::ObjectRef;
-    use rtd_types::base_types::SequenceNumber;
     use rtd_types::base_types::RtdAddress as RtdAddressType;
+    use rtd_types::base_types::SequenceNumber;
     use rtd_types::digests::ObjectDigest;
     use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 

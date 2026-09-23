@@ -21,7 +21,6 @@ use std::time::Duration;
 use anyhow::Context as _;
 use anyhow::bail;
 use async_trait::async_trait;
-use serde::Serialize;
 use rtd_indexer_alt_framework::store::CommitterWatermark;
 use rtd_indexer_alt_framework::store::ConcurrentConnection;
 use rtd_indexer_alt_framework::store::ConcurrentStore;
@@ -30,6 +29,7 @@ use rtd_indexer_alt_framework::store::InitWatermark;
 use rtd_indexer_alt_framework::store::PrunerWatermark;
 use rtd_indexer_alt_framework::store::ReaderWatermark;
 use rtd_indexer_alt_framework::store::Store;
+use serde::Serialize;
 
 /// In-memory mirror of a pipeline's watermark row.
 #[derive(Default, Clone)]

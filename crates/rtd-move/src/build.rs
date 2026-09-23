@@ -4,10 +4,10 @@
 use clap::Parser;
 use move_cli::base::{self};
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
-use std::{fs, path::Path};
 use rtd_move_build::BuildConfig;
 use rtd_package_alt::{RtdFlavor, find_environment};
 use rtd_sdk::wallet_context::WalletContext;
+use std::{fs, path::Path};
 
 const LAYOUTS_DIR: &str = "layouts";
 const STRUCT_LAYOUTS_FILENAME: &str = "struct_layouts.yaml";

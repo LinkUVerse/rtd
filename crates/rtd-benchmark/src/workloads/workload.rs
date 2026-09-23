@@ -9,11 +9,11 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use rand::Rng;
 use rand::distributions::{Distribution, Standard};
+use rtd_types::gas_coin::MIST_PER_RTD;
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount as EnumCountMacro, EnumIter};
-use rtd_types::gas_coin::MIST_PER_RTD;
 
 // This is the maximum gas we will transfer from primary coin into any gas coin
 // for running the benchmark

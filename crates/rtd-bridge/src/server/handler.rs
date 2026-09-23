@@ -10,9 +10,9 @@ use crate::types::{BridgeAction, SignedBridgeAction};
 use alloy::primitives::TxHash;
 use async_trait::async_trait;
 use axum::Json;
+use rtd_types::digests::TransactionDigest;
 use std::str::FromStr;
 use std::sync::Arc;
-use rtd_types::digests::TransactionDigest;
 use tap::TapFallible;
 use tracing::info;
 

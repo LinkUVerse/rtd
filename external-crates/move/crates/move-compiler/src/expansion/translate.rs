@@ -22,7 +22,7 @@ use crate::{
         attributes::expand_attributes,
         byte_string, hex_string,
         name_validation::{
-            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES,
+            IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES, IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES,
             ModuleMemberKind, NameCase, check_restricted_name_all_cases, check_valid_address_name,
             check_valid_function_parameter_name, check_valid_local_name,
             check_valid_module_member_alias, check_valid_module_member_name,

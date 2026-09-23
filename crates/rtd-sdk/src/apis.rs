@@ -31,7 +31,7 @@ use rtd_json_rpc_types::{
     TransactionFilter,
 };
 use rtd_types::balance::Supply;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress, TransactionDigest};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber, TransactionDigest};
 use rtd_types::dynamic_field::DynamicFieldName;
 use rtd_types::event::EventID;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;

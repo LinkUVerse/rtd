@@ -12,14 +12,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use consensus_types::block::BlockRef;
-use std::{
-    collections::{BTreeMap, HashMap},
-    net::SocketAddr,
-    sync::{
-        Arc, Mutex as StdMutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
 use rtd_types::{
     base_types::{AuthorityName, random_object_ref},
     committee::Committee,
@@ -37,6 +29,14 @@ use rtd_types::{
     },
     rtd_system_state::RtdSystemState,
     transaction::Transaction,
+};
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    sync::{
+        Arc, Mutex as StdMutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::time::{Duration, sleep};
 

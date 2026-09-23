@@ -6,7 +6,6 @@ use cluster::{Cluster, ClusterFactory};
 use config::ClusterTestOpt;
 use futures::future::join_all;
 use helper::ObjectChecker;
-use std::sync::Arc;
 use rtd_faucet::{CoinInfo, RequestStatus};
 use rtd_rpc_api::Client as GrpcClient;
 use rtd_rpc_api::client::ExecutedTransaction;
@@ -15,6 +14,7 @@ use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectRef, TransactionDigest};
 use rtd_types::object::Owner;
 use rtd_types::rtd_system_state::rtd_system_state_summary::RtdSystemStateSummary;
+use std::sync::Arc;
 
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::{

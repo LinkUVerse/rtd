@@ -432,5 +432,4 @@ mod tests {
         // The in-progress install is never evicted.
         assert!(cache.path().join(".tmp-9.9.9-1").exists());
     }
-
 }

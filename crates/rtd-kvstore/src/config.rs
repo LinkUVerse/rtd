@@ -4,14 +4,14 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_indexer_alt_framework::config::ConcurrencyConfig;
 use rtd_indexer_alt_framework::pipeline;
 use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
 use rtd_indexer_alt_framework::pipeline::sequential::SequentialConfig;
 use rtd_indexer_alt_framework::{self as framework};
+use serde::Deserialize;
+use serde::Serialize;
 use tracing::warn;
 
 use crate::bigtable::client::PoolConfig;

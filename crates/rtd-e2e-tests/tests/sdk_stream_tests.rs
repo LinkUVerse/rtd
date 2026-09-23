@@ -3,9 +3,9 @@
 
 use futures::StreamExt;
 use linku_common::ZipDebugEqIteratorExt;
-use std::future;
 use rtd_sdk::{RTD_COIN_TYPE, RtdClientBuilder};
 use rtd_swarm_config::genesis_config::{DEFAULT_GAS_AMOUNT, DEFAULT_NUMBER_OF_OBJECT_PER_ACCOUNT};
+use std::future;
 use test_cluster::TestClusterBuilder;
 
 // TODO: rewrite the tests after the removal of DevNet NFT

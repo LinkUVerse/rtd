@@ -22,9 +22,6 @@ use consensus_core::{
     CommitAPI as _, CommitRange,
     storage::{Store as ConsensusStore, rocksdb_store::RocksDBStore},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::value::Value as JsonValue;
-use std::sync::Arc;
 use rtd_types::{
     base_types::EpochId,
     digests::{
@@ -32,6 +29,9 @@ use rtd_types::{
     },
     messages_checkpoint::CheckpointSequenceNumber,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::value::Value as JsonValue;
+use std::sync::Arc;
 
 pub const DEFAULT_LIMIT: usize = 30;
 

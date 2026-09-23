@@ -6,7 +6,6 @@ use std::net::{IpAddr, SocketAddr};
 use anyhow::Result;
 use fastcrypto::traits::KeyPair;
 use rand::{SeedableRng, rngs::StdRng};
-use serde::{Deserialize, Serialize};
 use rtd_config::genesis::{GenesisCeremonyParameters, TokenAllocation};
 use rtd_config::node::{DEFAULT_COMMISSION_RATE, DEFAULT_VALIDATOR_GAS_PRICE};
 use rtd_config::{Config, local_ip_utils};
@@ -17,6 +16,7 @@ use rtd_types::crypto::{
     PublicKey, RtdKeyPair, generate_proof_of_possession, get_key_pair_from_rng,
 };
 use rtd_types::multiaddr::Multiaddr;
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 // All information needed to build a NodeConfig for a state sync fullnode.

@@ -21,10 +21,6 @@ use linku_common::ZipDebugEqIteratorExt;
 use linku_common::{assert_reachable, debug_fatal};
 use linku_metrics::spawn_monitored_task;
 use parking_lot::Mutex;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    sync::Arc,
-};
 use rtd_config::node::{AuthorityOverloadConfig, FundsWithdrawSchedulerType};
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID,
@@ -37,6 +33,10 @@ use rtd_types::{
         SenderSignedData, SharedInputObject, SharedObjectMutability, TransactionData,
         TransactionDataAPI, TransactionKey,
     },
+};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    sync::Arc,
 };
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
@@ -663,8 +663,6 @@ mod test {
     use crate::authority::ExecutionEnv;
     use crate::authority::shared_object_version_manager::AssignedVersions;
     use crate::authority::{AuthorityState, authority_tests::init_state_with_objects};
-    use std::collections::BTreeSet;
-    use std::{time::Duration, vec};
     use rtd_test_transaction_builder::TestTransactionBuilder;
     use rtd_types::base_types::{RtdAddress, random_object_ref};
     use rtd_types::executable_transaction::VerifiedExecutableTransaction;
@@ -680,6 +678,8 @@ mod test {
         object::Object,
         transaction::{CallArg, ObjectArg},
     };
+    use std::collections::BTreeSet;
+    use std::{time::Duration, vec};
     use tokio::time::Instant;
     use tokio::{
         sync::mpsc::{UnboundedReceiver, error::TryRecvError, unbounded_channel},

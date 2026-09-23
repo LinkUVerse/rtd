@@ -30,12 +30,12 @@ use tracing::debug;
 
 use crate::epoch::committee_store::CommitteeStore;
 use prometheus::Registry;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_types::committee::{CommitteeWithNetworkMetadata, StakeUnit};
 use rtd_types::messages_grpc::{LayoutGenerationOption, ObjectInfoRequest};
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
+use std::time::Duration;
 
 pub const DEFAULT_RETRIES: usize = 4;
 

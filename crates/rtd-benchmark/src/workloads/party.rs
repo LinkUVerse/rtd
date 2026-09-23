@@ -15,7 +15,6 @@ use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use move_core_types::identifier::Identifier;
 use rand::seq::IteratorRandom;
-use std::sync::{Arc, Mutex};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::{base_types::FullObjectRef, object::Owner};
 use rtd_types::{base_types::RtdAddress, crypto::get_key_pair, transaction::Transaction};
@@ -23,6 +22,7 @@ use rtd_types::{
     base_types::{FullObjectID, ObjectID},
     transaction::{ObjectArg, SharedObjectMutability},
 };
+use std::sync::{Arc, Mutex};
 use tracing::info;
 
 #[derive(Debug)]

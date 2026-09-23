@@ -1,14 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use rtd_inverted_index::event_seq;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use rtd_inverted_index::event_seq;
 
 use bytes::Bytes;
 use roaring::RoaringBitmap;
-use scoped_futures::ScopedFutureExt;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_framework::pipeline::sequential::Handler;
 use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
@@ -17,6 +16,7 @@ use rtd_indexer_alt_framework_store_traits::SequentialStore;
 use rtd_indexer_alt_framework_store_traits::Store;
 use rtd_inverted_index::IndexDimension;
 use rtd_types::full_checkpoint_content::Checkpoint;
+use scoped_futures::ScopedFutureExt;
 
 use super::NUM_SHARDS;
 use super::shard_for;

@@ -14,19 +14,6 @@ use prometheus::{
     IntCounter, IntGauge, Registry, register_int_counter_with_registry,
     register_int_gauge_with_registry,
 };
-#[cfg(tidehunter)]
-use serde::de::DeserializeOwned;
-#[cfg(not(tidehunter))]
-use std::cmp::max;
-use std::cmp::min;
-#[cfg(not(tidehunter))]
-use std::collections::{BTreeSet, HashMap};
-#[cfg(not(tidehunter))]
-use std::sync::Mutex;
-use std::sync::atomic::AtomicU64;
-#[cfg(not(tidehunter))]
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{sync::Arc, time::Duration};
 use rtd_config::node::AuthorityStorePruningConfig;
 pub use rtd_rpc_store::RetractionCursors;
 use rtd_rpc_store::Store as RpcStore;
@@ -43,6 +30,19 @@ use rtd_types::{
     base_types::{ObjectID, SequenceNumber, TransactionDigest},
     storage::ObjectKey,
 };
+#[cfg(tidehunter)]
+use serde::de::DeserializeOwned;
+#[cfg(not(tidehunter))]
+use std::cmp::max;
+use std::cmp::min;
+#[cfg(not(tidehunter))]
+use std::collections::{BTreeSet, HashMap};
+#[cfg(not(tidehunter))]
+use std::sync::Mutex;
+use std::sync::atomic::AtomicU64;
+#[cfg(not(tidehunter))]
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::oneshot::{self, Sender};
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};

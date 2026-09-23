@@ -4,8 +4,6 @@
 use futures::future::join_all;
 use futures::join;
 use rand::distributions::Distribution;
-use std::net::SocketAddr;
-use std::time::{Duration, SystemTime};
 use rtd_macros::{register_fail_point_async, sim_test};
 use rtd_protocol_config::ProtocolVersion;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
@@ -21,6 +19,8 @@ use rtd_types::execution_status::{
 };
 use rtd_types::messages_grpc::WaitForEffectsResponse;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
+use std::net::SocketAddr;
+use std::time::{Duration, SystemTime};
 use test_cluster::TestClusterBuilder;
 use tokio::time::sleep;
 use tracing::info;

@@ -3,7 +3,6 @@
 use tempfile::TempDir;
 
 use fastcrypto::ed25519::Ed25519KeyPair;
-use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
 use rtd_config::{Config, RTD_CLIENT_CONFIG};
 use rtd_keys::key_derive::generate_new_key;
 use rtd_keys::key_identity::KeyIdentity;
@@ -16,7 +15,7 @@ use rtd_sdk::{
 };
 use rtd_types::base_types::{RtdAddress, random_object_ref};
 use rtd_types::crypto::{Ed25519RtdSignature, RtdKeyPair, RtdSignature};
-use rtd_types::crypto::{SignatureScheme, RtdSignatureInner};
+use rtd_types::crypto::{RtdSignatureInner, SignatureScheme};
 use rtd_types::multisig::{MultiSig, MultiSigPublicKey};
 use rtd_types::transaction::{ProgrammableTransaction, TransactionData, TransactionKind};
 use rtd_types::{
@@ -24,6 +23,7 @@ use rtd_types::{
     signature::GenericSignature,
     utils::sign_zklogin_personal_msg,
 };
+use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]

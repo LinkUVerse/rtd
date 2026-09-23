@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_json_rpc_api::{
     CoinReadApiClient, IndexerApiClient, TransactionBuilderClient, WriteApiClient,
 };
@@ -15,6 +14,7 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{CallArg, ObjectArg, TransactionData, TransactionKind};
 use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]

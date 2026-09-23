@@ -5,11 +5,11 @@ use std::fmt;
 
 use async_graphql::Object;
 use async_graphql::scalar;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_package_resolver::OpenSignature;
 use rtd_package_resolver::OpenSignatureBody;
 use rtd_package_resolver::Reference;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub(crate) struct OpenMoveType {
     signature: OpenMoveTypeSignature,

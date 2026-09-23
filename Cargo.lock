@@ -13022,7 +13022,7 @@ dependencies = [
 [[package]]
 name = "rtd-crypto"
 version = "0.4.0"
-source = "git+https://github.com/LinkUVerse/rtd-rust-sdk.git?rev=1aed5776c9d957f08d06bde07664993d70825c93#1aed5776c9d957f08d06bde07664993d70825c93"
+source = "git+https://github.com/LinkUVerse/rtd-rust-sdk.git?rev=fd95c4566e88cda3c4e5e590deda4e6aff864700#fd95c4566e88cda3c4e5e590deda4e6aff864700"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.4.2",
@@ -15036,7 +15036,7 @@ dependencies = [
 [[package]]
 name = "rtd-rpc"
 version = "0.4.0"
-source = "git+https://github.com/LinkUVerse/rtd-rust-sdk.git?rev=1aed5776c9d957f08d06bde07664993d70825c93#1aed5776c9d957f08d06bde07664993d70825c93"
+source = "git+https://github.com/LinkUVerse/rtd-rust-sdk.git?rev=fd95c4566e88cda3c4e5e590deda4e6aff864700#fd95c4566e88cda3c4e5e590deda4e6aff864700"
 dependencies = [
  "base64 0.22.1",
  "bcs",
@@ -15271,7 +15271,7 @@ dependencies = [
 [[package]]
 name = "rtd-sdk-types"
 version = "0.4.0"
-source = "git+https://github.com/LinkUVerse/rtd-rust-sdk.git?rev=1aed5776c9d957f08d06bde07664993d70825c93#1aed5776c9d957f08d06bde07664993d70825c93"
+source = "git+https://github.com/LinkUVerse/rtd-rust-sdk.git?rev=fd95c4566e88cda3c4e5e590deda4e6aff864700#fd95c4566e88cda3c4e5e590deda4e6aff864700"
 dependencies = [
  "base64ct",
  "bcs",

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::sim_test;
 use rtd_rpc::proto::rtd::rpc::v2::Argument;
@@ -29,6 +28,7 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Command as RtdCommand;
 use rtd_types::transaction::{ObjectArg, TransactionData, TransactionDataAPI};
+use shared_crypto::intent::Intent;
 use test_cluster::TestClusterBuilder;
 
 fn proto_to_response(

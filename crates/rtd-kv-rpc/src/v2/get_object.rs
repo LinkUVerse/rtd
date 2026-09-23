@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::StreamExt;
-use std::collections::HashMap;
 use rtd_kvstore::{BigTableClient, KeyValueStoreReader};
 use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsRequest;
 use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsResponse;
@@ -12,6 +11,7 @@ use rtd_rpc_api::{
 };
 use rtd_types::base_types::{ObjectID, SequenceNumber};
 use rtd_types::storage::ObjectKey;
+use std::collections::HashMap;
 
 use crate::PackageResolver;
 use crate::render::object_to_response;

@@ -28,11 +28,11 @@ use prometheus::{
     IntCounterVec, IntGaugeVec, Registry, register_int_counter_vec_with_registry,
     register_int_gauge_vec_with_registry,
 };
-use serde::Serialize;
 use rtd_config::AddressProberConfig;
 use rtd_core::consensus_manager::ConsensusManager;
 use rtd_network::discovery::{Sender as DiscoverySender, TrustedPeerP2pAddresses};
 use rtd_network::endpoint_manager::AddressSource;
+use serde::Serialize;
 use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::time::Instant;
 use tracing::{debug, info};

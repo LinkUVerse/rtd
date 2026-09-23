@@ -6,7 +6,7 @@ use rtd_protocol_config::ProtocolConfig;
 
 use crate::{
     accumulator_root::AccumulatorValue,
-    base_types::{ObjectID, SequenceNumber, RtdAddress, random_object_ref},
+    base_types::{ObjectID, RtdAddress, SequenceNumber, random_object_ref},
     coin_reservation::{CoinReservationResolverTrait, ParsedObjectRefWithdrawal},
     digests::{ChainIdentifier, CheckpointDigest},
     error::UserInputResult,

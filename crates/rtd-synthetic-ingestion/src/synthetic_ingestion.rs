@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost::Message;
-use simulacrum::Simulacrum;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
 use rtd_rpc::proto::rtd::rpc::v2::Checkpoint as ProtoCheckpoint;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::crypto::get_account_key_pair;
@@ -13,6 +10,9 @@ use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::full_checkpoint_content::CheckpointData;
 use rtd_types::gas_coin::MIST_PER_RTD;
 use rtd_types::utils::to_sender_signed_transaction;
+use simulacrum::Simulacrum;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 use tokio::fs;
 use tracing::info;
 
@@ -115,10 +115,10 @@ pub async fn read_ingestion_data(path: &PathBuf) -> anyhow::Result<BTreeMap<u64,
 mod tests {
     use crate::synthetic_ingestion::generate_ingestion;
     use prost::Message;
-    use std::path::PathBuf;
     use rtd_rpc::proto::rtd::rpc::v2::Checkpoint as ProtoCheckpoint;
     use rtd_types::full_checkpoint_content::Checkpoint;
     use rtd_types::full_checkpoint_content::CheckpointData;
+    use std::path::PathBuf;
 
     #[tokio::test]
     async fn test_ingestion_from_zero() {

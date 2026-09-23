@@ -8,10 +8,10 @@ use diesel::expression::AsExpression;
 use diesel::prelude::*;
 use diesel::serialize;
 use diesel::sql_types::SmallInt;
-use serde::Deserialize;
-use serde::Serialize;
 use rtd_field_count::FieldCount;
 use rtd_types::object::Owner;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::schema::kv_transactions;
 use crate::schema::tx_affected_addresses;

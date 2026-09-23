@@ -72,7 +72,7 @@ NEW_LOWER="rtd"
 OLD_SDK_REV="618b6c8484a2394f73d9b5e21cce0ac228b2cf31"
 
 # 您 Fork 的 SDK commit hash（修改为您的 commit）
-NEW_SDK_REV="1aed5776c9d957f08d06bde07664993d70825c93"
+NEW_SDK_REV="fd95c4566e88cda3c4e5e590deda4e6aff864700"
 
 ################################################################################
 # 示例：RTD 品牌配置（默认值）
@@ -86,5 +86,5 @@ NEW_SDK_REV="1aed5776c9d957f08d06bde07664993d70825c93"
 # OLD_MIXED="Sui"            NEW_MIXED="Rtd"
 # OLD_LOWER="sui"            NEW_LOWER="rtd"
 # OLD_SDK_REV="618b6c8484a2394f73d9b5e21cce0ac228b2cf31"
-# NEW_SDK_REV="1aed5776c9d957f08d06bde07664993d70825c93"
+# NEW_SDK_REV="fd95c4566e88cda3c4e5e590deda4e6aff864700"
 ################################################################################

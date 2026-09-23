@@ -3,12 +3,12 @@
 
 use crate::error::{BridgeError, BridgeResult};
 use crate::types::{BridgeAction, BridgeActionDigest};
+use rtd_types::Identifier;
+use rtd_types::event::EventID;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use rtd_types::Identifier;
-use rtd_types::event::EventID;
 use typed_store::DBMapUtils;
 use typed_store::Map;
 use typed_store::rocks::{DBMap, MetricConf};

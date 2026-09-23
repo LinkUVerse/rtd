@@ -7,8 +7,8 @@ use rtd_rpc::proto::rtd::rpc::v2::{Balance, GetBalanceRequest, GetBalanceRespons
 use rtd_sdk_types::Address;
 use rtd_sdk_types::StructTag;
 use rtd_types::base_types::RtdAddress;
-use rtd_types::storage::BalanceInfo;
 use rtd_types::rtd_sdk_types_conversions::struct_tag_sdk_to_core;
+use rtd_types::storage::BalanceInfo;
 
 #[tracing::instrument(skip(service))]
 pub fn get_balance(service: &RpcService, request: GetBalanceRequest) -> Result<GetBalanceResponse> {

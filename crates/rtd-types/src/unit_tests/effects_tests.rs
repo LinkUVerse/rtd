@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use crate::base_types::{ObjectID, RtdAddress, SequenceNumber};
 use crate::crypto::{AccountKeyPair, get_key_pair_from_rng};
 use crate::digests::ObjectDigest;
 use crate::effects::{TestEffectsBuilder, TransactionEffectsAPI};

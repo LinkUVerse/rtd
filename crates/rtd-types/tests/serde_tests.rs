@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::StructTag;
+use rtd_types::base_types::ObjectType;
+use rtd_types::parse_rtd_struct_tag;
+use rtd_types::rtd_serde::RtdStructTag;
 use serde::Serialize;
 use serde_json::Value;
 use serde_with::serde_as;
 use std::str::FromStr;
-use rtd_types::base_types::ObjectType;
-use rtd_types::parse_rtd_struct_tag;
-use rtd_types::rtd_serde::RtdStructTag;
 
 #[test]
 fn test_struct_tag_serde() {

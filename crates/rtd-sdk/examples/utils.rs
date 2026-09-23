@@ -17,8 +17,6 @@ use rtd_sdk::{
 use tracing::info;
 
 use reqwest::Client;
-use serde_json::json;
-use shared_crypto::intent::Intent;
 use rtd_sdk::types::{
     base_types::{ObjectID, RtdAddress},
     digests::TransactionDigest,
@@ -26,6 +24,8 @@ use rtd_sdk::types::{
     transaction::{Argument, Command, Transaction, TransactionData},
     transaction_driver_types::ExecuteTransactionRequestType,
 };
+use serde_json::json;
+use shared_crypto::intent::Intent;
 
 use rtd_sdk::{RtdClient, RtdClientBuilder, rpc_types::RtdTransactionBlockResponseOptions};
 
@@ -34,13 +34,6 @@ struct FaucetResponse {
     task: String,
     error: Option<String>,
 }
-
-// const RTD_FAUCET: &str = "https://faucet.devnet.rtd.io/v2/gas"; // devnet faucet
-
-// Testnet faucet is under heavy rate limit, we recommend using devnet for these examples
-pub const RTD_FAUCET: &str = "https://faucet.testnet.rtd.io/v2/gas"; // testnet faucet
-
-// const RTD_FAUCET: &str = "http://127.0.0.1:9123/v2/gas";
 
 /// Return a rtd client to interact with the APIs,
 /// the active address of the local wallet, and another address that can be used as a recipient.
@@ -99,9 +92,13 @@ pub async fn request_tokens_from_faucet(
     }];
 
     // make the request to the faucet JSON RPC API for coin
+    let faucet_url = std::env::var("RTD_TESTNET_FAUCET_URL")
+        .map_err(|_| anyhow::anyhow!("Set RTD_TESTNET_FAUCET_URL for this example"))?;
+    let faucet_status_url = std::env::var("RTD_TESTNET_FAUCET_STATUS_URL")
+        .map_err(|_| anyhow::anyhow!("Set RTD_TESTNET_FAUCET_STATUS_URL for this example"))?;
     let client = Client::new();
     let resp = client
-        .post(RTD_FAUCET)
+        .post(&faucet_url)
         .header("Content-Type", "application/json")
         .json(&json_body)
         .send()
@@ -132,7 +129,7 @@ pub async fn request_tokens_from_faucet(
     // wait for the faucet to finish the batch of token requests
     loop {
         let resp = client
-            .get("https://faucet.testnet.rtd.io/v1/status")
+            .get(&faucet_status_url)
             .header("Content-Type", "application/json")
             .json(&json_body)
             .send()

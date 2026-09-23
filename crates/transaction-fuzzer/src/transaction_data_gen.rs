@@ -7,7 +7,7 @@ use proptest::prelude::*;
 
 use crate::type_arg_fuzzer::{gen_type_tag, pt_for_tags};
 use proptest::collection::vec;
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
 
 use rtd_types::digests::{ChainIdentifier, ObjectDigest};
 use rtd_types::transaction::{

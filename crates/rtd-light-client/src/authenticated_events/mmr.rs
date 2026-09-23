@@ -68,8 +68,8 @@ pub fn apply_stream_updates(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use rtd_types::digests::Digest;
+    use std::str::FromStr;
 
     use super::*;
 

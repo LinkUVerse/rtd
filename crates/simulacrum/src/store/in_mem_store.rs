@@ -6,12 +6,11 @@ use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::resolver::SerializedPackage;
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
-use std::collections::{BTreeMap, HashMap};
 use rtd_config::genesis;
 use rtd_types::error::RtdErrorKind;
 use rtd_types::storage::{PackageObject, get_module, load_package_object_from_object_store};
 use rtd_types::{
-    base_types::{AuthorityName, ObjectID, SequenceNumber, RtdAddress},
+    base_types::{AuthorityName, ObjectID, RtdAddress, SequenceNumber},
     committee::{Committee, EpochId},
     crypto::{AccountKeyPair, AuthorityKeyPair},
     digests::{ObjectDigest, TransactionDigest},
@@ -25,6 +24,7 @@ use rtd_types::{
     storage::{BackingPackageStore, ObjectStore, ParentSync, RuntimeObjectResolver},
     transaction::VerifiedTransaction,
 };
+use std::collections::{BTreeMap, HashMap};
 
 use super::SimulatorStore;
 

@@ -16,13 +16,13 @@ use crate::workloads::{Gas, GasCoinConfig, workload::ExpectedFailureType};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
-use std::sync::Arc;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::get_key_pair;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{Command, Transaction, TransactionData};
 use rtd_types::type_input::TypeInput;
 use rtd_types::utils::to_sender_signed_transaction;
+use std::sync::Arc;
 
 /// Leave room for the transaction envelope (sender, gas, signature, command) under
 /// `max_tx_size_bytes`. Measured envelope is well under 1 KB; 8 KB is a safe margin.

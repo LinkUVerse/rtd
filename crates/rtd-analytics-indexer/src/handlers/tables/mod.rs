@@ -314,9 +314,9 @@ mod tests {
     use move_core_types::annotated_value::MoveVariant;
     use move_core_types::identifier::Identifier;
     use move_core_types::language_storage::StructTag;
+    use rtd_types::base_types::ObjectID;
     use std::collections::BTreeMap;
     use std::str::FromStr;
-    use rtd_types::base_types::ObjectID;
 
     #[tokio::test]
     async fn test_wrapped_object_parsing() -> anyhow::Result<()> {

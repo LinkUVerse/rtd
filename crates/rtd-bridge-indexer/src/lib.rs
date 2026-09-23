@@ -9,8 +9,6 @@ use crate::metrics::BridgeIndexerMetrics;
 use crate::postgres_manager::PgPool;
 use crate::storage::PgBridgePersistent;
 use alloy::primitives::Address as EthAddress;
-use std::str::FromStr;
-use std::sync::Arc;
 use rtd_bridge::eth_client::EthClient;
 use rtd_bridge::metrics::BridgeMetrics;
 use rtd_bridge::utils::{get_eth_contract_addresses, get_eth_provider};
@@ -20,6 +18,8 @@ use rtd_bridge_schema::models::{
 use rtd_bridge_schema::models::{GovernanceActionType, TokenTransferData as DBTokenTransferData};
 use rtd_bridge_schema::models::{RtdErrorTransactions, TokenTransfer as DBTokenTransfer};
 use rtd_types::base_types::{RtdAddress, TransactionDigest};
+use std::str::FromStr;
+use std::sync::Arc;
 
 pub mod config;
 pub mod metrics;

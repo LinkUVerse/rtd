@@ -7,7 +7,7 @@
     rust_2021_compatibility
 )]
 
-use base_types::{SequenceNumber, RtdAddress};
+use base_types::{RtdAddress, SequenceNumber};
 use move_binary_format::CompiledModule;
 use move_binary_format::file_format::{AbilitySet, SignatureToken};
 use move_bytecode_utils::resolve_struct;
@@ -85,12 +85,12 @@ pub mod programmable_transaction_builder;
 pub mod ptb_trace;
 pub mod randomness_state;
 pub mod rpc_proto_conversions;
-pub mod signature;
-pub mod signature_verification;
-pub mod storage;
 pub mod rtd_sdk_types_conversions;
 pub mod rtd_serde;
 pub mod rtd_system_state;
+pub mod signature;
+pub mod signature_verification;
+pub mod storage;
 pub mod supported_protocol_versions;
 pub mod test_checkpoint_data_builder;
 pub mod traffic_control;

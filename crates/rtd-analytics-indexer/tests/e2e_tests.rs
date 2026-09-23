@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 
-use mock_store::MockStore;
 use linku_common::ZipDebugEqIteratorExt;
+use mock_store::MockStore;
 use object_store::ObjectStore;
 use object_store::ObjectStoreExt as _;
 use object_store::memory::InMemory;

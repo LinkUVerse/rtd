@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
-use std::path::PathBuf;
-use std::str::FromStr;
 use rtd_macros::sim_test;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoRequest;
@@ -19,6 +17,8 @@ use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::SharedObjectMutability;
 use rtd_types::transaction::{ObjectArg, TransactionData};
 use rtd_types::{RTD_COIN_REGISTRY_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID, TypeTag};
+use std::path::PathBuf;
+use std::str::FromStr;
 use test_cluster::TestClusterBuilder;
 
 // RTD doesn't use the CoinRegistry - it was created before the CoinRegistry system existed and has

@@ -18,6 +18,7 @@ use crate::{
         Ability_, BinOp, BinOp_, ConstantName, DatatypeName, Field, FunctionName, TargetKind,
         VariantName,
     },
+    rtd_mode::ID_FIELD_NAME,
     shared::{
         matching::{MATCH_TEMP_PREFIX, MatchContext, new_match_var_name},
         program_info::TypingProgramInfo,
@@ -25,7 +26,6 @@ use crate::{
         unique_map::UniqueMap,
         *,
     },
-    rtd_mode::ID_FIELD_NAME,
     typing::ast as T,
 };
 

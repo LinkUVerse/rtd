@@ -4,16 +4,20 @@
 // docs::#config
 import { getConfig, getDeployment, getUnits } from '@linku/deepbook-v3/predict';
 
-// The SDK carries a deployment record for Testnet and for Mainnet, so `getConfig`
-// resolves either. This constant is the single place these examples select a
-// network. Change it here and every other file follows. They default to Testnet,
-// where the quote coin is a mintable test coin; on Mainnet it is native USDC.
-export const NETWORK = 'testnet' as 'testnet' | 'mainnet';
+const environment = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+	.process?.env;
+function required(name: string): string {
+	const value = environment?.[name]?.trim();
+	if (!value) throw new Error(`${name} is required for an RTD DeepBook Predict deployment`);
+	return value;
+}
 
-export const FULLNODE_URL =
-	NETWORK === 'mainnet'
-		? 'https://fullnode.mainnet.rtd.io:443'
-		: 'https://fullnode.testnet.rtd.io:443';
+export const NETWORK = required('RTD_PREDICT_NETWORK') as 'testnet' | 'mainnet';
+if (NETWORK !== 'testnet' && NETWORK !== 'mainnet') {
+	throw new Error('RTD_PREDICT_NETWORK must be testnet or mainnet');
+}
+
+export const FULLNODE_URL = required('RTD_PREDICT_GRPC_URL');
 
 // One underlying is live on this deployment.
 export const UNDERLYING = 'BTC';
@@ -22,14 +26,12 @@ export const UNDERLYING = 'BTC';
 // Assert the name at startup, so a later SDK release that moves a network to a
 // new deployment fails loudly here rather than quietly trading against a
 // deployment these examples were never checked against.
-export const EXPECTED_DEPLOYMENT = {
-	testnet: 'deepbook-predict-testnet',
-	mainnet: 'deepbook-predict-mainnet',
-}[NETWORK];
+export const EXPECTED_DEPLOYMENT = required('RTD_PREDICT_DEPLOYMENT');
+const expectedChainId = required('RTD_CHAIN_ID');
 
 export const DEPLOYMENT = getDeployment(NETWORK);
 
-if (DEPLOYMENT.deployment !== EXPECTED_DEPLOYMENT) {
+if (DEPLOYMENT.deployment !== EXPECTED_DEPLOYMENT || DEPLOYMENT.chainId !== expectedChainId) {
 	throw new Error(
 		`Expected DeepBook Predict deployment ${EXPECTED_DEPLOYMENT}, got ` +
 			`${DEPLOYMENT.deployment} (chain ${DEPLOYMENT.chainId}, ` +
@@ -37,11 +39,9 @@ if (DEPLOYMENT.deployment !== EXPECTED_DEPLOYMENT) {
 	);
 }
 
-// Package IDs, the shared registry, protocol config, and pool vault objects, the
-// quote coin type, and the per-underlying oracle IDs all come from the SDK, so
-// no deployment identifier is hardcoded in these examples. Always read the quote
-// coin from `CONFIG.quoteCoinType`: on Mainnet it is native USDC, and on Testnet
-// it is a test coin with the same `usdc::USDC` module path that displays as DUSDC.
+// The SDK deployment record supplies package and object IDs, quote-coin type,
+// and oracle IDs. Use it only after its chain ID matches this RTD deployment.
+// Always read the quote coin from `CONFIG.quoteCoinType`.
 export const CONFIG = getConfig(NETWORK);
 
 // Scale constants the deployment owns: position quantities are whole

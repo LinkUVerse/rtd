@@ -4,8 +4,6 @@
 use anyhow::{Context, Result};
 use fastcrypto::encoding::{Base64, Encoding};
 use fastcrypto::hash::HashFunction;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{fs, path::Path};
 use rtd_types::authenticator_state::{AuthenticatorStateInner, get_authenticator_state};
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::clock::Clock;
@@ -17,17 +15,19 @@ use rtd_types::gas_coin::TOTAL_SUPPLY_MIST;
 use rtd_types::messages_checkpoint::{
     CertifiedCheckpointSummary, CheckpointContents, CheckpointSummary, VerifiedCheckpoint,
 };
-use rtd_types::storage::ObjectStore;
 use rtd_types::rtd_system_state::{
     RtdSystemState, RtdSystemStateTrait, RtdSystemStateWrapper, RtdValidatorGenesis,
     get_rtd_system_state, get_rtd_system_state_wrapper,
 };
+use rtd_types::storage::ObjectStore;
 use rtd_types::transaction::Transaction;
 use rtd_types::{RTD_BRIDGE_OBJECT_ID, RTD_RANDOMNESS_STATE_OBJECT_ID};
 use rtd_types::{
     committee::{Committee, EpochId, ProtocolVersion},
     object::Object,
 };
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::{fs, path::Path};
 use tracing::trace;
 
 #[derive(Clone, Debug)]

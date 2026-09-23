@@ -8,8 +8,8 @@ use crate::{
     },
 };
 use move_core_types::account_address::AccountAddress;
-use std::{collections::BTreeMap, rc::Rc};
 use rtd_types::{base_types::ObjectID, error::ExecutionError};
+use std::{collections::BTreeMap, rc::Rc};
 
 #[derive(Clone, Debug)]
 pub struct RootedLinkage {

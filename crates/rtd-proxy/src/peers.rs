@@ -11,13 +11,6 @@ use prometheus::{CounterVec, HistogramVec, IntGaugeVec};
 use prometheus::{register_counter_vec, register_histogram_vec, register_int_gauge_vec};
 use prost_types::Value as JsonValue;
 use prost_types::value::Kind as JsonKind;
-use std::collections::BTreeMap;
-use std::str::FromStr;
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
 use rtd_rpc::Client as RtdRpcClient;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::proto::rtd::rpc::v2::{Epoch, GetEpochRequest, GetObjectRequest, Object};
@@ -28,6 +21,13 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::bridge::{BridgeInnerV1, BridgeSummary, BridgeTrait, BridgeWrapper};
 use rtd_types::dynamic_field::Field;
 use rtd_types::rtd_system_state::rtd_system_state_summary::RtdSystemStateSummary;
+use std::collections::BTreeMap;
+use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tracing::{debug, error, info, warn};
 use url::Url;
 
@@ -1082,12 +1082,12 @@ fn rtd_address_to_sdk_address(addr: RtdAddress) -> Address {
 mod tests {
     use super::*;
     use crate::admin::{CertKeyPair, generate_self_cert};
-    use serde::{Deserialize, Serialize};
     use rtd_types::base_types::RtdAddress;
     use rtd_types::bridge::{BridgeCommitteeSummary, BridgeSummary, MoveTypeCommitteeMember};
     use rtd_types::rtd_system_state::rtd_system_state_summary::{
         RtdSystemStateSummary, RtdValidatorSummary,
     };
+    use serde::{Deserialize, Serialize};
 
     /// creates a test that binds our proxy use case to the structure in rtd_getLatestRtdSystemState
     /// most of the fields are garbage, but we will send the results of the serde process to a private decode

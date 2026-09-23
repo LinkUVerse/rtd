@@ -19,9 +19,9 @@ use move_vm_runtime::{
     natives::functions::NativeResult,
     pop_arg,
 };
+use rtd_types::{TypeTag, base_types::MoveObjectType};
 use smallvec::smallvec;
 use std::collections::VecDeque;
-use rtd_types::{TypeTag, base_types::MoveObjectType};
 use tracing::{error, instrument};
 
 const E_BCS_SERIALIZATION_FAILURE: u64 = 2;

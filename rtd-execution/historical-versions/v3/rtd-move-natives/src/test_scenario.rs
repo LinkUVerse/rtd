@@ -22,15 +22,9 @@ use move_vm_types::{
     pop_arg,
     values::{self, StructRef, Value, Vector, VectorSpecialization},
 };
-use smallvec::smallvec;
-use std::{
-    borrow::Borrow,
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
-};
 use rtd_types::{
     TypeTag,
-    base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress},
+    base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber},
     config,
     digests::{ObjectDigest, TransactionDigest},
     dynamic_field::DynamicFieldInfo,
@@ -39,6 +33,12 @@ use rtd_types::{
     in_memory_storage::InMemoryStorage,
     object::{MoveObject, Object, Owner},
     storage::{BackingPackageStore, PackageObject, RuntimeObjectResolver},
+};
+use smallvec::smallvec;
+use std::{
+    borrow::Borrow,
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet, VecDeque},
 };
 
 const E_COULD_NOT_GENERATE_EFFECTS: u64 = 0;

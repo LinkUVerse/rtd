@@ -11,8 +11,8 @@ use crate::multiaddr::Multiaddr;
 use anemo::PeerId;
 use consensus_config::{Authority, Committee as ConsensusCommittee};
 use linku_common::ZipDebugEqIteratorExt;
-use serde::{Deserialize, Serialize};
 use rtd_protocol_config::ProtocolVersion;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 #[enum_dispatch]

@@ -6,9 +6,6 @@
 use crate::error::{BridgeError, BridgeResult};
 use crate::test_utils::DUMMY_MUTALBE_BRIDGE_OBJECT_ARG;
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex};
 use rtd_json_rpc_types::RtdEvent;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::ObjectRef;
@@ -20,6 +17,9 @@ use rtd_types::gas_coin::GasCoin;
 use rtd_types::object::Owner;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::Transaction;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex};
 
 use crate::rtd_client::{ExecuteTransactionResult, RtdClientInner};
 use crate::types::{BridgeAction, BridgeActionStatus, IsBridgePaused, RtdEvents};
