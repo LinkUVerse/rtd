@@ -78,9 +78,9 @@ with one section per environment:
 
 ```toml
 [published.mainnet]
-chain-id = "35834a8a"                          # the network's chain id
-published-at = "0x0e735f8c93a95722efd735..."   # the package's current onchain address
-original-id = "0x2c8d603bc51326b8c13cef..."    # its original, first-published address
+chain-id = "<RTD_CHAIN_ID>"                  # from the target network's genesis
+published-at = "<PUBLISHED_PACKAGE_ID>"    # from the RTD publish transaction
+original-id = "<ORIGINAL_PACKAGE_ID>"      # from the first RTD publication
 version = 8
 toolchain-version = "1.71.1"                   # the rtd release that built it
 

@@ -13,7 +13,7 @@ fields, or whose name doesn't match the module; OTW-typed values that can be obt
 `init`.
 Exploit: a malformed/forgeable witness undermines the "happens once at publish" guarantee the
 caller relies on for authority (ties to SM-A5).
-Source: `LinkUVerse/skills → rtd-move/move.md`.
+Source: `historical upstream skills → rtd-move/move.md`.
 
 ### SM-H2 — Unsafe `init` capability routing   [Critical]
 Invariant: `init` routes every authority cap to the publisher (`ctx.sender()`) or a multisig, or
@@ -23,7 +23,7 @@ Detect: caps created in `init` then `transfer`'d to a constant/derived address, 
 `share_object`'d with an ungated mutator.
 Exploit: anyone claims admin/treasury at genesis, or authority is permanently lost — both
 unrecoverable without redeploy.
-Source: `LinkUVerse/skills → rtd-move/move.md`.
+Source: `historical upstream skills → rtd-move/move.md`.
 
 ### SM-I1 — `UpgradeCap` custody / policy   [Critical]
 Invariant: for any non-trivial package the `UpgradeCap` is held by a multisig, policy-restricted
@@ -40,8 +40,8 @@ Exploit: whoever holds it (or compromises that key) silently rewrites package lo
 compromise of every object/flow the package controls. Mishandled `UpgradeReceipt` in a wrapper
 either bricks the upgrade flow (DoS) or, if the wrapper relaxes the receipt's ability set,
 re-enters SM-J1 territory.
-Source: `LinkUVerse/skills → rtd-publish/SKILL.md`, `LinkUVerse/skills → rtd-move/move.md`,
-`LinkUVerse/skills → ptbs/commands.md` (UpgradeReceipt + `package::commit_upgrade`).
+Source: `historical upstream skills → rtd-publish/SKILL.md`, `historical upstream skills → rtd-move/move.md`,
+`historical upstream skills → ptbs/commands.md` (UpgradeReceipt + `package::commit_upgrade`).
 
 ### SM-I2 — Versioning / migration gap across upgrades   [Critical]
 Invariant: shared/long-lived objects carry a version field that entrypoints assert
@@ -54,4 +54,4 @@ package ID but use the upgraded one.
 Exploit: the old package version (still callable) keeps mutating new-format state, or
 new-vs-old logic disagree on layout/invariants → inconsistency, stuck funds, or drain. Forgotten
 new-singleton init can be front-run and claimed.
-Source: `LinkUVerse/skills → rtd-publish/SKILL.md`, `LinkUVerse/skills → ptbs/commands.md` (upgrade does not call `init`).
+Source: `historical upstream skills → rtd-publish/SKILL.md`, `historical upstream skills → ptbs/commands.md` (upgrade does not call `init`).

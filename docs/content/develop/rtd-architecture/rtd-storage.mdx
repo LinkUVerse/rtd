@@ -42,6 +42,8 @@ answer: >-
   needed to store data and transaction results.
 ---
 
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
 The cost of operating on any blockchain has 2 main components: compute, the power required to process logic (transactions), and storage, the digital space needed to store data and transaction results.
 
 ## Storage architecture
@@ -124,7 +126,7 @@ You can check the current storage fee on the network using the following GraphQL
 }
 ```
 
-You can run this query in your browser at https://graphql.mainnet.rtd.io/graphql
+Run this query only against a GraphQL service configured for your RTD network; substitute its operator-provided URL for `YOUR_RTD_GRAPHQL_HOST`.
 
 :::
 

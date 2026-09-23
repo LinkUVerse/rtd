@@ -16,8 +16,8 @@ whose returned obligation type is not ability-less; a wrapper around `rtd::borro
 introduces abilities.
 Exploit: take the loan/borrowed asset and drop (or stash) the receipt instead of repaying →
 the repayment/return check is never forced.
-Source: `LinkUVerse/skills → object-model/patterns.md` (hot-potato + `rtd::borrow::Referent` /
-`Borrow` patterns), `LinkUVerse/skills → naming-conventions/SKILL.md`.
+Source: `historical upstream skills → object-model/patterns.md` (hot-potato + `rtd::borrow::Referent` /
+`Borrow` patterns), `historical upstream skills → naming-conventions/SKILL.md`.
 
 ### SM-J2 — Internal transfer or leaky `_mut` getter   [High]
 Invariant: composable `public` functions return assets so the caller decides their destination
@@ -28,7 +28,7 @@ Detect: `public fun` that creates/produces an asset and calls `transfer::*` on i
 relies on as invariant (balances, supply, config).
 Exploit: callers mutate internal state directly through the leaked `&mut`, bypassing the checks
 the module assumed; or a forced internal transfer routes an asset away from the intended owner.
-Source: `LinkUVerse/skills → composable-move-functions/SKILL.md`, `LinkUVerse/skills → naming-conventions/SKILL.md`.
+Source: `historical upstream skills → composable-move-functions/SKILL.md`, `historical upstream skills → naming-conventions/SKILL.md`.
 
 ### SM-K1 — Logic unsafe under attacker-orchestrated PTB   [High]
 Invariant: correctness does not depend on a fixed call order or on "the frontend calls these in
@@ -40,7 +40,7 @@ expected follow-up call is skipped or reordered; functions that return a powerfu
 balance, `&mut`-derived object) with no obligation forcing safe use.
 Exploit: build a PTB that calls step 1, then a different function, then step 3 — reaching a state
 the author assumed unreachable (e.g. withdraw before the solvency-restoring step).
-Source: `LinkUVerse/skills → ptbs/fundamentals.md`, `LinkUVerse/skills → ptbs/commands.md`.
+Source: `historical upstream skills → ptbs/fundamentals.md`, `historical upstream skills → ptbs/commands.md`.
 
 ### SM-K2 — Gas-coin / sponsored-transaction misuse   [Medium]
 Invariant: `GasCoin` is passed by value only to `TransferObjects` (split first otherwise); in
@@ -54,5 +54,5 @@ Also (off-chain PTB construction we review): `SplitCoins` with an empty `amounts
 `MergeCoins` with an empty `to_merge` array **fail pre-execution** — relevant for sponsor /
 backend code that builds PTBs from user input without preflighting non-emptiness; treat as input
 validation, not a Move-code finding.
-Source: `LinkUVerse/skills → ptbs/building.md`, `LinkUVerse/skills → ptbs/fundamentals.md`,
-`LinkUVerse/skills → ptbs/commands.md` (non-empty array preflights).
+Source: `historical upstream skills → ptbs/building.md`, `historical upstream skills → ptbs/fundamentals.md`,
+`historical upstream skills → ptbs/commands.md` (non-empty array preflights).

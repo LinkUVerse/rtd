@@ -107,7 +107,7 @@ The `TreasuryCap` object is transferable, so a third party can take over the man
 
 The Coin standard includes the ability to create regulated coins. To create a regulated coin, you use the `coin::create_regulated_currency_v2` function (which uses the `coin::create_currency` function itself), but which also returns a `DenyCapV2` capability. The `DenyCapV2` capability allows the bearer to maintain a list of addresses that cannot use the token.
 
-The [regulated-coin-sample repository](https://github.com/LinkUVerse/regulated-coin-sample) provides an example of regulated coin creation.
+The local `examples/move/coin/sources/regcoin_new.move` module demonstrates regulated currency creation and deny-list updates. Review its capabilities and test them on your own RTD environment before use.
 
 ### `DenyList` object
 
@@ -115,7 +115,7 @@ A system-created `DenyList` shared object holds the list of addresses that canno
 
 ### Global pause switch
 
-The `DenyCapV2` object for a regulated coin includes an `allow_global_pause` Boolean field. When set to `true`, the bearer of the `DenyCapV2` object for the coin type can use the `coin::deny_list_v2_enable_global_pause` function to pause coin activity indefinitely. Immediately upon the bearer initiating the pause, the network disallows the coin type as input for any transactions. At the start of the next epoch (epochs last approximately 24 hours), the network additionally disallows all addresses from receiving the coin type.
+The `DenyCapV2` object for a regulated coin includes an `allow_global_pause` Boolean field. When set to `true`, the bearer of the `DenyCapV2` object for the coin type can use the `coin::deny_list_v2_enable_global_pause` function to pause coin activity indefinitely. Immediately upon the bearer initiating the pause, the network disallows the coin type as input for any transactions. At the start of the next epoch, the network additionally disallows all addresses from receiving the coin type. Epoch duration depends on the RTD network configuration.
 
 When the bearer of the `DenyCapV2` object for the coin type removes the pause using `coin::deny_list_v2_disable_global_pause`, the coins are immediately available to use again as transaction inputs. Addresses cannot receive the coin type, however, until the following epoch.
 
@@ -230,4 +230,3 @@ public entry fun <FUNCTION-NAME><T>(
 :::
 
 <ImportContent source="coin-standards-migrate" mode="snippet" />
-

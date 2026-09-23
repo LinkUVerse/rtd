@@ -73,9 +73,8 @@ const references = [
 			},
 			'references/rtd-api/rpc-best-practices',
 			{
-				// JSON-RPC was disabled on Mainnet the week of 2026-07-27. Kept
-				// behind a collapsed Legacy category for migration lookups until
-				// full decommission in mid-October 2026, then archive this entry.
+				// RTD Mainnet has not launched and will not expose JSON-RPC. Keep
+				// the source-level legacy reference for local deployments.
 				type: 'category',
 				label: 'Legacy (to be archived)',
 				collapsed: true,
@@ -132,30 +131,10 @@ const references = [
 			'references/sdk-comparison',
 			{
 				type: 'link',
-				label: 'TypeScript SDK v1 -> v2 Migration Guide',
-				href: 'https://sdk.linkuverse.com/rtd/migrations/rtd-2.0',
-			},
-			{
-				type: 'link',
-				label: 'dApp Kit',
-				href: 'https://sdk.linkuverse.com/dapp-kit',
-			},
-			{
-				type: 'link',
 				label: 'Rust SDK',
 				href: 'https://github.com/LinkUVerse/rtd-rust-sdk',
 			},
 			"references/rust-sdk",
-			{
-				type: 'link',
-				label: 'TypeScript SDK',
-				href: 'https://sdk.linkuverse.com/typescript',
-			},
-			{
-				type: 'link',
-				label: 'zkSend SDK',
-				href: 'https://sdk.linkuverse.com/zksend',
-			},
 		],
 	},
 	{
@@ -197,17 +176,16 @@ const references = [
 	},
 	'references/ptb-commands',
 	'references/object-display-syntax',
-	'references/release-notes',
     'references/rtd-glossary',
 	{
 		type: 'link',
-		label: 'Open Zeppelin: Access Library',
-		href: 'https://docs.openzeppelin.com/contracts-rtd/1.x/api/access',
+		label: 'OpenZeppelin Sui Access Library (upstream reference)',
+		href: 'https://docs.openzeppelin.com/contracts-sui/1.x/api/access',
 	},
 	{
 		type: 'link',
-		label: 'Open Zeppelin: Math Library',
-		href: 'https://docs.openzeppelin.com/contracts-rtd/1.x/api/math',
+		label: 'OpenZeppelin Sui Math Library (upstream reference)',
+		href: 'https://docs.openzeppelin.com/contracts-sui/1.x/api/math',
 	},
 	'references/awesome-rtd',
 	'references/awesome-rtd-gaming',
@@ -222,11 +200,6 @@ const references = [
 		items: [
 			'references/contribute/rtd-environment',
 			'references/contribute/contribute-to-rtd-repos',
-			{
-				type: 'link',
-				label: 'Submit a SIP',
-				href: 'https://sips.rtd.io',
-			},
 			'references/contribute/code-of-conduct',
 			'references/contribute/style-guide',
 			'references/contribute/mdx-components',

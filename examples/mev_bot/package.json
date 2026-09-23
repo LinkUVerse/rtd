@@ -3,7 +3,7 @@
 	"version": "1.0.10",
 	"main": "src/index.ts",
 	"type": "module",
-	"author": "Patrick <patrick@linkuverse.com>",
+	"author": "Patrick",
 	"license": "MIT",
 	"scripts": {
 		"start": "npx ts-node --esm src/index.ts"

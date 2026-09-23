@@ -1,1 +1,3 @@
-`@linku/zksend` has moved to https://github.com/LinkUVerse/ts-sdks/tree/main/packages/zksend
+# zksend
+
+This package is not included in the current `rtd-ts-sdk` fork. It is not part of the supported RTD SDK surface.

@@ -13,7 +13,7 @@ body suggests test scaffolding. The shape (public + unauthorized + privileged bo
 signal, not the missing annotation.
 Exploit: the helper ships on-chain as an unauthenticated mint / admin-bypass / object-spawn
 function → unlimited mint or authority seizure in production.
-Source: `LinkUVerse/skills → move-unit-testing/SKILL.md`.
+Source: `historical upstream skills → move-unit-testing/SKILL.md`.
 
 ---
 
@@ -24,17 +24,17 @@ integration is in view. Flag, don't deep-dive.
 
 - **Type-anchoring.** Object/type queries must use the **original** package ID (struct types stay
   anchored there after upgrades); function calls use the upgraded ID. Mixing them silently
-  returns no results. Source: `LinkUVerse/skills → rtd-publish/SKILL.md`, `LinkUVerse/skills → frontend-apps/`.
+  returns no results. Source: `historical upstream skills → rtd-publish/SKILL.md`, `historical upstream skills → frontend-apps/`.
 - **Read-after-write.** `await client.waitForTransaction({ digest })` before reading from another
   node or invalidating caches; a returned digest is not proof of success (check
-  `result.$kind === 'FailedTransaction'`). Source: `LinkUVerse/skills → accessing-data/grpc.md`,
-  `LinkUVerse/skills → frontend-apps/`.
+  `result.$kind === 'FailedTransaction'`). Source: `historical upstream skills → accessing-data/grpc.md`,
+  `historical upstream skills → frontend-apps/`.
 - **No secrets in the browser.** Private keys, mnemonics, admin/signing keys, gas-station coins,
-  and indexer DB credentials never live in frontend code. Source: `LinkUVerse/skills → frontend-apps/limitations.md`.
+  and indexer DB credentials never live in frontend code. Source: `historical upstream skills → frontend-apps/limitations.md`.
 - **Amount precision.** Wrap large MIST amounts in `BigInt`; bare JS numbers lose precision above
-  2^53 → silent over/underpayment. Source: `LinkUVerse/skills → ptbs/building.md`.
+  2^53 → silent over/underpayment. Source: `historical upstream skills → ptbs/building.md`.
 - **Supply chain.** Prefer MVR / pinned `Move.lock` revisions over floating git deps to resist
   named-address hijacking; verify published bytecode matches source. Source:
-  `LinkUVerse/skills → rtd-move-project/SKILL.md`, `LinkUVerse/skills → rtd-build-test/SKILL.md`.
+  `historical upstream skills → rtd-move-project/SKILL.md`, `historical upstream skills → rtd-build-test/SKILL.md`.
 - **Network targeting.** Confirm `rtd client active-env` before any mainnet publish/operation.
-  Source: `LinkUVerse/skills → rtd-cli/SKILL.md`.
+  Source: `historical upstream skills → rtd-cli/SKILL.md`.

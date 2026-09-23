@@ -56,7 +56,7 @@ const FIXES = {
   'references/fullnode-protocol.mdx':
     'Reader can look up the Rtd full node gRPC protocol available on all full nodes',
   'references/research-papers.mdx':
-    'Reader can look up Rtd-relevant research papers co-authored by Rtd team members',
+    'Reader can identify upstream research relevant to the RTD source fork',
   'references/rust-sdk.mdx':
     'Reader can look up how to use the Rtd Rust SDK to interact with Rtd networks in Rust',
   'references/rtd-api.mdx':

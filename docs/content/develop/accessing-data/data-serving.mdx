@@ -79,7 +79,7 @@ View the video below for a comparison of the latest and legacy Rtd data stacks.
 
 You can use the following SDKs to interact with data on Rtd.
 
-- [TypeScript SDK](https://sdk.linkuverse.com/rtd/migrations/rtd-2.0/json-rpc-migration)
+- [TypeScript SDK](/references/rtd-sdks)
 
 - [Rust SDK - gRPC](https://github.com/LinkUVerse/rtd-rust-sdk)
 
@@ -114,6 +114,6 @@ Refer to the following articles outlining general differences between gRPC and G
 
 :::
 
-Directly connect to [JSON-RPC](/references/rtd-api) hosted on Rtd [full nodes](/operators/full-node/rtd-full-node) that are operated by [RPC providers](https://rtd.io/developers#dev-tools) (filter by `RPC`) or [data indexer operators](https://github.com/rtd-foundation/awesome-rtd?tab=readme-ov-file#indexers--data-services). The Mainnet, Testnet, or Devnet load balancer URLs abstract the Rtd Foundation-managed full nodes. Do not use those for production.
+Connect to RPC only after verifying the RTD chain ID and endpoint. No public RTD load balancer or foundation-managed endpoint is verified.
 
 You can get real-time or historical data using JSON-RPC while it remains available. The retention period for historical data depends on the [pruning strategy](/operators/data-management/managing-data#rtd-node-pruning-policies) that node operators implement. Do not assume a full node implicitly falls back to the Archival Store; use GraphQL with Archival configured by the operator, or query an Archival Service endpoint directly.

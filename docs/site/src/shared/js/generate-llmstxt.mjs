@@ -23,7 +23,7 @@ for (let i = 0; i < args.length; i++) {
 const scriptDir = path.dirname(new URL(import.meta.url).pathname);
 const markdownDir = path.resolve(positional[0] ?? path.join(scriptDir, "../../static/markdown"));
 const outputFile = flags["output"] ?? path.join(scriptDir, "../../../static/llms.txt");
-const baseUrl = flags["base-url"] ?? "https://docs.rtd.io";
+const baseUrl = flags["base-url"] ?? "http://localhost:3000";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TARGET_CHARS = 45_000;

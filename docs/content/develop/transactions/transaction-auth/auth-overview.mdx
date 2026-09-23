@@ -62,6 +62,8 @@ answer: >-
   between them.
 ---
 
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
 Transaction authentication on Rtd involves three core concepts: cryptographic keys that you control, addresses that identify accounts onchain, and signatures that prove ownership. Rtd implements these concepts using widely accepted wallet specifications and multiple signature schemes.
 
 ## Keys and addresses
@@ -181,9 +183,9 @@ An accepted pure Ed25519 signature must follow:
 
 For more information on advanced signature schemes:
 
-- **zkLogin**: See [zkLogin](/rtd-stack/zklogin-integration) for details on zero-knowledge login signatures. The TypeScript SDK provides `ZkLoginSigner` (`@linku/rtd/zklogin`), which wraps an ephemeral signer and automatically produces zkLogin signatures. Its `getKeyScheme()` returns `'ZkLogin'` to distinguish it from other signing schemes.
+- **zkLogin**: See [zkLogin](/rtd-stack/zklogin-integration) for details on zero-knowledge login signatures. The TypeScript SDK provides `ZkLoginSigner` (`rtd-typescript/zklogin`), which wraps an ephemeral signer and automatically produces zkLogin signatures. Its `getKeyScheme()` returns `'ZkLogin'` to distinguish it from other signing schemes.
 
-- **Passkey**: See [SIP-8](https://github.com/rtd-foundation/sips/blob/main/sips/sip-9.md) for passkey implementation details.
+- **Passkey**: See [upstream Sui SIP-9](https://github.com/sui-foundation/sips/blob/main/sips/sip-9.md) for passkey implementation details.
 
 - **Multisig**: See [Multisig](/develop/transactions/transaction-auth/multisig) for multi-signature transactions.
 
@@ -229,7 +231,7 @@ See more authority key toolings in [Validator Tool](https://github.com/LinkUVers
 
 ### Examples
 
-The [Rtd CLI tool](/getting-started/onboarding/rtd-install) and the [Rtd SDKs](https://sdk.linkuverse.com/typescript) provide a flexible interface to sign transactions with various signing schemes.
+The [Rtd CLI tool](/getting-started/onboarding/rtd-install) and the [Rtd SDKs](/references/rtd-sdks) provide a flexible interface to sign transactions with various signing schemes.
 
 <Tabs>
 <TabItem value="cli" label="CLI">
@@ -297,13 +299,13 @@ The following examples demonstrate how to sign and execute transactions using Ru
 There are various ways to instantiate a key pair and to derive its public key and Rtd address using the Rtd TypeScript SDK.
 
 ```tsx
-import { fromHex } from '@linku/bcs';
-import { type Keypair } from '@linku/rtd/cryptography';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { Secp256k1Keypair } from '@linku/rtd/keypairs/secp256k1';
-import { Secp256r1Keypair } from '@linku/rtd/keypairs/secp256r1';
-import { Transaction } from '@linku/rtd/transactions';
+import { fromHex } from 'rtd-bcs';
+import { type Keypair } from 'rtd-typescript/cryptography';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { Secp256k1Keypair } from 'rtd-typescript/keypairs/secp256k1';
+import { Secp256r1Keypair } from 'rtd-typescript/keypairs/secp256r1';
+import { Transaction } from 'rtd-typescript/transactions';
 
 const kp_rand_0 = new Ed25519Keypair();
 const kp_rand_1 = new Secp256k1Keypair();
@@ -345,7 +347,7 @@ expect(await keypair.getPublicKey().verifyTransaction(bytes, serializedSignature
 
 // define rtd client for the desired network.
 const client = new RtdGrpcClient({
-	baseUrl: 'https://fullnode.testnet.rtd.io:443',
+	baseUrl: 'https://YOUR_RTD_FULLNODE_HOST',
 	network: 'testnet',
 });
 

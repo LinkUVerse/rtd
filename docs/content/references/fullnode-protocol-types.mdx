@@ -1,47 +1,15 @@
 ---
-title: Rtd Full Node gRPC Enum and Scalar Type Definitions
-sidebar_label: Enum and Scalar Types
-description: Enum and scalar type definitions for the Rtd Full Node gRPC API.
+title: RTD Full Node gRPC Types
+sidebar_label: Types
+description: Locate RTD Full Node gRPC enum and scalar definitions in the proto source.
 keywords:
-  - rtd grpc types
-  - grpc enums
-  - protobuf types
-  - rtd full node types
-  - scalar types
-  - enum definitions
-  - categorical fields
-  - protobuf primitives
-  - transaction status
-  - object ownership type
-  - rtd full node grpc api
-goal:
-  description: >-
-    Reader can look up enum and scalar type definitions for the Rtd Full Node
-    gRPC API
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - min_words: 100
-      label: Needs more reference content
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-questions:
-  - What is Rtd Full Node gRPC Enum and Scalar Type Definitions in Rtd?
-  - >-
-    Where can I find the rtd full node grpc enum and scalar type definitions
-    reference?
-  - How does rtd full node grpc enum and scalar type definitions work on Rtd?
-answer: Enum and scalar type definitions for the Rtd Full Node gRPC API.
+  - rtd full node
+  - grpc
+  - enums
 ---
 
-import Protocol from "../../site/src/components/Protocol";
+# RTD Full Node gRPC types
 
-This page lists all enum and scalar type definitions for the [Rtd Full Node gRPC API](fullnode-protocol). Enums define the valid values for categorical fields (such as transaction status or object ownership type). Scalar value types map protobuf primitives to their language-specific equivalents.
+Enums, messages, and scalar field types are defined in the checked-in `temp/rtd-apis/proto/rtd/rpc/v2` tree and the imported Google protobuf definitions. The [forked RTD API proto source](https://github.com/LinkUVerse/rtd-apis/tree/main/proto/rtd/rpc/v2) is the reference until a local generator creates and validates a matching documentation artifact.
 
-See also: [Message Definitions](fullnode-protocol-messages) | [Methods](fullnode-protocol) | [Proto source files](https://github.com/LinkUVerse/rtd-apis/tree/main/proto)
-
-<Protocol />
+Use the [service method overview](fullnode-protocol) to identify the relevant request and response type, then read that type's `.proto` file. A type present in source does not by itself prove that a public RTD endpoint is deployed.

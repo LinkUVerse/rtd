@@ -13,7 +13,7 @@ module axelar::utils {
     const PREFIX: vector<u8> = b"\x19Rtd Signed Message:\n";
 
     /// Normalize last byte of the signature. Have it 1 or 0.
-    /// See https://tech.linkuverse.com/cryptography-in-rtd-cross-chain-signature-verification/
+    /// Cross-chain signature verification must be reviewed for the target RTD deployment.
     public fun normalize_signature(signature: &mut vector<u8>) {
         // Compute v = 0 or 1.
         assert!(vector::length(signature) == 65, EInvalidSignatureLength);

@@ -48,7 +48,7 @@ answer: >-
   metrics data.
 ---
 
-Running a bridge validator node (bridge node) requires registering your node with the bridge committee. Correct configuration of your node ensures optimal performance and valid metrics data. Follow this topic to make sure your bridge node is set up properly.
+This page describes how to configure bridge software for an RTD network whose operator has deployed and configured the bridge contracts and committee. RTD has no verified public bridge deployment or committee. Obtain the RTD chain ID, bridge package ID, Ethereum contracts, and approved endpoints from your network operator before using these commands.
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
@@ -229,12 +229,12 @@ The generated configuration includes the following parameters:
 | `run-client` | Whether Bridge Client should be enabled in bridge node (more instructions follow). |
 | `approved-governance-actions` | A list of governance actions that you want to support. |
 | `rtd:rtd-rpc-url` | Rtd RPC URL. |
-| `rtd:rtd-bridge-chain-id` | `0` for Rtd Mainnet, `1` for Rtd Testnet. |
+| `rtd:rtd-bridge-chain-id` | Set this to the bridge chain ID assigned to your deployed RTD network; RTD has no Mainnet bridge ID yet. |
 | `eth:eth-rpc-url` | Ethereum RPC URL. |
 | `eth:eth-bridge-proxy-address` | The proxy address for Bridge Solidity contracts on Ethereum. |
 | `eth:eth-bridge-chain-id` | `10` for Ethereum Mainnet, `11` for Sepolia Testnet. |
 | `eth:eth-contracts-start-block-fallback` | The starting block BridgeNodes queries for from Ethereum FullNode. This number should be the block where Solidity contracts are deployed or slightly before. |
-| `metrics:push-url` | The URL of the remote Rtd metrics pipeline (for example, `https://metrics-proxy.[testnet_OR_mainnet].rtd.io:8443/publish/metrics`). See the [metrics push section](#metrics-push) for more details. |
+| `metrics:push-url` | Optional URL of a metrics pipeline operated for your RTD network. No public RTD metrics endpoint is configured. See [metrics push](#metrics-push). |
 
 With `run-client: true`, you can find these additional fields in the generated config:
 
@@ -292,11 +292,8 @@ Build or install bridge node in one of the following ways:
     ```sh
     $ cargo build --release --bin rtd-bridge
     ```
-- Use `curl`/`wget` pre-built binaries (for Linux/AMD64 only).
-    ```sh
-    $ curl https://rtd-releases.s3.us-east-1.amazonaws.com/{SHA}/rtd-bridge -o rtd-bridge
-    ```
-- Use pre-built Docker image. Pull from Docker Hub: `linku/rtd-tools:{SHA}`
+
+RTD has no verified public bridge binary bucket or Docker image. Use a binary built from an approved commit or a distribution channel verified by your network operator.
 
 
 ### Run bridge node
@@ -359,7 +356,7 @@ To enable metrics push, set the following parameters in `BridgeNodeConfig`:
 
 ```yaml
 metrics:
-    push-url: https://metrics-proxy.[testnet|mainnet].rtd.io:8443/publish/metrics
+    push-url: https://your-metrics-endpoint.example.invalid/publish/metrics
 ```
 
 The proxy authenticates pushed metrics by using the metrics key pair. It is similar to `rtd-node` pushing metrics with `NetworkKey`. Unlike `NetworkKey`, the bridge node metrics key is not recorded on chain and can be ephemeral. The metrics key is loaded from the `metrics-key-pair` field in `BridgeNodeConfig` if provided, otherwise a new key pair is generated on the fly. The proxy queries node public keys periodically by hitting the metrics public API key of each node.

@@ -1,23 +1,3 @@
-# Tooling Name (Please Replace)
+# RTD ecosystem submissions
 
-## Tooling Category
-
-- [ ] AI
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [ ] SDK
-- [ ] Walrus
-- [ ] Infrastructure as Code
-
-## Homepage or Repo or Download Link
-
-## Description
-
-## Features
-
-## Documentation or Tutorial
-
-## Latest Version Number of Rtd Tested On
+Submit only an integration verified against an identified RTD chain. Include the source repository, chain identifier, package or service deployment record, endpoint owner, and an end-to-end test. Upstream Sui integrations are not RTD integrations by name alone.

@@ -1,110 +1,19 @@
 ---
-title: RtdNS SDK
-description: Use the RtdNS SDK to query name service data and build transactions that interact with Rtd Name Service.
-keywords: [ RtdNS, SDK, TypeScript, installation, client extension, mainnet, testnet ]
-goal:
-  description: >-
-    Reader can install and initialize the RtdNS SDK to query name service data
-    and build transactions
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-questions:
-  - How do I install the RtdNS SDK?
-  - How do I add RtdNS methods to a Rtd client?
-  - What can I do with the RtdNS SDK?
-answer: >-
-  Install the RtdNS SDK with npm i @linku/rtdns, then attach the rtdns()
-  extension to a Rtd client with $extend. Pass no arguments to use the built-in
-  Mainnet and Testnet constants, or pass a packageInfo object for any other
-  deployment. RtdNS methods are then available under client.rtdns.
+title: "RtdNS SDK"
+description: "Upstream Sui ecosystem reference. RTD integration is not deployed or verified."
+keywords: ["RTD", "RtdNS SDK", "deployment status"]
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+:::caution RTD deployment status
 
-Use the RtdNS SDK to interact with the Rtd Name Service. Query RtdNS data in a usable way and build transactions that interact with service names.
+The Sui Name Service examples were mechanically renamed during the fork. RTD has no verified RtdNS registry, domain issuance, Mainnet or Testnet package IDs, hosted resolver, or public website.
 
-## Installation
-
-<Tabs>
-    <TabItem label="Using @linku/rtd" value="rtd">
-    To use with the latest version of the TypeScript SDK, install using:
-    ```bash npm2yarn
-    $ npm i @linku/rtdns
-    ```
-    </TabItem>
-    <TabItem label="Using @linku/rtd.js" value="suijs">
-    To use with the older version (prior to 1.x) of the TypeScript SDK (0.54.1), install using:
-    ```bash npm2yarn
-    $ npm i @linku/rtdns@0.0.3
-    ```
-    </TabItem>
-</Tabs>
-
-## The `rtdns` client extension
-
-The `rtdns()` extension adds RtdNS functionality to any Rtd client, exposed under `client.rtdns`.
-
-:::info
-
-You should keep only 1 extended client throughout your app, API, or script. For example, in React, you should use a context to provide the client.
+RTD has not launched Mainnet. Do not use upstream Sui addresses, package IDs,
+network settings, tokens, or service endpoints as RTD configuration.
 
 :::
 
-## Attach the extension
-
-:::caution
-
-Always keep the dependency updated so you get the latest constants. If you do not, some of your transactions might fail to build.
-
-:::
-
-Attach RtdNS to a Rtd client with the `rtdns()` extension. Pass no arguments to use the built-in constants for Mainnet and Testnet, or pass a `packageInfo` object to target any other deployment.
-
-<Tabs groupId='initializer'>
-
-<TabItem label="Network initializer" value='network'>
-```js
-import { rtdns } from '@linku/rtdns';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-
-// Re-use the Rtd client of your project rather than creating a new one.
-const client = new RtdGrpcClient({
-	network: 'testnet',
-	baseUrl: 'https://fullnode.testnet.rtd.io:443',
-}).$extend(rtdns());
-
-// RtdNS methods are now available under client.rtdns.
-const nameRecord = await client.rtdns.getNameRecord('example.rtd');
-```
-</TabItem>
-
-<TabItem label="Constants initializer" value='constants'>
-```js
-import { rtdns, type PackageInfo } from '@linku/rtdns';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-
-const packageInfo: PackageInfo = {
-	packageId: '0x...',
-	packageIdV1: '0x...',
-	// ... other required fields
-};
-
-const client = new RtdGrpcClient({
-	network: 'localnet',
-	baseUrl: 'http://localhost:9000',
-}).$extend(rtdns({ packageInfo }));
-```
-
-The `PackageInfo` type defines the required fields. For current Mainnet and Testnet values, see the [RtdNS active constants](https://docs.rtdns.io/developer#active-constants), which RtdNS maintains. Do not copy package IDs from documentation, because they change on every package upgrade.
-
-</TabItem>
-
-</Tabs>
+This page is retained as a navigation placeholder for the upstream Name service topic.
+Before publishing an RTD integration guide, deploy the required services and
+contracts on an RTD network, verify end-to-end behavior, and publish the
+actual RTD-specific endpoints and object IDs.

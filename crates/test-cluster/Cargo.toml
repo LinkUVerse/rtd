@@ -1,6 +1,6 @@
 [package]
 name = "test-cluster"
-authors = ["LinkU Labs <build@linkuverse.com>"]
+authors = ["LinkU Labs"]
 version = "0.1.0"
 license = "Apache-2.0"
 publish = false

@@ -5,7 +5,6 @@
 
 module prettier::misc;
 
-use std::{string::String, type_name::{Self, TypeName}};
 use rtd::{
     clock::Clock,
     coin::Coin,
@@ -13,6 +12,7 @@ use rtd::{
     rtd::RTD,
     table::{Self, Table}
 };
+use std::{string::String, type_name::{Self, TypeName}};
 
 fun calculate_pending_rewards<StakeCoin, RewardCoin>(
     acc: &Account<StakeCoin, RewardCoin>,

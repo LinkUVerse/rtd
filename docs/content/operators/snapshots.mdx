@@ -35,7 +35,7 @@ goal:
 questions:
   - How do I use Rtd database snapshots?
   - How do I restore a Rtd node from a snapshot?
-  - Where can I download Rtd node snapshots?
+  - How do I obtain a snapshot for my RTD network?
 answer: >-
   Database snapshots of the Rtd network enable full node operators a way to
   bootstrap a full node without having to execute all the transactions that
@@ -46,7 +46,7 @@ Database snapshots provide a point-in-time view of a database's store. In Rtd, t
 
 Snapshots of the Rtd network enable full node operators to bootstrap a full node without having to execute all the transactions that occurred after genesis. You can upload snapshots to remote object stores like S3, Google Cloud Storage, Azure Blob Storage, and similar services. These services typically run the export process in the background so there is no degradation in performance for your full node. With snapshots stored in the cloud, you can recover quickly from catastrophic failures in your system or hardware.
 
-To maintain a healthy Rtd network, Rtd encourages the Rtd community to bring up additional snapshots to ensure stronger data availability across the network.
+RTD has no verified public snapshot service. For a network you operate, publish snapshots only with a documented chain ID, genesis digest, epoch, and trusted access policy.
 
 ## Supported snapshot types
 
@@ -82,7 +82,7 @@ You can restore a full node using either RocksDB snapshots or formal snapshots.
 
 To restore from a RocksDB snapshot, follow these steps:
 
-1. Choose the snapshot source for the epoch you want to restore. LinkU Labs managed DB snapshots are available in GCS for Testnet and in GCS or S3 for Mainnet, with one snapshot per epoch.
+1. Obtain a snapshot from the operator of your RTD network. Verify that its genesis digest, chain ID, and epoch match the node you are restoring. RTD has no verified public Mainnet, Testnet, or managed snapshot bucket.
 1. Download the snapshot to a temporary directory using cloud object store tooling. For example, if the `db-path` value points to `/opt/rtd/db/authorities_db/full_node_db` and you want to restore from epoch 10, use one of these commands:
 
    Use the AWS CLI for S3 buckets (provided you have credentials to associate with the download):
@@ -104,7 +104,7 @@ When you restore a full node from a snapshot, write it to the path `/opt/rtd/db/
 
 ### Restoring using formal snapshots
 
-To restore using a formal snapshot, use the `rtd-tool` binary. You can download `rtd-tool` along with other `rtd` binaries.
+To restore using a formal snapshot, build `rtd-tool` from the approved RTD source revision or obtain it from a distribution channel verified by your network operator.
 See [Install Rtd](/getting-started/onboarding/rtd-install) for more details.
 
 To restore a node from a formal snapshot, complete the following steps:
@@ -113,16 +113,16 @@ To restore a node from a formal snapshot, complete the following steps:
 2. Run the command:
    ```
    rtd-tool download-formal-snapshot --latest --genesis "<PATH-TO-GENESIS-BLOB>" \
-        --network <NETWORK> --snapshot-bucket <BUCKET-NAME> --snapshot-bucket-type <TYPE> \
-        --path <PATH-TO-NODE-DB> --num-parallel-downloads 50 --no-sign-request
+        --network unknown --snapshot-bucket <YOUR_RTD_SNAPSHOT_BUCKET> --snapshot-bucket-type <TYPE> \
+        --path <PATH-TO-NODE-DB> --num-parallel-downloads 50
    ```
-   - `--epoch`: The epoch that you want to download. LinkU Labs hosted buckets keep only the last 90 epochs. You can check the most recent epoch on Rtd explorers like [suivision](https://suivision.xyz/) or [suiscan](https://suiscan.xyz/).
+   - `--epoch`: The epoch that you want to download. Confirm it with the operator of your network; RTD has no verified public snapshot bucket or explorer.
    - `--latest`: Rather than explicitly passing an epoch through `--epoch`, you can pass the `--latest` flag, which automatically selects the latest snapshot.
    - `--genesis`: The path to the location of the network's `genesis.blob`.
-   - `--network`: Network to download snapshot for. Defaults to `mainnet`.
+   - `--network`: Use `unknown` for an RTD network unless the tool and network operator explicitly map that network to another value. The CLI's inherited `mainnet` default does not identify an RTD Mainnet.
    - `--path`: Path to snapshot directory on local filesystem.
-   - `--no-sign-request`: If set, `--snapshot-bucket` and `--snapshot-bucket-type` are ignored, and Cloudflare R2 is used.
-   - `--snapshot-bucket`: Source snapshot bucket name, for example `linku-mainnet-formal`. This cannot be used with `--no-sign-request`.
+   - `--no-sign-request`: Do not use this inherited shortcut for an RTD network. It conflicts with explicit bucket flags and has no RTD public bucket configured.
+   - `--snapshot-bucket`: Source snapshot bucket name, for example `YOUR_RTD_SNAPSHOT_BUCKET`. This cannot be used with `--no-sign-request`.
    - `--snapshot-bucket-type`: Snapshot bucket type. GCS and S3 currently supported. This cannot be used with `--no-sign-request`.
 
    The following environment variables are used if `--no-sign-request` is not set:
@@ -131,26 +131,9 @@ To restore a node from a formal snapshot, complete the following steps:
    * AZURE: `AZURE_SNAPSHOT_STORAGE_ACCOUNT`, `AZURE_SNAPSHOT_STORAGE_ACCESS_KEY`
 
 
-## LinkU Labs managed snapshots
+## Snapshot sources
 
-LinkU Labs hosts two tiers of snapshot storage access: high throughput, Requester Pays enabled buckets, and free, permissionless buckets.
-
-**High throughput, Requester Pays enabled buckets:**
-* GCS and S3 buckets are set up with requester pays. You need to provide a set of valid AWS or GCP credentials when downloading from these buckets.
-[Requester Pays](https://cloud.google.com/storage/docs/requester-pays) means you are charged for the egress costs of pulling the snapshot data.
-* For the best download speeds, use the S3 buckets with [transfer acceleration](https://aws.amazon.com/s3/transfer-acceleration/) enabled when an S3 bucket is available for the snapshot type and network.
-
-**Free, permissionless buckets:**
-* These are currently hosted on Cloudflare R2, currently only in North America.
-* Because the bucket is open to the internet, you do not need to provide any cloud credentials.
-* The free buckets are only available for formal snapshots. For example, `rtd-tool download-formal-snapshot --no-sign-request` uses the free formal snapshot bucket.
-* For DB snapshots, use cloud object store tooling with one of the Requester Pays buckets.
-
-### Bucket names
-
-For the full list of snapshot bucket names, checkpoint store endpoints, and credential requirements, see [Available Data Stores](/operators/data-management/available-data-stores). The snapshot-specific stores are listed under [formal snapshot buckets](/operators/data-management/available-data-stores#formal-buckets).
-
-![LinkU Managed Snapshots](./images/managed-snapshots_opreator-guides_v1.png "A diagram that shows the current architecture of LinkU snapshot availability")
+RTD has no verified managed snapshot tier, public bucket, or published bucket name. The operator of each network must provide the storage location and access requirements. A GCS or S3 bucket may charge for requests and transfer; check its billing policy before downloading. See [Available Data Stores](/operators/data-management/available-data-stores) for configuration patterns, not a list of deployed RTD services.
 
 ## Enabling snapshots
 
@@ -172,8 +155,8 @@ Add an entry to the config file for `db-checkpoint-config`. Using Amazon's S3 se
      object-store-config:
        object-store: "S3"
        bucket: "<BUCKET-NAME>"
-       aws-access-key-id: “<ACCESS-KEY>”
-       aws-secret-access-key: “<SHARED-KEY>”
+       aws-access-key-id: "<ACCESS-KEY>"
+       aws-secret-access-key: "<SHARED-KEY>"
        aws-region: "<BUCKET-REGION>"
        object-store-connection-limit: 20
    ```
@@ -191,8 +174,8 @@ Add an entry to the config file for `db-checkpoint-config`. Using Amazon's S3 se
      object-store-config:
        object-store: "S3"
        bucket: "<BUCKET-NAME>"
-       aws-access-key-id: “<ACCESS-KEY>”
-       aws-secret-access-key: “<SHARED-KEY>”
+       aws-access-key-id: "<ACCESS-KEY>"
+       aws-secret-access-key: "<SHARED-KEY>"
        aws-region: "<BUCKET-REGION>"
        object-store-connection-limit: 200
    ```

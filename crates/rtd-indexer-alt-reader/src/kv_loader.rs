@@ -46,7 +46,7 @@ pub struct KvArgs {
     #[arg(long)]
     pub kv_max_decoding_message_size: Option<usize>,
 
-    /// gRPC endpoint URL for the ledger service (e.g., archive.mainnet.rtd.io)
+    /// Explicit gRPC endpoint URL for a ledger service that you operate.
     #[arg(long)]
     pub ledger_grpc_url: Option<Uri>,
 

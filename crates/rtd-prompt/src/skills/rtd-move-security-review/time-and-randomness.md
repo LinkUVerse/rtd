@@ -11,7 +11,7 @@ Detect: time-sensitive comparisons against `ctx.epoch_timestamp_ms()` / `ctx.epo
 sub-epoch precision matters.
 Exploit: a "deadline" that never advances within an epoch — submit late, or treat an expired
 window as still open (or vice-versa).
-Source: `LinkUVerse/skills → rtd-move/move.md`, `LinkUVerse/skills → rtd-overview/ecosystem.md`.
+Source: `historical upstream skills → rtd-move/move.md`, `historical upstream skills → rtd-overview/ecosystem.md`.
 
 ### SM-L2 — Randomness test-and-abort (composition leak)   [Critical]
 Invariant: functions that consume `rtd::random` (`Random` object `0x8`) must be `entry` only,
@@ -27,5 +27,5 @@ Exploit: the attacker wraps the call in a PTB, inspects the outcome (return valu
 object, or a follow-on assertion), and **aborts the whole transaction** when the roll is
 unfavorable — retrying until they win. Breaks lotteries, loot boxes, raffles, random rewards.
 Why missed: the code "works" and tests pass; the flaw is purely in composability/visibility.
-Source: `LinkUVerse/skills → rtd-overview/ecosystem.md` (entry-only / test-and-abort) + Rtd randomness
+Source: `historical upstream skills → rtd-overview/ecosystem.md` (entry-only / test-and-abort) + Rtd randomness
 best-practice for the value-reveal nuance.

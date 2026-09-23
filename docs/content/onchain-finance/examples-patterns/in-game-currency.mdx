@@ -1,100 +1,30 @@
 ---
 title: In-Game Currencies
-description: >-
-  Use the Rtd Closed-Loop Token standard to create assets that you can use as
-  currency within a game application.
-keywords:
-  - closed-loop tokens
-  - closed-loop
-  - closed loop
-  - in-game tokens
-  - in-game currency
-  - game currency
-  - token example
-  - create a token
-  - how to create token
-  - RTD token standards
-goal:
-  description: >-
-    Reader can use the Rtd Closed-Loop Token standard to create assets that you
-    can use as currency within a game application
-  requires:
-    - pattern: '```'
-      min: 1
-      label: Has at least one code example
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - min_words: 200
-      label: Has enough content to explain the pattern
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+description: Use a closed-loop Token policy to control how players earn and spend in-game assets.
+keywords: [closed-loop tokens, game currency, token policy, in-game tokens]
 questions:
-  - What is In-Game Currencies in Rtd?
-  - How does in-game currencies work on Rtd?
-  - Why should I use in-game currencies?
+  - How can a game use a closed-loop token on RTD?
+  - Which actions does the local GEM example allow?
 answer: >-
-  Use the Rtd Closed-Loop Token standard to create assets that you can use as
-  currency within a game application.
+  The local GEM example creates a TokenPolicy, sells GEM tokens for RTD, and
+  accepts ten GEM tokens for a Sword through a spend action request.
 ---
 
-In-game currencies can use [closed-loop tokens](/onchain-finance/closed-loop-token) to create assets that players earn and spend within your game's economy. You mint the currency on Rtd, but players can only use it within the workflows you define (for example, buying items, upgrading characters, or trading with other players through a governed marketplace). Common examples include gems, diamonds, credits, and gold.
+An in-game currency can use the [closed-loop Token standard](/onchain-finance/closed-loop-token) to control how players obtain and spend it. A `TokenPolicy` identifies the permitted actions and any rules that must be approved before an action request is confirmed. The game must still define its own supply, pricing, item delivery, and administrative controls.
 
-Closed-loop tokens differ from standard `Coin` types because they restrict what actions holders can perform. You configure a [`TokenPolicy`](/onchain-finance/closed-loop-token/token-policy) with rules that gate minting, spending, and transferring. This lets you control the game economy onchain while preventing players from extracting currency outside the game's intended flows.
+## Local GEM example
 
-This example implements a governance-controlled currency called King Credits. Transferring the currency requires approval from a Crown Council, which you configure as a custom rule. This pattern is useful when you want human or programmatic oversight over currency movement (for example, anti-cheat measures or economy balancing).
+The `examples/move/token` package contains a GEM currency and a Sword purchase flow. Its initializer creates the GEM currency and a policy that permits the custom `buy` action and the standard `spend` action. The shared `GemStore` holds the GEM treasury capability and the RTD received for purchases.
 
-## Initialize the currency
+<ImportContent source="examples/move/token/sources/gems.move" mode="code" />
 
-To create the King Credits currency, initialize the currency using the `coin_registry::new_currency_with_otw` module and configure the currency policy with `token::add_rule_for_action`:
+`buy_gems` accepts only the three exact RTD payment amounts encoded in the example and returns GEM tokens plus an action request. `buy_sword` consumes exactly ten GEM tokens and returns a `Sword` and a spend request. A transaction that uses these functions must handle and confirm the returned requests according to the policy; receiving a token or item alone is not the entire payment flow.
 
-<ImportContent source="I3/king_credits/sources/king_credits.move" mode="code" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" noComments />
+The module is a teaching example with fixed prices. It does not include a council approval rule, an anti-cheat service, or a production game economy. To add such controls, define a rule type, add it to the relevant action in `TokenPolicy`, and test authorized and unauthorized requests. See [Token policies](/onchain-finance/closed-loop-token/token-policy) and [loyalty tokens](/onchain-finance/examples-patterns/loyalty-tokens) for related patterns.
 
-:::info
+Build and test the local package before adapting it:
 
-`init` functions run only during the package publish event.
-
-:::
-
-## Set custom transfer rules
-
-In another Move package, implement the `add_rule_config` function to initialize the rule configuration with initial council members and set a limit on the maximum number of members, including a check to ensure the count does not exceed that maximum.
-
-The `add_council_member` and `remove_council_member` functions add and remove members from the council. The `prove` function checks whether the request sender is a council member and adds an approval for the rule if they are:
-
-<ImportContent source="I3/king_credits/sources/crown_council_rule.move" mode="code" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" noComments />
-
-## Deploy and test
-
-To deploy the King Credits currency:
-
-1. Build both packages (the currency and the council rule):
-   ```sh
-   $ rtd move build
-   ```
-2. Publish the currency package first, then publish the council rule package (which depends on the currency package).
-3. After publishing, the `init` function runs automatically and creates the `TreasuryCap`, `TokenPolicy`, and initial token configuration.
-4. Add council members by calling `add_council_member` with the `TreasuryCap`.
-5. Test a transfer by minting tokens to a user, then having a council member call `prove` to approve the transfer.
-
-## Implementation considerations
-
-- **Protect the `TreasuryCap`.** The holder can mint unlimited tokens, disrupting the game economy. Store it in a multisig address or dedicated custody ([Security Best Practices](/develop/security/best-practices)).
-- **Council member management.** The `add_council_member` and `remove_council_member` functions should be gated by the `TreasuryCap` holder. Log all membership changes as events for auditability.
-- **Supply management.** Decide your supply model early. If you mint tokens on demand (for example, as player rewards), monitor the total supply to prevent inflation that undermines your game economy.
-
-## When to use this pattern
-
-Use governance-controlled in-game currencies when:
-
-- You need human or programmatic approval for transfers (anti-cheat, economy balancing).
-- The currency should not be freely tradable outside the game.
-- You want onchain transparency for all currency operations.
-
-For currencies that do not need transfer approval, use the [loyalty tokens](/onchain-finance/examples-patterns/loyalty-tokens) pattern instead, which uses simpler spend-only rules.
-
-[View the full example on GitHub](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/I3).
+```sh
+rtd move build --path examples/move/token
+rtd move test --path examples/move/token
+```

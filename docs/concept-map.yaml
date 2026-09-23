@@ -15,7 +15,6 @@ concepts:
     must_appear_in:
       - "getting-started/onboarding/rtd-install.mdx"
     terms:
-      - "suiup"
       - "rtd --version"
       - "install"
       - "prerequisites"

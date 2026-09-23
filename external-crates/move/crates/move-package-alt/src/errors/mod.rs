@@ -127,7 +127,7 @@ pub enum PackageError {
     DependencyWithSameNameAsPackage { name: String },
 
     #[error(
-        "Packages with old-style Move.toml files cannot depend on new-style packages. See https://docs.rtd.io/references/package-managers/package-manager-migration for instructions."
+        "Packages with old-style Move.toml files cannot depend on new-style packages. See docs/content/references/package-managers/package-manager-migration.mdx for instructions."
     )]
     LegacyDependsOnModern,
 

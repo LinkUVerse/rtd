@@ -90,11 +90,11 @@ The indexing framework supports multiple data sources to give you flexibility in
 
 **Polling-based sources** that periodically check for new checkpoints:
 
-- **Remote stores** can connect to public checkpoint repositories such as [`https://checkpoints.mainnet.rtd.io`](https://checkpoints.mainnet.rtd.io/) and [`https://checkpoints.testnet.rtd.io`](https://checkpoints.testnet.rtd.io/), but these HTTPS endpoints retain only the most recent 30 days of checkpoints and should be used only as fallback sources. For full-retention backfills, use `gs://linku-mainnet-checkpoints-use4` or `gs://linku-testnet-checkpoints-use4` with `--remote-store-gcs` and Requester Pays enabled.
+- **Remote stores** can connect to an operator-managed RTD checkpoint store. Set `RTD_CHECKPOINT_HTTP_URL` or `YOUR_RTD_CHECKPOINT_BUCKET` only after verifying that the store contains data from your chain and covers the range you need. Availability, retention, authentication, and Requester Pays policy depend on that deployment; this repository supplies no public store.
 
 - **Local files** process checkpoint files produced by a local full node. This method offers the lowest latency but is recommended only for testing because the node does not automatically clean up these files.
 
-- **RPC endpoints** connect directly to a full node RPC endpoint. This approach lets you pull checkpoints from a trusted source you operate or access networks (like Devnet) that lack a remote store.
+- **RPC endpoints** connect directly to a full node serving the same RTD chain. This approach lets you pull checkpoints from a trusted source you operate when no remote store is available.
 
 **Push-based sources** provide real-time checkpoint data as it becomes available:
 
@@ -122,4 +122,4 @@ The indexing framework abstracts database operations through a flexible storage 
 
 ## Building custom indexers
 
-To build your own pipelines for application-specific data, see [Building Your First Custom Indexer](/develop/accessing-data/custom-indexer/build). You can also reach out to a [data indexer operator](/references/awesome-rtd) that might already have set one up for your needs.
+To build your own pipelines for application-specific data, see [Building Your First Custom Indexer](/develop/accessing-data/custom-indexer/build). For an existing deployment, ask that RTD network's operator whether a compatible indexer and data retention policy are available.

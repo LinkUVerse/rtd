@@ -1,27 +1,3 @@
 # Dubhe (by Obelisk Labs)
 
-## Tooling Category
-
-- [x] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [x] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-Engine for Everyone to Build Intent-Centric Worlds ⚙️ An Open-Source toolchain for Move Applications.
-
-## Features
-
-- ⚡️ Built with [Move](https://move-language.github.io/move/)
-- 🏛️ Harvard Structural Architecture
-- 📦 Structured [Schema-based](https://dubhe.obelisk.build/dubhe/rtd/schemas) Storage
-- 🌐 Multi-Move Ecosystem Support
-- 🛠️ Development Tools:
-  - Sandbox Networking & Indexing
-  - Type-safe SDKs
-  - Hot Updates
-  - Logic Upgrades & Data Migration
-  - Automatic indexer
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

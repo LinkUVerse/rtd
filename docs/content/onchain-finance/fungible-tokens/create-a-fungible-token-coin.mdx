@@ -56,50 +56,21 @@ The network's native coin, RTD, uses the Coin standard.
 
 ## Use the Coin standard
 
-To create a coin, you must define the metadata, create the currency, and mint the initial supply.
+To create a coin, define its metadata and currency in a Move package. The local `examples/move/coin` package shows the legacy `coin::create_currency` path. The publisher receives a `TreasuryCap` and can mint coins in later transactions.
 
 ##### Step 1: Define the metadata
 
-Define the metadata for the coin, including its name, description, symbol, icon URL, and decimals:
-
-<ImportContent
-	source="I1/silver/sources/silver.move"
-	mode="code"
-	org="LinkUVerse"
-	repo="rtd-move-bootcamp"
-	lines="11-15"
-	branch="solution"
-/>
-
-This example creates a coin with 9 decimals, the name Silver, a description, the symbol SILVER, and an icon URL for an asset stored on Walrus.
+Choose the coin's decimal precision, symbol, name, description, and optional icon URL. In the local example, `MY_COIN` uses six decimals and no icon URL.
 
 ##### Step 2: Create the currency
 
-Create the coin using the `coin::create_currency` function:
+The initializer calls `coin::create_currency`, freezes the returned metadata, and transfers the `TreasuryCap` to the publisher:
 
-<ImportContent
-	source="I1/silver/sources/silver.move"
-	mode="code"
-	org="LinkUVerse"
-	repo="rtd-move-bootcamp"
-	fun="create_currency"
-	branch="solution"
-/>
+<ImportContent source="examples/move/coin/sources/my_coin.move" mode="code" />
 
-##### Step 3: Mint the initial supply
+##### Step 3: Mint a supply when needed
 
-Mint the initial supply of your coin:
-
-<ImportContent
-	source="I1/silver/sources/silver.move"
-	mode="code"
-	org="LinkUVerse"
-	repo="rtd-move-bootcamp"
-	fun="mint"
-	branch="solution"
-/>
-
-[View the full example](https://github.com/LinkUVerse/rtd-move-bootcamp/blob/main/I1) or learn more about the [Coin Standard](/onchain-finance/fungible-tokens/coin).
+The local initializer does not mint an initial supply. Its `mint` function lets the `TreasuryCap` holder choose an amount and recipient in a later transaction. If you need a fixed supply at publication time, use the [fixed-supply pattern](/onchain-finance/examples-patterns/fixed-supply) instead. See [Coin Standard](/onchain-finance/fungible-tokens/coin) for the underlying capability model.
 
 ## Managing coins
 

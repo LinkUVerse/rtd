@@ -178,7 +178,7 @@ Key operations:
 
 Always pair `take_shared` with `return_shared` within the same transaction block. Owned objects taken with `take_from_sender` can be returned, transferred, or destroyed; they do not need to be returned to the sender.
 
-For a complete walkthrough with access control, cross-module interactions, and transaction effects inspection, see the [scenario testing example app](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/G1/scenario).
+For more tests of token rules and authorized actions, inspect the `#[test_only]` modules in the local `examples/move/token/sources/regulated_token.move` and `examples/move/token/sources/rules/` sources. They are unit tests; they do not provide a complete scenario-testing walkthrough.
 
 ## Test utilities
 
@@ -285,4 +285,4 @@ Move tests validate contract logic in a package-local environment. For full appl
 - **Local network testing:** Run a [local Rtd network](/getting-started/onboarding/local-network) to test transactions, object interactions, and gas costs against a real execution environment before deploying to Testnet.
 - **Testnet deployment:** Deploy your packages to [Testnet](/getting-started/onboarding/configure-rtd-client) to verify behavior with real network conditions, indexing, and RPC queries.
 - **Dry runs:** Use `rtd client call --dry-run` or `devInspectTransactionBlock` to simulate a transaction against the current network state without executing it. This catches issues like incorrect object versions or insufficient gas before you submit.
-- **SDK integration tests:** Use the [Rtd TypeScript SDK](https://sdk.linkuverse.com/typescript) to write integration tests that submit transactions, query state, and verify end-to-end flows from a client perspective. For an example of a full test matrix (Move contract tests, SDK unit/integration tests, and E2E tests), see the [Rtd Stack Messaging test suite](/rtd-stack/messaging/testing).
+- **SDK integration tests:** Use the [Rtd TypeScript SDK](/references/rtd-sdks) to write integration tests that submit transactions, query state, and verify end-to-end flows from a client perspective. Run them against the exact RTD genesis and endpoints you intend to support.

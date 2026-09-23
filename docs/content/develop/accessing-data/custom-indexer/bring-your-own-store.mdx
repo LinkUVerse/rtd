@@ -150,13 +150,11 @@ async fn main() -> anyhow::Result<()> {
         IndexerArgs::default(),
         ClientArgs {
             ingestion: IngestionClientArgs {
-                // Use the full-retention Testnet GCS bucket for checkpoint
-                // catch-up and streaming fallback. The public Testnet HTTPS
-                // checkpoint endpoint has 30-day retention only.
-                remote_store_gcs: Some("linku-testnet-checkpoints-use4".to_string()),
-                // This is the programmatic equivalent of passing
-                // --remote-store-header="x-goog-user-project:my-project"
-                // to the indexer framework CLI.
+                // Supply a GCS bucket populated with checkpoints from this
+                // RTD chain. Verify the range and access policy with its operator.
+                remote_store_gcs: Some("YOUR_RTD_CHECKPOINT_BUCKET".to_string()),
+                // Include this header only if the operator's bucket uses
+                // Requester Pays, with your actual billing project.
                 remote_store_headers: vec![(
                     "x-goog-user-project".parse()?,
                     "my-project".parse()?,
@@ -164,9 +162,8 @@ async fn main() -> anyhow::Result<()> {
                 ..Default::default()
             },
             streaming: StreamingClientArgs {
-                // Public-good Testnet endpoint for testing only. Production
-                // indexers must use a fullnode endpoint from an RPC provider.
-                streaming_url: Some("https://fullnode.testnet.rtd.io:443".parse()?),
+                // Use an operator-managed fullnode on the same RTD chain.
+                streaming_url: Some("https://your-rtd-fullnode.example.invalid:443".parse()?),
                 ..Default::default()
             },
             ..Default::default()
@@ -188,7 +185,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-The public-good fullnode URL in this example is for testing only. For production, replace it with a production-grade fullnode gRPC endpoint from an [RPC provider](/develop/accessing-data/rpc-providers).
+The URL and bucket in this example are placeholders, not RTD public services. Replace both with sources operated for the same RTD chain, and verify genesis, checkpoint range, capacity, and retention before use. If the bucket does not use Requester Pays, omit its billing header.
 
 ### Example: ClickHouse implementation
 
@@ -272,7 +269,7 @@ In checkpoint data, these events arrive as **raw BCS bytes** that need to be con
 
 1. Define the `Event` struct in Rust.
 
-    Define the same structure in Rust as declared in Move. You can do this manually or use [`move-binding`](https://github.com/LinkUVerse/move-binding) to auto-generate it from onchain packages.
+    Define the same structure in Rust as declared in Move. Keep field order and BCS types aligned with the deployed package, and validate deserialization against representative event bytes. This checkout does not provide an RTD-specific binding generator.
 
     ```rust
     use serde::Deserialize;

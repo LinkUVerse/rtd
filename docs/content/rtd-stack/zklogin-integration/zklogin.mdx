@@ -26,11 +26,11 @@ answer: >-
   terminology, and offchain signature verification.
 ---
 
-This page is the technical reference for zkLogin. For a conceptual overview, see [zkLogin](/rtd-stack/zklogin-integration). For implementation steps, see the [Integration Guide](/rtd-stack/zklogin-integration/integration-guide).
+This page describes the zkLogin protocol inherited from Sui. RTD has not launched Mainnet and does not provide a public prover, salt service, or OAuth provider list. An operator must explicitly configure trusted issuers and validate a complete RTD flow before production use. For a conceptual overview, see [zkLogin](/rtd-stack/zklogin-integration).
 
 ## OpenID providers
 
-<ImportContent source="openid-providers" mode="snippet" />
+No OAuth issuer is publicly enabled for RTD by default. Treat the upstream Sui provider list as a reference only; enable and validate trusted issuers in the target RTD network configuration.
 
 ## Entities
 
@@ -38,7 +38,7 @@ The zkLogin protocol involves three entities beyond the user:
 
 1. **Application frontend:** The wallet or frontend that stores the ephemeral private key, directs the user through the OAuth login flow, and creates and signs zkLogin transactions.
 
-2. **Salt service:** A backend service that returns a consistent, unique salt for each user. See [Salt management](/rtd-stack/zklogin-integration/integration-guide#step-4-manage-user-salt) for strategies.
+2. **Salt service:** A backend service that returns a consistent, unique salt for each user. No RTD salt service is provided by this fork.
 
 3. **Proving service:** A backend service that generates zero-knowledge proofs from the JWT, JWT randomness, user salt, and max epoch. The proof is submitted onchain with the ephemeral signature.
 
@@ -48,7 +48,7 @@ The following terms come from [the OpenID Connect specification](https://openid.
 
 ### OpenID provider (OP)
 
-An OAuth 2.0 authorization server that authenticates an end-user and provides claims to a relying party. Identified by the `iss` field in the JWT payload. See the [table of supported providers](#openid-providers).
+An OAuth 2.0 authorization server that authenticates an end-user and provides claims to a relying party. Identified by the `iss` field in the JWT payload. See the network operator's explicitly configured provider list.
 
 ### Relying party (RP) or client
 
@@ -60,7 +60,7 @@ A locally unique identifier for the end user within the issuer. zkLogin uses `su
 
 ### JSON Web Key (JWK)
 
-A JSON data structure representing an OP's public keys. A public endpoint (for example, `https://www.googleapis.com/oauth2/v3/certs`) provides the keys corresponding to each `kid`. In Rtd, validators call JWK endpoints independently, and the latest JWKs for all supported providers are updated during protocol upgrades. Correctness is guaranteed by quorum (2f+1) of validator stake.
+A JSON data structure representing an OP's public keys. A public endpoint (for example, `https://www.googleapis.com/oauth2/v3/certs`) provides the keys corresponding to each `kid`. RTD validators need an explicitly configured, trusted issuer set and JWK update path. The inherited upstream issuer list does not define an RTD public provider set.
 
 ### JSON Web Token (JWT)
 
@@ -163,26 +163,11 @@ Logging in with a different OAuth provider or application produces a different a
 
 ## Ceremony
 
-zkLogin uses Groth16 zkSNARKs for proof generation. Groth16 requires a computation-specific common reference string (CRS) generated through a trusted setup ceremony. The security model requires that at least one participant in the ceremony acted honestly, generated strong entropy, and discarded it.
-
-The Rtd zkLogin ceremony was a cryptographic multi-party computation (MPC) following the [MMORPG protocol](https://eprint.iacr.org/2017/1050.pdf) by Bowe, Gabizon, and Miers. It ran September 12–18, 2023, with 111 contributions (82 browser, 29 Docker) from participants with diverse backgrounds: Rtd validators, cryptographers, Web3 experts, academics, and business leaders.
-
-<details>
-<summary>Ceremony details</summary>
-
-The protocol proceeds in two phases:
-
-- **Phase 1** (circuit-agnostic): Adopted from the community-contributed [perpetual powers of tau](https://github.com/privacy-scaling-explorations/perpetualpowersoftau/tree/master), specifically [challenge #0081](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0081) (80 community contributions). The [Drand](http://drand.love) random beacon at epoch #3298000 was applied to remove bias.
-
-- **Phase 2** (zkLogin-circuit-specific): 111 contributions. Participants could contribute through a browser ([snarkjs](https://github.com/iden3/snarkjs)) or Docker ([Kobi's implementation](https://github.com/iseriohn/phase2-bn254)), providing software diversity. The Drand random beacon at epoch #3320606 was applied to remove bias.
-
-The zkLogin circuit and ceremony client [code](https://github.com/rtd-foundation/zk-ceremony-client) were open-sourced before the ceremony. An [audit report](https://github.com/rtd-foundation/security-audits/blob/main/docs/zksecurity_zklogin-circuits.pdf) on the circuit from zkSecurity was also published.
-
-All intermediate files can be reproduced following instructions for [phase 1](https://github.com/rtd-foundation/zklogin-ceremony-contributions/blob/main/phase1/README.md) and [phase 2](https://github.com/rtd-foundation/zklogin-ceremony-contributions/blob/main/phase2/README.md). The final CRS and all transcripts are available in a public repository.
-
-The resulting proving key is stored with the proving service. The verifying key was [deployed](https://github.com/LinkUVerse/rtd/pull/13822) as part of the validator software (protocol version 25 in [release 1.10.1](https://github.com/LinkUVerse/rtd/releases/tag/mainnet-v1.10.1)).
-
-</details>
+The Groth16 circuit and verifying-key code were inherited from upstream Sui.
+The historical 2023 ceremony and audit belong to Sui; they were not an RTD
+ceremony or an RTD deployment audit. Operators must validate the exact
+proving-key and verifying-key artifacts used by their RTD network before
+accepting proofs.
 
 ## Security and privacy
 
@@ -218,25 +203,16 @@ The proving service and salt service can link user identity (they see both the J
 
 ## Offchain signature verification {#offchain-signature-verification}
 
-You can verify a zkLogin signature over transaction data or a personal message using the following methods:
-
-1. **Rtd TypeScript SDK:** Use the [SDK](https://sdk.linkuverse.com/typescript), which initializes a [GraphQL client](/references/rtd-graphql) under the hood.
-
-2. **GraphQL endpoint:** Call `https://rtd-[network].linkuverse.com/graphql` directly. See the <UnsafeLink href="/references/rtd-api/rtd-graphql/beta/reference/operations/queries/verify-zk-login-signature">GraphQL documentation</UnsafeLink>. Recommended if you do not want to run servers or handle JWK rotations.
-
-3. **Rtd Keytool CLI** (debug use):
-
-   ```sh
-   rtd keytool zk-login-sig-verify --sig $ZKLOGIN_SIG --bytes $BYTES --intent-scope 3 --network devnet --curr-epoch 3
-   ```
-
-4. **Self-hosted verifier:** Use the [`zklogin-verifier`](https://github.com/LinkUVerse/zklogin-verifier) for custom logic.
+No public RTD GraphQL verifier endpoint has been deployed. Verify signatures
+with locally tested code and the public keys and epoch state of the RTD
+network you operate. Do not send production credentials or signatures to
+upstream Sui services under an assumed RTD endpoint.
 
 ## FAQ
 
 #### What providers is zkLogin compatible with?
 
-zkLogin supports providers that implement OpenID Connect on top of OAuth 2.0. See the [supported providers table](#openid-providers). Additional providers are enabled through protocol upgrades.
+The protocol can support compatible OpenID Connect providers, but an issuer is usable on RTD only when its JWK flow is explicitly configured and validated by the network operator.
 
 #### What are the circuit constraints?
 

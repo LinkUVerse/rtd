@@ -1,64 +1,27 @@
 ---
-title: Legacy Rust SDK
-description: >-
-  The Rtd Rust SDK is available as two crates: the current rtd-rust-sdk (using
-  GraphQL RPC and gRPC) for new integrations, and the legacy rtd-sdk crate for
-  maintaining existing projects.
+title: RTD Rust SDKs
+sidebar_label: Rust SDK
+description: Rust SDK source locations and integration limits for RTD.
 keywords:
-  - rust
-  - rust SDK
-  - rtd rust SDK
-  - crates/rtd-sdk
+  - Rust SDK
+  - rtd-rust-sdk
   - rtd-sdk
-goal:
-  description: >-
-    Reader can look up how to use the Rtd Rust SDK to interact with Rtd networks
-    in Rust
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - min_words: 100
-      label: Needs more reference content
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
 questions:
-  - How do I use the Legacy Rust SDK?
-  - What is Legacy Rust SDK in Rtd?
-  - What methods does the Legacy Rust SDK provide?
+  - Which Rust SDK source should I use for RTD?
+  - Is the older rtd-sdk compatible with the new Rust SDK?
 answer: >-
-  The Legacy Rust SDK crate is in the [`crates/rtd-sdk`
-  directory](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) of the
-  Rtd repository.
+  The dedicated rtd-rust-sdk repository and the older rtd-sdk crate in the
+  main repository provide separate Rust client source. Compatibility between
+  them and a deployed RTD network must be tested for the chosen revisions.
 ---
 
-The Rtd Rust SDK provides Rust wrappers for interacting with Rtd networks. Two Rust SDK crates are available:
+The [dedicated Rust SDK source](https://github.com/LinkUVerse/rtd-rust-sdk) and the main repository's [`crates/rtd-sdk`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) are separate codebases. Inspect their manifests and APIs before choosing one. The older crate may be useful during migration, but this page does not claim binary or API compatibility with the dedicated SDK.
 
-| **Crate** | **Repository** | **Status** | **Use when** |
-|---|---|---|---|
-| [`rtd-rust-sdk`](https://github.com/LinkUVerse/rtd-rust-sdk) | [LinkUVerse/rtd-rust-sdk](https://github.com/LinkUVerse/rtd-rust-sdk) | **Current** | Building new Rust integrations. Uses [GraphQL RPC](/develop/accessing-data/graphql/graphql-rpc) and [gRPC](/develop/accessing-data/grpc). |
-| [`rtd-sdk`](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) | [LinkUVerse/rtd](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) | **Legacy** | Maintaining existing integrations that depend on this crate. |
-
-For new projects, use [`rtd-rust-sdk`](https://github.com/LinkUVerse/rtd-rust-sdk). It is the actively maintained Rust SDK with support for the current Rtd API surface.
-
-## Legacy `rtd-sdk` crate
-
-The legacy SDK crate lives in the [`crates/rtd-sdk` directory](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk) of the main Rtd repository. It is forward and backwards compatible with `rtd-rust-sdk`.
-
-### Installation
-
-Add the crate to your `Cargo.toml`:
+For an application that connects to an RTD network, use a source revision that matches its protocol. Configure its gRPC or GraphQL client with an endpoint operated for that chain, and verify genesis and chain ID. No public RTD GraphQL endpoint is established by the existence of the SDK.
 
 ```toml
 [dependencies]
 rtd-sdk = { git = "https://github.com/LinkUVerse/rtd.git", package = "rtd-sdk" }
 ```
 
-### SDK reference
-
-The legacy SDK README contains usage examples for connecting to a network, querying objects, and submitting transactions:
-
-<ImportContent source="crates/rtd-sdk/README.md" mode="code" style="md" />
+The dependency above is a source example for the older crate. Pin a reviewed commit in a real application and test against the intended RTD network. See [SDK comparison](/references/sdk-comparison).

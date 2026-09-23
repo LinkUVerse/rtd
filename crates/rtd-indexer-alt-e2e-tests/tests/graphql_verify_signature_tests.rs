@@ -372,7 +372,7 @@ async fn sign_passkey_personal_message(msg: &[u8]) -> (Vec<u8>, Vec<u8>, RtdAddr
         }
     }
 
-    let origin = url::Url::parse("https://www.rtd.io").unwrap();
+    let origin = url::Url::parse("https://example.com").unwrap();
 
     // Create credential.
     let my_authenticator =

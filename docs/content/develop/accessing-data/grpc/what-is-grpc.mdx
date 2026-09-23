@@ -57,7 +57,7 @@ The [gRPC API](/references/fullnode-protocol) replaces JSON-RPC on full nodes. J
 
 ## Release status
 
-gRPC polling and streaming APIs are generally available. JSON-RPC is deprecated. Rtd Foundation disabled it on Mainnet full nodes the week of July 27, 2026, and plans full decommission, including code removal, for mid-October 2026. For decision criteria, a JSON-RPC method mapping, the full timeline, and common migration gotchas, see the [JSON-RPC Migration Guide](/develop/accessing-data/json-rpc-migration).
+RTD has not launched Mainnet. Its future Mainnet will not expose JSON-RPC, following the upstream Sui direction; the Sui 2026 dates do not describe an RTD event.
 
 :::warning
 The gRPC and GraphQL RPC APIs have replaced JSON-RPC. View the video below to learn more about the migration timeline and which API to use. 
@@ -116,7 +116,9 @@ Streaming APIs are useful for building indexers, dashboards, or bots that need t
 
 If a full node does not return a specific object, transaction, or checkpoint, the data might have been pruned based on the node's retention configuration. Full node gRPC does not automatically fall back to Archival. To access high-retention data, configure your application to query the [Archival Store and Service](/develop/accessing-data/archival-store) directly.
 
-You can reuse the same gRPC `LedgerService` methods for this lookup, but you must point the client at an Archival Service endpoint such as `archive.mainnet.rtd.io:443` or your provider's archival URL instead of the full node's URL.
+You can reuse the same gRPC `LedgerService` methods for this lookup, but point
+the client at an archival endpoint explicitly configured for your RTD chain,
+instead of the full node's URL. No public RTD archival endpoint is verified.
 
 ## Best practices
 

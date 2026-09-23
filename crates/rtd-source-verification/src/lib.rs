@@ -41,8 +41,9 @@ pub struct VerifiedMetadata {
 
 /// How to obtain the `rtd` toolchain that rebuilds a package.
 pub enum ToolchainSource {
-    /// Download and cache a release: the publication's recorded version, or `Some(version)` to
-    /// override it.
+    /// Download and cache a release from the explicitly configured
+    /// `RTD_COMPILER_RELEASE_URL_TEMPLATE`: the publication's recorded version, or
+    /// `Some(version)` to override it. No public RTD release endpoint is assumed.
     Version(Option<String>),
     /// Use the `rtd` binary already at this path, skipping version resolution and download.
     Binary(PathBuf),

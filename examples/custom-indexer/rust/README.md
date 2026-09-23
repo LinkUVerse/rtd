@@ -1,7 +1,7 @@
 # Rtd Custom Indexer Example
 This is a complementary example to the Rtd Custom Indexer documentation.
 It demonstrates how to create a custom indexer for the Rtd search engine.
-See the [Rtd Custom Indexer documentation](https://docs.rtd.io/guides/developer/advanced/custom-indexer) for more information.
+See the Rtd Custom Indexer documentation (see the checked-in `docs/content` tree) for more information.
 
 Set `RTD_CHECKPOINT_STORE_URL` to a checkpoint store serving your RTD network
 before running `remote_reader.rs`. No public checkpoint store is assumed.

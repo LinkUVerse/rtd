@@ -287,7 +287,7 @@ fn verify_bytecode(package: &MoveCompiledPackage, fn_info: &FnInfoMap) -> RtdRes
         })?;
         rtd_bytecode_verifier::rtd_verify_module_unmetered(m, fn_info, &verifier_config)?;
     }
-    // TODO(https://github.com/LinkUVerse/rtd/issues/69): Run Move linker
+    // TODO: Run Move linker
 
     Ok(())
 }

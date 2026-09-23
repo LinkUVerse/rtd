@@ -1,37 +1,3 @@
 # WELLDONE Code
 
-> [!WARNING]
-> The tool is currently not working.
-
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [x] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [ ] SDK
-
-## Description
-
-WELLDONE Code is a Remix IDE Plugin. Using WELLDONE Code, developers can easily develop and test smart contracts in Remix IDE for non-EVM networks such as NEAR and Cosmos, in addition to EVM-compatible networks. Rtd is also supported.
-
-## Features
-
-- Move
-    - ❌ Move 2024 not supported
-    - Compilation
-    - Unit Testing
-    - Deployment
-- Project Management
-    - Multiple workspaces
-    - Persistent session
-- Utilities
-    - Lightweight object explorer
-    - Lightweight package explorer
-    - Package function call
-- Example templates
-
-## Latest Version Number of Rtd Tested On
-
-⚠️ N/A
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

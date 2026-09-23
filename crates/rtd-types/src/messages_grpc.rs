@@ -249,7 +249,7 @@ pub struct HandleSoftBundleCertificatesResponseV3 {
     pub responses: Vec<HandleCertificateResponseV3>,
 }
 
-/// Soft Bundle request.  See [SIP-19](https://github.com/rtd-foundation/sips/blob/main/sips/sip-19.md).
+/// Soft Bundle request. The behavior is inherited until RTD publishes its own specification.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HandleSoftBundleCertificatesRequestV3 {
     pub certificates: Vec<CertifiedTransaction>,

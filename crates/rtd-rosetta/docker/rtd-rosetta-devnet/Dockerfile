@@ -7,11 +7,19 @@ RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 FROM chef AS builder
-RUN git clone https://github.com/LinkUVerse/rtd .
-RUN git checkout devnet
+COPY Cargo.toml Cargo.lock ./
+COPY consensus consensus
+COPY crates crates
+COPY rtd-execution rtd-execution
+COPY external-crates external-crates
 
 RUN curl -sSfL https://raw.githubusercontent.com/coinbase/rosetta-cli/master/scripts/install.sh | sh -s
-RUN curl -fLJO https://github.com/LinkUVerse/rtd-genesis/raw/main/devnet/genesis.blob
+ARG RTD_GENESIS_BLOB_URL
+ARG RTD_GENESIS_BLOB_SHA256
+RUN test -n "$RTD_GENESIS_BLOB_URL" || (echo "Set RTD_GENESIS_BLOB_URL to a verified RTD genesis blob URL" >&2; exit 1)
+RUN test -n "$RTD_GENESIS_BLOB_SHA256" || (echo "Set RTD_GENESIS_BLOB_SHA256 to the verified genesis blob digest" >&2; exit 1)
+RUN curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$RTD_GENESIS_BLOB_URL" -o genesis.blob
+RUN echo "$RTD_GENESIS_BLOB_SHA256  genesis.blob" | sha256sum -c -
 RUN cargo build --release --bin rtd --bin rtd-rosetta --bin rtd-node
 
 # Production Image

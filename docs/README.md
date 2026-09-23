@@ -1,6 +1,8 @@
 # Rtd Documentation
 
-This directory contains the source for [docs.rtd.io](https://docs.rtd.io). It is split between `content/` (documentation pages) and `site/` (Docusaurus configuration, plugins, and scripts).
+This directory contains inherited Docusaurus documentation source. It is split between `content/` (documentation pages) and `site/` (configuration, plugins, and scripts). The public domain and network services referenced by inherited pages have not been verified as RTD deployments.
+
+**Publication gate:** Do not deploy this site or publish its generated `llms.txt` until the [RTD documentation audit](RTD_PUBLICATION_GATE.md) is complete. Several inherited pages still refer to Sui services, Sui network objects, unsupported installers, or unannounced RTD public networks. A Docusaurus build only checks rendering; it cannot verify those claims.
 
 ## Repository layout
 
@@ -90,12 +92,11 @@ Pages have `questions:` and `answer:` fields for Generative Engine Optimization 
 ```yaml
 questions:
   - How do I install the Rtd CLI?
-  - What is suiup?
+  - How is the RTD CLI installed from source?
   - How do I verify my Rtd installation?
 answer: >-
-  Run `curl -sSfL https://raw.githubusercontent.com/LinkUVerse/suiup/main/install.sh | sh`
-  to install suiup, then `suiup install rtd@testnet` for the Testnet toolchain.
-  Verify with `rtd --version`.
+  Build the RTD CLI from this repository and verify with `rtd --version`.
+  External installers and public network releases need separate verification.
 ```
 
 - **`questions`**: 2-5 questions this page answers. AI engines match user queries against these.
@@ -232,7 +233,7 @@ Key scripts in `docs/site/scripts/`:
 
 ## For AI agents and LLMs
 
-- **`llms.txt`**: Generated at `https://docs.rtd.io/llms.txt`. Use as entry point for documentation structure.
+- **`llms.txt`**: Generated at `/llms.txt`. Use as entry point for documentation structure.
 - **Style guide skill**: Machine-readable style rules at `docs/rtd-documentation-style-guide.skill`.
 - **`sidebars.js`**: Full navigation tree at `docs/content/sidebars.js`.
 - **`mdx-components.mdx`**: Custom component reference at `docs/content/references/contribute/mdx-components.mdx`.
@@ -245,7 +246,7 @@ To preview before your changes are ready for review, [mark your PR as a draft](h
 
 ## Style guide
 
-All contributions must follow the [Rtd Documentation Style Guide](https://docs.rtd.io/references/contribute/style-guide):
+All contributions must follow the [Rtd Documentation Style Guide](/references/contribute/style-guide):
 
 - US English, active voice, present tense, second person ("you")
 - No Latin abbreviations (use "for example" not "e.g.")
@@ -254,11 +255,11 @@ All contributions must follow the [Rtd Documentation Style Guide](https://docs.r
 
 ## Contributing
 
-- [Contribution process](https://docs.rtd.io/references/contribute/contribution-process)
-- [Repo contributing guidelines](https://docs.rtd.io/references/contribute/contribute-to-rtd-repos)
-- [Style guide](https://docs.rtd.io/references/contribute/style-guide)
-- [MDX components](https://docs.rtd.io/references/contribute/mdx-components)
-- [Code of conduct](https://docs.rtd.io/references/contribute/code-of-conduct)
+- [Contribution process](/references/contribute/contribution-process)
+- [Repo contributing guidelines](/references/contribute/contribute-to-rtd-repos)
+- [Style guide](/references/contribute/style-guide)
+- [MDX components](/references/contribute/mdx-components)
+- [Code of conduct](/references/contribute/code-of-conduct)
 
 ## License
 

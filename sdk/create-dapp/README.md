@@ -1,2 +1,3 @@
-`@linku/create-dapp` has moved to
-https://github.com/LinkUVerse/ts-sdks/tree/main/packages/create-dapp
+# create-dapp
+
+This package is not included in the current `rtd-ts-sdk` fork. It is not part of the supported RTD SDK surface.

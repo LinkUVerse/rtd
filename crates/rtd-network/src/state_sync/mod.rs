@@ -1612,8 +1612,8 @@ async fn sync_checkpoint_contents_from_archive_iteration<S>(
             warn!("Archival ingestion url for state sync is not configured");
             return;
         };
-        if ingestion_url.contains("checkpoints.mainnet.rtd.io") {
-            warn!("{} can't be used as an archival fallback", ingestion_url);
+        if ingestion_url.trim().is_empty() {
+            warn!("Archival ingestion url for state sync is empty");
             return;
         }
         let obj_store = build_object_store(

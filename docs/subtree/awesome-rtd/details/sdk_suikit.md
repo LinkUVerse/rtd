@@ -1,23 +1,3 @@
 # RtdKit (by OpenDive)
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-RtdKit is a Swift SDK natively designed to make developing for the Rtd Blockchain easy.
-
-## Features
-
-- [Features](https://github.com/OpenDive/RtdKit/tree/main?tab=readme-ov-file#features)
-- ⚠️ `Bech32` encoded private key is not supported.
-- ⚠️ GraphQL is partially supported.
-- [Rtd BCS types are supported](https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Types)
-- ⚠️ [Kiosk is supported](https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Types/Structs/Kiosk) (might not be actively maintained)
-- ⚠️ [RtdNS is supported](https://github.com/OpenDive/RtdKit/tree/main/Sources/RtdKit/Types/Structs/RtdNS) (might not be actively maintained)
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

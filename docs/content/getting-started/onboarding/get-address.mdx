@@ -231,15 +231,11 @@ $ rtd client switch --address <ADDRESS>
 
 ## Query information about an address 
 
-You can use a Rtd network explorer to find more information about an address, its token balances, and the objects it owns. Popular Rtd explorers include:
-
-- [RtdVision](https://suivision.xyz/)
-
-- [RtdScan](https://suiscan.xyz/mainnet/accounts)
+Use `rtd client objects <ADDRESS>` or an RPC endpoint for the RTD network you configured to inspect an address. No public RTD explorer is verified for this fork; SuiVision and Suiscan display Sui data.
 
 :::danger
 
-Data displayed on an explorer differs depending on which network you created your address on. If you've followed the [Configure a Rtd Client](/getting-started/onboarding/configure-rtd-client) page previously, you are most likely using Testnet. Be sure to select Testnet on the Rtd explorer or use the dedicated URL, such as https://**testnet**.suivision.xyz/.
+Check the configured RPC endpoint and chain ID before looking up an address. A Sui explorer cannot verify RTD data.
 
 :::
 

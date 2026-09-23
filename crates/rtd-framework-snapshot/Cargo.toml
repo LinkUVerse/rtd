@@ -2,7 +2,7 @@
 name = "rtd-framework-snapshot"
 version.workspace = true
 edition = "2024"
-authors = ["LinkU Labs <eng@linkuverse.com>"]
+authors = ["LinkU Labs"]
 description = "Tool to create a bytecode snapshot of the current rtd-framework"
 license = "Apache-2.0"
 publish = false

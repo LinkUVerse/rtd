@@ -1,33 +1,3 @@
 # ChainIDE
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [x] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [ ] SDK
-
-## Description
-
-ChainIDE is cloud-based IDE for creating decentralized applications to deploy on blockchains. It supports Rtd smart contract development.
-
-## Features
-- Move
-    - Move 2024 is supported
-    - Compilation
-    - Unit Testing
-    - Deployment
-- Project Management
-    - Multiple workspaces
-    - Persistent session
-    - Integrated terminal
-- Utilities
-    - Lightweight object explorer
-    - Lightweight package explorer
-    - Package function call
-- Example templates
-
-## Latest Version Number of Rtd Tested On
-
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

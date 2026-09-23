@@ -1,6 +1,6 @@
 [package]
 name = "rtd-e2e-tests"
-authors = ["LinkU Labs <build@linkuverse.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"

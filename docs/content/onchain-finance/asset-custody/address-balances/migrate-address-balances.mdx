@@ -46,7 +46,7 @@ answer: >-
 
 Address balances introduce a canonical balance system for fungible assets tied to Rtd addresses. This supplements the `Coin<T>` model with direct address-owned balances, simplifying transaction construction and eliminating coin selection complexity.
 
-For the full specification, see [SIP-58: Rtd Address Balances](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md). For implementation details on sending, withdrawing, and paying gas from address balances, see [Using Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances).
+For the full specification, see [upstream Sui SIP-58: Sui Address Balances](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md). For implementation details on sending, withdrawing, and paying gas from address balances, see [Using Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances).
 
 ## Read this first
 
@@ -73,7 +73,7 @@ Balance query responses now include address balance information alongside coin o
 
 ### JSON-RPC (legacy)
 
-Rtd Foundation disabled JSON-RPC on Mainnet full nodes. This section describes the legacy response shape so you can recognize it in code you are migrating. For new code, use the gRPC or GraphQL fields that follow.
+RTD has not launched Mainnet. Its future Mainnet will not expose JSON-RPC, following the upstream Sui direction; the Sui 2026 dates do not describe an RTD event. The legacy response below is source-level reference only.
 
 The legacy `rtdx_getBalance` and `rtdx_getAllBalances` response carries a `fundsInAddressBalance` field, and its `totalBalance` field combines coin objects and address balance funds:
 
@@ -110,7 +110,7 @@ The `GetBalance` and `ListBalances` methods from `StateService` now return separ
 
 ### GraphQL
 
-The `balance` and `balances` fields on address types now include `addressBalance`, `coinBalance`, and `totalBalance` fields. See [GraphQL Reference - `IAddressable.balance`](/references/rtd-api/rtd-graphql/beta/reference/types/interfaces/iaddressable) for the full schema.
+The `balance` and `balances` fields on address types now include `addressBalance`, `coinBalance`, and `totalBalance` fields. Inspect the checked-in `crates/rtd-indexer-alt-graphql/src/snapshots/rtd_indexer_alt_graphql__tests__schema.graphql.snap` for the current `IAddressable` schema; see the [GraphQL guide](/develop/accessing-data/graphql) for usage.
 
 ## Changes to balance computation from checkpoint data
 

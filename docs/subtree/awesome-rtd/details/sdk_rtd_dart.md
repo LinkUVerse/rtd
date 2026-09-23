@@ -1,22 +1,3 @@
 # Rtd Dart SDK (MofaLabs)
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-Dart Client SDK for Rtd blockchain
-
-## Features
-
-- [Features](https://github.com/mofalabs/rtd?tab=readme-ov-file#usage)
-- ⚠️ GraphQL is not supported yet.
-- [Rtd BCS types are supported](https://github.com/mofalabs/rtd/tree/main/lib/bcs)
-- [zkLogin SDK](https://github.com/mofalabs/zklogin)
-- ⚠️ [Deepbook SDK](https://github.com/mofalabs/deepbook) (not actively maintained)
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

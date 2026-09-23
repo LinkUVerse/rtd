@@ -1,12 +1,9 @@
 ---
 title: Connecting to a Local Network
 description: >-
-  Connect to a Rtd local network using the Rtd CLI. Use local networks to test
-  your applications and prepare for launching them on Devnet or Testnet.
+  Connect to a local RTD network using the CLI and verify its chain identity before testing applications.
 keywords:
   - local network
-  - Testnet
-  - Devnet
   - test application
   - deploy app locally
   - customize local network
@@ -19,7 +16,7 @@ keywords:
 goal:
   description: >-
     Reader can start a local Rtd network, fund addresses, and test against it
-    instead of Testnet
+    on an operator-controlled chain
   requires:
     - pattern: '```'
       min: 2
@@ -40,17 +37,10 @@ questions:
   - How do I fund addresses on a local Rtd network?
   - How do I connect the Rtd CLI to a local network?
 answer: >-
-  Connect to a Rtd local network using the Rtd CLI. Use local networks to test
-  your applications and prepare for launching them on Devnet or Testnet.
+  Connect to a local RTD network using the CLI and verify its chain identity before testing applications.
 ---
 
-The Rtd CLI provides the `rtd start` command to create and start a local instance of the Rtd network. You can start services such as an indexer, a faucet, or a local instance of the GraphQL service (including the web-based GraphiQL IDE). `rtd start` also includes a local faucet to get test RTD to use in the local network you create.
-
-:::info Localnet vs Devnet
-
-Localnet is a single-machine network you run yourself. Devnet is a shared public test network that LinkU Labs operates. These are different networks with separate state.
-
-:::
+The RTD CLI can start a local network with a local faucet. Optional indexer and GraphQL components require additional local dependencies. A locally created chain has its own genesis and is separate from every other network; RTD has no verified public Devnet or Testnet.
 
 <Tabs className="tabsHeadingCentered--small--small">
 <TabItem value="prereq" label="Prerequisites">
@@ -266,31 +256,9 @@ The response resembles the following:
 ╰────────────────────────────────────────────────────────────────────┴────────────╯
 ```
 
-## Generate example data
+## Test with an SDK
 
-Use the TypeScript SDK to add example data to your network. This requires that you start a local network with an indexer and GraphQL. To do so, use the following command:
-
-```sh
-rtd start --force-regenesis --with-faucet --with-indexer --with-graphql
-```
-
-Then run the following command from the `rtd` root folder:
-
-```sh
-$ pnpm --filter @linku/rtd test:e2e
-```
-
-For additional information about example data for testing, see the [TypeScript example on GitHub](https://github.com/LinkUVerse/ts-sdks/tree/main/packages/typescript#testing).
-
-## Monitor activity
-
-Use a Rtd network explorer to monitor your local network activity. You can build and run one locally or use the **Custom RPC URL** setting available on many online explorers to provide your local network's RPC URL (`http://127.0.0.1:9000` by default).
-
-<ImportContent source="lists/rtd-explorers" mode="snippet" />
-
-## Testing with the Rtd TypeScript SDK
-
-The published version of the Rtd TypeScript SDK might be an earlier version than the version of Rtd you installed for your local network. To make sure you're using the latest version of the SDK, use the `experimental`-tagged version (for example, `0.0.0-experimental-20230317184920`) in the [Current Tags](https://www.npmjs.com/package/@linku/rtd?activeTab=versions) section of the Rtd NPM registry.
+Build the `rtd-ts-sdk` source revision compatible with this node. Its `rtd-typescript` package must point at your local endpoint, and any transaction must use the address, gas, and package IDs from this genesis. No `rtd-typescript` NPM release or upstream Sui explorer is required for local testing. Use CLI queries or your own locally deployed GraphQL/indexer service to monitor activity.
 
 ## Troubleshooting
 
@@ -310,7 +278,7 @@ If you see `Address already in use` for port 9000:
 # Find the process using port 9000
 $ lsof -i :9000
 # Kill it
-$ kill -9 <PID>
+$ kill -TERM <PID>
 ```
 
 Alternatively, change the fullnode port in `~/.rtd/rtd_config/fullnode.yaml`.

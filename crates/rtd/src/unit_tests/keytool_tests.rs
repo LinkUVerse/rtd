@@ -167,12 +167,11 @@ async fn test_read_write_keystore_with_flag() {
 }
 
 #[test]
-async fn test_rtd_operations_config() {
+async fn test_legacy_operations_key_fixtures() {
     let temp_dir = TempDir::new().unwrap();
     let path = temp_dir.path().join("rtd.keystore");
     let path1 = path.clone();
-    // This is the hardcoded keystore in rtd-operation: https://github.com/LinkUVerse/rtd-operations/blob/af04c9d3b61610dbb36401aff6bef29d06ef89f8/docker/config/generate/static/rtd.keystore
-    // If this test fails, address hardcoded in rtd-operations is likely needed be updated.
+    // Pinned legacy operations keystore fixture; this checks address derivation only.
     let kp = RtdKeyPair::decode_base64("ANRj4Rx5FZRehqwrctiLgZDPrY/3tI5+uJLCdaXPCj6C").unwrap();
     let contents = vec![kp.encode_base64()];
     let res = std::fs::write(path, serde_json::to_string_pretty(&contents).unwrap());
@@ -185,8 +184,7 @@ async fn test_rtd_operations_config() {
         read.unwrap().addresses()[0]
     );
 
-    // This is the hardcoded keystore in rtd-operation: https://github.com/LinkUVerse/rtd-operations/blob/af04c9d3b61610dbb36401aff6bef29d06ef89f8/docker/config/generate/static/rtd-benchmark.keystore
-    // If this test fails, address hardcoded in rtd-operations is likely needed be updated.
+    // Second pinned legacy operations keystore fixture.
     let path2 = temp_dir.path().join("rtd-benchmark.keystore");
     let path3 = path2.clone();
     let kp = RtdKeyPair::decode_base64("APCWxPNCbgGxOYKeMfPqPmXmwdNVyau9y4IsyBcmC14A").unwrap();

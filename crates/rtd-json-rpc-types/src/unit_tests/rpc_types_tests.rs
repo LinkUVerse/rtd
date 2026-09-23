@@ -60,7 +60,7 @@ fn test_move_value_to_string() {
 
 #[test]
 fn test_option() {
-    // bugfix for https://github.com/LinkUVerse/rtd/issues/4995
+    // Regression coverage for option values in RPC responses.
     let option = MoveValue::Struct(MoveStruct {
         type_: StructTag {
             address: MOVE_STDLIB_ADDRESS,

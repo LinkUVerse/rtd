@@ -49,6 +49,8 @@ answer: >-
   asset. For example, stablecoins are a type of regulated currency.
 ---
 
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
 Regulated currencies are assets with access control managed through a **deny list**. A deny list identifies addresses that cannot send or receive that asset. For example, stablecoins are a type of regulated currency.
 
 To create regulated currencies on Rtd, the Currency Standard's Coin Registry provides regulatory features through the `rtd::coin_registry` module. It has built-in support for global pause functionality and ecosystem integration.
@@ -112,7 +114,7 @@ The example uses a single file to create the smart contract for the project (`re
 | `TREASURY_CAP_ID` | The treasury cap object ID that allows the bearer to mint new coins. This data is part of the response that Rtd provides on publish. |
 | `MODULE_NAME` | The name of the module you publish. |
 | `COIN_NAME` | The name of your regulated coin. |
-| `RTD_FULLNODE_URL` | The URL to the full node network that processes transactions. For Testnet this value is `https://fullnode.testnet.rtd.io:443`. |
+| `RTD_FULLNODE_URL` | The URL of a full node for the RTD chain you are using; obtain it from that chain's operator. No public RTD Testnet URL is verified here. |
 
 :::caution
 

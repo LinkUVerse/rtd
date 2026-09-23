@@ -7,8 +7,8 @@ the package. Disassembly is the working view for all reading and analysis.
 
 ```sh
 PKG=0x<package_id>
-NETWORK=mainnet                 # or testnet, devnet
-GQL="https://graphql.${NETWORK}.rtd.io/graphql"
+: "${RTD_GRAPHQL_URL:?Set RTD_GRAPHQL_URL to a verified RTD GraphQL endpoint}"
+GQL="$RTD_GRAPHQL_URL"
 OUT="./.move-work/$PKG"
 mkdir -p "$OUT/mv" "$OUT/asm"
 ```

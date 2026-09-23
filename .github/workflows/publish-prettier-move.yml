@@ -32,6 +32,12 @@ jobs:
           echo "::error::Publishing is only allowed from main (selected ref: $GITHUB_REF)"
           exit 1
 
+      - name: Require configured npm publication
+        if: ${{ ! inputs.dry_run && vars.RTD_ENABLE_PRETTIER_MOVE_PUBLISH != 'true' }}
+        run: |
+          echo "::error::Set RTD_ENABLE_PRETTIER_MOVE_PUBLISH=true after configuring trusted npm publishing"
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
 

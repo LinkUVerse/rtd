@@ -1,11 +1,11 @@
-The `rtd-metric-checker` crate is used for querying prometheus metrics and validating the results. It will primarily be used to check for performance regressions in nightly deployments. Requires `api_key`, `api_user` & prometheus `url` which can be found in `rtd-ops` repo or by asking the PE team.
+The `rtd-metric-checker` crate queries Prometheus metrics and validates the results. Supply the URL and credentials for a metrics service that you operate; RTD has no public metrics service.
 
 ## Guide
 
 ### Example Usage
 
 ```
-RUST_LOG=debug cargo run --package rtd-metric-checker --bin rtd-metric-checker  -- --api-key xxxxxxxx --api-user xxxx_metrics --config checks.yaml --url https://xxxx.rtd.io/prometheus
+RUST_LOG=debug cargo run --package rtd-metric-checker --bin rtd-metric-checker -- --api-key "$RTD_METRICS_API_KEY" --api-user "$RTD_METRICS_API_USER" --config checks.yaml --url "$RTD_METRICS_URL"
 ```
 
 ### Example Config

@@ -67,7 +67,7 @@ This guide provides practical examples for querying the Rtd network using gRPC. 
 
 - [x] Obtain access to a [gRPC](/develop/accessing-data/grpc)-enabled Rtd full node. Check the [list of RPC and data providers](https://www.notion.so/linkuverse/RPC-providers-offering-future-Rtd-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) that support gRPC on their full nodes, and contact a provider directly to request access.
 
-If your provider does not support gRPC, ask them to enable it or contact the Rtd Foundation team on Discord or Telegram for help.
+If your provider does not support gRPC, ask that provider directly or operate a compatible RTD full node.
 
 </TabItem>
 </Tabs>
@@ -154,7 +154,7 @@ The following limits are configured in the Rtd full node source code and apply t
 | Subscription buffer | 1,024 items per subscriber | [`CHECKPOINT_MAILBOX_SIZE`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-rpc-api/src/subscription/mod.rs) |
 | Max subscribers | 1,024 | [`DEFAULT_MAX_SUBSCRIBERS`](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-rpc-api/src/subscription/mod.rs) |
 
-The public Rtd Foundation endpoints at `fullnode.<network>.rtd.io` are behind load balancers that impose additional rate limits (requests per second, concurrent streams, and message size caps) beyond what the node itself configures. Contact your provider for their specific limits, or check the full node's `grpc` configuration section if you operate your own node.
+No public RTD Foundation endpoint or rate limit is verified. Check the full node `grpc` configuration and your provider documentation.
 
 ## Field presence
 
@@ -228,7 +228,7 @@ Interact with gRPC by using [`grpcurl`](https://github.com/fullstorydev/grpcurl)
 $ grpcurl <FULL_NODE_URL> list
 ```
 
-The port on Rtd Foundation managed full nodes is `443`. 
+Use the port configured for your verified RTD full node; do not infer it from inherited public URLs.
 
 ### List available APIs in the `LedgerService`
 

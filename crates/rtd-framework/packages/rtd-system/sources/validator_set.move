@@ -234,7 +234,7 @@ fun can_join(self: &ValidatorSet, stake: u64, ctx: &TxContext): bool {
     let (min_joining_voting_power, _, _) = self.get_voting_power_thresholds(ctx);
 
     // if the validator will have at least `min_joining_voting_power` after joining, they can join.
-    // this formula comes from SIP-39: https://github.com/rtd-foundation/sips/blob/main/sips/sip-39.md
+    // Preserve the inherited voting-power admission formula until RTD defines its own proposal.
     let future_total_stake = self.total_stake + stake;
     let future_validator_voting_power = voting_power::derive_raw_voting_power(
         stake,
@@ -251,7 +251,7 @@ fun get_voting_power_thresholds(self: &ValidatorSet, ctx: &TxContext): (u64, u64
         else ctx.epoch() + 1
     };
 
-    // these numbers come from SIP-39: https://github.com/rtd-foundation/sips/blob/main/sips/sip-39.md
+    // Preserve the inherited three-phase thresholds until RTD defines its own proposal.
     let curr_epoch = ctx.epoch();
     if (curr_epoch < start_epoch + PHASE_LENGTH) (12, 8, 4) // phase 1
     else if (curr_epoch < start_epoch + (2 * PHASE_LENGTH)) (6, 4, 2) // phase 2

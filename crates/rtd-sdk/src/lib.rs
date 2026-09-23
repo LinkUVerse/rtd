@@ -4,7 +4,7 @@
 //! The Rtd Rust SDK
 //!
 //! It aims at providing a similar SDK functionality like the one existing for
-//! [TypeScript](https://github.com/LinkUVerse/rtd/tree/main/sdk/typescript/).
+//! TypeScript SDK in the sibling `rtd-ts-sdk/packages/typescript` checkout.
 //! Rtd Rust SDK builds on top of the JSON-RPC API
 //! and therefore many of the return types are the ones specified in [rtd_types].
 //!

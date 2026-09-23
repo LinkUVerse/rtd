@@ -27,7 +27,7 @@ answer: >-
   to authorize transactions, without revealing the identity onchain.
 ---
 
-zkLogin is a Rtd primitive that lets users send transactions from a Rtd address using an OAuth credential (Google, Apple, Facebook, and others) without publicly linking the two. Users sign in with a provider they already use, and the application derives a Rtd address from that credential. No seed phrases, no persistent private keys.
+The RTD fork includes zkLogin protocol code inherited from Sui. A usable deployment also needs explicitly configured OAuth/JWK providers, a compatible prover, a salt service, and end-to-end validation on the target RTD network. No RTD public prover or Mainnet is available.
 
 ## Why zkLogin
 
@@ -36,7 +36,7 @@ zkLogin is a Rtd primitive that lets users send transactions from a Rtd address 
 - **Two-factor security:** Signing a transaction requires both a recent OAuth credential and a per-user salt. Compromising one factor alone is not enough to move funds.
 - **Privacy by default:** Zero-knowledge proofs prevent third parties from linking a Rtd address to its OAuth identity.
 - **Native to Rtd:** zkLogin is a protocol-level primitive, not a third-party service. It composes with [multisig](/develop/transactions/transaction-auth/multisig), [sponsored transactions](/develop/transaction-payment/sponsor-txn), and other Rtd features.
-- **Audited and verified:** The zkLogin circuits have been [audited](https://github.com/rtd-foundation/security-audits/blob/main/docs/zksecurity_zklogin-circuits.pdf) by two firms specializing in zero-knowledge proofs. The trusted setup [ceremony](/rtd-stack/zklogin-integration/zklogin#ceremony) included more than 100 participants.
+- **Inherited cryptography:** The fork uses the upstream Sui zkLogin circuit and verifying code. The upstream audit and ceremony do not establish an independent RTD service or deployment audit.
 
 ## How zkLogin works
 
@@ -64,7 +64,7 @@ For the detailed step-by-step protocol, see [How zkLogin works](/rtd-stack/zklog
 
 ## Supported providers
 
-<ImportContent source="openid-providers" mode="snippet" />
+The current local RTD chain does not enable a public OAuth provider list by default. Operators must configure trusted issuers and JWK handling for their own network before accepting zkLogin transactions.
 
 ## Common questions
 
@@ -82,7 +82,7 @@ If the user signs in with a different OAuth provider or a different application,
 
 ### What happens if the salt is lost?
 
-The user permanently loses access to that zkLogin address. Even with a valid OAuth login, you cannot derive the address without the correct salt. Plan salt persistence, backup, and recovery accordingly. See [Salt management](/rtd-stack/zklogin-integration/integration-guide#step-4-manage-user-salt) in the integration guide.
+The user permanently loses access to that zkLogin address. Even with a valid OAuth login, you cannot derive the address without the correct salt. Plan salt persistence, backup, and recovery before deploying a salt service.
 
 ### Is a zkLogin wallet custodial?
 
@@ -94,34 +94,34 @@ MPC and multisig wallets split or distribute private keys and define a threshold
 
 ### Can I use zkLogin inside a multisig wallet?
 
-Yes. See the [Multisig guide](https://sdk.linkuverse.com/typescript/cryptography/multisig#multisig-with-zklogin).
+The inherited protocol supports this pattern, but it still requires a configured and validated RTD zkLogin deployment.
 
 ## When to use zkLogin
 
 | Scenario | Recommended approach |
 | --- | --- |
-| Consumer app with non-crypto users | zkLogin with [Enoki](/onchain-finance/asset-custody/wallets/zk-login-wallets#enoki) for managed salt + sponsored transactions |
-| App where users might or might not have a wallet | zkLogin as one connection option alongside traditional wallets through [dApp Kit](https://sdk.linkuverse.com/dapp-kit) |
-| App that needs full control over proving and salt | zkLogin [self-hosted integration](/rtd-stack/zklogin-integration/integration-guide) |
-| Backend service or agent identity | zkLogin with a service-owned OAuth credential |
-| Users who already have wallets | Traditional wallet connection through dApp Kit. zkLogin is optional. |
+| Consumer app with non-crypto users | Evaluate zkLogin after operating and validating RTD-compatible OAuth, prover, and salt services. |
+| App where users might or might not have a wallet | Offer validated RTD wallet signers; add zkLogin only when the network configuration supports it. |
+| App that needs full control over proving and salt | Build and test self-hosted RTD services before accepting user funds. |
+| Backend service or agent identity | Evaluate a service-owned OAuth credential after the same checks. |
+| Users who already have wallets | Use ordinary RTD wallet signatures; zkLogin is optional. |
 
 ## Next steps
 
 <Cards>
 <Card title="Integration Guide" href="/rtd-stack/zklogin-integration/integration-guide">
-Step-by-step implementation: ephemeral keys, JWT, salt, ZK proof, and signature assembly.
+Deployment requirements and validation status.
 </Card>
 <Card title="Configure OpenID Providers" href="/rtd-stack/zklogin-integration/developer-account">
 Set up OAuth clients with Google, Facebook, Apple, Twitch, Kakao, Slack, or Microsoft.
 </Card>
 <Card title="zkLogin Demo" href="/rtd-stack/zklogin-integration/zklogin-demo">
-Interactive React example demonstrating the full zkLogin flow.
+Status of the inherited React example.
 </Card>
 <Card title="Technical Reference" href="/rtd-stack/zklogin-integration/zklogin">
 Address derivation formula, ceremony details, security analysis, and protocol notations.
 </Card>
 <Card title="zkLogin Wallets" href="/onchain-finance/asset-custody/wallets/zk-login-wallets">
-Wallet implementations including Enoki (managed service) and the Playtron wallet.
+Upstream wallet concepts; no RTD service deployment is implied.
 </Card>
 </Cards>

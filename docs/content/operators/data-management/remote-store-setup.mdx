@@ -42,6 +42,9 @@ answer: >-
 
 The remote store is an object store (S3 or GCS) containing protobuf-encoded checkpoint blobs. Full nodes read from it for state sync and indexers read from it for backfills. The `rtd-checkpoint-blob-indexer` populates this store by reading checkpoints from a source and writing compressed protobuf blobs to a destination.
 
+RTD has no verified public checkpoint bucket. All bucket names below must be
+supplied by the operator of the RTD chain being indexed.
+
 ## Architecture overview
 
 ```mermaid
@@ -54,7 +57,7 @@ graph LR
 <TabItem value="prereq" label="Prerequisites">
 
 - Access to a checkpoint source (see [Available Data Stores](/operators/data-management/available-data-stores) for the full list):
-   - **Full-retention GCS buckets (recommended for backfill):** `gs://linku-mainnet-checkpoints-use4` or `gs://linku-testnet-checkpoints-use4` ([Requester Pays](/operators/data-management/available-data-stores#checkpoint-gcs)).
+   - **An operator-owned GCS bucket:** Verify that its checkpoints match your RTD genesis digest and configure access and billing with its operator.
    - **Your own full node:** Must have gRPC enabled for steady-state streaming.
 - A destination object store with write credentials (S3 or GCS).
 - The `rtd-checkpoint-blob-indexer` binary.
@@ -74,19 +77,23 @@ The indexer runs three pipelines. Only the first two should be enabled:
 
 ## Backfill from an existing bucket
 
-The easiest way to populate your own remote store on Mainnet or Testnet is to backfill from LinkU's requester-pays GCS buckets. Use `--remote-store-gcs` as the source and a destination flag (`--s3` or `--gcs`) to write to your store.
+If your RTD network operator provides a verified checkpoint bucket, use
+`--remote-store-gcs` as the source and a destination flag (`--s3` or `--gcs`)
+to write to your store.
 
-#### Example: Backfill an S3 bucket from LinkU's GCS bucket (Mainnet)
+#### Example: Backfill an S3 bucket from an operator-owned GCS bucket
 
 ```sh
 rtd-checkpoint-blob-indexer \
     --pipeline checkpoint_blob --pipeline epochs \
-    --remote-store-gcs linku-mainnet-checkpoints-use4 \
+    --remote-store-gcs YOUR_RTD_CHECKPOINT_BUCKET \
     --s3 my-checkpoint-bucket \
     --compression-level 3
 ```
 
-For Testnet, use `--remote-store-gcs linku-testnet-checkpoints-use4`. Both buckets are [GCS Requester Pays](/operators/data-management/available-data-stores#checkpoint-gcs). Do not use the public HTTPS endpoints (`checkpoints.mainnet.rtd.io` / `checkpoints.testnet.rtd.io`) for full-retention backfill because they retain only the most recent 30 days.
+The bucket above is a required placeholder. Confirm its retention, chain ID,
+credentials, and billing before backfill. No public RTD checkpoint HTTPS
+endpoint is configured by this fork.
 
 ## Alternative: Backfill from a full node
 
@@ -117,7 +124,7 @@ The full node only needs gRPC enabled. JSON-RPC is not required.
 
 ### Running multiple instances
 
-Writes are idempotent, so multiple indexer instances can safely write to the same bucket. Run **2–3 instances** at steady state to enable rolling deployments without ever delaying updates from the chain. During backfill, a single instance is sufficient.
+Writes are idempotent, so multiple indexer instances can write to the same bucket. Start with one instance and add redundancy after measuring throughput and lag on your RTD chain; there is no RTD public-network sizing baseline.
 
 ## CLI reference
 
@@ -133,8 +140,8 @@ Writes are idempotent, so multiple indexer instances can safely write to the sam
 
 | Flag | Description |
 |------|-------------|
-| `--remote-store-gcs <BUCKET>` | Fetch checkpoints from a GCS bucket. Required for full-retention backfill. See [Available Data Stores](/operators/data-management/available-data-stores#checkpoint-gcs). |
-| `--remote-store-url <URL>` | Fetch checkpoints from an HTTPS remote store URL. [Public HTTPS endpoints](/operators/data-management/available-data-stores#checkpoint-https) retain only the most recent 30 days. |
+| `--remote-store-gcs <BUCKET>` | Fetch checkpoints from an operator-owned GCS bucket. Verify that it retains the full history required for your backfill. See [Available Data Stores](/operators/data-management/available-data-stores#checkpoint-gcs). |
+| `--remote-store-url <URL>` | Fetch checkpoints from an HTTPS store operated for your RTD chain. Check its actual retention; no public RTD endpoint is configured. |
 | `--remote-store-s3 <BUCKET>` | Fetch checkpoints from an S3 bucket. |
 | `--rpc-api-url <URL>` | Fetch checkpoints from a full node gRPC endpoint. |
 

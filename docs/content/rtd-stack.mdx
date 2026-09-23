@@ -1,9 +1,8 @@
 ---
-title: Rtd Stack
+title: Rtd Stack Status
 description: >-
-  Explore the Rtd Stack: an overview of Rtd's core components and primitives
-  including onchain randomness, onchain time, zkLogin, Nautilus, Seal, Walrus,
-  and RtdPlay.
+  Review RTD source-level primitives and the deployment status of inherited
+  Sui ecosystem integrations.
 keywords:
   - onchain randomness
   - onchain time
@@ -16,8 +15,8 @@ keywords:
   - Rtd stack
 goal:
   description: >-
-    Reader can get oriented in the Rtd Stack components and primitives and find
-    the one relevant to their app
+    Reader can distinguish RTD source-level primitives from inherited services
+    that require independent deployment and verification.
   requires:
     - has_frontmatter:
         - title
@@ -28,13 +27,24 @@ goal:
     - has_answer: true
       label: Needs answer summary for AI citation
 questions:
-  - What is Rtd Stack in Rtd?
-  - What topics does Rtd Stack cover?
-  - How does rtd stack work on Rtd?
-answer: Learn about the different components and primitives of the Rtd Stack.
+  - Which Rtd Stack topics are source-level capabilities?
+  - Which inherited integrations have been deployed on RTD?
+answer: >-
+  The fork contains Move and protocol primitives, but the inherited Sui
+  ecosystem services listed here are not verified RTD deployments.
 ---
 
-Learn about the different components and primitives of the Rtd Stack.
+This section contains two kinds of material: primitives present in the RTD
+source fork, and ecosystem applications inherited from upstream Sui
+documentation. A source module does not establish an independently operated
+service. RTD has no public Mainnet, and this documentation does not verify RTD
+deployments for Walrus, Seal, RtdNS, Nautilus, Enoki, Move Registry, DeepBook,
+Messaging, or RtdPlay0X1.
+
+Use the source and protocol pages to understand potential capabilities for a
+network you operate. Check each integration's status page before using any
+package ID, endpoint, SDK, wallet, or transaction example. Upstream Sui
+identifiers and service URLs cannot be used as RTD network configuration.
 
 import DocCardList from '@theme/DocCardList';
 

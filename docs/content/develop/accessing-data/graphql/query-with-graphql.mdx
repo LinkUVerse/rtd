@@ -63,19 +63,7 @@ answer: >-
 
 This guide provides practical examples for querying the Rtd network using GraphQL, including reads, transaction submission, and transaction simulation. For core concepts like headers, variables, fragments, pagination, scope, and limits, see the [corresponding concepts page](/develop/accessing-data/graphql/graphql-rpc).
 
-Access the GraphQL service for Rtd RPC through an online IDE that provides a complete toolbox for fetching data and executing transactions on the network:
-
-- Mainnet: https://graphql.mainnet.rtd.io/graphql
-- Testnet: https://graphql.testnet.rtd.io/graphql
-- Devnet: https://graphql.devnet.rtd.io/graphql
-
-:::info
-
-The public Mainnet and Testnet GraphQL services are rate-limited to keep network throughput optimized. They are useful for development and public-good access, but production apps should use a provider endpoint or operate their own GraphQL stack. Refer to the [list of RPC or data providers](https://www.notion.so/linkuverse/RPC-providers-offering-future-Rtd-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) that support GraphQL RPC or gRPC.
-
-:::
-
-The online IDE provides features such as auto-completion (use <kbd>Ctrl</kbd>+<kbd>Space</kbd> or just start typing), built-in documentation (Book icon, top-left), multi-tabs, and more. You can try the example queries on this page directly in the IDE. 
+Run or obtain a GraphQL service for the specific RTD chain you intend to query. This fork does not establish a public RTD GraphQL endpoint or IDE, and RTD has no public Mainnet. The examples below are schema patterns; verify the deployed service schema and replace sample object IDs and values with data from your chain. Set `RTD_GRAPHQL_URL` to the operator-provided endpoint before running shell examples.
 
 ## Supported schema
 
@@ -96,7 +84,7 @@ By default, each response contains the following HTTP response headers:
 - `x-rtd-rpc-version`: The version of the service that handled the request.
 
 ```sh
-$ curl -i -X POST https://graphql.testnet.rtd.io/graphql\
+$ curl -i -X POST "$RTD_GRAPHQL_URL"\
      --header 'x-rtd-rpc-show-usage: true'                 \
      --header 'Content-Type: application/json'             \
      --data '{
@@ -170,14 +158,14 @@ query ($epochID: Int) {
 
 #### Within the GraphQL IDE
 
-When using the [GraphQL online integrated development environment (IDE)](https://graphql.mainnet.rtd.io/graphql), supply variables as a JSON object to the query in the **Variables** pane at the bottom of the main editing window. You receive a warning if you supply a variable but don't declare it.
+When using a GraphQL IDE operated for your RTD network, supply variables as a JSON object to the query in its **Variables** pane. No public RTD GraphQL IDE is established by this source fork.
 
 #### Within requests
 
 When making a request to the GraphQL service using a tool such as `curl`, pass the query and variables as two fields of a single JSON object:
 
 ```sh
-$ curl -X POST https://rtd-testnet.linkuverse.com/graphql \
+$ curl -X POST "$RTD_GRAPHQL_URL" \
     --header 'Content-Type: application/json' \
     --data '{
       "query": "query ($epochID: Int) { epoch(id: $epochID) { referenceGasPrice } }",

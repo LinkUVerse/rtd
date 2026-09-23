@@ -1,6 +1,6 @@
 # Walrus Attributes Indexer
 
-This is an extension of the [Custom Indexer guide](https://docs.rtd.io/guides/developer/advanced/custom-indexer) to show how to index Walrus blobs and their associated `Metadata` dynamic fields.
+This is an extension of the Custom Indexer guide (see the checked-in `docs/content` tree) to show how to index Walrus blobs and their associated `Metadata` dynamic fields.
 
 Walrus is a separate service. This example requires a Walrus deployment on
 RTD, its `Metadata` type, and a checkpoint store for the same RTD network.

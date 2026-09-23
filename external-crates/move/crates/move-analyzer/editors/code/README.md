@@ -1,7 +1,7 @@
 # Move
 
 Provides language support for the Move programming language. For information about Move visit the
-language [documentation](https://docs.rtd.io/concepts/rtd-move-concepts). It also provides early-stage
+language documentation (see the checked-in `docs/content` tree). It also provides early-stage
 support for trace-debugging Move unit tests using a familiar VSCode debugging interface (e.g., stepping
 through the code, tracking local variable names, setting line breakpoints).
 
@@ -24,7 +24,7 @@ the pre-built move-analyzer binary is not available for your platform or if you 
 binary stored in a different location.
 
 If you want to build, test, and trace Move code using the extension, you must install the `rtd` binary on
-your machine - see [here](https://docs.rtd.io/guides/developer/getting-started/rtd-install) for
+your machine - see here (see the checked-in `docs/content` tree) for
 instructions. The extension assumes that the `rtd` binary is in your system path, but you can set
 its custom location using VSCode's settings (`⌘` + `,` on macOS, or use the menu item *Code >
 Preferences > Settings*). Search for the `move.rtd.path` user setting, set it to the new location of
@@ -33,7 +33,7 @@ the `rtd` binary, and restart VSCode.
 In order to trace-debug Move code execution, the `rtd` binary must be built with the `tracing` feature flag.
 If your version of the `rtd` binary was not built with this feature flag, an attempt to trace test
 execution will fail. In this case you may have to build the `rtd` binary from source following these
-[instructions](https://docs.rtd.io/guides/developer/getting-started/rtd-install#install-rtd-binaries-from-source).
+instructions (see the checked-in `docs/content` tree).
 
 # Troubleshooting
 
@@ -48,7 +48,7 @@ This can be done in two steps:
 1. Install the move-analyzer installation prerequisites for your platform. They are the same
 as prerequisites for Rtd installation - for Linux, macOS and Windows these prerequisites and
 their installation instructions can be found
-[here](https://docs.rtd.io/guides/developer/getting-started/rtd-install#additional-prerequisites-by-operating-system)
+here (see the checked-in `docs/content` tree)
 2. Invoke `cargo install --git https://github.com/LinkUVerse/rtd rtd-move-lsp` to install the
 `move-analyzer` language server in your Cargo binary directory, which is typically located
 in the `~/.cargo/bin` (macOS/Linux) or `C:\Users\USER\.cargo\bin` (Windows) directory.
@@ -74,7 +74,7 @@ extension.
 
 ## What if everything else fails?
 
-Check [Rtd Developer Forum](https://forums.rtd.io/c/technical-support) to see if the problem
+Check Rtd Developer Forum (no public RTD forum is configured) to see if the problem
 has already been reported and, if not, report it there.
 
 # Features

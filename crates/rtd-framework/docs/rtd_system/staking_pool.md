@@ -272,7 +272,7 @@ A self-custodial object holding the staked RTD tokens.
 ## Struct `FungibleStakedRtd`
 
 An alternative to <code><a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">StakedRtd</a></code> that holds the pool token amount instead of the RTD balance.
-StakedRtd objects can be converted to FungibleStakedSuis after the initial warmup period.
+StakedRtd objects can be converted to FungibleStakedRtds after the initial warmup period.
 The advantage of this is that you can now merge multiple StakedRtd objects from different
 activation epochs into a single FungibleStakedRtd object.
 

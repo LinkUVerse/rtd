@@ -14,7 +14,7 @@ validation; `derived_object::derive_address(parent, key)` where `key` is user-in
 assets/objects can be sent to the result before creation.
 Exploit: overwrite or block another user's slot; pre-create / pre-send to a derived address to
 hijack initialization, or front-run object creation.
-Source: `LinkUVerse/skills → object-model/dynamic-fields-and-collections.md`, `LinkUVerse/skills → object-model/patterns.md`.
+Source: `historical upstream skills → object-model/dynamic-fields-and-collections.md`, `historical upstream skills → object-model/patterns.md`.
 
 ### SM-E2 — Wrong DF vs DOF choice for visibility   [Medium]
 Invariant: use `dynamic_object_field` when the child must keep its own ID and be independently
@@ -23,7 +23,7 @@ hides objects.
 Detect: objects that must be addressable stored as plain `dynamic_field` (invisible by ID); or
 objects meant to be encapsulated stored as DOF (independently exposed).
 Exploit: assets become unreachable by tooling, or "hidden" children are independently accessible.
-Source: `LinkUVerse/skills → object-model/dynamic-fields-and-collections.md`.
+Source: `historical upstream skills → object-model/dynamic-fields-and-collections.md`.
 
 ### SM-E3 — Unbounded inline collections   [High]
 Invariant: `VecMap` / `VecSet` / inline `vector` are bounded (≈100 entries before the ~256 KB
@@ -33,7 +33,7 @@ Detect: per-user or otherwise unbounded inserts into `VecMap`/`VecSet`/`vector`;
 `destroy_empty` on a destruction path; O(n) scans inside hot functions.
 Exploit: grow the collection until the owning object exceeds the size limit or gas cost →
 the object can no longer be mutated (permanent DoS / locked funds).
-Source: `LinkUVerse/skills → object-model/dynamic-fields-and-collections.md`.
+Source: `historical upstream skills → object-model/dynamic-fields-and-collections.md`.
 
 ### SM-E4 — Missing existence check before dynamic_field / collection access   [Medium]
 Invariant: `dynamic_field::borrow*<T>` / `borrow_mut*<T>` / `remove*<T>` — and the equivalent
@@ -54,6 +54,6 @@ Exploit: an attacker triggers the missing-field path to abort honest users' tran
 against an entrypoint), or exploits the absence-induced abort to take a different code path the
 author did not anticipate (e.g. a fallback branch that bypasses an accumulator that was supposed
 to be initialized).
-Source: `LinkUVerse/skills → object-model/dynamic-fields-and-collections.md` ("Accessing a
+Source: `historical upstream skills → object-model/dynamic-fields-and-collections.md` ("Accessing a
 nonexistent field aborts the transaction. Adding a field with a name that already exists … also
 aborts.").

@@ -35,42 +35,25 @@ questions:
   - When should I update my Rtd full node?
   - How do I handle database migrations during a node update?
 answer: >-
-  Each Rtd network is deployed on a consistent schedule. Extenuating
-  circumstances might delay releases occasionally, but these delays are rare and
-  communicated through [official channels](#communication).
+  RTD has no published public network release schedule. Update a node to the
+  version approved by the operator of the network it actually serves.
 ---
 
 ## Rtd release process
 
-Each Rtd network is deployed on a consistent schedule. Extenuating circumstances might delay releases occasionally, but these delays are rare and communicated through [official channels](#communication).
+RTD has not launched a public Mainnet and has no verified public network release schedule. Operators of local or private RTD networks decide when to deploy a new version. Record the source commit, protocol version, chain ID, and approved rollout time for your network before changing a node.
 
-- `devnet`: Deployed every week on Mondays.
-- `testnet`: Deployed every week on Tuesdays.
-- `mainnet`: Deployed every two weeks on Wednesdays.
-
-:::info
-
-For additional details, see each network's [release schedule and configuration](https://rtd.io/networkinfo).
-
-:::
-
-Whenever Rtd releases a new version, you must update your full node with the release to ensure compatibility with the network it connects to. For example, if you use Rtd Testnet you should install the version of Rtd running on Rtd Testnet.
+When the operator of your network deploys a new version, update your full node to a compatible build. Apply protocol-changing versions before the network activates the new protocol.
 
 Any release that contains a protocol change needs to be applied before the protocol upgrade takes place (when enough stake within the validator set upgrades, the new protocol version is enacted in the next epoch).
 If you do not update your full node, it cannot connect to the network after the protocol upgrade takes place.
 
 ## Communication
 
-Releases are announced on the [Rtd Discord server](https://discord.com/invite/rtd) and the [node-operators](https://groups.google.com/a/groups.rtd.io/g/node-operators) Google group.
-
-### Discord channels
-- `devnet`: [`#devnet-updates`](https://discord.com/channels/916379725201563759/1004638487078772736)
-- `testnet`: [`#tn-validator-announcements`](https://discord.com/channels/916379725201563759/1003660994381353101), [`#testnet-updates`](https://discord.com/channels/916379725201563759/1095151359642304612), and [`#node-announcements`](https://discord.com/channels/916379725201563759/1002231298888306718) channels.
-- `mainnet`: [`#mn-validator-announcements`](https://discord.com/channels/916379725201563759/1093852827627040768), [`#mainnet-updates`](https://discord.com/channels/916379725201563759/1103082453792464906), and [`#node-announcements`](https://discord.com/channels/916379725201563759/1002231298888306718) channels.
+RTD has no verified public release announcement channel. Get the target commit and rollout time from the operator of the specific RTD network you run. Treat repository tags as source identifiers only; a tag alone does not prove that a network has deployed that build.
 
 ## Update your full node 
 
-You can track the latest version of Rtd on the [Rtd Releases](https://github.com/LinkUVerse/rtd/releases) page on GitHub.
-The schedule for each network is available in the [Network Release Schedule](https://rtd.io/networkinfo) page.
+Confirm the target source commit and protocol version with your network operator. Build or obtain a binary from a distribution channel that operator has approved, and verify its provenance before installation. Keep the previous binary and configuration available for rollback if the protocol has not advanced.
 
 It is reasonable to have to shut down your full node to perform an update, whether that be a rolling restart in Kubernetes, or a systemctl stop on a Linux machine to replace the rtd-node binary.

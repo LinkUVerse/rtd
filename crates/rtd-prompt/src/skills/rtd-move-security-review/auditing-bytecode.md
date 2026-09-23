@@ -203,7 +203,7 @@ Exploit: ...
 For every audit, record alongside the findings:
 
 - Target package id + network (`mainnet` / `testnet` / `devnet`)
-- GraphQL endpoint used (e.g. `https://graphql.mainnet.rtd.io/graphql`)
+- GraphQL endpoint used (supply a verified RTD URL; no public Mainnet endpoint exists yet)
 - `rtd --version` (the binary that ran `rtd prompt` and `rtd move disassemble`)
 
 Recording the tool version matters because textual disassembly can change across `rtd`

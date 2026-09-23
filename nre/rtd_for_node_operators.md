@@ -34,16 +34,14 @@ To run a Rtd Validator a machine with the following is required:
 
 Rtd Node can be deployed in a number of ways.
 
-There are pre-built container images available in [Docker Hub](https://hub.docker.com/r/linku/rtd-node/tags).
-
-And pre built `linux/amd64` binaries available in S3 that can be fetched using one of the following methods:
-
-```shell
-wget https://releases.rtd.io/$RTD_SHA/rtd-node
-```
+RTD does not currently publish a public Mainnet release endpoint. Obtain a
+signed `linux/amd64` binary from a release channel you trust, and obtain its
+verification key through a separate trusted channel. From the repository root:
 
 ```shell
-curl https://releases.rtd.io/$RTD_SHA/rtd-node -o rtd-node
+export RTD_RELEASE_BASE_URL="https://<your-artifact-host>/releases"
+export RTD_RELEASE_PUBLIC_KEY="/path/to/trusted-rtd-release-key.pem"
+./nre/download_and_verify_private_binary.sh "$RTD_SHA" rtd-node
 ```
 
 To build directly from source:
@@ -81,7 +79,7 @@ Rtd Node uses the following ports by default:
 | UDP/8081      | inbound/outbound | narwhal primary interface         |
 | UDP/8082      | inbound/outbound | narwhal worker interface          |
 | UDP/8084      | inbound/outbound | peer to peer state sync interface |
-| TCP/8443      | outbound         | metrics pushing                   |
+| TCP/8443      | outbound         | optional operator metrics proxy  |
 | TCP/9184      | localhost        | metrics scraping                  |
 
 To run a validator successfully it is critical that ports 8080-8084 are open as outlined above, including the specific protocol (TCP/UDP).
@@ -126,7 +124,8 @@ The following keys are used by Rtd Node:
 
 These are configured in the [Rtd Node configuration file](#configuration).
 
-You can generate each of these via the [rtd cli](https://docs.rtd.io/guides/developer/getting-started/rtd-install).
+You can generate each of these with the locally built `rtd` CLI. RTD has no
+public documentation site yet; use `rtd keytool --help` for available commands.
 
 ```
 $ rtd keytool generate bls12381
@@ -156,7 +155,8 @@ curl -s http://localhost:9184/metrics
 curl http://localhost:9184/metrics | grep <METRIC>
 ```
 
-Rtd Node also pushes metrics to a central Rtd metrics proxy.
+Rtd Node can push metrics when your network operator configures a metrics
+proxy. The example validator configuration does not enable a public proxy.
 
 ### Logs
 
@@ -200,14 +200,11 @@ curl localhost:1337/logging -d "info"
 
 ### Dashboards
 
-Public dashboard for network wide visibility:
+RTD has no public Mainnet or Testnet validator dashboard yet. Use a dashboard
+connected to the metrics service operated by your network.
 
-- [Rtd Testnet Validators](https://metrics.rtd.io/public-dashboards/9b841d63c9bf43fe8acec4f0fa991f5e)
-
-For viewing total stake of validators, current active set and candidates:
-
-- [Validators on Suiscan](https://suiscan.xyz/mainnet/validators)
-- [Validators on RtdVision](https://suivision.xyz/validators)
+For viewing total stake, the current validator set, and candidates, use a
+verified explorer connected to the RTD network you operate.
 
 ## Software Updates
 
@@ -239,15 +236,13 @@ p2p-config:
 
 ## Chain Operations
 
-The following chain operations are executed using the `rtd` CLI. This binary is built and provided as a release similar to `rtd-node`, examples:
+The following chain operations use the `rtd` CLI. Build it from source or
+download a signed binary from your trusted release channel:
 
 ```shell
-wget https://releases.rtd.io/$RTD_SHA/rtd
-chmod +x rtd
-```
-
-```shell
-curl https://releases.rtd.io/$RTD_SHA/rtd -o rtd
+export RTD_RELEASE_BASE_URL="https://<your-artifact-host>/releases"
+export RTD_RELEASE_PUBLIC_KEY="/path/to/trusted-rtd-release-key.pem"
+./nre/download_and_verify_private_binary.sh "$RTD_SHA" rtd
 chmod +x rtd
 ```
 
@@ -304,7 +299,9 @@ rtd client call --package 0x3 --module rtd_system --function rotate_operation_ca
 
 By default the new `Cap` object is transferred to the validator address, which then could be transferred to the new delegatee address. At this point, the old `Cap` becomes invalidated and no longer represents eligibility.
 
-To get the current valid `Cap` object's ID of a validator, use the Rtd Client CLI `rtd client objects` command after setting the holder as the active address. Or go to the [explorer](https://explorer.rtd.io/object/0x0000000000000000000000000000000000000005) and look for `operation_cap_id` of that validator in the `validators` module.
+To get the current valid `Cap` object's ID of a validator, use the Rtd Client
+CLI `rtd client objects` command after setting the holder as the active
+address. RTD has no public Mainnet explorer yet.
 
 ### Updating the Gas Price Survey Quote
 
@@ -365,17 +362,15 @@ After the validator is removed at the next epoch change, the staking pool will b
 
 ## Private Security Fixes
 
-There may be instances where urgent security fixes need to be rolled out before publicly announcing it's presence (Issues affecting liveliness, invariants such as RTD supply, governance etc). In order to not be actively exploited LinkUVerse will release signed security binaries incorporating such fixes with a delay in publishing the source code until a large % of our validators have patched the vulnerability.
+If your network operator distributes signed security binaries, obtain the
+artifact directory URL and verification public key through trusted channels.
+There is currently no default RTD public security release bucket or public key
+URL. The scripts refuse to download anything until both are supplied. Keep the
+public key on local disk and run the commands from the repository root:
 
-This release process will be different and we expect us to announce the directory for such binaries out of band.
-Our public key to verify these binaries would be stored [here](https://rtd-private.s3.us-west-2.amazonaws.com/rtd_security_release.pem)
-
-You can download all the necessary signed binaries and docker artifacts incorporating the security fixes by using the [download_private.sh](https://github.com/LinkUVerse/rtd/blob/main/nre/download_private.sh)
-
-Usage
-`./download_private.sh <commit-sha>`
-
-You can also download and verify specific binaries that may not be included by the above script using the [download_and_verify_private_binary.sh](https://github.com/LinkUVerse/rtd/blob/main/nre/download_and_verify_private_binary.sh) script.
-
-Usage:
-`./download_and_verify_private_binary.sh <commit-sha> <binary-name>`
+```shell
+export RTD_RELEASE_BASE_URL="https://<your-artifact-host>/releases"
+export RTD_RELEASE_PUBLIC_KEY="/path/to/trusted-rtd-release-key.pem"
+./nre/download_private.sh <commit-sha>
+./nre/download_and_verify_private_binary.sh <commit-sha> <binary-name>
+```

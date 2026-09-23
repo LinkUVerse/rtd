@@ -71,6 +71,8 @@ answer: >-
   code samples for every common migration path.
 ---
 
+RTD has no public Mainnet or verified public archival service. Set the endpoint for your own RTD chain when adapting these source-level gRPC migration examples. Future RTD Mainnet will not expose JSON-RPC.
+
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -85,7 +87,7 @@ Each recipe pairs a JSON-RPC call with its gRPC replacement and explains the key
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] Install the `@linku/rtd` TypeScript SDK by running `npm install @linku/rtd`.
+- [x] Install the `rtd-typescript` TypeScript SDK by running `npm install rtd-typescript`.
 - [x] Obtain access to a gRPC-enabled full node and note its endpoint.
 
 </TabItem>
@@ -94,7 +96,7 @@ Each recipe pairs a JSON-RPC call with its gRPC replacement and explains the key
 Create a client once and reuse it:
 
 ```ts
-import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
 
 const client = new RtdGrpcClient({
   baseUrl: '<FULL_NODE_URL>',
@@ -332,7 +334,7 @@ Replace `rtdx_queryTransactionBlocks` with `LedgerService.ListTransactions` for 
 
 :::info
 
-The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `client.listTransactions()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listTransactions()`. The `grpcurl` example below shows the raw protobuf JSON request shape.
+The `rtd-typescript` TypeScript SDK (v2.23.1+) exposes `client.listTransactions()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listTransactions()`. The `grpcurl` example below shows the raw protobuf JSON request shape.
 
 :::
 
@@ -439,7 +441,7 @@ ws.onmessage = (msg) => console.log(JSON.parse(msg.data));
 
 :::info
 
-The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `SubscribeEvents` through the proto client at `client.subscriptionService.subscribeEvents()`. The Buf CLI example below shows the raw protobuf JSON request shape.
+The `rtd-typescript` TypeScript SDK (v2.23.1+) exposes `SubscribeEvents` through the proto client at `client.subscriptionService.subscribeEvents()`. The Buf CLI example below shows the raw protobuf JSON request shape.
 
 :::
 
@@ -500,7 +502,7 @@ Use `LedgerService.ListEvents` to retrieve events matching an `EventFilter` acro
 
 :::info
 
-The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `client.listEvents()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listEvents()`. The `grpcurl` example in the next tab shows the raw protobuf JSON request shape.
+The `rtd-typescript` TypeScript SDK (v2.23.1+) exposes `client.listEvents()` as a high-level wrapper. You can also use the proto client directly through `client.ledgerService.listEvents()`. The `grpcurl` example in the next tab shows the raw protobuf JSON request shape.
 
 :::
 
@@ -621,7 +623,7 @@ Use `SubscriptionService.SubscribeTransactions` for a real-time, filtered stream
 
 :::info
 
-The `@linku/rtd` TypeScript SDK (v2.23.1+) exposes `SubscribeTransactions` through the proto client at `client.subscriptionService.subscribeTransactions()`. The Buf CLI example below shows the raw protobuf JSON request shape.
+The `rtd-typescript` TypeScript SDK (v2.23.1+) exposes `SubscribeTransactions` through the proto client at `client.subscriptionService.subscribeTransactions()`. The Buf CLI example below shows the raw protobuf JSON request shape.
 
 :::
 
@@ -920,7 +922,7 @@ $ curl -X POST <FULL_NODE_URL> \
 <TabItem value="grpc-sdk" label="gRPC (TypeScript SDK)">
 
 ```ts
-import { Transaction } from '@linku/rtd/transactions';
+import { Transaction } from 'rtd-typescript/transactions';
 
 // Build and sign a transaction (see PTB docs for details)
 const tx = new Transaction();
@@ -955,9 +957,9 @@ Replace the JSON-RPC `signAndExecuteTransactionBlock` pattern with `signAndExecu
 
 ```ts
 // Old JSON-RPC pattern
-import { RtdClient, getFullnodeUrl } from '@linku/rtd/client';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { Transaction } from '@linku/rtd/transactions';
+import { RtdClient, getFullnodeUrl } from 'rtd-typescript/client';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { Transaction } from 'rtd-typescript/transactions';
 
 const client = new RtdClient({ url: getFullnodeUrl('mainnet') });
 const keypair = new Ed25519Keypair();
@@ -977,9 +979,9 @@ console.log('Digest:', result.digest);
 <TabItem value="grpc-sdk" label="gRPC (TypeScript SDK)">
 
 ```ts
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { Transaction } from '@linku/rtd/transactions';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { Transaction } from 'rtd-typescript/transactions';
 
 const client = new RtdGrpcClient({
   baseUrl: '<FULL_NODE_URL>',
@@ -1262,7 +1264,7 @@ Implement `backfillCheckpoints` with `ListCheckpoints`, treating its end checkpo
 Use the cursor from each response to request the next page:
 
 ```ts
-import type { RtdClientTypes } from '@linku/rtd';
+import type { RtdClientTypes } from 'rtd-typescript';
 
 let cursor: string | null = null;
 
@@ -1286,7 +1288,7 @@ do {
 A full node returns `NOT_FOUND` for data outside its retention window. Fall back to the [Archival Store](/develop/accessing-data/archival-store) for historical lookups:
 
 ```ts
-import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
 
 const fullNode = new RtdGrpcClient({
   baseUrl: '<FULL_NODE_URL>',
@@ -1294,7 +1296,7 @@ const fullNode = new RtdGrpcClient({
 });
 
 const archive = new RtdGrpcClient({
-  baseUrl: 'https://archive.mainnet.rtd.io:443',
+  baseUrl: process.env.RTD_ARCHIVE_GRPC_URL!,
   network: 'mainnet',
 });
 
@@ -1337,4 +1339,4 @@ gRPC streams can terminate for several reasons. Understanding the server's conne
 
 **Server-side timeout:** Unary requests use the general gRPC timeout, which defaults to 60 seconds. Each streaming `List*` API has its own configurable `timeout-ms`; the full node configuration examples use 5 seconds. This deadline covers the entire list stream, so a long backfill can end even after returning frames. Resume from the latest `watermark.cursor` while preserving the original upper bound. Network, proxy, and GOAWAY interruptions require the same cursor-based recovery.
 
-**Public endpoint limitations:** The public URLs at `https://fullnode.<network>.rtd.io` are behind load balancers that impose their own connection timeouts and rate limits beyond what the Rtd node configures. Long-running streams are more likely to be interrupted on public endpoints. For production streaming workloads, run your own [Rtd full node](/operators/full-node/rtd-full-node) or use a provider with a dedicated gRPC endpoint.
+**Endpoint limitations:** RTD has no verified public gRPC URL. For streaming workloads, run your own [Rtd full node](/operators/full-node/rtd-full-node) or use a provider only after verifying its RTD chain support and stream limits.

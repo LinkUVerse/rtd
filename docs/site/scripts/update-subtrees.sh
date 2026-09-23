@@ -3,10 +3,9 @@
 # Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-cd "$(git rev-parse --show-toplevel)" || exit 1
+set -euo pipefail
 
-git subtree pull --prefix=docs/site/src/shared git@github.com:LinkUVerse/ML-Shared-Docusaurus.git master --squash
-git subtree pull --prefix=docs/subtree/awesome-rtd git@github.com:rtd-foundation/awesome-rtd.git main --squash
-git subtree pull --prefix=docs/subtree/awesome-gaming git@github.com:becky-rtd/awesome-rtd-gaming.git main --squash
-
-echo "✅ All subtree content updated — commit and push the changes"
+# The inherited subtree URLs include unverified RTD mirrors. Pulling them here
+# would replace reviewed status pages with unreviewed third-party claims.
+echo "RTD docs subtree updates require a verified source and a manual content review." >&2
+exit 1

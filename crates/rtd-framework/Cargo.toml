@@ -2,7 +2,7 @@
 name = "rtd-framework"
 version = "0.1.0"
 edition = "2024"
-authors = ["LinkU Labs <eng@linkuverse.com>"]
+authors = ["LinkU Labs"]
 description = "Move framework for rtd platform"
 license = "Apache-2.0"
 publish = false

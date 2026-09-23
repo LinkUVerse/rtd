@@ -46,8 +46,8 @@ impl Project {
                 description: Some(description.to_string()),
                 contact: Some(Contact {
                     name: contact_name.to_string(),
-                    url: Some(url.to_string()),
-                    email: Some(email.to_string()),
+                    url: (!url.is_empty()).then(|| url.to_string()),
+                    email: (!email.is_empty()).then(|| email.to_string()),
                 }),
                 license: Some(License {
                     name: license.to_string(),

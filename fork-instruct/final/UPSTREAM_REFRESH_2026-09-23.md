@@ -163,11 +163,14 @@ light-client 的主网/测试网 YAML 只是空模板，不是可运行网络配
 对应服务确实部署到 RTD 后才配置真实对象 ID、RPC 或浏览器 URL。
 `examples/RTD_FORK_STATUS.md` 记录各示例的部署前置条件。继承的 TS 示例
 仍有 `@linku/rtd` / `@linku/dapp-kit` 旧包 API，而此次独立 TS SDK 实际
-包名为 `rtd-typescript` / `rtd-dapp-kit-react`；这些非主链示例需在后续
-移植 API 和安装包后才可声明完整构建通过。本轮 27 个 TS/JS 示例文件的
-语法检查与 oracle 配置的类型检查通过；继承的 `@linku/rtd@1.18.0` 无法
-从 npm 获取，离线环境也缺少 React Query Devtools，故没有完整 TS 示例
-构建通过的证据。
+包名包括 `rtd-typescript` / `rtd-dapp-kit-react` / `rtd-kiosk`；新版本
+`rtd-typescript/client` 不再提供旧 `RtdClient` 与 `getFullnodeUrl` 接口。
+根 pnpm workspace 已仅保留主包与本地 Move formatter；继承的 dApp、
+示例不再进入主链安装或构建。锁文件中的旧 SDK 快照未被这两个 importer
+引用；`pnpm install --frozen-lockfile --lockfile-only --offline --ignore-scripts`
+和联网的 `pnpm install --frozen-lockfile` 均通过，本地 Move formatter 构建
+及 60 项测试也通过。旧示例须按保留的 SDK API 逐项迁移，
+并在实际 RTD 网络上部署其依赖后才能重新加入工作区。
 
 ## 文档发布门槛
 
@@ -175,8 +178,10 @@ light-client 的主网/测试网 YAML 只是空模板，不是可运行网络配
 交易链接。机械替换正文中的品牌并不会让 `suiscan.xyz`、`suivision.xyz`
 等站点支持 RTD。尤其不要把这套文档直接作为 RTD 正式站点发布；
 需先按实际已部署的 RTD 服务建立文档发布清单，裁掉旧链第三方页面和
-入站导航、修正外链，再通过 Docusaurus 的断链检查。本轮未把文档站点的
-构建、链接可达性或外部服务接入记为通过。`doc/` 中保留的
+入站导航、修正外链。文档内容及站点经过清理后，`npm ci` 与 Docusaurus
+`npm run build` 已通过；构建仍有非致命的历史锚点警告，外部链接可达性
+及服务接入尚未验证。具体发布阻断条件见 `docs/RTD_PUBLICATION_GATE.md`。
+`doc/` 中保留的
 历史 fork/修复资料是内部参考，不代表当前网络的可用服务。
 根目录 `README.md` 已去掉虚构的官方服务与性能宣称，`SECURITY.md`
 已移除没有依据的赏金金额、第三方报告入口和联系方式；发布生产网络前
@@ -222,3 +227,19 @@ OpenRPC `generate-spec` 1/1、GraphQL SDL 导出默认与 staging 配置各
 上述结果是本地构建及目标测试。正式网络 genesis 与 Chain ID、外部服务、
 真实进程强杀恢复、强制 checkpoint builder panic 的端到端演练，以及
 第三方 TS 示例的完整构建均不在本轮通过范围内。
+
+主链根目录的 `pnpm install --frozen-lockfile`、Move formatter 构建与
+60/60 测试通过；最终 CI 对应的 `pnpm turbo lint build test` 也通过。
+`docs/site` 的 `npm ci`、`npm run build` 通过。
+
+复制到 `temp/link-u-smart-contract` 的本地部署脚本使用由
+`rtd genesis --write-config ./rtd-conf.yaml` 生成并校验的配置，仅给指定
+`0xc535a846ad8aecf2c353c12b557612f0f1ae3bb09ba7cd2c6c8fa6fa56bf0df9`
+地址分配 `5200000000000000` MIST；默认生成的五组匿名测试账户已删除，
+本次不启动 faucet。旧本地链数据清理后，
+`rtd genesis --from-config ./rtd-conf.yaml -f` 与完整三合约部署均成功。
+新本地链完整 ID 为 `2msPrVdGQLEzZeTM2cMdhdrgEjUNgmaS7bXWbnqSChJx`；
+三个初始化交易均成功，各生成 1024 个分片。部署元数据和分片产物通过
+`verify_deploy_artifacts.sh` 校验，节点 `/health` 返回 HTTP 200。
+`rtd-indexer-alt` 与 `rtd-indexer-alt-jsonrpc` 及对应守护进程已停止。
+该 Chain ID 只属于此次本地 dev 创世，不是未来 RTD 主网或测试网 ID。

@@ -1,24 +1,3 @@
 # Rtd Typescript SDK (by LinkU Labs)
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-The Rtd TypeScript SDK is a modular library of tools for interacting with the Rtd blockchain. Use it to send queries to RPC nodes, build and sign transactions, and interact with a Rtd or local network.
-
-## Features
-
-- [Module packages](https://sdk.linkuverse.com/typescript#module-packages)
-- [GraphQL (RPC 2.0)](https://sdk.linkuverse.com/typescript/graphql) is supported.
-- [Rtd BCS types are supported](https://github.com/LinkUVerse/rtd/blob/main/sdk/typescript/src/bcs)
-- [Kiosk SDK](https://sdk.linkuverse.com/kiosk)
-- [zkSend (Stashed) SDK](https://sdk.linkuverse.com/zksend)
-- [DeepBookV3 SDK](https://docs.rtd.io/standards/deepbookv3-sdk)
-- [RtdNS SDK](https://docs.rtdns.io/developer/sdk)
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

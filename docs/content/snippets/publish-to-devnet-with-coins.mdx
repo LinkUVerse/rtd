@@ -1,9 +1,3 @@
-Before being able to publish your package to Testnet, you need Testnet RTD tokens. To get some, visit the online faucet at https://faucet.rtd.io/. For other ways to get RTD in your Testnet account, see [Get RTD Tokens](/getting-started/onboarding/get-coins).
+Before publishing, configure the CLI for the intended RTD network, confirm its chain identifier, and fund the publishing address with RTD from that network's genesis or operator-controlled faucet. No public RTD Devnet or Testnet faucet is verified here.
 
-Now that you have an account with some Testnet RTD, you can deploy your contracts. To publish your package, use the following command in the same terminal or console:
-
-```
-rtd client publish --gas-budget <GAS-BUDGET>
-```
-
-For the gas budget, use a standard value such as `20000000`.
+From the package directory, build and test against its configured environment, then run `rtd client publish`. Record the returned package ID and transaction digest from this RTD chain. See [local network setup](/getting-started/onboarding/local-network).

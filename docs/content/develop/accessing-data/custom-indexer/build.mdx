@@ -93,7 +93,7 @@ $ diesel --version
 
 The following steps show how to create an indexer that:
 
-- Connects to Rtd checkpoint sources: Uses the durable Requester Pays GCS bucket for production backfill, then fullnode gRPC polling and streaming for steady-state ingestion. The public-good HTTPS checkpoint store is for recent-data testing only.
+- Connects to RTD checkpoint sources supplied by the operator of the same chain. An operator-managed checkpoint store can support backfill; a verified full node gRPC endpoint can support polling and streaming.
 - Processes checkpoints: Streams checkpoint data continuously.
 - Extracts transaction data: Pulls transaction digests from each checkpoint.
 - Stores in local PostgreSQL: Commits data to a local PostgreSQL database as the default example storage layer. For other storage systems, implement the framework's `Store` and `Connection` traits.
@@ -103,12 +103,11 @@ In the end, you have a working indexer that demonstrates all core framework conc
 
 :::info
 
-Rtd provides checkpoint data through multiple sources:
+The framework supports several checkpoint source types, but this repository does not provide public RTD full nodes, checkpoint stores, GCS buckets, or a retention guarantee:
 
-- **GCS buckets (production backfill and recovery):** `gs://linku-testnet-checkpoints-use4` for Testnet or `gs://linku-mainnet-checkpoints-use4` for Mainnet. These buckets have full checkpoint retention and are Requester Pays enabled, so configure GCS credentials and a billing project before using them.
-- **Fullnode gRPC (production steady state):** Use a production-grade endpoint from an [RPC provider](/develop/accessing-data/rpc-providers) for polling and streaming after the historical backfill reaches the network tip.
-- **Public-good fullnode gRPC (testing only):** `https://fullnode.testnet.rtd.io:443`, `https://fullnode.mainnet.rtd.io:443`, and `https://fullnode.devnet.rtd.io:443`. Do not use these endpoints for production ingestion.
-- **Public HTTPS checkpoint stores (testing only, most recent 30 days):** `https://checkpoints.testnet.rtd.io` for Testnet or `https://checkpoints.mainnet.rtd.io` for Mainnet. Do not use these public-good endpoints for production ingestion.
+- **Operator-managed GCS bucket:** Use `YOUR_RTD_CHECKPOINT_BUCKET` only after verifying its checkpoints belong to your chain and cover the range you need. Configure credentials; include a billing project header only if that bucket uses Requester Pays.
+- **Operator-managed full node gRPC:** Use `FULLNODE_GRPC_URL` from the same RTD chain for polling and streaming. Verify its checkpoint retention and capacity before relying on it for steady-state ingestion.
+- **Operator-managed HTTPS store:** Use `RTD_CHECKPOINT_HTTP_URL` only if your network operator exposes one and confirms its retention. This can be a fallback or test source; it is not a built-in RTD public service.
 
 :::
 
@@ -242,7 +241,7 @@ Open `up.sql` and replace its contents with the following code (using the actual
 
 This example uses the `TEXT` data type for `tx_digest`, but best practice for a production indexer is to use the `BYTEA` data type.
 
-The `TEXT` type is used to make the transaction digest easily readable and directly usable with external tools. Digests are `Base58` encoded, and because PostgreSQL cannot natively display `BYTEA` data in this format, storing it as `TEXT` allows you to copy the digest from a query and paste it into an explorer like [RtdScan](https://suiscan.xyz/testnet/home).
+The `TEXT` type is used to make the transaction digest easily readable and directly usable with external tools. Digests are `Base58` encoded, and because PostgreSQL cannot natively display `BYTEA` data in this format, storing it as `TEXT` allows you to copy the digest from a query and inspect it through the configured RTD network RPC endpoint.
 
 For a production environment, however, `BYTEA` is strongly recommended. It offers superior storage and query efficiency by storing the raw byte representation, which is more compact and significantly faster for comparisons than a string. Refer to [Binary data performance in PostgreSQL](https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/) on the CYBERTEC website for more information.
 
@@ -437,46 +436,46 @@ Your indexer is now complete. The next steps walk you through running the indexe
 
 ##step Run your indexer
 
-Use the `cargo run` command to run your indexer against Testnet. Production operation has separate backfill and steady-state phases. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources) for details on each source.
+Use `cargo run` with data sources supplied by the operator of your RTD network. A deployment may use separate backfill and steady-state phases. Confirm that every source has the same genesis and chain ID; RTD has no public Testnet or Mainnet source described by this guide. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources).
 
-Before using a Requester Pays GCS bucket, configure credentials and a billing project. Pass the billing project in the `x-goog-user-project` header:
+If your operator uses a Requester Pays GCS bucket, configure credentials and its billing project. The header below applies only to that bucket policy:
 
 ```sh
-$ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/gcp-credentials.json
+$ export GOOGLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json
 $ export GOOGLE_CLOUD_PROJECT=your-billing-project
 ```
 
-**Phase 1: backfill from the full-retention GCS checkpoint bucket:**
+**Phase 1: backfill from an operator-managed GCS checkpoint bucket with verified coverage:**
 
 ```sh
 $ cargo run -- \
-    --remote-store-gcs linku-testnet-checkpoints-use4 \
+    --remote-store-gcs YOUR_RTD_CHECKPOINT_BUCKET \
     --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}"
 ```
 
-After the indexer reaches the network tip, stop it and restart it with fullnode gRPC. Existing pipelines resume from their committed watermarks. For production, obtain a production-grade fullnode gRPC endpoint from an RPC provider:
+After the indexer reaches the network tip, stop it and restart it with a full node gRPC endpoint from the same RTD chain. Existing pipelines resume from their committed watermarks. Obtain its URL and retention policy from your operator:
 
 **Phase 2: use fullnode gRPC polling and streaming for steady state:**
 
 ```sh
-$ export FULLNODE_GRPC_URL=https://your-rpc-provider.example:443
+$ export FULLNODE_GRPC_URL=https://your-rtd-fullnode.example.invalid:443
 
 $ cargo run -- \
     --rpc-api-url "$FULLNODE_GRPC_URL" \
     --streaming-url "$FULLNODE_GRPC_URL"
 ```
 
-For testing only, you can instead use the public-good Testnet endpoint `https://fullnode.testnet.rtd.io:443`. The public-good Mainnet, Testnet, and Devnet fullnode endpoints are not intended for production use.
-
-**Testing only: public HTTPS checkpoint store (most recent 30 days):**
+If your operator runs an HTTPS checkpoint store, it can be used for a covered range:
 
 ```sh
+$ export RTD_CHECKPOINT_HTTP_URL=https://your-rtd-checkpoints.example.invalid
+$ export FIRST_AVAILABLE_CHECKPOINT=0
 $ cargo run -- \
-    --remote-store-url https://checkpoints.testnet.rtd.io \
-    --first-checkpoint RECENT_CHECKPOINT
+    --remote-store-url "$RTD_CHECKPOINT_HTTP_URL" \
+    --first-checkpoint "$FIRST_AVAILABLE_CHECKPOINT"
 ```
 
-The public HTTPS checkpoint stores (`https://checkpoints.testnet.rtd.io` and `https://checkpoints.mainnet.rtd.io`) retain only the most recent 30 days of checkpoints. Use them only for testing. When using one with a fresh database, set `--first-checkpoint` to a checkpoint that is still within the retained range; otherwise, the indexer starts at checkpoint 0 and retries missing checkpoints indefinitely. For production backfills, use `--remote-store-gcs` with `linku-testnet-checkpoints-use4` for Testnet or `linku-mainnet-checkpoints-use4` for Mainnet. See [Use Requester Pays](https://cloud.google.com/storage/docs/using-requester-pays) and [Running a Remote Store](/operators/data-management/remote-store-setup) for more information.
+Ask the operator for the first and last available checkpoint. With a fresh database, `--first-checkpoint` must fall inside that verified range; otherwise the indexer can retry an unavailable checkpoint indefinitely. For backfills beyond the HTTPS store's range, use another store populated by the same RTD chain. See [Running a Remote Store](/operators/data-management/remote-store-setup).
 
 :::info
 
@@ -508,6 +507,6 @@ View sample records:
 $ SELECT * FROM transaction_digests LIMIT 5;
 ```
 
-To confirm your data is accurate, copy any transaction digest from your database and verify it on RtdScan: [https://suiscan.xyz/testnet/home](https://suiscan.xyz/testnet/home)
+To confirm your data is accurate, copy any transaction digest from your database and query it through the same RTD network RPC endpoint.
 
 The key concepts covered here apply to any custom indexer: define your data structure, implement the `Processor` and `Handler` traits, and let the framework handle the infrastructure.

@@ -250,18 +250,13 @@ Reference files through their path from the repository root, without a leading `
 To reference a file in another repository, add the `org` and `repo` arguments. The `source` path is then relative to that repository's root. Add `branch` to pin a specific branch instead of the default.
 
 ```jsx
-<ImportContent
-  source="/move/hello-world/sources/greeting.move"
-  org="LinkUVerse"
-  repo="rtd-stack-hello-world"
-  mode="code"
-/>
+<ImportContent source="examples/move/first_package/sources/example.move" mode="code" />
 ```
 
 Pin a branch whenever the example must stay stable, because the default branch can change underneath the page:
 
 ```jsx
-<ImportContent source="I2/fixed_supply/sources/silver.move" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" mode="code" />
+<ImportContent source="examples/move/first_package/sources/example.move" mode="code" />
 ```
 
 #### How to use

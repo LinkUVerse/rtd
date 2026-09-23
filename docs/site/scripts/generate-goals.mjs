@@ -194,7 +194,7 @@ function generateOnboardingGoal(title, body, headings, codeBlocks, h2s, relPath)
   }
 
   // Page-specific checks based on what the page teaches
-  if (hasPattern(body, 'install|suiup')) {
+  if (hasPattern(body, 'install|build the RTD CLI')) {
     requires.push({ pattern: 'rtd --version|rtd -V', min: 1, label: 'Shows how to verify installation' });
   }
   if (hasPattern(body, 'address') && hasPattern(body, 'new-address|keystore')) {

@@ -203,7 +203,7 @@ fn make_credential_creation_option(origin: &Url) -> CredentialCreationOptions {
 
 #[tokio::test]
 async fn test_passkey_serde() {
-    let origin = Url::parse("https://www.rtd.io").unwrap();
+    let origin = Url::parse("https://example.com").unwrap();
     let request = make_credential_creation_option(&origin);
     let response = create_credential_and_sign_test_tx(&origin, request).await;
 
@@ -228,7 +228,7 @@ async fn test_passkey_serde() {
 
 #[tokio::test]
 async fn test_passkey_authenticator() {
-    let origin = Url::parse("https://www.rtd.io").unwrap();
+    let origin = Url::parse("https://example.com").unwrap();
     let request = make_credential_creation_option(&origin);
     let response = create_credential_and_sign_test_tx(&origin, request).await;
 
@@ -253,7 +253,7 @@ async fn test_passkey_authenticator() {
 
 #[tokio::test]
 async fn test_passkey_fails_invalid_json() {
-    let origin = Url::parse("https://www.rtd.io").unwrap();
+    let origin = Url::parse("https://example.com").unwrap();
     let request = make_credential_creation_option(&origin);
     let response = create_credential_and_sign_test_tx(&origin, request).await;
     let client_data_json_missing_type = r#"{"challenge":"9-fH7nX8Nb1JvUynz77mv1kXOkGkg1msZb2qhvZssGI","origin":"http://localhost:5173","crossOrigin":false}"#;
@@ -310,7 +310,7 @@ async fn test_passkey_fails_invalid_json() {
 
 #[tokio::test]
 async fn test_passkey_fails_invalid_challenge() {
-    let origin = Url::parse("https://www.rtd.io").unwrap();
+    let origin = Url::parse("https://example.com").unwrap();
     let request = make_credential_creation_option(&origin);
     let response = create_credential_and_sign_test_tx(&origin, request).await;
     let fake_client_data_json = r#"{"type":"webauthn.get","challenge":"wrong_base64_encoding","origin":"http://localhost:5173","crossOrigin":false}"#;
@@ -331,7 +331,7 @@ async fn test_passkey_fails_invalid_challenge() {
 
 #[tokio::test]
 async fn test_passkey_fails_wrong_client_data_type() {
-    let origin = Url::parse("https://www.rtd.io").unwrap();
+    let origin = Url::parse("https://example.com").unwrap();
     let request = make_credential_creation_option(&origin);
     let response = create_credential_and_sign_test_tx(&origin, request).await;
     let fake_client_data_json = r#"{"type":"webauthn.create","challenge":"9-fH7nX8Nb1JvUynz77mv1kXOkGkg1msZb2qhvZssGI","origin":"http://localhost:5173","crossOrigin":false}"#;
@@ -352,7 +352,7 @@ async fn test_passkey_fails_wrong_client_data_type() {
 
 #[tokio::test]
 async fn test_real_passkey_output() {
-    // response from a real passkey authenticator created in iCloud, from typescript client: https://passkey-example.vercel.app/ (repo: https://github.com/LinkUVerse/passkey-example)
+    // Pinned response from an iCloud passkey authenticator; its original origin is part of the signed fixture.
     let address =
         RtdAddress::from_str("0x9c0c00e929f08431583dad0e9409b5afb20cdbae0043fa5577f2577dbe88a0db")
             .unwrap();

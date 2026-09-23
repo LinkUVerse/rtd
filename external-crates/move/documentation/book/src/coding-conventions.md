@@ -1,1 +1,1 @@
-See [Rtd's Coding Conventions for Move](https://docs.rtd.io/develop/write-move/move-best-practices)
+See Rtd's Coding Conventions for Move (see the checked-in `docs/content` tree)

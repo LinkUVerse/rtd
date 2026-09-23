@@ -1,8 +1,5 @@
 # Checks formatting in all examples and system packages (TBD for Rtd System and Bridge)
-# Uses a fixed NPM version to separate prettier-move release changes from system package
-# changes.
-#
-# With new releases of prettier-move, update the `VERSION` in the env.
+# The npm formatter check runs only after an RTD package and version are configured.
 name: Move Tooling
 
 on:
@@ -10,9 +7,6 @@ on:
     branches: main
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-
-env:
-  FORMATTER_VERSION: 0.4.0
 
 jobs:
   tree-sitter:
@@ -45,6 +39,7 @@ jobs:
 
   prettier-move:
     name: Move Formatter - check formatting
+    if: ${{ vars.RTD_PRETTIER_MOVE_NPM_PACKAGE != '' && vars.RTD_PRETTIER_MOVE_NPM_VERSION != '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,5 +56,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
       - name: Use Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # pin@v6.2.0
-      - run: npm install --no-warnings @linku/prettier-plugin-move@${{ env.FORMATTER_VERSION }}
+      - run: npm install --no-warnings "${RTD_PRETTIER_MOVE_NPM_PACKAGE}@${RTD_PRETTIER_MOVE_NPM_VERSION}"
+        env:
+          RTD_PRETTIER_MOVE_NPM_PACKAGE: ${{ vars.RTD_PRETTIER_MOVE_NPM_PACKAGE }}
+          RTD_PRETTIER_MOVE_NPM_VERSION: ${{ vars.RTD_PRETTIER_MOVE_NPM_VERSION }}
       - run: npx prettier-move -c **/*.move

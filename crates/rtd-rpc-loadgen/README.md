@@ -17,7 +17,7 @@ Run the following command to see available commands:
 cargo run --bin rtd-rpc-loadgen -- -h
 ```
 
-To try this locally, refer to the [docs](https://docs.rtd.io/guides/developer/getting-started/local-network). Recommend setting `database-url` to an env variable. Note: run `RUST_LOG="consensus=off" cargo run rtd -- start --with-faucet --force-regenesis --with-indexer` to rebuild.
+To try this locally, start an RTD local network with `rtd start --with-faucet --with-indexer`. Recommend setting `database-url` as an environment variable. RTD has no public RPC endpoint yet.
 
 ### Example 1: Get All Checkpoints
 

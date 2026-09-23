@@ -10,14 +10,14 @@ use anyhow::{Context, anyhow};
 use colored::Colorize;
 use move_command_line_common::env::MOVE_HOME;
 use tar::Archive;
-use tracing::debug;
 
 use crate::error::Error;
 
 const CURRENT_COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Resolve the path to a `rtd` binary for `version`, downloading and caching it under the user's
-/// cache directory (one subdirectory per version) if necessary.
+/// cache directory (one subdirectory per version) if necessary. Historical downloads require
+/// `RTD_COMPILER_RELEASE_URL_TEMPLATE`; RTD has no default public release endpoint.
 ///
 /// If `version` is the version of the running binary, the running executable is used directly
 /// (avoiding a redundant download of the version already in hand). This is also the precache /
@@ -188,12 +188,24 @@ fn stream_rtd_binary(version: &str, platform: &str, dest: &Path) -> anyhow::Resu
     extract_rtd_from_stream(reader, version, platform, dest)
 }
 
-/// Open a streaming reader over the `rtd` release tarball for `version`, trying the mainnet release
-/// first and falling back to the testnet release on a 404.
+/// Open a streaming reader over an explicitly configured, trusted release tarball.
+/// RTD has no default public release endpoint.
 fn download_reader(version: &str, platform: &str) -> anyhow::Result<impl io::Read> {
-    let mainnet_url = format!(
-        "https://github.com/LinkUVerse/rtd/releases/download/mainnet-v{version}/rtd-mainnet-v{version}-{platform}.tgz",
-    );
+    let template = std::env::var("RTD_COMPILER_RELEASE_URL_TEMPLATE").context(
+        "RTD_COMPILER_RELEASE_URL_TEMPLATE is required to download a historical compiler; \
+         configure a trusted HTTPS URL containing {version} and {platform}, or provide a local binary",
+    )?;
+    if !template.starts_with("https://")
+        || !template.contains("{version}")
+        || !template.contains("{platform}")
+    {
+        return Err(anyhow!(
+            "RTD_COMPILER_RELEASE_URL_TEMPLATE must be an HTTPS URL containing {{version}} and {{platform}}"
+        ));
+    }
+    let release_url = template
+        .replace("{version}", version)
+        .replace("{platform}", platform);
 
     // Progress goes to stderr so it does not corrupt a `--json` verification result on stdout.
     eprintln!(
@@ -202,17 +214,7 @@ fn download_reader(version: &str, platform: &str) -> anyhow::Result<impl io::Rea
         version.yellow()
     );
 
-    let response = match ureq::get(&mainnet_url).call() {
-        Ok(response) => response,
-        Err(ureq::Error::Status(404, _)) => {
-            debug!("no mainnet release for {version}, trying testnet");
-            let testnet_url = format!(
-                "https://github.com/LinkUVerse/rtd/releases/download/testnet-v{version}/rtd-testnet-v{version}-{platform}.tgz",
-            );
-            ureq::get(&testnet_url).call()?
-        }
-        Err(e) => return Err(e.into()),
-    };
+    let response = ureq::get(&release_url).call()?;
     Ok(response.into_reader())
 }
 

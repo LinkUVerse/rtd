@@ -3421,8 +3421,8 @@ pub async fn execute_dry_run(
 /// B = computation cost + storage cost - storage rebate + GAS_SAFE_OVERHEAD * reference gas price
 /// overhead
 ///
-/// This gas estimate is computed exactly as in the TypeScript SDK
-/// <https://github.com/LinkUVerse/rtd/blob/3c4369270605f78a243842098b7029daf8d883d9/sdk/typescript/src/transactions/TransactionBlock.ts#L845-L858>
+/// This gas estimate matches `computeGasBudget` in the sibling
+/// `rtd-ts-sdk/packages/typescript/src/client/core-resolver.ts` checkout.
 pub async fn estimate_gas_budget(
     context: &mut WalletContext,
     signer: RtdAddress,

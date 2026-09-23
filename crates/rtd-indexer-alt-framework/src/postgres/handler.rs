@@ -25,7 +25,6 @@
 //! To fully decouple, we'd need to move all postgres-specific code (including IndexerCluster) to
 //! rtd-pg-db, which would be a much larger breaking change. Consider this for a future refactor.
 //!
-//! See: <https://github.com/LinkUVerse/rtd/pull/24055#issuecomment-3471278182>
 
 use async_trait::async_trait;
 

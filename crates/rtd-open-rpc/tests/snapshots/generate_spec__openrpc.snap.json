@@ -5,8 +5,7 @@
     "description": "Rtd JSON-RPC API for interaction with an Rtd fullnode. Configure the endpoint for your deployed RTD network explicitly; local networks use port 9000 by default.",
     "contact": {
       "name": "LinkU Labs",
-      "url": "https://linkuverse.com",
-      "email": "build@linkuverse.com"
+      "url": "https://github.com/LinkUVerse/rtd"
     },
     "license": {
       "name": "Apache-2.0",

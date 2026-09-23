@@ -1,43 +1,19 @@
 ---
-title: Messaging SDK
-description: >-
-  Build end-to-end encrypted group messaging on Rtd using Seal threshold
-  encryption, a Walrus-backed relayer, and onchain permission management.
-keywords:
-  - messaging
-  - rtd-stack-messaging
-  - encryption
-  - seal
-  - walrus
-  - relayer
-  - groups
-  - permissions
-  - e2e
-goal:
-  description: >-
-    Reader understands what the Messaging SDK provides and can navigate to guides covering its Move package, TypeScript client, Rust relayer, and discovery indexer
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-questions:
-  - What is Messaging SDK in Rtd?
-  - What topics does Messaging SDK cover?
-  - How does messaging sdk work on Rtd?
-answer: >-
-  Build end-to-end encrypted group messaging on Rtd using Seal threshold
-  encryption, a Walrus-backed relayer, and onchain permission management.
+title: "Messaging SDK"
+description: "Upstream Sui ecosystem reference. RTD integration is not deployed or verified."
+keywords: ["RTD", "Messaging SDK", "deployment status"]
 ---
 
-The Messaging SDK provides end-to-end encrypted, permissioned group messaging on Rtd. Messages are encrypted client-side with AES-256-GCM, keys are managed through Seal threshold encryption, and ciphertext is archived to Walrus for decentralized persistence. Onchain Move contracts manage group membership, granular permissions, and versioned encryption keys.
+:::caution RTD deployment status
 
-The SDK includes a canonical Move package, a TypeScript client, and reference implementations for a Rust relayer and a TypeScript discovery indexer.
+The upstream encrypted messaging examples depend on Seal, Walrus, a relayer, and Move packages. No complete RTD deployment or compatible public messaging service has been verified.
 
-import DocCardList from '@theme/DocCardList';
+RTD has not launched Mainnet. Do not use upstream Sui addresses, package IDs,
+network settings, tokens, or service endpoints as RTD configuration.
 
-<DocCardList />
+:::
+
+This page is retained as a navigation placeholder for the upstream Messaging SDK topic.
+Before publishing an RTD integration guide, deploy the required services and
+contracts on an RTD network, verify end-to-end behavior, and publish the
+actual RTD-specific endpoints and object IDs.

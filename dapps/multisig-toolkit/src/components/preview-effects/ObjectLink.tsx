@@ -1,6 +1,5 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-import { useRtdClientContext } from '@linku/dapp-kit';
 import { ObjectOwner, RtdObjectChange } from '@linku/rtd/client';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -28,11 +27,9 @@ export function ObjectLink({
 	type?: string;
 	owner?: ObjectOwner;
 	object?: RtdObjectChange;
-} & React.HTMLAttributes<HTMLAnchorElement> &
-	React.ComponentPropsWithoutRef<'a'>) {
+} & React.HTMLAttributes<HTMLSpanElement> &
+	React.ComponentPropsWithoutRef<'span'>) {
 	const [copied, setCopied] = useState(false);
-
-	const { network } = useRtdClientContext();
 
 	let objectId: string | undefined;
 	let display: string | undefined;
@@ -69,12 +66,6 @@ export function ObjectLink({
 		}
 	}
 
-	const link = objectId
-		? `https://suiexplorer.com/${ownerDisplay ? 'address' : 'object'}/${objectId}?network=${
-				network.split(':')[1]
-			}`
-		: undefined;
-
 	const copy = () => {
 		if (!objectId && !display) return;
 
@@ -95,21 +86,9 @@ export function ObjectLink({
 				<CopyIcon width={10} height={10} className="cursor-pointer" onClick={copy} />
 			) : null}
 
-			{link ? (
-				<>
-					<a
-						href={link}
-						target="_blank"
-						className="underline break-words pl-2"
-						{...tags}
-						rel="noreferrer"
-					>
-						{display}
-					</a>
-				</>
-			) : (
-				<span>{display || '-'}</span>
-			)}
+			<span className="break-words pl-2" {...tags}>
+				{display || '-'}
+			</span>
 		</>
 	);
 }

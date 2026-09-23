@@ -2,9 +2,9 @@
 name = "typed-store-derive"
 version = "0.3.0"
 license = "Apache-2.0"
-authors = ["Ade A. <ade@linkuverse.com>"]
+authors = ["Ade A."]
 description = "macros for the typed-store crate"
-repository = "https://github.com/linkuverse/linku-infra"
+repository = "https://github.com/LinkUVerse/rtd"
 edition = "2024"
 publish = false
 

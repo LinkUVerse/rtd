@@ -1,21 +1,3 @@
 # Pysui (by [FrankC01](https://github.com/FrankC01))
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-Python Client SDK for Rtd blockchain
-
-## Features
-
-- [Supported features](https://pysui.readthedocs.io/en/latest/index.html)
-- GraphQL (beta) is supported.
-- [Rtd BCS types are supported](https://github.com/FrankC01/pysui/blob/main/pysui/rtd/rtd_types/bcs.py)
-- [Pysui Gadgets](https://github.com/FrankC01/pysui_gadgets) - Rtd utilities built on top of Pysui
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

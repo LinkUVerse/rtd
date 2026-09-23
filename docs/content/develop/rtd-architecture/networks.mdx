@@ -1,94 +1,53 @@
 ---
-title: Networks
-description: >-
-  Rtd operates multiple networks including Mainnet for production, Testnet for
-  staging, Devnet for developing new features, and Localnet for local
-  development.
-keywords:
-  - networks
-  - mainnet
-  - testnet
-  - devnet
-  - localnet
-  - rtd networks
-  - rpc endpoints
+title: RTD Networks
+description: Network identity and endpoint status for the RTD source fork.
+keywords: [rtd networks, localnet, devnet, testnet, mainnet, chain id]
 goal:
-  description: >-
-    Reader understands rtd operates multiple networks including Mainnet for
-    production, Testnet for staging
+  description: Reader can distinguish verified local RTD networks from unverified public services
   requires:
     - has_frontmatter:
         - title
         - description
         - keywords
       label: Has required frontmatter fields
-    - min_words: 300
-      label: Needs more content depth
-    - pattern: '\]\(/[^)]+\)'
-      min: 2
-      label: Links to related documentation
     - has_questions: true
-      label: Needs questions for AI search visibility
+      label: Has reader questions
     - has_answer: true
-      label: Needs answer summary for AI citation
+      label: Has a direct answer
 questions:
-  - What networks does Rtd provide?
-  - 'How do I choose between Mainnet, Testnet, Devnet, and Localnet?'
-  - What is Testnet used for on Rtd?
+  - Which RTD networks are verified?
+  - Where can I find an RTD RPC endpoint?
 answer: >-
-  Rtd operates multiple networks including Mainnet for production, Testnet for
-  staging, Devnet for developing new features, and Localnet for local
-  development.
+  The RTD source fork can start a local development network. Public RTD
+  Mainnet, Testnet, and Devnet endpoints and chain IDs have not been verified.
 ---
 
-Rtd has several networks available, each serving a different purpose. Each network is comprised of nodes. Nodes provide resources to the network and participate in activities such as validating onchain transactions through a process called [consensus](/develop/rtd-architecture/consensus). There are 2 types of nodes on each Rtd network:
+RTD is a fork of the Sui codebase with a distinct native coin and a distinct
+chain identity. Nodes from the two chains cannot join one another. A network
+name alone is insufficient to identify a chain: check its genesis digest and
+chain ID before sending transactions or indexing data.
 
-- **Full node:** Can validate blockchain activity including transactions, checkpoints, and epoch changes. 
+## Local development network
 
-- **Validator node:** Responsible for signing transactions, staking, gas price references, and tallying rules, in addition to validating blockchain activity.
+The RTD node binary can start a new local network from its own genesis. The
+local genesis and any resulting chain ID are specific to that launch. Configure
+the CLI with the RPC endpoint produced by the local deployment rather than
+copying a public Sui URL. See [Local Network](/getting-started/onboarding/local-network)
+and [Configure a Rtd Client](/getting-started/onboarding/configure-rtd-client).
 
-Full nodes are not able to sign transactions and only have access to a read-only view of the network's state. They are capable of storing and maintaining the chain's full history, and can validate the integrity of the chain by re-executing transactions after a quorum of validators has committed them. 
+A local faucet, indexer, and JSON-RPC server are available only if the chosen
+local deployment starts them. Check process readiness and query the actual
+endpoint before relying on it.
 
-Validator nodes can sign transactions but only store the latest transactions.
+## Public networks
 
-Learn more about [nodes on Rtd](/operators).
+This source fork does not define verified public RTD Mainnet, Testnet, or Devnet
+genesis digests, public RPC endpoints, explorers, faucets, or snapshot buckets.
+The familiar Sui network names and URLs found in inherited documentation are
+not RTD network configuration. Do not use them to sign, broadcast, inspect, or
+fund RTD transactions.
 
-## Mainnet
-
-Mainnet is responsible for all production environment applications and transactions. All activity on Mainnet costs real RTD or MIST tokens, which have a value of fiat currency. RTD or MIST must be bought from an exchange, and excess RTD or MIST can be sold at a later date on the exchange for its fiat value. All activity on Mainnet is public and can be viewed through explorers such as [suiscan](https://suiscan.xyz/mainnet/home).
-
-[Epochs](/develop/rtd-architecture/epochs) on Mainnet are approximately 24 hours long. Data is always persisted on the network. Learn more about [data storage and storage fees](/develop/rtd-architecture/rtd-storage).
-
-The RPC URL for Mainnet is: `https://fullnode.mainnet.rtd.io:443`.
-
-## Testnet
-
-Testnet is a staging network designed for developers to test their code before placing it in production. Activity on Testnet uses Testnet RTD and MIST tokens, which can be obtained through a [faucet](/getting-started/onboarding/get-coins). Testnet tokens have no real value and cannot be exchanged for fiat currency.
-
-All activity on Testnet is public and can be viewed through explorers such as [RtdVision](https://testnet.suivision.xyz/).
-
-[Epochs](/develop/rtd-architecture/epochs) on Testnet are approximately 24 hours long. Data on Testnet is not guaranteed to be persisted because data might be wiped occasionally. It should not be relied on for permanent storage. Testnet data persists through the regular update process, and planned data wipes are announced ahead of time.
-
-The RPC URL for Testnet is: `https://fullnode.testnet.rtd.io:443`.
-
-## Devnet
-
-Devnet is an unstable network used to develop new features. If you want to write code against upcoming Rtd features, you can use this network for early testing before the feature is finalized and released.
-
-All activity on Devnet is public and can be viewed through explorers such as [suiscan](https://suiscan.xyz/devnet/home).
-
-[Epochs](/develop/rtd-architecture/epochs) on Devnet are 1 hour long. Devnet is not recommended for new developers because it is better suited for advanced use cases. Data on Devnet is wiped **weekly** as part of its [scheduled update process](https://rtd.io/networkinfo).
-
-The RPC URL for Devnet is: `https://fullnode.devnet.rtd.io:443`.
-
-## Localnet
-
-Localnet is used to run an instance of the Rtd network on your local computer. Developing on a local network provides an optimized workflow in an environment you control. You can set custom network configuration parameters, such as data persistence and a local faucet.
-
-:::tip
-
-A local faucet enables you to mint as many Testnet tokens as you need for your development process, avoiding the limitations imposed on public faucets for Testnet. 
-
-:::
-
-Learn more about [creating a local Rtd network](/getting-started/onboarding/local-network).
+When a public RTD network is launched, its operator must publish the genesis
+digest, chain ID, signed network configuration, RPC and faucet endpoints,
+operational status, and a supported binary release. Then this page can document
+those network-specific details with verification instructions.

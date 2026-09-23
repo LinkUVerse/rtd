@@ -50,7 +50,7 @@ answer: >-
 
 Address balances introduce a canonical balance system for fungible assets tied to Rtd addresses. This replaces the UTXO-style `Coin<T>` model with direct address-owned balances, simplifying transaction construction and eliminating coin selection complexity.
 
-For the full specification, see [SIP-58: Rtd Address Balances](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md).
+For the full specification, see [upstream Sui SIP-58: Sui Address Balances](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md).
 
 ## How address balances work
 
@@ -103,7 +103,7 @@ The protocol periodically reconciles these events through **settlement transacti
 
 From a developer's perspective, settlement is transparent. You interact with address balances through the SDK and CLI, and the protocol handles reconciliation automatically. The `derive_balance_changes` algorithm in the SDK computes the net effect of a transaction by combining object-level changes with accumulator events.
 
-For the formal specification of the settlement mechanism, see [SIP-58](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md).
+For the formal specification of the settlement mechanism, see [upstream Sui SIP-58](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md).
 
 ## When to use which
 

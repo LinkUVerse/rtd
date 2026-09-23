@@ -275,9 +275,7 @@ impl TestTransactionBuilder {
             vec![
                 CallArg::Pure(bcs::to_bytes("example_nft_name").unwrap()),
                 CallArg::Pure(bcs::to_bytes("example_nft_description").unwrap()),
-                CallArg::Pure(
-                    bcs::to_bytes("https://rtd.io/_nuxt/img/rtd-logo.8d3c44e.svg").unwrap(),
-                ),
+                CallArg::Pure(bcs::to_bytes("https://example.invalid/rtd-logo.svg").unwrap()),
             ],
         )
     }

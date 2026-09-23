@@ -53,12 +53,12 @@ answer: >-
   to perform multiple commands in a single transaction.
 ---
 
-This guide explores creating a [programmable transaction block (PTB)](/develop/transactions/ptbs/prog-txn-blocks) on Rtd using the [TypeScript SDK](https://sdk.linkuverse.com/typescript/install) and the Rtd CLI.
+This guide explores creating a [programmable transaction block (PTB)](/develop/transactions/ptbs/prog-txn-blocks) on Rtd using the [TypeScript SDK](/references/rtd-sdks) and the Rtd CLI.
 
 This example constructs a PTB to send RTD tokens. First, import the `Transaction` class, and construct it:
 
 ```ts
-import { Transaction } from '@linku/rtd/transactions';
+import { Transaction } from 'rtd-typescript/transactions';
 
 const tx = new Transaction();
 ```
@@ -164,7 +164,7 @@ tx.transferObjects([mintMany[0], mintMany[1]], tx.pure.address(address));
 
 ## Use the gas coin
 
-For most transactions, reach for [`tx.coin()` and `tx.balance()`](https://sdk.linkuverse.com/rtd/transactions/coins-and-balances) rather than the gas coin. They are the recommended way to source tokens, and they draw from coin objects and address balances without you selecting either.
+For most transactions, reach for [`tx.coin()` and `tx.balance()`](/references/rtd-sdks) rather than the gas coin. They are the recommended way to source tokens, and they draw from coin objects and address balances without you selecting either.
 
 `tx.gas` still matters when you want the gas coin specifically, and it is valid as input for any argument.
 

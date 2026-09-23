@@ -1,64 +1,22 @@
 ---
 title: Funding Wallets
-description: >-
-  Get RTD and tokens into user wallets by withdrawing from centralized
-  exchanges, bridging from other chains, or using testnet and devnet faucets.
+description: Fund wallets on a local RTD development network.
 keywords:
   - funding
-  - fiat
-  - bridge
-  - exchange
   - faucet
-  - wallet funding
-goal:
-  description: >-
-    Reader can choose a method to fund user wallets with RTD and tokens
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - min_words: 200
-      label: Needs more content depth
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-builder_paths:
-  - path_id: p2p-payments
-    path_name: P2P Payments
-    step: Funding wallets
-    stage: Onboarding
+  - wallet
+  - local development
 questions:
-  - How do I get RTD into a wallet?
-  - How do I bridge tokens from Ethereum to Rtd?
+  - How do I get RTD into a development wallet?
 answer: >-
-  Fund wallets through exchange withdrawals, cross-chain bridges
-  (Wormhole, Rtd Bridge), or
-  Testnet faucets. For agents, use a gas station to sponsor transactions
-  instead of direct funding.
+  Use the faucet configured for your own RTD development network. No public RTD
+  Mainnet, exchange withdrawal, fiat on-ramp, or bridge route is verified.
 ---
 
-Before users or agents can transact on Rtd, their wallets need tokens. Users who already hold RTD on a centralized exchange can withdraw to their Rtd wallet address:
+To transact on a local RTD development chain, a wallet needs the native RTD coin for gas. Use the faucet configured when that development network was created. Check the wallet's active chain ID and address before requesting funds, then verify the received coin on the same chain. Development coins have no monetary value.
 
-1. Copy the Rtd address from the wallet.
-2. In the exchange, initiate a withdrawal for RTD on the **Rtd network**.
-3. Paste the Rtd address as the withdrawal destination.
-4. The RTD arrives in the wallet after the exchange processes the withdrawal.
+If you reset the local chain, its genesis and chain ID can change. A balance, object, or package ID from the previous chain is not portable to the new chain. Refresh the wallet environment and deployment records after a reset.
 
-## Bridging from other chains
+RTD has no public Mainnet. No exchange withdrawal, fiat on-ramp, Wormhole route, or public RTD Bridge has been verified. Do not send RTD or other assets to upstream Sui addresses or to an endpoint that merely uses a similar name. See [bridging tokens](/onchain-finance/fungible-tokens/rtd-bridging) for the requirements to operate an RTD bridge.
 
-To move assets from Ethereum, Solana, or other blockchains to Rtd, use a cross-chain bridge:
-
-- [Wormhole](https://wormhole.com/): Supports bridging tokens between Rtd and multiple chains including Ethereum, Solana, and others.
-
-- [Rtd Bridge](https://bridge.rtd.io/): Native bridge between Rtd and Ethereum.
-
-Bridged assets arrive as wrapped tokens on Rtd. The wrapped token's coin type address differs from the native token's address on the source chain.
-
-## Testnet and Devnet faucets
-
-For development and testing on Testnet and Devnet, see [Get RTD from Faucet](/getting-started/onboarding/get-coins) for CLI and programmatic faucet access.
-
-Faucet tokens have no monetary value and cannot be transferred to Mainnet.
+An application may later sponsor a user's gas fees, but sponsorship requires a separately configured service, signing policy, funding wallet, and abuse controls. It is not provided by a public RTD gas station in this fork.

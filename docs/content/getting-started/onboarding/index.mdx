@@ -1,50 +1,27 @@
 ---
-title: 'Hello, World!'
-description: >-
-  An overview of the Rtd onboarding steps, from installing Rtd and configuring a
-  client to creating an address, getting test tokens, and deploying your first
-  Move package.
+title: RTD Local Onboarding
+description: Build the RTD CLI, connect to a local chain, and publish a Move package.
 keywords:
-  - install rtd
-  - rtd data
-  - get started
-  - how to get started
-  - connect to a network
-  - get RTD
-  - rtd tokens
-pagination_prev: null
-goal:
-  description: >-
-    Reader can follow the step-by-step onboarding path from installing Rtd
-    through configuring a client, creating an address, getting test tokens, and
-    deploying a Hello World package
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+  - RTD onboarding
+  - local network
+  - Move package
 questions:
-  - How do I get started building on Rtd?
-  - What is the Rtd developer onboarding path?
-  - What do I need to set up before writing Move code?
+  - How do I start developing against RTD?
+  - Is a public RTD Testnet available?
 answer: >-
-  Get started with Rtd, the first internet-scale programmable blockchain
-  platform.
+  Build the fork source, start a local RTD network, verify its chain ID, obtain
+  gas from that network's local faucet, and publish a Move package. This guide
+  does not assume a public RTD network.
 ---
 
-Get started with Rtd, the first internet-scale programmable blockchain platform.
+RTD development begins with a network whose genesis and chain ID you control. No public RTD Mainnet, Testnet, Devnet, faucet, wallet service, or explorer is established by these pages.
 
 <Cards type="steps">
-
-<Card className="plausible-event-name=Index+install+button" title="Install Rtd" href="/getting-started/onboarding/rtd-install" />
-<Card className="plausible-event-name=Index+client+button" title="Configure a Rtd Client" href="/getting-started/onboarding/configure-rtd-client" />
-<Card className="plausible-event-name=Index+address+button" title="Create a Rtd Address" href="/getting-started/onboarding/get-address" />
-<Card className="plausible-event-name=Index+faucet+button" title="Get RTD from Faucet" href="/getting-started/onboarding/get-coins" />
-<Card className="plausible-event-name=Index+dapp+button" title="Hello, World!" href="/getting-started/onboarding/hello-world" />
-<Card className="plausible-event-name=Index+next+button" title="Next Steps" href="/getting-started/onboarding/next-steps" />
-
+<Card title="Build RTD" href="/getting-started/onboarding/rtd-install" />
+<Card title="Start a local network" href="/getting-started/onboarding/local-network" />
+<Card title="Configure the client" href="/getting-started/onboarding/configure-rtd-client" />
+<Card title="Create an address" href="/getting-started/onboarding/get-address" />
+<Card title="Get local gas" href="/getting-started/onboarding/get-coins" />
+<Card title="Build and publish Move" href="/getting-started/onboarding/hello-world" />
+<Card title="Next steps" href="/getting-started/onboarding/next-steps" />
 </Cards>

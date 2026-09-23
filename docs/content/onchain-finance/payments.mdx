@@ -1,65 +1,11 @@
 ---
 title: Payments
-description: >-
-  Overview of payment approaches on Rtd: reading balances, constructing payment
-  intents, sponsoring gas fees, gasless stablecoin transfers, and production
-  payment verification with Payment Kit.
+description: Current RTD support and deployment requirements.
 keywords:
+  - RTD
   - payments
-  - payment kit
-  - payment intents
-  - stablecoin
-  - P2P
-  - sponsored transactions
-  - gas
-  - address balances
-goal:
-  description: >-
-    Reader can integrate payment flows on Rtd, from reading and managing
-    balances to sponsoring gasless transactions
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - min_words: 300
-      label: Needs more content depth
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-questions:
-  - What is Payments in Rtd?
-  - How does payments work on Rtd?
-  - Why should I use payments?
-answer: >-
-  Integrate payment flows into your application, from reading and managing
-  address balances to sponsoring gasless transactions for your users.
 ---
 
-Rtd provides multiple primitives for building payment flows, from reading balances and constructing multi-step transactions to sponsoring gas fees on behalf of your users. The approach you choose depends on your use case:
+# Payments
 
-- **Reading balances:** Query [address balances](/onchain-finance/asset-custody/address-balances) to display a user's holdings or verify sufficient funds before processing a payment.
-- **Constructing payments:** Use [payment intents](/onchain-finance/payment-intents) to compose multi-step payment workflows (split coins, transfer, merge) into a single atomic [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks).
-- **Sponsoring gas:** Use [sponsored transactions](/develop/transaction-payment/sponsor-txn) so your users pay no gas fees. This is common for onboarding flows and stablecoin transfers where you want a Web2-like experience.
-- **Gasless stablecoin transfers:** Rtd supports [zero-fee stablecoin transfers](/develop/transaction-payment/gasless-stablecoin-transfers) for eligible transactions, removing gas costs entirely for supported assets.
-- **Recurring and delegated spending:** Use [allowances](/onchain-finance/allowances) to let a service, agent, or team member pull from a user's address balance within limits the user sets and can revoke.
-- **Payment verification:** The [Payment Kit](/onchain-finance/payment-kit) provides secure payment verification, receipt management, and duplicate prevention for production payment systems.
-
-### Choosing a payment approach
-
-| **Use case** | **Approach** | **Key benefit** |
-|---|---|---|
-| Display user balances | [Address Balances](/onchain-finance/asset-custody/address-balances) | Direct balance reads without coin enumeration |
-| Send assets to a recipient | [Payment Intents](/onchain-finance/payment-intents) | Atomic multi-step transactions |
-| Subsidize user gas costs | [Sponsored Transactions](/develop/transaction-payment/sponsor-txn) | Zero gas for the end user |
-| Stablecoin payments | [Gasless Stablecoin Transfers](/develop/transaction-payment/gasless-stablecoin-transfers) | No gas fees for eligible stablecoin transfers |
-| Production payment processing | [Payment Kit](/onchain-finance/payment-kit) | Receipts, verification, duplicate prevention |
-| Subscriptions and agent budgets | [Allowances](/onchain-finance/allowances) | Bounded, revocable pulls from a funder's balance without per-payment signatures |
-
-:::info Regulatory considerations
-
-Payment applications might be subject to KYC, AML, and money-transmitter licensing requirements depending on your jurisdiction and business model. These requirements are outside the scope of Rtd documentation. Consult qualified legal counsel before launching a payment product.
-
-:::
+The RTD source fork provides transaction, coin, address-balance, and gas-sponsorship primitives for building payments on a specifically identified RTD network. A payment application must verify the transaction digest, chain ID, recipient, coin type, exact amount, and final status before crediting a user. The source fork does not establish a public RTD Mainnet, supported stablecoin issuer, deployed Payment Kit, or upstream Sui exchange integration. The protocol gasless token allowlist is empty, so ordinary users need gas or a separately configured sponsor. See [payment model](/onchain-finance/choose-payments-model), [address balances](/onchain-finance/asset-custody/address-balances), and [sponsored transactions](/develop/transaction-payment/sponsor-txn).

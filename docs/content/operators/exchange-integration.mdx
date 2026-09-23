@@ -70,11 +70,11 @@ An exchange integration needs reliable access to Rtd network data and the abilit
 
 - **Run your own [Rtd full node](/operators/full-node/rtd-full-node).** This gives you full control over availability, retention, and read performance. The full node operator guide covers hardware sizing, setup, snapshots, logging, and monitoring.
 
-- **Use an RPC or data provider.** Several providers operate gRPC-enabled and GraphQL-enabled Rtd endpoints. See the [list of RPC and data providers](https://www.notion.so/linkuverse/RPC-providers-offering-future-Rtd-data-primitives-2466d9dcb4e980a99a36e9aafd8c17e0?source=copy_link) for current options.
+- **Use an RPC or data provider.** Verify that the provider actually supports the RTD chain and the APIs your integration needs. No public RTD provider has been verified for this fork.
 
 :::caution
 
-The public endpoints at `https://fullnode.<network>.rtd.io` and `https://graphql.<network>.rtd.io/graphql` are rate-limited and intended for development. Do not point a production exchange at them. Run your own full node or use a provider endpoint with a contract that meets your throughput and uptime needs.
+RTD has no verified public RPC or GraphQL endpoint. Run your own full node or use a provider only after confirming its RTD chain ID, API support, throughput, and uptime.
 
 :::
 
@@ -131,7 +131,7 @@ Rtd supports two ways to hold fungible value at an address:
 
 - **Coin objects.** Individual `Coin<T>` objects owned by an address.
 
-- **Address balances.** A canonical per-coin-type balance tied directly to an address, introduced in [SIP-58](https://github.com/rtd-foundation/sips/blob/main/sips/sip-58.md). Funds sent through `rtd::coin::send_funds` and `rtd::balance::send_funds` merge automatically into a single balance per coin type with no object management required. See [Using Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances) for details.
+- **Address balances.** A canonical per-coin-type balance tied directly to an address, introduced in [upstream Sui SIP-58](https://github.com/sui-foundation/sips/blob/main/sips/sip-58.md). Funds sent through `rtd::coin::send_funds` and `rtd::balance::send_funds` merge automatically into a single balance per coin type with no object management required. See [Using Address Balances](/onchain-finance/asset-custody/address-balances/using-address-balances) for details.
 
 When you query a balance, account for both representations. In the GraphQL schema, `Balance.totalBalance` returns the sum across coin objects and the address-balance accumulator. `Balance.coinBalance` and `Balance.addressBalance` expose each component separately, so you can reconcile against your own bookkeeping.
 
@@ -151,7 +151,7 @@ Rtd is a DAG-based blockchain and uses checkpoints for node synchronization and 
 
 - Checkpoints do not fork, roll back, or reorganize.
 
-- Rtd creates about 4 checkpoints every second. Find the most current statistic on the [Rtd public dashboard](https://metrics.rtd.io/public-dashboards/4ceb11cc210d4025b122294586961169).
+- Checkpoint production depends on the network and its current validators. Measure the rate from a verified node on the RTD chain you integrate with; RTD has no verified public checkpoint dashboard.
 
 ### Checkpoint API operations {#checkpoint-api-operations}
 
@@ -249,9 +249,9 @@ The current entry functions in the [`rtd_system` Move module](https://github.com
 
 Non-entry variants `request_add_stake_non_entry` and `request_withdraw_stake_non_entry` return the `StakedRtd` object or withdrawn balance directly, so you can compose them with other PTB commands. The `StakedRtd` type lives in the [`staking_pool` module](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-framework/packages/rtd-system/sources/staking_pool.move).
 
-To build staking and unstaking transactions, assemble a PTB that calls one of these functions. The [TypeScript SDK](https://sdk.linkuverse.com/typescript) provides the helpers you need.
+To build staking and unstaking transactions, assemble a PTB that calls one of these functions. The [TypeScript SDK](/references/rtd-sdks) provides the helpers you need.
 
-To read stake state for an address, list owned `StakedRtd` objects through `StateService.ListOwnedObjects` filtered by type on [gRPC](/develop/accessing-data/grpc/using-grpc), or through the `address.objects(filter: { type: ... })` connection on [GraphQL](/develop/accessing-data/graphql/query-with-graphql). The current schema exposes balance, transaction, and object access; it does not yet expose a first-class staking-state field that returns active stakes, pending stakes, and accrued rewards together. To compute accrued rewards, read the `StakedRtd` object's stake activation epoch and principal, then compute the current value against the validator's exchange rate, or use the [TypeScript SDK](https://sdk.linkuverse.com/typescript) staking helpers if available for your use case.
+To read stake state for an address, list owned `StakedRtd` objects through `StateService.ListOwnedObjects` filtered by type on [gRPC](/develop/accessing-data/grpc/using-grpc), or through the `address.objects(filter: { type: ... })` connection on [GraphQL](/develop/accessing-data/graphql/query-with-graphql). The current schema exposes balance, transaction, and object access; it does not yet expose a first-class staking-state field that returns active stakes, pending stakes, and accrued rewards together. To compute accrued rewards, read the `StakedRtd` object's stake activation epoch and principal, then compute the current value against the validator's exchange rate, or use the [TypeScript SDK](/references/rtd-sdks) staking helpers if available for your use case.
 
 ## Designing deposits and withdrawals
 
@@ -273,7 +273,7 @@ Treat deposit and withdrawal pipelines as event-driven and idempotent. The follo
 
 ## Production considerations
 
-- **Endpoints.** Use your own full node or a contracted provider endpoint. Do not rely on the public `fullnode.<network>.rtd.io` or `graphql.<network>.rtd.io` URLs for production traffic.
+- **Endpoints.** Use your own full node or a contracted provider endpoint only after verifying that it serves your RTD chain ID. No public RTD full node or GraphQL URL is verified.
 
 - **Observability.** Configure full node [logging](/operators/observability#logging-levels) and [metrics monitoring](/operators/full-node/monitoring) so you can detect lag or failures quickly.
 
@@ -281,4 +281,4 @@ Treat deposit and withdrawal pipelines as event-driven and idempotent. The follo
 
 - **Custody and key management.** Treat exchange custody keys and any administrative capabilities (for example, capability objects governing your deposit or withdrawal flow) as high-value assets. Separate hot, warm, and cold keys by role, so an online compromise does not expose the keys with the most privilege. Hold warm and cold keys in a [multisig](/develop/transactions/transaction-auth/multisig) address or hardware custody, and sign cold-key transactions using [Offline Signing](/develop/transactions/transaction-auth/offline-signing). Keep Testnet and Mainnet keys strictly separate, so a test key can never sign a production transaction.
 
-- **API stability.** Pin SDK versions and verify your code against the linked references each time you upgrade. Watch the [release notes](/references/release-notes) for breaking changes that affect balances, events, or transaction shapes.
+- **API stability.** Pin SDK versions and verify your code against the linked references each time you upgrade. Review the checkout's `RELEASES.md` and the exact SDK source revision for breaking changes that affect balances, events, or transaction shapes.

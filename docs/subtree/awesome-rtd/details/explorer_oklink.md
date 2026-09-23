@@ -1,20 +1,3 @@
 # OKLink
 
-## Tooling Category
-
-- [ ] dApp Development
-- [x] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [ ] SDK
-
-## Description
-
-Provide fundamental explorer and data APIs on Rtd.
-
-## Features
-- Fundamental network data (transactions, epoch,...)
-- [Fundamental blockchain data APIs](https://www.oklink.com/docs/en/#fundamental-blockchain-data)
-- Supported networks:
-    - Mainnet
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

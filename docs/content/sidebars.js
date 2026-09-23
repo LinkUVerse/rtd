@@ -575,97 +575,13 @@ rtdStackSidebar: [
         'rtd-stack/walrus/rtd-stack-walrus-sites',
       ],
     },
-    {
-      type: 'category',
-      label: 'Seal',
-      link: { type: 'doc', id: 'rtd-stack/seal/index' },
-      items: [
-        'rtd-stack/seal/server-overview',
-        'rtd-stack/seal/getting-started',
-        {
-          type: 'category',
-          label: 'Developer guide',
-          items: [
-            'rtd-stack/seal/design',
-            'rtd-stack/seal/using-seal',
-            'rtd-stack/seal/example-patterns',
-            'rtd-stack/seal/security-best-practices',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Operator guide',
-          items: [
-            'rtd-stack/seal/key-server-ops',
-            'rtd-stack/seal/key-server-committee-ops',
-            'rtd-stack/seal/aggregator',
-            'rtd-stack/seal/seal-cli',
-          ],
-        },
-        'rtd-stack/seal/pricing',
-        'rtd-stack/seal/terms-of-service',
-        'rtd-stack/seal/rtd-stack-seal',
-      ],
-    },
+    'rtd-stack/seal/rtd-stack-seal',
     {
       type: 'category',
       label: 'Messaging SDK',
       link: { type: 'doc', id: 'rtd-stack/messaging/index' },
       items: [
-        {
-          type: 'category',
-          label: 'Getting Started',
-          collapsed: true,
-          items: [
-            'rtd-stack/messaging/installation',
-            'rtd-stack/messaging/setup',
-            'rtd-stack/messaging/examples',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Architecture',
-          collapsed: true,
-          items: [
-            'rtd-stack/messaging/encryption',
-            'rtd-stack/messaging/security',
-            'rtd-stack/messaging/relayer',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Guides',
-          collapsed: true,
-          items: [
-            'rtd-stack/messaging/attachments',
-            'rtd-stack/messaging/archive-recovery',
-            'rtd-stack/messaging/group-discovery',
-            'rtd-stack/messaging/extending',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Reference',
-          collapsed: true,
-          items: [
-            'rtd-stack/messaging/api-reference',
-            'rtd-stack/messaging/testing',
-            'rtd-stack/messaging/community-contributed',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Examples',
-          collapsed: true,
-          items: [
-            'rtd-stack/messaging/chat-app',
-          ],
-        },
-        {
-          type: 'link',
-          label: 'GitHub Repo',
-          href: 'https://github.com/LinkUVerse/rtd-stack-messaging',
-        },
+        'rtd-stack/messaging/chat-app',
       ],
     },
     {
@@ -707,11 +623,6 @@ rtdStackSidebar: [
       type: 'category',
       label: 'Enoki',
       items: [
-        {
-          type: 'link',
-          label: 'Enoki Docs',
-          href: 'https://docs.enoki.linkuverse.com/',
-        },
         'rtd-stack/enoki/solitaire',
         'rtd-stack/enoki/ticketing-poc',
       ],
@@ -737,17 +648,17 @@ rtdStackSidebar: [
 		{
           type: 'link',
           label: 'DeepBookV3',
-          href: 'https://docs.rtd.io/onchain-finance/deepbook/deepbookv3/deepbook',
+          href: '/onchain-finance/deepbook/deepbookv3/deepbook',
         },
 		{
           type: 'link',
           label: 'DeepBook Margin',
-          href: 'https://docs.rtd.io/onchain-finance/deepbook/deepbook-margin/design',
+          href: '/onchain-finance/deepbook/deepbook-margin/design',
         },
 		{
           type: 'link',
           label: 'DeepBook Predict',
-          href: 'https://docs.rtd.io/onchain-finance/deepbook/deepbook-predict/design',
+          href: '/onchain-finance/deepbook/deepbook-predict/design',
         },
       ],
     },
@@ -764,18 +675,7 @@ rtdStackSidebar: [
         'rtd-stack/zklogin-integration/zklogin',
       ],
     },
-    {
-      type: 'category',
-      label: 'Hashi',
-      link: { type: 'doc', id: 'rtd-stack/hashi/index' },
-      items: [
-        {
-          type: 'link',
-          label: 'Hashi Docs',
-          href: 'https://linkuverse.github.io/hashi/design/',
-        },
-      ],
-    },
+    'rtd-stack/hashi/index',
     {
       type: 'category',
       label: 'RtdPlay0X1',

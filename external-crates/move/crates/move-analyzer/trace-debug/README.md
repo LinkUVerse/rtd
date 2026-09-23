@@ -1,6 +1,6 @@
 # Move Trace Debugging
 
-Provides the ability to visualize trace files, which can be generated for a given package when running Move unit tests or replaying on-chain transactions with the [replay tool](https://docs.rtd.io/references/cli/replay). These trace files contain information about operations executed during a Move unit test run or during an on-chain transaction run (including [PTB](https://docs.rtd.io/concepts/transactions/prog-txn-blocks) commands).
+Provides the ability to visualize trace files, which can be generated for a given package when running Move unit tests or replaying on-chain transactions with the replay tool (see the checked-in `docs/content` tree). These trace files contain information about operations executed during a Move unit test run or during an on-chain transaction run (including PTB (see the checked-in `docs/content` tree) commands).
 
 This extension leverages an implementation of the [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol) (DAP) that analyzes execution traces and presents them to the IDE client (in this case a VSCode extension) in a format that the client understands and can visualize using a familiar debugging interface.
 
@@ -26,4 +26,4 @@ Note that support for trace-debugging macros and enums is limited at this point 
 
 # How to use
 
-A detailed description of the debugger is available as part of the Rtd [documentation](https://docs.rtd.io/references/ide/debugger), including comprehensive usage [instructions](https://docs.rtd.io/references/ide/debugger#usage).
+A detailed description of the debugger is available as part of the Rtd documentation (see the checked-in `docs/content` tree), including comprehensive usage instructions (see the checked-in `docs/content` tree).

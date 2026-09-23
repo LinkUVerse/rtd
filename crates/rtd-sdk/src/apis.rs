@@ -1045,9 +1045,11 @@ impl EventApi {
     /// use rtd_types::base_types::RtdAddress;
     /// #[tokio::main]
     /// async fn main() -> Result<(), anyhow::Error> {
+    ///     let ws_url = std::env::var("RTD_WS_URL")?;
+    ///     let rpc_url = std::env::var("RTD_RPC_URL")?;
     ///     let rtd = RtdClientBuilder::default()
-    ///         .ws_url("wss://rpc.mainnet.rtd.io:443")
-    ///         .build("https://fullnode.mainnet.rtd.io:443")
+    ///         .ws_url(ws_url.as_str())
+    ///         .build(rpc_url.as_str())
     ///         .await?;
     ///     let mut subscribe_all = rtd
     ///         .event_api()

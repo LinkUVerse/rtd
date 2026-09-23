@@ -65,14 +65,17 @@ import TabItem from '@theme/TabItem';
 
 <ImportContent source="json-rpc-deprecation" mode="snippet" />
 
-JSON-RPC is deprecated. Rtd is decommissioning it on the following timeline. The Mainnet shutoff has already taken effect, so the remaining milestones remove the infrastructure behind it:
+RTD has not launched Mainnet. Future RTD Mainnet will not expose JSON-RPC,
+following the upstream Sui direction. The Sui 2026 migration dates are
+historical upstream milestones, not RTD events. A local RTD deployment may
+still enable JSON-RPC while clients migrate to gRPC or GraphQL.
 
 | Milestone | Target date |
 | --- | --- |
-| Disable JSON-RPC on Rtd Foundation's mainnet full nodes | Week of July 27, 2026 |
-| Rtd Foundation stops publishing JSON-RPC snapshots for full nodes | End of August 2026 |
-| Implicit fallback from JSON-RPC to archival service disconnected | End of September 2026 |
-| Full decommission of JSON-RPC from full nodes, including code removal | Mid-October 2026 |
+| Future RTD Mainnet JSON-RPC policy | No JSON-RPC at launch; Mainnet has not launched |
+| RTD public full-node snapshots | Not announced |
+| Local RTD JSON-RPC availability | Depends on the local node configuration |
+| RTD source-code removal of JSON-RPC | Not scheduled |
 
 The 2 replacements are [gRPC](/develop/accessing-data/grpc) for real-time full node access, archival service access and transaction execution, and [GraphQL RPC](/develop/accessing-data/graphql/graphql-rpc) for rich, structured queries over live and historical blockchain data.
 
@@ -140,7 +143,7 @@ The following table maps common JSON-RPC method families to their gRPC service a
 | `unsafe_payRtd`, `unsafe_pay`, `unsafe_payAllRtd`, `unsafe_transferRtd`, `unsafe_transferObject`, `unsafe_moveCall`, `unsafe_splitCoin`, `unsafe_mergeCoins`, `unsafe_batchTransaction` | Build a [programmable transaction block](/develop/transactions/ptbs/prog-txn-blocks) with the SDK, then execute it through `TransactionExecutionService.ExecuteTransaction` | Build a PTB with the SDK, then submit through `Mutation.executeTransaction` |
 | `rtd_getNormalizedMoveModule`, `rtd_getNormalizedMoveFunction`, `rtd_getNormalizedMoveStruct` | `MovePackageService` | `Query.package`, then `MovePackage.module`, `MoveModule.function`, and `MoveModule.struct` |
 
-The JSON-RPC `unsafe_*` builder methods do not have a one-to-one replacement on either side. Build transactions with [PTBs](/develop/transactions/ptbs/prog-txn-blocks) using the [TypeScript SDK](https://sdk.linkuverse.com/typescript) or the [Rust SDK](https://github.com/LinkUVerse/rtd-rust-sdk), then submit the resulting bytes through `TransactionExecutionService.ExecuteTransaction`.
+The JSON-RPC `unsafe_*` builder methods do not have a one-to-one replacement on either side. Build transactions with [PTBs](/develop/transactions/ptbs/prog-txn-blocks) using the [TypeScript SDK](/references/rtd-sdks) or the [Rust SDK](https://github.com/LinkUVerse/rtd-rust-sdk), then submit the resulting bytes through `TransactionExecutionService.ExecuteTransaction`.
 
 ## Migration gotchas
 
@@ -152,7 +155,7 @@ The 3 interfaces differ in how they reach pruned history:
 
 - **Full node gRPC** serves the complete RPC surface (transaction execution, point lookups, checkpoint subscriptions), but only within the full node's retention window.
 
-- **The Archival Service** is a separate gRPC service that serves unpruned point lookups for checkpoints, transactions, and objects. It is scoped to those point lookups, so it does not serve the rest of the full node RPC surface, such as transaction execution or live state queries. Reuse the same `LedgerService` methods, but point the client at an Archival Service endpoint such as `archive.mainnet.rtd.io:443` or your provider's archival URL. See [Archival Store](/develop/accessing-data/archival-store).
+- **The Archival Service** is a separate gRPC service that serves unpruned point lookups for checkpoints, transactions, and objects when an RTD operator deploys it. It does not serve transaction execution or live state queries. Configure its URL explicitly for your RTD chain ID. See [Archival Store](/develop/accessing-data/archival-store).
 
 - **GraphQL** is a unified interface that serves both recent data and, when the operator configures archival access, unpruned point lookups, with no client-side fallback.
 
@@ -164,9 +167,9 @@ JSON-RPC accepts a positional array of arguments. gRPC uses typed protobuf messa
 
 JSON-RPC offered WebSocket subscriptions for events and transactions, which have been deprecated since mid-2024. Rtd does not carry those forward. Use `SubscriptionService` over gRPC server streaming instead: `SubscribeEvents` with an `EventFilter` replaces `rtd_subscribeEvent`, `SubscribeTransactions` with a `TransactionFilter` replaces `rtd_subscribeTransaction`, and `SubscribeCheckpoints` delivers entire checkpoints. All 3 support server-side filtering. Subscriptions begin at the current tip and do not support resumption. To avoid gaps, open the subscription and immediately drain live frames into durable, bounded storage while a separate worker backfills with the corresponding `LedgerService` list API (`ListEvents`, `ListTransactions`, or `ListCheckpoints`). Do not leave the subscription unread during backfill. Process the durable live spool after backfill reaches the subscription boundary, and restart from the last durably processed cursor if the spool fills or the stream ends. See [Subscriptions for streaming data](/develop/accessing-data/grpc/what-is-grpc#subscriptions-for-streaming-data).
 
-### Public load balancer URLs are not production endpoints
+### Configure an RTD endpoint explicitly
 
-The public URLs at `https://fullnode.<network>.rtd.io` and `https://graphql.<network>.rtd.io/graphql` are rate-limited and intended for development and public-good access. Do not point a production exchange, indexer, or wallet backend at them. Run your own [Rtd full node](/operators/full-node/rtd-full-node) or contract with a provider for a dedicated gRPC or GraphQL endpoint.
+RTD has no verified public load balancer URLs. Run your own [Rtd full node](/operators/full-node/rtd-full-node) or contract with a provider that supports your RTD chain ID and a dedicated gRPC or GraphQL endpoint.
 
 ### Object and coin queries behave differently
 
@@ -199,11 +202,11 @@ A full node retains a configurable window of recent data and prunes older histor
 
 Not all tools in the Rtd ecosystem require manual migration:
 
-- **Rtd CLI**: No changes needed. The CLI already uses gRPC internally. The `rpc` field in `~/.rtd/rtd_config/client.yaml` points at the same `fullnode.*.rtd.io:443` URLs, which serve both JSON-RPC and gRPC.
+- **Rtd CLI**: Check its configured transport and `rpc` field in `~/.rtd/rtd_config/client.yaml` against the node you actually operate. RTD has no verified public full node URL.
 
-- **dApp Kit**: The currently published `@linku/dapp-kit` client factory requires `RtdJsonRpcClient` and does not accept `RtdGrpcClient`. Continue using its JSON-RPC client until a dApp Kit release explicitly adds transport-agnostic client support; do not substitute `RtdGrpcClient` in `createClient`.
+- **dApp Kit**: The checked-in `rtd-dapp-kit-react` package must be configured against an RTD service that you operate and verify. Validate its transport support against the exact SDK version in use before replacing a JSON-RPC client with `RtdGrpcClient`.
 
-- **Kiosk SDK** (`@linku/kiosk`): Continue using a supported JSON-RPC or GraphQL client for Kiosk object and event queries. The currently published Kiosk SDK does not accept `RtdGrpcClient`; migrate only after a Kiosk release explicitly adds gRPC support.
+- **Kiosk SDK** (`rtd-kiosk`): Validate object and event queries against the exact client transport and RTD network you operate. The source package alone does not establish a public Kiosk service.
 
 - **Walrus site-builder**: The site-builder manages its own Rtd connection through `sites-config.yaml`. Check the [Walrus documentation](https://docs.wal.app/) for gRPC migration status, as the transport is controlled by the Walrus team.
 

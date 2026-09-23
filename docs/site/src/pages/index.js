@@ -4,15 +4,8 @@
 import React from "react";
 
 import Layout from "@theme/Layout";
-import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
 import styles from "./index.module.css";
-
-// Target for the "Developer Updates" hero link. That page does not exist yet,
-// so this points at the external Rtd blog as an interim (external links are not
-// route-checked, so the strict build passes). Swap this single constant to
-// "/developer-updates" when the dedicated page ships.
-export const DEVELOPER_UPDATES_URL = "https://blog.rtd.io";
 
 export default function Home() {
   const developerResources = [
@@ -24,7 +17,7 @@ export default function Home() {
     },
     {
       title: "Rtd Agent Skills",
-      description: "Equip AI coding agents with Rtd-specific skills and context.",
+      description: "Check the status of RTD-specific agent skills before use.",
       to: "/skills",
     },
     {
@@ -36,13 +29,13 @@ export default function Home() {
     {
       title: "Onchain Finance",
       description:
-        "Issue tokens and stablecoins, tokenize assets, and build payments and NFTs.",
+        "Explore Move asset patterns and the status of inherited finance integrations.",
       to: "/onchain-finance",
     },
     {
       title: "Rtd Stack",
       description:
-        "Compose onchain primitives like zkLogin, Nautilus, and Seal into your app.",
+        "Review source capabilities and the deployment status of external services.",
       to: "/rtd-stack",
     },
     {
@@ -57,19 +50,19 @@ export default function Home() {
     {
       title: "DeepBook",
       description:
-        "Trade on Rtd's onchain central limit order book across spot, margin, and prediction markets.",
+        "Review the inherited DeepBook design; no RTD market is deployed.",
       to: "/onchain-finance/deepbook",
     },
     {
       title: "Walrus",
       description:
-        "Store and serve media, blobs, and app data on decentralized storage.",
+        "Review upstream storage concepts; RTD integration has not been verified.",
       to: "/rtd-stack/walrus",
     },
     {
       title: "zkLogin",
       description:
-        "Onboard users with their existing Web2 logins, no seed phrase required.",
+        "Review identity features and provider requirements before integration.",
       to: "/rtd-stack/zklogin-integration/zklogin",
     },
     {
@@ -122,12 +115,6 @@ export default function Home() {
 
   return (
     <>
-      <Head>
-        <meta
-          name="google-site-verification"
-          content="nOyG5Cxvr3m94VHwQFHHaK_5BR6EyAYJ_4oPxYBptPs"
-        />
-      </Head>
       <Layout>
         <div
           className="overflow-hidden min-h-screen flex flex-col bg-cover bg-center bg-no-repeat"
@@ -146,14 +133,11 @@ export default function Home() {
                   lineHeight: "1.6",
                 }}
               >
-                Rtd is a next-generation smart contract platform with high
-                throughput, low latency, and an asset-oriented programming model
-                powered by the Move programming language. Explore guides,
-                references, and tutorials to start building on Rtd.
+                RTD is a fork of the Sui source code built around Move. These
+                guides cover source capabilities and locally operated networks.
+                RTD has not launched a public Mainnet; check each integration’s
+                deployment status before using its examples.
               </p>
-              <Link to={DEVELOPER_UPDATES_URL} className={styles.devUpdates}>
-                Developer Updates
-              </Link>
             </div>
           </div>
 

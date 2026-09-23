@@ -1,5 +1,8 @@
 [package]
 name = "modern_using_legacy_name_as_replacement"
 
+[environments]
+testnet = "01234567"
+
 [dep-replacements.testnet]
 MoveStdlib = { git = "any", rev = "any" }

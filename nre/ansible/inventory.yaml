@@ -4,7 +4,8 @@ validator:
     validator:
       ansible_host: validator.example.com
       ansible_user: ubuntu
-      rtd_release: "$RTD_SHA" # UPDATE THIS
+      rtd_node_binary_url: "" # Trusted HTTPS URL of your rtd-node artifact
+      rtd_node_binary_sha256: "" # Verified 64-character SHA-256 digest
       node_config: "./validator.yaml"
       genesis_blob: "./genesis.blob"
       keypair_path: "./key-pairs/"

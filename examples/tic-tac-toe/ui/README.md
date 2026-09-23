@@ -22,8 +22,8 @@ Client dApp using the following tools:
 -   [Vite](https://vitejs.dev/) for build tooling
 -   [Radix UI](https://www.radix-ui.com/) for pre-built UI components
 -   [ESLint](https://eslint.org/)
--   [`@linku/dapp-kit`](https://sdk.linkuverse.com/dapp-kit) for connecting to
-    wallets and loading data
+-   the forked `rtd-dapp-kit-react` source package for connecting to compatible
+    wallets and loading data from the configured RTD network
 -   [pnpm](https://pnpm.io/) for package management
 
 ## Starting your dApp

@@ -29,8 +29,7 @@ convenience:
 
 - `.move` source files — for source repositories you are explicitly reviewing.
   Move packages organize sources under `sources/` with a `Move.toml` manifest at the
-  root; see [docs.rtd.io](https://docs.rtd.io/develop/manage-packages/move-package-management)
-  for the canonical layout.
+  root; see the package-management guide in this repository for the layout.
 - `.asm` disassembly of compiled bytecode — for deployed on-chain packages. Produce `.asm` files via
   `rtd-and-move-tools/fetch-and-disassemble.md`.
 
@@ -60,14 +59,14 @@ Record with every audit report the inputs needed to re-derive the same findings:
 - **The Move code under audit:**
   - Source audit: source repo + commit / branch.
   - Bytecode audit: target package id and network; GraphQL endpoint used
-    (e.g., `https://graphql.mainnet.rtd.io/graphql`).
+    (supply the actual GraphQL URL; RTD has no public Mainnet endpoint).
 - `rtd --version` (the binary that ran `rtd prompt`; for bytecode audits, also the
   binary that ran `rtd move disassemble`).
 
 ## External references
 
-- [LinkUVerse/skills](https://github.com/LinkUVerse/skills) — the constructive Rtd / Move
-  skills the `SM-*` rules are derived from. Useful when you need to understand the
-  well-formed pattern an `SM-*` rule describes the violation of.
-- [docs.rtd.io](https://docs.rtd.io) — Rtd framework documentation.
+- The historical source of the `SM-*` catalog is recorded in
+  `crates/rtd-prompt/src/maintenance/UPSTREAMS.md`; verify each rule against the current
+  RTD framework before using it in an audit.
+- The `crates/rtd-framework` source in this repository — RTD framework reference.
 - [move-book.com](https://move-book.com) — Move language reference.

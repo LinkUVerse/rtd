@@ -1,48 +1,19 @@
 ---
-title: RtdNS
-description: >-
-  Replace raw wallet addresses with human-readable .rtd names using Rtd Name
-  Service (RtdNS), with onchain and offchain resolution, reverse lookup, and
-  subnames.
-keywords:
-  - RtdNS
-  - Rtd Name Service
-  - domain names
-  - name resolution
-  - subnames
-  - rtd stack
-goal:
-  description: >-
-    Introduce RtdNS and list available subtopics.
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-builder_paths:
-  - path_id: p2p-payments
-    path_name: P2P Payments / Neomoney
-    step: Recipient resolution (RtdNS)
-    stage: Payment Flow
-    eval: missing
-builder_paths_source:
-  dashboard: 'https://docs-analytics-dashboard.vercel.app/evals'
-  snapshot: '2026-07-10'
-questions:
-  - What is RtdNS in Rtd?
-  - What topics does RtdNS cover?
-  - How does rtdns work on Rtd?
-answer: >-
-  Rtd Name Service (RtdNS) is a decentralized naming service on Rtd that maps
-  human-readable `.rtd` names to wallet addresses.
+title: "RtdNS"
+description: "Upstream Sui ecosystem reference. RTD integration is not deployed or verified."
+keywords: ["RTD", "RtdNS", "deployment status"]
 ---
 
-Rtd Name Service (RtdNS) is a decentralized naming service on Rtd that maps human-readable `.rtd` names to wallet addresses. Apps use RtdNS for address display, name-based transfers, and identity in social and messaging features.
+:::caution RTD deployment status
 
-import DocCardList from '@theme/DocCardList';
+The Sui Name Service examples were mechanically renamed during the fork. RTD has no verified RtdNS registry, domain issuance, Mainnet or Testnet package IDs, hosted resolver, or public website.
 
-<DocCardList />
+RTD has not launched Mainnet. Do not use upstream Sui addresses, package IDs,
+network settings, tokens, or service endpoints as RTD configuration.
+
+:::
+
+This page is retained as a navigation placeholder for the upstream Name service topic.
+Before publishing an RTD integration guide, deploy the required services and
+contracts on an RTD network, verify end-to-end behavior, and publish the
+actual RTD-specific endpoints and object IDs.

@@ -1,28 +1,3 @@
 # Suimon CLI
 
-## Tooling Category
-
-- [ ] dApp Development
-- [x] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [ ] SDK
-
-## Description
-
-Powerful command line tool designed to provide detailed dashboards for monitoring RTD network
-
-## Features
-- Supported entities for monitoring:
-    - Full Nodes
-    - Validators
-    - System State and Protocol
-    - Release History
-    - Active Validators
-    - Validator Parameters
-    - Validator Reports
-- Supported networks:
-    - Devnet
-    - Testnet
-    - Mainnet
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

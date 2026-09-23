@@ -13,7 +13,6 @@ import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import NavbarLogo from "@theme/Navbar/Logo";
 import NavbarSearch from "@theme/Navbar/Search";
 import GetStartedLink from "@site/src/components/GetStartedLink";
-import SearchModal from "@site/src/components/Search/SearchModal";
 
 function useNavbarItems() {
   // TODO temporary casting until ThemeConfig type is improved
@@ -61,69 +60,6 @@ function NavbarContentLayout({ left, right }) {
   );
 }
 
-function SearchLauncher() {
-  const [open, setOpen] = React.useState(false);
-
-  // Allow other components (e.g. getting-started search bar) to open the modal
-  React.useEffect(() => {
-    const handler = () => setOpen(true);
-    window.addEventListener("open-search-modal", handler);
-    return () => window.removeEventListener("open-search-modal", handler);
-  }, []);
-
-  return (
-    <>
-      <button
-        type="button"
-        className="DocSearch DocSearch-Button flex items-center cursor-pointer"
-        onClick={() => setOpen(true)}
-      >
-        <span className="DocSearch-Button-Container flex">
-          <svg
-            width="20"
-            height="20"
-            className="DocSearch-Search-Icon"
-            viewBox="0 0 20 20"
-            aria-hidden="true"
-          >
-            <path
-              d="M14.386 14.386l4.0877 4.0877-4.0877-4.0877c-2.9418 2.9419-7.7115 2.9419-10.6533 0-2.9419-2.9418-2.9419-7.7115 0-10.6533 2.9418-2.9419 7.7115-2.9419 10.6533 0 2.9419 2.9418 2.9419 7.7115 0 10.6533z"
-              stroke="currentColor"
-              fill="none"
-              fillRule="evenodd"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <span className="DocSearch-Button-Placeholder font-semibold">
-            Search
-          </span>
-        </span>
-      </button>
-      <SearchModal isOpen={open} onClose={() => setOpen(false)} />
-    </>
-  );
-}
-
-function KapaButton() {
-  const handleClick = () => {
-    if (typeof window !== "undefined" && window.Kapa) {
-      window.Kapa.open();
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="kapa-trigger-btn flex items-center gap-2.5 cursor-pointer bg-white text-gray-900 font-semibold text-base px-5 py-2.5 rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
-    >
-      <img src="/img/logo.svg" alt="" width="23" height="23" />
-      <span className="hidden min-[1400px]:inline">Ask Rtd AI</span>
-    </button>
-  );
-}
-
 export default function NavbarContent() {
   const mobileSidebar = useMobileSidebarSafe();
   const items = useNavbarItems();
@@ -143,10 +79,8 @@ export default function NavbarContent() {
         <div className="navbar-right-controls flex items-center flex-shrink-0">
           <NavbarItems items={rightItems} />
           <ThemeToggle />
-          <KapaButton />
           {!searchBarItem && (
             <NavbarSearch>
-              <SearchLauncher />
               <GetStartedLink />
             </NavbarSearch>
           )}

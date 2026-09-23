@@ -59,8 +59,8 @@ env:
   #     none, so role-to-assume would hard-fail the OIDC step. This fork skip is a
   #     fail-safe accommodation, NOT a security boundary — the RO role still trusts
   #     pull_request, so a fork reading the cache is acceptable (Decision A).
-  # Keep in sync with the rtd-sccache-{rw,ro}-github trust policies.
-  SCCACHE_ROLE: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.rtd_repo_ref == '') && (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && 'arn:aws:iam::011083325127:role/rtd-sccache-rw-github' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && 'arn:aws:iam::011083325127:role/rtd-sccache-ro-github' || '' }}
+  # Keep in sync with the configured RTD cache role trust policies.
+  SCCACHE_ROLE: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.rtd_repo_ref == '') && (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && vars.RTD_AWS_SCCACHE_RW_ROLE_ARN || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && vars.RTD_AWS_SCCACHE_RO_ROLE_ARN || '' }}
 
 jobs:
   diff:
@@ -102,6 +102,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - run: rustup component add clippy
       - name: cargo clippy
@@ -130,6 +133,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - name: Set Swap Space

@@ -1,65 +1,26 @@
 ---
 title: Fiat Off-Ramps
-description: >-
-  Convert Rtd-native tokens to fiat currency using third-party off-ramp
-  providers integrated with the Rtd network.
+description: Requirements for adding a fiat off-ramp to an RTD application.
 keywords:
   - fiat
   - off-ramp
   - payments
-  - stablecoins
-  - USDC
-  - RTD
-  - bank transfer
-  - cash out
-goal:
-  description: >-
-    Reader can choose and integrate a fiat off-ramp provider for their Rtd app
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+  - wallet integration
 questions:
-  - What fiat off-ramp providers support Rtd?
+  - Can I sell RTD through a fiat off-ramp?
 answer: >-
-  Several third-party providers offer fiat off-ramp integration with Rtd,
-  including Banxa, Coinbase, Meld, and Onramper. 
+  No fiat off-ramp provider has been verified for RTD. RTD does not yet have a
+  public Mainnet. Confirm chain and asset support with a provider before
+  enabling a sale or withdrawal flow.
 ---
 
-Fiat off-ramp providers enable you to trade Rtd-native tokens (RTD, WAL, DEEP, and others) for fiat currency that can be withdrawn to a user's bank account, card, or payment method. Embedding an off-ramp provider into your app allows users to convert their Rtd assets to traditional currency without leaving your interface. Verify current provider capabilities before integrating.
+No fiat off-ramp provider has been verified for RTD. RTD does not yet have a public Mainnet. Provider lists and supported assets from the upstream Sui ecosystem do not establish RTD support.
 
-The following table summarizes providers with live Rtd off-ramp integration as of August 2026. All columns refer to Rtd chain and Rtd asset support specifically.
+Before offering fiat withdrawals in an RTD application, verify all of the following with the provider and in a test deployment:
 
-:::info
+1. The provider explicitly supports the RTD chain ID, asset type, and withdrawal route.
+2. The provider can receive the asset on RTD and attributes deposits using the actual chain transaction digest.
+3. The user sees the provider's fees, limits, settlement time, KYC requirements, and available countries before committing funds.
+4. Your application handles failed, delayed, and refunded transfers without treating an initiated transfer as settled.
 
-Off-ramp coverage is evolving. Provider asset support and regional availability change frequently. Confirm current capabilities with your chosen provider before launching an integration.
-
-:::
-
-| **Provider** | **Supported assets** | **Documentation** |
-|---|---|---|
-| [Banxa](https://banxa.com/) | RTD | [Banxa docs](https://docs.banxa.com/products/hosted-checkout/docs/reference/supported-cryptocurrencies-and-blockchains) |
-| [Bridge.xyz](https://bridge.xyz) | USDRtd | [Bridge docs](https://apidocs.bridge.xyz/platform/issuance/designing-your-stablecoin#supported-chains) |
-| [Coinbase](https://coinbase.com/) | RTD, USDC, WAL, DEEP | [Coinbase CDP docs](https://docs.cdp.coinbase.com/onramp/offramp/offramp-overview) |
-| [Alchemy Pay](https://alchemypay.org/) | AUSD, RTD, USD | [Alchemy Pay docs](https://alchemypay.readme.io/docs/api-integration-3) |
-| [CoinVoyage](https://www.coinvoyage.io/) | Rtd Dollar | [CoinVoyage docs](https://docs.coinvoyage.io/sdk/paykit-headless#rtd-payment-signatures) |
-| [Onramper](https://onramper.com/) | RTD | [Onramper docs](https://docs.onramper.com/docs/network-support) |
-| [Meld](https://www.meld.io) | RTD, USDC, CETUS, NAVI | [Meld docs](https://www.meld.io/coverage/service-providers?cryptoCurrencies=RTD) |
-
-See [Fiat On-Ramps](/onchain-finance/asset-custody/fiat-on-ramps) for the full on-ramp provider list.
-
-## Asset limitations
-
-When you choose off-ramp providers, be aware of the following limitations:
-
-- **USDC off-ramp on Rtd:** USDC off-ramp coverage on Rtd is limited. If your users need to off-ramp USDC, confirm provider support directly.
-
-- **RTD sell limits:** Off-ramp providers might enforce sell limits. Confirm limitations with the provider directly. 
-
-- **KYC requirements:** Off-ramp flows likely require Know Your Customer (KYC) verification. Factor this into your user experience design.
+Do not send RTD assets to a Sui deposit address or reuse upstream Sui asset identifiers. See [fiat on-ramps](/onchain-finance/asset-custody/fiat-on-ramps) for the corresponding purchase checks.

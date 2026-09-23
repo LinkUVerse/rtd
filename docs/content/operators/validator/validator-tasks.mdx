@@ -109,7 +109,7 @@ $ curl -s http://localhost:9184/metrics
 $ curl http://localhost:9184/metrics | grep <METRIC>
 ```
 
-`rtd-node` also pushes metrics to a central Rtd metrics proxy.
+Metrics are available locally. Configure a remote metrics proxy only if the operator of your RTD network actually runs one.
 
 ## Logs
 
@@ -153,9 +153,7 @@ $ curl localhost:1337/logging -d "info"
 
 ## Dashboards
 
-Public dashboard for network-wide visibility:
-
-- [Rtd Testnet Validators](https://metrics.rtd.io/public-dashboards/9b841d63c9bf43fe8acec4f0fa991f5e)
+RTD has no verified public validator dashboard. Build a dashboard from the metrics endpoint of nodes you operate, or use a dashboard supplied by the operator of your network after verifying its chain ID.
 
 ## Software updates
 
@@ -187,16 +185,11 @@ p2p-config:
 
 ## Chain operations
 
-You execute the following chain operations using the `rtd` CLI. This binary is built and provided as a release similar to `rtd-node`, for example:
+You execute the following chain operations using the `rtd` CLI. Build the CLI from the same approved source revision as the nodes on your network:
 
 ```sh
-$ wget https://releases.rtd.io/$RTD_SHA/rtd
-$ chmod +x rtd
-```
-
-```sh
-$ curl https://releases.rtd.io/$RTD_SHA/rtd -o rtd
-$ chmod +x rtd
+$ cargo build --release --bin rtd
+# Binary: target/release/rtd
 ```
 
 Ensure that the `rtd` binary release/version matches that of the deployed network, as this is often required.
@@ -259,7 +252,7 @@ Strengthen operation-capability delegation with these practices:
 - **Delegate with least privilege.** Hand the operation cap only to the address that needs it for a specific task, and keep account keys offline and uninvolved in routine operations.
 - **Revoke after the task completes.** Once a delegated task is done, rotate the cap with `rtd_system::rotate_operation_cap` to invalidate the old one, and rotate immediately if a delegatee key is lost or compromised.
 - **Keep an audit trail.** Record who held each cap, when you delegated it, and when you revoked it, so you can review operational actions after the fact.
-- **Roll out security fixes confidentially.** Apply urgent fixes through the [private security fixes](#private-security-fixes) process rather than disclosing them publicly before validators have patched.
+- **Roll out security fixes carefully.** Coordinate urgent fixes through the operator of your network, and verify each binary before installation.
 
 See [Security Best Practices](/develop/security/best-practices) for the canonical operator guidance.
 
@@ -311,17 +304,6 @@ $ rtd client call --package 0x3 --module rtd_system --function request_remove_va
 
 After the validator is removed at the next epoch change, the staking pool becomes inactive and you can only withdraw stakes from an inactive pool.
 
-## Private security fixes
+## Security fixes
 
-There might be instances where urgent security fixes need to roll out before public announcement (issues affecting liveness, invariants such as RTD supply, governance, and so on). To avoid active exploitation, LinkU Labs releases signed security binaries incorporating such fixes with a delay in publishing the source code until a large percentage of validators have patched the vulnerability.
-
-This release process is different, and you should expect that announcements of the directory for such binaries arrive out of band.
-[View the public key used to verify these binaries](https://rtd-private.s3.us-west-2.amazonaws.com/rtd_security_release.pem).
-
-A script is also available that downloads all the necessary signed binaries and Docker artifacts incorporating the security fixes.
-
-- Usage: `./download_private.sh <commit-sha>`
-
-You can also download and verify specific binaries that might not be included by the above script using the `download_and_verify_private_binary.sh` script.
-
-- Usage: `./download_and_verify_private_binary.sh <commit-sha> <binary-name>`
+RTD has no verified private binary distribution, signing key, or public validator security release process. For a network you operate, define a trusted channel for urgent announcements, record the approved source commit, distribute binaries with verifiable checksums or signatures, and coordinate the protocol activation time with validators. Do not use upstream Sui signing keys or download buckets as RTD release authority.

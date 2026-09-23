@@ -5,14 +5,12 @@
 
 const fs = require("fs");
 const path = require("path");
-const glob = require("glob");
 
 const SITE_ROOT = path.resolve(__dirname, "../"); // docusaurus site root
 const REPO_ROOT = path.resolve(SITE_ROOT, "../../"); // monorepo root
 const OUT_FILE = path.join(SITE_ROOT, ".generated/ImportContentMap.ts");
 
-// Where to look for MDX that might use <ImportContent>
-const MDX_GLOBS = [path.join(REPO_ROOT, "docs/content/**/*.{md,mdx}")];
+const CONTENT_ROOT = path.join(REPO_ROOT, "docs/content");
 
 // Optionally constrain which repo roots are permitted for mode="code"
 const ALLOWED_ROOTS = new Set(["crates", "external-crates", "examples"]);
@@ -24,8 +22,9 @@ function stripFencedCode(md) {
   // Strip frontmatter first (triple-backtick patterns in YAML values
   // like `pattern: '```'` would otherwise corrupt code fence matching)
   const body = md.replace(/^---\n[\s\S]*?\n---\n?/, "");
-  // Remove fenced code blocks (``` must be at start of line)
-  return body.replace(/^```[^\n]*\n[\s\S]*?^```[^\n]*/gm, "");
+  // Fences in Markdown list items can be indented. They are examples, not
+  // ImportContent components to resolve at build time.
+  return body.replace(/^[ \t]*```[^\n]*\n[\s\S]*?^[ \t]*```[^\n]*/gm, "");
 }
 
 // Finds <ImportContent ...> start tags (self-closing or not), attribute order agnostic
@@ -50,9 +49,22 @@ function normalizeRepoRel(src) {
 }
 
 // --- main ---
-const mdxFiles = MDX_GLOBS.flatMap((g) => glob.sync(g, { nodir: true }));
+function listMarkdownFiles(dir) {
+  const result = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      result.push(...listMarkdownFiles(full));
+    } else if (/\.mdx?$/.test(entry.name)) {
+      result.push(full);
+    }
+  }
+  return result;
+}
+
+const mdxFiles = listMarkdownFiles(CONTENT_ROOT);
 if (process.env.DEBUG_IMPORT_CONTENT) {
-  console.log(`[generate-import-context] Globs:`, MDX_GLOBS);
+  console.log(`[generate-import-context] Content root:`, CONTENT_ROOT);
   console.log(`[generate-import-context] MDX files found: ${mdxFiles.length}`);
 }
 const wanted = new Set();

@@ -1287,7 +1287,6 @@ impl TryFrom<&RtdAuthorityStrongQuorumSignInfo> for AuthorityStrongQuorumSignInf
 // maintain the invariant that valid certificates with distinct signatures are equivalent, but yet-unchecked
 // certificates that differ on signers aren't.
 //
-// see also https://github.com/LinkUVerse/rtd/issues/266
 static_assertions::assert_not_impl_any!(AuthorityStrongQuorumSignInfo: Hash, Eq, PartialEq);
 
 impl<const STRONG_THRESHOLD: bool> AuthoritySignInfoTrait

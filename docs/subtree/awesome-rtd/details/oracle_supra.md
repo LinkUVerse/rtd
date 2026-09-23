@@ -1,16 +1,3 @@
 # Supra Oracles
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [x] Oracle
-- [ ] SDK
-
-## Features
-- [Pull-based price feed](https://docs.supra.com/docs/data-feeds/pull-model) ([Rtd is supported](https://docs.supra.com/docs/data-feeds/pull-model/networks))
-- [Push-based price feed](https://docs.supra.com/docs/data-feeds/decentralized) ([Rtd is supported](https://docs.supra.com/docs/data-feeds/decentralized/networks))
-- [Live Data Feed](https://supra.com/data)
-- [Supported pairs](https://docs.supra.com/docs/data-feeds/data-feeds-index)
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

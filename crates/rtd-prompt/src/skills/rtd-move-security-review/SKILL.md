@@ -27,9 +27,9 @@ description: >
 > Offensive counterpart to the constructive Move skills — each rule = violated invariant
 > with detection heuristic, severity, and exploit sketch.
 
-> **Sources.** Per-rule citation `LinkUVerse/skills → <file>`. **[+domain]** = established
+> **Sources.** Per-rule citation `historical upstream skills → <file>`. **[+domain]** = established
 > auditing practice not in upstream skills (high-yield, easy to miss — e.g. SM-A3, SM-B4).
-> Verify on-chain facts against [docs.rtd.io](https://docs.rtd.io),
+> Verify on-chain facts against the configured RTD network,
 > [move-book.com](https://move-book.com), or framework source.
 
 > **Representation.** The catalog is stated in Move semantics. Use `.move` files when

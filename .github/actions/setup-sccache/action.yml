@@ -22,6 +22,15 @@ inputs:
       must grant `permissions: id-token: write`. Empty on fork PRs / untrusted
       contexts (graceful degradation to a local cache). See AWS_OIDC_ROLES.md.
     required: false
+  aws-account-id:
+    description: AWS account ID owned by this repository; required when AWS cache is enabled
+    required: false
+  sccache-bucket:
+    description: S3 cache bucket owned by this repository; required when AWS cache is enabled
+    required: false
+  aws-region:
+    description: AWS region for the RTD-owned cache bucket; required when AWS cache is enabled
+    required: false
   role-duration-seconds:
     description: >
       STS session duration (seconds) for the OIDC role assumption. Empty falls
@@ -29,7 +38,7 @@ inputs:
       that outlive a 1h session and would otherwise fail with an sccache S3
       `ExpiredToken` mid-build (e.g. the slow macos-latest-large release leg). The
       assumed role's MaxSessionDuration must be >= this value
-      (rtd-sccache-rw-github is set to 14400).
+      (the operator must configure this on the role).
     required: false
   key-prefix:
     description: S3 key prefix for cache partitioning (e.g., ubuntu-ghcloud, windows-ghcloud)
@@ -97,6 +106,13 @@ runs:
     # When neither is set (fork PRs / untrusted contexts), every S3 step below is
     # skipped and the build falls back to a local sccache. Keeping both paths lets
     # callers migrate to OIDC one workflow/job at a time.
+    - name: Validate configured AWS cache
+      if: (inputs.role-to-assume != '' || inputs.aws-access-key-id != '') && (inputs.aws-account-id == '' || inputs.sccache-bucket == '' || inputs.aws-region == '')
+      shell: bash
+      run: |
+        echo "::error::Configure RTD_AWS_ACCOUNT_ID, RTD_SCCACHE_BUCKET, and RTD_AWS_REGION before enabling AWS cache"
+        exit 1
+
     - name: Configure AWS credentials (OIDC)
       if: inputs.role-to-assume != ''
       uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # pin@v5.1.1
@@ -108,8 +124,8 @@ runs:
         # past 1h (the role's MaxSessionDuration must allow the requested value).
         role-duration-seconds: ${{ inputs.role-duration-seconds }}
         # Fail closed if STS ever returns creds for an unexpected account.
-        allowed-account-ids: '011083325127'
-        aws-region: us-west-2
+        allowed-account-ids: ${{ inputs.aws-account-id }}
+        aws-region: ${{ inputs.aws-region }}
 
     - name: Configure AWS credentials (static keys)
       if: inputs.role-to-assume == '' && inputs.aws-access-key-id != ''
@@ -117,15 +133,15 @@ runs:
       with:
         aws-access-key-id: ${{ inputs.aws-access-key-id }}
         aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
-        allowed-account-ids: '011083325127'
-        aws-region: us-west-2
+        allowed-account-ids: ${{ inputs.aws-account-id }}
+        aws-region: ${{ inputs.aws-region }}
 
     - name: Set sccache environment
       if: inputs.role-to-assume != '' || inputs.aws-access-key-id != ''
       shell: bash
       run: |
-        echo "SCCACHE_BUCKET=linkuverse-sccache" >> "$GITHUB_ENV"
-        echo "SCCACHE_REGION=us-west-2" >> "$GITHUB_ENV"
+        echo "SCCACHE_BUCKET=${{ inputs.sccache-bucket }}" >> "$GITHUB_ENV"
+        echo "SCCACHE_REGION=${{ inputs.aws-region }}" >> "$GITHUB_ENV"
         echo "SCCACHE_S3_KEY_PREFIX=${{ inputs.key-prefix }}" >> "$GITHUB_ENV"
 
     - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # pin@v0.0.9

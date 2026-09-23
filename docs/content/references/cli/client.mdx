@@ -67,32 +67,32 @@ Use the `rtd client envs` command to find the network environments set up in the
 ╭────────┬────────────────────────────────────┬────────╮
 │ alias  │ url                                │ active │
 ├────────┼────────────────────────────────────┼────────┤
-│ devnet │ https://fullnode.devnet.rtd.io:443 │ *  	   │
+│ localnet │ http://127.0.0.1:9000                │ *      │
 ╰────────┴────────────────────────────────────┴────────╯
 ```
 
 ### Create network environment
 
-Use `client new-env` to add details for a new network environment. This example creates an environment pointer to Rtd Mainnet. Setting the `alias` value makes referencing the environment less prone to typographical errors. After running this command, Rtd updates your client.yaml file in `~/.rtd/rtd_config` with the new information.
+Use `client new-env` to add an environment for an RTD network you operate. This example uses the default local full node port. After running this command, Rtd updates your `client.yaml` file in `~/.rtd/rtd_config`.
 
 ```
-$ rtd client new-env --alias=mainnet --rpc https://fullnode.mainnet.rtd.io:443
+$ rtd client new-env --alias=localnet --rpc http://127.0.0.1:9000
 
-Added new Rtd env [mainnet] to config.
+Added new Rtd env [localnet] to config.
 ```
 
 ### Set current environment
 
-Use the `rtd client switch` command to change the current network. This example switches the current network to `mainnet`.
+Use the `rtd client switch` command to change the current network. This example switches to the local network.
 
 ```sh
-$ rtd client switch --env mainnet
+$ rtd client switch --env localnet
 ```
 ```sh
-Active environment switched to [mainnet]
+Active environment switched to [localnet]
 ```
 
-If you run `rtd client envs` after this command, you see the asterisk in the `active` column on the `mainnet` row of the table.
+If you run `rtd client envs` after this command, you see the asterisk in the `active` column on the `localnet` row. Verify the chain with `rtd client chain-identifier --format hex` before submitting a transaction.
 
 ### Get current active address
 
@@ -107,7 +107,8 @@ $ rtd client active-address
 
 ### Request a RTD coin from faucet
 
-If you use one of the standard public RPCs (for example, `fullnode.devnet.rtd.io:443`), you can use the `faucet` command to request gas coins. If you use a custom faucet service, then pass in the URL to the faucet using the `--url` option.
+RTD has no verified public RPC or faucet. For a network with a configured faucet,
+pass its URL with `--url` after verifying the network's chain ID with its operator.
 The `faucet` command works for a local network, as well. If you start your network with a custom faucet port, include the `--url` option.
 
 ```sh
@@ -291,16 +292,16 @@ $ rtd client party-transfer \
 
 `rtd client test-publish` and `rtd client test-upgrade` publish and upgrade packages without recording the published addresses in the package's `Published.toml`. They build the package for a given environment and publish it on the current network, taking dependency addresses from an ephemeral publication file (the pubfile) and recording the new publication information back into that pubfile. This is useful for testing a package against the live network without mutating your canonical publication state. For background, see [Move Package Management](/develop/manage-packages/move-package-management).
 
-Publish a package ephemerally, building for the `testnet` environment and recording publication info in a pubfile:
+For a custom `staging` environment defined in your `Move.toml`, record ephemeral publication info in a pubfile:
 
 ```sh
-$ rtd client test-publish --pubfile-path Pub.testnet.toml --build-env testnet
+$ rtd client test-publish --pubfile-path Pub.staging.toml --build-env staging
 ```
 
 Later, upgrade that same ephemeral package using the pubfile produced by `test-publish`:
 
 ```sh
-$ rtd client test-upgrade --pubfile-path Pub.testnet.toml --build-env testnet
+$ rtd client test-upgrade --pubfile-path Pub.staging.toml --build-env staging
 ```
 
 The key options are:

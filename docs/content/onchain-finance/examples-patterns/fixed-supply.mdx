@@ -1,76 +1,34 @@
 ---
 title: Fixed Supply
-description: >-
-  Initialize a coin with a fixed total supply, then lock the supply to prevent
-  further minting using dynamic fields and freezing.
-keywords:
-  - fixed supply
-  - fixed total supply
-  - coin supply
-  - total supply
-goal:
-  description: Reader can initialize a coin with a fixed total supply
-  requires:
-    - pattern: '```'
-      min: 1
-      label: Has at least one code example
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - min_words: 200
-      label: Has enough content to explain the pattern
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+description: Create a currency, mint its full supply once, and give up the minting capability.
+keywords: [fixed supply, coin supply, total supply, currency registry]
 questions:
-  - What is Fixed Supply in Rtd?
-  - How does fixed supply work on Rtd?
-  - How do I subscribe to fixed supply events?
+  - How do I make a fixed-supply currency on RTD?
+  - What happens to the TreasuryCap after minting?
 answer: >-
-  This fixed supply example mints the total supply of 10,000,000,000,000,000,000
-  coins and transfers the coins to the sender. Then, the treasury cap is locked
-  as a dynamic object field to prevent further modifications.
+  The local example creates a currency with six decimals, mints one billion
+  whole units, and passes the TreasuryCap to make_supply_fixed so no more
+  units can be minted.
 ---
 
-A fixed-supply coin has a predetermined total supply that cannot increase after creation. No additional tokens can ever be minted because the minting capability (`TreasuryCap`) is locked or destroyed during initialization. Fixed supply is common for governance tokens, utility tokens, and any asset where scarcity is a design requirement.
+A fixed-supply currency mints its entire supply during initialization. The example in this repository uses `rtd::coin_registry` and fixes the supply while creating the currency. The code is a reference for a local RTD package; review and test it against the network you operate before publishing.
 
-This pattern involves 3 steps during the module's `init` function:
+## How the local example works
 
-1. **Create the currency:** Call `coin::create_currency` with a [One-Time Witness](https://move-book.com/programmability/one-time-witness/) to create the `TreasuryCap` and `CoinMetadata`. The `create_currency` function takes parameters for the coin's decimals, symbol, name, description, and icon URL.
-2. **Mint the total supply:** Call `coin::mint` with the `TreasuryCap` to create all tokens at once. The amount is specified in the smallest unit (base units). For example, if your coin has 9 decimals, a supply of `10_000_000_000_000_000_000` represents 10 billion coins.
-3. **Lock the `TreasuryCap`:** Store the `TreasuryCap` as a [dynamic object field](/develop/objects/dynamic-fields) on a permanent object. This prevents anyone from calling `coin::mint` again because the `TreasuryCap` is no longer directly accessible. You can also freeze or destroy the `TreasuryCap` depending on your requirements.
+1. A one-time witness creates the currency through `coin_registry::new_currency_with_otw`.
+2. The module initializer mints `1_000_000_000_000000` base units. With six decimals, that is one billion whole units.
+3. `currency.make_supply_fixed(treasury_cap)` consumes the minting capability. The resulting currency cannot mint more units through that capability.
+4. The builder is finalized, and the minted coin and `MetadataCap` are transferred to the publisher.
 
-<ImportContent source="I2/fixed_supply/sources/silver.move" mode="code" org="LinkUVerse" repo="rtd-move-bootcamp" branch="solution" noComments />
+<ImportContent source="examples/move/coin/sources/fixed_supply.move" mode="code" />
 
-### Why lock the `TreasuryCap`
+Keep the `MetadataCap` separate from the supply guarantee: it controls metadata, while `make_supply_fixed` gives up minting. If you also need the package to remain immutable, review how the package's `UpgradeCap` is managed before deployment. Publishing and disposing of upgrade authority are separate decisions.
 
-The `TreasuryCap` is the [capability](/develop/objects/transfers/custom-rules) that authorizes minting and burning. If you transfer it to the deployer's address instead of locking it, anyone who gains access to that address (through key compromise or social engineering) can mint unlimited tokens. Locking the `TreasuryCap` as a dynamic object field makes it inaccessible to any function call, including `coin::mint` ([Security Best Practices](/develop/security/best-practices)).
+Build and test the package in this checkout before using it:
 
-### Why burn the `UpgradeCap`
+```sh
+rtd move build --path examples/move/coin
+rtd move test --path examples/move/coin
+```
 
-To further ensure the package cannot be modified, burn the `UpgradeCap` rather than transferring it. If the `UpgradeCap` remains accessible, a future upgrade could add a function that extracts the locked `TreasuryCap` from its dynamic field and mints additional tokens. Burning the `UpgradeCap` makes the package immutable and the fixed supply permanent ([Security Best Practices](/develop/security/best-practices)).
-
-:::caution
-
-Burning the `UpgradeCap` is irreversible. You cannot fix bugs or add features to the package after burning it. Only burn the `UpgradeCap` when you are confident the package is production-ready.
-
-:::
-
-### Deploy and verify
-
-To deploy a fixed-supply coin:
-
-1. Build the package:
-   ```sh
-   $ rtd move build
-   ```
-2. Publish to the network:
-   ```sh
-   $ rtd client publish
-   ```
-3. Verify the total supply by calling `coin::total_supply` on the `TreasuryCap`. The value should match your intended total. `CoinMetadata` carries the coin's display fields (`decimals`, `name`, `symbol`, `description`, `icon_url`) and does not track supply.
-
-[View the full example on GitHub](https://github.com/LinkUVerse/rtd-move-bootcamp/tree/solution/I2).
+See [Currency and Coin standards](/onchain-finance/fungible-tokens) and [security best practices](/develop/security/best-practices) for related design choices.

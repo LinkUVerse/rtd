@@ -21,9 +21,8 @@ the binary at build time via `include_str!`.
 
 ## Install
 
-`rtd prompt` is built into the Rtd CLI. Install `rtd` per the [official Rtd CLI install
-guide](https://docs.rtd.io/getting-started/onboarding/rtd-install); once `rtd` is on
-your `PATH`, `rtd prompt` is available.
+`rtd prompt` is built into the Rtd CLI. Build `rtd` from this repository; once it is
+on your `PATH`, `rtd prompt` is available. RTD has no published CLI installation site yet.
 
 ## Commands
 

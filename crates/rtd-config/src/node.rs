@@ -905,32 +905,6 @@ fn default_jwk_fetch_interval_seconds() -> u64 {
 pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
     let mut map = BTreeMap::new();
 
-    // providers that are available on devnet only.
-    let experimental_providers = BTreeSet::from([
-        "Google".to_string(),
-        "Facebook".to_string(),
-        "Twitch".to_string(),
-        "Kakao".to_string(),
-        "Apple".to_string(),
-        "Slack".to_string(),
-        "TestIssuer".to_string(),
-        "TestIssuerKey8192".to_string(),
-        "Microsoft".to_string(),
-        "KarrierOne".to_string(),
-        "Credenza3".to_string(),
-        "Playtron".to_string(),
-        "Threedos".to_string(),
-        "Onefc".to_string(),
-        "FanTV".to_string(),
-        "Arden".to_string(), // Arden partner
-        "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es".to_string(), // Trace, external partner
-        "EveFrontier".to_string(),
-        "TestEveFrontier".to_string(),
-        "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz".to_string(), // Decot, external partner
-        "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg".to_string(), // test Gamma Prime, external partner
-        "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E".to_string(), // Gamma Prime, external partner
-    ]);
-
     // providers that are available for mainnet and testnet.
     let providers = BTreeSet::from([
         "Google".to_string(),
@@ -953,7 +927,9 @@ pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
     ]);
     map.insert(Chain::Mainnet, providers.clone());
     map.insert(Chain::Testnet, providers);
-    map.insert(Chain::Unknown, experimental_providers);
+    // An RTD genesis has its own chain ID. Do not automatically fetch upstream
+    // test issuers or partner JWKs before their RTD use has been verified.
+    map.insert(Chain::Unknown, BTreeSet::new());
     map
 }
 
@@ -1952,10 +1928,11 @@ mod tests {
     use rtd_keys::keypair_file::{write_authority_keypair_to_file, write_keypair_to_file};
     use rtd_types::base_types::ObjectID;
     use rtd_types::crypto::{AuthorityKeyPair, NetworkKeyPair, RtdKeyPair, get_key_pair_from_rng};
+    use rtd_types::supported_protocol_versions::Chain;
 
     use super::{
         AuthorityStorePruningConfig, ExecutionTimeObserverConfig, Genesis, StateArchiveConfig,
-        TransactionKeyValueStoreReadConfig,
+        TransactionKeyValueStoreReadConfig, default_zklogin_oauth_providers,
     };
     use crate::NodeConfig;
 
@@ -1993,6 +1970,13 @@ mod tests {
         assert!(omitted.base_url.is_empty());
     }
 
+    #[test]
+    fn unknown_chain_does_not_fetch_unverified_issuers() {
+        let providers = default_zklogin_oauth_providers();
+        let unknown = providers.get(&Chain::Unknown).unwrap();
+        assert!(unknown.is_empty());
+    }
+
     /// Tests that a legacy validator config (captured on 12/06/2024) can be parsed.
     #[test]
     fn legacy_validator_config() {
@@ -2010,6 +1994,13 @@ mod tests {
                 .authority_store_pruning_config
                 .rpc_store_bitmap_periodic_compaction_days,
             None
+        );
+        assert!(
+            template
+                .zklogin_oauth_providers
+                .get(&Chain::Unknown)
+                .unwrap()
+                .is_empty()
         );
     }
 

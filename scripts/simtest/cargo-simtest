@@ -68,11 +68,13 @@ fi
 # You should not assume that test runs will be repeatable with and without blst mocking,
 # as blst samples from the PRNG when not mocked.
 if [[ -n "$USE_MOCK_CRYPTO" ]]; then
+  if [[ -z "$LOCAL_MOCK_BLST_PATH" || ! -f "$LOCAL_MOCK_BLST_PATH/Cargo.toml" ]]; then
+    die "USE_MOCK_CRYPTO requires LOCAL_MOCK_BLST_PATH pointing to a local blst fork"
+  fi
   echo "Using mocked crypto crates - no cryptographic verification will occur"
   msim_rustflags="$msim_rustflags --cfg use_mock_crypto"
   cargo_patch_args+=(
-    --config 'patch.crates-io.blst.git = "https://github.com/LinkUVerse/mock-blst.git"'
-    --config 'patch.crates-io.blst.rev = "630ca4d55de8e199e62c5b6a695c702d95fe6498"'
+    --config "patch.crates-io.blst.path = \"$LOCAL_MOCK_BLST_PATH\""
   )
 fi
 

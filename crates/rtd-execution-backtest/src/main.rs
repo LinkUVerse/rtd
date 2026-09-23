@@ -97,7 +97,7 @@ struct Args {
     fullnode_url: Option<Url>,
 
     /// GraphQL endpoint used to read each epoch's framework packages as of its first checkpoint:
-    /// `mainnet`, `testnet`, or a GraphQL url. Required.
+    /// An explicit GraphQL URL. RTD has no default public Mainnet or Testnet endpoint. Required.
     #[clap(long)]
     graphql: Node,
 

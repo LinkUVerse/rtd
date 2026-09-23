@@ -11,7 +11,7 @@ Detect: `has key` declarations missing `id: UID`; value-bearing or authority obj
 with `drop`.
 Exploit: a `drop`-able resource/authority object can be silently discarded, breaking supply or
 access accounting (lost funds, lost admin).
-Source: `LinkUVerse/skills → rtd-move/move.md`.
+Source: `historical upstream skills → rtd-move/move.md`.
 
 ### SM-B2 — Irreversible `store` breaks soulbound / locked invariants   [Critical]
 Invariant: objects intended to be non-transferable, locked, or under custom transfer rules must
@@ -25,7 +25,7 @@ such types with module-exposed transfer functions. Soulbound (intended-non-trans
 most common motivation, but `store` similarly opens shared / frozen / receive misuse.
 Exploit: anyone calls `public_transfer` to move/steal the object, or `public_share_object` to
 force it into shared state, bypassing the intended binding.
-Source: `LinkUVerse/skills → object-model/ownership.md`, `LinkUVerse/skills → object-model/transfers.md`.
+Source: `historical upstream skills → object-model/ownership.md`, `historical upstream skills → object-model/transfers.md`.
 
 ### SM-B3 — Secret data in events or Display   [Medium]
 Invariant: event structs have exactly `copy, drop`; no confidential field is emitted in an event
@@ -34,7 +34,7 @@ Detect: `event::emit` of structs containing secrets/keys/PII; `{field}` Display 
 sensitive fields.
 Exploit: read "private" on-chain data straight from an indexer or wallet UI — chain storage is
 public regardless of access functions.
-Source: `LinkUVerse/skills → rtd-move/events-coins.md`, `LinkUVerse/skills → object-model/display.md`.
+Source: `historical upstream skills → rtd-move/events-coins.md`, `historical upstream skills → object-model/display.md`.
 
 ### SM-B4 — Type confusion / fake-object injection   [Critical] [+domain]
 Invariant: a function that accepts an instance of a protocol-defined type
@@ -118,5 +118,5 @@ Exploit: pass `Coin<WorthlessToken>` to a function denominated in `USDC` and cre
 balance with worthless value; or construct a witness of an attacker-chosen type to satisfy
 a generic authorization gate.
 Source: [+domain] (generic-type substitution / unconstrained-witness; not directly derived
-from upstream `LinkUVerse/skills` — verified empty in `modern-move-syntax/`,
+from upstream `historical upstream skills` — verified empty in `modern-move-syntax/`,
 `composable-move-functions/`, and `rtd-move/move.md` at the pinned ref).

@@ -27,16 +27,9 @@ require("dotenv").config();
 const config = {
   title: "Rtd Documentation",
   tagline:
-    "Rtd is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by Move",
+    "Documentation for the RTD source fork and locally operated networks; public RTD services are not launched",
   favicon: "/img/favicon.ico",
   headTags: [
-    {
-      tagName: "meta",
-      attributes: {
-        name: "algolia-site-verification",
-        content: "BCA21DA2879818D2",
-      },
-    },
     {
       tagName: "link",
       attributes: {
@@ -62,17 +55,9 @@ const config = {
         type: "application/xml",
       },
     },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "api-catalog",
-        href: "/.well-known/api-catalog",
-        type: "application/linkset+json",
-      },
-    },
   ],
-  // Set the production url of your site here
-  url: "https://docs.rtd.io",
+  // Local preview only. Public RTD documentation has not been deployed.
+  url: "http://localhost:3000",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: "/",
@@ -81,7 +66,7 @@ const config = {
   onBrokenAnchors: "warn",
   onDuplicateRoutes: 'throw',
 
-  staticDirectories: ["static", "src/open-spec"],
+  staticDirectories: ["static"],
   markdown: {
     format: "detect",
     mermaid: true,
@@ -91,11 +76,7 @@ const config = {
   },
   },
   
-  clientModules: [
-    require.resolve("./src/client/pushfeedback-toc.js"),
-    require.resolve("./src/client/webmcp.js"),
-    require.resolve("./src/client/kapa-sidebar.js"),
-  ],
+  clientModules: [],
   plugins: [
     function llmsTxtDirectivePlugin() {
       return {
@@ -211,16 +192,6 @@ const config = {
     "docusaurus-plugin-copy-page-button",
     require.resolve("./src/plugins/validate-openrpc"),
 
-    [
-      require.resolve("./src/shared/plugins/plausible"),
-      {
-        domain: "docs.rtd.io",
-        enableInDev: false,
-        trackOutboundLinks: true,
-        hashMode: false,
-        trackLocalhost: false,
-      },
-    ],
     function stepHeadingLoader() {
       return {
         name: "step-heading-loader",
@@ -297,7 +268,6 @@ const config = {
     },
     path.resolve(__dirname, `./src/shared/plugins/descriptions`),
     path.resolve(__dirname, `./src/plugins/framework`),
-    path.resolve(__dirname, `./src/plugins/protocol`),
   ],
   presets: [
     [
@@ -308,8 +278,6 @@ const config = {
           path: "../content",
           routeBasePath: "/",
           sidebarPath: SIDEBARS_PATH,
-          // the double docs below is a fix for having the path set to ../content
-          editUrl: "https://github.com/LinkUVerse/rtd/tree/main/docs/docs",
           exclude: [
             "**/snippets/**",
             "**/standards/deepbook-ref/**",
@@ -345,28 +313,7 @@ const config = {
     ],
   ],
 
-  scripts: [
-    //{ src: "./src/js/tabs-md.js", defer: true },
-    {
-      src: "https://widget.kapa.ai/kapa-widget.bundle.js",
-      "data-website-id": "b05d8d86-0b10-4eb2-acfe-e9012d75d9db",
-      "data-project-name": "Rtd Knowledge",
-      "data-project-color": "#298DFF",
-      "data-button-hide": "true",
-      "data-view-mode": "sidebar",
-      "data-modal-title": "Ask Rtd AI",
-      "data-modal-ask-ai-input-placeholder": "Ask me anything about Rtd!",
-      "data-modal-example-questions":"How do I deploy to Rtd?,What is Mysticeti?,What are object ownership types for Rtd Move?,What are programmable transaction blocks (PTBs)?",
-      "data-modal-overlay-hidden": "true",
-      "data-modal-lock-scroll": "false",
-      "data-modal-image": "/img/logo.svg",
-      "data-mcp-enabled": "true",
-      "data-mcp-server-url": "https://rtd.mcp.kapa.ai",
-      "data-mcp-button-text": "Use Rtd MCP Server",
-      "data-chat-disclaimer": "**New:** Install [Rtd Agent Skills](https://docs.rtd.io/skills) to supercharge your AI coding agent with Rtd expertise.",
-      async: true,
-    },
-  ],
+  scripts: [],
   stylesheets: [
     {
       href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap",
@@ -489,19 +436,19 @@ const config = {
           },
           {
             type: "dropdown",
-            label: "Rtd Stack",
+            label: "Rtd Stack status",
             to: "rtd-stack",
             items: [
               { type: "doc", docId: "rtd-stack/on-chain-primitives/access-time", label: "Onchain Time" },
               { type: "doc", docId: "rtd-stack/on-chain-primitives/randomness-onchain", label: "Onchain Randomness" },
               { type: "doc", docId: "rtd-stack/sagat", label: "Sagat" },
-              { type: "doc", docId: "rtd-stack/walrus/index", label: "Walrus" },
-              { type: "doc", docId: "rtd-stack/seal/index", label: "Seal" },
-              { type: "doc", docId: "rtd-stack/rtdns/index", label: "RtdNS" },
+              { type: "doc", docId: "rtd-stack/walrus/index", label: "Walrus status" },
+              { type: "doc", docId: "rtd-stack/seal/rtd-stack-seal", label: "Seal status" },
+              { type: "doc", docId: "rtd-stack/rtdns/index", label: "RtdNS status" },
               { type: "doc", docId: "rtd-stack/enoki/solitaire", label: "Enoki" },
-              { type: "doc", docId: "rtd-stack/nautilus/index", label: "Nautilus" },
+              { type: "doc", docId: "rtd-stack/nautilus/index", label: "Nautilus status" },
               { type: "doc", docId: "rtd-stack/zklogin-integration/index", label: "zkLogin" },
-              { type: "doc", docId: "rtd-stack/suiplay0x1/index", label: "RtdPlay0X1" },
+              { type: "doc", docId: "rtd-stack/suiplay0x1/index", label: "RtdPlay0X1 status" },
             ],
           },
           {
@@ -516,7 +463,6 @@ const config = {
               { type: "doc", docId: "references/ptb-commands", label: "PTB Commands" },
               { type: "doc", docId: "references/framework", label: "Move Framework" },
               { type: "doc", docId: "references/object-display-syntax", label: "Object Display V2 Syntax" },
-              { type: "doc", docId: "references/release-notes", label: "Release Notes" },
               { type: "doc", docId: "references/rtd-glossary", label: "Glossary" },
             ],
           },
@@ -526,13 +472,13 @@ const config = {
         logo: {
           alt: "Rtd Logo",
           src: "img/rtd-logo-footer.svg",
-          href: "https://rtd.io",
+          href: "/",
         },
         style: "dark",
-        copyright: `© ${new Date().getFullYear()} Rtd Foundation | Documentation distributed under <a href="https://github.com/LinkUVerse/rtd/blob/main/docs/site/LICENSE">CC BY 4.0</a>`,
+        copyright: `© ${new Date().getFullYear()} Original contributors and RTD contributors | Documentation distributed under CC BY 4.0`,
       },
       codeblock: {
-        showGithubLink: true,
+        showGithubLink: false,
         githubLinkLabel: "View on GitHub",
       },
       prism: {

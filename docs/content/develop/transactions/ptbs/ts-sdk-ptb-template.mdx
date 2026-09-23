@@ -17,16 +17,20 @@ questions:
   - How do I send a transaction from a backend script?
   - How do I send a transaction from a frontend wallet?
 answer: >-
-  Install `@linku/rtd` in your project, build a `Transaction`, then sign it
+  Install `rtd-typescript` in your project, build a `Transaction`, then sign it
   with a keypair in a backend script or hand it to the user's wallet through
   dApp Kit in a frontend app.
 ---
+
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
+The package names below refer to the checked-in `temp/rtd-ts-sdk` source. Build and link those packages from that checkout unless you have independently verified a published distribution.
 
 A [Programmable Transaction Block](/develop/transactions/ptbs/prog-txn-blocks) (PTB) groups several onchain actions into a single transaction that succeeds or fails as a unit. Send one from an app you already have, whether it signs with its own key pair or relies on a user's wallet.
 
 :::tip
 
-The sections below cover the integration points, not the full API. For complete coverage of transaction building, including inputs, commands, results, and execution, see [Rtd Programmable Transaction Basics](https://sdk.linkuverse.com/typescript/transaction-building/basics) in the TypeScript SDK documentation.
+The sections below cover the integration points, not the full API. For complete coverage of transaction building, including inputs, commands, results, and execution, see [Rtd Programmable Transaction Basics](/references/rtd-sdks) in the TypeScript SDK documentation.
 
 :::
 
@@ -46,33 +50,25 @@ The Rtd TypeScript SDK ships as an ES module, so your project's TypeScript confi
 }
 ```
 
-Frontend build tools such as Vite and Next.js handle this for you. If you do not have a frontend project yet, the dApp Kit starter scaffolds one with the configuration already in place:
-
-```bash
-$ npm create @linku/dapp
-```
+Frontend build tools such as Vite and Next.js handle this for you. Create a frontend project with a tool you already trust, then install the checked-in RTD SDK packages.
 
 ## Send a transaction from a backend script
 
 A backend script signs with a key pair that you control. Load the secret key from an environment variable, never from a hardcoded string.
 
-Install the core SDK package:
-
-```bash
-$ npm install @linku/rtd
-```
+Add the built `rtd-typescript` package from the local RTD SDK checkout to your application.
 
 The following script builds a transaction that sends 0.1 RTD to a recipient, signs it, executes it, and checks the result:
 
 ```ts title='send.ts'
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-import { Transaction } from '@linku/rtd/transactions';
-import { MIST_PER_RTD } from '@linku/rtd/utils';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
+import { Transaction } from 'rtd-typescript/transactions';
+import { MIST_PER_RTD } from 'rtd-typescript/utils';
 
 const client = new RtdGrpcClient({
   network: 'devnet',
-  baseUrl: 'https://fullnode.devnet.rtd.io:443',
+  baseUrl: 'https://YOUR_RTD_FULLNODE_HOST',
 });
 
 // Load the secret key from the environment, never hardcode it.
@@ -99,21 +95,17 @@ Always check the `$kind` field on the result. A transaction can be submitted and
 
 A frontend app does not hold the user's key. The user's wallet signs the transaction through Rtd dApp Kit, so your code only builds the transaction and hands it to the wallet.
 
-Install dApp Kit alongside the core SDK:
+Add the built `rtd-dapp-kit-react` package alongside `rtd-typescript` from the local RTD SDK checkout.
 
-```bash
-$ npm install @linku/dapp-kit-react @linku/rtd
-```
-
-This example assumes a `DAppKitProvider` wraps your app, configured with `createDAppKit`. For the provider setup, see [Getting started with dApp Kit for React](https://sdk.linkuverse.com/dapp-kit/getting-started/react).
+This example assumes a `DAppKitProvider` wraps your app, configured with `createDAppKit`. For the provider setup, see [Getting started with dApp Kit for React](/references/rtd-sdks).
 
 The following component builds the transaction in the click handler and asks the connected wallet to sign and execute it:
 
 ```tsx title='SendButton.tsx'
-import { ConnectButton } from '@linku/dapp-kit-react/ui';
-import { useCurrentAccount, useDAppKit } from '@linku/dapp-kit-react';
-import { Transaction } from '@linku/rtd/transactions';
-import { MIST_PER_RTD } from '@linku/rtd/utils';
+import { ConnectButton } from 'rtd-dapp-kit-react/ui';
+import { useCurrentAccount, useDAppKit } from 'rtd-dapp-kit-react';
+import { Transaction } from 'rtd-typescript/transactions';
+import { MIST_PER_RTD } from 'rtd-typescript/utils';
 
 export function SendButton() {
   const account = useCurrentAccount();

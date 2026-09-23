@@ -1,28 +1,3 @@
 # PTB Builder Explorer
 
-## Tooling Category
-
-- [ ] dApp Development
-- [x] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [ ] SDK
-
-## Description
-
-A fork of the Polymedia Explorer.
-
-## Features
-- Fundamental network data (transactions, epoch,...)
-- Function execution
-- Analytics:
-    - Validators
-- Supported networks:
-    - Mainnet
-    - Testnet
-    - Devnet
-    - Local
-    - Custom nodes
-
-
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

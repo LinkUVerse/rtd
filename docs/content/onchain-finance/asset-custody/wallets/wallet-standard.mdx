@@ -50,9 +50,11 @@ answer: >-
   Standard](https://github.com/wallet-standard/wallet-standard/).
 ---
 
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
 Browser extension wallets built for Rtd use the [Wallet Standard](https://github.com/wallet-standard/wallet-standard/). This is a cross-chain standard that defines how apps can automatically discover and interact with wallets.
 
-If you are building a wallet, the helper library `@linku/wallet-standard` provides types and utilities to help get started.
+If you are building a wallet, the helper library `rtd-wallet-standard` provides types and utilities to help get started.
 
 ## Working with wallets
 
@@ -61,10 +63,10 @@ The Wallet Standard includes features to help build wallets.
 ### Creating a wallet interface
 
 Create a class that represents your wallet. Use the `Wallet` interface from
-`@linku/wallet-standard` to help ensure your class adheres to the standard.
+`rtd-wallet-standard` to help ensure your class adheres to the standard.
 
 ```tsx
-import { RTD_DEVNET_CHAIN, Wallet } from '@linku/wallet-standard';
+import { RTD_DEVNET_CHAIN, Wallet } from 'rtd-wallet-standard';
 
 class YourWallet implements Wallet {
 	get version() {
@@ -132,7 +134,7 @@ import {
   RtdSignPersonalMessage,
   RtdSignTransaction,
   RtdSignAndExecuteTransaction
-} from "@linku/wallet-standard";
+} from "rtd-wallet-standard";
 
 class YourWallet implements Wallet {
 	/* ... existing code from above ... */
@@ -195,7 +197,7 @@ The last requirement of the wallet interface is to expose an `accounts` interfac
 The accounts use the `ReadonlyWalletAccount` class to construct an account matching the required interface.
 
 ```tsx
-import { ReadonlyWalletAccount } from '@linku/wallet-standard';
+import { ReadonlyWalletAccount } from 'rtd-wallet-standard';
 
 class YourWallet implements Wallet {
 	get accounts() {
@@ -227,7 +229,7 @@ After you have a compatible interface for your wallet, use the `registerWallet`
 function to register it.
 
 ```tsx
-import { registerWallet } from '@linku/wallet-standard';
+import { registerWallet } from 'rtd-wallet-standard';
 
 registerWallet(new YourWallet());
 ```
@@ -241,7 +243,7 @@ The Wallet Standard includes features to help your apps interact with wallets.
 To query the installed wallets in a user's browser, use the `get` function of `getWallets`.
 
 ```tsx
-import { getWallets } from '@linku/wallet-standard';
+import { getWallets } from 'rtd-wallet-standard';
 
 const availableWallets = getWallets().get();
 ```
@@ -295,7 +297,7 @@ wallet.features['standard:disconnect'].disconnect();
 
 Once the user has authorized accounts from a wallet, your app has the necessary information to execute transactions, such as address and method.
 
-Construct the transaction separately with the `@linku/rtd` library and then sign it with the private key of the user. Use the `rtd:signTransaction` feature to achieve this:
+Construct the transaction separately with the `rtd-typescript` library and then sign it with the private key of the user. Use the `rtd:signTransaction` feature to achieve this:
 
 ```tsx
 wallet.features['rtd:signTransaction'].signTransaction({
@@ -306,15 +308,15 @@ wallet.features['rtd:signTransaction'].signTransaction({
 
 Similar to account authorization, this process opens a pop-up dialog for the user to either accept or decline the transaction. Upon accepting, the function returns an object in the form `{bytes: String, signature: Uint8Array}`. The `bytes` value is the `b64` encoding of the transaction and the `signature` value is the transaction signature.
 
-To execute the transaction, use a Rtd client such as `RtdGrpcClient` from `@linku/rtd/grpc`:
+To execute the transaction, use a Rtd client such as `RtdGrpcClient` from `rtd-typescript/grpc`:
 
 ```tsx
-import { fromBase64 } from '@linku/rtd/utils';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { fromBase64 } from 'rtd-typescript/utils';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
 
 const client = new RtdGrpcClient({
-  network: 'mainnet',
-  baseUrl: 'https://fullnode.mainnet.rtd.io:443',
+  network: 'localnet',
+  baseUrl: process.env.RTD_FULLNODE_GRPC_URL!,
 });
 await client.executeTransaction({
   transaction: fromBase64(bytes),
@@ -365,4 +367,4 @@ These values are all arrays containing the new or changed items. Consequently, e
 
 ### Implementation example
 
-LinkU Labs offers a bare bones scaffold for React-based applications called `@linku/dapp-kit-react`. See the [dApp Kit documentation](https://sdk.linkuverse.com/dapp-kit) for more information.
+The forked RTD TypeScript SDK contains a `dapp-kit` source package for React applications. Build and test it against the target RTD chain and a compatible wallet before enabling a connection flow. This source package does not establish a hosted SDK site or a public wallet integration.

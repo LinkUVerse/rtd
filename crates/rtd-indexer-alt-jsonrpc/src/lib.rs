@@ -133,8 +133,8 @@ impl RpcService {
             "Rtd JSON-RPC",
             "A JSON-RPC API for interacting with the Rtd blockchain.",
             "LinkU Labs",
-            "https://linkuverse.com",
-            "build@linkuverse.com",
+            "https://github.com/LinkUVerse/rtd",
+            "",
             "Apache-2.0",
             "https://raw.githubusercontent.com/LinkUVerse/rtd/main/LICENSE",
         );

@@ -5,10 +5,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # rtd-execution-backtest
 
-Backtests the execution layer against historical mainnet data: it re-executes past transactions
+Backtests the execution layer against historical data from a configured RTD network: it re-executes past transactions
 under the **current** execution rules and reports where the recomputed result diverges from what was
 recorded on chain. Useful for measuring the behavioral impact of an execution/protocol change before
 it ships (e.g. a VM, gas, or linkage change).
+
+**RTD has no public Mainnet or public checkpoint archive yet.** Supply endpoints and epoch ranges
+from a network you operate. The following commands require explicit endpoint variables; they are
+not ready-to-run Mainnet examples.
 
 It runs as a [`rtd-indexer-alt-framework`](../rtd-indexer-alt-framework) concurrent pipeline:
 
@@ -44,35 +48,31 @@ The output sink is selected with `--store`:
 ```bash
 # Zero-setup ndjson run.
 cargo run --release -p rtd-execution-backtest -- \
-  --remote-store-url https://checkpoints.mainnet.rtd.io \
-  --fullnode-url https://linku-rpc.mainnet.rtd.io:443 \
-  --graphql mainnet \
-  --start-epoch 1152 --end-epoch 1152 --status all \
+  --remote-store-url "$RTD_CHECKPOINT_URL" \
+  --fullnode-url "$RTD_FULLNODE_URL" \
+  --graphql "$RTD_GRAPHQL_URL" \
+  --start-epoch "$RTD_START_EPOCH" --end-epoch "$RTD_END_EPOCH" --status all \
   --execute-concurrency 24 \
   --cache ./.package-cache \
   --store ndjson --output ./divergences.ndjson
 
 # Postgres run, with a run identifier (see --task below).
 cargo run --release -p rtd-execution-backtest -- \
-  --remote-store-url https://checkpoints.mainnet.rtd.io \
-  --fullnode-url https://linku-rpc.mainnet.rtd.io:443 \
-  --graphql mainnet \
-  --start-epoch 1152 --end-epoch 1152 --status all \
+  --remote-store-url "$RTD_CHECKPOINT_URL" \
+  --fullnode-url "$RTD_FULLNODE_URL" \
+  --graphql "$RTD_GRAPHQL_URL" \
+  --start-epoch "$RTD_START_EPOCH" --end-epoch "$RTD_END_EPOCH" --status all \
   --cache ./.package-cache \
   --store postgres --database-url postgres://localhost/backtest \
   --task my-linkage-change
 ```
 
-- **Checkpoint source.** Prefer a remote object store — the fast archival path — with a
-  `--fullnode-url` supplied separately for epoch + package resolution. The HTTP endpoint
-  (`--remote-store-url https://checkpoints.<network>.rtd.io`) is the zero-setup option but **only
-  retains roughly the last 30 days**, so backtesting older epochs needs the GCS bucket directly via
-  `--remote-store-gcs <bucket>` (see [accessing checkpoint
-  data](https://docs.rtd.io/guides/developer/advanced/custom-indexer#remote-reader)); running
-  colocated with the bucket also avoids egress cost and latency. Alternatively a single
+- **Checkpoint source.** Prefer a remote object store that you operate, with a
+  `--fullnode-url` supplied separately for epoch and package resolution. Retention and availability
+  depend on that store's configuration. Alternatively a single
   `--rpc-api-url` fullnode can serve as both (slower; see the rate-limit caveat below).
-- **`--graphql`** (required) is the GraphQL endpoint used to read each epoch's framework packages as
-  of its first checkpoint: `mainnet`, `testnet`, or a GraphQL url. See [System
+- **`--graphql`** (required) is the explicitly configured GraphQL URL used to read each epoch's framework packages as
+  of its first checkpoint. See [System
   packages](#how-execution-context-is-reconstructed) for why the fullnode's gRPC API cannot serve
   this.
 - `--start-epoch` / `--end-epoch` select the inclusive epoch range.
@@ -170,10 +170,9 @@ are counted in `coin_reservation_skipped` and skipped.
   consensus-layer congestion / randomness control never ran on chain, so they "succeed" here. These
   are detected from the on-chain effects and counted under `cancellation_excluded` rather than
   reported as divergences.
-- **Public-node rate limiting.** Package fetches go to the fullnode; `fullnode.mainnet.rtd.io`
-  returns HTTP 429 under concurrent load. The fetcher retries with backoff, but prefer
-  `--remote-store-url` for checkpoints plus a dedicated/archival fullnode. Public nodes also prune
-  old epochs — only recent epochs are available there.
+- **Fullnode rate limiting.** Package fetches go to the configured fullnode. Its operator may
+  return HTTP 429 under concurrent load or prune old epochs. The fetcher retries with backoff;
+  prefer an archival fullnode and a checkpoint store you operate when replaying older data.
 - **Address-balance state is not reconstructed.** Transactions paying gas or funds from an address
   balance (the accumulator; counted under `gas_from_balance`) are replayed without it, so a
   withdrawal that failed on chain with `InsufficientFundsForWithdraw` can succeed here. This is

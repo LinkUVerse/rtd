@@ -5,18 +5,16 @@ enclosed in quotation marks, you should use an editor that supports UTF-8, not t
 	<metadata>
 		<id>rtd</id>
 		<version>$version$</version>
-		<owners>Rtd Foundation</owners>
+		<owners>LinkUVerse</owners>
 		<title>Main Rtd Binary</title>
-		<authors>rtd</authors>
-		<projectUrl>https://rtd.io/</projectUrl>
+		<authors>LinkUVerse</authors>
+		<projectUrl>https://github.com/LinkUVerse/rtd</projectUrl>
 		<licenseUrl>https://github.com/LinkUVerse/rtd/blob/main/LICENSE</licenseUrl>
-		<iconUrl>https://assets-global.website-files.com/6425f546844727ce5fb9e5ab/643775f4a15c9a9e10426daa_Rtd_Favicon_256.png</iconUrl>
 		<projectSourceUrl>https://github.com/LinkUVerse/rtd/</projectSourceUrl>
 		<bugTrackerUrl>https://github.com/LinkUVerse/rtd/issues</bugTrackerUrl>
 		<tags>rtd</tags>
-		<packageSourceUrl>https://community.chocolatey.org/packages/rtd.portable</packageSourceUrl>
-		<summary>Rtd delivers the benefits of Web3 with the ease of Web2</summary>
-		<description>Rtd is the first internet-scale programmable blockchain platform</description>
+		<summary>RTD blockchain command-line tools</summary>
+		<description>Command-line tools for the RTD blockchain fork</description>
 		<releaseNotes>See https://github.com/LinkUVerse/rtd/releases/tag/testnet-v$version$</releaseNotes>
 	</metadata>
 	<files>

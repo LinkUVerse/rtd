@@ -33,15 +33,15 @@ external_keys:
   External: "./external.keystore"
 envs:
   - alias: testnet
-    rpc: "https://fullnode.testnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
   - alias: mainnet
-    rpc: "https://fullnode.mainnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
   - alias: devnet
-    rpc: "https://fullnode.devnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
   - alias: local

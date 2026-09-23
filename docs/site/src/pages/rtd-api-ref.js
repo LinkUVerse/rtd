@@ -3,7 +3,6 @@
 
 import React from "react";
 import Layout from "@theme/Layout";
-import API from "../components/API";
 
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 
@@ -17,11 +16,11 @@ export default function JsonRpc() {
             Legacy API scheduled for removal
           </p>
           <p>
-            Rtd Foundation disabled JSON-RPC on Mainnet full nodes the week of
-            July&nbsp;27,&nbsp;2026, and plans full decommission, including code
-            removal, for mid-October&nbsp;2026, when this reference moves to the
-            archive. Use this page to identify the legacy methods your
-            application still calls, not to build new integrations. Call{" "}
+            RTD has not launched Mainnet. Its future Mainnet will not expose
+            JSON-RPC, following the upstream Sui direction. The upstream
+            July&nbsp;2026 dates do not describe an RTD event. Use this page
+            to identify methods in local deployments that still expose the
+            legacy service. Call{" "}
             <a href="/develop/accessing-data/grpc">gRPC</a> or{" "}
             <a href="/develop/accessing-data/graphql/graphql-rpc">
               GraphQL RPC
@@ -34,13 +33,11 @@ export default function JsonRpc() {
           </p>
         </div>
         <p>
-          Complete reference for the legacy Rtd JSON-RPC API. Browse methods,
-          request parameters, and response schemas to identify the calls your
-          application still depends on, then map each one to its gRPC or GraphQL
-          replacement.
+          A public RTD API catalog and network-specific OpenRPC snapshots have
+          not been released. Inspect the source specification and query your
+          own RTD node for the API enabled in your deployment.
         </p>
       </div>
-      <API />
     </Layout>
   );
 }

@@ -42,7 +42,7 @@ env:
   # workflow_dispatch (sub = refs/heads/main, trusted; the tag-prefix + refs/tags
   # checkout guards restrict it to published release tags). There is no
   # pull_request trigger, so sccache always uses the RW role.
-  SCCACHE_ROLE: arn:aws:iam::011083325127:role/rtd-sccache-rw-github
+  SCCACHE_ROLE: ${{ vars.RTD_AWS_SCCACHE_RW_ROLE_ARN }}
 
 jobs:
   release-build:
@@ -110,22 +110,33 @@ jobs:
           echo "os_type=${system_os}-${arch}" >> $GITHUB_ENV     
 
       - name: Check if archive for this version has already been published
+        if: ${{ vars.RTD_RELEASE_ARCHIVE_BASE_URL != '' }}
         continue-on-error: true
         shell: bash
+        env:
+          RTD_RELEASE_ARCHIVE_BASE_URL: ${{ vars.RTD_RELEASE_ARCHIVE_BASE_URL }}
         run: |
+          archive_base="${RTD_RELEASE_ARCHIVE_BASE_URL%/}"
+          if [[ "$archive_base" != https://* ]]; then
+            echo "::warning::RTD_RELEASE_ARCHIVE_BASE_URL must be HTTPS; building from source"
+            exit 0
+          fi
           echo "s3_existing_archive=$(for network in mainnet testnet devnet; do \
-            if curl -Is https://rtd-releases.s3.us-east-1.amazonaws.com/releases/rtd-${network}-v${{ env.rtd_version }}-${{ env.os_type }}.tgz \
+            if curl -Is "${archive_base}/releases/rtd-${network}-v${{ env.rtd_version }}-${{ env.os_type }}.tgz" \
             | head -n1 | grep -q '200 OK'; then echo "releases/rtd-${network}-v${{ env.rtd_version }}-${{ env.os_type }}.tgz"; \
             break; fi; done)" >> $GITHUB_ENV
 
       - name: Download archive, if it exists
         if: ${{ env.s3_existing_archive != '' }}
         shell: bash
+        env:
+          RTD_RELEASE_ARCHIVE_BASE_URL: ${{ vars.RTD_RELEASE_ARCHIVE_BASE_URL }}
         run: |
           mkdir -p ${{ env.TMP_BUILD_DIR }}
           # released archives are publicly readable (the existence check above
           # relies on that), so no AWS credentials are needed here
-          curl -fSs -o ./tmp/rtd-${{ env.rtd_tag }}-${os_type}.tgz https://rtd-releases.s3.us-east-1.amazonaws.com/${{ env.s3_existing_archive }}
+          archive_base="${RTD_RELEASE_ARCHIVE_BASE_URL%/}"
+          curl -fSs -o ./tmp/rtd-${{ env.rtd_tag }}-${os_type}.tgz "${archive_base}/${{ env.s3_existing_archive }}"
           tar -xf ./tmp/rtd-${{ env.rtd_tag }}-${os_type}.tgz -C ${{ env.TMP_BUILD_DIR }}
 
       - name: Install nexttest (Windows)
@@ -173,10 +184,13 @@ jobs:
         if: ${{ env.s3_existing_archive == '' }}
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           # macos-latest-large (Intel) is the slowest release runner; its build
           # exceeds the default 1h OIDC session, expiring sccache's S3 token
           # mid-build (ExpiredToken). Request a 4h session for that leg only.
-          # Requires rtd-sccache-rw-github MaxSessionDuration >= 14400.
+          # Requires the configured cache role MaxSessionDuration >= 14400.
           role-duration-seconds: ${{ matrix.os == 'macos-latest-large' && '14400' || '' }}
           key-prefix: ${{ matrix.os }}
 
@@ -219,24 +233,30 @@ jobs:
           tar -cvzf ./tmp/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz -C ${{ env.TMP_BUILD_DIR }} .
 
       - name: Publish Windows rtd binary to Chocolatey
-        if: ${{ matrix.os == 'windows-ghcloud' && contains(env.rtd_tag, 'testnet') }}
+        if: ${{ matrix.os == 'windows-ghcloud' && contains(env.rtd_tag, 'testnet') && vars.RTD_ENABLE_CHOCOLATEY_PUBLISH == 'true' }}
         shell: bash
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
         run: |
+          if [[ -z "$CHOCO_API_KEY" ]]; then
+            echo "::error::CHOCO_API_KEY is required when RTD_ENABLE_CHOCOLATEY_PUBLISH is true"
+            exit 1
+          fi
           choco install checksum
           export rtd_sha=$(checksum -t sha256 ${{ env.TMP_BUILD_DIR }}/rtd.exe)
           cd chocolatey
 
           cat <<EOF >>VERIFICATION.txt
           Rtd Binary verification steps
-          1. Download https://github.com/LinkUVerse/rtd/releases/download/${{ env.rtd_tag }}/rtd-${{ env.rtd_tag }}-windows-x86_64.tgz
+          1. Download https://github.com/${{ github.repository }}/releases/download/${{ env.rtd_tag }}/rtd-${{ env.rtd_tag }}-windows-x86_64.tgz
           2. Extract rtd.exe
           3. Verify binary: checksum.exe -t sha256 rtd.exe: ${rtd_sha}
 
-          File 'LICENSE.txt' is obtained from: https://github.com/LinkUVerse/rtd/blob/main/LICENSE
+          File 'LICENSE.txt' is obtained from: https://github.com/${{ github.repository }}/blob/main/LICENSE
           EOF
 
           choco pack --version ${{ env.rtd_version }} configuration=release
-          choco apikey --api-key ${{ secrets.CHOCO_API_KEY }} --source https://push.chocolatey.org/
+          choco apikey --api-key "$CHOCO_API_KEY" --source https://push.chocolatey.org/
           choco push rtd.${{ env.rtd_version }}.nupkg --source https://push.chocolatey.org/
 
       - name: Upload release artifacts for ${{ matrix.os }} platform
@@ -255,24 +275,24 @@ jobs:
             ./tmp/rtd-${{ env.rtd_tag }}-${{ env.os_type }}.tgz
 
       - name: Dispatch Walrus Rtd testnet tag update
-        if: ${{ matrix.os == 'ubuntu-ghcloud' && contains(env.rtd_tag, 'testnet') }}
+        if: ${{ matrix.os == 'ubuntu-ghcloud' && contains(env.rtd_tag, 'testnet') && vars.RTD_WALRUS_REPOSITORY != '' }}
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # pin@v4.0.1
         with:
-          repository: LinkUVerse/walrus
+          repository: ${{ vars.RTD_WALRUS_REPOSITORY }}
           token: ${{ secrets.WALRUS_REPO_DISPATCH }}
           event-type: update-walrus-rtd-testnet-tag
           client-payload: '{"new_tag": "${{ env.rtd_tag }}"}'
 
-  # Copy built archives to s3://rtd-releases so future runs skip the rebuild and
+  # Copy built archives to the configured S3 bucket so future runs skip the rebuild and
   # node operators can pull binaries by tag. Runs in the protected `release`
   # environment to assume the dedicated release-s3 OIDC role, credential-isolated
-  # from the build job (see .github/AWS_OIDC_ROLES.md, Role 2). `!cancelled()`
+  # from the build job (see .github/AWS_OIDC_ROLES.md). `!cancelled()`
   # preserves the old per-platform best-effort upload: archives from matrix legs
   # that succeeded are uploaded even if another leg failed.
   upload-release-archives-to-s3:
     name: Upload release archives to S3
     needs: release-build
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && vars.RTD_AWS_ACCOUNT_ID != '' && vars.RTD_AWS_RELEASES_ROLE_ARN != '' && vars.RTD_RELEASES_S3_BUCKET != '' && vars.RTD_AWS_REGION != '' }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -289,21 +309,29 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # pin@v5.1.1
         with:
-          role-to-assume: arn:aws:iam::011083325127:role/rtd-releases-rw-github
-          allowed-account-ids: '011083325127'
-          aws-region: us-west-2
+          role-to-assume: ${{ vars.RTD_AWS_RELEASES_ROLE_ARN }}
+          allowed-account-ids: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
 
-      - name: Upload archives to s3://rtd-releases
+      - name: Upload archives to configured S3 bucket
         shell: bash
+        env:
+          RTD_RELEASES_S3_BUCKET: ${{ vars.RTD_RELEASES_S3_BUCKET }}
         run: |
           shopt -s nullglob
-          for f in ./archives/*.tgz; do
-            aws s3 cp "$f" "s3://rtd-releases/releases/$(basename "$f")" || true
+          archives=(./archives/*.tgz)
+          if (( ${#archives[@]} == 0 )); then
+            echo "::error::No release archives were produced"
+            exit 1
+          fi
+          for f in "${archives[@]}"; do
+            aws s3 cp "$f" "s3://${RTD_RELEASES_S3_BUCKET}/releases/$(basename "$f")"
           done
 
   # Tag all rtd images with release tag, so that they can be easily found
   tag-docker-hub-images:
     name: Tag rtd docker images in DockerHub
+    if: ${{ vars.RTD_OPERATIONS_REPOSITORY != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Derive cache_family from release tag
@@ -317,10 +345,10 @@ jobs:
           release_branch_version=$(echo "${rtd_version}" | awk -F. '{print $1"."$2".0"}')
           echo "cache_family=releases/rtd-v${release_branch_version}-release" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch Tagging of images in DockerHub, in LinkUVerse/rtd-operations
+      - name: Dispatch Tagging of images in DockerHub, in configured operations repository
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # pin@v4.0.1
         with:
-          repository: LinkUVerse/rtd-operations
+          repository: ${{ vars.RTD_OPERATIONS_REPOSITORY }}
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: tag-docker-images
           client-payload: '{"rtd_commit": "${{ github.sha }}", "tag": "${{ env.TAG_NAME }}", "cache_family": "${{ steps.cf.outputs.cache_family }}"}'
@@ -329,6 +357,8 @@ jobs:
   # by tag name (e.g. `release: testnet-v1.70.2` in ansible) find them.
   tag-release-binaries-in-s3:
     name: Tag rtd binaries in s3
+    needs: upload-release-archives-to-s3
+    if: ${{ needs['upload-release-archives-to-s3'].result == 'success' && vars.RTD_OPERATIONS_REPOSITORY != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Derive cache_family from release tag
@@ -342,10 +372,10 @@ jobs:
           release_branch_version=$(echo "${rtd_version}" | awk -F. '{print $1"."$2".0"}')
           echo "cache_family=releases/rtd-v${release_branch_version}-release" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch ensure-rtd-binaries in LinkUVerse/rtd-operations
+      - name: Dispatch ensure-rtd-binaries in configured operations repository
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # pin@v4.0.1
         with:
-          repository: LinkUVerse/rtd-operations
+          repository: ${{ vars.RTD_OPERATIONS_REPOSITORY }}
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: ensure-rtd-binaries
           client-payload: '{"rtd_commit": "${{ github.sha }}", "tag_name": "${{ env.TAG_NAME }}", "cache_family": "${{ steps.cf.outputs.cache_family }}"}'

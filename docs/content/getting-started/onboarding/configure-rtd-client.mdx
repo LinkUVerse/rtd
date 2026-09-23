@@ -1,141 +1,30 @@
 ---
-title: Configure a Rtd Client
-description: >-
-  Configure the Rtd CLI client to connect to Testnet, Devnet, or a custom
-  network, and verify your setup is working.
+title: Configure an RTD Client
+sidebar_label: Configure an RTD Client
+description: Point the RTD CLI at a verified RTD network endpoint.
 keywords:
-  - rtd client
-  - rtd configuration
+  - RTD client
   - client.yaml
-  - client config
-  - local config
-  - configure tooling
-  - configure rtd client
-  - configure rtd
-  - config rtd
-pagination_prev: null
-pagination_next: null
-goal:
-  description: >-
-    Reader can configure the Rtd client for Testnet, Devnet, or a custom network
-    and verify connectivity
-  requires:
-    - pattern: '```'
-      min: 2
-      label: Has command or code examples
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - links_to:
-        - /getting-started/onboarding/get-address
-      label: Links to next onboarding step
-    - pattern: rtd --version|rtd -V
-      min: 1
-      label: Shows how to verify installation
-    - min_words: 300
-      label: Needs more walkthrough depth
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+  - local network
 questions:
-  - How do I configure the Rtd client for a specific network?
-  - 'How do I switch between Rtd Testnet, Devnet, and Mainnet?'
-  - What is client.yaml and how do I edit it?
+  - How do I configure the RTD client for a local network?
+  - How do I verify the active RTD chain?
 answer: >-
-  The Rtd client configuration specifies which network to connect to and which
-  address to send transactions.
+  Add the RPC endpoint from the RTD network you operate, select that environment,
+  and compare its chain identifier with the network's genesis. Public Sui
+  endpoints and inherited network aliases do not identify an RTD chain.
 ---
 
-The Rtd client configuration specifies which network to connect to and which address to send transactions.
+First, [build the RTD CLI](/getting-started/onboarding/rtd-install) and [start a local network](/getting-started/onboarding/local-network). The CLI stores client configuration under `~/.rtd/rtd_config` by default. A different config directory can be selected through the CLI options.
 
-<Tabs className="tabsHeadingCentered--small">
-<TabItem value="prereq" label="Prerequisites">
-
-First, confirm that Rtd has been installed successfully:
-
-```
-$ rtd --version
-```
-
-If this command returns `rtd not found`, then Rtd is not installed and you must [follow the installation instructions](/getting-started/onboarding/rtd-install).
-
-</TabItem>
-</Tabs>
-
-## `rtd client`
-
-Run the Rtd CLI with the command:
-
-```
-$ rtd client
+```sh
+rtd --version
+rtd client new-env --alias localnet --rpc http://127.0.0.1:9000
+rtd client switch --env localnet
+rtd client active-env
+rtd client chain-identifier --format hex
 ```
 
-:::info
+Use the actual endpoint shown by your node if it differs from the example. Record the chain ID together with the genesis file and compare it with the chain you intended to connect to. The CLI may inherit `devnet`, `testnet`, or `mainnet` aliases from upstream defaults; these aliases and their public URLs are not RTD services. Do not select them for an RTD transaction.
 
-If a previous Rtd installation stored a `client.yaml` file locally, you receive the `rtd client --help` output in the console. You can delete the existing `~/.rtd/rtd_config/client.yaml` file if you'd like to start fresh, or you can continue using the existing configuration.
-
-:::
-
-The prompt asks if you want to create the `client.yaml` file, select `Y` or press enter. You can skip the prompt with `rtd client -y`.
-
-```
-No rtd config found in `~/.rtd/rtd_config/client.yaml`, create one [Y/n]?
-```
-
-You see the following output:
-
-```
-Generated new keypair ...
-  secret recovery phrase : [recovery phrase words are here]
-Created "~/.rtd/rtd_config/client.yaml"
-Set active environment to testnet
-```
-
-:::caution
-
-Store recovery phrases securely and do not share them with anyone, as they provide access to any objects and tokens that an address owns.
-
-The recovery phrase is not visible again once the CLI history disappears.
-
-[Learn more](/getting-started/onboarding/get-address) about Rtd addresses, key generation, and recovery phrases.
-
-:::
-
-## `client.yaml`
-
-Your Rtd client is now configured. By default, Rtd stores this information in either the `~/.rtd/rtd_config/client.yaml` file (macOS/Linux) or `%USERPROFILE%\.rtd\rtd_config\client.yaml` file (Windows). You can store a `client.yaml` file in a different location, if preferred, and specify its location with the `--client.config` flag.
-
-The `client.yaml` contains the configuration for connecting to different Rtd networks (Testnet, Mainnet, Devnet, and Localnet), as well as your current active environment, which tells the CLI which network to use when you don't explicitly specify one.
-
-You can modify your configuration using the `rtd client` subcommands. See the output of `rtd client --help` for more information.
-
-Rtd stores the key for the Rtd address in a separate file, `~/.rtd/rtd_config/rtd.keystore` (macOS/Linux) or `%USERPROFILE/.rtd/rtd_config/rtd.keystore` (Windows). Learn more about Rtd addresses in [Create a Rtd Address](/getting-started/onboarding/get-address).
-
-<div className="next-steps-module">
-  <div className="next-steps-header">
-    <h3>Next steps</h3>
-  </div>
-  <div className="next-steps-grid">
-    <Card className="plausible-event-name=client+address+button"
-      title="Learn More About Rtd Addresses"
-      href="/getting-started/onboarding/get-address"
-    >
-      Now that you have created a Rtd address, learn about address management, key pairs, and recovery phrase best practices.
-    </Card>
-    <Card className="plausible-event-name=client+faucet+button"
-      title="Get RTD from Faucet"
-      href="/getting-started/onboarding/get-coins"
-    >
-      Obtain RTD from a faucet to deploy packages on Testnet.
-    </Card>
-        <Card className="plausible-event-name=client+hello+button"
-      title="Hello, World!"
-      href="/getting-started/onboarding/hello-world"
-    >
-      Clone the "Hello, World!" project.
-    </Card>
-  </div>
-</div>
+Run `rtd client active-address` to inspect the current address. The keystore contains signing material; protect it and any recovery phrase. Next, [create or select an address](/getting-started/onboarding/get-address) and [obtain gas on the same network](/getting-started/onboarding/get-coins).

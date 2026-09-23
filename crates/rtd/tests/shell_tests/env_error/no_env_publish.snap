@@ -21,6 +21,6 @@ To publish on a different environment, you can use `rtd client switch --env <env
 
 To make a temporary publication on `devnet`, use the `rtd client test-publish` command instead.
 
-It is also possible to add a new environment to `Move.toml` if you want to maintain a persistent publication on `devnet`; see https://docs.rtd.io/guides/developer/packages/move-package-management#environments for more details.
+It is also possible to add a new environment to `Move.toml` if you want to maintain a persistent publication on `devnet`.
 
 ----- stderr -----

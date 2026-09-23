@@ -550,7 +550,7 @@ impl TransactionDigest {
     /// ie. for an object there is no parent digest.
     /// Note that this is not the same as the digest of the genesis transaction,
     /// which cannot be known ahead of time.
-    // TODO(https://github.com/LinkUVerse/rtd/issues/65): we can pick anything here
+    // The marker only needs to differ from a real genesis transaction digest.
     pub const fn genesis_marker() -> Self {
         Self::ZERO
     }

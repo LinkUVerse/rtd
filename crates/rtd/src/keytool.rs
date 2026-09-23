@@ -1,6 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use crate::zklogin_commands_util::{perform_zk_login_test_tx, read_cli_line};
+use crate::zklogin_commands_util::perform_zk_login_test_tx;
 use anyhow::anyhow;
 use aws_sdk_kms::{
     Client as KmsClient,
@@ -16,8 +16,7 @@ use fastcrypto::jwt_utils::parse_and_validate_jwt;
 use fastcrypto::secp256k1::recoverable::Secp256k1Sig;
 use fastcrypto::traits::{KeyPair, ToFromBytes};
 use fastcrypto_zkp::bn254::utils::{
-    gen_address_seed, get_nonce, get_oidc_url, get_proof, get_test_issuer_jwt_token,
-    get_token_exchange_url,
+    gen_address_seed, get_nonce, get_proof, get_test_issuer_jwt_token,
 };
 use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
 use fastcrypto_zkp::bn254::zk_login::{OIDCProvider, ZkLoginInputs, fetch_jwks};
@@ -26,7 +25,6 @@ use imbl::hashmap::HashMap as ImHashMap;
 use json_to_table::{Orientation, json_to_table};
 use linku_common::ZipDebugEqIteratorExt;
 use num_bigint::BigUint;
-use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rtd_keys::key_derive::generate_new_key;
@@ -229,8 +227,7 @@ pub enum KeyToolCommand {
     /// and prints out its Rtd address, Base64 encoded public key, the key scheme, and the key scheme flag.
     Unpack { keypair: String },
 
-    /// Given the max_epoch, generate an OAuth url, ask user to paste the redirect with id_token, call salt server, then call the prover server,
-    /// create a test transaction, use the ephemeral key to sign and execute it by assembling to a serialized zkLogin signature.
+    /// Disabled until RTD OAuth clients, redirect URLs, and zkLogin services have been configured.
     ZkLoginSignAndExecuteTx {
         #[clap(long)]
         max_epoch: EpochId,
@@ -244,7 +241,7 @@ pub enum KeyToolCommand {
         sign_with_sk: bool, // if true, execute tx with the traditional sig (in the multisig), otherwise with the zklogin sig.
     },
 
-    /// A workaround to the above command because sometimes token pasting does not work (for Facebook). All the inputs required here are printed from the command above.
+    /// Execute a zkLogin test transaction with a token and parameters supplied by a separately configured RTD client.
     ZkLoginEnterToken {
         #[clap(long)]
         parsed_token: String,
@@ -1024,232 +1021,11 @@ impl KeyToolCommand {
                     },
                 )
             }
-            KeyToolCommand::ZkLoginSignAndExecuteTx {
-                max_epoch,
-                network,
-                fixed,
-                test_multisig,
-                sign_with_sk,
-            } => {
-                let skp = if fixed {
-                    RtdKeyPair::Ed25519(Ed25519KeyPair::generate(&mut StdRng::from_seed([0; 32])))
-                } else {
-                    RtdKeyPair::Ed25519(Ed25519KeyPair::generate(&mut rand::thread_rng()))
-                };
-                println!("Ephemeral keypair: {:?}", skp.encode());
-                let pk = skp.public();
-                let ephemeral_key_identifier: RtdAddress = (&skp.public()).into();
-                println!("Ephemeral key identifier: {ephemeral_key_identifier}");
-                context.config.keystore.import(None, skp).await?;
-
-                let mut eph_pk_bytes = vec![pk.flag()];
-                eph_pk_bytes.extend(pk.as_ref());
-                let kp_bigint = BigUint::from_bytes_be(&eph_pk_bytes);
-                println!("Ephemeral pubkey (BigInt): {:?}", kp_bigint);
-
-                let jwt_randomness = if fixed {
-                    "100681567828351849884072155819400689117".to_string()
-                } else {
-                    let random_bytes = rand::thread_rng().r#gen::<[u8; 16]>();
-                    let jwt_random_bytes = BigUint::from_bytes_be(&random_bytes);
-                    jwt_random_bytes.to_string()
-                };
-                println!("Jwt randomness: {jwt_randomness}");
-                let url = get_oidc_url(
-                    OIDCProvider::Google,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "25769832374-famecqrhe2gkebt5fvqms2263046lj96.apps.googleusercontent.com",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_2 = get_oidc_url(
-                    OIDCProvider::Twitch,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "rs1bh065i9ya4ydvifixl4kss0uhpt",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_3 = get_oidc_url(
-                    OIDCProvider::Facebook,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "233307156352917",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_4 = get_oidc_url(
-                    OIDCProvider::Kakao,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "aa6bddf393b54d4e0d42ae0014edfd2f",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_5 = get_token_exchange_url(
-                    OIDCProvider::Kakao,
-                    "aa6bddf393b54d4e0d42ae0014edfd2f",
-                    "https://rtd.io/",
-                    "$YOUR_AUTH_CODE",
-                    "", // not needed
-                )?;
-                let url_6 = get_oidc_url(
-                    OIDCProvider::Apple,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "nl.digkas.wallet.client",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_7 = get_oidc_url(
-                    OIDCProvider::Slack,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "2426087588661.5742457039348",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_8 = get_token_exchange_url(
-                    OIDCProvider::Slack,
-                    "2426087588661.5742457039348",
-                    "https://rtd.io/",
-                    "$YOUR_AUTH_CODE",
-                    "39b955a118f2f21110939bf3dff1de90",
-                )?;
-                let url_9 = get_oidc_url(
-                    OIDCProvider::AwsTenant((
-                        "us-east-1".to_string(),
-                        "zklogin-example".to_string(),
-                    )),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "6c56t7re6ekgmv23o7to8r0sic",
-                    "https://www.rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_10 = get_oidc_url(
-                    OIDCProvider::Microsoft,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "2e3e87cb-bf24-4399-ab98-48343d457124",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_11 = get_oidc_url(
-                    OIDCProvider::KarrierOne,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "kns-dev",
-                    "https://rtd.io/", // placeholder
-                    &jwt_randomness,
-                )?;
-                let url_12 = get_oidc_url(
-                    OIDCProvider::Credenza3,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "65954ec5d03dba0198ac343a",
-                    "https://example.com/callback",
-                    &jwt_randomness,
-                )?;
-                let url_14 = get_oidc_url(
-                    OIDCProvider::Arden,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "2e3i87cb-bf24-4399-ab98-48343d457124",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_15 = get_oidc_url(
-                    OIDCProvider::AwsTenant(("eu-west-3".to_string(), "trace".to_string())),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "trace-dev",
-                    "https://trace.fan",
-                    &jwt_randomness,
-                )?;
-                let url_16 = get_oidc_url(
-                    OIDCProvider::EveFrontier,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "583ebc6d-abd8-4057-8c77-78405628e42d",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_17 = get_oidc_url(
-                    OIDCProvider::TestEveFrontier,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "c8815001-f950-4147-905e-4833d904cd38",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_18 = get_oidc_url(
-                    OIDCProvider::AwsTenant(("ap-southeast-1".to_string(), "decot".to_string())),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "42e9pih2409ktfhmkmo2ipup2h",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_19 = get_oidc_url(
-                    OIDCProvider::AwsTenant(("eu-north-1".to_string(), "gammaprime".to_string())),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "gammaprime-dev",
-                    "https://www.rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_20 = get_oidc_url(
-                    OIDCProvider::AwsTenant((
-                        "eu-north-1".to_string(),
-                        "test-gammaprime".to_string(),
-                    )),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "test-gammaprime-dev",
-                    "https://www.rtd.io/",
-                    &jwt_randomness,
-                )?;
-                // This is only for CLI testing. If frontend apps will be built, no need to add anything here.
-                println!("Visit URL (Google): {url}");
-                println!("Visit URL (Twitch): {url_2}");
-                println!("Visit URL (Facebook): {url_3}");
-                println!("Visit URL (Kakao): {url_4}");
-                println!("Token exchange URL (Kakao): {url_5}");
-                println!("Visit URL (Apple): {url_6}");
-                println!("Visit URL (Slack): {url_7}");
-                println!("Token exchange URL (Slack): {url_8}");
-
-                println!("Visit URL (AWS): {url_9}");
-                println!("Visit URL (Microsoft): {url_10}");
-                println!("Visit URL (KarrierOne): {url_11}");
-                println!("Visit URL (Credenza3): {url_12}");
-                println!("Visit URL (Arden): {url_14}");
-                println!("Visit URL (AWS - Trace): {url_15}");
-                println!("Visit URL (EveFrontier): {url_16}");
-                println!("Visit URL (TestEveFrontier): {url_17}");
-                println!("Visit URL (AWS - Decot): {url_18}");
-                println!("Visit URL (AWS - Gamma Prime): {url_19}");
-                println!("Visit URL (AWS - Test Gamma Prime): {url_20}");
-                println!(
-                    "Finish login and paste the entire URL here (e.g. https://rtd.io/#id_token=...):"
-                );
-
-                let parsed_token = read_cli_line()?;
-                let tx_digest = perform_zk_login_test_tx(
-                    &parsed_token,
-                    max_epoch,
-                    &jwt_randomness,
-                    &kp_bigint.to_string(),
-                    ephemeral_key_identifier,
-                    &mut context.config.keystore,
-                    &network,
-                    test_multisig,
-                    sign_with_sk,
-                )
-                .await?;
-                CommandOutput::ZkLoginSignAndExecuteTx(ZkLoginSignAndExecuteTx { tx_digest })
+            KeyToolCommand::ZkLoginSignAndExecuteTx { .. } => {
+                return Err(anyhow!(
+                    "The built-in OAuth test clients and redirect URLs are not configured for RTD. \
+                     Use an independently configured RTD OAuth client and the zk-login-enter-token command."
+                ));
             }
             KeyToolCommand::ZkLoginEnterToken {
                 parsed_token,

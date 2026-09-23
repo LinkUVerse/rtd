@@ -72,11 +72,11 @@ A token that can be used only for a specific service, by an authorized account, 
 
 #### DeepBook {#deepbook}
 
-A decentralized central limit order book (CLOB) built on Rtd. The Rtd documentation refers to the DeepBook standard as DeepBookV3 to avoid confusion with the recently deprecated version of DeepBook (DeepBookV2).
+DeepBook is an upstream Sui decentralized central limit order book. Its package IDs and deployments are not RTD deployments; a separate RTD port and network deployment must be verified before describing it as an RTD application.
 
 #### Devnet {#devnet}
 
-A development network where data is wiped regularly as part of scheduled software updates.
+A development network, when operated for a particular RTD deployment. This source tree does not establish a public RTD Devnet or its wipe schedule.
  
 ### Epoch {#epoch}
 
@@ -113,7 +113,7 @@ A decentralized system for commerce applications on Rtd. The Rtd Kiosk standard 
 
 ### Mainnet {#mainnet}
 
-The Rtd production network. 
+The future RTD production network. RTD has not launched Mainnet, and future Mainnet will not provide JSON-RPC.
 
 ### Multi-writer objects {#multi-writer-objects}
 
@@ -151,7 +151,7 @@ Single-writer objects are owned by one address. In Rtd, transactions affecting o
 
 ### Smart contract {#smart-contract}
 
-A [smart contract](https://en.wikipedia.org/wiki/Smart_contract) is an agreement based upon the protocol for conducting transactions in a blockchain. In Rtd, smart contracts are written in the [Move](https://github.com/LinkUVerse/awesome-move) programming language.
+A [smart contract](https://en.wikipedia.org/wiki/Smart_contract) is an agreement based upon the protocol for conducting transactions in a blockchain. In Rtd, smart contracts are written in the [Move](https://move-book.com/) programming language.
 
 ### Rtd {#rtd}
 
@@ -169,10 +169,6 @@ A secure storage system for managing your Rtd cryptographic key pairs.
 
 A CLI tool that provides commands for managing and generating addresses, and interacting with private keys, signatures, or zkLogin.
 
-#### RtdLink {#suilink}
-
-A LinkU Labs product that connects wallets across chains to support use cases such as cross chain wallet verification, asset ownership verification, and asset distributions across chains.
-
 #### Rtd Object Display {#rtd-object-display}
 
 A template engine that enables onchain management of offchain representation (display) for a type. 
@@ -183,7 +179,7 @@ An asset that is bound to an account and cannot be transferred.
 
 #### Testnet {#testnet}
 
-A development network. Data deployed to Testnet persists through the regular update process, but might be wiped when necessary. Testnet data wipes are announced ahead of time.
+A network used to test a blockchain deployment. This repository does not establish a public RTD Testnet; obtain its genesis, endpoint, and retention policy from the operator of any RTD test network you use.
 
 ### Total order {#total-order}
 
@@ -206,4 +202,3 @@ A validator in Rtd plays a passive role analogous to the more active role of val
 #### Wallet Standard {#wallet-standard}
 
 A cross-chain standard that defines how apps can automatically discover and interact with wallets.
-

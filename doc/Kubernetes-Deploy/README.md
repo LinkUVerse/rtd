@@ -632,13 +632,13 @@ metadata:
   namespace: ${NAMESPACE}
   labels:
     app: rtd-validator
-    rtd.io/node-index: "${i}"
+    rtd.local/node-index: "${i}"
 spec:
   clusterIP: None
   publishNotReadyAddresses: true
   selector:
     app: rtd-validator
-    rtd.io/node-index: "${i}"
+    rtd.local/node-index: "${i}"
   ports:
     - name: validator-grpc
       port: 8080
@@ -672,7 +672,7 @@ metadata:
   namespace: ${NAMESPACE}
   labels:
     app: rtd-validator
-    rtd.io/node-index: "${i}"
+    rtd.local/node-index: "${i}"
 spec:
   serviceName: rtd-validator-${i}
   replicas: 1
@@ -682,12 +682,12 @@ spec:
   selector:
     matchLabels:
       app: rtd-validator
-      rtd.io/node-index: "${i}"
+      rtd.local/node-index: "${i}"
   template:
     metadata:
       labels:
         app: rtd-validator
-        rtd.io/node-index: "${i}"
+        rtd.local/node-index: "${i}"
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9184"
@@ -824,13 +824,13 @@ metadata:
   namespace: ${NAMESPACE}
   labels:
     app: rtd-fullnode
-    rtd.io/node-index: "${i}"
+    rtd.local/node-index: "${i}"
 spec:
   clusterIP: None
   publishNotReadyAddresses: true
   selector:
     app: rtd-fullnode
-    rtd.io/node-index: "${i}"
+    rtd.local/node-index: "${i}"
   ports:
     - name: network
       port: 8080
@@ -856,7 +856,7 @@ metadata:
   namespace: ${NAMESPACE}
   labels:
     app: rtd-fullnode
-    rtd.io/node-index: "${i}"
+    rtd.local/node-index: "${i}"
 spec:
   serviceName: rtd-fullnode-${i}
   replicas: 1
@@ -866,12 +866,12 @@ spec:
   selector:
     matchLabels:
       app: rtd-fullnode
-      rtd.io/node-index: "${i}"
+      rtd.local/node-index: "${i}"
   template:
     metadata:
       labels:
         app: rtd-fullnode
-        rtd.io/node-index: "${i}"
+        rtd.local/node-index: "${i}"
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9184"

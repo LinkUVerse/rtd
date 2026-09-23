@@ -1,32 +1,14 @@
 ---
-title: DeepBook
-description: >-
-  DeepBook is Rtd's native liquidity layer, providing a central limit order book
-  for spot trading, margin trading, and prediction markets.
+title: "DeepBook"
+description: "Status of the upstream DeepBook material in the RTD source fork."
 keywords:
+  - RTD
   - deepbook
-  - deepbookv3
-  - deep book
-  - central limit order book
-  - clob
-  - spot trading
-  - margin
-  - predict
-  - liquidity
-  - DEEP token
-questions:
-  - What is DeepBook in Rtd?
-  - What topics does DeepBook cover?
-  - How does deepbook work on Rtd?
-answer: >-
-  DeepBook is Rtd's native liquidity layer, providing a central limit order book
-  for spot trading, margin trading, and prediction markets.
 ---
+# DeepBook deployment status
 
-DeepBook is Rtd's native liquidity layer, providing a central limit order book for spot trading, margin trading, and prediction markets.
+DeepBook is an upstream Sui application. This RTD source fork does not establish a deployed DeepBookV3, Margin, or Predict package on an RTD network. RTD has not launched a public Mainnet, and no public RTD DeepBook Testnet has been verified.
 
-Before you build, decide how your code calls DeepBook. You can depend on the DeepBookV3 Move package from your own Move module, compose transactions with the TypeScript SDK, or read market data without signing transactions. See [Choose your integration model](/onchain-finance/deepbook/deepbookv3/deepbook#choose-your-integration-model) to compare the options.
+The pared-down RTD TypeScript SDK does not include an `@linku/deepbook-v3` package. Upstream package IDs, coin types, pool IDs, DEEP token addresses, market data, faucet instructions, and order workflows must not be used as RTD configuration.
 
-import DocCardList from '@theme/DocCardList';
-
-<DocCardList />
+A future RTD integration requires a separately ported and tested Move package, compatible SDK, locally verified transactions, and operator-published network identifiers. See [RTD networks](/develop/rtd-architecture/networks) for the current network status.

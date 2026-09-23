@@ -60,8 +60,8 @@ env:
   #     none, so role-to-assume would hard-fail the OIDC step. This fork skip is a
   #     fail-safe accommodation, NOT a security boundary — the RO role still trusts
   #     pull_request, so a fork reading the cache is acceptable (Decision A).
-  # Keep in sync with the rtd-sccache-{rw,ro}-github trust policies.
-  SCCACHE_ROLE: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.rtd_repo_ref == '') && (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && 'arn:aws:iam::011083325127:role/rtd-sccache-rw-github' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && 'arn:aws:iam::011083325127:role/rtd-sccache-ro-github' || '' }}
+  # Keep in sync with the configured RTD cache role trust policies.
+  SCCACHE_ROLE: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.rtd_repo_ref == '') && (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && vars.RTD_AWS_SCCACHE_RW_ROLE_ARN || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && vars.RTD_AWS_SCCACHE_RO_ROLE_ARN || '' }}
 
 jobs:
   diff:
@@ -114,6 +114,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - uses: taiki-e/install-action@protoc
@@ -168,6 +171,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - uses: taiki-e/install-action@protoc
@@ -239,6 +245,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - uses: taiki-e/install-action@protoc
@@ -306,6 +315,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@fc79b3f67fa8a838184ce84a674ca12238d2c761 # pin@master
@@ -366,6 +378,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: windows-ghcloud
 
       - uses: taiki-e/install-action@nextest
@@ -395,6 +410,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: windows-ghcloud
 
       - uses: taiki-e/install-action@nextest
@@ -422,6 +440,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - uses: taiki-e/install-action@protoc
@@ -460,6 +481,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - uses: taiki-e/install-action@protoc
@@ -495,6 +519,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - name: Run move tests
@@ -593,6 +620,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - run: rustup component add clippy
       # TODO(bradh): debug and re-enable this; the caching is breaking the clippy build
@@ -676,6 +706,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - name: Install cargo-hakari, and cache the binary
         uses: baptiste0928/cargo-install@1cd874a5478fdca35d868ccc74640c5aabbb8f1b # pin@v3.0.0

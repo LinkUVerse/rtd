@@ -1,45 +1,11 @@
 ---
 title: Wallets
-description: >-
-  Understand how Rtd wallets work, explore available wallet types including
-  Slush, self-custodial, and zkLogin wallets, integrate wallets into your app,
-  and connect wallets across apps with RtdLink.
+description: Key custody and wallet integration status for RTD.
 keywords:
-  - wallet
+  - RTD
   - wallets
-  - store
-  - send
-  - receive
-  - coin
-  - coins
-  - rtd coin
-  - NFT
-  - NFTs
-  - stablecoin
-  - stablecoins
-  - suilink
-pagination_prev: null
-goal:
-  description: >-
-    Introduce Rtd wallets and link to subtopics.
-  requires:
-    - has_frontmatter:
-        - title
-        - description
-      label: Has required frontmatter fields
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
-questions:
-  - What is Wallets in Rtd?
-  - What topics does Wallets cover?
-  - How does wallets work on Rtd?
-answer: Learn about Rtd wallets and related integrations.
 ---
 
-A Rtd wallet stores the keys that prove ownership of your onchain assets and signs the transactions you submit to the network. This section covers how wallets work, the wallet types available on Rtd (including Slush, self-custodial wallets, and zkLogin wallets), how to integrate wallets into your app, and how RtdLink connects your wallet across apps.
+An RTD wallet stores or controls keys and signs transactions for the specific RTD chain ID. The CLI and SDK in this fork provide local key management and signing primitives. A Sui wallet or Sui address must not be assumed compatible with an RTD network.
 
-import DocCardList from '@theme/DocCardList';
-
-<DocCardList />
+This source fork does not establish a public RTD wallet service, hosted prover, or cross-chain identity product. The Slush and SuiLink pages explain why upstream Sui services cannot be advertised as RTD integrations. See [self-custody](/onchain-finance/asset-custody/wallets/self-custody), [Wallet Standard](/onchain-finance/asset-custody/wallets/wallet-standard), and [RTD networks](/develop/rtd-architecture/networks).

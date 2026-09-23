@@ -33,7 +33,7 @@ const mediaTargetDir = path.join(
 
 const MAX_PAGE_CHARS = 49500;
 const GITHUB_SOURCE_URL =
-  "https://github.com/rtd-foundation/awesome-rtd/blob/main/README.md";
+  "https://github.com/sui-foundation/awesome-sui/blob/main/README.md";
 
 // Process the content to remove the Contents section and transform list items
 function processContent(content) {
@@ -49,7 +49,7 @@ function processContent(content) {
   // Fix CONTRIBUTING.md link
   processedContent = processedContent.replace(
     /\[([^\]]*)\]\(CONTRIBUTING\.md\)/g,
-    "[$1](https://github.com/rtd-foundation/awesome-rtd/blob/main/CONTRIBUTING.md)",
+    "[$1](https://github.com/sui-foundation/awesome-sui/blob/main/CONTRIBUTING.md)",
   );
 
   // Change details/*.md links to awesome-rtd/*.mdx and replace dashes with underscores as a temporary fix for a broken link in readme
@@ -234,7 +234,7 @@ function processDetailContent(content) {
 
 // Truncate content to stay under the character limit while preserving valid markup
 function truncateContent(content, maxChars, frontmatter) {
-  const truncationNotice = `\n\n---\n\n:::info\n\nThis page has been truncated to stay within size limits. View the full list on the [Awesome Rtd GitHub repo](${GITHUB_SOURCE_URL}).\n\n:::\n`;
+  const truncationNotice = `\n\n---\n\n:::info\n\nThis page has been truncated to stay within size limits. The [upstream Sui source](${GITHUB_SOURCE_URL}) is reference material and does not establish RTD integration.\n\n:::\n`;
 
   const availableChars = maxChars - frontmatter.length - truncationNotice.length;
 
@@ -302,13 +302,21 @@ const readmeContent = fs.readFileSync(readmePath, "utf8");
 const processedReadmeContent = processContent(readmeContent);
 
 const frontmatter = `---
-title: Awesome Rtd
-description: A curated list of awesome developer tools and infrastructure projects within the Rtd ecosystem.
+title: Awesome RTD status
+description: Status of the inherited upstream ecosystem catalog in this RTD fork.
+keywords:
+  - ecosystem
+  - integrations
+  - upstream
+questions:
+  - Are inherited ecosystem integrations available on RTD?
+answer: >-
+  The upstream Sui ecosystem catalog has not been validated for RTD.
 ---
 
 :::info
 
-Visit the [Awesome Rtd repo](https://github.com/rtd-foundation/awesome-rtd/tree/main) on GitHub for the source content of these pages.
+The [upstream Sui Awesome catalog](https://github.com/sui-foundation/awesome-sui) is reference material. Its entries are not verified RTD integrations.
 
 :::
 

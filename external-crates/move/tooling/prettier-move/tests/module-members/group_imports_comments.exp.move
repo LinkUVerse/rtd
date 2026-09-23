@@ -5,8 +5,8 @@
 
 module prettier::group_imports_comments;
 
-use std::ascii::String as ASCII;
 use rtd::clock::Clock;
+use std::ascii::String as ASCII;
 
 // leading comment keeps this import out of the group
 use rtd::coin::Coin;

@@ -47,13 +47,21 @@ const readmeContent = fs.readFileSync(readmePath, "utf8");
 const processedReadmeContent = processContent(readmeContent);
 
 const readmeMdxContent = `---
-title: Awesome Rtd Gaming
-description: A curated list of awesome gaming projects and developer tools within the Rtd ecosystem.
+title: Awesome RTD Gaming status
+description: Status of the inherited gaming catalog in this RTD fork.
+keywords:
+  - gaming
+  - integrations
+  - upstream
+questions:
+  - Are inherited gaming integrations available on RTD?
+answer: >-
+  The inherited gaming catalog has not been validated for RTD.
 ---
 
 :::info
 
-Visit the [Awesome Rtd Gaming repo](https://github.com/becky-rtd/awesome-rtd-gaming/tree/main) on GitHub for the source content of these pages.
+The checked-in source snapshot under docs/subtree/awesome-rtd-gaming is historical material. Its entries are not verified RTD integrations.
 
 :::
 

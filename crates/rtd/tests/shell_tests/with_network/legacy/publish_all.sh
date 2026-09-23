@@ -9,6 +9,14 @@
 #
 # We have to use test-publish because you can't real-publish a legacy package on localnet
 
+# The modern package must declare the test cluster's actual chain id.
+CHAIN_ID=$(rtd client --client.config "$CONFIG" chain-identifier --format hex)
+cat >> modern/Move.toml <<EOF
+
+[environments]
+testnet = "$CHAIN_ID"
+EOF
+
 echo "=== publish legacy_dep ==="
 rtd client --client.config $CONFIG \
     test-publish --build-env testnet --pubfile-path Pub.local.toml legacy_dep \

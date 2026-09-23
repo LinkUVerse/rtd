@@ -44,6 +44,8 @@ answer: >-
   packages.
 ---
 
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
 <AgentPrompt
   prompt={"Debug this Rtd transaction failure. Inspect object refs, gas objects, ownership, versions, and suggest the minimal code or PTB change to make it execute."}
 />
@@ -325,9 +327,7 @@ $ rtd client envs
 You see something similar to:
 
 ```
-localnet => http://0.0.0.0:9000
-testnet => https://fullnode.testnet.rtd.io:443 
-devnet => https://fullnode.devnet.rtd.io:443 (active)
+localnet => http://127.0.0.1:9000 (active)
 ```
 
 Then, try switching to another network:
@@ -550,10 +550,10 @@ Rtd errors fall into two categories:
 Detect the category in TypeScript:
 
 ```typescript
-import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
 
 const client = new RtdGrpcClient({
-  baseUrl: 'https://fullnode.mainnet.rtd.io:443',
+  baseUrl: 'https://YOUR_RTD_FULLNODE_HOST',
   network: 'mainnet',
 });
 
@@ -582,7 +582,7 @@ Use explicit typed serialization methods instead:
 
 ```typescript
 // Deprecated — do not use
-// import { getPureSerializationType } from '@linku/rtd/transactions';
+// import { getPureSerializationType } from 'rtd-typescript/transactions';
 
 // Use typed methods instead
 tx.pure.u64(amount);
@@ -605,10 +605,10 @@ The same change applies to multi-get methods like `getObjects`. In v1, these ret
 For single-get calls, wrap the call in a `try`/`catch`:
 
 ```typescript
-import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
 
 const client = new RtdGrpcClient({
-  baseUrl: 'https://fullnode.mainnet.rtd.io:443',
+  baseUrl: 'https://YOUR_RTD_FULLNODE_HOST',
   network: 'mainnet',
 });
 
@@ -641,4 +641,4 @@ for (const result of results) {
 
 **Resources**
 
-- [TypeScript SDK migration guide](https://sdk.linkuverse.com/rtd/migrations/rtd-2.0/json-rpc-migration)
+- [TypeScript SDK migration guide](/references/rtd-sdks)

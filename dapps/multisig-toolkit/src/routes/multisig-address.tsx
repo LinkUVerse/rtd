@@ -134,7 +134,7 @@ export default function MultiSigAddressGenerator() {
 					<CardHeader>
 						<CardTitle>Rtd MultiSig Address</CardTitle>
 						<CardDescription>
-							https://docs.rtd.io/testnet/learn/cryptography/rtd-multisig
+							Multisig address for the connected RTD network.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>

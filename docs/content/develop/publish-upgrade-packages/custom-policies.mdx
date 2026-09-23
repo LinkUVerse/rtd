@@ -459,7 +459,7 @@ The scripts below use ES module syntax, so make sure your `package.json` sets:
 Then add the Rtd TypeScript SDK as a dependency:
 
 ```sh
-$ npm install @linku/rtd
+$ npm install rtd-typescript
 ```
 
 ### Publishing a package with custom policy {#publishing-custom-policy}
@@ -482,8 +482,8 @@ import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { fromBase64 } from '@linku/rtd/utils';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { fromBase64 } from 'rtd-typescript/utils';
 
 const sender = execSync(`${RTD} client active-address`, { encoding: 'utf8' }).trim();
 const signer = (() => {
@@ -530,7 +530,7 @@ const { modules, dependencies } = JSON.parse(
 Next, construct the transaction to publish the package. Wrap its `UpgradeCap` in a day of the week policy, which permits upgrades on Tuesdays, and send the new policy back:
 
 ```js
-import { Transaction } from '@linku/rtd/transactions';
+import { Transaction } from 'rtd-typescript/transactions';
 
 const tx = new Transaction();
 const packageUpgradeCap = tx.publish({ modules, dependencies });
@@ -548,7 +548,7 @@ tx.transferObjects([tuesdayUpgradeCap], tx.pure.address(sender));
 Finally, execute that transaction and display its effects to the console. The following snippet assumes that you're running your examples against a local network. Change the `baseUrl` and `network` parameters to run on Devnet, Testnet, or Mainnet:
 
 ```js
-import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
 
 const client = new RtdGrpcClient({ baseUrl: 'http://localhost:9000', network: 'localnet' });
 const result = await client.signAndExecuteTransaction({
@@ -573,10 +573,10 @@ import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { Transaction } from '@linku/rtd/transactions';
-import { fromBase64 } from '@linku/rtd/utils';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { Transaction } from 'rtd-typescript/transactions';
+import { fromBase64 } from 'rtd-typescript/utils';
 
 const RTD = 'rtd';
 const POLICY_PACKAGE_ID = '<POLICY-PACKAGE>';
@@ -769,10 +769,10 @@ import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
-import { Transaction, UpgradePolicy } from '@linku/rtd/transactions';
-import { fromBase64 } from '@linku/rtd/utils';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
+import { Transaction, UpgradePolicy } from 'rtd-typescript/transactions';
+import { fromBase64 } from 'rtd-typescript/utils';
 
 const RTD = 'rtd';
 const POLICY_PACKAGE_ID = '<POLICY-PACKAGE>';

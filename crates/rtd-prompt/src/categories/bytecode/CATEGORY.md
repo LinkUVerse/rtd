@@ -28,5 +28,5 @@ disassembly (`rtd move disassemble` output), which is 1:1 with the executed byte
 ## External references
 
 - [move-book.com](https://move-book.com) — Move language reference.
-- [docs.rtd.io](https://docs.rtd.io) — Rtd framework + on-chain conventions.
-- [`move-binary-format` source](https://github.com/LinkUVerse/rtd/tree/main/external-crates/move/crates/move-binary-format) — the canonical definition of the `.mv` table layout and instruction set.
+- The `crates/rtd-framework` source in this repository — RTD framework and on-chain conventions.
+- `external-crates/move/crates/move-binary-format/` in this checkout — the canonical definition of the `.mv` table layout and instruction set.

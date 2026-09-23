@@ -1,236 +1,56 @@
 ---
-title: Get RTD from Faucet
-description: >-
-  Use the Rtd faucet to obtain free RTD tokens for use on the Rtd Devnet and
-  Testnet networks.
-keywords:
-  - rtd faucet
-  - faucet
-  - token faucet
-  - rtd devnet
-  - rtd testnet
-  - devnet
-  - testnet
-  - get free tokens
-  - free tokens
-pagination_prev: null
-pagination_next: null
+title: Get RTD on a Local Network
+description: Fund an address through the faucet configured for a local RTD network.
+keywords: [rtd, localnet, faucet, balance]
 goal:
-  description: >-
-    Reader can request RTD tokens from the faucet and confirm they arrived in
-    their wallet
+  description: Reader can request and verify local RTD from a configured faucet
   requires:
-    - pattern: '```'
-      min: 2
-      label: Has command or code examples
     - has_frontmatter:
         - title
         - description
         - keywords
       label: Has required frontmatter fields
-    - links_to:
-        - /getting-started/onboarding/hello-world
-      label: Links to next onboarding step
-    - pattern: balance|gas
-      min: 1
-      label: Shows how to verify token receipt
-    - min_words: 300
-      label: Needs more walkthrough depth
     - has_questions: true
-      label: Needs questions for AI search visibility
+      label: Has reader questions
     - has_answer: true
-      label: Needs answer summary for AI citation
+      label: Has a direct answer
 questions:
-  - How do I get RTD tokens from the faucet?
-  - How do I request Testnet or Devnet RTD tokens?
-  - How do I verify my RTD token balance?
+  - How do I fund an RTD address on a local network?
+  - How do I verify its balance?
 answer: >-
-  To perform transactions on a Rtd network, you need RTD tokens to pay for gas
-  and storage.
+  Start a local RTD network with a faucet, configure the CLI for that network,
+  then request and verify local RTD through the CLI.
 ---
 
-To perform transactions on a Rtd network, you need RTD tokens to pay for gas and storage. 
+RTD transactions use the native `Coin<rtd::rtd::RTD>` type for gas. This source
+fork has no verified public faucet, exchange listing, or public RTD network
+endpoint. The following workflow is for a local network that you control.
 
-For applications on Mainnet, you must buy real RTD on exchanges like Coinbase, OKX, or Robinhood. Its value is determined by market factors such as supply and demand, network utility, and perceived value.
-
-Because Mainnet tokens cost real money, development can be expensive. That's why Rtd provides Devnet and Testnet networks, which mirror Mainnet features and enable you to build and test safely for an affordable cost.
-
-:::important
-
-RTD tokens on Devnet and Testnet are free and hold no monetary value.
-
-:::
-
-You can get free RTD tokens from the Rtd faucet, which lets you deploy and interact with smart contracts and objects on Devnet, Testnet, or a local network. There is no faucet for Mainnet.
-
-<Tabs className="tabsHeadingCentered--small">
-<TabItem value="prereq" label="Prerequisites">
-
-- [x] [Install the latest version of Rtd](/getting-started/onboarding/rtd-install).
-
-- [x] Set up your Rtd account and CLI environment. 
-
-<details className="nudge-details">
-
-<summary>
-
-Create Rtd account and setup CLI environment.
-
-</summary>
+First [start a local RTD network](/getting-started/onboarding/local-network) with
+a faucet and point the CLI to the RPC and faucet URLs produced by that
+specific deployment. Confirm the configured network identity and active
+address before requesting funds:
 
 ```sh
-$ rtd client
+rtd client active-env
+rtd client active-address
 ```
 
-If this is the first time running the `rtd client` CLI tool, it asks you to provide a Rtd full node server URL (or press enter for the default Testnet), select an encryption scheme to generate an address, and stores the configuration in a `client.yaml` file. For more information, refer to the [Rtd client CLI tutorial](/references/cli/client).
-
-If this is not your first time running `rtd client`, then you already have a `client.yaml` file in your local environment. If you'd like to create a new address for this tutorial, use the command:
-
-```sh 
-$ rtd client new-address ed25519
-```
-
-</details>
-
-</TabItem>
-</Tabs>
-
-## Request RTD tokens from faucet {#online-faucet}
-
-Visit the [online faucet](https://faucet.rtd.io/) to request RTD tokens.
-
-Then, follow these steps: 
-
-1. Connect your wallet or paste your wallet address in the address field. Get your wallet address in the CLI with the command `rtd client active-address`. 
-1. Use the network dropdown to select the correct network: Testnet, Devnet, or Localnet. Use the Testnet for most use cases before deploying to Mainnet for production. [Learn more](/getting-started/onboarding/configure-rtd-client) about the available networks and their differences. 
-1. Click the **Request RTD** button. 
-
-To request more RTD, refresh your browser and click the **Request RTD** button again. The requests are rate limited, however, so too many requests results in a waiting period before you can request more tokens.
-
-### Community faucets 
-
-You can also use the following community-provided faucets to obtain RTD tokens:
-
-- [N1Stake faucet](http://faucet.n1stake.com/)
-
-- [RtdLearn faucet](http://faucet.suilearn.io/)
-
-These faucets have their own separate limits, such as one request per day or one request every few hours.
-
-### Verify token balance 
-
-To check your balance of RTD tokens and confirm you received some from the faucet, use the command:
-
-```
-$ rtd client balance 
-```
-
-Alternatively, use a Rtd Explorer such as [RtdVision](https://suivision.xyz/) or [RtdScan](https://suiscan.xyz/mainnet/accounts) to check the RTD token balance of an address.
-
-You should have a balance of RTD tokens:
-
-```
-╭────────────────────────────────────────────╮
-│ Balance of coins owned by this address     │
-├────────────────────────────────────────────┤
-│ ╭────────────────────────────────────────╮ │
-│ │ coin       balance (raw)  balance      │ │
-│ ├────────────────────────────────────────┤ │
-│ │ Rtd        56804696124     0.50 RTD    │ │
-│ ╰────────────────────────────────────────╯ │
-╰────────────────────────────────────────────╯
-```
-
-If you do not have a balance, repeat the [request RTD tokens from faucet](#online-faucet) steps, or use an [alternative faucet method](#alternative-faucets).
-
-### Return unused Testnet RTD
-
-The faucet drains from a finite pool of RTD. If the pool empties, it disrupts faucet service for the rest of the community. To help ensure this doesn't happen, you can use the online faucet to return your unused RTD to the Testnet pool. You cannot return RTD to the Devnet or Localnet pools.
-
-There are two ways to return unused Testnet RTD tokens:
-
-- Connect your wallet to the online faucet, and click the **Return tokens to faucet** button. Approve the transaction using your wallet, and the faucet returns your RTD tokens to the pool.
-
-- If you prefer not to connect your wallet, send the tokens to the address `0x7a9d19d4c210663926eb549da59a54e25777fef63161bfccda08277b58b4212e` through a [separate transaction](/develop/transactions/transaction-auth/auth-overview).
-
-## Alternative methods for getting RTD tokens {#alternative-faucets}
-
-If you need an alternative method to get RTD tokens for deployment on Testnet or Devnet, you have several options.
-
-:::tip
-
-Every method to obtain RTD tokens for Testnet and Devnet is rate limited. If you need a large amount of RTD tokens, use a local network.
-
-:::
-
-<Tabs>
-
-<TabItem value="discord" label="Discord">
-
-1. Join [Discord](https://discord.gg/rtd).
-   
-   If you try to join the Rtd Discord channel using a newly created Discord account, you might need to wait a few days for validation.
-1. Request RTD tokens in the Rtd [#devnet-faucet](https://discord.com/channels/916379725201563759/971488439931392130) or [#testnet-faucet](https://discord.com/channels/916379725201563759/1037811694564560966) Discord channels. Send the following message to the channel, replacing `<YOUR RTD ADDRESS>` with your client address:
-   ```sh
-   !faucet <YOUR RTD ADDRESS>
-   ```
-
-</TabItem>
-<TabItem value="curl" label="cURL">
-
-Use the following cURL commands to set console variables and request tokens directly from the faucet server. Set `NETWORK` to either `testnet` or `devnet`.
+If your local deployment started a faucet and configured its URL, request local
+RTD for the active address:
 
 ```sh
-$ ADDRESS=$(rtd client active-address)
-$ NETWORK=testnet
-$ curl --location --request POST "https://faucet.${NETWORK}.rtd.io/v2/gas" \
---header "Content-Type: application/json" \
---data-raw "{
-    \"FixedAmountRequest\": {
-        \"recipient\": \"${ADDRESS}\"
-    }
-}"
+rtd client faucet
+rtd client balance
 ```
 
-If you're working with a local network, replace `"https://faucet.${NETWORK}.rtd.io/v2/gas"` with the appropriate value based on which package runs your network:
+If the faucet was started on a custom URL, pass that verified local URL with
+`rtd client faucet --url CUSTOM_FAUCET_URL`. An error from the faucet may mean
+that it was not started, that the CLI points at another network, or that it is
+not ready. Check the local deployment logs and its actual endpoint instead of
+trying a Sui faucet. A Sui faucet cannot mint RTD on your forked chain.
 
-- `rtd-faucet`: `http://127.0.0.1:5003/gas`
-- `rtd`: `http://127.0.0.1:9123/gas`
-
-</TabItem>
-<TabItem value="typescript" label="TypeScript SDK">
-
-You can access the faucet using the [Rtd TypeScript SDK](https://sdk.linkuverse.com/typescript).
-
-```typescript
-import { getFaucetHost, requestRtdFromFaucetV2 } from '@linku/rtd/faucet';
-
-// get tokens from the Devnet faucet server
-await requestRtdFromFaucetV2({
-	// connect to Devnet
-	host: getFaucetHost('devnet'),
-	recipient: '<YOUR RTD ADDRESS>',
-});
-```
-</TabItem>
-</Tabs>
-
-## RTD tokens on a local network
-
-If you are running a local Rtd network, you can get RTD tokens from your local faucet. See the [Connect to a Local Network](/getting-started/onboarding/local-network#use-the-local-faucet) topic for details.
-
-After you have RTD tokens, you're ready to [build and publish your first package](/getting-started/onboarding/hello-world).
-
-<div className="next-steps-module">
-  <div className="next-steps-header">
-    <h3>Next steps</h3>
-  </div>
-  <div className="next-steps-grid">
-        <Card className="plausible-event-name=faucet+hello+button"
-      title="Hello, World!" 
-      href="/getting-started/onboarding/hello-world"
-    >
-      Clone and build the "Hello, World!" project.
-    </Card>
-  </div>
-</div>
+For an address supplied by another tool, use `rtd client balance` after
+switching to that address, or query your configured RTD RPC endpoint. SuiVision
+and Suiscan report Sui balances and cannot validate an RTD address. Once the
+local balance is available, continue with [Hello, World!](/getting-started/onboarding/hello-world).

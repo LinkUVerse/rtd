@@ -51,8 +51,6 @@ const MIME_TYPES = {
 };
 
 const LINK_HEADER =
-  '</.well-known/mcp/server-card.json>; rel="mcp-server-card"; type="application/json", ' +
-  '</.well-known/api-catalog>; rel="api-catalog", ' +
   '</llms.txt>; rel="service-doc"; type="text/plain"; title="LLM-optimized documentation", ' +
   '</sitemap.xml>; rel="sitemap"; type="application/xml", ' +
   '</robots.txt>; rel="robots"; type="text/plain", ' +

@@ -5,14 +5,25 @@ application packages, oracle state, USDC, DeepBook pools, Walrus metadata,
 or public explorer. A matching RTD SDK release and network deployment are
 required before a third-party example can run.
 
-The current standalone TS SDK publishes source packages named `rtd-typescript`
-and `rtd-dapp-kit-react`. Many inherited examples still import the old
-`@linku/rtd` / `@linku/dapp-kit` package API, and DeepBook examples import an
-SDK that was deliberately excluded from the retained TS package set. They are
-kept as source references for review; they cannot be claimed as buildable RTD
-examples until their imports and API calls are migrated to the retained SDK
-packages and those packages are installable. The forked SDK projects themselves
-have separate passing build and test results.
+The current standalone TS SDK contains `rtd-typescript`, `rtd-dapp-kit-react`,
+`rtd-kiosk`, and `rtd-bcs`. Many inherited examples still import the old
+`@linku/rtd` / `@linku/dapp-kit` package API. In particular, the current
+`rtd-typescript/client` no longer exports the old `RtdClient` or
+`getFullnodeUrl` JSON-RPC API. DeepBook examples import an SDK that was
+deliberately excluded from the retained TS package set. The root pnpm
+workspace therefore excludes all inherited `dapps/**` and `examples/**`
+JavaScript packages; their old registry dependencies must not be installed as
+part of a main-chain build. They are source references for review, not
+buildable RTD examples. Each one needs API migration and a build against the
+retained SDK before rejoining the workspace. The forked SDK projects have
+separate build and test evidence.
+
+The root `pnpm-lock.yaml` still contains unreferenced package snapshots for
+these inherited SDK dependencies. Its only importers are the root package and
+the local Move formatter, and neither importer depends on an old SDK package.
+The offline frozen lockfile check passes. A full offline install was blocked by
+an unrelated missing `prettier` tarball in the local pnpm store, so no JS build
+claim is made here.
 
 | Example | Required RTD deployment/configuration |
 | --- | --- |

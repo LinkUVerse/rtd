@@ -5,9 +5,9 @@ the data to persist between transactions.
 
 For more details, see the Rtd documentation on
 
-- [The Object Model](https://docs.rtd.io/concepts/object-model)
-- [Move Rules for Objects](https://docs.rtd.io/concepts/rtd-move-concepts#global-unique)
-- [Transferring Objects](https://docs.rtd.io/concepts/transfers)
+- The Object Model (see the checked-in `docs/content` tree)
+- Move Rules for Objects (see the checked-in `docs/content` tree)
+- Transferring Objects (see the checked-in `docs/content` tree)
 
 ## Object Rules
 

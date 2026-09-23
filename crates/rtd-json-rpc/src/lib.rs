@@ -62,8 +62,8 @@ pub fn rtd_rpc_doc(version: &str) -> Project {
         "Rtd JSON-RPC",
         "Rtd JSON-RPC API for interaction with an Rtd fullnode. Configure the endpoint for your deployed RTD network explicitly; local networks use port 9000 by default.",
         "LinkU Labs",
-        "https://linkuverse.com",
-        "build@linkuverse.com",
+        "https://github.com/LinkUVerse/rtd",
+        "",
         "Apache-2.0",
         "https://raw.githubusercontent.com/LinkUVerse/rtd/main/LICENSE",
     )

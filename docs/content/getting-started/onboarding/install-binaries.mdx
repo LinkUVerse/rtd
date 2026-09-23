@@ -1,154 +1,27 @@
 ---
 title: Install from Binaries
-description: >-
-  Each Rtd release provides a set of binaries for several operating systems. You
-  can download these binaries from GitHub and use them to install Rtd.
+sidebar_label: Install Binaries
+description: Requirements for using prebuilt RTD binaries.
 keywords:
-  - install rtd
-  - install rtd binaries
-  - binaries
-goal:
-  description: Reader can install prebuilt Rtd binaries for their platform
-  requires:
-    - pattern: '```'
-      min: 2
-      label: Has command or code examples
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - pattern: rtd --version|rtd -V
-      min: 1
-      label: Shows how to verify installation
-    - min_words: 300
-      label: Needs more walkthrough depth
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+  - RTD binary
+  - install RTD
+  - release verification
 questions:
-  - How do I install Rtd from prebuilt binaries?
-  - What platforms have prebuilt Rtd binaries?
-  - How do I verify my Rtd binary installation?
+  - Are prebuilt RTD binaries available?
+  - How should I verify an RTD binary?
 answer: >-
-  Each Rtd release provides a set of binaries for several operating systems. You
-  can download these binaries from GitHub and use them to install Rtd.
+  No public RTD binary release or AWS download is verified by this fork. Build
+  from the reviewed source revision, or use a binary supplied and authenticated
+  by the operator of your RTD network.
 ---
 
-<ImportContent source="info-easy-install" mode="snippet" />
+No public RTD release asset, S3 binary distribution, Homebrew package, or Chocolatey package is verified here. Do not download a renamed upstream Sui binary and treat it as RTD: its protocol and network identity differ.
 
-Each Rtd release provides a set of binaries for several operating systems. You can download these binaries from GitHub and use them to install Rtd.
-
-<Tabs groupId="operating-systems">
-
-<TabItem value="linux" label="Linux">
-
-1. Go to the [Rtd GitHub repository](https://github.com/LinkUVerse/rtd).
-1. In the right pane, find the **Releases** section.
-
-    ![Rtd releases in GitHub](./images/releases.png)
-1. Click the release tagged **Latest** to open the release's page.
-1. In the **Assets** section of the release, select the .tgz compressed file that corresponds to your operating system.
-1. Extract all files from the .tgz file into the preferred location on your system. These instructions assume you extract the files into a `rtd` folder at the user root of your system for demonstration purposes. Replace references to this location in subsequent steps if you choose a different directory.
-1. Navigate to the expanded folder. You should have the following extracted files:
-
-    <ImportContent source="lists/binaries-file-list" mode="snippet" />
-
-1. Add the folder containing the extracted files to your `PATH` variable. To do so, you can update your `~/.bashrc` to include the location of the Rtd binaries. If using the suggested location, you type `export PATH=$PATH:~/rtd` and press Enter.
-1. Start a new terminal session or type `source ~/.bashrc` to load the new `PATH` value.
-
-</TabItem>
-
-<TabItem value="mac" label="macOS">
-
-1. Go to the [Rtd GitHub repository](https://github.com/LinkUVerse/rtd).
-1. In the right pane, find the **Releases** section.
-
-    ![Rtd releases in GitHub](./images/releases.png)
-1. Click the release tagged **Latest** to open the release's page.
-1. In the **Assets** section of the release, select the .tgz compressed file that corresponds to your operating system.
-1. Extract all files from the .tgz file into the preferred location on your system. These instructions assume you extract the files into a `rtd` folder at the user root of your system. Replace references to this location in subsequent steps if you choose a different directory.
-1. Navigate to the expanded folder. You should have the following extracted files:
-
-    <ImportContent source="lists/binaries-file-list" mode="snippet" />
-
-1. Add the folder containing the extracted files to your `PATH` variable. To do so, you can update your `~/.zshrc` or `~/.bashrc` to include the location of the Rtd binaries. If using the suggested location, you type `export PATH=$PATH:~/rtd` and press Enter.
-1. Start a new console session or type `source ~/.zshrc` (or `.bashrc`) to load the new `PATH` value.
-1. If running the binaries for the first time, you might receive an error from MacOS that prevents the binaries from running. If you receive this error, close the dialog and type `xattr -d com.apple.quarantine ~/rtd/*` in your console and press <kbd>Enter</kbd> (be sure to adjust the path if different).
-
-</TabItem>
-
-<TabItem value="win" label="Windows">
-
-1. Go to the [Rtd GitHub repository](https://github.com/LinkUVerse/rtd).
-1. In the right pane, find the **Releases** section.
-
-    ![Rtd releases in GitHub](./images/releases.png)
-1. Click the release tagged **Latest** to open the release's page.
-1. In the **Assets** section of the release, select the .tgz compressed file that corresponds to your operating system.
-1. Extract all files from the .tgz file into the preferred location on your system. These instructions assume you extract the files into a `rtd` folder at the root of your C drive. Replace references to this location in subsequent steps if you choose a different directory.
-
-    :::info
-
-    Windows does not natively support .tgz files, but you can use a free compressed file app like [7Zip](https://7-zip.org/) to extract.
-
-    :::
-
-1. Navigate to the expanded folder. You should have the following extracted files:
-
-    <ImportContent source="lists/binaries-file-list" mode="snippet" />
-
-1. Add the folder containing the extracted files to your `PATH` variable. There are several ways to get to the setting depending on your version of Windows. One way that works on all versions of Windows is to type `sysdm.cpl` in a console to open the System Properties window. Under the **Advanced** tab, click the **Environment Variables...** button.
-1. In the Environment Variables window, select the `Path` variable and click the **Edit...** button.
-1. In the Edit environment variable window, click **New** and add the path to your expanded folder. Using the example path, this would be `C:\rtd`.
-1. Click **OK**.
-
-</TabItem>
-
-</Tabs>
-
-## Build binaries locally
-
-You can download the Rtd repo and build the binaries locally. The binaries are exported to the `target/release` directory.
-    
-```sh
-$ cargo build --profile release --bin rtd --features tracing
-```
-
-The `--features tracing` flag enables Move test coverage and debugger support. Include other packages as needed.
-
-<ImportContent source="lists/binaries-file-list" mode="snippet" />
-
-## Upgrade from Cargo
-
-:::info
-Consider switching to [`suiup`](/getting-started/onboarding/rtd-install) for upgrades. It handles version pinning and network-specific builds without long compile times.
-:::
-
-If you previously installed the Rtd binaries with Cargo, you can update them to the most recent release with the same command you used to install them (changing `testnet` to the desired branch). Always include `--features tracing`:
+For local development, [build from source](/getting-started/onboarding/install-source). If an RTD network operator supplies a prebuilt binary, confirm its source revision, signature or digest, platform, and protocol compatibility through that operator before installing it.
 
 ```sh
-$ cargo install --locked --git https://github.com/LinkUVerse/rtd.git --branch testnet rtd --features tracing
+rtd --version
+rtd client chain-identifier --format hex
 ```
 
-:::info
-
-The `tracing` feature enables Move test coverage and debugger support in the Rtd CLI. These features are not available unless you include `--features tracing`.
-
-:::
-
-## Install `rtd-node` for Ubuntu from AWS {#aws-rtd-node}
-
-<ImportContent source="install-rtd-node" mode="snippet" />
-
-## Verify the installation
-
-After installing, open a new terminal and run:
-
-```sh
-$ rtd --version
-```
-
-If the installation succeeded, the command prints the installed Rtd version.
-
+Run the chain identifier command only after configuring an endpoint for the intended RTD network. Compare the result with its verified genesis. See [client configuration](/getting-started/onboarding/configure-rtd-client).

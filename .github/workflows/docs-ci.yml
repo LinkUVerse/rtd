@@ -1,4 +1,4 @@
-name: Build and Deploy docs.rtd.io
+name: Build RTD docs
 
 on:
   push:

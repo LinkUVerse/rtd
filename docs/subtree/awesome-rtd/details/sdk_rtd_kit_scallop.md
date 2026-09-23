@@ -1,22 +1,3 @@
 # Rtd Kit (by [Scallop](github.com/scallop-io/rtd-kit))
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-TypeScript Client Kit SDK for Rtd blockchain
-
-## Features
-
-- Transfer RTD, Custom Coin, and objects.
-- Move call functionality.
-- Programmable transaction support.
-- Query on-chain data.
-- HD wallet with multi-account management.
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

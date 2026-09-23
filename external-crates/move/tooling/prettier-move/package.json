@@ -1,6 +1,6 @@
 {
     "name": "@linku/prettier-plugin-move",
-    "author": "LinkU Labs <build@linkuverse.com>",
+    "author": "LinkU Labs",
     "description": "Move Plugin for Prettier",
     "version": "0.4.0",
     "license": "Apache-2.0",

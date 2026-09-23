@@ -44,7 +44,7 @@ env:
   # pull_request (Decision A). The extensions branch is deliberately untrusted
   # (dormant; see AWS_OIDC_MIGRATION_INVENTORY.md). No workflow_dispatch here, so no
   # override-ref clause. Keep in sync with the rtd-sccache-{rw,ro}-github trusts.
-  SCCACHE_ROLE: ${{ (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && 'arn:aws:iam::011083325127:role/rtd-sccache-rw-github' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && 'arn:aws:iam::011083325127:role/rtd-sccache-ro-github' || '' }}
+  SCCACHE_ROLE: ${{ (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && vars.RTD_AWS_SCCACHE_RW_ROLE_ARN || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && vars.RTD_AWS_SCCACHE_RO_ROLE_ARN || '' }}
 
 jobs:
   diff:
@@ -81,6 +81,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - name: Set Swap Space
@@ -124,6 +127,9 @@ jobs:
       - uses: ./.github/actions/setup-sccache
         with:
           role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
           key-prefix: ubuntu-ghcloud
       - run: rustup component add clippy
 

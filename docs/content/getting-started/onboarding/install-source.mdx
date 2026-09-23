@@ -1,154 +1,30 @@
 ---
 title: Install from Source
-description: 'Install the Rtd framework from source, either locally or directly from GitHub.'
+sidebar_label: Install from Source
+description: Build and install the RTD CLI from a reviewed fork source revision.
 keywords:
-  - install rtd
-  - how to install rtd
-  - install rtd cli
-  - rtd command line interface
-  - install from source
-  - source install
-hide_table_of_contents: true
-goal:
-  description: >-
-    Reader can build and install the Rtd framework from source, either locally
-    or directly from GitHub
-  requires:
-    - pattern: '```'
-      min: 2
-      label: Has command or code examples
-    - has_frontmatter:
-        - title
-        - description
-        - keywords
-      label: Has required frontmatter fields
-    - pattern: rtd --version|rtd -V
-      min: 1
-      label: Shows how to verify installation
-    - min_words: 300
-      label: Needs more walkthrough depth
-    - has_questions: true
-      label: Needs questions for AI search visibility
-    - has_answer: true
-      label: Needs answer summary for AI citation
+  - install RTD
+  - source build
+  - Cargo
 questions:
-  - How do I build the Rtd CLI from source?
-  - What dependencies do I need to build Rtd from source?
-  - When should I install from source instead of using prebuilt binaries?
+  - How do I install the RTD CLI from source?
+  - Which RTD revision should I build?
 answer: >-
-  You can install Rtd from source, either locally or directly from GitHub. At
-  minimum, you need Rust and Cargo installed for the Rtd framework:.
+  Build the RTD CLI from a reviewed source revision that matches the network
+  you operate. No RTD public-network release branch or installer is verified.
 ---
 
-<ImportContent source="info-easy-install" mode="snippet" /> 
-
-You can install Rtd from source, either locally or directly from GitHub. At minimum, you need Rust and Cargo installed for the Rtd framework: 
-
-- [x] Download and install Rust: 
-  <div className="pl-8">
-    ```sh
-    $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-    ```
-
-    If you have Rust installed, update to the latest version: 
-  
-    ```sh
-    $ rustup update stable
-    ```
-  </div>
-- [x] Download and install Cargo:
-  <div className="pl-8">
-    ```sh
-    $ curl https://sh.rustup.rs -sSf | sh
-    ```
-  </div>
-  
-  Depending on your operating system, you might require additional prerequisites.
-
-<details>
-<summary>
-Additional prerequisites
-</summary>
-<ImportContent source="install-prereqs" mode="snippet" />
-</details>
-
-You can install from source either directly from GitHub or from your local drive. Regardless of which install from source method you use, the installer places the Rtd components in the `~/.cargo/bin` folder.
-
-You can also download the [source code](/references/contribute/rtd-environment) to locally access files.
-
-<Tabs>
-
-<TabItem label="GitHub source" value="github">
-
-Use Cargo to install Rtd directly from the GitHub repo: 
+Install Rust and Cargo using the [official Rust toolchain instructions](https://www.rust-lang.org/tools/install), then select the RTD source revision that your target network operator has approved. Use the current checkout for local development:
 
 ```sh
-$ cargo install --locked --git https://github.com/LinkUVerse/rtd.git --branch testnet rtd --features tracing
+cargo install --locked --path crates/rtd --features tracing
+rtd --version
 ```
 
-:::info
-
-The tracing feature enables trace-based debugging, profiling, and Move test coverage support in the Rtd CLI. It adds minimal runtime overhead unless you are actively using those features.
-
-:::
-
-Replace the `testnet` branch in the previous command if necessary. Available options are:
-
-    - `main`: Latest updates. Least stable.
-    - `devnet`: Includes experimental features.
-    - `testnet`: Includes beta features.
-    - `mainnet`: Stable release.
-
-You can build and install additional packages as needed. Replace `rtd` in the previous command with the package name in the following table.
-
-<ImportContent source="lists/binaries-file-list" mode="snippet" />
-
-</TabItem>
-
-<TabItem label="Local source" value="local">
-
-You can clone the public Rtd repo and install from source on your local machine.
-
-1. Fork the [Rtd repo](https://github.com/LinkUVerse/rtd).
-
-1. Use a console to clone the fork to the desired directory. 
-
-    ```sh
-    $ git clone https://github.com/YourOrg/rtd.git
-    ```
-1. Navigate to the repo directory and switch to the branch you want to build against.
-
-    - `main`: Latest updates. Least stable.
-    - `devnet`: Includes experimental features.
-    - `testnet`: Includes beta features.
-    - `mainnet`: Stable release.
-
-    ```sh
-    $ git switch testnet
-    ```
-
-1. Run the `cargo install` command from the repo root.
-
-    ```sh
-    $ cargo install --locked --path crates/rtd --features tracing
-    ```
-
-:::info
-
-The tracing feature enables trace-based debugging, profiling, and Move test coverage support in the Rtd CLI. It adds minimal runtime overhead unless you are actively using those features.
-
-:::
-
-</TabItem>
-
-</Tabs>
-
-## Verify the installation
-
-After installing, open a new terminal and run:
+The `tracing` feature enables Move trace and test coverage support. Build `rtd-node` separately if you will operate a node:
 
 ```sh
-$ rtd --version
+cargo build --locked --release -p rtd-node
 ```
 
-If the installation succeeded, the command prints the installed Rtd version.
+The binary version alone does not prove network compatibility. Verify genesis, chain ID, and protocol version with your network operator before using the CLI. Branches named `mainnet`, `testnet`, or `devnet` in an upstream or fork repository do not by themselves establish a deployed RTD public network. RTD has not launched Mainnet.

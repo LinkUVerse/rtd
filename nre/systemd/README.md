@@ -17,12 +17,18 @@ sudo mkdir -p /opt/rtd/key-pairs
 sudo chown -R rtd:rtd /opt/rtd
 ```
 
-2. Install the Rtd Node (rtd-node) binary, two options:
+2. Install the Rtd Node (`rtd-node`) binary. RTD does not currently have a
+   public release endpoint. Use a verified artifact from your own release
+   channel or build from source:
     
-- Pre-built binary stored in Amazon S3:
+- Download a signed binary from a trusted artifact directory. Obtain the
+  verification key through a separate trusted channel, then run this from the
+  repository root:
         
 ```shell
-wget https://releases.rtd.io/$RTD_SHA/rtd-node
+export RTD_RELEASE_BASE_URL="https://<your-artifact-host>/releases"
+export RTD_RELEASE_PUBLIC_KEY="/path/to/trusted-rtd-release-key.pem"
+./nre/download_and_verify_private_binary.sh "$RTD_SHA" rtd-node
 chmod +x rtd-node
 sudo mv rtd-node /opt/rtd/bin
 ```
@@ -113,10 +119,13 @@ When an update is required to the Rtd Node software the following procedure can 
 sudo systemctl stop rtd-node
 ```
 
-2. Fetch the new rtd-node binary
+2. From the repository root, obtain and verify the new `rtd-node` binary with
+   the same trusted release URL and public key used during installation:
 
 ```shell
-wget https://releases.rtd.io/${RTD_SHA}/rtd-node
+export RTD_RELEASE_BASE_URL="https://<your-artifact-host>/releases"
+export RTD_RELEASE_PUBLIC_KEY="/path/to/trusted-rtd-release-key.pem"
+./nre/download_and_verify_private_binary.sh "$RTD_SHA" rtd-node
 ```
 
 3. Update and move the new binary:

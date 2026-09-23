@@ -58,7 +58,7 @@ const BUILDER_PATHS = [
       // ── Setup ──
       { step: 'Install Rtd CLI', stage: 'Setup', page: 'getting-started/onboarding/rtd-install.mdx', eval: 'covered' },
       { step: 'Scaffold frontend', stage: 'Setup', page: 'getting-started/examples/dapp-kit-frontend.mdx', eval: 'covered' },
-      { step: 'TypeScript SDK', stage: 'Setup', page: null, eval: 'covered', note: 'External: sdk.linkuverse.com' },
+      { step: 'TypeScript SDK', stage: 'Setup', page: 'references/rtd-sdks.mdx', eval: 'partial', note: 'Source package only; no public SDK documentation service' },
       { step: 'Developer tools', stage: 'Setup', page: 'getting-started/tooling.mdx', eval: null },
       // ── DeFi Primitives ──
       { step: 'Understand DeFi on Rtd', stage: 'DeFi Primitives', page: 'onchain-finance/deepbook/deepbookv3/deepbook.mdx', eval: 'partial' },

@@ -691,7 +691,7 @@ impl Default for Limits {
             // This default was picked as the sum of pre- and post- quorum timeouts from
             // [rtd_core::authority_aggregator::TimeoutConfig], with a 10% buffer.
             //
-            // <https://github.com/LinkUVerse/rtd/blob/eaf05fe5d293c06e3a2dfc22c87ba2aef419d8ea/crates/rtd-core/src/authority_aggregator.rs#L84-L85>
+            // See `crates/rtd-core/src/authority_aggregator.rs` for the timeout values.
             mutation_timeout_ms: 74_000,
             query_timeout_ms: 40_000,
             max_query_depth: 20,

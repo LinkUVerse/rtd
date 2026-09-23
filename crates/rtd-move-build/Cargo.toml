@@ -2,7 +2,7 @@
 name = "rtd-move-build"
 version.workspace = true
 edition = "2024"
-authors = ["LinkU Labs <eng@linkuverse.com>"]
+authors = ["LinkU Labs"]
 description = "Logic for building Rtd Move Packages"
 license = "Apache-2.0"
 publish = false

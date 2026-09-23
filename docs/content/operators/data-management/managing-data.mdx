@@ -107,7 +107,7 @@ If your node's disk usage is growing beyond your capacity (commonly 7TB or more 
 | Full node serving RPC queries | [Indexing config](#full-node-with-indexing-but-limited-object-history) | Moderate (5 epochs of object history, 2 epochs of transactions) |
 | Full node with complete object history | [Full history config](#full-node-with-full-object-history-but-pruned-transaction-history) | Highest (all object versions retained, transactions pruned) |
 
-{/* TODO: Citation needed. Verify current approximate disk sizes for each pruning scenario on Mainnet. */}
+{/* Capacity depends on the RTD chain and retention settings; measure it on the deployed network. */}
 
 After applying a pruning configuration, monitor disk usage over the following days. Pruning deletes data logically first; RocksDB reclaims the physical space during background compaction. If disk usage does not decrease after 3 to 5 days, verify your configuration and check that `periodic-compaction-threshold-days` is set to `1`.
 
@@ -241,7 +241,7 @@ This configuration manages the full object history while still pruning historic 
 
 The main caveat is that the current configuration enables the **transaction pruner** to go ahead of the **object pruner**. The object pruner might not be able to properly clean up the objects modified by the transactions that have already been pruned. You should closely monitor the disk space growth on a full node with this configuration.
 
-In addition to the regular (pruned) snapshots, LinkU Labs also maintains special RocksDB snapshots with full history of object versions available for the operators using this configuration.
+If you need to restore this configuration, arrange a full-history RocksDB snapshot with the operator of your own RTD network. RTD has no verified public full-history snapshot service.
 
 ```yaml
 authority-store-pruning-config:

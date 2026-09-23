@@ -1,8 +1,8 @@
 # Rtd MultiSig Toolkit
 
-The Rtd MultiSig Toolkit is a comprehensive suite of tools designed to facilitate secure and efficient multi-signature transactions on the Rtd blockchain. It provides users with the ability to manage, analyze, and execute multi-signature transactions with ease.
+The Rtd MultiSig Toolkit is source code for building and inspecting multi-signature transactions. Build and verify it against the RTD network and SDK revision you intend to use.
 
-The toolkit is [available online](https://multisig-toolkit.linkuverse.com/).
+This fork does not establish a hosted RTD toolkit or a public RTD network endpoint.
 
 ## Offline Signer
 

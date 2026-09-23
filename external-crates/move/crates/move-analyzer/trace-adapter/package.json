@@ -3,7 +3,7 @@
   "description": "A Debug Adapter Protocol implementation for visualizing both Move function call and external event traces",
   "version": "0.1.0",
   "license": "Apache-2.0",
-  "author": "LinkU Labs <build@linkuverse.com>",
+  "author": "LinkU Labs",
   "engines": {
     "node": ">=22"
   },

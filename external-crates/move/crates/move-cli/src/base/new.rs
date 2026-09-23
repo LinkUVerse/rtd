@@ -95,7 +95,7 @@ impl New {
             [dependencies]
 
             # Read more about the package management system options:
-            # https://docs.rtd.io/guides/developer/packages/move-package-management
+            # docs/content/develop/manage-packages/move-package-management.mdx
             "#
             ),
         )?;

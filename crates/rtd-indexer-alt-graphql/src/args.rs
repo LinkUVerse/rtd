@@ -17,8 +17,7 @@ use crate::RpcArgs;
 /// Arguments for configuring GraphQL streaming subscriptions.
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct SubscriptionArgs {
-    /// gRPC URL of a fullnode to stream checkpoints from (e.g.
-    /// `https://fullnode.testnet.rtd.io:443`). When set, the instance enables GraphQL
+    /// gRPC URL of a configured fullnode to stream checkpoints from. When set, the instance enables GraphQL
     /// subscriptions. When not set, subscriptions are not available.
     #[arg(long)]
     pub checkpoint_stream_url: Option<Uri>,

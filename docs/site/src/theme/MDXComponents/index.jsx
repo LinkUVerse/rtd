@@ -13,7 +13,6 @@ import BrowserOnly from "@docusaurus/BrowserOnly";
 import UnsafeLink from "@site/src/shared/components/UnsafeLink";
 import RelatedLink from "@site/src/shared/components/RelatedLink";
 import ImportContent from "@site/src/shared/components/ImportContent";
-import ProtocolConfig from "@site/src/components/ProtocolConfig";
 import BetaTag from "@site/src/components/BetaTag";
 import EffortBox from "@site/src/components/EffortBox";
 import AgentPrompt from "@site/src/components/AgentPrompt";
@@ -32,7 +31,6 @@ export default {
   UnsafeLink,
   RelatedLink,
   ImportContent,
-  ProtocolConfig,
   BetaTag,
   EffortBox,
   AgentPrompt,

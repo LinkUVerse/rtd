@@ -1,66 +1,21 @@
-# Lineage — derivation of the SM-* catalog from `LinkUVerse/skills`
+# Lineage of the Move security review catalog
 
-The SM-* rules in this catalog were derived (2026) by analyzing the constructive
-"how to write correct Rtd Move" guidance in the public
-[`LinkUVerse/skills`](https://github.com/LinkUVerse/skills) repository. Each rule is the
-**inversion** of a "must / never / always" prescription in the upstream skills — every
-constructive rule implies a vulnerability when violated. Pinned to the upstream ref
-documented in `maintenance/UPSTREAMS.md`.
+The `SM-*` rules were adapted from constructive Move guidance in the historical upstream
+[`MystenLabs/skills`](https://github.com/MystenLabs/skills) repository at the commit recorded
+in `crates/rtd-prompt/src/maintenance/UPSTREAMS.md`. A constructive rule can suggest an
+audit failure mode when violated. This derivation does not establish that every upstream
+rule applies unchanged to RTD.
 
-## Files scanned at derivation time
-
-All `*.md` files under the following skill bundles in the upstream repo:
-
-- `rtd-move/` (SKILL.md, move.md, events-coins.md)
-- `object-model/` (SKILL.md, ownership.md, transfers.md, dynamic-fields-and-collections.md, patterns.md, display.md)
-- `composable-move-functions/SKILL.md`
-- `naming-conventions/SKILL.md`
-- `move-unit-testing/SKILL.md`
-- `modern-move-syntax/SKILL.md`
-- `ptbs/` (SKILL.md, fundamentals.md, commands.md, building.md, troubleshooting.md, cli.md)
-- `rtd-publish/SKILL.md`
-- `rtd-move-project/SKILL.md`
-- `rtd-build-test/SKILL.md`
-- `frontend-apps/` (SKILL.md, limitations.md, transactions.md, queries.md, setup.md)
-- `rtd-sdks/` (typescript.md, rust.md)
-- `accessing-data/` (SKILL.md, grpc.md, graphql.md, indexers.md, walrus.md, archival.md, use-cases.md)
-- `rtd-cli/SKILL.md`, `rtd-client/SKILL.md`, `rtd-install/SKILL.md`
-- `rtd-overview/ecosystem.md`
-
-## Per-rule attribution
-
-Every SM-* rule's `Source:` line cites the upstream file(s) it was derived from, written
-in the form `Source: LinkUVerse/skills → <relative-path>`. Rules tagged `[+domain]` come from
-established Rtd/Move auditing practice and are NOT directly from the upstream skills (notable
-examples: SM-A3 capability–resource binding, SM-B4 type-confusion / fake-object injection,
-SM-B5 generic-type substitution / unconstrained witness, and the value-reveal nuance in
-SM-L2 randomness).
+Rule `Source:` annotations retain the paths used when the catalog was created. Those paths
+refer to the historical upstream snapshot, even where their names were mechanically
+renamed during the fork. Read them as lineage, then verify behavior in the current RTD
+framework before reporting a finding. Rules tagged `[+domain]` come from broader Move
+audit practice rather than a specific upstream skill.
 
 ## Refresh protocol
 
-To refresh the SM-* catalog against an updated `LinkUVerse/skills` snapshot:
-
-1. **Clone** `LinkUVerse/skills` at the new ref:
-   ```sh
-   git clone https://github.com/LinkUVerse/skills.git /tmp/upstream-skills
-   ```
-2. **Diff** the file set above against the previously-pinned ref (the current value
-   of which is recorded in `maintenance/UPSTREAMS.md`):
-   ```sh
-   git -C /tmp/upstream-skills diff <previously-pinned-ref>..HEAD -- <files>
-   ```
-3. **Re-scan** each changed file with the lens: *"what constructive rules does this state,
-   and does any SM-* rule cite it?"* Confirm existing rules still match; identify new
-   prescriptions that imply a new SM-* rule.
-4. **Update** the affected SM-* reference file(s).
-5. **Large changes** (>5 affected rules) — re-run the original 3-agent thorough scan that
-   built v1 (the prompt template isn't checked into this repo; reconstruct from the v1
-   commit history or contact the catalog author).
-6. **Rebuild the Rtd CLI** so the embedded skill content reflects the refreshed catalog.
-
-## Why this matters
-
-The audit skill catalog is downstream of the constructive skills. When Rtd/Move evolves (new
-framework primitives, new patterns, changed semantics), the constructive skills update first;
-the audit catalog must follow. Without explicit lineage tracking, the catalog silently goes
-stale. This file is the contract that prevents that.
+1. Review the pinned upstream snapshot in `maintenance/UPSTREAMS.md` and the proposed new
+   upstream revision.
+2. For each changed recommendation, inspect the current local RTD framework implementation.
+3. Update affected `SM-*` rules and source annotations only where the behavior is supported.
+4. Rebuild the RTD CLI, which embeds this catalog at build time.

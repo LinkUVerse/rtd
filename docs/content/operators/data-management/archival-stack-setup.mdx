@@ -42,6 +42,8 @@ answer: >-
 
 See [Archival Store and Service](/develop/accessing-data/archival-store) for more information on the stack.
 
+RTD has no verified public Mainnet, archival service, or checkpoint bucket. The instructions below are a template for an operator who runs the entire stack on one identified RTD chain. Supply your own genesis digest, checkpoint source, Bigtable instance, and gRPC endpoint; verify that every component reads the same chain.
+
 ## Architecture overview
 
 1. **Google Cloud Bigtable**: The backing store that holds all historical chain data across 14 tables.
@@ -63,9 +65,7 @@ graph LR
 - Two GCP service accounts:
   - **Read/write account** for the indexer; requires `roles/bigtable.user`.
   - **Read-only account** for the gRPC service; requires `roles/bigtable.reader`.
-- A checkpoint bucket for your network, for history:
-  - **Mainnet:** `--remote-store-gcs linku-mainnet-checkpoints-use4` (Requester Pays).
-  - **Testnet:** `--remote-store-gcs linku-testnet-checkpoints-use4` (Requester Pays).
+- A checkpoint bucket owned by your network operator, for history. Verify its genesis digest, retention, access credentials, and billing policy before using `--remote-store-gcs YOUR_RTD_CHECKPOINT_BUCKET`.
 - A [Rtd full node](/operators/full-node/rtd-full-node) with gRPC enabled, for the tip.
 
 </TabItem>
@@ -83,7 +83,7 @@ Both binaries authenticate to GCP using [Application Default Credentials (ADC)](
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
 
-The public HTTPS endpoints (`https://checkpoints.mainnet.rtd.io`, `https://checkpoints.testnet.rtd.io`) keep only the latest 30 days. Use the GCS buckets above for backfill.
+No public RTD checkpoint HTTPS endpoint or retention period is verified. Backfill from a trusted bucket or full node operated for your RTD chain.
 
 ## Bigtable setup
 
@@ -132,37 +132,11 @@ done
 
 ### Storage requirements
 
-Measured 2026-07-27. Grows with network activity.
-
-| Table | Mainnet | Testnet |
-|-------|---------|---------|
-| `transactions` | 10.8 TB | 3.2 TB |
-| `objects` | 5 TB | 1.3 TB |
-| `checkpoints` | 947.7 GB | 572.9 GB |
-| `transaction_bitmap_index` | 606.7 GB | 311.6 GB |
-| `tx_seq_digest` | 502.5 GB | 335.5 GB |
-| `event_bitmap_index` | 250.9 GB | 21.3 GB |
-| `checkpoints_by_digest` | 18.2 GB | 21.8 GB |
-| `epochs` | 169.2 MB | 156.1 MB |
-| `packages` | 30.9 MB | 71 MB |
-| `watermark_alt` | 23.5 MB | 41.5 MB |
-| `packages_by_id` | 19.1 MB | 43.2 MB |
-| `packages_by_checkpoint` | 16.5 MB | 38.1 MB |
-| `protocol_configs` | 1.2 MB | 610.2 KB |
-| `system_packages` | 1.6 KB | 2.9 KB |
-| **Total** | **~18.1 TB** | **~5.8 TB** |
+No RTD public-network storage measurements exist. Estimate capacity from your own checkpoint history, retention requirement, and a representative backfill. Monitor each table and reserve headroom for index growth and recovery; upstream Sui Mainnet/Testnet sizes are not RTD capacity estimates.
 
 ### Scaling {#scaling}
 
-Use autoscaling. The indexer paces its own writes, so the cluster grows during backfill and settles back at the tip on its own.
-
-| Autoscaling setting | Mainnet | Testnet |
-|---------------------|---------|---------|
-| Minimum nodes | 7 | 3 |
-| Maximum nodes | 30 | 10 |
-| CPU utilization target | 60% | 60% |
-
-Each SSD node holds up to 5 TB; stay under 70% (3.5 TB per node).
+Enable autoscaling if your Bigtable deployment supports it. Choose minimum and maximum node counts from measurements of your own RTD backfill and steady-state traffic. The inherited Sui Mainnet/Testnet node counts are not RTD recommendations. Keep enough storage and compute headroom for a restore or replay.
 
 ### Backup policy
 
@@ -174,20 +148,20 @@ Configure automated backups. Daily with 7-day retention is a reasonable default.
 
 | | CPU | Memory |
 |---|---|---|
-| At the tip | 1 core | 1 GB |
-| Backfilling | 16 cores | 32 GB |
+| At the tip | Measure on your chain | Measure on your chain |
+| Backfilling | Size from a representative run | Size from a representative run |
 
 ### Run `rtd-kvstore-alt`
 
 ```sh
 rtd-kvstore-alt \
-    --chain mainnet \
+    --chain unknown \
     my-bigtable-instance \
-    --remote-store-gcs linku-mainnet-checkpoints-use4 \
+    --remote-store-gcs YOUR_RTD_CHECKPOINT_BUCKET \
     --streaming-url http://my-fullnode:9000
 ```
 
-For Testnet, use `--chain testnet` with `--remote-store-gcs linku-testnet-checkpoints-use4`.
+Use `--chain unknown` for an RTD network unless its operator has verified another chain classification in the binary. Replace `YOUR_RTD_CHECKPOINT_BUCKET` with a bucket proven to contain checkpoints from that same network.
 
 That one command backfills from genesis and then indexes at the tip. There is no separate backfill config and no cutover. Do not set `--rpc-api-url`.
 
@@ -217,7 +191,7 @@ Exactly one checkpoint source is allowed (`--remote-store-gcs`, `--remote-store-
 
 :::info
 
-LinkU Labs plans to enable requester-pays on the public checkpoint buckets in the future. Streaming from your own full node avoids these costs.
+The operator of your bucket determines its access and billing policy. Streaming from your own full node avoids third-party bucket charges when its retained history covers the required checkpoint range.
 
 :::
 
@@ -309,9 +283,9 @@ All 14 are required for full archival service functionality.
 
 ### Backfill
 
-Start the indexer without `--first-checkpoint`. A full Mainnet backfill takes approximately **3-4 days** on a 30-node SSD cluster with a 16 CPU indexer.
+Start the indexer without `--first-checkpoint` for a complete backfill from genesis. Time the run on your own chain and monitor the checkpoint source, Bigtable write latency, and storage growth. No RTD public Mainnet backfill benchmark exists.
 
-Use one indexer instance. One instance can drive a 30-node cluster, the largest scale tested.
+Start with one indexer instance and scale only after measuring its throughput and Bigtable capacity.
 
 Bigtable writes are idempotent, so you can run several instances at the tip for rolling deployments.
 

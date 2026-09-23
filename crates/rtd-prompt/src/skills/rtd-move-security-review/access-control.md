@@ -13,7 +13,7 @@ carries `copy`/`drop`. The authority's **name doesn't matter** — it may not co
 (e.g., `Admin`, `Manager`, `License`, or any project-specific name)
 Exploit: clone an `AdminCap`/`TreasuryCap` and replay privileged calls; or grief by dropping the
 only cap and bricking administration.
-Source: `LinkUVerse/skills → rtd-move/move.md`, `LinkUVerse/skills → naming-conventions/SKILL.md`.
+Source: `historical upstream skills → rtd-move/move.md`, `historical upstream skills → naming-conventions/SKILL.md`.
 
 ### SM-A2 — Missing authorization on privileged entrypoint   [Critical]
 Invariant: **every `public`/`entry` function that takes a `&mut SharedObject` is callable by any
@@ -29,7 +29,7 @@ gate before the first state-mutating expression.
 _Absence rule:_ walk every `public`/`entry` fn touching shared state; a `&*Cap` or
 `tx_context::sender(...)` gate *elsewhere* in the module does not clear an unguarded fn.
 Exploit: any address calls the privileged path directly via a PTB.
-Source: `LinkUVerse/skills → rtd-move/move.md`, `LinkUVerse/skills → composable-move-functions/SKILL.md`.
+Source: `historical upstream skills → rtd-move/move.md`, `historical upstream skills → composable-move-functions/SKILL.md`.
 
 ### SM-A3 — Capability not bound to the resource it governs   [Critical] [+domain]
 Invariant: when a cap governs a *specific* object (a pool, vault, treasury), the cap stores that
@@ -72,7 +72,7 @@ Detect: direct `transfer::transfer(cap, addr)` / `public_transfer(cap, addr)` of
 to an externally-supplied address with no acceptance step.
 Exploit: a mistyped or attacker-influenced address permanently captures or bricks admin authority
 (unrecoverable, since the cap is the only key).
-Source: `LinkUVerse/skills → rtd-move/move.md`.
+Source: `historical upstream skills → rtd-move/move.md`.
 
 ### SM-A5 — Forgeable witness / authority type   [High]
 Invariant: a type used as proof of authority (witness, OTW) must be constructible ONLY by its
@@ -81,7 +81,7 @@ drop {}` with no fields can be built by anyone.
 Detect: functions gated by a `W: drop` witness parameter where `W` is publicly constructible
 (public struct with public/no fields, or a generic type the caller chooses).
 Exploit: construct the witness yourself and call the "authorized-only" function.
-Source: `LinkUVerse/skills → rtd-move/move.md` (witness / OTW patterns).
+Source: `historical upstream skills → rtd-move/move.md` (witness / OTW patterns).
 
 ### SM-A6 — Missing object-state guard on a privileged release/mutate   [High]
 Invariant: when a module exposes a privileged release / transfer / state-change function for an
@@ -104,7 +104,7 @@ _Absence rule:_ an `assert!`/`abort` *elsewhere* in the module does not clear th
 verify the guard reaches *this* privileged op on the path.
 Exploit: caller invokes the release path while the object's state still forbids it — transfer a
 locked NFT, redeem before expiry, withdraw without the loan being marked repaid.
-Source: `LinkUVerse/skills → object-model/transfers.md` (`transfer_if_unlocked` example:
+Source: `historical upstream skills → object-model/transfers.md` (`transfer_if_unlocked` example:
 `assert!(item.unlocked, EItemLocked); transfer::transfer(item, to);`).
 
 ---
@@ -119,4 +119,4 @@ unauthenticated function.
 Detect: caps created in `init` or factory fns then sent to a non-fixed address; mint/burn/upgrade
 operations whose cap argument is obtainable without authorization.
 Exploit: seize mint/upgrade authority → unlimited supply or full package rewrite.
-Source: `LinkUVerse/skills → rtd-move/events-coins.md`, `LinkUVerse/skills → rtd-publish/SKILL.md`. See SM-G1, SM-I1.
+Source: `historical upstream skills → rtd-move/events-coins.md`, `historical upstream skills → rtd-publish/SKILL.md`. See SM-G1, SM-I1.

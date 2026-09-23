@@ -2,9 +2,9 @@
 name = "telemetry-subscribers"
 version = "0.2.0"
 license = "Apache-2.0"
-authors = ["Evan Chan <echan@linkuverse.com>"]
+authors = ["Evan Chan"]
 description = "Library for common telemetry and observability functionality"
-repository = "https://github.com/linkuverse/linku-infra"
+repository = "https://github.com/LinkUVerse/rtd"
 edition = "2024"
 publish = false
 

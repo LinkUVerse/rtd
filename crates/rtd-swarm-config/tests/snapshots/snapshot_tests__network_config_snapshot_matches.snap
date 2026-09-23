@@ -77,7 +77,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -117,29 +117,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1
@@ -263,7 +241,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -303,29 +281,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1
@@ -449,7 +405,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -489,29 +445,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1
@@ -635,7 +569,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -675,29 +609,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1
@@ -821,7 +733,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -861,29 +773,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1
@@ -1007,7 +897,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -1047,29 +937,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1
@@ -1193,7 +1061,7 @@ validator_configs:
       archive-interval-epochs: 0
     indexer-max-subscriptions: ~
     transaction-kv-store-read-config:
-      base-url: "https://transactions.rtd.io/"
+      base-url: ""
       cache-size: 100000
     jwk-fetch-interval-seconds: 3600
     zklogin-oauth-providers:
@@ -1233,29 +1101,7 @@ validator_configs:
         - TestEveFrontier
         - Threedos
         - Twitch
-      Unknown:
-        - Apple
-        - Arden
-        - "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E"
-        - "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg"
-        - "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es"
-        - Credenza3
-        - EveFrontier
-        - Facebook
-        - FanTV
-        - Google
-        - Kakao
-        - KarrierOne
-        - Microsoft
-        - Onefc
-        - Playtron
-        - Slack
-        - TestEveFrontier
-        - TestIssuer
-        - TestIssuerKey8192
-        - Threedos
-        - Twitch
+      Unknown: []
     authority-overload-config:
       max-txn-age-in-queue:
         secs: 1

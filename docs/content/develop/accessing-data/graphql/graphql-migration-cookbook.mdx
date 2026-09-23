@@ -85,11 +85,7 @@ Each recipe pairs a JSON-RPC call with its GraphQL replacement and explains the 
 
 ## Before you start
 
-GraphQL queries run against the online IDE or any GraphQL endpoint. Access the service at:
-
-- **Mainnet:** https://graphql.mainnet.rtd.io/graphql
-- **Testnet:** https://graphql.testnet.rtd.io/graphql
-- **Devnet:** https://graphql.devnet.rtd.io/graphql
+GraphQL queries require an endpoint operated for your specific RTD chain. RTD has no public Mainnet or verified public GraphQL service. The JSON-RPC examples below are for a local legacy endpoint only; future RTD Mainnet will not expose JSON-RPC. Set `<GRAPHQL_ENDPOINT>` to the URL of a GraphQL service you operate or have verified.
 
 For `curl` examples, replace `<GRAPHQL_ENDPOINT>` with your provider's GraphQL URL. See [GraphQL for Rtd RPC](/develop/accessing-data/graphql/graphql-rpc) for headers, variables, fragments, and pagination details.
 
@@ -107,7 +103,7 @@ Replace `rtd_getObject` with `Query.object`. Select only the fields you need ins
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -161,7 +157,7 @@ Replace `rtd_multiGetObjects` with `Query.multiGetObjects`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -210,7 +206,7 @@ Replace `rtd_getTransactionBlock` with `Query.transaction`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -258,7 +254,7 @@ Replace `rtd_multiGetTransactionBlocks` with `Query.multiGetTransactions`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -297,7 +293,7 @@ Replace `rtd_getTotalTransactionBlocks` with `Checkpoint.networkTotalTransaction
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -332,7 +328,7 @@ Replace `rtdx_queryTransactionBlocks` with `Query.transactions` and a `Transacti
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -386,7 +382,7 @@ Replace `rtdx_queryEvents` with `Query.events` and an `EventFilter`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -440,7 +436,7 @@ query {
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -485,7 +481,7 @@ Replace `rtd_getCheckpoint` with `Query.checkpoint`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -523,7 +519,7 @@ Replace `rtd_getCheckpoints` polling with `Query.checkpoints` pagination.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -569,7 +565,7 @@ Replace `rtdx_getBalance` and `rtdx_getAllBalances` with `Address.balance` and `
 
 ```sh
 # Single coin type
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -579,7 +575,7 @@ curl -X POST https://fullnode.mainnet.rtd.io:443 \
   }'
 
 # All coin types
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -633,7 +629,7 @@ Replace `rtdx_getCoins` and `rtdx_getAllCoins` with `Address.objects` filtered b
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -683,7 +679,7 @@ Replace `rtdx_getCoinMetadata` with `Query.coinMetadata`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -719,7 +715,7 @@ Replace `rtdx_getOwnedObjects` with `Address.objects`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -768,7 +764,7 @@ Replace `rtdx_getDynamicFields` with `Object.dynamicFields`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -828,7 +824,7 @@ Replace `rtdx_getDynamicFieldObject` with `Object.dynamicObjectField`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -875,7 +871,7 @@ Replace `rtd_executeTransactionBlock` with `Mutation.executeTransaction`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -936,7 +932,7 @@ Replace `rtd_dryRunTransactionBlock` and `rtd_devInspectTransactionBlock` with `
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -989,7 +985,7 @@ Replace `rtdx_getReferenceGasPrice` with `Epoch.referenceGasPrice`.
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -1021,7 +1017,7 @@ Replace `rtdx_getStakes` and `rtdx_getStakesByIds` with `Address.objects` filter
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -1060,7 +1056,7 @@ JSON-RPC provided `rtdx_getValidatorsApy` as a convenience method. GraphQL does 
 <TabItem value="json-rpc" label="JSON-RPC (deprecated)">
 
 ```sh
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -1115,7 +1111,7 @@ Replace `rtd_getNormalizedMoveModule`, `rtd_getNormalizedMoveFunction`, and `rtd
 
 ```sh
 # Get a normalized Move module
-curl -X POST https://fullnode.mainnet.rtd.io:443 \
+curl -X POST http://127.0.0.1:9000 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -1280,6 +1276,6 @@ GraphQL passes cursors through `after` or `before` fields on connections, with p
 
 Different queries hit different data sources with different retention. Live object set queries (balances, owned objects) rely on the Consistent Store with ~1 hour retention. Historical queries (transactions, events) rely on the database with ~30–90 days retention. Point lookups can route to the Archival Service for indefinite retention when configured. Use `serviceConfig.availableRange` to check retention before querying.
 
-### Public endpoints are not production endpoints
+### Configure your GraphQL endpoint
 
-The public URLs at `https://graphql.<NETWORK>.rtd.io/graphql` are rate-limited and intended for development. Production apps should use a provider endpoint or operate their own [GraphQL and Indexer stack](/operators/data-management/indexer-stack-setup).
+RTD has no verified public GraphQL URL. Operate your own [GraphQL and Indexer stack](/operators/data-management/indexer-stack-setup) or use a provider only after verifying its RTD chain support.

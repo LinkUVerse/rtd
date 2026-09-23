@@ -61,14 +61,16 @@ answer: >-
   rtd::allowance::revoke and the AllowanceCap.
 ---
 
+> URLs containing `YOUR_RTD_` are configuration placeholders. This fork does not establish public RTD endpoints or a public Mainnet. Verify the target chain ID and replace each placeholder with an operator-provided service before use.
+
 An allowance is a shared object of type `rtd::allowance::Allowance<Balance<T>>` that authorizes one spender to withdraw coin type `T` from the funder's [address balance](/onchain-finance/asset-custody/address-balances). The funder issues it, the spender uses it in their own transactions, and the funder revokes it. For the concepts and use cases, see [What Are Allowances?](/onchain-finance/allowances/allowances-overview). For the full module reference, see [`rtd::allowance`](/references/framework/rtd_rtd/allowance).
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- [x] [Install Rtd](/getting-started/onboarding/rtd-install) v1.80 or later for Devnet and Testnet, or v1.81 or later for Mainnet.
+- [x] [Build Rtd](/getting-started/onboarding/rtd-install) from the source revision matching your RTD network, and verify the actual chain identifier.
 - [x] A funded [address balance](/onchain-finance/asset-custody/address-balances) on the funder's address.
-- [x] For the TypeScript examples, `@linku/rtd` 2.31 or later: `npm install @linku/rtd`.
+- [x] For the TypeScript examples, `rtd-typescript` 2.31 or later: `npm install rtd-typescript`.
 
 </TabItem>
 </Tabs>
@@ -123,12 +125,12 @@ Windows are fixed, not sliding, and unused amounts do not carry over. See the [A
 The TypeScript examples on this page share the following setup:
 
 ```typescript title='setup.ts'
-import { RtdGrpcClient } from '@linku/rtd/grpc';
-import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { RtdGrpcClient } from 'rtd-typescript/grpc';
+import { Ed25519Keypair } from 'rtd-typescript/keypairs/ed25519';
 
 export const client = new RtdGrpcClient({
-	network: 'testnet',
-	baseUrl: 'https://fullnode.testnet.rtd.io:443',
+	network: 'localnet',
+	baseUrl: process.env.RTD_FULLNODE_GRPC_URL!,
 });
 
 // Load secret keys from the environment, never hardcode them.
@@ -141,7 +143,7 @@ export const spenderAddress = spenderKeypair.toRtdAddress();
 The following transaction issues an allowance of 1 RTD in total, with no rate limit and no start time, that expires in 30 days. Because `Option<RateLimit>` is not a pure value, the `none` comes from a Move call:
 
 ```typescript title='issue-allowance.ts'
-import { Transaction } from '@linku/rtd/transactions';
+import { Transaction } from 'rtd-typescript/transactions';
 import { client, funderAddress, funderKeypair, spenderAddress } from './setup';
 
 const ALLOWANCE_TYPE = '0x2::balance::Balance<0x2::rtd::RTD>';
@@ -259,7 +261,7 @@ Before the transaction executes, Rtd verifies that the allowance is an input of 
 `tx.balance()` accepts an `allowance` option. The SDK reads the allowance to find the funder, adds the withdrawal input, and calls `balance_spend` for you. The following transaction spends 0.1 RTD through the allowance and deposits it into the spender's address balance:
 
 ```typescript title='spend-allowance.ts'
-import { Transaction } from '@linku/rtd/transactions';
+import { Transaction } from 'rtd-typescript/transactions';
 import { client, spenderAddress, spenderKeypair } from './setup';
 
 const allowanceId = 'ALLOWANCE_ID'; // from the issuing transaction
@@ -440,7 +442,7 @@ public fun revoke<T>(self: AllowanceCap<T>, allowance: Allowance<T>)
 From the TypeScript SDK:
 
 ```typescript title='revoke-allowance.ts'
-import { Transaction } from '@linku/rtd/transactions';
+import { Transaction } from 'rtd-typescript/transactions';
 import { client, funderAddress, funderKeypair } from './setup';
 
 const allowanceId = 'ALLOWANCE_ID';

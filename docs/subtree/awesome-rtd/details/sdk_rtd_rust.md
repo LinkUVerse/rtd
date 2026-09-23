@@ -1,20 +1,3 @@
 # Rtd Rust SDK (by LinkU Labs)
 
-## Tooling Category
-
-- [ ] dApp Development
-- [ ] Explorer
-- [ ] IDE
-- [ ] Indexer
-- [ ] Oracle
-- [x] SDK
-
-## Description
-
-Rtd Rust SDK contains APIs to interact with Rtd blockchain.
-
-## Features
-
-- [Supported operations](https://arc.net/l/quote/gmkrkhqg)
-- ⚠️ GraphQL is not supported yet
-- [Rtd BCS types are supported](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-types/src/base_types.rs)
+This is an upstream Sui ecosystem reference. No RTD deployment or compatibility for this project has been verified. Do not use upstream package IDs, public endpoints, or branding as RTD configuration. A future RTD integration requires source review and a transaction or API test against the intended RTD chain.

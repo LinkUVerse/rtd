@@ -3007,7 +3007,6 @@ async fn init_sim_executor(
 
     // Validators are sorted by their authority public key in tests. Sort before assigning
     // names so that validators are ordered by name (validator_0, validator_1, ..).
-    // See https://github.com/LinkUVerse/rtd/blob/272c471e3ad1f91b2564efdaaa17100e475f732e/crates/rtd-swarm-config/src/network_config_builder.rs#L443
     let addr_keys: Vec<_> = (0..num_custom_validator_accounts)
         // Make a validator account with a gas object
         .map(|_| {
