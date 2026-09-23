@@ -2,6 +2,14 @@
 *.swp
 **/.terraform/
 target/
+**/target/
+.git/
+**/.git/
+node_modules/
+**/node_modules/
+.turbo/
+**/.turbo/
+**/dist/
 **/*Dockerfile
 *.md
 build/
