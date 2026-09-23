@@ -150,15 +150,10 @@ async fn main() -> anyhow::Result<()> {
         IndexerArgs::default(),
         ClientArgs {
             ingestion: IngestionClientArgs {
-                // Supply a GCS bucket populated with checkpoints from this
-                // RTD chain. Verify the range and access policy with its operator.
-                remote_store_gcs: Some("YOUR_RTD_CHECKPOINT_BUCKET".to_string()),
-                // Include this header only if the operator's bucket uses
-                // Requester Pays, with your actual billing project.
-                remote_store_headers: vec![(
-                    "x-goog-user-project".parse()?,
-                    "my-project".parse()?,
-                )],
+                // Supply a self-hosted Ceph RGW bucket populated with checkpoints
+                // from this RTD chain. Set AWS_ENDPOINT to the private RGW URL,
+                // with explicit S3 protocol credentials and region.
+                remote_store_s3: Some("rtd-checkpoints".to_string()),
                 ..Default::default()
             },
             streaming: StreamingClientArgs {

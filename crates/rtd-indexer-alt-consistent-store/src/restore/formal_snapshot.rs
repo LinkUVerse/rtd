@@ -10,8 +10,6 @@ use anyhow::ensure;
 use bytes::Bytes;
 use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
-use object_store::azure::MicrosoftAzureBuilder;
-use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use rtd_indexer_alt_framework::ingestion::store_client::StoreIngestionClient;
@@ -30,20 +28,10 @@ use crate::restore::storage::StorageConnectionArgs;
 #[derive(clap::Args, Clone, Debug)]
 #[group(required = true)]
 pub struct FormalSnapshotArgs {
-    /// Fetch formal snapshot from AWS S3. Provide the bucket name or endpoint-and-bucket.
-    /// (env: AWS_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
+    /// Fetch from self-hosted S3-compatible storage such as Ceph RGW.
+    /// AWS_ENDPOINT and explicit S3 credentials are required.
     #[arg(long, group = "source")]
     pub s3: Option<String>,
-
-    /// Fetch formal snapshot from Google Cloud Storage. Provide the bucket name.
-    /// (env: GOOGLE_SERVICE_ACCOUNT_PATH).
-    #[arg(long, group = "source")]
-    pub gcs: Option<String>,
-
-    /// Fetch formal snapshot from Azure Blob Storage. Provide the container name.
-    /// (env: AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCESS_KEY)
-    #[arg(long, group = "source")]
-    pub azure: Option<String>,
 
     /// Fetch formal snapshot from a generic HTTP endpoint.
     #[arg(long, group = "source")]
@@ -100,28 +88,17 @@ impl FormalSnapshot {
         // Connect to the formal snapshot source.
         let store: Arc<dyn Storage + Send + Sync + 'static> = if let Some(bucket) = snapshot_args.s3
         {
-            info!(bucket, "S3 storage");
+            let endpoint = std::env::var("AWS_ENDPOINT")
+                .context("AWS_ENDPOINT must point to self-hosted S3-compatible storage")?;
+            validate_self_hosted_s3_environment(&Url::parse(&endpoint)?)?;
+            info!(bucket, endpoint, "Self-hosted S3-compatible storage");
             AmazonS3Builder::from_env()
                 .with_client_options(connection_args.into())
-                .with_imdsv1_fallback()
                 .with_bucket_name(bucket)
-                .build()
-                .map(Arc::new)?
-        } else if let Some(bucket) = snapshot_args.gcs {
-            info!(bucket, "GCS storage");
-            GoogleCloudStorageBuilder::from_env()
-                .with_client_options(connection_args.into())
-                .with_bucket_name(bucket)
-                .build()
-                .map(Arc::new)?
-        } else if let Some(container) = snapshot_args.azure {
-            info!(container, "Azure storage");
-            MicrosoftAzureBuilder::from_env()
-                .with_client_options(connection_args.into())
-                .with_container_name(container)
                 .build()
                 .map(Arc::new)?
         } else if let Some(endpoint) = snapshot_args.http {
+            validate_self_hosted_url(&endpoint)?;
             info!(endpoint = %endpoint, "HTTP storage");
             HttpStorage::new(endpoint, connection_args).map(Arc::new)?
         } else if let Some(path) = snapshot_args.local {
@@ -130,6 +107,8 @@ impl FormalSnapshot {
         } else {
             bail!("No formal snapshot source provided");
         };
+
+        validate_self_hosted_url(&snapshot_args.remote_store_url)?;
 
         let (epoch, epoch_dir) = if let Some(path) = snapshot_args.path {
             let epoch = snapshot_args
@@ -248,4 +227,39 @@ impl FormalSnapshot {
             .await
             .context("Failed to fetch object file")
     }
+}
+
+fn validate_self_hosted_url(url: &Url) -> anyhow::Result<()> {
+    let host = url.host_str().context("Storage URL must contain a host")?;
+    ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "Storage URL must use HTTP(S)"
+    );
+    ensure!(
+        !["amazonaws.com", "googleapis.com", "blob.core.windows.net"]
+            .iter()
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}"))),
+        "Storage URL must point to self-hosted infrastructure"
+    );
+    Ok(())
+}
+
+fn validate_self_hosted_s3_environment(endpoint: &Url) -> anyhow::Result<()> {
+    validate_self_hosted_url(endpoint)?;
+    ensure!(
+        endpoint.scheme() == "https"
+            || std::env::var("RTD_ARCHIVE_ALLOW_INSECURE_S3_DEV").as_deref() == Ok("1"),
+        "Plaintext S3 endpoints are restricted to local development"
+    );
+    for name in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ] {
+        ensure!(
+            std::env::var(name).is_ok_and(|value| !value.is_empty()),
+            "{name} is required for the self-hosted S3 protocol; cloud metadata credentials are disabled"
+        );
+    }
+    Ok(())
 }

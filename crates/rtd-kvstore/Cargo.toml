@@ -27,7 +27,6 @@ clap.workspace = true
 futures.workspace = true
 governor.workspace = true
 http.workspace = true
-gcp_auth.workspace = true
 integer-encoding.workspace = true
 linku-common.workspace = true
 num_cpus.workspace = true

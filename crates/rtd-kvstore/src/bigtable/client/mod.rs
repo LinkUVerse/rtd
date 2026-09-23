@@ -1,10 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-mod auth_channel;
 pub mod bitmap_query;
 mod channel_pool;
 mod flow_control;
+mod metadata_channel;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -20,7 +20,6 @@ use anyhow::bail;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::StreamExt;
-use gcp_auth::TokenProvider;
 use prometheus::Registry;
 use rtd_futures::task::TaskGuard;
 use rtd_inverted_index::ScanDirection;
@@ -35,14 +34,15 @@ use tonic::Code;
 use tonic::transport::Certificate;
 use tonic::transport::Channel;
 use tonic::transport::ClientTlsConfig;
+use tonic::transport::Identity;
 
-use auth_channel::AuthChannel;
-use auth_channel::bigtable_features_header;
 use channel_pool::ChannelPool;
 use channel_pool::ChannelPrimer;
 pub use channel_pool::PoolConfig;
 use flow_control::BatchWriteFlowController;
 use flow_control::is_overload_error;
+use metadata_channel::MetadataChannel;
+use metadata_channel::bigtable_features_header;
 
 use crate::CheckpointData;
 use crate::EpochData;
@@ -146,8 +146,6 @@ pub struct MutationError {
 
 struct BigtablePrimer {
     instance_name: String,
-    policy: String,
-    token_provider: Option<Arc<dyn TokenProvider>>,
 }
 
 impl ChannelPrimer for BigtablePrimer {
@@ -156,13 +154,9 @@ impl ChannelPrimer for BigtablePrimer {
         channel: &'a Channel,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            let auth_channel = AuthChannel::new(
-                channel.clone(),
-                self.policy.clone(),
-                self.token_provider.clone(),
-                bigtable_features_header(false),
-            );
-            let mut client = BigtableInternalClient::new(auth_channel);
+            let metadata_channel =
+                MetadataChannel::new(channel.clone(), bigtable_features_header(false));
+            let mut client = BigtableInternalClient::new(metadata_channel);
             client
                 .ping_and_warm(PingAndWarmRequest {
                     name: self.instance_name.clone(),
@@ -177,7 +171,7 @@ impl ChannelPrimer for BigtablePrimer {
 #[derive(Clone)]
 pub struct BigTableClient {
     table_prefix: String,
-    client: BigtableInternalClient<AuthChannel<ChannelPool>>,
+    client: BigtableInternalClient<MetadataChannel<ChannelPool>>,
     batch_write_flow_control: BatchWriteFlowControl,
     client_name: String,
     metrics: Option<Arc<KvMetrics>>,
@@ -201,18 +195,14 @@ impl BigTableClient {
         let endpoint = Channel::from_shared(format!("http://{host}"))?;
         let pool =
             ChannelPool::new_connected(endpoint, PoolConfig::singleton(), None, None).await?;
-        let auth_channel = AuthChannel::new(
-            pool,
-            "https://www.googleapis.com/auth/bigtable.data".to_string(),
-            None,
-            bigtable_features_header(batch_write_flow_control),
-        );
+        let metadata_channel =
+            MetadataChannel::new(pool, bigtable_features_header(batch_write_flow_control));
         let client_name = client_name.to_string();
         let flow_controller = batch_write_flow_control
             .then(|| BatchWriteFlowController::new(client_name.clone(), None));
         Ok(Self {
             table_prefix: format!("projects/emulator/instances/{}/tables/", instance_id),
-            client: BigtableInternalClient::new(auth_channel),
+            client: BigtableInternalClient::new(metadata_channel),
             batch_write_flow_control: BatchWriteFlowControl::Disabled,
             client_name,
             metrics: None,
@@ -252,7 +242,7 @@ impl BigTableClient {
     pub async fn new_remote_with_credentials(
         instance_id: String,
         project_id: Option<String>,
-        is_read_only: bool,
+        _is_read_only: bool,
         timeout: Option<Duration>,
         max_decoding_message_size: Option<usize>,
         client_name: String,
@@ -262,48 +252,72 @@ impl BigTableClient {
         credentials_path: Option<String>,
         batch_write_flow_control: bool,
     ) -> Result<Self> {
-        let config = pool_config;
-        let policy = if is_read_only {
-            "https://www.googleapis.com/auth/bigtable.data.readonly"
-        } else {
-            "https://www.googleapis.com/auth/bigtable.data"
-        };
-        let token_provider: Arc<dyn TokenProvider> = match credentials_path {
-            Some(path) => Arc::new(gcp_auth::CustomServiceAccount::from_file(&path)?),
-            None => gcp_auth::provider().await?,
-        };
-        let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(include_bytes!("../proto/google.pem")))
-            .domain_name("bigtable.googleapis.com");
-        let mut endpoint = Channel::from_static("https://bigtable.googleapis.com")
+        if credentials_path.is_some() {
+            bail!(
+                "Google service-account credentials are not supported by the self-hosted RTD archive"
+            );
+        }
+        let gateway_url = std::env::var("RTD_HBASE_GATEWAY_ENDPOINT")
+            .context("RTD_HBASE_GATEWAY_ENDPOINT must point to the self-hosted HBase gateway")?;
+        if gateway_url.contains("googleapis.com")
+            || gateway_url.contains("amazonaws.com")
+            || gateway_url.contains("blob.core.windows.net")
+        {
+            bail!("RTD_HBASE_GATEWAY_ENDPOINT must not point to a proprietary cloud service");
+        }
+        let mut endpoint = Channel::from_shared(gateway_url.clone())?
             .http2_keep_alive_interval(Duration::from_secs(30))
             .keep_alive_timeout(Duration::from_secs(10))
-            .keep_alive_while_idle(true)
-            .tls_config(tls_config)?;
+            .keep_alive_while_idle(true);
+        if gateway_url.starts_with("https://") {
+            let ca_path = std::env::var("RTD_HBASE_GATEWAY_CA_CERT")
+                .context("RTD_HBASE_GATEWAY_CA_CERT is required for mTLS")?;
+            let cert_path = std::env::var("RTD_HBASE_GATEWAY_CLIENT_CERT")
+                .context("RTD_HBASE_GATEWAY_CLIENT_CERT is required for mTLS")?;
+            let key_path = std::env::var("RTD_HBASE_GATEWAY_CLIENT_KEY")
+                .context("RTD_HBASE_GATEWAY_CLIENT_KEY is required for mTLS")?;
+            let mut tls_config = ClientTlsConfig::new()
+                .ca_certificate(Certificate::from_pem(std::fs::read(ca_path)?))
+                .identity(Identity::from_pem(
+                    std::fs::read(cert_path)?,
+                    std::fs::read(key_path)?,
+                ));
+            if let Ok(server_name) = std::env::var("RTD_HBASE_GATEWAY_SERVER_NAME") {
+                tls_config = tls_config.domain_name(server_name);
+            }
+            endpoint = endpoint.tls_config(tls_config)?;
+        } else if gateway_url.starts_with("http://") {
+            if std::env::var("RTD_HBASE_GATEWAY_ALLOW_INSECURE_DEV").as_deref() != Ok("1") {
+                bail!("Plaintext HBase gateway connections are restricted to local development");
+            }
+        } else {
+            bail!(
+                "RTD_HBASE_GATEWAY_ENDPOINT must use https://, or http:// only for local development"
+            );
+        }
         endpoint = endpoint.timeout(timeout.unwrap_or(DEFAULT_CHANNEL_TIMEOUT));
-        let project_id = match project_id {
-            Some(p) => p,
-            None => token_provider.project_id().await?.to_string(),
-        };
+        let project_id = project_id.unwrap_or_else(|| "rtd".to_string());
+        if !project_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+            || !instance_id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+        {
+            bail!("RTD archive project and instance IDs must be ASCII path components");
+        }
         let instance_name = format!("projects/{}/instances/{}", project_id, instance_id);
         let table_prefix = format!("{}/tables/", instance_name);
-        let primer = BigtablePrimer {
-            instance_name,
-            policy: policy.to_string(),
-            token_provider: Some(token_provider.clone()),
-        };
+        let primer = BigtablePrimer { instance_name };
         let pool =
-            ChannelPool::new_connected(endpoint, config, Some(Box::new(primer)), registry).await?;
+            ChannelPool::new_connected(endpoint, pool_config, Some(Box::new(primer)), registry)
+                .await?;
         let metrics = registry.map(KvMetrics::new);
-        let auth_channel = AuthChannel::new(
-            pool,
-            policy.to_string(),
-            Some(token_provider),
-            bigtable_features_header(batch_write_flow_control),
-        );
+        let metadata_channel =
+            MetadataChannel::new(pool, bigtable_features_header(batch_write_flow_control));
         let max_decoding_message_size =
             max_decoding_message_size.unwrap_or(DEFAULT_MAX_DECODING_MESSAGE_SIZE);
-        let client = BigtableInternalClient::new(auth_channel)
+        let client = BigtableInternalClient::new(metadata_channel)
             .max_decoding_message_size(max_decoding_message_size);
         let flow_controller = batch_write_flow_control
             .then(|| BatchWriteFlowController::new(client_name.clone(), metrics.clone()));

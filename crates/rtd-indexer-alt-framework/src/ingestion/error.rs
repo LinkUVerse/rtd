@@ -5,6 +5,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("Archive source is not self-hosted: {0}")]
+    InvalidSource(String),
+
     #[error("Checkpoint {0} not found")]
     NotFound(u64),
 

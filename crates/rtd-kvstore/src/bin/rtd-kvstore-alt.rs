@@ -31,7 +31,7 @@ struct Args {
     /// BigTable instance ID
     instance_id: String,
 
-    /// GCP project ID for the BigTable instance (defaults to the token provider's project)
+    /// Logical project ID for the self-hosted HBase gateway (defaults to rtd)
     #[arg(long)]
     bigtable_project: Option<String>,
 
@@ -68,9 +68,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Install ring as the default rustls crypto provider. Required because hyper-rustls
-    // (via gcp_auth) enables aws-lc-rs by default, and we also use ring elsewhere.
-    // With both providers compiled in, rustls can't auto-detect which to use.
+    // Install ring as the default rustls crypto provider when multiple providers
+    // are compiled into the workspace dependency graph.
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install rustls crypto provider");

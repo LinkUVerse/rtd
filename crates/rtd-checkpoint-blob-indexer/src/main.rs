@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Context as _;
+use anyhow::ensure;
 use clap::Parser;
 use object_store::ClientOptions;
 use object_store::RetryConfig;
 use object_store::aws::{AmazonS3Builder, S3ConditionalPut};
-use object_store::azure::MicrosoftAzureBuilder;
-use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use reqwest::header::HeaderMap;
@@ -41,20 +41,10 @@ struct Args {
     #[arg(long)]
     config: PathBuf,
 
-    /// Write to AWS S3. Provide the bucket name or endpoint-and-bucket.
-    /// (env: AWS_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
+    /// Write to a self-hosted S3-compatible store such as Ceph RGW.
+    /// AWS_ENDPOINT and explicit S3 credentials are required; cloud defaults are forbidden.
     #[arg(long, group = "store")]
     s3: Option<String>,
-
-    /// Write to Google Cloud Storage. Provide the bucket name.
-    /// (env: GOOGLE_SERVICE_ACCOUNT_PATH)
-    #[arg(long, group = "store")]
-    gcs: Option<String>,
-
-    /// Write to Azure Blob Storage. Provide the container name.
-    /// (env: AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCESS_KEY)
-    #[arg(long, group = "store")]
-    azure: Option<String>,
 
     /// Write to HTTP endpoint.
     #[arg(long, group = "store")]
@@ -120,32 +110,19 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let object_store: Arc<dyn object_store::ObjectStore> = if let Some(bucket) = args.s3 {
-        info!(bucket, "Using S3 storage");
+        let endpoint = std::env::var("AWS_ENDPOINT")
+            .context("AWS_ENDPOINT must point to self-hosted S3-compatible storage")?;
+        validate_self_hosted_s3_environment(&Url::parse(&endpoint)?)?;
+        info!(bucket, endpoint, "Using self-hosted S3-compatible storage");
         AmazonS3Builder::from_env()
             .with_client_options(client_options)
             .with_retry(retry_config)
-            .with_imdsv1_fallback()
             .with_bucket_name(bucket)
             .with_conditional_put(S3ConditionalPut::ETagMatch)
             .build()
             .map(Arc::new)?
-    } else if let Some(bucket) = args.gcs {
-        info!(bucket, "Using GCS storage");
-        GoogleCloudStorageBuilder::from_env()
-            .with_client_options(client_options)
-            .with_retry(retry_config)
-            .with_bucket_name(bucket)
-            .build()
-            .map(Arc::new)?
-    } else if let Some(container) = args.azure {
-        info!(container, "Using Azure storage");
-        MicrosoftAzureBuilder::from_env()
-            .with_client_options(client_options)
-            .with_retry(retry_config)
-            .with_container_name(container)
-            .build()
-            .map(Arc::new)?
     } else if let Some(endpoint) = args.http {
+        validate_self_hosted_url(&endpoint)?;
         info!(endpoint = %endpoint, "Using HTTP storage");
         HttpBuilder::new()
             .with_url(endpoint.to_string())
@@ -224,6 +201,41 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+fn validate_self_hosted_url(url: &Url) -> anyhow::Result<()> {
+    let host = url.host_str().context("Storage URL must contain a host")?;
+    ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "Storage URL must use HTTP(S)"
+    );
+    ensure!(
+        !["amazonaws.com", "googleapis.com", "blob.core.windows.net"]
+            .iter()
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}"))),
+        "Storage URL must point to self-hosted infrastructure"
+    );
+    Ok(())
+}
+
+fn validate_self_hosted_s3_environment(endpoint: &Url) -> anyhow::Result<()> {
+    validate_self_hosted_url(endpoint)?;
+    ensure!(
+        endpoint.scheme() == "https"
+            || std::env::var("RTD_ARCHIVE_ALLOW_INSECURE_S3_DEV").as_deref() == Ok("1"),
+        "Plaintext S3 endpoints are restricted to local development"
+    );
+    for name in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ] {
+        ensure!(
+            std::env::var(name).is_ok_and(|value| !value.is_empty()),
+            "{name} is required for the self-hosted S3 protocol; cloud metadata credentials are disabled"
+        );
+    }
+    Ok(())
+}
+
 fn parse_object_store_header(header: &str) -> Result<(HeaderName, HeaderValue), String> {
     let (name, value) = header
         .split_once(':')
@@ -243,15 +255,40 @@ mod tests {
     use clap::error::ErrorKind;
 
     #[test]
-    fn test_args_object_store_headers() {
-        let args = Args::try_parse_from([
+    fn managed_cloud_endpoints_and_backends_are_rejected() {
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://s3.amazonaws.com").unwrap()).is_err()
+        );
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://storage.googleapis.com").unwrap())
+                .is_err()
+        );
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://ceph-rgw.internal").unwrap()).is_ok()
+        );
+        let err = Args::try_parse_from([
             "cmd",
             "--config",
             "config.toml",
             "--gcs",
             "bucket",
+            "--local-ingestion-path",
+            "/tmp/checkpoints",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_args_object_store_headers() {
+        let args = Args::try_parse_from([
+            "cmd",
+            "--config",
+            "config.toml",
+            "--s3",
+            "bucket",
             "--store-header",
-            "x-goog-user-project:my-project",
+            "x-rtd-project:my-project",
             "--store-header",
             "authorization:Bearer abc:def",
             "--local-ingestion-path",
@@ -262,7 +299,7 @@ mod tests {
         assert_eq!(args.store_headers.len(), 2);
         assert_eq!(
             args.store_headers[0].0,
-            HeaderName::from_static("x-goog-user-project")
+            HeaderName::from_static("x-rtd-project")
         );
         assert_eq!(
             args.store_headers[0].1,
@@ -284,10 +321,10 @@ mod tests {
             "cmd",
             "--config",
             "config.toml",
-            "--gcs",
+            "--s3",
             "bucket",
             "--store-header",
-            "x-goog-user-project",
+            "x-rtd-project",
             "--local-ingestion-path",
             "/tmp/checkpoints",
         ])
@@ -302,7 +339,7 @@ mod tests {
             "cmd",
             "--config",
             "config.toml",
-            "--gcs",
+            "--s3",
             "bucket",
             "--store-header",
             "bad name:value",
@@ -320,7 +357,7 @@ mod tests {
             "cmd",
             "--config",
             "config.toml",
-            "--gcs",
+            "--s3",
             "bucket",
             "--store-header",
             "x-test:bad\nvalue",

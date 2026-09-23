@@ -14,8 +14,6 @@ use clap::ArgGroup;
 use object_store::ClientOptions;
 use object_store::ObjectStore;
 use object_store::aws::AmazonS3Builder;
-use object_store::azure::MicrosoftAzureBuilder;
-use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use prometheus::Histogram;
@@ -73,20 +71,10 @@ pub struct IngestionClientArgs {
     #[arg(long, group = "source")]
     pub remote_store_url: Option<Url>,
 
-    /// Fetch checkpoints from AWS S3. Provide the bucket name or endpoint-and-bucket.
-    /// (env: AWS_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
+    /// Fetch checkpoints from a self-hosted S3-compatible store such as Ceph RGW.
+    /// AWS_ENDPOINT and explicit S3 credentials are required.
     #[arg(long, group = "source")]
     pub remote_store_s3: Option<String>,
-
-    /// Fetch checkpoints from Google Cloud Storage. Provide the bucket name.
-    /// (env: GOOGLE_SERVICE_ACCOUNT_PATH)
-    #[arg(long, group = "source")]
-    pub remote_store_gcs: Option<String>,
-
-    /// Fetch checkpoints from Azure Blob Storage. Provide the container name.
-    /// (env: AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCESS_KEY)
-    #[arg(long, group = "source")]
-    pub remote_store_azure: Option<String>,
 
     /// Default header to include in remote store requests, as `<name>:<value>`.
     /// Can be provided multiple times.
@@ -125,8 +113,6 @@ impl Default for IngestionClientArgs {
         Self {
             remote_store_url: None,
             remote_store_s3: None,
-            remote_store_gcs: None,
-            remote_store_azure: None,
             remote_store_headers: vec![],
             local_ingestion_path: None,
             rpc_api_url: None,
@@ -208,6 +194,7 @@ impl IngestionClient {
         // TODO: Support stacking multiple ingestion clients for redundancy/failover.
         let retry = super::store_client::retry_config();
         let client = if let Some(url) = args.remote_store_url.as_ref() {
+            validate_self_hosted_url(url)?;
             let store = HttpBuilder::new()
                 .with_url(url.to_string())
                 .with_client_options(args.client_options().with_allow_http(true))
@@ -216,27 +203,11 @@ impl IngestionClient {
                 .map(Arc::new)?;
             IngestionClient::with_store(store, metrics.clone())?
         } else if let Some(bucket) = args.remote_store_s3.as_ref() {
+            validate_self_hosted_s3_environment()?;
             let store = AmazonS3Builder::from_env()
                 .with_client_options(args.client_options())
                 .with_retry(retry)
-                .with_imdsv1_fallback()
                 .with_bucket_name(bucket)
-                .build()
-                .map(Arc::new)?;
-            IngestionClient::with_store(store, metrics.clone())?
-        } else if let Some(bucket) = args.remote_store_gcs.as_ref() {
-            let store = GoogleCloudStorageBuilder::from_env()
-                .with_client_options(args.client_options())
-                .with_retry(retry)
-                .with_bucket_name(bucket)
-                .build()
-                .map(Arc::new)?;
-            IngestionClient::with_store(store, metrics.clone())?
-        } else if let Some(container) = args.remote_store_azure.as_ref() {
-            let store = MicrosoftAzureBuilder::from_env()
-                .with_client_options(args.client_options())
-                .with_retry(retry)
-                .with_container_name(container)
                 .build()
                 .map(Arc::new)?;
             IngestionClient::with_store(store, metrics.clone())?
@@ -252,8 +223,7 @@ impl IngestionClient {
             )?
         } else {
             panic!(
-                "One of remote_store_url, remote_store_s3, remote_store_gcs, remote_store_azure, \
-                local_ingestion_path or rpc_api_url must be provided"
+                "One of remote_store_url, remote_store_s3, local_ingestion_path or rpc_api_url must be provided"
             );
         };
 
@@ -460,6 +430,52 @@ impl IngestionClient {
     pub async fn latest_checkpoint_number(&self) -> anyhow::Result<u64> {
         self.client.latest_checkpoint_number().await
     }
+}
+
+fn validate_self_hosted_url(url: &Url) -> IngestionResult<()> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| IE::InvalidSource("URL must contain a host".to_string()))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(IE::InvalidSource("URL must use HTTP(S)".to_string()));
+    }
+    if ["amazonaws.com", "googleapis.com", "blob.core.windows.net"]
+        .iter()
+        .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")))
+    {
+        return Err(IE::InvalidSource(
+            "cloud storage endpoint is forbidden".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_self_hosted_s3_environment() -> IngestionResult<()> {
+    let endpoint = std::env::var("AWS_ENDPOINT").map_err(|_| {
+        IE::InvalidSource("AWS_ENDPOINT must point to self-hosted S3 storage".to_string())
+    })?;
+    let endpoint = Url::parse(&endpoint)
+        .map_err(|_| IE::InvalidSource("AWS_ENDPOINT must be an HTTP(S) URL".to_string()))?;
+    validate_self_hosted_url(&endpoint)?;
+    if endpoint.scheme() == "http"
+        && std::env::var("RTD_ARCHIVE_ALLOW_INSECURE_S3_DEV").as_deref() != Ok("1")
+    {
+        return Err(IE::InvalidSource(
+            "Plaintext S3 is restricted to local development".to_string(),
+        ));
+    }
+    for name in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ] {
+        if !std::env::var(name).is_ok_and(|value| !value.is_empty()) {
+            return Err(IE::InvalidSource(format!(
+                "{name} is required; cloud metadata credentials are disabled"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Keep backing off until we are waiting for the max interval, but don't give up.
@@ -700,10 +716,10 @@ pub(crate) mod tests {
     fn test_args_remote_store_headers() {
         let args = TestArgs::try_parse_from([
             "cmd",
-            "--remote-store-gcs",
+            "--remote-store-s3",
             "bucket",
             "--remote-store-header",
-            "x-goog-user-project:my-project",
+            "x-rtd-project:my-project",
             "--remote-store-header",
             "authorization:Bearer abc:def",
         ])
@@ -712,7 +728,7 @@ pub(crate) mod tests {
         assert_eq!(args.ingestion.remote_store_headers.len(), 2);
         assert_eq!(
             args.ingestion.remote_store_headers[0].0,
-            HeaderName::from_static("x-goog-user-project")
+            HeaderName::from_static("x-rtd-project")
         );
         assert_eq!(
             args.ingestion.remote_store_headers[0].1,
@@ -729,13 +745,29 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn managed_cloud_checkpoint_sources_are_rejected() {
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://s3.amazonaws.com").unwrap()).is_err()
+        );
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://storage.googleapis.com").unwrap())
+                .is_err()
+        );
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://ceph-rgw.internal").unwrap()).is_ok()
+        );
+        let err = TestArgs::try_parse_from(["cmd", "--remote-store-gcs", "bucket"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
     fn test_args_remote_store_header_requires_delimiter() {
         let err = TestArgs::try_parse_from([
             "cmd",
-            "--remote-store-gcs",
+            "--remote-store-s3",
             "bucket",
             "--remote-store-header",
-            "x-goog-user-project",
+            "x-rtd-project",
         ])
         .unwrap_err();
 
@@ -746,7 +778,7 @@ pub(crate) mod tests {
     fn test_args_remote_store_header_rejects_invalid_name() {
         let err = TestArgs::try_parse_from([
             "cmd",
-            "--remote-store-gcs",
+            "--remote-store-s3",
             "bucket",
             "--remote-store-header",
             "bad name:value",
@@ -760,7 +792,7 @@ pub(crate) mod tests {
     fn test_args_remote_store_header_rejects_invalid_value() {
         let err = TestArgs::try_parse_from([
             "cmd",
-            "--remote-store-gcs",
+            "--remote-store-s3",
             "bucket",
             "--remote-store-header",
             "x-test:bad\nvalue",
