@@ -18,7 +18,7 @@
 OLD_ORG="MystenLabs"
 
 # 新组织名称（修改为您的组织名）
-NEW_ORG="YourOrganization"
+NEW_ORG="LinkUVerse"
 
 ################################################################################
 # 品牌名称配置（首字母大写）
@@ -27,7 +27,7 @@ NEW_ORG="YourOrganization"
 OLD_BRAND="Mysten"
 
 # 新品牌名称（首字母大写）
-NEW_BRAND="YourBrand"
+NEW_BRAND="LinkU"
 
 ################################################################################
 # 品牌名称配置（纯小写）
@@ -36,7 +36,7 @@ NEW_BRAND="YourBrand"
 OLD_BRAND_LOWER="mysten"
 
 # 新品牌名称小写
-NEW_BRAND_LOWER="yourbrand"
+NEW_BRAND_LOWER="linku"
 
 ################################################################################
 # 代币符号配置（纯大写）
@@ -45,7 +45,7 @@ NEW_BRAND_LOWER="yourbrand"
 OLD_UPPER="SUI"
 
 # 新代币符号（纯大写）
-NEW_UPPER="YOUR"
+NEW_UPPER="RTD"
 
 ################################################################################
 # 混合大小写配置
@@ -54,7 +54,7 @@ NEW_UPPER="YOUR"
 OLD_MIXED="Sui"
 
 # 新混合大小写（首字母大写）
-NEW_MIXED="Your"
+NEW_MIXED="Rtd"
 
 ################################################################################
 # 纯小写配置
@@ -63,7 +63,7 @@ NEW_MIXED="Your"
 OLD_LOWER="sui"
 
 # 新纯小写
-NEW_LOWER="your"
+NEW_LOWER="rtd"
 
 ################################################################################
 # SDK 依赖配置（如果您 Fork 了 sui-rust-sdk）
