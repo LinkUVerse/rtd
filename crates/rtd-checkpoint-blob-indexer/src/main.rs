@@ -112,10 +112,13 @@ async fn main() -> anyhow::Result<()> {
     let object_store: Arc<dyn object_store::ObjectStore> = if let Some(bucket) = args.s3 {
         let endpoint = std::env::var("AWS_ENDPOINT")
             .context("AWS_ENDPOINT must point to self-hosted S3-compatible storage")?;
-        validate_self_hosted_s3_environment(&Url::parse(&endpoint)?)?;
-        info!(bucket, endpoint, "Using self-hosted S3-compatible storage");
+        let endpoint = Url::parse(&endpoint)?;
+        validate_self_hosted_s3_environment(&endpoint)?;
+        info!(bucket, endpoint = %endpoint, "Using self-hosted S3-compatible storage");
+        // with_client_options replaces from_env's HTTP allowance; restore it only for
+        // an endpoint that passed the explicit development-only URL check above.
         AmazonS3Builder::from_env()
-            .with_client_options(client_options)
+            .with_client_options(client_options.with_allow_http(endpoint.scheme() == "http"))
             .with_retry(retry_config)
             .with_bucket_name(bucket)
             .with_conditional_put(S3ConditionalPut::ETagMatch)

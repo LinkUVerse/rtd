@@ -203,9 +203,13 @@ impl IngestionClient {
                 .map(Arc::new)?;
             IngestionClient::with_store(store, metrics.clone())?
         } else if let Some(bucket) = args.remote_store_s3.as_ref() {
-            validate_self_hosted_s3_environment()?;
+            let endpoint = validate_self_hosted_s3_environment()?;
+            // The custom client options replace from_env's HTTP setting.
             let store = AmazonS3Builder::from_env()
-                .with_client_options(args.client_options())
+                .with_client_options(
+                    args.client_options()
+                        .with_allow_http(endpoint.scheme() == "http"),
+                )
                 .with_retry(retry)
                 .with_bucket_name(bucket)
                 .build()
@@ -450,7 +454,7 @@ fn validate_self_hosted_url(url: &Url) -> IngestionResult<()> {
     Ok(())
 }
 
-fn validate_self_hosted_s3_environment() -> IngestionResult<()> {
+fn validate_self_hosted_s3_environment() -> IngestionResult<Url> {
     let endpoint = std::env::var("AWS_ENDPOINT").map_err(|_| {
         IE::InvalidSource("AWS_ENDPOINT must point to self-hosted S3 storage".to_string())
     })?;
@@ -475,7 +479,7 @@ fn validate_self_hosted_s3_environment() -> IngestionResult<()> {
             )));
         }
     }
-    Ok(())
+    Ok(endpoint)
 }
 
 /// Keep backing off until we are waiting for the max interval, but don't give up.
