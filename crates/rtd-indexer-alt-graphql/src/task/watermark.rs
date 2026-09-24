@@ -521,6 +521,7 @@ async fn watermark_from_consistent(
             total_transactions: Some(total_transactions),
             max_timestamp_ms: Some(max_timestamp_ms),
             stride: _,
+            chain_id: _,
         }) => Ok(Some(WatermarkRow {
             pipeline: "consistent".to_owned(),
             epoch_hi_inclusive: max_epoch as i64,

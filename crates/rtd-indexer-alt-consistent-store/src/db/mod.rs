@@ -408,6 +408,33 @@ impl Db {
         })
     }
 
+    /// Return the chain ID only when every required pipeline has recorded the
+    /// same identity. A partially restored or mixed-chain store is unready.
+    pub(crate) fn common_chain_id(&self, pipelines: &[&str]) -> Result<Option<[u8; 32]>, Error> {
+        self.0.read().expect("poisoned").with(|f| {
+            let mut common = None;
+            for pipeline in pipelines {
+                let key = key::encode(pipeline.as_bytes());
+                let Some(stored) = f.db.get_pinned_cf(f.chain_id_cf, &key)? else {
+                    return Ok(None);
+                };
+                let chain_id: [u8; 32] = stored.as_ref().try_into().map_err(|_| {
+                    Error::Internal(anyhow::anyhow!(
+                        "stored chain_id for pipeline {pipeline:?} has wrong length: {}",
+                        stored.len()
+                    ))
+                })?;
+                if common.is_some_and(|existing| existing != chain_id) {
+                    return Err(Error::Internal(anyhow::anyhow!(
+                        "consistent pipelines have different chain IDs"
+                    )));
+                }
+                common = Some(chain_id);
+            }
+            Ok(common)
+        })
+    }
+
     /// Return the watermark that was written at the start of restoration for the given `pipeline`,
     /// or `None` if no restoration is in progress for that pipeline.
     pub(crate) fn restore_watermark(&self, pipeline: &str) -> Result<Option<Watermark>, Error> {
@@ -1158,6 +1185,36 @@ pub(crate) mod tests {
             db.take_snapshot(wm(1));
             assert_eq!(db.get(1, &cf, &42u64).unwrap(), Some(43u64));
         }
+    }
+
+    #[test]
+    fn test_common_chain_id_requires_all_pipelines_and_survives_reopen() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        let pipelines = [
+            "address_balances",
+            "balances",
+            "object_by_owner",
+            "object_by_type",
+        ];
+        let chain_id = [7u8; 32];
+
+        {
+            let db = Db::open(&path, opts(), 4, cfs()).unwrap();
+            assert_eq!(db.common_chain_id(&pipelines).unwrap(), None);
+            for pipeline in &pipelines[..3] {
+                assert!(db.accepts_chain_id(pipeline, chain_id).unwrap());
+            }
+            assert_eq!(db.common_chain_id(&pipelines).unwrap(), None);
+            assert!(db.accepts_chain_id(pipelines[3], chain_id).unwrap());
+            assert_eq!(db.common_chain_id(&pipelines).unwrap(), Some(chain_id));
+        }
+
+        let db = Db::open(&path, opts(), 4, cfs()).unwrap();
+        assert_eq!(db.common_chain_id(&pipelines).unwrap(), Some(chain_id));
+        assert!(!db.accepts_chain_id(pipelines[3], [8u8; 32]).unwrap());
+        assert!(db.accepts_chain_id("unexpected", [8u8; 32]).unwrap());
+        assert!(db.common_chain_id(&[pipelines[0], "unexpected"]).is_err());
     }
 
     #[test]

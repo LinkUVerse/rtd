@@ -48,6 +48,11 @@ message AvailableRangeResponse {
   // Accessible checkpoints in the available range are evenly spaced out
   // `stride` checkpoints apart.
   optional uint64 stride = 200;
+
+  // Full 32-byte genesis checkpoint digest shared by every indexed pipeline.
+  // Missing or inconsistent pipeline identities must not be admitted by a read
+  // router. This is advisory identity evidence, not checkpoint certification.
+  optional bytes chain_id = 201;
 }
 
 message BatchGetBalancesRequest { repeated GetBalanceRequest requests = 1; }
