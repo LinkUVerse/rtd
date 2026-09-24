@@ -25,6 +25,7 @@ pub(crate) const WATERMARK_PATH: &str = "_metadata/watermark/checkpoint_blob.jso
 
 pub struct StoreIngestionClient {
     store: Arc<dyn ObjectStore>,
+    require_published_watermark: bool,
     /// Counter incremented (in the [`IngestionClientTrait`] impl) by the size in bytes of each
     /// fetched checkpoint payload. `None` for callers that only use this client for one-shot
     /// metadata fetches (e.g. `end_of_epoch_checkpoints`) and don't need a metric.
@@ -40,6 +41,18 @@ impl StoreIngestionClient {
     pub fn new(store: Arc<dyn ObjectStore>, total_ingested_bytes: Option<IntCounter>) -> Self {
         Self {
             store,
+            require_published_watermark: false,
+            total_ingested_bytes,
+        }
+    }
+
+    pub fn new_guarded(
+        store: Arc<dyn ObjectStore>,
+        total_ingested_bytes: Option<IntCounter>,
+    ) -> Self {
+        Self {
+            store,
+            require_published_watermark: true,
             total_ingested_bytes,
         }
     }
@@ -62,9 +75,25 @@ impl StoreIngestionClient {
         Ok(decoded)
     }
 
-    async fn checkpoint_bytes(&self, checkpoint: u64) -> object_store::Result<Bytes> {
+    async fn checkpoint_bytes(&self, checkpoint: u64) -> Result<Bytes, CheckpointError> {
+        if self.require_published_watermark {
+            // A copied object may be visible before the publisher advances the
+            // advisory watermark. Read it for every fetch so a stale cached tip
+            // cannot grant access to an unpublished checkpoint.
+            let published_hi = self
+                .watermark_checkpoint_hi_inclusive()
+                .await
+                .map_err(CheckpointError::Fetch)?;
+            if published_hi.is_none_or(|hi| checkpoint > hi) {
+                return Err(CheckpointError::NotFound);
+            }
+        }
         self.bytes(ObjectPath::from(format!("{checkpoint}.binpb.zst")))
             .await
+            .map_err(|e| match e {
+                Error::NotFound { .. } => CheckpointError::NotFound,
+                e => CheckpointError::Fetch(e.into()),
+            })
     }
 
     async fn bytes(&self, path: ObjectPath) -> object_store::Result<Bytes> {
@@ -103,13 +132,7 @@ impl IngestionClientTrait for StoreIngestionClient {
     /// - server errors (5xx),
     /// - issues getting a full response.
     async fn checkpoint(&self, checkpoint: u64) -> CheckpointResult {
-        let bytes = self
-            .checkpoint_bytes(checkpoint)
-            .await
-            .map_err(|e| match e {
-                Error::NotFound { .. } => CheckpointError::NotFound,
-                e => CheckpointError::Fetch(e.into()),
-            })?;
+        let bytes = self.checkpoint_bytes(checkpoint).await?;
 
         if let Some(counter) = &self.total_ingested_bytes {
             counter.inc_by(bytes.len() as u64);
@@ -251,6 +274,54 @@ pub(crate) mod tests {
                 .unwrap(),
             1
         )
+    }
+
+    #[tokio::test]
+    async fn guarded_checkpoint_waits_for_published_watermark() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/1.binpb.zst"))
+            .respond_with(status(StatusCode::OK).set_body_bytes(test_checkpoint_data(1)))
+            .mount(&server)
+            .await;
+
+        let store = HttpBuilder::new()
+            .with_url(server.uri())
+            .with_client_options(ClientOptions::default().with_allow_http(true))
+            .build()
+            .map(Arc::new)
+            .unwrap();
+        let client = StoreIngestionClient::new_guarded(store, None);
+
+        assert!(matches!(
+            IngestionClientTrait::checkpoint(&client, 1).await,
+            Err(CheckpointError::NotFound)
+        ));
+
+        Mock::given(method("GET"))
+            .and(path(WATERMARK_PATH))
+            .respond_with(
+                status(StatusCode::OK)
+                    .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 0}).to_string()),
+            )
+            .mount(&server)
+            .await;
+        assert!(matches!(
+            IngestionClientTrait::checkpoint(&client, 1).await,
+            Err(CheckpointError::NotFound)
+        ));
+
+        Mock::given(method("GET"))
+            .and(path(WATERMARK_PATH))
+            .respond_with(
+                status(StatusCode::OK)
+                    .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 1}).to_string()),
+            )
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        let checkpoint = IngestionClientTrait::checkpoint(&client, 1).await.unwrap();
+        assert_eq!(checkpoint.summary.sequence_number(), &1);
     }
 
     #[tokio::test]

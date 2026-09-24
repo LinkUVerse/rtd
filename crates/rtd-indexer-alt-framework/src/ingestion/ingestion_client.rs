@@ -76,6 +76,10 @@ pub struct IngestionClientArgs {
     #[arg(long, group = "source")]
     pub remote_store_s3: Option<String>,
 
+    /// Require the published object-store watermark before fetching a checkpoint.
+    #[arg(long, conflicts_with_all = ["local_ingestion_path", "rpc_api_url"])]
+    pub require_published_watermark: bool,
+
     /// Default header to include in remote store requests, as `<name>:<value>`.
     /// Can be provided multiple times.
     #[arg(long = "remote-store-header", value_parser = parse_remote_store_header)]
@@ -113,6 +117,7 @@ impl Default for IngestionClientArgs {
         Self {
             remote_store_url: None,
             remote_store_s3: None,
+            require_published_watermark: false,
             remote_store_headers: vec![],
             local_ingestion_path: None,
             rpc_api_url: None,
@@ -201,7 +206,11 @@ impl IngestionClient {
                 .with_retry(retry)
                 .build()
                 .map(Arc::new)?;
-            IngestionClient::with_store(store, metrics.clone())?
+            IngestionClient::with_store_watermark_guard(
+                store,
+                metrics.clone(),
+                args.require_published_watermark,
+            )?
         } else if let Some(bucket) = args.remote_store_s3.as_ref() {
             let endpoint = validate_self_hosted_s3_environment()?;
             // The custom client options replace from_env's HTTP setting.
@@ -214,7 +223,11 @@ impl IngestionClient {
                 .with_bucket_name(bucket)
                 .build()
                 .map(Arc::new)?;
-            IngestionClient::with_store(store, metrics.clone())?
+            IngestionClient::with_store_watermark_guard(
+                store,
+                metrics.clone(),
+                args.require_published_watermark,
+            )?
         } else if let Some(path) = args.local_ingestion_path.as_ref() {
             let store = LocalFileSystem::new_with_prefix(path).map(Arc::new)?;
             IngestionClient::with_store(store, metrics.clone())?
@@ -239,10 +252,20 @@ impl IngestionClient {
         store: Arc<dyn ObjectStore>,
         metrics: Arc<IngestionMetrics>,
     ) -> IngestionResult<Self> {
-        let client = Arc::new(StoreIngestionClient::new(
-            store,
-            Some(metrics.total_ingested_bytes.clone()),
-        ));
+        Self::with_store_watermark_guard(store, metrics, false)
+    }
+
+    fn with_store_watermark_guard(
+        store: Arc<dyn ObjectStore>,
+        metrics: Arc<IngestionMetrics>,
+        require_published_watermark: bool,
+    ) -> IngestionResult<Self> {
+        let bytes = Some(metrics.total_ingested_bytes.clone());
+        let client = Arc::new(if require_published_watermark {
+            StoreIngestionClient::new_guarded(store, bytes)
+        } else {
+            StoreIngestionClient::new(store, bytes)
+        });
         Ok(Self::from_trait(client, metrics))
     }
 
@@ -747,6 +770,27 @@ pub(crate) mod tests {
             args.ingestion.remote_store_headers[1].1,
             HeaderValue::from_static("Bearer abc:def")
         );
+    }
+
+    #[test]
+    fn published_watermark_guard_only_accepts_remote_store() {
+        let args = TestArgs::try_parse_from([
+            "cmd",
+            "--remote-store-s3",
+            "published",
+            "--require-published-watermark",
+        ])
+        .unwrap();
+        assert!(args.ingestion.require_published_watermark);
+
+        let err = TestArgs::try_parse_from([
+            "cmd",
+            "--rpc-api-url",
+            "http://localhost:8080",
+            "--require-published-watermark",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
     #[test]
