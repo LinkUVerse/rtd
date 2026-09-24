@@ -22,6 +22,7 @@ use crate::types::full_checkpoint_content::Checkpoint;
 
 // from rtd-indexer-alt-object-store
 pub(crate) const WATERMARK_PATH: &str = "_metadata/watermark/checkpoint_blob.json";
+pub(crate) const COMMITTED_WATERMARK_PATH: &str = "_metadata/publication/committed.json";
 
 pub struct StoreIngestionClient {
     store: Arc<dyn ObjectStore>,
@@ -77,9 +78,9 @@ impl StoreIngestionClient {
 
     async fn checkpoint_bytes(&self, checkpoint: u64) -> Result<Bytes, CheckpointError> {
         if self.require_published_watermark {
-            // A copied object may be visible before the publisher advances the
-            // advisory watermark. Read it for every fetch so a stale cached tip
-            // cannot grant access to an unpublished checkpoint.
+            // The publisher writes the committed marker only after the ledger
+            // transaction. Read it for every fetch so an earlier advisory
+            // watermark or a stale cached tip cannot grant access.
             let published_hi = self
                 .watermark_checkpoint_hi_inclusive()
                 .await
@@ -102,14 +103,19 @@ impl StoreIngestionClient {
     }
 
     async fn watermark_checkpoint_hi_inclusive(&self) -> anyhow::Result<Option<u64>> {
-        let bytes = match self.bytes(ObjectPath::from(WATERMARK_PATH)).await {
+        let path = if self.require_published_watermark {
+            COMMITTED_WATERMARK_PATH
+        } else {
+            WATERMARK_PATH
+        };
+        let bytes = match self.bytes(ObjectPath::from(path)).await {
             Ok(bytes) => bytes,
             Err(Error::NotFound { .. }) => return Ok(None),
-            Err(e) => return Err(e).context(format!("error reading {WATERMARK_PATH}")),
+            Err(e) => return Err(e).context(format!("error reading {path}")),
         };
 
         let watermark: ObjectStoreWatermark =
-            serde_json::from_slice(&bytes).context(format!("error parsing {WATERMARK_PATH}"))?;
+            serde_json::from_slice(&bytes).context(format!("error parsing {path}"))?;
 
         Ok(Some(watermark.checkpoint_hi_inclusive))
     }
@@ -293,13 +299,28 @@ pub(crate) mod tests {
             .unwrap();
         let client = StoreIngestionClient::new_guarded(store, None);
 
+        Mock::given(method("GET"))
+            .and(path(WATERMARK_PATH))
+            .respond_with(
+                status(StatusCode::OK)
+                    .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 1}).to_string()),
+            )
+            .mount(&server)
+            .await;
+
         assert!(matches!(
             IngestionClientTrait::checkpoint(&client, 1).await,
             Err(CheckpointError::NotFound)
         ));
+        assert_eq!(
+            IngestionClientTrait::latest_checkpoint_number(&client)
+                .await
+                .unwrap(),
+            0
+        );
 
         Mock::given(method("GET"))
-            .and(path(WATERMARK_PATH))
+            .and(path(COMMITTED_WATERMARK_PATH))
             .respond_with(
                 status(StatusCode::OK)
                     .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 0}).to_string()),
@@ -310,9 +331,15 @@ pub(crate) mod tests {
             IngestionClientTrait::checkpoint(&client, 1).await,
             Err(CheckpointError::NotFound)
         ));
+        assert_eq!(
+            IngestionClientTrait::latest_checkpoint_number(&client)
+                .await
+                .unwrap(),
+            0
+        );
 
         Mock::given(method("GET"))
-            .and(path(WATERMARK_PATH))
+            .and(path(COMMITTED_WATERMARK_PATH))
             .respond_with(
                 status(StatusCode::OK)
                     .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 1}).to_string()),
@@ -322,6 +349,12 @@ pub(crate) mod tests {
             .await;
         let checkpoint = IngestionClientTrait::checkpoint(&client, 1).await.unwrap();
         assert_eq!(checkpoint.summary.sequence_number(), &1);
+        assert_eq!(
+            IngestionClientTrait::latest_checkpoint_number(&client)
+                .await
+                .unwrap(),
+            1
+        );
     }
 
     #[tokio::test]
