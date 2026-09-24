@@ -439,7 +439,8 @@ impl IngestionClient {
 fn validate_self_hosted_url(url: &Url) -> IngestionResult<()> {
     let host = url
         .host_str()
-        .ok_or_else(|| IE::InvalidSource("URL must contain a host".to_string()))?;
+        .ok_or_else(|| IE::InvalidSource("URL must contain a host".to_string()))?
+        .trim_end_matches('.');
     if !matches!(url.scheme(), "http" | "https") {
         return Err(IE::InvalidSource("URL must use HTTP(S)".to_string()));
     }

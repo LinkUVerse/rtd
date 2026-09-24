@@ -10,13 +10,8 @@ use anyhow::Context;
 use anyhow::Result;
 use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
-use object_store::azure::MicrosoftAzureBuilder;
-use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::local::LocalFileSystem;
-use reqwest::header::HeaderMap;
-use reqwest::header::HeaderName;
-use reqwest::header::HeaderValue;
-use tokio_util::sync::CancellationToken;
+use rtd_config::object_storage_config::validate_self_hosted_endpoint;
 use tracing::info;
 
 use rtd_indexer_alt_framework::Indexer;
@@ -33,7 +28,6 @@ use crate::config::OutputStoreConfig;
 use crate::handlers::system_package_eviction::SYSTEM_PACKAGE_EVICTION_PIPELINE;
 use crate::handlers::system_package_eviction::SystemPackageEviction;
 use crate::metrics::Metrics;
-use crate::progress_monitoring::spawn_snowflake_monitors;
 use crate::store::AnalyticsStore;
 
 /// Build and run an analytics indexer, returning a Service handle.
@@ -122,55 +116,18 @@ pub async fn build_analytics_indexer(
         )
         .await?;
 
-    // Spawn Snowflake monitors (if configured)
-    let cancel = CancellationToken::new();
-    let sf_handles = spawn_snowflake_monitors(&config, metrics, cancel.clone())?;
-
     // Run the indexer and register shutdown signals
     let service = indexer.run().await?;
-    Ok(service
-        .with_shutdown_signal(async move {
-            store.shutdown().await;
-        })
-        .with_shutdown_signal(async move {
-            cancel.cancel();
-            for handle in sf_handles {
-                let _ = handle.await;
-            }
-        }))
+    Ok(service.with_shutdown_signal(async move {
+        store.shutdown().await;
+    }))
 }
 
 fn create_object_store(config: &OutputStoreConfig) -> Result<Arc<dyn object_store::ObjectStore>> {
     match config {
-        OutputStoreConfig::Gcs {
-            bucket,
-            service_account_path,
-            custom_headers,
-            request_timeout_secs,
-        } => {
-            let mut client_options =
-                ClientOptions::default().with_timeout(Duration::from_secs(*request_timeout_secs));
-
-            // Apply custom headers (e.g., for requester-pays buckets)
-            if let Some(headers_map) = custom_headers {
-                let mut headers = HeaderMap::new();
-                for (key, value) in headers_map {
-                    headers.insert(
-                        HeaderName::try_from(key.as_str())?,
-                        HeaderValue::from_str(value)?,
-                    );
-                }
-                client_options = client_options.with_default_headers(headers);
-            }
-
-            GoogleCloudStorageBuilder::new()
-                .with_client_options(client_options)
-                .with_bucket_name(bucket)
-                .with_service_account_path(service_account_path.to_string_lossy())
-                .build()
-                .map(|s| Arc::new(s) as Arc<dyn object_store::ObjectStore>)
-                .context("Failed to create GCS store")
-        }
+        OutputStoreConfig::Gcs { .. } | OutputStoreConfig::Azure { .. } => Err(anyhow::anyhow!(
+            "RTD analytics only permits local or self-hosted S3 storage"
+        )),
         OutputStoreConfig::S3 {
             bucket,
             region,
@@ -181,44 +138,65 @@ fn create_object_store(config: &OutputStoreConfig) -> Result<Arc<dyn object_stor
         } => {
             let client_options =
                 ClientOptions::default().with_timeout(Duration::from_secs(*request_timeout_secs));
-            let mut builder = AmazonS3Builder::new()
+            let endpoint = endpoint
+                .as_deref()
+                .context("RTD analytics requires a self-hosted S3 endpoint")?;
+            validate_self_hosted_endpoint(endpoint)?;
+            let access_key = access_key_id
+                .as_deref()
+                .filter(|value| !value.is_empty())
+                .context("RTD analytics requires an explicit self-hosted S3 access key")?;
+            let secret_key = secret_access_key
+                .as_deref()
+                .filter(|value| !value.is_empty())
+                .context("RTD analytics requires an explicit self-hosted S3 secret")?;
+            anyhow::ensure!(
+                !region.is_empty(),
+                "RTD analytics requires a self-hosted S3 region"
+            );
+            let builder = AmazonS3Builder::new()
                 .with_client_options(client_options)
                 .with_bucket_name(bucket)
-                .with_region(region);
-            if let Some(key) = access_key_id {
-                builder = builder.with_access_key_id(key);
-            }
-            if let Some(secret) = secret_access_key {
-                builder = builder.with_secret_access_key(secret);
-            }
-            if let Some(ep) = endpoint {
-                builder = builder.with_endpoint(ep);
-            }
+                .with_region(region)
+                .with_access_key_id(access_key)
+                .with_secret_access_key(secret_key)
+                .with_endpoint(endpoint);
             builder
                 .build()
                 .map(|s| Arc::new(s) as Arc<dyn object_store::ObjectStore>)
                 .context("Failed to create S3 store")
         }
-        OutputStoreConfig::Azure {
-            container,
-            account,
-            access_key,
-            request_timeout_secs,
-        } => {
-            let client_options =
-                ClientOptions::default().with_timeout(Duration::from_secs(*request_timeout_secs));
-            MicrosoftAzureBuilder::new()
-                .with_client_options(client_options)
-                .with_container_name(container)
-                .with_account(account)
-                .with_access_key(access_key)
-                .build()
-                .map(|s| Arc::new(s) as Arc<dyn object_store::ObjectStore>)
-                .context("Failed to create Azure store")
-        }
         OutputStoreConfig::File { path } => LocalFileSystem::new_with_prefix(path)
             .map(|s| Arc::new(s) as Arc<dyn object_store::ObjectStore>)
             .context("Failed to create file store"),
         OutputStoreConfig::Custom(store) => Ok(store.clone()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::create_object_store;
+    use crate::config::OutputStoreConfig;
+    use std::path::PathBuf;
+
+    #[test]
+    fn analytics_rejects_cloud_store_and_implicit_s3() {
+        let gcs = OutputStoreConfig::Gcs {
+            bucket: "unused".into(),
+            service_account_path: PathBuf::from("/unused"),
+            custom_headers: None,
+            request_timeout_secs: 1,
+        };
+        assert!(create_object_store(&gcs).is_err());
+
+        let s3 = OutputStoreConfig::S3 {
+            bucket: "unused".into(),
+            region: "us-east-1".into(),
+            access_key_id: Some("unused".into()),
+            secret_access_key: Some("unused".into()),
+            endpoint: None,
+            request_timeout_secs: 1,
+        };
+        assert!(create_object_store(&s3).is_err());
     }
 }

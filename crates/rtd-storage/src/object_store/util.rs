@@ -14,7 +14,6 @@ use indicatif::ProgressBar;
 use itertools::Itertools;
 use linku_common::ZipDebugEqIteratorExt;
 use object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
-use object_store::gcp::{GoogleCloudStorageBuilder, GoogleConfigKey};
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
@@ -23,6 +22,7 @@ use object_store::{
 };
 use prost::Message;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use rtd_config::object_storage_config::validate_self_hosted_endpoint;
 use rtd_rpc::proto::rtd::rpc::v2 as proto;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
@@ -443,7 +443,7 @@ pub fn build_object_store(
     ingestion_url: &str,
     remote_store_options: Vec<(String, String)>,
     remote_store_headers: Vec<(String, String)>,
-) -> Arc<dyn ObjectStore> {
+) -> Result<Arc<dyn ObjectStore>> {
     let timeout_secs = 5;
     let mut client_options = ClientOptions::new()
         .with_timeout(Duration::from_secs(timeout_secs))
@@ -452,8 +452,8 @@ pub fn build_object_store(
         let mut headers = HeaderMap::new();
         for (name, value) in &remote_store_headers {
             headers.insert(
-                HeaderName::from_bytes(name.as_bytes()).expect("invalid remote store header name"),
-                HeaderValue::from_str(value).expect("invalid remote store header value"),
+                HeaderName::from_bytes(name.as_bytes())?,
+                HeaderValue::from_str(value)?,
             );
         }
         client_options = client_options.with_default_headers(headers);
@@ -465,49 +465,66 @@ pub fn build_object_store(
     };
     let url = ingestion_url
         .parse::<Url>()
-        .expect("archival ingestion url must be valid");
+        .context("Invalid archival ingestion URL")?;
     if url.scheme() == "file" {
-        Arc::new(
-            LocalFileSystem::new_with_prefix(
-                url.to_file_path()
-                    .expect("archival ingestion url must have a valid file path"),
-            )
-            .expect("failed to create local file system store"),
-        )
+        let path = url
+            .to_file_path()
+            .map_err(|_| anyhow!("Invalid local archival ingestion path"))?;
+        Ok(Arc::new(LocalFileSystem::new_with_prefix(path)?))
     } else if url.scheme() == "gs" {
-        let mut builder = GoogleCloudStorageBuilder::new()
-            .with_client_options(client_options)
-            .with_retry(retry_config)
-            .with_url(ingestion_url);
-        for (key, value) in &remote_store_options {
-            builder = builder.with_config(
-                GoogleConfigKey::from_str(key).expect("invalid GCS config key"),
-                value.clone(),
-            );
-        }
-        Arc::new(builder.build().expect("failed to build GCS store"))
-    } else if url.host_str().unwrap_or_default().starts_with("s3") {
+        Err(anyhow!(
+            "GCS is not an RTD archival source; use self-hosted Ceph RGW"
+        ))
+    } else if url.scheme() == "s3" || url.host_str().unwrap_or_default().starts_with("s3") {
+        let option = |name: &str| {
+            remote_store_options
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.as_str())
+        };
+        let endpoint = option("aws_endpoint")
+            .map(str::to_owned)
+            .or_else(|| std::env::var("AWS_ENDPOINT").ok())
+            .filter(|value| !value.is_empty())
+            .context("Explicit self-hosted S3 endpoint is required")?;
+        validate_self_hosted_endpoint(&endpoint)?;
+        let access_key = option("aws_access_key_id")
+            .map(str::to_owned)
+            .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok())
+            .filter(|value| !value.is_empty())
+            .context("Explicit self-hosted S3 access key is required")?;
+        let secret_key = option("aws_secret_access_key")
+            .map(str::to_owned)
+            .or_else(|| std::env::var("AWS_SECRET_ACCESS_KEY").ok())
+            .filter(|value| !value.is_empty())
+            .context("Explicit self-hosted S3 secret is required")?;
+        let region = option("aws_region")
+            .map(str::to_owned)
+            .or_else(|| std::env::var("AWS_DEFAULT_REGION").ok())
+            .filter(|value| !value.is_empty())
+            .context("Explicit self-hosted S3 region is required")?;
         let mut builder = AmazonS3Builder::new()
             .with_client_options(client_options)
             .with_retry(retry_config)
-            .with_imdsv1_fallback()
             .with_url(ingestion_url);
         for (key, value) in &remote_store_options {
-            builder = builder.with_config(
-                AmazonS3ConfigKey::from_str(key).expect("invalid S3 config key"),
-                value.clone(),
-            );
+            builder = builder.with_config(AmazonS3ConfigKey::from_str(key)?, value.clone());
         }
-        Arc::new(builder.build().expect("failed to build S3 store"))
+        builder = builder
+            .with_endpoint(endpoint)
+            .with_access_key_id(access_key)
+            .with_secret_access_key(secret_key)
+            .with_region(region);
+        Ok(Arc::new(builder.build()?))
     } else {
-        Arc::new(
+        validate_self_hosted_endpoint(ingestion_url)?;
+        Ok(Arc::new(
             HttpBuilder::new()
                 .with_url(url.to_string())
                 .with_client_options(client_options)
                 .with_retry(retry_config)
-                .build()
-                .expect("failed to build HTTP store"),
-        )
+                .build()?,
+        ))
     }
 }
 
@@ -552,7 +569,7 @@ pub async fn end_of_epoch_data(
     url: &str,
     remote_store_options: Vec<(String, String)>,
 ) -> anyhow::Result<Vec<CheckpointSequenceNumber>> {
-    let store = build_object_store(url, remote_store_options, vec![]);
+    let store = build_object_store(url, remote_store_options, vec![])?;
     let response = store.get(&Path::from("epochs.json")).await?;
     let bytes = response.bytes().await?;
     Ok(serde_json::from_slice(&bytes)?)
@@ -560,6 +577,7 @@ pub async fn end_of_epoch_data(
 
 #[cfg(test)]
 mod tests {
+    use crate::object_store::util::build_object_store;
     use crate::object_store::util::{
         MANIFEST_FILENAME, copy_recursively, delete_recursively, write_snapshot_manifest,
     };
@@ -568,6 +586,12 @@ mod tests {
     use std::fs;
     use std::num::NonZeroUsize;
     use tempfile::TempDir;
+
+    #[test]
+    fn archive_reader_rejects_hosted_cloud_sources() {
+        assert!(build_object_store("gs://bucket", vec![], vec![]).is_err());
+        assert!(build_object_store("https://storage.googleapis.com/rtd", vec![], vec![]).is_err());
+    }
 
     #[tokio::test]
     pub async fn test_copy_recursively() -> anyhow::Result<()> {

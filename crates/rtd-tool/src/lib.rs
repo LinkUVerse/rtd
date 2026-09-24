@@ -1131,7 +1131,7 @@ async fn backfill_epoch_transaction_digests(
         ),
     );
 
-    let client = build_object_store(&ingestion_url, vec![], vec![]);
+    let client = build_object_store(&ingestion_url, vec![], vec![])?;
     let checkpoint_counter = Arc::new(AtomicU64::new(0));
     let tx_counter = Arc::new(AtomicU64::new(0));
     let cloned_checkpoint_counter = checkpoint_counter.clone();

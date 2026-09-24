@@ -205,7 +205,10 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn validate_self_hosted_url(url: &Url) -> anyhow::Result<()> {
-    let host = url.host_str().context("Storage URL must contain a host")?;
+    let host = url
+        .host_str()
+        .context("Storage URL must contain a host")?
+        .trim_end_matches('.');
     ensure!(
         matches!(url.scheme(), "http" | "https"),
         "Storage URL must use HTTP(S)"

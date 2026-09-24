@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use clap::*;
 use object_store::aws::AmazonS3Builder;
 use object_store::{ClientOptions, DynObjectStore};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -132,9 +132,45 @@ impl ObjectStoreConfig {
 
         info!(bucket=?self.bucket, object_store_type="S3", "Object Store");
 
+        let endpoint = self
+            .aws_endpoint
+            .as_deref()
+            .context("Self-hosted S3 endpoint is required")?;
+        validate_self_hosted_endpoint(endpoint)?;
+        let region = self
+            .aws_region
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .context("Self-hosted S3 region is required")?;
+        let bucket = self
+            .bucket
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .context("Self-hosted S3 bucket is required")?;
+        let access_key_id = self
+            .aws_access_key_id
+            .clone()
+            .or_else(|| env::var("ARCHIVE_READ_AWS_ACCESS_KEY_ID").ok())
+            .or_else(|| env::var("FORMAL_SNAPSHOT_WRITE_AWS_ACCESS_KEY_ID").ok())
+            .or_else(|| env::var("DB_SNAPSHOT_READ_AWS_ACCESS_KEY_ID").ok())
+            .filter(|value| !value.is_empty())
+            .context("Explicit self-hosted S3 access key is required")?;
+        let secret_access_key = self
+            .aws_secret_access_key
+            .clone()
+            .or_else(|| env::var("ARCHIVE_READ_AWS_SECRET_ACCESS_KEY").ok())
+            .or_else(|| env::var("FORMAL_SNAPSHOT_WRITE_AWS_SECRET_ACCESS_KEY").ok())
+            .or_else(|| env::var("DB_SNAPSHOT_READ_AWS_SECRET_ACCESS_KEY").ok())
+            .filter(|value| !value.is_empty())
+            .context("Explicit self-hosted S3 secret is required")?;
+
         let mut builder = AmazonS3Builder::new()
             .with_client_options(no_timeout_options())
-            .with_imdsv1_fallback();
+            .with_region(region)
+            .with_bucket_name(bucket)
+            .with_access_key_id(access_key_id)
+            .with_secret_access_key(secret_access_key)
+            .with_endpoint(endpoint);
 
         if self.aws_virtual_hosted_style_request {
             builder = builder.with_virtual_hosted_style_request(true);
@@ -142,94 +178,8 @@ impl ObjectStoreConfig {
         if self.aws_allow_http {
             builder = builder.with_allow_http(true);
         }
-        if let Some(region) = &self.aws_region {
-            builder = builder.with_region(region);
-        }
-        if let Some(bucket) = &self.bucket {
-            builder = builder.with_bucket_name(bucket);
-        }
-
-        if let Some(key_id) = &self.aws_access_key_id {
-            builder = builder.with_access_key_id(key_id);
-        } else if let Ok(secret) = env::var("ARCHIVE_READ_AWS_ACCESS_KEY_ID") {
-            builder = builder.with_access_key_id(secret);
-        } else if let Ok(secret) = env::var("FORMAL_SNAPSHOT_WRITE_AWS_ACCESS_KEY_ID") {
-            builder = builder.with_access_key_id(secret);
-        } else if let Ok(secret) = env::var("DB_SNAPSHOT_READ_AWS_ACCESS_KEY_ID") {
-            builder = builder.with_access_key_id(secret);
-        }
-
-        if let Some(secret) = &self.aws_secret_access_key {
-            builder = builder.with_secret_access_key(secret);
-        } else if let Ok(secret) = env::var("ARCHIVE_READ_AWS_SECRET_ACCESS_KEY") {
-            builder = builder.with_secret_access_key(secret);
-        } else if let Ok(secret) = env::var("FORMAL_SNAPSHOT_WRITE_AWS_SECRET_ACCESS_KEY") {
-            builder = builder.with_secret_access_key(secret);
-        } else if let Ok(secret) = env::var("DB_SNAPSHOT_READ_AWS_SECRET_ACCESS_KEY") {
-            builder = builder.with_secret_access_key(secret);
-        }
-
-        if let Some(endpoint) = &self.aws_endpoint {
-            builder = builder.with_endpoint(endpoint);
-        }
         Ok(Arc::new(LimitStore::new(
             builder.build().context("Invalid s3 config")?,
-            self.object_store_connection_limit,
-        )))
-    }
-    fn new_gcs(&self) -> Result<Arc<DynObjectStore>, anyhow::Error> {
-        use object_store::gcp::GoogleCloudStorageBuilder;
-        use object_store::limit::LimitStore;
-
-        info!(bucket=?self.bucket, object_store_type="GCS", "Object Store");
-
-        let mut builder = GoogleCloudStorageBuilder::new();
-
-        if let Some(bucket) = &self.bucket {
-            builder = builder.with_bucket_name(bucket);
-        }
-        if let Some(account) = &self.google_service_account {
-            builder = builder.with_service_account_path(account);
-        }
-
-        let mut client_options = no_timeout_options();
-        if let Some(google_project_id) = &self.google_project_id {
-            let x_project_header = HeaderName::from_static("x-goog-user-project");
-            let iam_req_header = HeaderName::from_static("userproject");
-
-            let mut headers = HeaderMap::new();
-            headers.insert(x_project_header, HeaderValue::from_str(google_project_id)?);
-            headers.insert(iam_req_header, HeaderValue::from_str(google_project_id)?);
-            client_options = client_options.with_default_headers(headers);
-        }
-        builder = builder.with_client_options(client_options);
-
-        Ok(Arc::new(LimitStore::new(
-            builder.build().context("Invalid gcs config")?,
-            self.object_store_connection_limit,
-        )))
-    }
-    fn new_azure(&self) -> Result<Arc<DynObjectStore>, anyhow::Error> {
-        use object_store::azure::MicrosoftAzureBuilder;
-        use object_store::limit::LimitStore;
-
-        info!(bucket=?self.bucket, account=?self.azure_storage_account,
-          object_store_type="Azure", "Object Store");
-
-        let mut builder = MicrosoftAzureBuilder::new().with_client_options(no_timeout_options());
-
-        if let Some(bucket) = &self.bucket {
-            builder = builder.with_container_name(bucket);
-        }
-        if let Some(account) = &self.azure_storage_account {
-            builder = builder.with_account(account)
-        }
-        if let Some(key) = &self.azure_storage_access_key {
-            builder = builder.with_access_key(key)
-        }
-
-        Ok(Arc::new(LimitStore::new(
-            builder.build().context("Invalid azure config")?,
             self.object_store_connection_limit,
         )))
     }
@@ -237,9 +187,81 @@ impl ObjectStoreConfig {
         match &self.object_store {
             Some(ObjectStoreType::File) => self.new_local_fs(),
             Some(ObjectStoreType::S3) => self.new_s3(),
-            Some(ObjectStoreType::GCS) => self.new_gcs(),
-            Some(ObjectStoreType::Azure) => self.new_azure(),
+            Some(ObjectStoreType::GCS | ObjectStoreType::Azure) => Err(anyhow!(
+                "RTD only permits local or self-hosted S3 object storage"
+            )),
             _ => Err(anyhow!("At least one storage backend should be provided")),
+        }
+    }
+}
+
+pub fn validate_self_hosted_endpoint(endpoint: &str) -> Result<()> {
+    let url = Url::parse(endpoint).context("Self-hosted S3 endpoint must be a URL")?;
+    let host = url
+        .host_str()
+        .context("Self-hosted S3 endpoint needs a host")?
+        .trim_end_matches('.');
+    anyhow::ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "S3 endpoint must use HTTP(S)"
+    );
+    anyhow::ensure!(
+        !["amazonaws.com", "googleapis.com", "blob.core.windows.net"]
+            .iter()
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}"))),
+        "S3 endpoint must point to RTD self-hosted storage"
+    );
+    anyhow::ensure!(
+        url.scheme() == "https"
+            || env::var("RTD_ARCHIVE_ALLOW_INSECURE_S3_DEV").as_deref() == Ok("1"),
+        "Plaintext S3 is restricted to explicit local development"
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ObjectStoreConfig;
+    use super::ObjectStoreType;
+    use super::validate_self_hosted_endpoint;
+
+    #[test]
+    fn object_store_rejects_cloud_backends_and_implicit_s3() {
+        for backend in [ObjectStoreType::GCS, ObjectStoreType::Azure] {
+            let config = ObjectStoreConfig {
+                object_store: Some(backend),
+                ..Default::default()
+            };
+            assert!(config.make().is_err());
+        }
+        let config = ObjectStoreConfig {
+            object_store: Some(ObjectStoreType::S3),
+            ..Default::default()
+        };
+        assert!(
+            config
+                .make()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("endpoint")
+        );
+    }
+
+    #[test]
+    fn object_store_requires_private_endpoint() {
+        assert!(validate_self_hosted_endpoint("https://ceph.rtd.internal").is_ok());
+        for endpoint in [
+            "https://s3.us-east-1.amazonaws.com",
+            "https://storage.googleapis.com",
+            "https://account.blob.core.windows.net",
+            "https://storage.googleapis.com.",
+            "file:///tmp/archive",
+        ] {
+            assert!(
+                validate_self_hosted_endpoint(endpoint).is_err(),
+                "{endpoint}"
+            );
         }
     }
 }

@@ -1616,11 +1616,17 @@ async fn sync_checkpoint_contents_from_archive_iteration<S>(
             warn!("Archival ingestion url for state sync is empty");
             return;
         }
-        let obj_store = build_object_store(
+        let obj_store = match build_object_store(
             ingestion_url,
             archive_config.remote_store_options.clone(),
             archive_config.remote_store_headers.clone(),
-        );
+        ) {
+            Ok(store) => store,
+            Err(error) => {
+                warn!("State sync archival source is invalid: {error}");
+                return;
+            }
+        };
         let mut checkpoint_stream = futures::stream::iter(start..=end)
             .map(|seq| {
                 let obj_store = obj_store.clone();

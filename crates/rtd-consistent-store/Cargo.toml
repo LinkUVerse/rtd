@@ -29,6 +29,7 @@ scoped-futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rtd-futures.workspace = true
+rtd-config.workspace = true
 rtd-indexer-alt-framework = { workspace = true, default-features = false }
 rtd-indexer-alt-framework-store-traits.workspace = true
 rtd-storage.workspace = true

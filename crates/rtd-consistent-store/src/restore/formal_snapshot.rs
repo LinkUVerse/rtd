@@ -46,11 +46,10 @@ use futures::stream;
 use futures::stream::BoxStream;
 use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
-use object_store::azure::MicrosoftAzureBuilder;
-use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use prometheus::Registry;
+use rtd_config::object_storage_config::validate_self_hosted_endpoint;
 use rtd_futures::future::with_slow_future_monitor;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientTrait;
 use rtd_indexer_alt_framework::ingestion::store_client::StoreIngestionClient;
@@ -80,27 +79,15 @@ const MAX_RETRY_INTERVAL: Duration = Duration::from_secs(60);
 /// If a single fetch takes longer than this, log a warning.
 const SLOW_FETCH_THRESHOLD: Duration = Duration::from_secs(600);
 
-/// Clap-style snapshot-source selector. One of `s3`, `gcs`,
-/// `azure`, `http`, or `local` is required.
+/// Clap-style snapshot-source selector. One of `s3`, `http`, or `local` is required.
 #[derive(clap::Args, Clone, Debug)]
 #[group(required = true)]
 pub struct FormalSnapshotArgs {
-    /// Fetch formal snapshot from AWS S3. Provide the bucket
+    /// Fetch formal snapshot from RTD self-hosted S3-compatible storage. Provide the bucket
     /// name. (env: AWS_ENDPOINT, AWS_ACCESS_KEY_ID,
     /// AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
     #[arg(long, group = "source")]
     pub s3: Option<String>,
-
-    /// Fetch formal snapshot from Google Cloud Storage. Provide
-    /// the bucket name. (env: GOOGLE_SERVICE_ACCOUNT_PATH)
-    #[arg(long, group = "source")]
-    pub gcs: Option<String>,
-
-    /// Fetch formal snapshot from Azure Blob Storage. Provide
-    /// the container name. (env: AZURE_STORAGE_ACCOUNT_NAME,
-    /// AZURE_STORAGE_ACCESS_KEY)
-    #[arg(long, group = "source")]
-    pub azure: Option<String>,
 
     /// Fetch formal snapshot from a generic HTTP endpoint.
     #[arg(long, group = "source")]
@@ -141,7 +128,7 @@ pub struct FormalSnapshotArgs {
 /// trip happen during construction so subsequent
 /// [`stream`](RestoreSource::stream) calls are pure file I/O.
 pub struct FormalSnapshot {
-    /// Underlying storage backend (S3/GCS/Azure/HTTP/local).
+    /// Underlying storage backend (self-hosted S3/HTTP/local).
     source: Arc<dyn Storage + Send + Sync + 'static>,
 
     /// Path of the epoch's subdirectory within `source`.
@@ -310,33 +297,32 @@ fn connect_storage(
 ) -> anyhow::Result<Arc<dyn Storage + Send + Sync + 'static>> {
     if let Some(bucket) = &args.s3 {
         info!(bucket, "S3 storage");
+        let endpoint = std::env::var("AWS_ENDPOINT")
+            .context("AWS_ENDPOINT must point to RTD self-hosted S3 storage")?;
+        validate_self_hosted_endpoint(&endpoint)?;
+        let access_key = std::env::var("AWS_ACCESS_KEY_ID")
+            .context("Explicit self-hosted S3 access key is required")?;
+        let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY")
+            .context("Explicit self-hosted S3 secret is required")?;
+        let region = std::env::var("AWS_DEFAULT_REGION")
+            .context("Explicit self-hosted S3 region is required")?;
+        ensure!(
+            !access_key.is_empty() && !secret_key.is_empty() && !region.is_empty(),
+            "Explicit self-hosted S3 credentials and region are required"
+        );
         return Ok(Arc::new(
-            AmazonS3Builder::from_env()
+            AmazonS3Builder::new()
                 .with_client_options(connection_args.into())
-                .with_imdsv1_fallback()
+                .with_endpoint(endpoint)
+                .with_access_key_id(access_key)
+                .with_secret_access_key(secret_key)
+                .with_region(region)
                 .with_bucket_name(bucket)
-                .build()?,
-        ));
-    }
-    if let Some(bucket) = &args.gcs {
-        info!(bucket, "GCS storage");
-        return Ok(Arc::new(
-            GoogleCloudStorageBuilder::from_env()
-                .with_client_options(connection_args.into())
-                .with_bucket_name(bucket)
-                .build()?,
-        ));
-    }
-    if let Some(container) = &args.azure {
-        info!(container, "Azure storage");
-        return Ok(Arc::new(
-            MicrosoftAzureBuilder::from_env()
-                .with_client_options(connection_args.into())
-                .with_container_name(container)
                 .build()?,
         ));
     }
     if let Some(endpoint) = &args.http {
+        validate_self_hosted_endpoint(endpoint.as_str())?;
         info!(endpoint = %endpoint, "HTTP storage");
         return Ok(Arc::new(HttpStorage::new(
             endpoint.clone(),
@@ -520,6 +506,39 @@ pub fn metrics(prefix: Option<&str>, registry: &Registry) -> Arc<FormalSnapshotM
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct SnapshotCli {
+        #[command(flatten)]
+        args: FormalSnapshotArgs,
+    }
+
+    #[test]
+    fn cloud_snapshot_sources_are_not_accepted() {
+        for flag in ["--gcs", "--azure"] {
+            assert!(
+                SnapshotCli::try_parse_from([
+                    "snapshot",
+                    flag,
+                    "bucket",
+                    "--remote-store-url",
+                    "https://ceph.rtd.internal",
+                ])
+                .is_err()
+            );
+        }
+        assert!(
+            SnapshotCli::try_parse_from([
+                "snapshot",
+                "--s3",
+                "bucket",
+                "--remote-store-url",
+                "https://ceph.rtd.internal",
+            ])
+            .is_ok()
+        );
+    }
 
     #[test]
     fn cursor_encodes_partition_as_4_byte_be() {

@@ -1,15 +1,14 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-mod gcs;
 mod local;
 mod s3;
 
 use std::sync::Arc;
 
-use crate::object_store::http::gcs::GoogleCloudStorage;
 use crate::object_store::http::local::LocalStorage;
 use crate::object_store::http::s3::AmazonS3;
+use rtd_config::object_storage_config::validate_self_hosted_endpoint;
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 
 use crate::object_store::ObjectStoreGetExt;
@@ -44,27 +43,25 @@ impl HttpDownloaderBuilder for ObjectStoreConfig {
                 Ok(LocalStorage::new(self.directory.as_ref().unwrap()).map(Arc::new)?)
             }
             Some(ObjectStoreType::S3) => {
-                let bucket_endpoint = if let Some(endpoint) = &self.aws_endpoint {
-                    if self.aws_virtual_hosted_style_request {
-                        endpoint.clone()
-                    } else {
-                        let bucket = self.bucket.as_ref().unwrap();
-                        format!("{endpoint}/{bucket}")
-                    }
+                let endpoint = self
+                    .aws_endpoint
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("Self-hosted S3 endpoint is required"))?;
+                validate_self_hosted_endpoint(endpoint)?;
+                let bucket_endpoint = if self.aws_virtual_hosted_style_request {
+                    endpoint.to_string()
                 } else {
-                    let bucket = self.bucket.as_ref().unwrap();
-                    let region = self.aws_region.as_ref().unwrap();
-                    if self.aws_virtual_hosted_style_request {
-                        format!("https://{bucket}.s3.{region}.amazonaws.com")
-                    } else {
-                        format!("https://s3.{region}.amazonaws.com/{bucket}")
-                    }
+                    let bucket = self
+                        .bucket
+                        .as_deref()
+                        .ok_or_else(|| anyhow!("Self-hosted S3 bucket is required"))?;
+                    format!("{endpoint}/{bucket}")
                 };
                 Ok(AmazonS3::new(&bucket_endpoint).map(Arc::new)?)
             }
-            Some(ObjectStoreType::GCS) => {
-                Ok(GoogleCloudStorage::new(self.bucket.as_ref().unwrap()).map(Arc::new)?)
-            }
+            Some(ObjectStoreType::GCS | ObjectStoreType::Azure) => Err(anyhow!(
+                "RTD only permits local or self-hosted S3 snapshot storage"
+            )),
             _ => Err(anyhow!("At least one storage backend should be provided")),
         }
     }

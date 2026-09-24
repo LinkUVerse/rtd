@@ -2,18 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::zklogin_commands_util::perform_zk_login_test_tx;
 use anyhow::anyhow;
-use aws_sdk_kms::{
-    Client as KmsClient,
-    primitives::Blob,
-    types::{MessageType, SigningAlgorithmSpec},
-};
 use bip32::DerivationPath;
 use clap::*;
 use fastcrypto::ed25519::Ed25519KeyPair;
 use fastcrypto::encoding::{Base64, Encoding, Hex};
 use fastcrypto::hash::HashFunction;
 use fastcrypto::jwt_utils::parse_and_validate_jwt;
-use fastcrypto::secp256k1::recoverable::Secp256k1Sig;
 use fastcrypto::traits::{KeyPair, ToFromBytes};
 use fastcrypto_zkp::bn254::utils::{
     gen_address_seed, get_nonce, get_proof, get_test_issuer_jwt_token,
@@ -206,22 +200,6 @@ pub enum KeyToolCommand {
         #[clap(long)]
         intent: Option<Intent>,
     },
-    /// Creates a signature by leveraging AWS KMS. Pass in a key-id to leverage Amazon
-    /// KMS to sign a message and the base64 pubkey.
-    /// Generate PubKey from pem using LinkUVerse/base64pemkey
-    /// Any signature commits to a [struct IntentMessage] consisting of the Base64 encoded
-    /// of the BCS serialized transaction bytes itself and its intent. If intent is absent,
-    /// default will be used.
-    SignKMS {
-        #[clap(long)]
-        data: String,
-        #[clap(long)]
-        keyid: String,
-        #[clap(long)]
-        intent: Option<Intent>,
-        #[clap(long)]
-        base64pk: String,
-    },
     /// This takes [enum RtdKeyPair] of Base64 encoded of 33-byte `flag || privkey`). It
     /// outputs the keypair into a file at the current directory where the address is the filename,
     /// and prints out its Rtd address, Base64 encoded public key, the key scheme, and the key scheme flag.
@@ -405,12 +383,6 @@ pub struct PrivateKeyBase64 {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SerializedSig {
-    serialized_sig_base64: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SignData {
     rtd_address: RtdAddress,
     // Base64 encoded string of serialized transaction data.
@@ -472,7 +444,6 @@ pub enum CommandOutput {
     PrivateKeyBase64(PrivateKeyBase64),
     Show(Key),
     Sign(SignData),
-    SignKMS(SerializedSig),
     ZkLoginSignAndExecuteTx(ZkLoginSignAndExecuteTx),
     ZkLoginInsecureSignPersonalMessage(ZkLoginInsecureSignPersonalMessage),
     ZkLoginSigVerify(ZkLoginSigVerifyResponse),
@@ -873,65 +844,6 @@ impl KeyToolCommand {
                     raw_intent_msg,
                     digest: Base64::encode(digest),
                     rtd_signature: rtd_signature.encode_base64(),
-                })
-            }
-
-            KeyToolCommand::SignKMS {
-                data,
-                keyid,
-                intent,
-                base64pk,
-            } => {
-                // Currently only supports secp256k1 keys
-                let pk_owner = PublicKey::decode_base64(&base64pk)
-                    .map_err(|e| anyhow!("Invalid base64 key: {:?}", e))?;
-                let address_owner = RtdAddress::from(&pk_owner);
-                info!("Address For Corresponding KMS Key: {}", address_owner);
-                info!("Raw tx_bytes to execute: {}", data);
-                let intent = intent.unwrap_or_else(Intent::rtd_transaction);
-                info!("Intent: {:?}", intent);
-                let msg: TransactionData =
-                    bcs::from_bytes(&Base64::decode(&data).map_err(|e| {
-                        anyhow!("Cannot deserialize data as TransactionData {:?}", e)
-                    })?)?;
-                let intent_msg = IntentMessage::new(intent, msg);
-                info!(
-                    "Raw intent message: {:?}",
-                    Base64::encode(bcs::to_bytes(&intent_msg)?)
-                );
-                let mut hasher = DefaultHash::default();
-                bcs::serialize_into(&mut hasher, &intent_msg)?;
-                let digest = hasher.finalize().digest;
-                info!("Digest to sign: {:?}", Base64::encode(digest));
-
-                // Set up the KMS client in default region.
-                let config = aws_config::load_from_env().await;
-                let kms = KmsClient::new(&config);
-
-                // Sign the message, normalize the signature and then compacts it
-                // serialize_compact is loaded as bytes for Secp256k1Signature
-                let response = kms
-                    .sign()
-                    .key_id(keyid)
-                    .message_type(MessageType::Raw)
-                    .message(Blob::new(digest))
-                    .signing_algorithm(SigningAlgorithmSpec::EcdsaSha256)
-                    .send()
-                    .await?;
-                let sig_bytes_der = response
-                    .signature
-                    .expect("Requires Asymmetric Key Generated in KMS");
-
-                let mut external_sig = Secp256k1Sig::from_der(sig_bytes_der.as_ref())?;
-                external_sig.normalize_s();
-                let sig_compact = external_sig.serialize_compact();
-
-                let mut serialized_sig = vec![SignatureScheme::Secp256k1.flag()];
-                serialized_sig.extend_from_slice(&sig_compact);
-                serialized_sig.extend_from_slice(pk_owner.as_ref());
-                let serialized_sig = Base64::encode(&serialized_sig);
-                CommandOutput::SignKMS(SerializedSig {
-                    serialized_sig_base64: serialized_sig,
                 })
             }
 

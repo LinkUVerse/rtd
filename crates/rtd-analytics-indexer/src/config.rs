@@ -263,6 +263,20 @@ impl IndexerConfig {
     /// - Duplicate pipeline types (each pipeline can only be configured once)
     /// - Individual pipeline config validity (e.g., batch_size required in live mode)
     pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.pipeline_configs.iter().any(|config| {
+                config.report_sf_max_table_checkpoint
+                    || config.sf_table_id.is_some()
+                    || config.sf_checkpoint_col_id.is_some()
+            }) && self.sf_account_identifier.is_none()
+                && self.sf_warehouse.is_none()
+                && self.sf_database.is_none()
+                && self.sf_schema.is_none()
+                && self.sf_username.is_none()
+                && self.sf_role.is_none()
+                && self.sf_private_key_file.is_none(),
+            "Snowflake configuration is unsupported in RTD; use self-hosted progress metrics"
+        );
         // Check for duplicate pipeline types
         let mut seen = std::collections::HashSet::new();
         for config in &self.pipeline_configs {
@@ -378,5 +392,22 @@ impl PipelineConfig {
         self.output_prefix
             .as_deref()
             .unwrap_or_else(|| self.pipeline.default_path())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IndexerConfig;
+
+    #[test]
+    fn analytics_rejects_snowflake_configuration() {
+        let mut config: IndexerConfig = serde_json::from_value(serde_json::json!({
+            "output_store": {"type": "file", "path": "/tmp/rtd-analytics-test"},
+            "pipelines": []
+        }))
+        .unwrap();
+        assert!(config.validate().is_ok());
+        config.sf_account_identifier = Some("cloud-account".into());
+        assert!(config.validate().is_err());
     }
 }
