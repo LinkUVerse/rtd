@@ -406,8 +406,10 @@ pub(crate) fn list_checkpoint_columns(mask: &FieldMaskTree, needs_full: bool) ->
 
 /// Transaction-table columns needed for `mask`. Always includes `cn`/`ts`
 /// (small metadata); adds `td`, `sg`, `ef`, `ev`, `bc`, `ul` as the mask
-/// requires, including all object-data columns when complete transaction
-/// objects or effects object types must be resolved.
+/// requires, including transaction data when signatures are requested (system
+/// transactions need their kind to reconstruct the Full Node's placeholder),
+/// and all object-data columns when complete transaction objects or effects
+/// object types must be resolved.
 pub(crate) fn transaction_columns(mask: &FieldMaskTree) -> Vec<&'static str> {
     transaction_columns_for_mask(mask, needs_transaction_objects(mask))
 }
@@ -419,6 +421,9 @@ fn transaction_columns_for_mask(mask: &FieldMaskTree, needs_objects: bool) -> Ve
     if mask
         .subtree(ExecutedTransaction::TRANSACTION_FIELD.name)
         .is_some()
+        || mask
+            .subtree(ExecutedTransaction::SIGNATURES_FIELD.name)
+            .is_some()
     {
         columns.push(col::DATA);
     }
@@ -499,6 +504,14 @@ mod tests {
     /// batch size the pipeline hands to BigTable — deliberately far below the
     /// backend `MAX_TX_DIGESTS_PER_REQUEST` clamp.
     const TX_CHUNK_SIZE: usize = 100;
+
+    #[test]
+    fn signatures_request_also_fetches_transaction_kind() {
+        let mask = FieldMaskTree::from(FieldMask::from_paths(["signatures"]));
+        let columns = transaction_columns(&mask);
+        assert!(columns.contains(&tables::transactions::col::DATA));
+        assert!(columns.contains(&tables::transactions::col::SIGNATURES));
+    }
 
     /// Deterministic, unique 32-byte digest: `i` big-endian in the low 8 bytes.
     fn digest(i: u64) -> TransactionDigest {

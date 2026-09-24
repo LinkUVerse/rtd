@@ -23,13 +23,16 @@ use rtd_rpc_api::RpcError;
 use rtd_rpc_api::proto::timestamp_ms_to_proto;
 use rtd_types::TypeTag;
 use rtd_types::base_types::ObjectID;
+use rtd_types::crypto::{Ed25519RtdSignature, RtdSignatureInner, Signature, ToFromBytes};
 use rtd_types::full_checkpoint_content::Checkpoint as FullCheckpoint;
 use rtd_types::full_checkpoint_content::ExecutedTransaction as FullExecutedTransaction;
 use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::messages_checkpoint::CertifiedCheckpointSummary;
 use rtd_types::object::Object;
 use rtd_types::object::rpc_visitor::proto::ProtoVisitor;
+use rtd_types::signature::GenericSignature;
 use rtd_types::storage::ObjectKey;
+use rtd_types::transaction::TransactionData as RtdTransactionData;
 use tracing::warn;
 
 use crate::PackageResolver;
@@ -38,6 +41,23 @@ use crate::resolve::compute_object_keys;
 
 /// Maximum size in bytes for JSON-rendered Move values (1 MiB).
 const MAX_JSON_MOVE_VALUE_SIZE: usize = 1024 * 1024;
+
+/// Full Node's transaction store keeps the all-zero sender signature created
+/// by `VerifiedTransaction::new_system_transaction`. Raw checkpoint contents
+/// intentionally carry no user signatures for system transactions. Preserve
+/// the raw HBase row and reconstruct that Full Node response-only placeholder.
+fn fullnode_signatures(
+    transaction: &RtdTransactionData,
+    mut signatures: Vec<GenericSignature>,
+) -> Vec<GenericSignature> {
+    if signatures.is_empty() && transaction.as_v1().kind.is_system_tx() {
+        signatures.push(GenericSignature::Signature(Signature::Ed25519RtdSignature(
+            Ed25519RtdSignature::from_bytes(&[0; Ed25519RtdSignature::LENGTH])
+                .expect("all-zero system signature has a fixed valid length"),
+        )));
+    }
+    signatures
+}
 
 /// Render a Move value as JSON using the package resolver for type layout.
 pub(crate) async fn render_json(
@@ -155,8 +175,11 @@ pub(crate) fn render_full_checkpoint(
                 transaction_balance_changes.push(tx.balance_changes);
             }
             Ok::<_, RpcError>(FullExecutedTransaction {
+                signatures: tx
+                    .signatures
+                    .map(|signatures| fullnode_signatures(&transaction, signatures))
+                    .unwrap_or_default(),
                 transaction,
-                signatures: tx.signatures.unwrap_or_default(),
                 effects,
                 events: tx.events,
                 unchanged_loaded_runtime_objects: tx.unchanged_loaded_runtime_objects,
@@ -232,15 +255,25 @@ pub(crate) async fn transaction_to_response(
     }
 
     if let Some(submask) = mask.subtree(ExecutedTransaction::TRANSACTION_FIELD.name)
-        && let Some(tx_data) = source.transaction_data
+        && let Some(tx_data) = source.transaction_data.as_ref()
     {
-        message.transaction = Some(Transaction::merge_from(&tx_data, &submask));
+        message.transaction = Some(Transaction::merge_from(tx_data, &submask));
     }
 
-    if let Some(submask) = mask.subtree(ExecutedTransaction::SIGNATURES_FIELD.name)
-        && let Some(sigs) = source.signatures
-    {
-        message.signatures = sigs
+    if let Some(submask) = mask.subtree(ExecutedTransaction::SIGNATURES_FIELD.name) {
+        let tx_data = source.transaction_data.as_ref().ok_or_else(|| {
+            RpcError::new(
+                tonic::Code::Internal,
+                format!("transaction {digest} data column missing for signatures"),
+            )
+        })?;
+        let sigs = source.signatures.ok_or_else(|| {
+            RpcError::new(
+                tonic::Code::Internal,
+                format!("transaction {digest} signatures column missing"),
+            )
+        })?;
+        message.signatures = fullnode_signatures(tx_data, sigs)
             .into_iter()
             .map(|signature| UserSignature::merge_from(&signature, &submask))
             .collect();
@@ -363,7 +396,7 @@ mod tests {
     use rtd_types::storage::ObjectKey;
     use rtd_types::transaction::{
         Command, ProgrammableMoveCall, SenderSignedData, Transaction,
-        TransactionData as RtdTransactionData, TransactionKind,
+        TransactionData as RtdTransactionData, TransactionKind, VerifiedTransaction,
     };
     use rtd_types::type_input::{StructInput, TypeInput};
     use std::sync::Arc;
@@ -391,6 +424,22 @@ mod tests {
         );
         let tx = Transaction::new(SenderSignedData::new(data.clone(), vec![]));
         (*tx.digest(), data)
+    }
+
+    #[test]
+    fn system_placeholder_matches_fullnode_without_changing_user_signatures() {
+        let genesis = VerifiedTransaction::new_genesis_transaction(vec![]).into_inner();
+        let genesis_data = genesis.transaction_data();
+        let expected = genesis.tx_signatures().to_vec();
+        assert_eq!(expected.len(), 1);
+        assert_eq!(fullnode_signatures(genesis_data, vec![]), expected);
+        assert_eq!(
+            fullnode_signatures(genesis_data, expected.clone()),
+            expected
+        );
+
+        let (_, user_data) = test_tx_data();
+        assert!(fullnode_signatures(&user_data, vec![]).is_empty());
     }
 
     /// Empty package store for tests that don't exercise JSON rendering.
