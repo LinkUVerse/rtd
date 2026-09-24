@@ -59,9 +59,6 @@ impl HttpDownloaderBuilder for ObjectStoreConfig {
                 };
                 Ok(AmazonS3::new(&bucket_endpoint).map(Arc::new)?)
             }
-            Some(ObjectStoreType::GCS | ObjectStoreType::Azure) => Err(anyhow!(
-                "RTD only permits local or self-hosted S3 snapshot storage"
-            )),
             _ => Err(anyhow!("At least one storage backend should be provided")),
         }
     }

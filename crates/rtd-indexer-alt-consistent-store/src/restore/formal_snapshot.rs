@@ -28,7 +28,7 @@ use crate::restore::storage::StorageConnectionArgs;
 #[derive(clap::Args, Clone, Debug)]
 #[group(required = true)]
 pub struct FormalSnapshotArgs {
-    /// Fetch from self-hosted S3-compatible storage such as Ceph RGW.
+    /// Fetch from self-hosted S3-compatible storage such as MinIO.
     /// AWS_ENDPOINT and explicit S3 credentials are required.
     #[arg(long, group = "source")]
     pub s3: Option<String>,

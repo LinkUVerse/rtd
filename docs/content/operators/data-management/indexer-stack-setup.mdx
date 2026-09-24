@@ -50,16 +50,18 @@ RTD has no public Mainnet or Testnet and provides no hosted checkpoint, snapshot
 
 Run a fullnode with gRPC enabled for the same RTD network as the indexer. Set `FULLNODE_GRPC_URL` to that node's reachable gRPC address. Verify its checkpoint retention before choosing a start checkpoint. There is no RTD public-good endpoint or verified third-party [RPC provider](/develop/accessing-data/rpc-providers).
 
-## Operator-owned checkpoint buckets {#requester-pays}
+## Operator-owned checkpoint buckets {#checkpoint-buckets}
 
-For a backfill beyond fullnode retention, first populate your own full-retention checkpoint store from the same RTD chain. [Available Data Stores](/operators/data-management/available-data-stores) describes supported source types; it does not provide a bucket. The GCS examples below apply only if your operator has created a GCS bucket. If that bucket uses Requester Pays, configure a billing project:
+For a backfill beyond fullnode retention, first populate your own full-retention, verified **published** bucket in self-hosted MinIO from the same RTD chain. [Available Data Stores](/operators/data-management/available-data-stores) describes the source contract; it does not provide a bucket. The S3 flag uses MinIO's open protocol and must never fall back to Amazon or another managed cloud endpoint. Configure a private endpoint and scoped read-only credentials:
 
 ```sh
-$ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/gcp-credentials.json
-$ export GOOGLE_CLOUD_PROJECT=your-billing-project
+$ export AWS_ENDPOINT=https://YOUR_PRIVATE_MINIO
+$ export AWS_ACCESS_KEY_ID=<PUBLISHED_BUCKET_READ_ONLY_KEY>
+$ export AWS_SECRET_ACCESS_KEY=<PUBLISHED_BUCKET_READ_ONLY_SECRET>
+$ export AWS_DEFAULT_REGION=<MINIO_REGION>
 ```
 
-Workload Identity or another supported Google credential source can replace the credential file. Include the `x-goog-user-project` header only when the bucket actually uses Requester Pays. See Google Cloud's [Use Requester Pays](https://cloud.google.com/storage/docs/using-requester-pays) documentation for billing and IAM requirements.
+Load these values from a self-hosted secret manager; do not paste real secrets into a shell history, process argument or Git. Production TLS must be enabled, and the source must expose only checkpoints independently verified and promoted from a separate staging bucket. A watermark file inside the writer's bucket is not a read barrier.
 
 ## Indexer setup
 
@@ -81,13 +83,13 @@ Run 1 indexer process for each configuration file and assign every co-located pr
 
 #### Phase 1: backfill
 
-Unprunable pipelines must start at genesis. This example requires an existing, verified operator-owned GCS bucket:
+Unprunable pipelines must start at genesis. This example requires an existing, verified MinIO published bucket:
 
 ```sh
 $ rtd-indexer-alt indexer \
     --config <CONFIG_FILE> \
     --database-url <DATABASE_URL> \
-    --remote-store-gcs <YOUR_RTD_CHECKPOINT_GCS_BUCKET> \
+    --remote-store-s3 <YOUR_RTD_PUBLISHED_MINIO_BUCKET> \
     --metrics-address <UNIQUE_METRICS_ADDRESS>
 ```
 
@@ -97,7 +99,7 @@ Prunable pipelines can start at a checkpoint based on their retention period:
 $ rtd-indexer-alt indexer \
     --config <CONFIG_FILE> \
     --database-url <DATABASE_URL> \
-    --remote-store-gcs <YOUR_RTD_CHECKPOINT_GCS_BUCKET> \
+    --remote-store-s3 <YOUR_RTD_PUBLISHED_MINIO_BUCKET> \
     --first-checkpoint <CHECKPOINT_NUMBER> \
     --metrics-address <UNIQUE_METRICS_ADDRESS>
 ```
@@ -108,13 +110,13 @@ For prunable pipelines, choose `first-checkpoint` from actual checkpoint timesta
 | --- | --- |
 | `<CONFIG_FILE>` | Path to indexer configuration file. |
 | `<DATABASE_URL>` | Postgres database connection string. |
-| `<YOUR_RTD_CHECKPOINT_GCS_BUCKET>` | Name of an operator-owned GCS bucket populated with checkpoints from this RTD chain. |
+| `<YOUR_RTD_PUBLISHED_MINIO_BUCKET>` | Name of the self-hosted, verified, read-only published MinIO bucket for this RTD chain. |
 | `<CHECKPOINT_NUMBER>` | For prunable pipelines only, the checkpoint at which indexing starts. |
 | `<UNIQUE_METRICS_ADDRESS>` | Prometheus bind address unique to this process, for example `127.0.0.1:9284` when the local fullnode already uses `9184`. |
 
 #### Examples
 
-Set `RTD_CHECKPOINT_GCS_BUCKET` to the name of your verified RTD checkpoint bucket before using these examples.
+Set `RTD_PUBLISHED_MINIO_BUCKET` to the name of your verified RTD checkpoint bucket before using these examples.
 
 **Unprunable pipeline from genesis:**
 
@@ -122,7 +124,7 @@ Set `RTD_CHECKPOINT_GCS_BUCKET` to the name of your verified RTD checkpoint buck
 $ rtd-indexer-alt indexer \
     --config unpruned.toml \
     --database-url postgres://username:password@localhost:5432/database \
-    --remote-store-gcs "$RTD_CHECKPOINT_GCS_BUCKET" \
+    --remote-store-s3 "$RTD_PUBLISHED_MINIO_BUCKET" \
     --metrics-address 127.0.0.1:9284
 ```
 
@@ -132,7 +134,7 @@ $ rtd-indexer-alt indexer \
 $ rtd-indexer-alt indexer \
     --config events.toml \
     --database-url postgres://username:password@localhost:5432/database \
-    --remote-store-gcs "$RTD_CHECKPOINT_GCS_BUCKET" \
+    --remote-store-s3 "$RTD_PUBLISHED_MINIO_BUCKET" \
     --first-checkpoint 5000 \
     --metrics-address 127.0.0.1:9287
 ```
@@ -152,7 +154,7 @@ $ rtd-indexer-alt indexer \
     --metrics-address 127.0.0.1:9287
 ```
 
-Replace the sample URL with the actual gRPC listener address of your own fullnode. If recovery requires checkpoints outside its retention, stop the process, recover from your own full-retention checkpoint store, and then switch back to fullnode gRPC. If your GCS bucket uses Requester Pays, add `--remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}"` to each bucket ingestion command above.
+Replace the sample URL with the actual gRPC listener address of your own fullnode. If recovery requires checkpoints outside its retention, stop the process, recover from your own full-retention MinIO published bucket, and then switch back to fullnode gRPC. Do not add Google billing headers or cloud credentials.
 
 :::info
 
@@ -401,12 +403,12 @@ $ rtd-indexer-alt-consistent-store run \
 
 Wait for the service to report `SERVING` and for every pipeline watermark to approach the network tip before routing GraphQL traffic to it. Only 1 process can open a given RocksDB path. Back up the RocksDB path separately from Postgres, and stop the consistent-store process before taking a filesystem-level copy.
 
-If a successfully restored watermark is older than the fullnode's retention window and you operate a full-retention GCS bucket, use that bucket for the catch-up phase:
+If a successfully restored watermark is older than the fullnode's retention window and you operate a full-retention MinIO published bucket, use that bucket for the catch-up phase:
 
 ```sh
 $ rtd-indexer-alt-consistent-store run \
     --database-path "$CONSISTENT_STORE_PATH" \
-    --remote-store-gcs "$RTD_CHECKPOINT_GCS_BUCKET" \
+    --remote-store-s3 "$RTD_PUBLISHED_MINIO_BUCKET" \
     --rpc-listen-address 127.0.0.1:7001 \
     --metrics-address 127.0.0.1:9186 \
     --config consistent-store.toml
@@ -414,7 +416,7 @@ $ rtd-indexer-alt-consistent-store run \
 
 Do not route traffic to this temporary catch-up process. After it reaches the network tip, stop it and restart with fullnode gRPC.
 
-To build a consistent store without a formal snapshot, process from checkpoint 0 using either your fullnode (if it retains genesis) or your full-retention checkpoint bucket. Do not set `--first-checkpoint` to a later checkpoint, because doing so produces incomplete ownership and balance state. If the bucket uses Requester Pays, add the billing header described above. Keep every source on the same RTD network and use a separate RocksDB path per network.
+To build a consistent store without a formal snapshot, process from checkpoint 0 using either your fullnode (if it retains genesis) or your full-retention MinIO published bucket. Do not set `--first-checkpoint` to a later checkpoint, because doing so produces incomplete ownership and balance state. Keep every source on the same RTD network and use a separate RocksDB path per network.
 
 ### Run config recommendations
 
@@ -586,7 +588,7 @@ If you also run the GraphQL RPC server, its health endpoint (for example, `http:
 
 A stalled watermark is the starting point for most indexer investigations. Narrow the cause to one of three categories before taking action:
 
-**Checkpoints not being downloaded (upstream):** The ingestion layer cannot fetch new checkpoints from the data source. Check network connectivity to your gRPC endpoint or GCS bucket. Verify the fullnode or checkpoint store is healthy and serving the expected checkpoint range. The `ingested_checkpoint_timestamp_lag` Prometheus metric shows how far behind the ingestion layer is.
+**Checkpoints not being downloaded (upstream):** The ingestion layer cannot fetch new checkpoints from the data source. Check network connectivity to your gRPC endpoint or self-hosted MinIO bucket. Verify the fullnode or checkpoint store is healthy and serving the expected checkpoint range. The `ingested_checkpoint_timestamp_lag` Prometheus metric shows how far behind the ingestion layer is.
 
 **Pipeline processing error:** The pipeline fetched checkpoints but fails to transform or process them. Check the indexer logs filtered by the pipeline name for error messages. Common causes include schema mismatches after a protocol upgrade or unexpected data in a specific checkpoint.
 

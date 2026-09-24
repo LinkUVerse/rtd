@@ -39,7 +39,7 @@ pub fn create_remote_store_client(
             Ok(Box::new(http_store))
         }
         "gs" => Err(anyhow::anyhow!(
-            "GCS is not an RTD ingestion source; use self-hosted Ceph RGW"
+            "GCS is not an RTD ingestion source; use self-hosted MinIO"
         )),
         "s3" => {
             let option = |name: &str| {
@@ -132,7 +132,7 @@ mod tests {
                 .is_err()
         );
         assert!(
-            validate_private_endpoint(&Url::parse("https://ceph.rtd.internal").unwrap()).is_ok()
+            validate_private_endpoint(&Url::parse("https://minio.rtd.internal").unwrap()).is_ok()
         );
     }
 }

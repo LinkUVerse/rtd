@@ -13,6 +13,11 @@ RTD has no verified public checkpoint, archival, or snapshot service. The Sui
 bucket names and hostnames inherited from upstream do not identify RTD data.
 Do not use them to bootstrap or restore an RTD node.
 
+RTD production infrastructure must use self-hosted open-source middleware.
+Google Cloud Bigtable/Storage, Amazon S3, Azure Blob, and other managed cloud
+data stores are not supported runtime dependencies. The `S3` flags below refer
+only to the protocol exposed by RTD-operated MinIO.
+
 ## Choosing a store
 
 First verify the genesis digest and chain ID of the network you operate. Then
@@ -21,16 +26,12 @@ retention according to your own infrastructure.
 
 ## Checkpoint remote stores
 
-### GCS buckets (full retention, Requester Pays) {#checkpoint-gcs}
+### MinIO published bucket (full retention) {#checkpoint-s3}
 
-Supply a GCS bucket only after your operator has published RTD checkpoints to
-it and confirmed the billing and access policy. No RTD GCS bucket is provided
-by this source tree.
-
-### S3 bucket (full retention, Requester Pays) {#checkpoint-s3}
-
-Supply an S3 bucket only after verifying that it contains checkpoints for your
-RTD chain ID. No RTD S3 bucket is provided by this source tree.
+Supply a self-hosted MinIO bucket only after verifying it contains
+continuously published checkpoints for your RTD chain ID. The producer writes
+to a separate staging bucket; consumers receive read-only access to verified
+published objects. No RTD bucket is provided by this source tree.
 
 ### HTTPS endpoints {#checkpoint-https}
 

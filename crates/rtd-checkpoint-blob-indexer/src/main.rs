@@ -41,7 +41,7 @@ struct Args {
     #[arg(long)]
     config: PathBuf,
 
-    /// Write to a self-hosted S3-compatible store such as Ceph RGW.
+    /// Write to a self-hosted S3-compatible store such as MinIO.
     /// AWS_ENDPOINT and explicit S3 credentials are required; cloud defaults are forbidden.
     #[arg(long, group = "store")]
     s3: Option<String>,
@@ -269,9 +269,7 @@ mod tests {
             validate_self_hosted_url(&Url::parse("https://storage.googleapis.com").unwrap())
                 .is_err()
         );
-        assert!(
-            validate_self_hosted_url(&Url::parse("https://ceph-rgw.internal").unwrap()).is_ok()
-        );
+        assert!(validate_self_hosted_url(&Url::parse("https://minio.internal").unwrap()).is_ok());
         let err = Args::try_parse_from([
             "cmd",
             "--config",

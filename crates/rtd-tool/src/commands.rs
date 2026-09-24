@@ -240,7 +240,7 @@ pub enum ToolCommand {
         /// based on value of `--network` flag.
         #[clap(long = "snapshot-bucket", conflicts_with = "no_sign_request")]
         snapshot_bucket: Option<String>,
-        /// Snapshot bucket type
+        /// Snapshot backend: local file or RTD-operated MinIO through the S3 API.
         #[clap(
             long = "snapshot-bucket-type",
             conflicts_with = "no_sign_request",
@@ -637,25 +637,6 @@ impl ToolCommand {
                         .ok()
                         .and_then(|b| b.parse().ok())
                         .unwrap_or(no_sign_request),
-                        object_store_connection_limit: 200,
-                        no_sign_request,
-                        ..Default::default()
-                    },
-                    ObjectStoreType::GCS => ObjectStoreConfig {
-                        object_store: Some(ObjectStoreType::GCS),
-                        bucket: snapshot_bucket,
-                        google_service_account: env::var("GCS_SNAPSHOT_SERVICE_ACCOUNT_FILE_PATH")
-                            .ok(),
-                        object_store_connection_limit: 200,
-                        no_sign_request,
-                        ..Default::default()
-                    },
-                    ObjectStoreType::Azure => ObjectStoreConfig {
-                        object_store: Some(ObjectStoreType::Azure),
-                        bucket: snapshot_bucket,
-                        azure_storage_account: env::var("AZURE_SNAPSHOT_STORAGE_ACCOUNT").ok(),
-                        azure_storage_access_key: env::var("AZURE_SNAPSHOT_STORAGE_ACCESS_KEY")
-                            .ok(),
                         object_store_connection_limit: 200,
                         no_sign_request,
                         ..Default::default()

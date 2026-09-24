@@ -150,8 +150,8 @@ async fn main() -> anyhow::Result<()> {
         IndexerArgs::default(),
         ClientArgs {
             ingestion: IngestionClientArgs {
-                // Supply a self-hosted Ceph RGW bucket populated with checkpoints
-                // from this RTD chain. Set AWS_ENDPOINT to the private RGW URL,
+                // Supply a self-hosted MinIO bucket populated with checkpoints
+                // from this RTD chain. Set AWS_ENDPOINT to the private MinIO URL,
                 // with explicit S3 protocol credentials and region.
                 remote_store_s3: Some("rtd-checkpoints".to_string()),
                 ..Default::default()

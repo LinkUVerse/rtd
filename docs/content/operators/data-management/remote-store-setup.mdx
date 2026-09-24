@@ -10,7 +10,7 @@ keywords:
   - indexer
   - object store
   - S3
-  - GCS
+  - MinIO
   - operator
 goal:
   description: >-
@@ -40,7 +40,7 @@ answer: >-
   remote store with protobuf checkpoint blobs.
 ---
 
-The remote store is an object store (S3 or GCS) containing protobuf-encoded checkpoint blobs. Full nodes read from it for state sync and indexers read from it for backfills. The `rtd-checkpoint-blob-indexer` populates this store by reading checkpoints from a source and writing compressed protobuf blobs to a destination.
+The remote store contains protobuf-encoded checkpoint blobs. RTD production storage must be an operator-owned, open-source MinIO deployment; `S3` below names its wire protocol, not Amazon's cloud service. Full nodes read from it for state sync and indexers read from it for backfills. The `rtd-checkpoint-blob-indexer` populates this store by reading checkpoints from a source and writing compressed protobuf blobs to a destination. Google Cloud Storage, Amazon S3, Azure Blob and other managed cloud stores are not supported RTD production dependencies.
 
 RTD has no verified public checkpoint bucket. All bucket names below must be
 supplied by the operator of the RTD chain being indexed.
@@ -50,16 +50,16 @@ supplied by the operator of the RTD chain being indexed.
 ```mermaid
 graph LR
     A[Source: Existing Remote Store / Full Node gRPC] --> B[rtd-checkpoint-blob-indexer]
-    B --> C[Your Remote Store<br/>S3 / GCS]
+    B --> C[Your self-hosted MinIO<br/>S3-compatible API]
 ```
 
 <Tabs className="tabsHeadingCentered--small">
 <TabItem value="prereq" label="Prerequisites">
 
-- Access to a checkpoint source (see [Available Data Stores](/operators/data-management/available-data-stores) for the full list):
-   - **An operator-owned GCS bucket:** Verify that its checkpoints match your RTD genesis digest and configure access and billing with its operator.
+- Access to a checkpoint source (see [Available Data Stores](/operators/data-management/available-data-stores)):
+   - **Your verified, full-retention MinIO published bucket:** Verify that its checkpoints match the RTD genesis digest and chain ID.
    - **Your own full node:** Must have gRPC enabled for steady-state streaming.
-- A destination object store with write credentials (S3 or GCS).
+- A separate self-hosted MinIO staging bucket with scoped write credentials. Indexers must read only from the verified published bucket.
 - The `rtd-checkpoint-blob-indexer` binary.
 
 </TabItem>
@@ -77,23 +77,28 @@ The indexer runs three pipelines. Only the first two should be enabled:
 
 ## Backfill from an existing bucket
 
-If your RTD network operator provides a verified checkpoint bucket, use
-`--remote-store-gcs` as the source and a destination flag (`--s3` or `--gcs`)
-to write to your store.
+If your RTD network operator provides a verified MinIO checkpoint bucket, use
+`--remote-store-s3` as the source and `--s3` for your destination. Set
+`AWS_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
+`AWS_DEFAULT_REGION` to the approved self-hosted MinIO endpoint and scoped
+credentials. The CLI requires `--config` even when using its default tuning.
 
-#### Example: Backfill an S3 bucket from an operator-owned GCS bucket
+#### Example: Backfill from an operator-owned MinIO bucket
 
 ```sh
 rtd-checkpoint-blob-indexer \
+    --config checkpoint-blob.toml \
     --pipeline checkpoint_blob --pipeline epochs \
-    --remote-store-gcs YOUR_RTD_CHECKPOINT_BUCKET \
-    --s3 my-checkpoint-bucket \
+    --remote-store-s3 YOUR_VERIFIED_PUBLISHED_BUCKET \
+    --s3 YOUR_STAGING_BUCKET \
     --compression-level 3
 ```
 
-The bucket above is a required placeholder. Confirm its retention, chain ID,
-credentials, and billing before backfill. No public RTD checkpoint HTTPS
-endpoint is configured by this fork.
+The bucket names above are required placeholders. Confirm retention, chain ID,
+object versions, credentials and access boundaries before backfill. No public
+RTD checkpoint HTTPS endpoint is configured by this fork. Publishing from the
+staging bucket requires separate verification and immutable promotion; a
+watermark file in the same bucket is not an access boundary.
 
 ## Alternative: Backfill from a full node
 
@@ -101,9 +106,10 @@ If you have an unpruned full node, you can use it as the checkpoint source inste
 
 ```sh
 rtd-checkpoint-blob-indexer \
+    --config checkpoint-blob.toml \
     --pipeline checkpoint_blob --pipeline epochs \
     --rpc-api-url http://my-fullnode:9000 \
-    --s3 my-checkpoint-bucket \
+    --s3 YOUR_STAGING_BUCKET \
     --compression-level 3
 ```
 
@@ -113,10 +119,11 @@ Once the backfill has caught up to the network tip, switch to full node gRPC str
 
 ```sh
 rtd-checkpoint-blob-indexer \
+    --config checkpoint-blob.toml \
     --pipeline checkpoint_blob --pipeline epochs \
     --rpc-api-url http://my-fullnode:9000 \
     --streaming-url http://my-fullnode:9000 \
-    --s3 my-checkpoint-bucket \
+    --s3 YOUR_STAGING_BUCKET \
     --compression-level 3
 ```
 
@@ -124,7 +131,7 @@ The full node only needs gRPC enabled. JSON-RPC is not required.
 
 ### Running multiple instances
 
-Writes are idempotent, so multiple indexer instances can write to the same bucket. Start with one instance and add redundancy after measuring throughput and lag on your RTD chain; there is no RTD public-network sizing baseline.
+The current blob writer performs ordinary object writes. Do not run multiple active writers against the same staging keys until RTD has implemented and tested conflict rejection, version pinning, and a single-writer handover procedure. Measure throughput and lag on your own RTD chain; there is no public-network sizing baseline.
 
 ## CLI reference
 
@@ -132,17 +139,17 @@ Writes are idempotent, so multiple indexer instances can write to the same bucke
 
 | Flag | Description |
 |------|-------------|
-| `--s3 <BUCKET>` | Write to AWS S3. Env: `AWS_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`. |
-| `--gcs <BUCKET>` | Write to Google Cloud Storage. Env: `GOOGLE_SERVICE_ACCOUNT_PATH`. |
-| `--http <URL>` | Write to an HTTP endpoint. |
+| `--s3 <BUCKET>` | Write to self-hosted MinIO using S3 protocol. Env: explicit private `AWS_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`. |
+| `--http <URL>` | Write to an operator-owned HTTPS endpoint; verify its storage and access contract separately. |
+| `--path <DIR>` | Write to a local directory for development. |
 
 ### Source flags (mutually exclusive, one required)
 
 | Flag | Description |
 |------|-------------|
-| `--remote-store-gcs <BUCKET>` | Fetch checkpoints from an operator-owned GCS bucket. Verify that it retains the full history required for your backfill. See [Available Data Stores](/operators/data-management/available-data-stores#checkpoint-gcs). |
-| `--remote-store-url <URL>` | Fetch checkpoints from an HTTPS store operated for your RTD chain. Check its actual retention; no public RTD endpoint is configured. |
-| `--remote-store-s3 <BUCKET>` | Fetch checkpoints from an S3 bucket. |
+| `--remote-store-url <URL>` | Fetch checkpoints from an operator-owned HTTPS store. Check its chain ID and retention; no public RTD endpoint is configured. |
+| `--remote-store-s3 <BUCKET>` | Fetch checkpoints from the self-hosted, verified MinIO published bucket. |
+| `--local-ingestion-path <DIR>` | Read a local checkpoint directory for development. |
 | `--rpc-api-url <URL>` | Fetch checkpoints from a full node gRPC endpoint. |
 
 ### Other flags

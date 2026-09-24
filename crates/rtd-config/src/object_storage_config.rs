@@ -18,16 +18,12 @@ use tracing::info;
 pub enum ObjectStoreType {
     /// Local file system
     File,
-    /// AWS S3
+    /// RTD-operated MinIO through the S3 API
     S3,
-    /// Google Cloud Store
-    GCS,
-    /// Azure Blob Store
-    Azure,
 }
 
 #[derive(Default, Debug, Clone, Deserialize, Serialize, Args)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ObjectStoreConfig {
     /// Which object storage to use. If not specified, defaults to local file system.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -37,62 +33,34 @@ pub struct ObjectStoreConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long)]
     pub directory: Option<PathBuf>,
-    /// Name of the bucket to use for the object store. Must also set
-    /// `--object-store` to a cloud object storage to have any effect.
+    /// Name of the MinIO bucket. Set `--object-store s3` to use it.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long)]
     pub bucket: Option<String>,
-    /// When using Amazon S3 as the object store, set this to an access key that
-    /// has permission to read from and write to the specified S3 bucket.
+    /// MinIO S3 API access key with the required bucket permissions.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long)]
     pub aws_access_key_id: Option<String>,
-    /// When using Amazon S3 as the object store, set this to the secret access
-    /// key that goes with the specified access key ID.
+    /// MinIO S3 API secret for the specified access key ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long)]
     pub aws_secret_access_key: Option<String>,
-    /// When using Amazon S3 as the object store, set this to bucket endpoint
+    /// Private RTD-operated MinIO S3 endpoint.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long)]
     pub aws_endpoint: Option<String>,
-    /// When using Amazon S3 as the object store, set this to the region
-    /// that goes with the specified bucket
+    /// S3 protocol region configured for this MinIO bucket.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(long)]
     pub aws_region: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(long)]
-    pub aws_profile: Option<String>,
     /// Enable virtual hosted style requests
     #[serde(default)]
     #[arg(long, default_value_t = true)]
     pub aws_virtual_hosted_style_request: bool,
-    /// Allow unencrypted HTTP connection to AWS.
+    /// Allow HTTP only with the explicit RTD development override.
     #[serde(default)]
     #[arg(long, default_value_t = true)]
     pub aws_allow_http: bool,
-    /// When using Google Cloud Storage as the object store, set this to the
-    /// path to the JSON file that contains the Google credentials.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(long)]
-    pub google_service_account: Option<String>,
-    /// When using Google Cloud Storage as the object store and writing to a
-    /// bucket with Requester Pays enabled, set this to the project_id
-    /// you want to associate the write cost with.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(long)]
-    pub google_project_id: Option<String>,
-    /// When using Microsoft Azure as the object store, set this to the
-    /// azure account name
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(long)]
-    pub azure_storage_account: Option<String>,
-    /// When using Microsoft Azure as the object store, set this to one of the
-    /// keys in storage account settings
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(long)]
-    pub azure_storage_access_key: Option<String>,
     #[serde(default = "default_object_store_connection_limit")]
     #[arg(long, default_value_t = 20)]
     pub object_store_connection_limit: usize,
@@ -187,9 +155,6 @@ impl ObjectStoreConfig {
         match &self.object_store {
             Some(ObjectStoreType::File) => self.new_local_fs(),
             Some(ObjectStoreType::S3) => self.new_s3(),
-            Some(ObjectStoreType::GCS | ObjectStoreType::Azure) => Err(anyhow!(
-                "RTD only permits local or self-hosted S3 object storage"
-            )),
             _ => Err(anyhow!("At least one storage backend should be provided")),
         }
     }
@@ -227,12 +192,12 @@ mod tests {
 
     #[test]
     fn object_store_rejects_cloud_backends_and_implicit_s3() {
-        for backend in [ObjectStoreType::GCS, ObjectStoreType::Azure] {
-            let config = ObjectStoreConfig {
-                object_store: Some(backend),
-                ..Default::default()
-            };
-            assert!(config.make().is_err());
+        for backend in ["\"GCS\"", "\"Azure\"", "\"gcs\"", "\"azure\""] {
+            assert!(serde_json::from_str::<ObjectStoreType>(backend).is_err());
+        }
+        for legacy_field in ["google-service-account", "azure-storage-account"] {
+            let config = format!(r#"{{"object-store":"S3","{legacy_field}":"legacy"}}"#);
+            assert!(serde_json::from_str::<ObjectStoreConfig>(&config).is_err());
         }
         let config = ObjectStoreConfig {
             object_store: Some(ObjectStoreType::S3),
@@ -250,7 +215,7 @@ mod tests {
 
     #[test]
     fn object_store_requires_private_endpoint() {
-        assert!(validate_self_hosted_endpoint("https://ceph.rtd.internal").is_ok());
+        assert!(validate_self_hosted_endpoint("https://minio.rtd.internal").is_ok());
         for endpoint in [
             "https://s3.us-east-1.amazonaws.com",
             "https://storage.googleapis.com",

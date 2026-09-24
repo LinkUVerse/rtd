@@ -523,7 +523,7 @@ mod tests {
                     flag,
                     "bucket",
                     "--remote-store-url",
-                    "https://ceph.rtd.internal",
+                    "https://minio.rtd.internal",
                 ])
                 .is_err()
             );
@@ -534,7 +534,7 @@ mod tests {
                 "--s3",
                 "bucket",
                 "--remote-store-url",
-                "https://ceph.rtd.internal",
+                "https://minio.rtd.internal",
             ])
             .is_ok()
         );

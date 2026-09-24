@@ -71,7 +71,7 @@ pub struct IngestionClientArgs {
     #[arg(long, group = "source")]
     pub remote_store_url: Option<Url>,
 
-    /// Fetch checkpoints from a self-hosted S3-compatible store such as Ceph RGW.
+    /// Fetch checkpoints from a self-hosted S3-compatible store such as MinIO.
     /// AWS_ENDPOINT and explicit S3 credentials are required.
     #[arg(long, group = "source")]
     pub remote_store_s3: Option<String>,
@@ -758,9 +758,7 @@ pub(crate) mod tests {
             validate_self_hosted_url(&Url::parse("https://storage.googleapis.com").unwrap())
                 .is_err()
         );
-        assert!(
-            validate_self_hosted_url(&Url::parse("https://ceph-rgw.internal").unwrap()).is_ok()
-        );
+        assert!(validate_self_hosted_url(&Url::parse("https://minio.internal").unwrap()).is_ok());
         let err = TestArgs::try_parse_from(["cmd", "--remote-store-gcs", "bucket"]).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::UnknownArgument);
     }

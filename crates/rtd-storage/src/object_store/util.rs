@@ -473,7 +473,7 @@ pub fn build_object_store(
         Ok(Arc::new(LocalFileSystem::new_with_prefix(path)?))
     } else if url.scheme() == "gs" {
         Err(anyhow!(
-            "GCS is not an RTD archival source; use self-hosted Ceph RGW"
+            "GCS is not an RTD archival source; use self-hosted MinIO"
         ))
     } else if url.scheme() == "s3" || url.host_str().unwrap_or_default().starts_with("s3") {
         let option = |name: &str| {
