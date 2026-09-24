@@ -116,9 +116,13 @@ impl ShardWorker {
                 Some(seal) = self.seal_rx.recv() => {
                     self.handle_shard_seal(seal).await;
                 }
-                Some(merge) = self.merge_rx.recv() => {
-                    self.handle_shard_merge(merge).await?;
-                }
+                // Once producers close, all merges were handled. Waiting for the
+                // seal channel to close would deadlock with GenerationWorker:
+                // it owns the seal sender and waits for this shard's event sender.
+                merge = self.merge_rx.recv() => match merge {
+                    Some(merge) => self.handle_shard_merge(merge).await?,
+                    None => break,
+                },
                 else => break,
             }
         }

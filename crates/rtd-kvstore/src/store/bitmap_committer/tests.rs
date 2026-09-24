@@ -170,6 +170,41 @@ async fn setup() -> (
     (mock, store, handler, service)
 }
 
+#[tokio::test]
+async fn bitmap_committer_finishes_after_bounded_input_closes() {
+    let (mock, store, handler, mut service) = setup().await;
+    let handler = Arc::new(handler);
+    let row_key = b"v1#bounded#shutdown";
+    let batch = make_batch(vec![value(row_key, 0, &[7], 1, 1000)]);
+    let h = handler.clone();
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(PIPELINE, watermark(1, 10, 1000))
+                    .await?;
+                h.commit(&batch, conn).await
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        wait_for_watermark_at_least(&store, 1)
+            .await
+            .checkpoint_hi_inclusive,
+        1
+    );
+    assert!(wait_for_bitmap(&mock, row_key).await.contains(7));
+    drop(handler);
+    drop(store);
+
+    tokio::time::timeout(std::time::Duration::from_secs(10), service.join())
+        .await
+        .expect("bitmap worker tasks must drain after the bounded input closes")
+        .unwrap();
+}
+
 fn watermark(cp: u64, tx_hi: u64, ts_ms: u64) -> CommitterWatermark {
     CommitterWatermark {
         epoch_hi_inclusive: 0,
