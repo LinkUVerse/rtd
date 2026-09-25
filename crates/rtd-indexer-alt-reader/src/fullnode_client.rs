@@ -17,6 +17,7 @@ use rtd_types::transaction::TransactionData;
 use tracing::instrument;
 use url::Url;
 
+use crate::grpc_tls;
 use crate::metrics::GrpcMetricsLayer;
 
 // Programmable transaction validation requires the command count to be strictly less than the
@@ -64,7 +65,8 @@ impl FullnodeClient {
             return Ok(None);
         };
 
-        let client = Client::new(url.to_string())
+        let uri = url.as_str().parse().context("invalid fullnode gRPC URL")?;
+        let client = grpc_tls::sdk_client(uri, "RTD_ARCHIVE_FULLNODE_GRPC")
             .context("Failed to create client for gRPC endpoint")?
             .request_layer(GrpcMetricsLayer::new(
                 prefix.unwrap_or("fullnode"),

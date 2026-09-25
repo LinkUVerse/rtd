@@ -404,6 +404,11 @@ pub struct KvRpcConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_key: Option<String>,
 
+    /// PEM CA used to authenticate incoming gRPC clients. When set, the
+    /// primary listener requires a client certificate signed by this CA.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_client_ca: Option<String>,
+
     /// Address a second, unencrypted gRPC listener binds to. Serves the same
     /// LedgerService as `address`, without TLS — for trusted internal callers
     /// (e.g. other in-cluster services) that should not need to negotiate
@@ -520,16 +525,35 @@ impl KvRpcConfig {
 
     /// TLS identity, when both cert and key are set and non-empty.
     pub fn tls_identity(&self) -> anyhow::Result<Option<tonic::transport::Identity>> {
+        anyhow::ensure!(
+            self.tls_cert.is_some() == self.tls_key.is_some(),
+            "tls-cert and tls-key must be configured together",
+        );
         let (Some(cert), Some(key)) = (self.tls_cert.as_deref(), self.tls_key.as_deref()) else {
             return Ok(None);
         };
-        if cert.is_empty() || key.is_empty() {
-            return Ok(None);
-        }
+        anyhow::ensure!(
+            !cert.is_empty() && !key.is_empty(),
+            "TLS identity paths must not be empty"
+        );
         Ok(Some(tonic::transport::Identity::from_pem(
             std::fs::read(cert)?,
             std::fs::read(key)?,
         )))
+    }
+
+    pub fn tls_client_ca(&self) -> anyhow::Result<Option<tonic::transport::Certificate>> {
+        let Some(path) = self.tls_client_ca.as_deref() else {
+            return Ok(None);
+        };
+        anyhow::ensure!(!path.is_empty(), "tls-client-ca must not be empty");
+        anyhow::ensure!(
+            self.tls_cert.is_some() && self.tls_key.is_some(),
+            "tls-client-ca requires tls-cert and tls-key",
+        );
+        let pem = std::fs::read(path)?;
+        anyhow::ensure!(!pem.is_empty(), "tls-client-ca PEM must not be empty");
+        Ok(Some(tonic::transport::Certificate::from_pem(pem)))
     }
 
     pub fn pool_config(&self) -> PoolConfig {
@@ -561,6 +585,14 @@ impl KvRpcConfig {
     /// shared read-pipeline knobs (concurrency and per-stage chunk/fan-out) and
     /// delegates to [`LedgerHistoryConfig::validate`] for the list-API knobs.
     pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.tls_cert.is_some() == self.tls_key.is_some(),
+            "tls-cert and tls-key must be configured together",
+        );
+        anyhow::ensure!(
+            self.tls_client_ca.is_none() || self.tls_cert.is_some(),
+            "tls-client-ca requires tls-cert and tls-key",
+        );
         anyhow::ensure!(
             self.health_address() != self.address(),
             "health_address must differ from address",
@@ -736,6 +768,23 @@ stages:
         let cfg = KvRpcConfig::default();
         assert_eq!(cfg.plaintext_address(), None);
         cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn tls_rejects_partial_identity_and_client_ca_without_identity() {
+        let cert_only = KvRpcConfig {
+            tls_cert: Some("/unused/server.crt".into()),
+            ..Default::default()
+        };
+        assert!(cert_only.validate().is_err());
+        assert!(cert_only.tls_identity().is_err());
+
+        let ca_only = KvRpcConfig {
+            tls_client_ca: Some("/unused/ca.crt".into()),
+            ..Default::default()
+        };
+        assert!(ca_only.validate().is_err());
+        assert!(ca_only.tls_client_ca().is_err());
     }
 
     #[test]

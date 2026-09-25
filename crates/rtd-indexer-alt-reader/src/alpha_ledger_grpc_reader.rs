@@ -16,6 +16,7 @@ use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
 use tonic::transport::Uri;
 use tracing::warn;
 
+use crate::grpc_tls;
 use crate::ledger_grpc_reader::LedgerGrpcArgs;
 use crate::metrics::GrpcMetricsLayer;
 
@@ -62,7 +63,7 @@ impl AlphaLedgerGrpcReader {
         registry: &Registry,
     ) -> anyhow::Result<Self> {
         let timeout = args.statement_timeout();
-        let mut client = Client::new(uri)?
+        let mut client = grpc_tls::sdk_client(uri, "RTD_ARCHIVE_LEDGER_GRPC")?
             .with_max_decoding_message_size(args.ledger_grpc_max_decoding_message_size)
             .request_layer(GrpcMetricsLayer::new(
                 prefix.unwrap_or("ledger_grpc"),

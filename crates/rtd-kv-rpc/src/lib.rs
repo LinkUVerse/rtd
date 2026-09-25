@@ -37,6 +37,7 @@ use rtd_types::message_envelope::Message;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 use tokio::time::sleep;
+use tonic::transport::Certificate;
 use tonic::transport::Identity;
 use tonic::transport::Server;
 use tonic::transport::ServerTlsConfig;
@@ -284,6 +285,7 @@ pub struct KvRpcServer {
 #[derive(Default)]
 pub struct ServerConfig {
     pub tls_identity: Option<Identity>,
+    pub tls_client_ca: Option<Certificate>,
     pub metrics_registry: Option<Registry>,
     pub enable_reflection: bool,
     /// Address a second, unencrypted gRPC listener binds to, serving the
@@ -569,7 +571,16 @@ impl KvRpcServer {
 
         let mut builder = Server::builder();
         if let Some(identity) = config.tls_identity {
-            builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
+            let mut tls = ServerTlsConfig::new().identity(identity);
+            if let Some(ca) = config.tls_client_ca {
+                tls = tls.client_ca_root(ca);
+            }
+            builder = builder.tls_config(tls)?;
+        } else {
+            anyhow::ensure!(
+                config.tls_client_ca.is_none(),
+                "client CA requires TLS identity"
+            );
         }
 
         // Cloned up-front (before `self` is consumed below) only when the

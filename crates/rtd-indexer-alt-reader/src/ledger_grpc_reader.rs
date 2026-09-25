@@ -22,6 +22,7 @@ use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::TransactionData;
 use tonic::transport::Uri;
 
+use crate::grpc_tls;
 use crate::metrics::GrpcMetricsLayer;
 
 #[derive(clap::Args, Debug, Clone)]
@@ -165,7 +166,7 @@ impl LedgerGrpcReader {
         max_batch_get_objects: usize,
     ) -> anyhow::Result<Self> {
         let timeout = args.statement_timeout();
-        let mut client = Client::new(uri)?
+        let mut client = grpc_tls::sdk_client(uri, "RTD_ARCHIVE_LEDGER_GRPC")?
             .with_max_decoding_message_size(args.ledger_grpc_max_decoding_message_size)
             .request_layer(GrpcMetricsLayer::new(
                 prefix.unwrap_or("ledger_grpc"),

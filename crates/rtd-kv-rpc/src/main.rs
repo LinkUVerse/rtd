@@ -227,6 +227,7 @@ async fn main() -> Result<()> {
 
     let server_config = ServerConfig {
         tls_identity: config.tls_identity()?,
+        tls_client_ca: config.tls_client_ca()?,
         metrics_registry: Some(registry),
         enable_reflection: true,
         plaintext_address: config.plaintext_address().map(str::parse).transpose()?,

@@ -19,6 +19,7 @@ use url::Url;
 
 pub use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha as proto;
 
+use crate::grpc_tls;
 use crate::metrics::ConsistentReaderMetrics;
 
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -82,8 +83,9 @@ impl ConsistentReader {
         registry: &Registry,
     ) -> Result<Self, Error> {
         let client = if let Some(url) = &args.consistent_store_url {
-            let mut endpoint = Channel::from_shared(url.to_string())
-                .context("Failed to create channel for gRPC endpoint")?;
+            let uri = url.as_str().parse().context("invalid Consistent gRPC URL")?;
+            let mut endpoint = grpc_tls::channel_endpoint(uri, "RTD_ARCHIVE_CONSISTENT_GRPC")
+                    .context("Failed to create channel for gRPC endpoint")?;
 
             if let Some(timeout) = args.statement_timeout() {
                 endpoint = endpoint.timeout(timeout);
