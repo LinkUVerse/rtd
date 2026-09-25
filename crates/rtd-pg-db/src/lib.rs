@@ -66,6 +66,10 @@ pub struct DbArgs {
     #[arg(long)]
     /// Path to a custom CA certificate to use for server certificate verification.
     pub tls_ca_cert_path: Option<PathBuf>,
+
+    /// Internal generation stamped on every pooled Alt writer connection.
+    #[arg(skip)]
+    pub writer_epoch: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -259,6 +263,7 @@ impl Default for DbArgs {
             db_statement_timeout_ms: None,
             tls_verify_cert: false,
             tls_ca_cert_path: None,
+            writer_epoch: None,
         }
     }
 }
@@ -306,6 +311,7 @@ async fn pool(
     read_only: bool,
 ) -> anyhow::Result<Pool<AsyncPgConnectionWithId>> {
     let statement_timeout = args.statement_timeout();
+    let writer_epoch = args.writer_epoch;
 
     // Build TLS configuration once
     let tls_config = build_tls_config(args.tls_verify_cert, args.tls_ca_cert_path.clone())?;
@@ -320,6 +326,13 @@ async fn pool(
 
             if let Some(timeout) = statement_timeout {
                 diesel::sql_query(format!("SET statement_timeout = {}", timeout.as_millis()))
+                    .execute(&mut conn)
+                    .await
+                    .map_err(ConnectionError::CouldntSetupConfiguration)?;
+            }
+
+            if let Some(epoch) = writer_epoch {
+                diesel::sql_query(format!("SET rtd.alt_writer_epoch = {epoch}"))
                     .execute(&mut conn)
                     .await
                     .map_err(ConnectionError::CouldntSetupConfiguration)?;

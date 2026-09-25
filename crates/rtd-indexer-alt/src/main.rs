@@ -78,6 +78,10 @@ async fn main() -> Result<()> {
             } else {
                 None
             };
+            let mut db_args = db_args;
+            db_args.writer_epoch = exclusive_writer
+                .as_ref()
+                .map(writer_lease::WriterLease::epoch);
 
             let indexer = tokio::select! {
                 _ = terminate() => {

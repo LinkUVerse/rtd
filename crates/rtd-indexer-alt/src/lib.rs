@@ -51,6 +51,7 @@ pub mod benchmark;
 pub(crate) mod bootstrap;
 pub mod config;
 pub(crate) mod handlers;
+pub mod writer_fence;
 
 pub async fn setup_indexer(
     database_url: Url,
@@ -100,6 +101,7 @@ pub async fn setup_indexer(
     let retry_interval = ingestion.retry_interval();
 
     // Prepare the store for the indexer
+    let use_writer_fence = db_args.writer_epoch.is_some();
     let store = Db::for_write(database_url, db_args)
         .await
         .context("Failed to connect to database")?;
@@ -109,6 +111,12 @@ pub async fn setup_indexer(
         .run_migrations(Some(&MIGRATIONS))
         .await
         .context("Failed to run pending migrations")?;
+
+    if use_writer_fence {
+        writer_fence::install(&store)
+            .await
+            .context("Failed to guard Alt writer tables")?;
+    }
 
     registry.register(Box::new(DbConnectionStatsCollector::new(
         Some("indexer_db"),

@@ -3,8 +3,7 @@
 
 //! Optional process-level admission lock for the Alt PostgreSQL writer.
 //! It is held on one dedicated database session until every indexer task stops.
-//! A lost session is detected by heartbeat; this is not a transaction-level
-//! fencing token for writes already in flight on other database connections.
+//! The database also checks the generation of every Alt data write.
 
 use std::future::pending;
 use std::time::Duration;
@@ -17,6 +16,7 @@ use diesel::QueryableByName;
 use diesel::sql_types::Bool;
 use diesel::sql_types::Integer;
 use diesel_async::RunQueryDsl;
+use rtd_indexer_alt::writer_fence;
 use rtd_indexer_alt_framework::postgres::Db;
 use rtd_indexer_alt_framework::postgres::DbArgs;
 use tokio::sync::oneshot;
@@ -48,6 +48,7 @@ struct Session {
 
 pub struct WriterLease {
     task: JoinHandle<Result<()>>,
+    epoch: i64,
 }
 
 impl Drop for WriterLease {
@@ -57,6 +58,10 @@ impl Drop for WriterLease {
 }
 
 impl WriterLease {
+    pub fn epoch(&self) -> i64 {
+        self.epoch
+    }
+
     async fn failure(&mut self) -> anyhow::Error {
         match (&mut self.task).await {
             Ok(Err(error)) => error,
@@ -75,7 +80,7 @@ pub async fn fail_if_ended(lease: Option<&mut WriterLease>) -> anyhow::Error {
 
 pub async fn acquire(database_url: Url, mut db_args: DbArgs) -> Result<WriterLease> {
     db_args.db_connection_pool_size = 1;
-    let (sender, receiver) = oneshot::channel::<Result<i32, String>>();
+    let (sender, receiver) = oneshot::channel::<Result<(i32, i64), String>>();
     let task = tokio::spawn(async move {
         let db = Db::for_write(database_url, db_args)
             .await
@@ -93,7 +98,8 @@ pub async fn acquire(database_url: Url, mut db_args: DbArgs) -> Result<WriterLea
             let _ = sender.send(Err(message.to_owned()));
             bail!("{message}");
         }
-        let _ = sender.send(Ok(admission.pid));
+        let epoch = writer_fence::advance_epoch(&mut conn).await?;
+        let _ = sender.send(Ok((admission.pid, epoch)));
 
         let mut tick = interval(Duration::from_secs(1));
         tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -110,8 +116,8 @@ pub async fn acquire(database_url: Url, mut db_args: DbArgs) -> Result<WriterLea
         }
     });
 
-    let pid = match receiver.await {
-        Ok(Ok(pid)) => pid,
+    let (pid, epoch) = match receiver.await {
+        Ok(Ok(admission)) => admission,
         Ok(Err(message)) => {
             task.abort();
             bail!("{message}");
@@ -124,6 +130,6 @@ pub async fn acquire(database_url: Url, mut db_args: DbArgs) -> Result<WriterLea
             };
         }
     };
-    info!(pid, "Exclusive Alt writer lock acquired");
-    Ok(WriterLease { task })
+    info!(pid, epoch, "Exclusive Alt writer lock acquired");
+    Ok(WriterLease { task, epoch })
 }
