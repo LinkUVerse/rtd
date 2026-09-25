@@ -30,6 +30,7 @@ pin-project.workspace = true
 prometheus.workspace = true
 reqwest.workspace = true
 rocksdb = { version = "0.22.0", default-features = false, features = ["snappy", "lz4", "zstd", "zlib", "multi-threaded-cf"] }
+rustls.workspace = true
 scoped-futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -59,4 +60,5 @@ rtd-indexer-alt-metrics.workspace = true
 rtd-storage.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 tempfile.workspace = true
