@@ -12,6 +12,7 @@ use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
+use rtd_indexer_alt_framework::ingestion::s3_tls::with_archive_s3_ca;
 use rtd_indexer_alt_framework::ingestion::store_client::StoreIngestionClient;
 use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
 use tracing::info;
@@ -90,10 +91,11 @@ impl FormalSnapshot {
         {
             let endpoint = std::env::var("AWS_ENDPOINT")
                 .context("AWS_ENDPOINT must point to self-hosted S3-compatible storage")?;
-            validate_self_hosted_s3_environment(&Url::parse(&endpoint)?)?;
+            let endpoint_url = Url::parse(&endpoint)?;
+            validate_self_hosted_s3_environment(&endpoint_url)?;
             info!(bucket, endpoint, "Self-hosted S3-compatible storage");
             AmazonS3Builder::from_env()
-                .with_client_options(connection_args.into())
+                .with_client_options(with_archive_s3_ca(connection_args.into(), &endpoint_url)?)
                 .with_bucket_name(bucket)
                 .build()
                 .map(Arc::new)?

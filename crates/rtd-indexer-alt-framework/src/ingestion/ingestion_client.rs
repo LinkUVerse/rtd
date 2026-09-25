@@ -35,6 +35,7 @@ use crate::ingestion::MAX_GRPC_MESSAGE_SIZE_BYTES;
 use crate::ingestion::Result as IngestionResult;
 use crate::ingestion::byte_count::ByteCountMakeCallbackHandler;
 use crate::ingestion::decode;
+use crate::ingestion::s3_tls::with_archive_s3_ca;
 use crate::ingestion::store_client::StoreIngestionClient;
 use crate::metrics::CohortMetrics;
 use crate::metrics::IngestionMetrics;
@@ -214,11 +215,14 @@ impl IngestionClient {
         } else if let Some(bucket) = args.remote_store_s3.as_ref() {
             let endpoint = validate_self_hosted_s3_environment()?;
             // The custom client options replace from_env's HTTP setting.
+            let options = with_archive_s3_ca(
+                args.client_options()
+                    .with_allow_http(endpoint.scheme() == "http"),
+                &endpoint,
+            )
+            .map_err(|error| IE::InvalidSource(error.to_string()))?;
             let store = AmazonS3Builder::from_env()
-                .with_client_options(
-                    args.client_options()
-                        .with_allow_http(endpoint.scheme() == "http"),
-                )
+                .with_client_options(options)
                 .with_retry(retry)
                 .with_bucket_name(bucket)
                 .build()

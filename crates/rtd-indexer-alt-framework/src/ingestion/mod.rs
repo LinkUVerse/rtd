@@ -42,6 +42,7 @@ pub(crate) mod decode;
 pub mod error;
 pub mod ingestion_client;
 mod rpc_client;
+pub mod s3_tls;
 pub mod store_client;
 pub mod streaming_client;
 #[cfg(test)]

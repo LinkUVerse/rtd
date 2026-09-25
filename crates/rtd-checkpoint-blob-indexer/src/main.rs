@@ -19,6 +19,7 @@ use reqwest::header::HeaderValue;
 use rtd_indexer_alt_framework::Indexer;
 use rtd_indexer_alt_framework::IndexerArgs;
 use rtd_indexer_alt_framework::ingestion::ClientArgs;
+use rtd_indexer_alt_framework::ingestion::s3_tls::with_archive_s3_ca;
 use rtd_indexer_alt_framework::service::Error;
 use rtd_indexer_alt_metrics::MetricsArgs;
 use rtd_indexer_alt_object_store::ObjectStore;
@@ -117,8 +118,12 @@ async fn main() -> anyhow::Result<()> {
         info!(bucket, endpoint = %endpoint, "Using self-hosted S3-compatible storage");
         // with_client_options replaces from_env's HTTP allowance; restore it only for
         // an endpoint that passed the explicit development-only URL check above.
+        let options = with_archive_s3_ca(
+            client_options.with_allow_http(endpoint.scheme() == "http"),
+            &endpoint,
+        )?;
         AmazonS3Builder::from_env()
-            .with_client_options(client_options.with_allow_http(endpoint.scheme() == "http"))
+            .with_client_options(options)
             .with_retry(retry_config)
             .with_bucket_name(bucket)
             .with_conditional_put(S3ConditionalPut::ETagMatch)
