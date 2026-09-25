@@ -46,6 +46,10 @@ pub enum Command {
         /// Path to the indexer's configuration TOML file.
         #[arg(long)]
         config: PathBuf,
+
+        /// Refuse another Alt writer in the same PostgreSQL database and exit if the lock session dies.
+        #[arg(long, default_value_t = false)]
+        require_exclusive_writer: bool,
     },
 
     /// Output the contents of the default configuration to STDOUT.
