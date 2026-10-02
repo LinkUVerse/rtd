@@ -1,20 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_move_build::BuildConfig;
-use rtd_sdk::RtdClient;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{TransactionData, TransactionKind};
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]
 async fn test_dry_run_publish_with_mocked_coin() -> Result<(), anyhow::Error> {
     let cluster = TestClusterBuilder::new().build().await;
-    let context = &cluster.wallet;
 
     let address = cluster.get_address_0();
-    let client: RtdClient = context.get_client().await.unwrap();
+    #[allow(deprecated)]
+    let client = cluster.rtd_client().clone();
 
     // Publish test coin package
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

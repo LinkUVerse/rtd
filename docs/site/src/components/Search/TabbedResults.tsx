@@ -9,7 +9,7 @@ export default function TabbedResults({
   tabs,
   showTooltips = true,
 }) {
-  const rtdtooltip = "Search results from the official Rtd Docs";
+  const suitooltip = "Search results from the official Rtd Docs";
   const rtdnstooltip = "Search results from Rtd Name Service";
   const movetooltip = "Search results from The Move Book";
   const dapptooltip = "Search results from the Rtd ecosystem SDKs";
@@ -33,7 +33,7 @@ export default function TabbedResults({
           {showTooltips && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs px-2 py-1 text-sm text-white bg-gray-800 rounded tooltip-delay">
               {label === "Rtd"
-                ? rtdtooltip
+                ? suitooltip
                 : label === "RtdNS"
                   ? rtdnstooltip
                   : label === "The Move Book"

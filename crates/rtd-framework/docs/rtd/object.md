@@ -21,8 +21,11 @@ Rtd object identifiers
 -  [Function `rtd_accumulator_root_address`](#rtd_object_rtd_accumulator_root_address)
 -  [Function `rtd_coin_registry_object_id`](#rtd_object_rtd_coin_registry_object_id)
 -  [Function `rtd_coin_registry_address`](#rtd_object_rtd_coin_registry_address)
+-  [Function `rtd_display_registry_object_id`](#rtd_object_rtd_display_registry_object_id)
+-  [Function `rtd_display_registry_address`](#rtd_object_rtd_display_registry_address)
 -  [Function `bridge`](#rtd_object_bridge)
 -  [Function `address_alias_state`](#rtd_object_address_alias_state)
+-  [Function `forwarding_address_registry`](#rtd_object_forwarding_address_registry)
 -  [Function `uid_as_inner`](#rtd_object_uid_as_inner)
 -  [Function `uid_to_inner`](#rtd_object_uid_to_inner)
 -  [Function `uid_to_bytes`](#rtd_object_uid_to_bytes)
@@ -36,7 +39,7 @@ Rtd object identifiers
 -  [Function `borrow_uid`](#rtd_object_borrow_uid)
 -  [Function `new_uid_from_hash`](#rtd_object_new_uid_from_hash)
 -  [Function `delete_impl`](#rtd_object_delete_impl)
--  [Function `record_new_uid`](#rtd_object_record_new_uid)
+-  [Function `record_new_uid_from_hash`](#rtd_object_record_new_uid_from_hash)
 
 
 <pre><code><b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
@@ -200,12 +203,32 @@ The hardcoded ID for the Coin Registry Object.
 
 
 
+<a name="rtd_object_RTD_DISPLAY_REGISTRY_OBJECT_ID"></a>
+
+The hardcoded ID for the Display Registry Object.
+
+
+<pre><code><b>const</b> <a href="../rtd/object.md#rtd_object_RTD_DISPLAY_REGISTRY_OBJECT_ID">RTD_DISPLAY_REGISTRY_OBJECT_ID</a>: <b>address</b> = 0xd;
+</code></pre>
+
+
+
 <a name="rtd_object_RTD_ADDRESS_ALIAS_STATE_ID"></a>
 
 The hardcoded ID for the AddressAliasState Object.
 
 
 <pre><code><b>const</b> <a href="../rtd/object.md#rtd_object_RTD_ADDRESS_ALIAS_STATE_ID">RTD_ADDRESS_ALIAS_STATE_ID</a>: <b>address</b> = 0xa;
+</code></pre>
+
+
+
+<a name="rtd_object_RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID"></a>
+
+The hardcoded ID for the singleton ForwardingAddressRegistry object.
+
+
+<pre><code><b>const</b> <a href="../rtd/object.md#rtd_object_RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID">RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID</a>: <b>address</b> = 0xfa;
 </code></pre>
 
 
@@ -563,6 +586,58 @@ This should only be called once from <code><a href="../rtd/coin_registry.md#rtd_
 
 </details>
 
+<a name="rtd_object_rtd_display_registry_object_id"></a>
+
+## Function `rtd_display_registry_object_id`
+
+Create the <code><a href="../rtd/object.md#rtd_object_UID">UID</a></code> for the singleton <code>DisplayRegistry</code> object.
+This should only be called once from <code><a href="../rtd/display_registry.md#rtd_display_registry">display_registry</a></code>.
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_rtd_display_registry_object_id">rtd_display_registry_object_id</a>(): <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_rtd_display_registry_object_id">rtd_display_registry_object_id</a>(): <a href="../rtd/object.md#rtd_object_UID">UID</a> {
+    <a href="../rtd/object.md#rtd_object_UID">UID</a> {
+        <a href="../rtd/object.md#rtd_object_id">id</a>: <a href="../rtd/object.md#rtd_object_ID">ID</a> { bytes: <a href="../rtd/object.md#rtd_object_RTD_DISPLAY_REGISTRY_OBJECT_ID">RTD_DISPLAY_REGISTRY_OBJECT_ID</a> },
+    }
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_object_rtd_display_registry_address"></a>
+
+## Function `rtd_display_registry_address`
+
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_rtd_display_registry_address">rtd_display_registry_address</a>(): <b>address</b>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_rtd_display_registry_address">rtd_display_registry_address</a>(): <b>address</b> {
+    <a href="../rtd/object.md#rtd_object_RTD_DISPLAY_REGISTRY_OBJECT_ID">RTD_DISPLAY_REGISTRY_OBJECT_ID</a>
+}
+</code></pre>
+
+
+
+</details>
+
 <a name="rtd_object_bridge"></a>
 
 ## Function `bridge`
@@ -611,6 +686,34 @@ This should only be called once from <code><a href="../rtd/address_alias.md#rtd_
 <pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_address_alias_state">address_alias_state</a>(): <a href="../rtd/object.md#rtd_object_UID">UID</a> {
     <a href="../rtd/object.md#rtd_object_UID">UID</a> {
         <a href="../rtd/object.md#rtd_object_id">id</a>: <a href="../rtd/object.md#rtd_object_ID">ID</a> { bytes: <a href="../rtd/object.md#rtd_object_RTD_ADDRESS_ALIAS_STATE_ID">RTD_ADDRESS_ALIAS_STATE_ID</a> },
+    }
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_object_forwarding_address_registry"></a>
+
+## Function `forwarding_address_registry`
+
+Create the <code><a href="../rtd/object.md#rtd_object_UID">UID</a></code> for the singleton <code>ForwardingAddressRegistry</code> object.
+This should only be called once from <code><a href="../rtd/forwarding_address.md#rtd_forwarding_address">forwarding_address</a></code>.
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_forwarding_address_registry">forwarding_address_registry</a>(): <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_forwarding_address_registry">forwarding_address_registry</a>(): <a href="../rtd/object.md#rtd_object_UID">UID</a> {
+    <a href="../rtd/object.md#rtd_object_UID">UID</a> {
+        <a href="../rtd/object.md#rtd_object_id">id</a>: <a href="../rtd/object.md#rtd_object_ID">ID</a> { bytes: <a href="../rtd/object.md#rtd_object_RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID">RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID</a> },
     }
 }
 </code></pre>
@@ -911,7 +1014,7 @@ restrictable in the object's module.
 Generate a new UID specifically used for creating a UID from a hash
 
 
-<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_new_uid_from_hash">new_uid_from_hash</a>(bytes: <b>address</b>): <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_new_uid_from_hash">new_uid_from_hash</a>(parent: <b>address</b>, bytes: <b>address</b>): <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>
 </code></pre>
 
 
@@ -920,8 +1023,8 @@ Generate a new UID specifically used for creating a UID from a hash
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_new_uid_from_hash">new_uid_from_hash</a>(bytes: <b>address</b>): <a href="../rtd/object.md#rtd_object_UID">UID</a> {
-    <a href="../rtd/object.md#rtd_object_record_new_uid">record_new_uid</a>(bytes);
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/object.md#rtd_object_new_uid_from_hash">new_uid_from_hash</a>(parent: <b>address</b>, bytes: <b>address</b>): <a href="../rtd/object.md#rtd_object_UID">UID</a> {
+    <a href="../rtd/object.md#rtd_object_record_new_uid_from_hash">record_new_uid_from_hash</a>(parent, bytes);
     <a href="../rtd/object.md#rtd_object_UID">UID</a> { <a href="../rtd/object.md#rtd_object_id">id</a>: <a href="../rtd/object.md#rtd_object_ID">ID</a> { bytes } }
 }
 </code></pre>
@@ -952,13 +1055,13 @@ Generate a new UID specifically used for creating a UID from a hash
 
 </details>
 
-<a name="rtd_object_record_new_uid"></a>
+<a name="rtd_object_record_new_uid_from_hash"></a>
 
-## Function `record_new_uid`
+## Function `record_new_uid_from_hash`
 
 
 
-<pre><code><b>fun</b> <a href="../rtd/object.md#rtd_object_record_new_uid">record_new_uid</a>(<a href="../rtd/object.md#rtd_object_id">id</a>: <b>address</b>)
+<pre><code><b>fun</b> <a href="../rtd/object.md#rtd_object_record_new_uid_from_hash">record_new_uid_from_hash</a>(parent: <b>address</b>, bytes: <b>address</b>)
 </code></pre>
 
 
@@ -967,7 +1070,7 @@ Generate a new UID specifically used for creating a UID from a hash
 <summary>Implementation</summary>
 
 
-<pre><code><b>native</b> <b>fun</b> <a href="../rtd/object.md#rtd_object_record_new_uid">record_new_uid</a>(<a href="../rtd/object.md#rtd_object_id">id</a>: <b>address</b>);
+<pre><code><b>native</b> <b>fun</b> <a href="../rtd/object.md#rtd_object_record_new_uid_from_hash">record_new_uid_from_hash</a>(parent: <b>address</b>, bytes: <b>address</b>);
 </code></pre>
 
 

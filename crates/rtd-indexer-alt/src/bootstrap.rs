@@ -3,23 +3,26 @@
 
 use std::time::Duration;
 
-use crate::Indexer;
-use anyhow::{Context, Result, bail};
-use diesel::{OptionalExtension, QueryDsl, SelectableHelper};
+use anyhow::Context;
+use anyhow::Result;
+use anyhow::bail;
+use diesel::OptionalExtension;
+use diesel::QueryDsl;
+use diesel::SelectableHelper;
 use diesel_async::RunQueryDsl;
 use rtd_indexer_alt_framework::postgres::Db;
-use rtd_indexer_alt_framework::types::{
-    full_checkpoint_content::Checkpoint,
-    rtd_system_state::{RtdSystemStateTrait, get_rtd_system_state},
-    transaction::TransactionKind,
-};
-use rtd_indexer_alt_schema::{
-    checkpoints::StoredGenesis,
-    epochs::StoredEpochStart,
-    schema::{kv_epoch_starts, kv_genesis},
-};
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_framework::types::rtd_system_state::RtdSystemStateTrait;
+use rtd_indexer_alt_framework::types::rtd_system_state::get_rtd_system_state;
+use rtd_indexer_alt_framework::types::transaction::TransactionKind;
+use rtd_indexer_alt_schema::checkpoints::StoredGenesis;
+use rtd_indexer_alt_schema::epochs::StoredEpochStart;
+use rtd_indexer_alt_schema::schema::kv_epoch_starts;
+use rtd_indexer_alt_schema::schema::kv_genesis;
 use rtd_types::transaction::TransactionDataAPI;
 use tracing::info;
+
+use crate::Indexer;
 
 pub struct BootstrapGenesis {
     pub stored_genesis: StoredGenesis,
@@ -68,17 +71,17 @@ pub async fn bootstrap(
         // - Get the Genesis system transaction from the genesis checkpoint.
         // - Get the system state object that was written out by the system transaction.
         None => {
-            let genesis_checkpoint = indexer
+            let genesis_checkpoint_envelope = indexer
                 .ingestion_client()
                 .wait_for(0, retry_interval)
                 .await
                 .context("Failed to fetch genesis checkpoint")?;
 
             let Checkpoint {
-                summary: checkpoint_summary,
                 transactions,
+                object_set,
                 ..
-            } = genesis_checkpoint.as_ref();
+            } = genesis_checkpoint_envelope.checkpoint.as_ref();
 
             let Some(genesis_transaction) = transactions
                 .iter()
@@ -88,7 +91,7 @@ pub async fn bootstrap(
             };
 
             let output_objects: Vec<_> = genesis_transaction
-                .output_objects(&genesis_checkpoint.object_set)
+                .output_objects(object_set)
                 .cloned()
                 .collect();
 
@@ -96,7 +99,7 @@ pub async fn bootstrap(
                 .context("Failed to get Genesis SystemState")?;
 
             let stored_genesis = StoredGenesis {
-                genesis_digest: checkpoint_summary.digest().inner().to_vec(),
+                genesis_digest: genesis_checkpoint_envelope.chain_id.as_bytes().to_vec(),
                 initial_protocol_version: rtd_system_state.protocol_version() as i64,
             };
             let stored_epoch_start = StoredEpochStart {

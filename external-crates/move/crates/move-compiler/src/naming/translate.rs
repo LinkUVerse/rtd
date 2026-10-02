@@ -7,7 +7,7 @@ use crate::{
     diagnostics::{
         self, Diagnostic, DiagnosticReporter, Diagnostics,
         codes::{self, *},
-        warning_filters::WarningFilters,
+        filter::FilterScope,
     },
     editions::FeatureGate,
     expansion::{
@@ -688,7 +688,7 @@ impl<'outer, 'env> Context<'outer, 'env> {
         self.reporter.add_ide_annotation(loc, info);
     }
 
-    pub fn push_warning_filter_scope(&mut self, filters: WarningFilters) {
+    pub fn push_warning_filter_scope(&mut self, filters: FilterScope) {
         self.reporter.push_warning_filter_scope(filters)
     }
 
@@ -1864,19 +1864,12 @@ pub fn program(
     prog: E::Program,
 ) -> N::Program {
     let outer_context = OuterContext::new(compilation_env, pre_compiled_lib.clone(), &prog);
-    let E::Program {
-        warning_filters_table,
-        modules: emodules,
-    } = prog;
+    let E::Program { modules: emodules } = prog;
     let modules = modules(compilation_env, &outer_context, emodules);
     let mut inner = N::Program_ { modules };
     let mut info = NamingProgramInfo::new(pre_compiled_lib, &inner);
     super::resolve_use_funs::program(compilation_env, &mut info, &mut inner);
-    N::Program {
-        info,
-        warning_filters_table,
-        inner,
-    }
+    N::Program { info, inner }
 }
 
 fn modules(
@@ -1910,7 +1903,7 @@ fn module(
         constants: econstants,
     } = mdef;
     let context = &mut Context::new(env, outer, package_name, ident);
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     let mut use_funs = use_funs(context, euse_funs);
     let mut syntax_methods = N::SyntaxMethods::new();
     let friends = efriends.filter_map(|mident, f| friend(context, mident, f));
@@ -2001,7 +1994,7 @@ fn use_funs(context: &mut Context, eufs: E::UseFuns) -> N::UseFuns {
         .flat_map(|e| explicit_use_fun(context, e))
         .collect();
     for (tn, method, nuf) in resolved_vec {
-        let methods = resolved.entry(tn).or_default();
+        let methods = resolved.entry(tn.clone()).or_default();
         let nuf_loc = nuf.loc;
         if let Err((_, prev)) = methods.add(method, nuf) {
             let msg = format!("Duplicate 'use fun' for '{}.{}'", tn, method);
@@ -2069,7 +2062,9 @@ fn explicit_use_fun(
     };
     let tn_opt = match tn_opt {
         ResolvedType::BuiltinType(bt_) => Some(N::TypeName_::Builtin(sp(ty.loc, bt_))),
-        ResolvedType::ModuleType(mt) => Some(N::TypeName_::ModuleType(mt.mident(), mt.name())),
+        ResolvedType::ModuleType(mt) => {
+            Some(N::TypeName_::ModuleType(mt.mident().into(), mt.name()))
+        }
         ResolvedType::Unbound => {
             assert!(context.env.has_errors());
             None
@@ -2106,7 +2101,7 @@ fn explicit_use_fun(
         loc,
         attributes,
         is_public,
-        tname: tn,
+        tname: tn.clone(),
         target_function,
         kind: N::UseFunKind::Explicit,
         used: is_public.is_some(), // suppress unused warning for public use funs
@@ -2289,12 +2284,18 @@ fn resolve_stdlib_type(context: &mut Context, ma: E::ModuleAccess_) -> Option<N:
     };
     let (decl_loc, tn, arity) = match *mt {
         ResolvedDatatype::Struct(stype) => {
-            let tn = sp(stype.decl_loc, NN::ModuleType(stype.mident, stype.name));
+            let tn = sp(
+                stype.decl_loc,
+                NN::ModuleType(stype.mident.into(), stype.name),
+            );
             let arity = stype.tyarg_arity;
             (stype.decl_loc, tn, arity)
         }
         ResolvedDatatype::Enum(etype) => {
-            let tn = sp(etype.decl_loc, NN::ModuleType(etype.mident, etype.name));
+            let tn = sp(
+                etype.decl_loc,
+                NN::ModuleType(etype.mident.into(), etype.name),
+            );
             let arity = etype.tyarg_arity;
             (etype.decl_loc, tn, arity)
         }
@@ -2333,7 +2334,7 @@ fn function(
     assert!(context.nominal_block_id == 0);
     assert!(context.used_fun_tparams.is_empty());
     assert!(context.used_locals.is_empty());
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     context.local_scopes = vec![BTreeMap::new()];
     context.local_count = BTreeMap::new();
     context.translating_fun = true;
@@ -2464,7 +2465,7 @@ fn struct_def(
         type_parameters,
         fields,
     } = sdef;
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     let type_parameters = datatype_type_parameters(context, type_parameters);
     let fields = struct_fields(context, fields);
     context.pop_warning_filter_scope();
@@ -2526,7 +2527,7 @@ fn enum_def(
         type_parameters,
         variants,
     } = edef;
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     let type_parameters = datatype_type_parameters(context, type_parameters);
     let variants = enum_variants(context, variants);
     context.pop_warning_filter_scope();
@@ -2602,13 +2603,14 @@ fn constant(context: &mut Context, _name: ConstantName, econstant: E::Constant) 
         index,
         attributes,
         loc,
+        visibility,
         signature: esignature,
         value: evalue,
     } = econstant;
     assert!(context.local_scopes.is_empty());
     assert!(context.local_count.is_empty());
     assert!(context.used_locals.is_empty());
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     context.local_scopes = vec![BTreeMap::new()];
     let signature = type_(context, TypeAnnotation::ConstantSignature, esignature);
     let value = *exp(context, Box::new(evalue));
@@ -2623,6 +2625,7 @@ fn constant(context: &mut Context, _name: ConstantName, econstant: E::Constant) 
         index,
         attributes,
         loc,
+        visibility,
         signature,
         value,
     }
@@ -2773,12 +2776,18 @@ fn type_(context: &mut Context, case: TypeAnnotation, sp!(loc, ety_): E::Type) -
                 RT::ModuleType(mt) => {
                     let (tn, arity) = match mt {
                         ResolvedDatatype::Struct(stype) => {
-                            let tn = sp(original_loc, NN::ModuleType(stype.mident, stype.name));
+                            let tn = sp(
+                                original_loc,
+                                NN::ModuleType(stype.mident.into(), stype.name),
+                            );
                             let arity = stype.tyarg_arity;
                             (tn, arity)
                         }
                         ResolvedDatatype::Enum(etype) => {
-                            let tn = sp(original_loc, NN::ModuleType(etype.mident, etype.name));
+                            let tn = sp(
+                                original_loc,
+                                NN::ModuleType(etype.mident.into(), etype.name),
+                            );
                             let arity = etype.tyarg_arity;
                             (tn, arity)
                         }

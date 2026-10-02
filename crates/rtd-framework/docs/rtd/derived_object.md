@@ -157,9 +157,9 @@ Claim a deterministic UID, using the parent's UID & any key.
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/derived_object.md#rtd_derived_object_claim">claim</a>&lt;K: <b>copy</b> + drop + store&gt;(parent: &<b>mut</b> UID, key: K): UID {
     <b>let</b> addr = <a href="../rtd/derived_object.md#rtd_derived_object_derive_address">derive_address</a>(parent.to_inner(), key);
     <b>let</b> id = addr.to_id();
-    <b>assert</b>!(!df::exists_(parent, <a href="../rtd/derived_object.md#rtd_derived_object_Claimed">Claimed</a>(id)), <a href="../rtd/derived_object.md#rtd_derived_object_EObjectAlreadyExists">EObjectAlreadyExists</a>);
+    <b>assert</b>!(!df::exists(parent, <a href="../rtd/derived_object.md#rtd_derived_object_Claimed">Claimed</a>(id)), <a href="../rtd/derived_object.md#rtd_derived_object_EObjectAlreadyExists">EObjectAlreadyExists</a>);
     df::add(parent, <a href="../rtd/derived_object.md#rtd_derived_object_Claimed">Claimed</a>(id), ClaimedStatus::Reserved);
-    <a href="../rtd/object.md#rtd_object_new_uid_from_hash">object::new_uid_from_hash</a>(addr)
+    <a href="../rtd/object.md#rtd_object_new_uid_from_hash">object::new_uid_from_hash</a>(parent.to_address(), addr)
 }
 </code></pre>
 
@@ -186,7 +186,7 @@ Note: If the UID has been deleted through <code><a href="../rtd/object.md#rtd_ob
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/derived_object.md#rtd_derived_object_exists">exists</a>&lt;K: <b>copy</b> + drop + store&gt;(parent: &UID, key: K): bool {
     <b>let</b> addr = <a href="../rtd/derived_object.md#rtd_derived_object_derive_address">derive_address</a>(parent.to_inner(), key);
-    df::exists_(parent, <a href="../rtd/derived_object.md#rtd_derived_object_Claimed">Claimed</a>(addr.to_id()))
+    df::exists(parent, <a href="../rtd/derived_object.md#rtd_derived_object_Claimed">Claimed</a>(addr.to_id()))
 }
 </code></pre>
 

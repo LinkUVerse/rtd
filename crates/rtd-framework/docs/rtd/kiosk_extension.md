@@ -76,7 +76,6 @@ implement custom authorization scheme for <code><a href="../rtd/kiosk_extension.
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -112,6 +111,7 @@ implement custom authorization scheme for <code><a href="../rtd/kiosk_extension.
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -539,7 +539,7 @@ Check whether an extension of type <code>Ext</code> is installed.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/kiosk_extension.md#rtd_kiosk_extension_is_installed">is_installed</a>&lt;Ext: drop&gt;(self: &Kiosk): bool {
-    df::exists_(self.uid(), <a href="../rtd/kiosk_extension.md#rtd_kiosk_extension_ExtensionKey">ExtensionKey</a>&lt;Ext&gt; {})
+    df::exists(self.uid(), <a href="../rtd/kiosk_extension.md#rtd_kiosk_extension_ExtensionKey">ExtensionKey</a>&lt;Ext&gt; {})
 }
 </code></pre>
 

@@ -20,11 +20,11 @@ pub mod rocks;
 pub mod tidehunter_util;
 mod util;
 pub use metrics::DBMetrics;
+pub use rocks::init_write_sync;
 pub use typed_store_error::TypedStoreError;
 pub use util::be_fix_int_ser;
 
 pub type StoreError = typed_store_error::TypedStoreError;
-
 #[derive(Debug, PartialEq)]
 pub(crate) enum StorageType {
     Rocks,

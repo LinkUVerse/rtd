@@ -13,7 +13,7 @@ services:
       - -c
       - |
         /usr/local/bin/rtd-rosetta generate-rosetta-cli-config --env devnet &
-        /usr/local/bin/rtd-rosetta start-online-remote-server --env devnet --genesis-path genesis.blob --full-node-url https://fullnode.devnet.rtd.io:443
+        /usr/local/bin/rtd-rosetta start-online-remote-server --env devnet --genesis-path genesis.blob --full-node-url "${RTD_ROSETTA_FULL_NODE_URL:?Set RTD_ROSETTA_FULL_NODE_URL to a verified RTD fullnode URL}"
     stdin_open: true
     tty: true
   rosetta-offline:
@@ -30,4 +30,3 @@ services:
         /usr/local/bin/rtd-rosetta start-offline-server --env devnet
     stdin_open: true
     tty: true
-

@@ -252,7 +252,8 @@ add your own environments in the `[environments]` section:
 
 ```toml
 [environments]
-testnet_alpha = "4c78adac"
+# Synthetic example ID; replace it with the chain ID for your network.
+testnet_alpha = "05060708"
 ```
 
 You can replace your dependencies in specific environments by adding a

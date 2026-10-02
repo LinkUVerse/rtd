@@ -4,15 +4,17 @@
 use crate::bank::BenchmarkBank;
 use crate::options::Opts;
 use crate::util::get_ed25519_keypair_from_keystore;
-use crate::{FullNodeProxy, LocalValidatorAggregatorProxy, ValidatorProxy};
+use crate::{BenchmarkProxyMetrics, FullNodeProxy, LocalValidatorAggregatorProxy, ValidatorProxy};
 use anyhow::{Context, Result, anyhow, bail};
 use prometheus::Registry;
 use rand::seq::SliceRandom;
+use rtd_types::base_types::ObjectID;
+use rtd_types::object::Owner;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::{Argument, Command, ObjectArg, TransactionData};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use rtd_types::base_types::ObjectID;
-use rtd_types::object::Owner;
 use tokio::runtime::Builder;
 use tokio::sync::{Barrier, oneshot};
 use tracing::info;
@@ -21,7 +23,8 @@ pub struct BenchmarkSetup {
     pub server_handle: JoinHandle<()>,
     pub shutdown_notifier: oneshot::Sender<()>,
     pub bank: BenchmarkBank,
-    pub proxies: Vec<Arc<dyn ValidatorProxy + Send + Sync>>,
+    pub execution_proxies: Vec<Arc<dyn ValidatorProxy + Send + Sync>>,
+    pub fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Send + Sync>>,
 }
 
 impl BenchmarkSetup {
@@ -47,42 +50,51 @@ impl BenchmarkSetup {
 
         let fullnode_rpc_urls = opts.fullnode_rpc_addresses.clone();
         info!("List of fullnode rpc urls: {:?}", fullnode_rpc_urls);
-        let proxies: Vec<Arc<dyn ValidatorProxy + Send + Sync>> = if opts.use_fullnode_for_execution
-        {
-            if fullnode_rpc_urls.is_empty() {
-                bail!("fullnode-rpc-url is required when use-fullnode-for-execution is true");
-            }
-            let mut fullnodes: Vec<Arc<dyn ValidatorProxy + Send + Sync>> = vec![];
-            for fullnode_rpc_url in fullnode_rpc_urls.iter() {
-                info!("Using FullNodeProxy: {:?}", fullnode_rpc_url);
-                fullnodes.push(Arc::new(FullNodeProxy::from_url(fullnode_rpc_url).await?));
-            }
-            fullnodes
-        } else {
-            info!("Using LocalValidatorAggregatorProxy");
-            if fullnode_rpc_urls.is_empty() {
-                bail!("fullnode RPC url is required for reconfiguration");
-            }
-            let reconfig_fullnode_rpc_url =
-                // Only need to use one full node for reconfiguration.
-                fullnode_rpc_urls.choose(&mut rand::thread_rng()).context(
-                    "Failed to get fullnode-rpc-url which is required for reconfiguration",
-                )?;
-            vec![Arc::new(
-                LocalValidatorAggregatorProxy::from_genesis(
-                    genesis,
-                    registry,
-                    reconfig_fullnode_rpc_url,
-                )
-                .await,
-            )]
-        };
-        let proxy = proxies
+
+        if fullnode_rpc_urls.is_empty() {
+            bail!("fullnode RPC url is required");
+        }
+
+        // Create metrics to share across all proxies
+        let metrics = BenchmarkProxyMetrics::new(registry);
+
+        // Always create fullnode proxies for RPC reads
+        let mut fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Send + Sync>> = vec![];
+        for fullnode_rpc_url in fullnode_rpc_urls.iter() {
+            info!("Creating FullNodeProxy: {:?}", fullnode_rpc_url);
+            fullnode_proxies.push(Arc::new(
+                FullNodeProxy::from_url(fullnode_rpc_url, &genesis.committee(), &metrics).await?,
+            ));
+        }
+
+        // Create execution proxies - either fullnode proxies or validator proxies
+        let execution_proxies: Vec<Arc<dyn ValidatorProxy + Send + Sync>> =
+            if opts.use_fullnode_for_execution {
+                info!("Using FullNodeProxy for execution");
+                fullnode_proxies.clone()
+            } else {
+                info!("Using LocalValidatorAggregatorProxy for execution");
+                let reconfig_fullnode_rpc_url =
+                    // Only need to use one full node for reconfiguration.
+                    fullnode_rpc_urls.choose(&mut rand::thread_rng()).context(
+                        "Failed to get fullnode-rpc-url which is required for reconfiguration",
+                    )?;
+                vec![Arc::new(
+                    LocalValidatorAggregatorProxy::from_genesis(
+                        genesis,
+                        reconfig_fullnode_rpc_url,
+                        &metrics,
+                    )
+                    .await,
+                )]
+            };
+
+        let execution_proxy = execution_proxies
             .choose(&mut rand::thread_rng())
-            .context("Failed to get proxy for reconfiguration")?;
+            .context("Failed to get execution proxy for reconfiguration")?;
         info!(
             "Reconfiguration - Reconfiguration to epoch {} is done",
-            proxy.get_current_epoch(),
+            execution_proxy.get_current_epoch(),
         );
 
         let primary_gas_owner_addr = ObjectID::from_hex_literal(&opts.primary_gas_owner_id)?;
@@ -98,36 +110,95 @@ impl BenchmarkSetup {
 
         let current_gas = if opts.use_fullnode_for_execution {
             // Go through fullnode to get the current gas object.
-            let mut gas_objects = proxy
+            let gas_objects = execution_proxy
                 .get_owned_objects(primary_gas_owner_addr.into())
                 .await?;
-            gas_objects.sort_by_key(|&(gas, _)| std::cmp::Reverse(gas));
 
-            // TODO: Merge all owned gas objects into one and use that as the primary gas object.
-            let (balance, primary_gas_obj) = gas_objects
+            let (_, primary_gas_obj) = gas_objects
                 .iter()
                 .max_by_key(|(balance, _)| balance)
                 .context(
                     "Failed to choose the gas object with the largest amount of gas".to_string(),
                 )?;
 
-            info!(
-                "Using primary gas id: {} with balance of {balance}",
-                primary_gas_obj.id()
-            );
-
             let primary_gas_account = primary_gas_obj.owner.get_owner_address()?;
-
             let keypair = Arc::new(get_ed25519_keypair_from_keystore(
                 keystore_path,
                 &primary_gas_account,
             )?);
 
-            (
-                primary_gas_obj.compute_object_reference(),
-                primary_gas_account,
-                keypair,
-            )
+            // Merge all owned gas coins into a single coin to prevent
+            // fragmentation exhaustion during long-running benchmark sessions.
+            // Without this, batch payment mode splits coins progressively
+            // until individual fragments drop below the gas budget threshold.
+            if gas_objects.len() > 1 {
+                let total_balance: u64 = gas_objects.iter().map(|(bal, _)| bal).sum();
+                info!(
+                    "Merging {} gas coins (total balance: {}) into one...",
+                    gas_objects.len(),
+                    total_balance,
+                );
+
+                let mut primary_ref = primary_gas_obj.compute_object_reference();
+                let coins_to_merge: Vec<_> = gas_objects
+                    .iter()
+                    .filter(|(_, obj)| obj.id() != primary_gas_obj.id())
+                    .map(|(_, obj)| obj.compute_object_reference())
+                    .collect();
+
+                let system_state = execution_proxy.get_latest_system_state_object().await?;
+                let gas_price = system_state.reference_gas_price;
+
+                // Batch merges to stay within the max_arguments protocol
+                // limit (512). Each batch merges up to 500 coins into the
+                // gas coin, then re-fetches the updated gas object ref.
+                const MERGE_BATCH_SIZE: usize = 500;
+                for batch in coins_to_merge.chunks(MERGE_BATCH_SIZE) {
+                    let mut builder = ProgrammableTransactionBuilder::new();
+                    let coin_args: Vec<_> = batch
+                        .iter()
+                        .map(|coin| builder.obj(ObjectArg::ImmOrOwnedObject(*coin)).unwrap())
+                        .collect();
+                    builder.command(Command::MergeCoins(Argument::GasCoin, coin_args));
+                    let pt = builder.finish();
+
+                    let data = TransactionData::new_programmable(
+                        primary_gas_account,
+                        vec![primary_ref],
+                        pt,
+                        50 * rtd_types::gas_coin::MIST_PER_RTD,
+                        gas_price,
+                    );
+
+                    let tx = rtd_types::transaction::Transaction::from_data_and_signer(
+                        data,
+                        vec![&*keypair],
+                    );
+                    let effects = execution_proxy.execute_transaction_block(tx).await;
+                    let effects = effects?;
+                    primary_ref = effects.gas_object().0;
+                }
+
+                info!(
+                    "Merged {} coins into {}: total balance = {}",
+                    gas_objects.len(),
+                    primary_ref.0,
+                    total_balance,
+                );
+
+                (primary_ref, primary_gas_account, keypair)
+            } else {
+                let (balance, _) = &gas_objects[0];
+                info!(
+                    "Using primary gas id: {} with balance of {balance}",
+                    primary_gas_obj.id()
+                );
+                (
+                    primary_gas_obj.compute_object_reference(),
+                    primary_gas_account,
+                    keypair,
+                )
+            }
         } else {
             // Go through local proxy to get the current gas object.
             let mut genesis_gas_objects = Vec::new();
@@ -146,7 +217,7 @@ impl BenchmarkSetup {
                 .context("Failed to choose a random primary gas")?
                 .clone();
 
-            let current_gas_object = proxy.get_object(genesis_gas_obj.id()).await?;
+            let current_gas_object = execution_proxy.get_object(genesis_gas_obj.id()).await?;
             let current_gas_account = current_gas_object.owner.get_owner_address()?;
 
             let keypair = Arc::new(get_ed25519_keypair_from_keystore(
@@ -166,8 +237,13 @@ impl BenchmarkSetup {
         Ok(BenchmarkSetup {
             server_handle: join_handle,
             shutdown_notifier: sender,
-            bank: BenchmarkBank::new(proxy.clone(), current_gas),
-            proxies,
+            bank: BenchmarkBank::new(
+                execution_proxy.clone(),
+                fullnode_proxies.clone(),
+                current_gas,
+            ),
+            execution_proxies,
+            fullnode_proxies,
         })
     }
 }

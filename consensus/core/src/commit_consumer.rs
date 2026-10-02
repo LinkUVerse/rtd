@@ -8,11 +8,9 @@ use parking_lot::Mutex;
 use tokio::sync::watch;
 use tracing::{debug, info};
 
-use crate::{CommitIndex, CommittedSubDag, block::CertifiedBlocksOutput};
+use crate::{CommitIndex, CommittedSubDag};
 
-/// Maximum number of consensus commits that may be persisted ahead of the consumer's durable
-/// state. Keeping this window bounded prevents a checkpoint-pipeline failure from leaving an
-/// arbitrarily large consensus replay tail after a crash.
+/// Maximum number of persisted consensus commits ahead of the crash-safe consumer cursor.
 pub const MAX_PENDING_DURABLE_COMMITS: CommitIndex = 1_000;
 
 /// Arguments from commit consumer to this consensus instance.
@@ -29,9 +27,6 @@ pub struct CommitConsumerArgs {
 
     /// A channel to output the committed sub dags.
     pub(crate) commit_sender: UnboundedSender<CommittedSubDag>,
-    /// A channel to output blocks for processing, separated from consensus commits.
-    /// In each block output, transactions that are not rejected are considered certified.
-    pub(crate) block_sender: UnboundedSender<CertifiedBlocksOutput>,
     // Allows the commit consumer to report its progress.
     monitor: Arc<CommitConsumerMonitor>,
 }
@@ -40,11 +35,7 @@ impl CommitConsumerArgs {
     pub fn new(
         replay_after_commit_index: CommitIndex,
         consumer_last_processed_commit_index: CommitIndex,
-    ) -> (
-        Self,
-        UnboundedReceiver<CommittedSubDag>,
-        UnboundedReceiver<CertifiedBlocksOutput>,
-    ) {
+    ) -> (Self, UnboundedReceiver<CommittedSubDag>) {
         let monitor = Arc::new(CommitConsumerMonitor::new(
             replay_after_commit_index,
             consumer_last_processed_commit_index,
@@ -60,11 +51,7 @@ impl CommitConsumerArgs {
         replay_after_commit_index: CommitIndex,
         consumer_last_processed_commit_index: CommitIndex,
         recovery_drain_ceiling: Option<CommitIndex>,
-    ) -> (
-        Self,
-        UnboundedReceiver<CommittedSubDag>,
-        UnboundedReceiver<CertifiedBlocksOutput>,
-    ) {
+    ) -> (Self, UnboundedReceiver<CommittedSubDag>) {
         let monitor = Arc::new(CommitConsumerMonitor::new_with_recovery_drain_ceiling(
             replay_after_commit_index,
             consumer_last_processed_commit_index,
@@ -81,24 +68,16 @@ impl CommitConsumerArgs {
         replay_after_commit_index: CommitIndex,
         consumer_last_processed_commit_index: CommitIndex,
         monitor: Arc<CommitConsumerMonitor>,
-    ) -> (
-        Self,
-        UnboundedReceiver<CommittedSubDag>,
-        UnboundedReceiver<CertifiedBlocksOutput>,
-    ) {
+    ) -> (Self, UnboundedReceiver<CommittedSubDag>) {
         let (commit_sender, commit_receiver) = unbounded_channel("consensus_commit_output");
-        let (block_sender, block_receiver) = unbounded_channel("consensus_block_output");
-
         (
             Self {
                 replay_after_commit_index,
                 consumer_last_processed_commit_index,
                 commit_sender,
-                block_sender,
                 monitor,
             },
             commit_receiver,
-            block_receiver,
         )
     }
 
@@ -263,6 +242,10 @@ impl CommitConsumerMonitor {
     /// Gets the highest commit whose consumer output is durable across process crashes.
     pub fn highest_durable_commit(&self) -> CommitIndex {
         *self.highest_durable_commit.borrow()
+    }
+
+    pub(crate) fn subscribe_highest_durable_commit(&self) -> watch::Receiver<CommitIndex> {
+        self.highest_durable_commit.subscribe()
     }
 
     /// Updates the crash-safe consumer watermark after the containing database batch commits.

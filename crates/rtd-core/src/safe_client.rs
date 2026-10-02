@@ -9,9 +9,6 @@ use prometheus::{
     Histogram, HistogramVec, IntCounterVec, Registry, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry,
 };
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use rtd_types::crypto::AuthorityPublicKeyBytes;
 use rtd_types::digests::TransactionEventsDigest;
 use rtd_types::effects::{SignedTransactionEffects, TransactionEffectsAPI, TransactionEvents};
@@ -19,11 +16,10 @@ use rtd_types::messages_checkpoint::{
     CertifiedCheckpointSummary, CheckpointRequest, CheckpointResponse, CheckpointSequenceNumber,
 };
 use rtd_types::messages_grpc::{
-    ExecutedData, HandleCertificateRequestV3, HandleCertificateResponseV2,
-    HandleCertificateResponseV3, ObjectInfoRequest, ObjectInfoResponse, SubmitTxRequest,
-    SubmitTxResponse, SystemStateRequest, TransactionInfoRequest, TransactionStatus,
-    ValidatorHealthRequest, ValidatorHealthResponse, VerifiedObjectInfoResponse,
-    WaitForEffectsRequest, WaitForEffectsResponse,
+    ExecutedData, ObjectInfoRequest, ObjectInfoResponse, SubmitTxRequest, SubmitTxResponse,
+    SystemStateRequest, TransactionInfoRequest, TransactionStatus, ValidatorHealthRequest,
+    ValidatorHealthResponse, VerifiedObjectInfoResponse, WaitForEffectsRequest,
+    WaitForEffectsResponse,
 };
 use rtd_types::messages_safe_client::PlainTransactionInfoResponse;
 use rtd_types::object::Object;
@@ -33,20 +29,11 @@ use rtd_types::{
     error::{RtdError, RtdErrorKind, RtdResult},
     transaction::*,
 };
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tap::TapFallible;
-use tracing::{debug, error, instrument};
-
-macro_rules! check_error {
-    ($address:expr, $cond:expr, $msg:expr) => {
-        $cond.tap_err(|err| {
-            if err.individual_error_indicates_epoch_change() {
-                debug!(?err, authority=?$address, "Not a real client error");
-            } else {
-                error!(?err, authority=?$address, $msg);
-            }
-        })
-    }
-}
+use tracing::{error, instrument};
 
 #[derive(Clone)]
 pub struct SafeClientMetricsBase {
@@ -92,7 +79,6 @@ pub struct SafeClientMetrics {
     total_ok_responses_handle_transaction_info_request: GenericCounter<prometheus::core::AtomicU64>,
     total_requests_handle_object_info_request: GenericCounter<prometheus::core::AtomicU64>,
     total_ok_responses_handle_object_info_request: GenericCounter<prometheus::core::AtomicU64>,
-    handle_transaction_latency: Histogram,
     handle_certificate_latency: Histogram,
     handle_obj_info_latency: Histogram,
     handle_tx_info_latency: Histogram,
@@ -104,21 +90,24 @@ impl SafeClientMetrics {
 
         let total_requests_handle_transaction_info_request = metrics_base
             .total_requests_by_address_method
-            .with_label_values(&[&validator_address, "handle_transaction_info_request"]);
+            .with_label_values(&[
+                validator_address.as_str(),
+                "handle_transaction_info_request",
+            ]);
         let total_ok_responses_handle_transaction_info_request = metrics_base
             .total_responses_by_address_method
-            .with_label_values(&[&validator_address, "handle_transaction_info_request"]);
+            .with_label_values(&[
+                validator_address.as_str(),
+                "handle_transaction_info_request",
+            ]);
 
         let total_requests_handle_object_info_request = metrics_base
             .total_requests_by_address_method
-            .with_label_values(&[&validator_address, "handle_object_info_request"]);
+            .with_label_values(&[validator_address.as_str(), "handle_object_info_request"]);
         let total_ok_responses_handle_object_info_request = metrics_base
             .total_responses_by_address_method
-            .with_label_values(&[&validator_address, "handle_object_info_request"]);
+            .with_label_values(&[validator_address.as_str(), "handle_object_info_request"]);
 
-        let handle_transaction_latency = metrics_base
-            .latency
-            .with_label_values(&["handle_transaction"]);
         let handle_certificate_latency = metrics_base
             .latency
             .with_label_values(&["handle_certificate"]);
@@ -134,7 +123,6 @@ impl SafeClientMetrics {
             total_ok_responses_handle_transaction_info_request,
             total_requests_handle_object_info_request,
             total_ok_responses_handle_object_info_request,
-            handle_transaction_latency,
             handle_certificate_latency,
             handle_obj_info_latency,
             handle_tx_info_latency,
@@ -256,33 +244,15 @@ impl<C: Clone> SafeClient<C> {
                     SignedTransaction::new_from_data_and_sig(transaction.into_data(), signed),
                 ))
             }
-            TransactionStatus::Executed(cert_opt, effects, events) => {
+            TransactionStatus::Executed(_cert_opt, effects, events) => {
+                // `cert_opt` is permanently None: validators no longer aggregate or persist
+                // per-transaction quorum signatures.
                 let signed_effects = self.check_signed_effects_plain(digest, effects, None)?;
-                match cert_opt {
-                    Some(cert) => {
-                        let committee = self.get_committee(&cert.epoch)?;
-                        let ct = CertifiedTransaction::new_from_data_and_sig(
-                            transaction.into_data(),
-                            cert,
-                        );
-                        ct.verify_committee_sigs_only(&committee).map_err(|e| {
-                            RtdErrorKind::FailedToVerifyTxCertWithExecutedEffects {
-                                validator_name: self.address,
-                                error: e.to_string(),
-                            }
-                        })?;
-                        Ok(PlainTransactionInfoResponse::ExecutedWithCert(
-                            ct,
-                            signed_effects,
-                            events,
-                        ))
-                    }
-                    None => Ok(PlainTransactionInfoResponse::ExecutedWithoutCert(
-                        transaction,
-                        signed_effects,
-                        events,
-                    )),
-                }
+                Ok(PlainTransactionInfoResponse::Executed(
+                    transaction,
+                    signed_effects,
+                    events,
+                ))
             }
         }
     }
@@ -347,7 +317,6 @@ where
         match &wait_for_effects_resp {
             WaitForEffectsResponse::Executed {
                 effects_digest: _,
-                fast_path: _,
                 details: Some(details),
             } => {
                 self.verify_executed_data((**details).clone())?;
@@ -358,62 +327,6 @@ where
         };
 
         Ok(wait_for_effects_resp)
-    }
-
-    /// Initiate a new transfer to a Rtd or Primary account.
-    pub async fn handle_transaction(
-        &self,
-        transaction: Transaction,
-        client_addr: Option<SocketAddr>,
-    ) -> Result<PlainTransactionInfoResponse, RtdError> {
-        let _timer = self.metrics.handle_transaction_latency.start_timer();
-        let digest = *transaction.digest();
-        let response = self
-            .authority_client
-            .handle_transaction(transaction.clone(), client_addr)
-            .await?;
-        let response = check_error!(
-            self.address,
-            self.check_transaction_info(&digest, transaction, response.status),
-            "Client error in handle_transaction"
-        )?;
-        Ok(response)
-    }
-
-    fn verify_certificate_response_v2(
-        &self,
-        digest: &TransactionDigest,
-        response: HandleCertificateResponseV2,
-    ) -> RtdResult<HandleCertificateResponseV2> {
-        let signed_effects =
-            self.check_signed_effects_plain(digest, response.signed_effects, None)?;
-
-        Ok(HandleCertificateResponseV2 {
-            signed_effects,
-            events: response.events,
-            fastpath_input_objects: vec![], // unused field
-        })
-    }
-
-    /// Execute a certificate.
-    pub async fn handle_certificate_v2(
-        &self,
-        certificate: CertifiedTransaction,
-        client_addr: Option<SocketAddr>,
-    ) -> Result<HandleCertificateResponseV2, RtdError> {
-        let digest = *certificate.digest();
-        let _timer = self.metrics.handle_certificate_latency.start_timer();
-        let response = self
-            .authority_client
-            .handle_certificate_v2(certificate, client_addr)
-            .await?;
-
-        let verified = check_error!(
-            self.address,
-            self.verify_certificate_response_v2(&digest, response),
-            "Client error in handle_certificate"
-        )?;
-        Ok(verified)
     }
 
     fn verify_events(
@@ -473,49 +386,6 @@ where
         Ok(())
     }
 
-    fn verify_certificate_response_v3(
-        &self,
-        digest: &TransactionDigest,
-        HandleCertificateResponseV3 {
-            effects,
-            events,
-            input_objects,
-            output_objects,
-            auxiliary_data,
-        }: HandleCertificateResponseV3,
-    ) -> RtdResult<HandleCertificateResponseV3> {
-        let effects = self.check_signed_effects_plain(digest, effects, None)?;
-
-        // Check Events
-        self.verify_events(&events, effects.events_digest())?;
-
-        // Check Input Objects
-        self.verify_objects(
-            &input_objects,
-            effects
-                .old_object_metadata()
-                .into_iter()
-                .map(|(object_ref, _owner)| (object_ref.0, object_ref)),
-        )?;
-
-        // Check Output Objects
-        self.verify_objects(
-            &output_objects,
-            effects
-                .all_changed_objects()
-                .into_iter()
-                .map(|(object_ref, _, _)| (object_ref.0, object_ref)),
-        )?;
-
-        Ok(HandleCertificateResponseV3 {
-            effects,
-            events,
-            input_objects,
-            output_objects,
-            auxiliary_data,
-        })
-    }
-
     fn verify_executed_data(
         &self,
         ExecutedData {
@@ -547,27 +417,6 @@ where
         )?;
 
         Ok(())
-    }
-
-    /// Execute a certificate.
-    pub async fn handle_certificate_v3(
-        &self,
-        request: HandleCertificateRequestV3,
-        client_addr: Option<SocketAddr>,
-    ) -> Result<HandleCertificateResponseV3, RtdError> {
-        let digest = *request.certificate.digest();
-        let _timer = self.metrics.handle_certificate_latency.start_timer();
-        let response = self
-            .authority_client
-            .handle_certificate_v3(request, client_addr)
-            .await?;
-
-        let verified = check_error!(
-            self.address,
-            self.verify_certificate_response_v3(&digest, response),
-            "Client error in handle_certificate"
-        )?;
-        Ok(verified)
     }
 
     pub async fn handle_object_info_request(

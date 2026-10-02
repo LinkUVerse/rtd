@@ -5,6 +5,7 @@ use crate::Result;
 use crate::RpcError;
 use crate::RpcService;
 use bytes::Bytes;
+use move_core_types::language_storage::StructTag;
 use prost::Message;
 use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskTree;
@@ -18,11 +19,13 @@ use rtd_rpc::proto::rtd::rpc::v2::ListDynamicFieldsResponse;
 use rtd_rpc::proto::rtd::rpc::v2::dynamic_field::DynamicFieldKind;
 use rtd_sdk_types::Address;
 use rtd_types::base_types::ObjectID;
+use rtd_types::full_checkpoint_content::ObjectSet;
+use rtd_types::storage::DynamicFieldKey;
 
 const MAX_PAGE_SIZE: usize = 1000;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE_BYTES: usize = 512 * 1024; // 512KiB
-const READ_MASK_DEFAULT: &str = "parent,field_id";
+const READ_MASK_DEFAULT: &str = crate::read_mask_defaults::DYNAMIC_FIELD;
 
 #[tracing::instrument(skip(service))]
 pub fn list_dynamic_fields(
@@ -79,8 +82,14 @@ pub fn list_dynamic_fields(
         FieldMaskTree::from(read_mask)
     };
 
-    let mut iter =
-        indexes.dynamic_field_iter(parent.into(), page_token.map(|t| t.field_id.into()))?;
+    let mut iter = indexes.dynamic_field_iter(
+        parent.into(),
+        page_token.map(|t| DynamicFieldKey {
+            parent: parent.into(),
+            field_id: t.field_id.into(),
+            object_type: t.object_type,
+        }),
+    )?;
     let mut dynamic_fields = Vec::with_capacity(page_size);
     let mut size_bytes = 0;
     while let Some(key) = iter
@@ -110,6 +119,7 @@ pub fn list_dynamic_fields(
             encode_page_token(PageToken {
                 parent,
                 field_id: cursor.field_id.into(),
+                object_type: cursor.object_type,
             })
         });
 
@@ -136,6 +146,7 @@ fn encode_page_token(page_token: PageToken) -> Bytes {
 struct PageToken {
     parent: Address,
     field_id: Address,
+    object_type: StructTag,
 }
 
 fn get_dynamic_field(
@@ -253,7 +264,11 @@ fn load_dynamic_field(
     }
 
     if let Some(submask) = read_mask.subtree(DynamicField::FIELD_OBJECT_FIELD) {
-        message.set_field_object(service.render_object_to_proto(&field_object, &submask));
+        message.set_field_object(service.render_object_to_proto(
+            &field_object,
+            &submask,
+            &ObjectSet::default(),
+        ));
     }
 
     match field.value_metadata()? {
@@ -284,7 +299,11 @@ fn load_dynamic_field(
                 }
 
                 if let Some(submask) = read_mask.subtree(DynamicField::CHILD_OBJECT_FIELD) {
-                    message.set_child_object(service.render_object_to_proto(&object, &submask));
+                    message.set_child_object(service.render_object_to_proto(
+                        &object,
+                        &submask,
+                        &ObjectSet::default(),
+                    ));
                 }
             }
         }

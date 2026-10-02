@@ -1,3 +1,8 @@
 documentation.json
-references/awesome-sui.mdx
-references/awesome-sui/
+references/awesome-rtd.mdx
+references/awesome-rtd/
+references/awesome-rtd-gaming.mdx
+references/awesome-rtd-gaming/
+rtd-stack/messaging/*.mdx
+!rtd-stack/messaging/index.mdx
+!rtd-stack/messaging/chat-app.mdx

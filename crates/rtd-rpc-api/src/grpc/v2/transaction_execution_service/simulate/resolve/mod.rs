@@ -10,7 +10,6 @@ use crate::Result;
 use crate::RpcError;
 use crate::RpcService;
 use crate::error::ObjectNotFoundError;
-use crate::reader::StateReader;
 use bytes::Bytes;
 use move_binary_format::normalized;
 use rtd_protocol_config::ProtocolConfig;
@@ -20,12 +19,17 @@ use rtd_sdk_types::Address;
 use rtd_sdk_types::Argument;
 use rtd_sdk_types::Command;
 use rtd_types::base_types::ObjectRef;
+use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
 use rtd_types::move_package::MovePackage;
 use rtd_types::transaction::CallArg;
+use rtd_types::transaction::FundsWithdrawalArg;
 use rtd_types::transaction::GasData;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::ProgrammableTransaction;
+use rtd_types::transaction::Reservation;
 use rtd_types::transaction::TransactionData;
+use rtd_types::transaction::WithdrawFrom;
+use rtd_types::transaction::WithdrawalTypeArg;
 use tap::Pipe;
 
 mod literal;
@@ -58,16 +62,16 @@ pub fn resolve_transaction(
         .map_err(|e| {
             FieldViolation::new("commands")
                 .with_description(format!("invalid command: {e}"))
-            .with_reason(ErrorReason::FieldInvalid)
+                .with_reason(ErrorReason::FieldInvalid)
         })?;
 
-    // Enforce the protocol's structural limits before any per-input scan,
-    // package fetch, or normalization runs.
+    // Enforce the protocol's structural limits on the PTB before any
+    // per-input scan, package fetch, or normalization runs.
     enforce_ptb_structural_limits(protocol_config, &ptb.inputs, &commands)?;
 
-    let mut called_packages = called_packages(&service.reader, protocol_config, &commands)?;
+    let mut called_packages = called_packages(service, protocol_config, &commands)?;
     resolve_unresolved_transaction(
-        &service.reader,
+        service,
         &mut called_packages,
         reference_gas_price,
         protocol_config.max_tx_gas(),
@@ -81,9 +85,9 @@ pub fn resolve_transaction(
 
 /// Reject PTBs that exceed the protocol's structural limits before doing any
 /// resolution work. These match the bounds applied later by the
-/// `ProgrammableTransaction` and `Command` validity checks; applying them
-/// here prevents unauthenticated callers from driving resolver work beyond
-/// those limits.
+/// `ProgrammableTransaction` and `Command` validity checks; we apply them
+/// upfront so the resolver itself cannot be driven into pathological work by
+/// an unauthenticated caller.
 fn enforce_ptb_structural_limits(
     protocol_config: &ProtocolConfig,
     inputs: &[rtd_rpc::proto::rtd::rpc::v2::Input],
@@ -117,10 +121,10 @@ fn enforce_ptb_structural_limits(
     for command in commands {
         let arg_count = match command {
             Command::MoveCall(call) => call.arguments.len(),
-            Command::TransferObjects(transfer) => transfer.objects.len(),
-            Command::SplitCoins(split) => split.amounts.len(),
-            Command::MergeCoins(merge) => merge.coins_to_merge.len(),
-            Command::MakeMoveVector(vector) => vector.elements.len(),
+            Command::TransferObjects(t) => t.objects.len(),
+            Command::SplitCoins(s) => s.amounts.len(),
+            Command::MergeCoins(m) => m.coins_to_merge.len(),
+            Command::MakeMoveVector(v) => v.elements.len(),
             Command::Publish(_) | Command::Upgrade(_) => 0,
             _ => 0,
         };
@@ -151,7 +155,7 @@ struct NormalizedPackage {
 }
 
 pub(super) fn called_packages(
-    reader: &StateReader,
+    service: &RpcService,
     protocol_config: &ProtocolConfig,
     commands: &[Command],
 ) -> Result<NormalizedPackages> {
@@ -166,7 +170,16 @@ pub(super) fn called_packages(
             None
         }
     }) {
-        let package = reader
+        // Skip packages already normalized for this request. The same package
+        // can appear in many commands (e.g. the framework `0x2`), and
+        // re-fetching it then redeserializing every module via
+        // `CompiledModule::deserialize_with_config` is unnecessary work.
+        if packages.contains_key(&move_call.package) {
+            continue;
+        }
+
+        let package = service
+            .reader
             .inner()
             .get_object(&(move_call.package.into()))
             .ok_or_else(|| ObjectNotFoundError::new(move_call.package))?
@@ -206,7 +219,7 @@ pub(super) fn called_packages(
 }
 
 fn resolve_unresolved_transaction(
-    reader: &StateReader,
+    service: &RpcService,
     called_packages: &mut NormalizedPackages,
     reference_gas_price: u64,
     max_gas_budget: u64,
@@ -220,7 +233,7 @@ fn resolve_unresolved_transaction(
         let gas_coins = unresolved_gas_payment
             .objects
             .iter()
-            .map(|unresolved| resolve_gas_object_reference(reader, unresolved.try_into()?))
+            .map(|unresolved| resolve_gas_object_reference(service, unresolved.try_into()?))
             .collect::<Result<Vec<_>>>()?;
         let payment = gas_coins.iter().map(|(r, _)| *r).collect::<Vec<_>>();
         let max_gas_budget = if payment.is_empty() {
@@ -260,7 +273,7 @@ fn resolve_unresolved_transaction(
                 .with_reason(ErrorReason::FieldInvalid)
         })?
         .unwrap_or(rtd_types::transaction::TransactionExpiration::None);
-    let ptb = resolve_ptb(reader, called_packages, unresolved_inputs, commands)?;
+    let ptb = resolve_ptb(service, called_packages, unresolved_inputs, commands)?;
     Ok(TransactionData::V1(
         rtd_types::transaction::TransactionDataV1 {
             kind: rtd_types::transaction::TransactionKind::ProgrammableTransaction(ptb),
@@ -271,11 +284,53 @@ fn resolve_unresolved_transaction(
     ))
 }
 
+/// If the unresolved reference has a digest that matches the coin reservation
+/// magic, parse it into a `ParsedObjectRefWithdrawal`. Coin reservation
+/// ObjectRefs encode an address balance reservation and don't correspond to
+/// real objects in storage, so callers must pass them through without a
+/// storage lookup.
+///
+/// Returns the parsed withdrawal together with the version from the
+/// unresolved reference (which `ParsedObjectRefWithdrawal` does not store).
+fn try_parse_coin_reservation(
+    unresolved: &UnresolvedObjectReference,
+    service: &RpcService,
+) -> Option<(
+    ParsedObjectRefWithdrawal,
+    rtd_types::base_types::SequenceNumber,
+)> {
+    use rtd_types::coin_reservation::ParsedDigest;
+
+    let digest = unresolved.digest?;
+    let object_digest = rtd_types::digests::ObjectDigest::new(*digest.inner());
+    if !ParsedDigest::is_coin_reservation_digest(&object_digest) {
+        return None;
+    }
+
+    let object_id: rtd_types::base_types::ObjectID = unresolved.object_id.into();
+    let version = rtd_types::base_types::SequenceNumber::from_u64(unresolved.version.unwrap_or(0));
+    let obj_ref = (object_id, version, object_digest);
+    let parsed = ParsedObjectRefWithdrawal::parse(&obj_ref, service.chain_id)?;
+    Some((parsed, version))
+}
+
 fn resolve_gas_object_reference(
-    reader: &StateReader,
+    service: &RpcService,
     unresolved_object_reference: UnresolvedObjectReference,
 ) -> Result<(ObjectRef, u64)> {
-    let object = reader
+    // Coin reservation ObjectRefs don't exist in storage; pass them through
+    // as-is when the digest identifies one.
+    if let Some((parsed, version)) =
+        try_parse_coin_reservation(&unresolved_object_reference, service)
+    {
+        return Ok((
+            parsed.encode(version, service.chain_id),
+            parsed.reservation_amount(),
+        ));
+    }
+
+    let object = service
+        .reader
         .inner()
         .get_object(&(unresolved_object_reference.object_id.into()))
         .ok_or_else(|| ObjectNotFoundError::new(unresolved_object_reference.object_id))?;
@@ -292,10 +347,19 @@ fn resolve_gas_object_reference(
 }
 
 fn resolve_object_reference(
-    reader: &StateReader,
+    service: &RpcService,
     unresolved_object_reference: UnresolvedObjectReference,
 ) -> Result<ObjectRef> {
-    let object = reader
+    // Coin reservation ObjectRefs don't exist in storage; pass them through
+    // as-is when the digest identifies one.
+    if let Some((parsed, version)) =
+        try_parse_coin_reservation(&unresolved_object_reference, service)
+    {
+        return Ok(parsed.encode(version, service.chain_id));
+    }
+
+    let object = service
+        .reader
         .inner()
         .get_object(&(unresolved_object_reference.object_id.into()))
         .ok_or_else(|| ObjectNotFoundError::new(unresolved_object_reference.object_id))?;
@@ -338,17 +402,21 @@ fn resolve_object_reference_with_object(
         ));
     }
 
-    if version.is_some_and(|version| version != v.value()) {
+    if let Some(version) = version.filter(|version| *version != v.value()) {
         return Err(RpcError::new(
             tonic::Code::InvalidArgument,
-            format!("provided version doesn't match, provided: {version:?} actual: {v}"),
+            format!(
+                "provided version doesn't match for object {id}, provided: {version} actual: {v}"
+            ),
         ));
     }
 
-    if digest.is_some_and(|digest| digest.inner() != d.inner()) {
+    if let Some(digest) = digest.filter(|digest| digest.inner() != d.inner()) {
         return Err(RpcError::new(
             tonic::Code::InvalidArgument,
-            format!("provided digest doesn't match, provided: {digest:?} actual: {d}"),
+            format!(
+                "provided digest doesn't match for object {id}, provided: {digest} actual: {d}"
+            ),
         ));
     }
 
@@ -356,15 +424,20 @@ fn resolve_object_reference_with_object(
 }
 
 pub(super) fn resolve_ptb(
-    reader: &StateReader,
+    service: &RpcService,
     called_packages: &mut NormalizedPackages,
     unresolved_inputs: &[rtd_rpc::proto::rtd::rpc::v2::Input],
     commands: Vec<Command>,
 ) -> Result<ProgrammableTransaction> {
+    // Precompute uses of every input argument across all commands once, so that
+    // per-input resolution is linear in the number of uses rather than scanning
+    // every command and every argument for each input. Without this, the
+    // resolver does O(inputs * commands * args/cmd) work.
+    let arg_uses = ArgUses::build(unresolved_inputs.len(), &commands);
     let inputs = unresolved_inputs
         .iter()
         .enumerate()
-        .map(|(arg_idx, arg)| resolve_arg(reader, called_packages, &commands, arg, arg_idx))
+        .map(|(arg_idx, arg)| resolve_arg(service, called_packages, &arg_uses, arg, arg_idx))
         .collect::<Result<_>>()?;
 
     ProgrammableTransaction {
@@ -375,9 +448,9 @@ pub(super) fn resolve_ptb(
 }
 
 fn resolve_arg(
-    reader: &StateReader,
+    service: &RpcService,
     called_packages: &mut NormalizedPackages,
-    commands: &[Command],
+    arg_uses: &ArgUses,
     arg: &rtd_rpc::proto::rtd::rpc::v2::Input,
     arg_idx: usize,
 ) -> Result<CallArg> {
@@ -392,6 +465,7 @@ fn resolve_arg(
             version: None,
             digest: None,
             mutable: None,
+            funds_withdrawal: None,
             literal: None,
         }
         | UnresolvedInput {
@@ -401,6 +475,7 @@ fn resolve_arg(
             version: None,
             digest: None,
             mutable: None,
+            funds_withdrawal: None,
             literal: None,
         } => CallArg::Pure(pure.to_vec()),
 
@@ -412,9 +487,10 @@ fn resolve_arg(
             version,
             digest,
             mutable: None,
+            funds_withdrawal: None,
             literal: None,
         } => CallArg::Object(ObjectArg::ImmOrOwnedObject(resolve_object_reference(
-            reader,
+            service,
             UnresolvedObjectReference {
                 object_id,
                 version,
@@ -430,11 +506,12 @@ fn resolve_arg(
             version: _,
             digest: None,
             mutable: _,
+            funds_withdrawal: None,
             literal: None,
         } => CallArg::Object(resolve_shared_input(
-            reader,
+            service,
             called_packages,
-            commands,
+            arg_uses,
             arg_idx,
             object_id,
         )?),
@@ -447,9 +524,10 @@ fn resolve_arg(
             version,
             digest,
             mutable: None,
+            funds_withdrawal: None,
             literal: None,
         } => CallArg::Object(ObjectArg::Receiving(resolve_object_reference(
-            reader,
+            service,
             UnresolvedObjectReference {
                 object_id,
                 version,
@@ -465,17 +543,40 @@ fn resolve_arg(
             version,
             digest,
             mutable,
+            funds_withdrawal: None,
             literal: None,
         } => CallArg::Object(resolve_object(
-            reader,
+            service,
             called_packages,
-            commands,
+            arg_uses,
             arg_idx,
             object_id,
             version,
             digest,
             mutable,
         )?),
+
+        // FundsWithdrawal
+        UnresolvedInput {
+            kind: Some(InputKind::FundsWithdrawal),
+            pure: None,
+            object_id: None,
+            version: None,
+            digest: None,
+            mutable: None,
+            funds_withdrawal: Some(w),
+            literal: None,
+        }
+        | UnresolvedInput {
+            kind: None,
+            pure: None,
+            object_id: None,
+            version: None,
+            digest: None,
+            mutable: None,
+            funds_withdrawal: Some(w),
+            literal: None,
+        } => CallArg::FundsWithdrawal(w),
 
         // Literal, unresolved pure argument
         UnresolvedInput {
@@ -485,10 +586,11 @@ fn resolve_arg(
             version: None,
             digest: None,
             mutable: None,
+            funds_withdrawal: None,
             literal: Some(literal),
         } => CallArg::Pure(literal::resolve_literal(
             called_packages,
-            commands,
+            arg_uses,
             arg_idx,
             literal,
         )?),
@@ -504,17 +606,31 @@ fn resolve_arg(
 }
 
 fn resolve_object(
-    reader: &StateReader,
+    service: &RpcService,
     called_packages: &NormalizedPackages,
-    commands: &[Command],
+    arg_uses: &ArgUses,
     arg_idx: usize,
     object_id: Address,
     version: Option<rtd_sdk_types::Version>,
     digest: Option<rtd_sdk_types::Digest>,
     _mutable: Option<bool>,
 ) -> Result<ObjectArg> {
+    // Coin reservation ObjectRefs don't exist in storage; pass them through
+    // as-is when the digest identifies one.
+    let unresolved = UnresolvedObjectReference {
+        object_id,
+        version,
+        digest,
+    };
+    if let Some((parsed, ver)) = try_parse_coin_reservation(&unresolved, service) {
+        return Ok(ObjectArg::ImmOrOwnedObject(
+            parsed.encode(ver, service.chain_id),
+        ));
+    }
+
     let id = object_id.into();
-    let object = reader
+    let object = service
+        .reader
         .inner()
         .get_object(&id)
         .ok_or_else(|| ObjectNotFoundError::new(object_id))?;
@@ -540,7 +656,7 @@ fn resolve_object(
                 },
             )?;
 
-            if is_input_argument_receiving(called_packages, commands, arg_idx)? {
+            if is_input_argument_receiving(called_packages, arg_uses, arg_idx)? {
                 ObjectArg::Receiving(object_ref)
             } else {
                 ObjectArg::ImmOrOwnedObject(object_ref)
@@ -548,8 +664,9 @@ fn resolve_object(
             .pipe(Ok)
         }
         rtd_types::object::Owner::Shared { .. }
-        | rtd_types::object::Owner::ConsensusAddressOwner { .. } => {
-            resolve_shared_input_with_object(called_packages, commands, arg_idx, object)
+        | rtd_types::object::Owner::ConsensusAddressOwner { .. }
+        | rtd_types::object::Owner::Party { .. } => {
+            resolve_shared_input_with_object(called_packages, arg_uses, arg_idx, object)
         }
         rtd_types::object::Owner::ObjectOwner(_) => Err(RpcError::new(
             tonic::Code::InvalidArgument,
@@ -559,31 +676,32 @@ fn resolve_object(
 }
 
 fn resolve_shared_input(
-    reader: &StateReader,
+    service: &RpcService,
     called_packages: &NormalizedPackages,
-    commands: &[Command],
+    arg_uses: &ArgUses,
     arg_idx: usize,
     object_id: Address,
 ) -> Result<ObjectArg> {
     let id = object_id.into();
-    let object = reader
+    let object = service
+        .reader
         .inner()
         .get_object(&id)
         .ok_or_else(|| ObjectNotFoundError::new(object_id))?;
-    resolve_shared_input_with_object(called_packages, commands, arg_idx, object)
+    resolve_shared_input_with_object(called_packages, arg_uses, arg_idx, object)
 }
 
 // Checks if the provided input argument is used as a receiving object
 fn is_input_argument_receiving(
     called_packages: &NormalizedPackages,
-    commands: &[Command],
+    arg_uses: &ArgUses,
     arg_idx: usize,
 ) -> Result<bool> {
     let (receiving_package, receiving_module, receiving_struct) =
         rtd_types::transfer::RESOLVED_RECEIVING_STRUCT;
 
     let mut receiving = false;
-    for (command, idx) in find_arg_uses(arg_idx, commands) {
+    for (command, idx) in arg_uses.uses_of(arg_idx) {
         if let (Command::MoveCall(move_call), Some(idx)) = (command, idx) {
             let arg_type = arg_type_of_move_call_input(called_packages, move_call, idx)?;
 
@@ -647,7 +765,7 @@ fn arg_type_of_move_call_input(
 
 fn resolve_shared_input_with_object(
     called_packages: &NormalizedPackages,
-    commands: &[Command],
+    arg_uses: &ArgUses,
     arg_idx: usize,
     object: rtd_types::object::Object,
 ) -> Result<ObjectArg> {
@@ -668,7 +786,7 @@ fn resolve_shared_input_with_object(
         ));
     };
     let mut mutable = false;
-    for (command, idx) in find_arg_uses(arg_idx, commands) {
+    for (command, idx) in arg_uses.uses_of(arg_idx) {
         match (command, idx) {
             (Command::MoveCall(move_call), Some(idx)) => {
                 let arg_type = arg_type_of_move_call_input(called_packages, move_call, idx)?;
@@ -704,69 +822,94 @@ fn resolve_shared_input_with_object(
     })
 }
 
-/// Given an particular input argument, find all of its uses.
+/// Precomputed map from input argument index to the commands that consume it.
 ///
-/// The returned iterator contains all commands where the argument is used and an optional index
-/// to indicate where the argument is used in that command.
-fn find_arg_uses(
-    arg_idx: usize,
-    commands: &[Command],
-) -> impl Iterator<Item = (&Command, Option<usize>)> {
-    fn matches_input_arg(arg: Argument, arg_idx: usize) -> bool {
-        matches!(arg, Argument::Input(idx) if idx as usize == arg_idx)
+/// Building this once is `O(commands * args_per_command)`. Looking up uses for a
+/// single input is then `O(uses_of_input)`, so the resolver as a whole is linear
+/// in the total number of arguments rather than quadratic.
+pub(super) struct ArgUses<'a> {
+    commands: &'a [Command],
+    /// `uses[input_idx]` is the list of `(command_idx, position)` pairs where
+    /// `Argument::Input(input_idx)` first appears within that command. The
+    /// `position` is `Some(i)` for argument lists (e.g. `MoveCall` parameters,
+    /// `TransferObjects` objects) and `None` for the "primary" slot of commands
+    /// that have one (e.g. `TransferObjects::address`, `SplitCoins::coin`).
+    /// Matches the prior `find_arg_uses` behaviour: at most one entry per
+    /// command, recording the first matching position.
+    uses: Vec<Vec<(usize, Option<usize>)>>,
+}
+
+impl<'a> ArgUses<'a> {
+    pub(super) fn build(num_inputs: usize, commands: &'a [Command]) -> Self {
+        let mut uses: Vec<Vec<(usize, Option<usize>)>> = vec![Vec::new(); num_inputs];
+
+        for (cmd_idx, command) in commands.iter().enumerate() {
+            // Track the first matching position per input within this command,
+            // matching the prior `find_arg_uses` semantics that returned only
+            // one entry per command.
+            let mut first_pos: BTreeMap<u16, Option<usize>> = BTreeMap::new();
+            let mut record = |arg: &Argument, pos: Option<usize>| {
+                if let Argument::Input(idx) = arg {
+                    first_pos.entry(*idx).or_insert(pos);
+                }
+            };
+
+            match command {
+                Command::MoveCall(move_call) => {
+                    for (i, arg) in move_call.arguments.iter().enumerate() {
+                        record(arg, Some(i));
+                    }
+                }
+                Command::TransferObjects(transfer_objects) => {
+                    record(&transfer_objects.address, None);
+                    for (i, arg) in transfer_objects.objects.iter().enumerate() {
+                        record(arg, Some(i));
+                    }
+                }
+                Command::SplitCoins(split_coins) => {
+                    record(&split_coins.coin, None);
+                    for (i, arg) in split_coins.amounts.iter().enumerate() {
+                        record(arg, Some(i));
+                    }
+                }
+                Command::MergeCoins(merge_coins) => {
+                    record(&merge_coins.coin, None);
+                    for (i, arg) in merge_coins.coins_to_merge.iter().enumerate() {
+                        record(arg, Some(i));
+                    }
+                }
+                Command::MakeMoveVector(make_move_vector) => {
+                    for (i, arg) in make_move_vector.elements.iter().enumerate() {
+                        record(arg, Some(i));
+                    }
+                }
+                Command::Upgrade(upgrade) => {
+                    record(&upgrade.ticket, None);
+                }
+                Command::Publish(_) => {}
+                _ => {}
+            }
+
+            for (input_idx, pos) in first_pos {
+                if let Some(slot) = uses.get_mut(input_idx as usize) {
+                    slot.push((cmd_idx, pos));
+                }
+            }
+        }
+
+        Self { commands, uses }
     }
 
-    commands.iter().filter_map(move |command| {
-        match command {
-            Command::MoveCall(move_call) => move_call
-                .arguments
-                .iter()
-                .position(|elem| matches_input_arg(*elem, arg_idx))
-                .map(Some),
-            Command::TransferObjects(transfer_objects) => {
-                if matches_input_arg(transfer_objects.address, arg_idx) {
-                    Some(None)
-                } else {
-                    transfer_objects
-                        .objects
-                        .iter()
-                        .position(|elem| matches_input_arg(*elem, arg_idx))
-                        .map(Some)
-                }
-            }
-            Command::SplitCoins(split_coins) => {
-                if matches_input_arg(split_coins.coin, arg_idx) {
-                    Some(None)
-                } else {
-                    split_coins
-                        .amounts
-                        .iter()
-                        .position(|amount| matches_input_arg(*amount, arg_idx))
-                        .map(Some)
-                }
-            }
-            Command::MergeCoins(merge_coins) => {
-                if matches_input_arg(merge_coins.coin, arg_idx) {
-                    Some(None)
-                } else {
-                    merge_coins
-                        .coins_to_merge
-                        .iter()
-                        .position(|elem| matches_input_arg(*elem, arg_idx))
-                        .map(Some)
-                }
-            }
-            Command::Publish(_) => None,
-            Command::MakeMoveVector(make_move_vector) => make_move_vector
-                .elements
-                .iter()
-                .position(|elem| matches_input_arg(*elem, arg_idx))
-                .map(Some),
-            Command::Upgrade(upgrade) => matches_input_arg(upgrade.ticket, arg_idx).then_some(None),
-            _ => None,
-        }
-        .map(|x| (command, x))
-    })
+    pub(super) fn uses_of(
+        &self,
+        arg_idx: usize,
+    ) -> impl Iterator<Item = (&Command, Option<usize>)> {
+        self.uses
+            .get(arg_idx)
+            .into_iter()
+            .flat_map(|entries| entries.iter())
+            .map(|(cmd_idx, pos)| (&self.commands[*cmd_idx], *pos))
+    }
 }
 
 struct UnresolvedObjectReference {
@@ -813,6 +956,7 @@ struct UnresolvedInput<'a> {
     pub version: Option<rtd_sdk_types::Version>,
     pub digest: Option<rtd_sdk_types::Digest>,
     pub mutable: Option<bool>,
+    pub funds_withdrawal: Option<FundsWithdrawalArg>,
     pub literal: Option<&'a prost_types::Value>,
 }
 
@@ -846,7 +990,98 @@ impl<'a> UnresolvedInput<'a> {
                     })
                 })
                 .transpose()?,
+            funds_withdrawal: input
+                .funds_withdrawal_opt()
+                .map(|w| {
+                    Ok(FundsWithdrawalArg {
+                        reservation: Reservation::MaxAmountU64(w.amount.ok_or_else(|| {
+                            FieldViolation::new("amount").with_reason(ErrorReason::FieldMissing)
+                        })?),
+                        type_arg: WithdrawalTypeArg::Balance(
+                            w.coin_type().parse::<rtd_types::TypeTag>().map_err(|e| {
+                                FieldViolation::new("coin_type")
+                                    .with_description(format!("invalid coin_type: {e}"))
+                                    .with_reason(ErrorReason::FieldInvalid)
+                            })?,
+                        ),
+                        withdraw_from: match w.source() {
+                            rtd_rpc::proto::rtd::rpc::v2::funds_withdrawal::Source::Sender => {
+                                WithdrawFrom::Sender
+                            }
+                            rtd_rpc::proto::rtd::rpc::v2::funds_withdrawal::Source::Sponsor => {
+                                WithdrawFrom::Sponsor
+                            }
+                            rtd_rpc::proto::rtd::rpc::v2::funds_withdrawal::Source::SenderAllowance => {
+                                WithdrawFrom::SenderAllowance {
+                                    funder: w.funder().parse().map_err(|e| {
+                                        FieldViolation::new("funder")
+                                            .with_description(format!("invalid funder: {e}"))
+                                            .with_reason(ErrorReason::FieldInvalid)
+                                    })?,
+                                    allowance: w.allowance().parse().map_err(|e| {
+                                        FieldViolation::new("allowance")
+                                            .with_description(format!("invalid allowance: {e}"))
+                                            .with_reason(ErrorReason::FieldInvalid)
+                                    })?,
+                                }
+                            }
+                            _ => WithdrawFrom::Sender,
+                        },
+                    })
+                })
+                .transpose()?,
             mutable: input.mutable,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rtd_types::base_types::ObjectID;
+    use rtd_types::object::Object;
+
+    #[test]
+    fn version_mismatch_error_includes_object_id() {
+        let id = ObjectID::random();
+        let object = Object::immutable_with_id_for_testing(id);
+
+        // Request a version that doesn't match the object's actual version.
+        let unresolved = UnresolvedObjectReference {
+            object_id: rtd_sdk_types::Address::new(id.into_bytes()),
+            version: Some(object.version().value() + 1),
+            digest: None,
+        };
+
+        let message = resolve_object_reference_with_object(&object, unresolved)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains(&id.to_string()),
+            "version mismatch error should include the object id, got: {message}"
+        );
+    }
+
+    #[test]
+    fn digest_mismatch_error_includes_object_id() {
+        let id = ObjectID::random();
+        let object = Object::immutable_with_id_for_testing(id);
+
+        // Request a digest that doesn't match the object's actual digest.
+        let unresolved = UnresolvedObjectReference {
+            object_id: rtd_sdk_types::Address::new(id.into_bytes()),
+            version: None,
+            digest: Some(rtd_sdk_types::Digest::new(
+                [0u8; rtd_sdk_types::Digest::LENGTH],
+            )),
+        };
+
+        let message = resolve_object_reference_with_object(&object, unresolved)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains(&id.to_string()),
+            "digest mismatch error should include the object id, got: {message}"
+        );
     }
 }

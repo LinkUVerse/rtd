@@ -3,21 +3,22 @@
 
 //! This module controls feature gating and breaking changes in new editions of the source language
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Display,
-    str::FromStr,
-};
-
 use crate::{
     diag,
     diagnostics::{Diagnostic, DiagnosticReporter},
     shared::string_utils::format_oxford_list,
 };
+
 use move_ir_types::location::*;
 use move_symbol_pool::Symbol;
-use once_cell::sync::Lazy;
+
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+    str::FromStr,
+    sync::LazyLock,
+};
 
 //**************************************************************************************************
 // types
@@ -54,8 +55,13 @@ pub enum FeatureGate {
     ModuleLabel,
     ModuleExtension,
     StringLiterals,
+    CrossModuleConstants,
 }
 
+/// Compiler flavor — selects syntax and semantic rules (e.g. `Core` vs `Rtd`).
+///
+/// Note: this is distinct from [`move_package_alt::MoveFlavor`], which parameterizes the package
+/// management system (system dependencies, default environments, on-chain fetching).
 #[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Default)]
 pub enum Flavor {
     #[default]
@@ -140,10 +146,13 @@ pub fn valid_editions_for_feature(feature: FeatureGate) -> Vec<Edition> {
 // impls
 //**************************************************************************************************
 
-static SUPPORTED_FEATURES: Lazy<BTreeMap<Edition, BTreeSet<FeatureGate>>> =
-    Lazy::new(|| BTreeMap::from_iter(Edition::ALL.iter().map(|e| (*e, e.features()))));
+static SUPPORTED_FEATURES: LazyLock<BTreeMap<Edition, BTreeSet<FeatureGate>>> =
+    LazyLock::new(|| BTreeMap::from_iter(Edition::ALL.iter().map(|e| (*e, e.features()))));
 
-const E2024_ALPHA_FEATURES: &[FeatureGate] = &[FeatureGate::ModuleExtension];
+const E2024_ALPHA_FEATURES: &[FeatureGate] = &[
+    FeatureGate::ModuleExtension,
+    FeatureGate::CrossModuleConstants,
+];
 
 const E2024_BETA_FEATURES: &[FeatureGate] = &[];
 
@@ -314,6 +323,7 @@ impl FeatureGate {
             FeatureGate::Lambda => "lambda expressions are",
             FeatureGate::ModuleLabel => "'module' label forms (ending with ';') are",
             FeatureGate::ModuleExtension => "module extensions are",
+            FeatureGate::CrossModuleConstants => "cross-module constants are",
             FeatureGate::StringLiterals => "string literals (without a leading 'b' or 'x') are",
         }
     }

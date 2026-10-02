@@ -11,13 +11,10 @@ use anyhow::{Context, Result, anyhow, bail};
 use move_binary_format::CompiledModule;
 use move_core_types::account_address::AccountAddress;
 use move_package_alt::{
-    package::RootPackage,
+    RootPackage,
     schema::{Environment, EnvironmentName},
 };
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::PathBuf;
 use rtd_move_build::BuildConfig;
 use rtd_package_alt::RtdFlavor;
 use rtd_types::{
@@ -25,8 +22,10 @@ use rtd_types::{
     digests::TransactionDigest,
     move_package::{MovePackage, TypeOrigin, UpgradeInfo},
     object::{Data, Object},
-    supported_protocol_versions::ProtocolConfig,
 };
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::PathBuf;
 
 /// Information about a package in the cache
 pub struct PackageInfo {
@@ -299,7 +298,7 @@ impl PackageRebuilder {
         // Create build config (following build.rs pattern)
         let config = MoveBuildConfig::default();
 
-        let envs = RootPackage::<RtdFlavor>::environments(&self.source_path)?;
+        let envs = RootPackage::<RtdFlavor>::environments(&self.source_path, &RtdFlavor::new())?;
         let Some(env_id) = envs.get(&self.env) else {
             todo!()
         };
@@ -314,6 +313,7 @@ impl PackageRebuilder {
             run_bytecode_verifier: false, // We don't need verification for rebuilding
             print_diags_to_stderr: true,  // Print diagnostics like build.rs does
             environment,
+            flavor: RtdFlavor::new(),
         };
 
         // Build the package (same as build.rs does)
@@ -561,16 +561,14 @@ impl PackageRebuilder {
             .build_new_linkage_table(&compiled_modules, &original_package)
             .context("Failed to build linkage table")?;
 
-        // Get protocol config for max package size
-        let protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
-        let max_package_size = protocol_config.max_move_package_size();
-
         // Create a new MovePackage with updated modules and properly generated tables
         let rebuilt_package = MovePackage::new(
             self.package_info.package_id, // Use the package ID directly
             version,
             module_map,
-            max_package_size,
+            // We're trying to rebuild the package (locally!) and this package may be a system
+            // package, so be permissive and allow rebuilding a package of any size.
+            u64::MAX,
             type_origin_table,
             linkage_table,
         )

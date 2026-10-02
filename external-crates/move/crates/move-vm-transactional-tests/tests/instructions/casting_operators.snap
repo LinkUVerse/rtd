@@ -3,7 +3,10 @@ source: crates/move-transactional-test-runner/src/framework.rs
 ---
 processed 38 tasks
 
-task 6, lines 193-202:
+// check: "Keep(EXECUTED)"
+
+task 6, lines 192-202:
+// Casting to u8, overflowing.
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -11,6 +14,7 @@ Error: Function execution failed with VMError: {
     location: 0xc::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u64(256) to u8",
 }
 
 task 7, lines 204-213:
@@ -21,6 +25,7 @@ Error: Function execution failed with VMError: {
     location: 0xd::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u64(303) to u8",
 }
 
 task 8, lines 215-224:
@@ -31,6 +36,7 @@ Error: Function execution failed with VMError: {
     location: 0xe::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(256) to u8",
 }
 
 task 9, lines 226-235:
@@ -41,6 +47,7 @@ Error: Function execution failed with VMError: {
     location: 0x15::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(56432) to u8",
 }
 
 task 10, lines 237-246:
@@ -51,6 +58,7 @@ Error: Function execution failed with VMError: {
     location: 0x16::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u16(256) to u8",
 }
 
 task 11, lines 248-257:
@@ -61,6 +69,7 @@ Error: Function execution failed with VMError: {
     location: 0x17::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u16(303) to u8",
 }
 
 task 12, lines 259-268:
@@ -71,6 +80,7 @@ Error: Function execution failed with VMError: {
     location: 0x18::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u32(256) to u8",
 }
 
 task 13, lines 270-279:
@@ -81,6 +91,7 @@ Error: Function execution failed with VMError: {
     location: 0x19::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u32(303) to u8",
 }
 
 task 14, lines 281-290:
@@ -91,6 +102,7 @@ Error: Function execution failed with VMError: {
     location: 0x1a::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u64(18446744073709551615) to u8",
 }
 
 task 15, lines 292-301:
@@ -101,6 +113,7 @@ Error: Function execution failed with VMError: {
     location: 0x1b::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(340282366920938463463374607431768211455) to u8",
 }
 
 task 16, lines 303-312:
@@ -111,9 +124,10 @@ Error: Function execution failed with VMError: {
     location: 0x1c::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u16(65535) to u8",
 }
 
-task 17, lines 314-325:
+task 17, lines 314-323:
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -121,9 +135,11 @@ Error: Function execution failed with VMError: {
     location: 0x1d::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u32(4294967295) to u8",
 }
 
-task 18, lines 326-335:
+task 18, lines 325-335:
+// Casting to u64, overflowing.
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -131,6 +147,7 @@ Error: Function execution failed with VMError: {
     location: 0x1e::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551616) to u64",
 }
 
 task 19, lines 337-346:
@@ -141,6 +158,7 @@ Error: Function execution failed with VMError: {
     location: 0x25::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551647) to u64",
 }
 
 task 20, lines 348-357:
@@ -151,6 +169,7 @@ Error: Function execution failed with VMError: {
     location: 0x26::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(340282366920938463463374607431768211455) to u64",
 }
 
 task 21, lines 359-368:
@@ -161,6 +180,7 @@ Error: Function execution failed with VMError: {
     location: 0x27::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u256(18446744073709551647) to u64",
 }
 
 task 22, lines 370-379:
@@ -171,9 +191,10 @@ Error: Function execution failed with VMError: {
     location: 0x28::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551647) to u64",
 }
 
-task 23, lines 381-392:
+task 23, lines 381-390:
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -181,9 +202,11 @@ Error: Function execution failed with VMError: {
     location: 0x29::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u256(57896044618658097711785492504343953926634992332820282019728792003956564819967) to u64",
 }
 
-task 24, lines 393-402:
+task 24, lines 392-402:
+// Casting to u16, overflowing.
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -191,6 +214,7 @@ Error: Function execution failed with VMError: {
     location: 0x2a::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551616) to u16",
 }
 
 task 25, lines 404-413:
@@ -201,6 +225,7 @@ Error: Function execution failed with VMError: {
     location: 0x2b::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551647) to u16",
 }
 
 task 26, lines 415-424:
@@ -211,6 +236,7 @@ Error: Function execution failed with VMError: {
     location: 0x2c::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(340282366920938463463374607431768211455) to u16",
 }
 
 task 27, lines 426-435:
@@ -221,6 +247,7 @@ Error: Function execution failed with VMError: {
     location: 0x2d::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u256(18446744073709551647) to u16",
 }
 
 task 28, lines 437-446:
@@ -231,6 +258,7 @@ Error: Function execution failed with VMError: {
     location: 0x2e::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551647) to u16",
 }
 
 task 29, lines 448-457:
@@ -241,6 +269,7 @@ Error: Function execution failed with VMError: {
     location: 0x35::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u256(57896044618658097711785492504343953926634992332820282019728792003956564819967) to u16",
 }
 
 task 30, lines 459-468:
@@ -251,9 +280,10 @@ Error: Function execution failed with VMError: {
     location: 0x36::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u32(2561233) to u16",
 }
 
-task 31, lines 470-481:
+task 31, lines 470-479:
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -261,9 +291,11 @@ Error: Function execution failed with VMError: {
     location: 0x37::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u32(4294967295) to u16",
 }
 
-task 32, lines 482-491:
+task 32, lines 481-491:
+// Casting to u32, overflowing.
 //# run
 Error: Function execution failed with VMError: {
     major_status: ARITHMETIC_ERROR,
@@ -271,6 +303,7 @@ Error: Function execution failed with VMError: {
     location: 0x38::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551616) to u32",
 }
 
 task 33, lines 493-502:
@@ -281,6 +314,7 @@ Error: Function execution failed with VMError: {
     location: 0x39::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551647) to u32",
 }
 
 task 34, lines 504-513:
@@ -291,6 +325,7 @@ Error: Function execution failed with VMError: {
     location: 0x3a::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(340282366920938463463374607431768211455) to u32",
 }
 
 task 35, lines 515-524:
@@ -301,6 +336,7 @@ Error: Function execution failed with VMError: {
     location: 0x3b::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u256(18446744073709551647) to u32",
 }
 
 task 36, lines 526-535:
@@ -311,6 +347,7 @@ Error: Function execution failed with VMError: {
     location: 0x3c::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u128(18446744073709551647) to u32",
 }
 
 task 37, lines 537-546:
@@ -321,4 +358,5 @@ Error: Function execution failed with VMError: {
     location: 0x3d::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 1)],
+    message: "Cannot cast u256(57896044618658097711785492504343953926634992332820282019728792003956564819967) to u32",
 }

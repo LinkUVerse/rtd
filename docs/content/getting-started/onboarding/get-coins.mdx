@@ -1,0 +1,56 @@
+---
+title: Get RTD on a Local Network
+description: Fund an address through the faucet configured for a local RTD network.
+keywords: [rtd, localnet, faucet, balance]
+goal:
+  description: Reader can request and verify local RTD from a configured faucet
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Has reader questions
+    - has_answer: true
+      label: Has a direct answer
+questions:
+  - How do I fund an RTD address on a local network?
+  - How do I verify its balance?
+answer: >-
+  Start a local RTD network with a faucet, configure the CLI for that network,
+  then request and verify local RTD through the CLI.
+---
+
+RTD transactions use the native `Coin<rtd::rtd::RTD>` type for gas. This source
+fork has no verified public faucet, exchange listing, or public RTD network
+endpoint. The following workflow is for a local network that you control.
+
+First [start a local RTD network](/getting-started/onboarding/local-network) with
+a faucet and point the CLI to the RPC and faucet URLs produced by that
+specific deployment. Confirm the configured network identity and active
+address before requesting funds:
+
+```sh
+rtd client active-env
+rtd client active-address
+```
+
+If your local deployment started a faucet and configured its URL, request local
+RTD for the active address:
+
+```sh
+rtd client faucet
+rtd client balance
+```
+
+If the faucet was started on a custom URL, pass that verified local URL with
+`rtd client faucet --url CUSTOM_FAUCET_URL`. An error from the faucet may mean
+that it was not started, that the CLI points at another network, or that it is
+not ready. Check the local deployment logs and its actual endpoint instead of
+trying a Sui faucet. A Sui faucet cannot mint RTD on your forked chain.
+
+For an address supplied by another tool, use `rtd client balance` after
+switching to that address, or query your configured RTD RPC endpoint. SuiVision
+and Suiscan report Sui balances and cannot validate an RTD address. Once the
+local balance is available, continue with [Hello, World!](/getting-started/onboarding/hello-world).

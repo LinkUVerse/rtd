@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::{account_address::AccountAddress, identifier::Identifier};
-use rtd_json_rpc_types::{RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponse};
 use rtd_keys::keystore::AccountKeystore;
-use rtd_light_client::mmr::apply_stream_updates;
+use rtd_light_client::authenticated_events::mmr::apply_stream_updates;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
+use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_types::accumulator_root::EventCommitment;
 use rtd_types::{
     accumulator_root::{self as ar, EventStreamHead},
@@ -32,7 +32,7 @@ async fn setup_test_cluster_with_auth_events() -> TestCluster {
 async fn setup_test_cluster_with_auth_events_disabled() -> TestCluster {
     let _guard: rtd_protocol_config::OverrideGuard =
         ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
-            cfg.disable_authenticated_event_streams_for_testing();
+            cfg.set_enable_authenticated_event_streams_for_testing(false);
             cfg
         });
 
@@ -52,7 +52,7 @@ async fn try_emit_authenticated_event(
     package_id: ObjectID,
     sender: RtdAddress,
     value: u64,
-) -> anyhow::Result<RtdTransactionBlockResponse> {
+) -> anyhow::Result<ExecutedTransaction> {
     let rgp = test_cluster.get_reference_gas_price().await;
 
     let mut ptb = ProgrammableTransactionBuilder::new();
@@ -76,7 +76,7 @@ async fn try_emit_authenticated_event(
                 .pop()
                 .unwrap()
                 .1
-                .object_ref()
+                .compute_object_reference()
         },
         10_000_000,
         rgp,
@@ -90,7 +90,7 @@ async fn load_event_stream_head_by_object_id(
     state: &rtd_core::authority::AuthorityState,
     object_id: ObjectID,
 ) -> Option<EventStreamHead> {
-    let obj = state.get_object(&object_id).await?;
+    let obj = state.get_object(&object_id)?;
     let mo = obj.data.try_as_move()?;
     let field = mo.to_rust::<Field<ar::AccumulatorKey, EventStreamHead>>()?;
     Some(field.value)
@@ -134,7 +134,7 @@ async fn authenticated_events_single_event_test() {
         .await
         .expect("Transaction should succeed");
 
-    let effects = resp.effects.as_ref().unwrap();
+    let effects = resp.effects;
     assert!(
         effects.status().is_ok(),
         "Transaction effects should be successful"
@@ -145,12 +145,12 @@ async fn authenticated_events_single_event_test() {
 
     let event = &acc_events[0];
     assert_eq!(
-        event.address,
+        event.write.address.address,
         RtdAddress::from(AccountAddress::from(package_id))
     );
 
     let state = test_cluster.fullnode_handle.rtd_node.state();
-    let stream_head = load_event_stream_head_by_object_id(&state, event.accumulator_obj)
+    let stream_head = load_event_stream_head_by_object_id(&state, *event.accumulator_obj.inner())
         .await
         .expect("EventStreamHead should be available");
 
@@ -171,7 +171,7 @@ async fn authenticated_events_multiple_events_test() {
             .await
             .expect("Transaction should succeed");
 
-        let effects = resp.effects.as_ref().unwrap();
+        let effects = resp.effects;
         assert!(
             effects.status().is_ok(),
             "Transaction effects should be successful"
@@ -180,10 +180,10 @@ async fn authenticated_events_multiple_events_test() {
         let acc_events = effects.accumulator_events();
         assert_eq!(acc_events.len(), 1);
         assert_eq!(
-            acc_events[0].address,
+            acc_events[0].write.address.address,
             RtdAddress::from(AccountAddress::from(package_id))
         );
-        last_event_obj_id = Some(acc_events[0].accumulator_obj);
+        last_event_obj_id = Some(*acc_events[0].accumulator_obj.inner());
     }
 
     tracing::info!("package_id: {package_id:?}, last_event_obj_id: {last_event_obj_id:?}");
@@ -206,7 +206,7 @@ async fn authenticated_events_disabled_test() {
     let result = try_emit_authenticated_event(&mut test_cluster, package_id, sender, 42).await;
 
     let response = result.expect("Transaction should execute to effects");
-    let effects = response.effects.as_ref().unwrap();
+    let effects = response.effects;
 
     assert!(
         effects.status().is_err(),
@@ -243,10 +243,10 @@ async fn authenticated_events_mmr_validation_test() {
             .await
             .expect("Transaction should succeed");
 
-        let effects = resp.effects.as_ref().unwrap();
+        let effects = resp.effects;
         let acc_events = effects.accumulator_events();
         if !acc_events.is_empty() {
-            accumulator_obj_id = Some(acc_events[0].accumulator_obj);
+            accumulator_obj_id = Some(*acc_events[0].accumulator_obj.inner());
         }
     }
 
@@ -261,11 +261,36 @@ async fn authenticated_events_mmr_validation_test() {
         .await
         .expect("Should be able to load event stream head at checkpoint X");
 
+    assert!(
+        rtd_stream_head_x.checkpoint_seq > start_checkpoint,
+        "checkpoint_seq ({}) must be after start ({})",
+        rtd_stream_head_x.checkpoint_seq,
+        start_checkpoint,
+    );
+    assert!(
+        rtd_stream_head_x.checkpoint_seq <= checkpoint_x,
+        "checkpoint_seq ({}) must not exceed latest checkpoint ({})",
+        rtd_stream_head_x.checkpoint_seq,
+        checkpoint_x,
+    );
+
     let mut events_up_to_x = Vec::new();
     for cp_seq in (start_checkpoint + 1)..=checkpoint_x {
         let cp_events = build_event_commitments_from_checkpoint(&state, cp_seq)
             .expect("Should be able to build event commitments");
         if !cp_events.is_empty() {
+            for commitment in &cp_events {
+                assert_eq!(
+                    commitment.checkpoint_seq, cp_seq,
+                    "Event commitment checkpoint_seq should match its containing checkpoint"
+                );
+            }
+            for pair in cp_events.windows(2) {
+                assert!(
+                    pair[0].transaction_idx <= pair[1].transaction_idx,
+                    "tx_index should be non-decreasing within a checkpoint"
+                );
+            }
             events_up_to_x.push(cp_events);
         }
     }
@@ -282,7 +307,26 @@ async fn authenticated_events_mmr_validation_test() {
         "MMR should match at checkpoint X"
     );
 
+    assert_eq!(
+        calculated_stream_head_x.checkpoint_seq, rtd_stream_head_x.checkpoint_seq,
+        "checkpoint_seq should match at checkpoint X"
+    );
+
     let stream_head_x = &rtd_stream_head_x;
+
+    for _ in 0..3 {
+        let tx = rtd_test_transaction_builder::make_transfer_rtd_transaction(
+            &test_cluster.wallet,
+            Some(sender),
+            None,
+        )
+        .await;
+        test_cluster
+            .wallet
+            .execute_transaction_may_fail(tx)
+            .await
+            .expect("Transfer should succeed");
+    }
 
     for i in 0..4 {
         let _resp = try_emit_authenticated_event(&mut test_cluster, package_id, sender, 200 + i)
@@ -310,6 +354,13 @@ async fn authenticated_events_mmr_validation_test() {
             .await
             .expect("Should be able to load event stream head at checkpoint X'");
 
+    assert!(
+        actual_stream_head_x_prime.checkpoint_seq > rtd_stream_head_x.checkpoint_seq,
+        "checkpoint_seq should advance: {} -> {}",
+        rtd_stream_head_x.checkpoint_seq,
+        actual_stream_head_x_prime.checkpoint_seq,
+    );
+
     let calculated_stream_head_x_prime = apply_stream_updates(stream_head_x, events_between);
 
     assert_eq!(
@@ -320,5 +371,10 @@ async fn authenticated_events_mmr_validation_test() {
     assert_eq!(
         calculated_stream_head_x_prime.mmr, actual_stream_head_x_prime.mmr,
         "MMR should match between calculated and actual stream heads"
+    );
+
+    assert_eq!(
+        calculated_stream_head_x_prime.checkpoint_seq, actual_stream_head_x_prime.checkpoint_seq,
+        "checkpoint_seq should match between calculated and actual stream heads"
     );
 }

@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: core
   edition: 2024.alpha
   lint: false
 ---
-error[E02001]: duplicate declaration, item, or annotation
+error[EC02001]: duplicate declaration, item, or annotation
   ┌─ tests/move_2024/extensions/invalid_fn_redefinition.move:7:9
   │
 2 │     fun f(): u64 { 0 }

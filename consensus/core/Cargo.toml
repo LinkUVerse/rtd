@@ -2,7 +2,7 @@
 name = "consensus-core"
 version = "0.1.0"
 license = "Apache-2.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 edition = "2024"
 publish = false
 
@@ -41,7 +41,6 @@ serde.workspace = true
 shared-crypto.workspace = true
 strum_macros.workspace = true
 rtd-macros.workspace = true
-rtd-protocol-config.workspace = true
 rtd-tls.workspace = true
 tap.workspace = true
 tempfile.workspace = true

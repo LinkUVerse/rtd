@@ -42,21 +42,17 @@ pub mod intercept_debug_fatal {
         pub callback: Arc<dyn Fn() + Send + Sync>,
     }
 
-    thread_local! {
-        static INTERCEPT_DEBUG_FATAL: Mutex<Option<DebugFatalCallback>> = Mutex::new(None);
-    }
+    static INTERCEPT_DEBUG_FATAL: Mutex<Option<DebugFatalCallback>> = Mutex::new(None);
 
     pub fn register_callback(message: &str, f: impl Fn() + Send + Sync + 'static) {
-        INTERCEPT_DEBUG_FATAL.with(|m| {
-            *m.lock().unwrap() = Some(DebugFatalCallback {
-                pattern: message.to_string(),
-                callback: Arc::new(f),
-            });
+        *INTERCEPT_DEBUG_FATAL.lock().unwrap() = Some(DebugFatalCallback {
+            pattern: message.to_string(),
+            callback: Arc::new(f),
         });
     }
 
     pub fn get_callback() -> Option<DebugFatalCallback> {
-        INTERCEPT_DEBUG_FATAL.with(|m| m.lock().unwrap().clone())
+        INTERCEPT_DEBUG_FATAL.lock().unwrap().clone()
     }
 }
 
@@ -74,10 +70,12 @@ macro_rules! register_debug_fatal_handler {
     };
 }
 
+/// Like `debug_fatal!`, but records the violation on a metric of the caller's choosing instead of
+/// `system_invariant_violations`: `$record` is invoked with `&linku_metrics::Metrics` when metrics
+/// are initialized. Use this when a violation has its own counter, and its own alert.
 #[macro_export]
-macro_rules! debug_fatal {
-    //($msg:literal $(, $arg:expr)* $(,)?)
-    ($msg:literal $(, $arg:expr)*) => {{
+macro_rules! debug_fatal_with_metric {
+    ($record:expr, $msg:literal $(, $arg:expr)*) => {{
         loop {
             #[cfg(msim)]
             {
@@ -98,9 +96,8 @@ macro_rules! debug_fatal {
             } else {
                 let stacktrace = std::backtrace::Backtrace::capture();
                 tracing::error!(debug_fatal = true, stacktrace = ?stacktrace, $msg $(, $arg)*);
-                let location = concat!(file!(), ':', line!());
                 if let Some(metrics) = linku_metrics::get_metrics() {
-                    metrics.system_invariant_violations.with_label_values(&[location]).inc();
+                    ($record)(metrics);
                 }
                 if $crate::in_antithesis() {
                     // antithesis requires a literal for first argument. pass the formatted argument
@@ -115,6 +112,69 @@ macro_rules! debug_fatal {
     }};
 }
 
+/// Like `debug_fatal!`, but records `$location` (a `&str`) as the
+/// `system_invariant_violations` metric label instead of the macro's own
+/// `file!():line!()`. Use this when forwarding a caller-supplied location
+/// (e.g. from `#[track_caller]` + `Location::caller()`) so the metric points
+/// at the user's call site rather than the wrapper.
+#[macro_export]
+macro_rules! debug_fatal_at {
+    ($location:expr, $msg:literal $(, $arg:expr)*) => {{
+        $crate::debug_fatal_with_metric!(
+            |metrics: &linku_metrics::Metrics| {
+                let location: &str = $location;
+                metrics.system_invariant_violations.with_label_values(&[location]).inc();
+            },
+            $msg $(, $arg)*
+        );
+    }};
+}
+
+#[macro_export]
+macro_rules! debug_fatal {
+    //($msg:literal $(, $arg:expr)* $(,)?)
+    ($msg:literal $(, $arg:expr)*) => {{
+        $crate::debug_fatal_at!(concat!(file!(), ':', line!()), $msg $(, $arg)*);
+    }};
+}
+
+#[macro_export]
+macro_rules! debug_fatal_no_invariant {
+    ($msg:literal $(, $arg:expr)*) => {{
+        loop {
+            #[cfg(msim)]
+            {
+                if let Some(cb) = $crate::logging::intercept_debug_fatal::get_callback() {
+                    tracing::error!($msg $(, $arg)*);
+                    let msg = format!($msg $(, $arg)*);
+                    if msg.contains(&cb.pattern) {
+                        (cb.callback)();
+                    }
+                    break;
+                }
+            }
+
+            if !$crate::in_antithesis() && $crate::logging::crash_on_debug() {
+                $crate::fatal!($msg $(, $arg)*);
+            } else {
+                tracing::error!($msg $(, $arg)*);
+                if $crate::in_antithesis() {
+                    let full_msg = format!($msg $(, $arg)*);
+                    let json = $crate::logging::json!({ "message": full_msg });
+                    $crate::logging::assert_unreachable_antithesis!($msg, &json);
+                }
+            }
+            break;
+        }
+    }};
+}
+
+/// Asserts that this line is reached at least once during an antithesis run.
+///
+/// If the line sits behind a protocol feature flag, use
+/// `rtd_protocol_config::assert_reachable_gated!` instead. This macro registers with antithesis
+/// at compile time, so a site that is correctly dark under the run's chain configuration is
+/// still reported as never reached.
 #[macro_export]
 macro_rules! assert_reachable {
     () => {
@@ -124,6 +184,8 @@ macro_rules! assert_reachable {
         // calling in to antithesis sdk breaks determinisim in simtests (on linux only)
         if !cfg!(msim) {
             $crate::logging::assert_reachable_antithesis!($message);
+        } else {
+            $crate::assert_reachable_simtest!($message);
         }
     }};
 }
@@ -135,8 +197,7 @@ macro_rules! assert_sometimes {
         if !cfg!(msim) {
             $crate::logging::assert_sometimes_antithesis!($expr, $message);
         } else {
-            // evaluate the expression in case it has side effects
-            let _ = $expr;
+            $crate::assert_sometimes_simtest!($expr, $message);
         }
     }};
 }

@@ -3,32 +3,40 @@ source: external-crates/move/crates/move-transactional-test-runner/src/framework
 ---
 processed 6 tasks
 
+// return values from entry functions must have drop
+
 task 0, lines 6-13:
 //# publish
-Error: Transaction Effects Status: Rtd Move Bytecode Verification Error. Please run the Rtd Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: RtdMoveVerificationError, source: Some("Invalid entry point return type. Expected a non reference type."), command: Some(0) } }
+created: object(1,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3974800,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 1, lines 15-22:
 //# publish
-Error: Transaction Effects Status: Rtd Move Bytecode Verification Error. Please run the Rtd Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: RtdMoveVerificationError, source: Some("Invalid entry point return type. Expected a non reference type."), command: Some(0) } }
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3974800,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
 task 2, lines 24-31:
 //# publish
-Error: Transaction Effects Status: Rtd Move Bytecode Verification Error. Please run the Rtd Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: RtdMoveVerificationError, source: Some("Invalid entry point return type. Expected a non reference type."), command: Some(0) } }
+created: object(3,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3990000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
 task 3, lines 33-41:
 //# publish
-Error: Transaction Effects Status: Rtd Move Bytecode Verification Error. Please run the Rtd Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: RtdMoveVerificationError, source: Some("Invalid entry point return type. The specified return type does not have the 'drop' ability: _::m::Copyable"), command: Some(0) } }
+created: object(4,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 4499200,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
 task 4, lines 43-52:
 //# publish
-Error: Transaction Effects Status: Rtd Move Bytecode Verification Error. Please run the Rtd Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: RtdMoveVerificationError, source: Some("Invalid entry point return type. The specified return type does not have the 'drop' ability: _::m::Obj"), command: Some(0) } }
+created: object(5,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 4544800,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
 task 5, lines 54-63:
 //# publish
-Error: Transaction Effects Status: Rtd Move Bytecode Verification Error. Please run the Rtd Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: RtdMoveVerificationError, source: Some("Invalid entry point return type. The specified return type does not have the 'drop' ability: vector<_::m::Obj>"), command: Some(0) } }
+created: object(6,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 4552400,  storage_rebate: 978120, non_refundable_storage_fee: 9880

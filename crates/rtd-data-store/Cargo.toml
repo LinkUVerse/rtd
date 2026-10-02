@@ -1,10 +1,13 @@
 [package]
 name = "rtd-data-store"
 version = "0.1.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true
@@ -14,9 +17,9 @@ csv.workspace = true
 cynic.workspace = true
 fastcrypto.workspace = true
 lru.workspace = true
+linku-common.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 serde.workspace = true
-rtd-config.workspace = true
 rtd-types.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true

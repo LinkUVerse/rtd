@@ -10,13 +10,13 @@ use rand::seq::SliceRandom;
 use rtd_protocol_config::Chain;
 use tokio::time::sleep;
 
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_benchmark::drivers::BenchmarkCmp;
 use rtd_benchmark::drivers::BenchmarkStats;
 use rtd_benchmark::drivers::bench_driver::BenchDriver;
 use rtd_benchmark::drivers::driver::Driver;
 use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
+use std::sync::Arc;
+use std::time::Duration;
 
 use rtd_benchmark::benchmark_setup::BenchmarkSetup;
 use rtd_benchmark::options::Opts;
@@ -54,6 +54,7 @@ use tokio::sync::Barrier;
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
+    let min_tps = opts.min_tps;
 
     // TODO: query the network for the current protocol version.
     let protocol_config = match opts.protocol_version {
@@ -95,7 +96,7 @@ async fn main() -> Result<()> {
         // whole network.
         let mut system_state_observer = SystemStateObserver::new(
             bench_setup
-                .proxies
+                .execution_proxies
                 .choose(&mut rand::thread_rng())
                 .context("Failed to get proxy for system state observer")?
                 .clone(),
@@ -147,7 +148,8 @@ async fn main() -> Result<()> {
             let driver = BenchDriver::new(opts.stat_collection_interval, stress_stat_collection);
             driver
                 .run(
-                    bench_setup.proxies,
+                    bench_setup.execution_proxies,
+                    bench_setup.fullnode_proxies,
                     workloads,
                     system_state_observer,
                     &registry_clone,
@@ -200,6 +202,16 @@ async fn main() -> Result<()> {
                     if !curr_benchmark_stats_path.is_empty() {
                         let serialized = serde_json::to_string(&benchmark_stats)?;
                         std::fs::write(curr_benchmark_stats_path, serialized)?;
+                    }
+
+                    if let Some(min_tps) = min_tps {
+                        let actual_tps = benchmark_stats.num_success_txes as f64
+                            / benchmark_stats.duration.as_secs_f64().max(1.0);
+                        if actual_tps < min_tps {
+                            return Err(anyhow!(
+                                "TPS {actual_tps:.2} is below minimum threshold {min_tps}"
+                            ));
+                        }
                     }
                 }
                 Err(e) => eprintln!("{e}"),

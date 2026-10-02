@@ -4,10 +4,14 @@
 use crate::{
     cfgir::visitor::AbstractInterpreterVisitor,
     command_line::compiler::Visitor,
-    diagnostics::warning_filters::WarningFilter,
+    diagnostics::{
+        codes::{DiagnosticOrigin, DiagnosticsID},
+        filter::FilterName,
+    },
     expansion::ast as E,
     hlir::ast::{BaseType_, SingleType, SingleType_},
-    linters::{ALLOW_ATTR_CATEGORY, LINT_WARNING_PREFIX, LintLevel, LinterDiagnosticCategory},
+    linters::{LintLevel, filters_from_table, lints},
+    shared::known_attributes::DiagnosticAttribute,
     typing::visitor::TypingVisitor,
 };
 use move_ir_types::location::Loc;
@@ -23,7 +27,9 @@ pub mod public_mut_tx_context;
 pub mod public_random;
 pub mod self_transfer;
 pub mod share_owned;
+pub mod uncallable_function;
 pub mod unnecessary_public_entry;
+pub mod unused_object_with_fields;
 
 pub const TRANSFER_MOD_NAME: &str = "transfer";
 pub const TRANSFER_FUN: &str = "transfer";
@@ -62,111 +68,102 @@ pub const VEC_MAP_STRUCT_NAME: &str = "VecMap";
 pub const VEC_SET_MOD_NAME: &str = "vec_set";
 pub const VEC_SET_STRUCT_NAME: &str = "VecSet";
 
-pub const SHARE_OWNED_FILTER_NAME: &str = "share_owned";
-pub const SELF_TRANSFER_FILTER_NAME: &str = "self_transfer";
-pub const CUSTOM_STATE_CHANGE_FILTER_NAME: &str = "custom_state_change";
-pub const COIN_FIELD_FILTER_NAME: &str = "coin_field";
-pub const FREEZE_WRAPPED_FILTER_NAME: &str = "freeze_wrapped";
-pub const COLLECTION_EQUALITY_FILTER_NAME: &str = "collection_equality";
-pub const PUBLIC_RANDOM_FILTER_NAME: &str = "public_random";
-pub const MISSING_KEY_FILTER_NAME: &str = "missing_key";
-pub const FREEZING_CAPABILITY_FILTER_NAME: &str = "freezing_capability";
-pub const PREFER_MUTABLE_TX_CONTEXT_FILTER_NAME: &str = "prefer_mut_tx_context";
-pub const UNNECESSARY_PUBLIC_ENTRY_FILTER_NAME: &str = "public_entry";
-
 pub const RANDOM_MOD_NAME: &str = "random";
 pub const RANDOM_STRUCT_NAME: &str = "Random";
 pub const RANDOM_GENERATOR_STRUCT_NAME: &str = "RandomGenerator";
 
 pub const INVALID_LOC: Loc = Loc::invalid();
 
-#[repr(u8)]
-pub enum LinterDiagnosticCode {
-    ShareOwned,
-    SelfTransfer,
-    CustomStateChange,
-    CoinField,
-    FreezeWrapped,
-    CollectionEquality,
-    PublicRandom,
-    MissingKey,
-    FreezingCapability,
-    PreferMutableTxContext,
-    UnnecessaryPublicEntry,
-}
+// Append-only: codes are positional and published (see `lints!`).
+lints!(
+    RtdLintCode,
+    DiagnosticOrigin::RtdLint,
+    RTD_LINT_WARNING_FILTERS,
+    (
+        ShareOwned,
+        Suspicious,
+        "share_owned",
+        "possible owned object share"
+    ),
+    (
+        SelfTransfer,
+        Conventions,
+        "self_transfer",
+        "non-composable transfer to sender"
+    ),
+    (
+        CustomStateChange,
+        Suspicious,
+        "custom_state_change",
+        "potentially unenforceable custom transfer/share/freeze policy"
+    ),
+    (
+        CoinField,
+        Conventions,
+        "coin_field",
+        "sub-optimal 'rtd::coin::Coin' field type"
+    ),
+    (
+        FreezeWrapped,
+        Suspicious,
+        "freeze_wrapped",
+        "attempting to freeze wrapped objects"
+    ),
+    (
+        CollectionEquality,
+        Suspicious,
+        "collection_equality",
+        "possibly useless collections compare"
+    ),
+    (
+        PublicRandom,
+        Security,
+        "public_random",
+        "risky use of 'rtd::random'"
+    ),
+    (
+        MissingKey,
+        Suspicious,
+        "missing_key",
+        "struct with id but missing key ability"
+    ),
+    (
+        FreezingCapability,
+        Suspicious,
+        "freezing_capability",
+        "freezing potential capability"
+    ),
+    (
+        PreferMutableTxContext,
+        Conventions,
+        "prefer_mut_tx_context",
+        "prefer '&mut TxContext' over '&TxContext'"
+    ),
+    (
+        UnnecessaryPublicEntry,
+        Complexity,
+        "public_entry",
+        "unnecessary `entry` on a `public` function"
+    ),
+    (
+        UncallableFunction,
+        Correctness,
+        "uncallable_function",
+        "it will not be possible to call this function"
+    ),
+    (
+        UnusedObjWithFields,
+        Suspicious,
+        "unused_object_with_fields",
+        "unused object with fields"
+    ),
+);
 
-pub fn known_filters() -> (Option<Symbol>, Vec<WarningFilter>) {
-    let filters = vec![
-        WarningFilter::All(Some(LINT_WARNING_PREFIX)),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::ShareOwned as u8,
-            Some(SHARE_OWNED_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::SelfTransfer as u8,
-            Some(SELF_TRANSFER_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::CustomStateChange as u8,
-            Some(CUSTOM_STATE_CHANGE_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::CoinField as u8,
-            Some(COIN_FIELD_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::FreezeWrapped as u8,
-            Some(FREEZE_WRAPPED_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::CollectionEquality as u8,
-            Some(COLLECTION_EQUALITY_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::PublicRandom as u8,
-            Some(PUBLIC_RANDOM_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::MissingKey as u8,
-            Some(MISSING_KEY_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::FreezingCapability as u8,
-            Some(FREEZING_CAPABILITY_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::PreferMutableTxContext as u8,
-            Some(PREFER_MUTABLE_TX_CONTEXT_FILTER_NAME),
-        ),
-        WarningFilter::code(
-            Some(LINT_WARNING_PREFIX),
-            LinterDiagnosticCategory::Rtd as u8,
-            LinterDiagnosticCode::UnnecessaryPublicEntry as u8,
-            Some(UNNECESSARY_PUBLIC_ENTRY_FILTER_NAME),
-        ),
-    ];
-
-    (Some(ALLOW_ATTR_CATEGORY.into()), filters)
+pub fn known_filters() -> (Option<Symbol>, Vec<(FilterName, Vec<DiagnosticsID>)>) {
+    (
+        Some(DiagnosticAttribute::LINT_SYMBOL),
+        filters_from_table(RtdLintCode::ORIGIN, RTD_LINT_WARNING_FILTERS),
+    )
 }
 
 pub fn linter_visitors(level: LintLevel) -> Vec<Visitor> {
@@ -182,6 +179,10 @@ pub fn linter_visitors(level: LintLevel) -> Vec<Visitor> {
             public_random::PublicRandomVisitor.visitor(),
             missing_key::MissingKeyVisitor.visitor(),
             unnecessary_public_entry::UnnecessaryPublicEntry.visitor(),
+            uncallable_function::UncallableFunction.visitor(),
+            unused_object_with_fields::UnusedObjWithFieldsVerifier.visitor(),
+            // This is not on by default outside of Rtd mode
+            crate::linters::unused_return_value::UnusedReturnValue.visitor(),
         ],
         LintLevel::All => {
             let mut visitors = linter_visitors(LintLevel::Default);

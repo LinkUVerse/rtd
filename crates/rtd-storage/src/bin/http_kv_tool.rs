@@ -2,21 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::*;
-use std::str::FromStr;
-use std::sync::Arc;
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_storage::http_key_value_store::*;
 use rtd_storage::key_value_store::TransactionKeyValueStore;
 use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
 use rtd_types::base_types::ObjectID;
 use rtd_types::digests::{CheckpointDigest, TransactionDigest};
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(rename_all = "kebab-case")]
 enum Command {
     Fetch {
-        // default value of 'https://transactions.rtd.io/'
-        #[arg(short, long, default_value = "https://transactions.rtd.io/mainnet")]
+        // The RTD transaction archive must be configured explicitly.
+        #[arg(short, long)]
         base_url: String,
 
         #[arg(short, long)]
@@ -75,12 +76,12 @@ impl Command {
 
                         if type_ == "tx" {
                             let tx = kv.multi_get_tx(&digests).await.unwrap();
-                            for (digest, tx) in digests.iter().zip(tx.iter()) {
+                            for (digest, tx) in digests.iter().zip_debug_eq(tx.iter()) {
                                 println!("fetched tx: {:?} {:?}", digest, tx);
                             }
                         } else {
                             let fx = kv.multi_get_fx_by_tx_digest(&digests).await.unwrap();
-                            for (digest, fx) in digests.iter().zip(fx.iter()) {
+                            for (digest, fx) in digests.iter().zip_debug_eq(fx.iter()) {
                                 println!("fetched fx: {:?} {:?}", digest, fx);
                             }
                         }
@@ -89,7 +90,7 @@ impl Command {
                     "ckpt_contents" => {
                         let ckpts = kv.multi_get_checkpoints(&[], &seqs, &[]).await.unwrap();
 
-                        for (seq, ckpt) in seqs.iter().zip(ckpts.1.iter()) {
+                        for (seq, ckpt) in seqs.iter().zip_debug_eq(ckpts.1.iter()) {
                             // populate digest before printing
                             ckpt.as_ref().map(|c| c.digest());
                             println!("fetched ckpt contents: {:?} {:?}", seq, ckpt);
@@ -109,12 +110,12 @@ impl Command {
                             .await
                             .unwrap();
 
-                        for (seq, ckpt) in seqs.iter().zip(ckpts.0.iter()) {
+                        for (seq, ckpt) in seqs.iter().zip_debug_eq(ckpts.0.iter()) {
                             // populate digest before printing
                             ckpt.as_ref().map(|c| c.digest());
                             println!("fetched ckpt summary: {:?} {:?}", seq, ckpt);
                         }
-                        for (digest, ckpt) in digests.iter().zip(ckpts.2.iter()) {
+                        for (digest, ckpt) in digests.iter().zip_debug_eq(ckpts.2.iter()) {
                             // populate digest before printing
                             ckpt.as_ref().map(|c| c.digest());
                             println!("fetched ckpt summary: {:?} {:?}", digest, ckpt);
@@ -140,7 +141,7 @@ impl Command {
             }
             Command::DecodeKey { url } => {
                 // url may look like
-                // https://transactions.rtd.io/mainnet/jlkqmZbVuunngIyy2vjBOJSETrM56EH_kIc5wuLvDydN_x0GAAAAAA/ob
+                // https://archive.example.invalid/jlkqmZbVuunngIyy2vjBOJSETrM56EH_kIc5wuLvDydN_x0GAAAAAA/ob
                 // extract the digest and type
                 let parts: Vec<_> = url.split('/').collect();
 

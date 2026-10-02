@@ -6,6 +6,20 @@ processed 31 tasks
 init:
 A: object(0,0)
 
+// 1. Output all the checkpoints, for context
+// 2. Fetch transactions from an empty checkpoint
+// 3. ...from a checkpoint with a single transaction
+// 4. ...from a checkpoint with multiple transactions
+// 5,   6,  7. ...with reversed ordering
+// 8,   9, 10. ...limited to two transactions
+// 11, 12, 13. ...limited and reversed
+// 14. Fetch limited transactions from a checkpoint with multiple transactions,
+//     with a cursor
+// 17. ...reversed
+// 18. Cursor points before the expected checkpoint
+// 19. Cursor points after the expected checkpoint
+// 20, 21. Cursor points before and after the expected checkpoint, reversed
+
 task 1, line 20:
 //# create-checkpoint
 Checkpoint created: 1
@@ -66,7 +80,7 @@ Response: {
   "result": {
     "epoch": "0",
     "sequenceNumber": "0",
-    "digest": "EznTSQyzQqRf8tuPhLWZDdhny9jgA7Rw81nWB486rW8C",
+    "digest": "CKjFRsvNLMhfTKYRc67g1tY5KjYkzrTRo9yu4rhW9nr1",
     "networkTotalTransactions": "1",
     "epochRollingGasCostSummary": {
       "computationCost": "0",
@@ -76,10 +90,10 @@ Response: {
     },
     "timestampMs": "0",
     "transactions": [
-      "3FJ4fSrf7toVCANccxAbeJ5A1iSzwKLghCYcaz9atbCD"
+      "85r5mfnut7T1NNBmbL7RpGMf9caJe5VEnpiCJxkz7eDE"
     ],
     "checkpointCommitments": [],
-    "validatorSignature": "sqTHHfkSR11Z+F1hT87Kq6omvXa6VgddqwTlq7kkS20vBM0XEMQsqq+YjSLf31fZ"
+    "validatorSignature": "opngWrNN1GAlo0T9hi0/PYUMHK4rucl+9WKijrKLXXjba1ZhvqFdSAAle4aMvE86"
   }
 }
 
@@ -91,9 +105,9 @@ Response: {
   "result": {
     "epoch": "0",
     "sequenceNumber": "1",
-    "digest": "6aWovQEKHwgzpsvJ1YxbamhB1fakCFiUYzvLor4kjbvX",
-    "networkTotalTransactions": "1",
-    "previousDigest": "EznTSQyzQqRf8tuPhLWZDdhny9jgA7Rw81nWB486rW8C",
+    "digest": "YK5vC7np6H5DHS7jnmzZPHn8rR4x9VXn6ZxE6crnhAA",
+    "networkTotalTransactions": "2",
+    "previousDigest": "CKjFRsvNLMhfTKYRc67g1tY5KjYkzrTRo9yu4rhW9nr1",
     "epochRollingGasCostSummary": {
       "computationCost": "0",
       "storageCost": "0",
@@ -101,9 +115,11 @@ Response: {
       "nonRefundableStorageFee": "0"
     },
     "timestampMs": "0",
-    "transactions": [],
+    "transactions": [
+      "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm"
+    ],
     "checkpointCommitments": [],
-    "validatorSignature": "tPLOYsvCtvGTc88SHy8jNbKrwpMVgH8hF/+UeA6r9lcUagr+kkAFNqcKWSDDZUFL"
+    "validatorSignature": "rOnWXLtTgyxkaajiZq8wsMwRk35a5h6qX4giEYtK5S0mbP9eF8ZbRZLXdRb6BxIT"
   }
 }
 
@@ -115,9 +131,9 @@ Response: {
   "result": {
     "epoch": "0",
     "sequenceNumber": "2",
-    "digest": "FfreGpYDd5ep5o9r46SqjNuVTV5jjS3wEmfRtx26kwij",
-    "networkTotalTransactions": "2",
-    "previousDigest": "6aWovQEKHwgzpsvJ1YxbamhB1fakCFiUYzvLor4kjbvX",
+    "digest": "GRE2oKbup6UFQ8kBE1iSZoNLeJA7hWdsipkFdoJqcNiV",
+    "networkTotalTransactions": "4",
+    "previousDigest": "YK5vC7np6H5DHS7jnmzZPHn8rR4x9VXn6ZxE6crnhAA",
     "epochRollingGasCostSummary": {
       "computationCost": "1000000",
       "storageCost": "1976000",
@@ -126,10 +142,11 @@ Response: {
     },
     "timestampMs": "0",
     "transactions": [
-      "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa"
+      "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
+      "2iEZQGAgJYgzmcNC2eLrbNejeTJHJxY4Xy4yKj7R3D8g"
     ],
     "checkpointCommitments": [],
-    "validatorSignature": "gNKVscJg3dc2QOstRKLNMRY1UIlOCg0s3Lg8XoGkA0CvQBaf5LX1kMil/6SUCCk8"
+    "validatorSignature": "p//QtE8vC/8EOe4TS8ogc3bH7m9DeRmOZgvKpWRPw+w8bYjVcqje5nQIz02lkIOW"
   }
 }
 
@@ -141,9 +158,9 @@ Response: {
   "result": {
     "epoch": "0",
     "sequenceNumber": "3",
-    "digest": "85aWv9yRg9dXc7bbSFcymQALE6H9BdQghNNnJP8Xa4o4",
-    "networkTotalTransactions": "6",
-    "previousDigest": "FfreGpYDd5ep5o9r46SqjNuVTV5jjS3wEmfRtx26kwij",
+    "digest": "Fj844PT3413hYVBtScSWyHy7VZyaEg9C8WE53sMiFLtM",
+    "networkTotalTransactions": "9",
+    "previousDigest": "GRE2oKbup6UFQ8kBE1iSZoNLeJA7hWdsipkFdoJqcNiV",
     "epochRollingGasCostSummary": {
       "computationCost": "5000000",
       "storageCost": "9880000",
@@ -152,13 +169,14 @@ Response: {
     },
     "timestampMs": "0",
     "transactions": [
-      "63rb3kkmYLsb5THn4GV3VHp5sDZ5GffaY3TWo3jaFC78",
-      "4JBFZsv4ZykFeBPHbJsfdEmHjNTnsgNJL555ZiTGSbZA",
-      "FWb7SBiW1434mcyZwiMgP49uKPXDqrFJ78e62KeVdG7x",
-      "AtFjxXNoMNmELt3bspkiXsE2SR7GA7wHHFJSLyiumUYQ"
+      "887ZoGG2uRiXqs9ytzyVJom4YDjJjoDXJKruvKcepsT2",
+      "5SSP1a1L5pXjn9mcq9knSiskG9QHhShk5fEdGpTMgsEC",
+      "MUxiTByXVB2P4buRwnD8x8PUj3zYqmVV776vztadJeK",
+      "ENfK4j3XThy1JbaCuLeK756JcaQrzXuN4ZojgUDST8c4",
+      "GvJUfeVXR9rGHPhuq6Fju2MmNBTtxZhkZMyJgaSDYXQN"
     ],
     "checkpointCommitments": [],
-    "validatorSignature": "lHjBQsxvGAvjcs7EqDnr1PYkxU6ChRQLXw/nrs1iJnupnrdI3TDiCrfYFad+ZWcf"
+    "validatorSignature": "oIIw0bciOy5u/NsUHMP3c0mtxHUfUC2ahi7+Ns0GCIG+lsnSPhRU19/ouo4Rlqy0"
   }
 }
 
@@ -168,8 +186,14 @@ Response: {
   "jsonrpc": "2.0",
   "id": 4,
   "result": {
-    "data": [],
-    "nextCursor": null,
+    "data": [
+      {
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MQ==",
     "hasNextPage": false
   }
 }
@@ -182,12 +206,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa",
+        "digest": "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
+        "timestampMs": "0",
+        "checkpoint": "2"
+      },
+      {
+        "digest": "2iEZQGAgJYgzmcNC2eLrbNejeTJHJxY4Xy4yKj7R3D8g",
         "timestampMs": "0",
         "checkpoint": "2"
       }
     ],
-    "nextCursor": "MQ==",
+    "nextCursor": "Mw==",
     "hasNextPage": false
   }
 }
@@ -200,27 +229,32 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "63rb3kkmYLsb5THn4GV3VHp5sDZ5GffaY3TWo3jaFC78",
+        "digest": "887ZoGG2uRiXqs9ytzyVJom4YDjJjoDXJKruvKcepsT2",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "4JBFZsv4ZykFeBPHbJsfdEmHjNTnsgNJL555ZiTGSbZA",
+        "digest": "5SSP1a1L5pXjn9mcq9knSiskG9QHhShk5fEdGpTMgsEC",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "FWb7SBiW1434mcyZwiMgP49uKPXDqrFJ78e62KeVdG7x",
+        "digest": "MUxiTByXVB2P4buRwnD8x8PUj3zYqmVV776vztadJeK",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "AtFjxXNoMNmELt3bspkiXsE2SR7GA7wHHFJSLyiumUYQ",
+        "digest": "ENfK4j3XThy1JbaCuLeK756JcaQrzXuN4ZojgUDST8c4",
+        "timestampMs": "0",
+        "checkpoint": "3"
+      },
+      {
+        "digest": "GvJUfeVXR9rGHPhuq6Fju2MmNBTtxZhkZMyJgaSDYXQN",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "NQ==",
+    "nextCursor": "OA==",
     "hasNextPage": false
   }
 }
@@ -231,8 +265,14 @@ Response: {
   "jsonrpc": "2.0",
   "id": 7,
   "result": {
-    "data": [],
-    "nextCursor": null,
+    "data": [
+      {
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MQ==",
     "hasNextPage": false
   }
 }
@@ -245,12 +285,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa",
+        "digest": "2iEZQGAgJYgzmcNC2eLrbNejeTJHJxY4Xy4yKj7R3D8g",
+        "timestampMs": "0",
+        "checkpoint": "2"
+      },
+      {
+        "digest": "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
         "timestampMs": "0",
         "checkpoint": "2"
       }
     ],
-    "nextCursor": "MQ==",
+    "nextCursor": "Mg==",
     "hasNextPage": false
   }
 }
@@ -263,27 +308,32 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "AtFjxXNoMNmELt3bspkiXsE2SR7GA7wHHFJSLyiumUYQ",
+        "digest": "GvJUfeVXR9rGHPhuq6Fju2MmNBTtxZhkZMyJgaSDYXQN",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "FWb7SBiW1434mcyZwiMgP49uKPXDqrFJ78e62KeVdG7x",
+        "digest": "ENfK4j3XThy1JbaCuLeK756JcaQrzXuN4ZojgUDST8c4",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "4JBFZsv4ZykFeBPHbJsfdEmHjNTnsgNJL555ZiTGSbZA",
+        "digest": "MUxiTByXVB2P4buRwnD8x8PUj3zYqmVV776vztadJeK",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "63rb3kkmYLsb5THn4GV3VHp5sDZ5GffaY3TWo3jaFC78",
+        "digest": "5SSP1a1L5pXjn9mcq9knSiskG9QHhShk5fEdGpTMgsEC",
+        "timestampMs": "0",
+        "checkpoint": "3"
+      },
+      {
+        "digest": "887ZoGG2uRiXqs9ytzyVJom4YDjJjoDXJKruvKcepsT2",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "Mg==",
+    "nextCursor": "NA==",
     "hasNextPage": false
   }
 }
@@ -294,8 +344,14 @@ Response: {
   "jsonrpc": "2.0",
   "id": 10,
   "result": {
-    "data": [],
-    "nextCursor": null,
+    "data": [
+      {
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MQ==",
     "hasNextPage": false
   }
 }
@@ -308,12 +364,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa",
+        "digest": "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
+        "timestampMs": "0",
+        "checkpoint": "2"
+      },
+      {
+        "digest": "2iEZQGAgJYgzmcNC2eLrbNejeTJHJxY4Xy4yKj7R3D8g",
         "timestampMs": "0",
         "checkpoint": "2"
       }
     ],
-    "nextCursor": "MQ==",
+    "nextCursor": "Mw==",
     "hasNextPage": false
   }
 }
@@ -326,17 +387,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "63rb3kkmYLsb5THn4GV3VHp5sDZ5GffaY3TWo3jaFC78",
+        "digest": "887ZoGG2uRiXqs9ytzyVJom4YDjJjoDXJKruvKcepsT2",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "4JBFZsv4ZykFeBPHbJsfdEmHjNTnsgNJL555ZiTGSbZA",
+        "digest": "5SSP1a1L5pXjn9mcq9knSiskG9QHhShk5fEdGpTMgsEC",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "Mw==",
+    "nextCursor": "NQ==",
     "hasNextPage": true
   }
 }
@@ -347,8 +408,14 @@ Response: {
   "jsonrpc": "2.0",
   "id": 13,
   "result": {
-    "data": [],
-    "nextCursor": null,
+    "data": [
+      {
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MQ==",
     "hasNextPage": false
   }
 }
@@ -361,12 +428,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa",
+        "digest": "2iEZQGAgJYgzmcNC2eLrbNejeTJHJxY4Xy4yKj7R3D8g",
+        "timestampMs": "0",
+        "checkpoint": "2"
+      },
+      {
+        "digest": "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
         "timestampMs": "0",
         "checkpoint": "2"
       }
     ],
-    "nextCursor": "MQ==",
+    "nextCursor": "Mg==",
     "hasNextPage": false
   }
 }
@@ -379,58 +451,63 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "AtFjxXNoMNmELt3bspkiXsE2SR7GA7wHHFJSLyiumUYQ",
+        "digest": "GvJUfeVXR9rGHPhuq6Fju2MmNBTtxZhkZMyJgaSDYXQN",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "FWb7SBiW1434mcyZwiMgP49uKPXDqrFJ78e62KeVdG7x",
+        "digest": "ENfK4j3XThy1JbaCuLeK756JcaQrzXuN4ZojgUDST8c4",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "NA==",
+    "nextCursor": "Nw==",
     "hasNextPage": true
   }
 }
 
 task 25, lines 175-182:
-//# run-jsonrpc --cursors 3
+//# run-jsonrpc --cursors 6
 Response: {
   "jsonrpc": "2.0",
   "id": 16,
   "result": {
     "data": [
       {
-        "digest": "FWb7SBiW1434mcyZwiMgP49uKPXDqrFJ78e62KeVdG7x",
+        "digest": "ENfK4j3XThy1JbaCuLeK756JcaQrzXuN4ZojgUDST8c4",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "AtFjxXNoMNmELt3bspkiXsE2SR7GA7wHHFJSLyiumUYQ",
+        "digest": "GvJUfeVXR9rGHPhuq6Fju2MmNBTtxZhkZMyJgaSDYXQN",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "NQ==",
+    "nextCursor": "OA==",
     "hasNextPage": false
   }
 }
 
 task 26, lines 184-191:
-//# run-jsonrpc --cursors 3
+//# run-jsonrpc --cursors 6
 Response: {
   "jsonrpc": "2.0",
   "id": 17,
   "result": {
     "data": [
       {
-        "digest": "63rb3kkmYLsb5THn4GV3VHp5sDZ5GffaY3TWo3jaFC78",
+        "digest": "5SSP1a1L5pXjn9mcq9knSiskG9QHhShk5fEdGpTMgsEC",
+        "timestampMs": "0",
+        "checkpoint": "3"
+      },
+      {
+        "digest": "887ZoGG2uRiXqs9ytzyVJom4YDjJjoDXJKruvKcepsT2",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "Mg==",
+    "nextCursor": "NA==",
     "hasNextPage": false
   }
 }
@@ -443,29 +520,29 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "63rb3kkmYLsb5THn4GV3VHp5sDZ5GffaY3TWo3jaFC78",
+        "digest": "887ZoGG2uRiXqs9ytzyVJom4YDjJjoDXJKruvKcepsT2",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "4JBFZsv4ZykFeBPHbJsfdEmHjNTnsgNJL555ZiTGSbZA",
+        "digest": "5SSP1a1L5pXjn9mcq9knSiskG9QHhShk5fEdGpTMgsEC",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "Mw==",
+    "nextCursor": "NQ==",
     "hasNextPage": true
   }
 }
 
 task 28, lines 202-209:
-//# run-jsonrpc --cursors 6
+//# run-jsonrpc --cursors 9
 Response: {
   "jsonrpc": "2.0",
   "id": 19,
   "result": {
     "data": [],
-    "nextCursor": "Ng==",
+    "nextCursor": "OQ==",
     "hasNextPage": false
   }
 }
@@ -483,24 +560,24 @@ Response: {
 }
 
 task 30, lines 220-227:
-//# run-jsonrpc --cursors 6
+//# run-jsonrpc --cursors 9
 Response: {
   "jsonrpc": "2.0",
   "id": 21,
   "result": {
     "data": [
       {
-        "digest": "AtFjxXNoMNmELt3bspkiXsE2SR7GA7wHHFJSLyiumUYQ",
+        "digest": "GvJUfeVXR9rGHPhuq6Fju2MmNBTtxZhkZMyJgaSDYXQN",
         "timestampMs": "0",
         "checkpoint": "3"
       },
       {
-        "digest": "FWb7SBiW1434mcyZwiMgP49uKPXDqrFJ78e62KeVdG7x",
+        "digest": "ENfK4j3XThy1JbaCuLeK756JcaQrzXuN4ZojgUDST8c4",
         "timestampMs": "0",
         "checkpoint": "3"
       }
     ],
-    "nextCursor": "NA==",
+    "nextCursor": "Nw==",
     "hasNextPage": true
   }
 }

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use fastcrypto::traits::KeyPair;
 use futures::{TryFutureExt, future};
 use itertools::Itertools as _;
+use linku_common::ZipDebugEqIteratorExt;
 use linku_common::{assert_reachable, debug_fatal};
 use linku_metrics::spawn_monitored_task;
 use moka::sync::Cache;
@@ -17,40 +18,24 @@ use prometheus::{
     register_histogram_with_registry, register_int_counter_vec_with_registry,
     register_int_counter_with_registry, register_int_gauge_with_registry,
 };
-use std::{
-    cmp::Ordering,
-    collections::HashSet,
-    future::Future,
-    io,
-    net::{IpAddr, SocketAddr},
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, Instant, SystemTime},
-};
 use rtd_network::{
     api::{Validator, ValidatorServer},
     tonic,
     validator::server::RTD_TLS_SERVER_NAME,
 };
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::message_envelope::Message;
-use rtd_types::messages_consensus::{
-    ConsensusPosition, ConsensusTransaction, ConsensusTransactionKey, ConsensusTransactionKind,
-};
+use rtd_types::messages_consensus::{ConsensusTransaction, ConsensusTransactionKey};
 use rtd_types::messages_grpc::{
-    HandleCertificateRequestV3, HandleCertificateResponseV3, RawSubmitTxResponse,
-};
-use rtd_types::messages_grpc::{
-    HandleCertificateResponseV2, HandleTransactionResponse, ObjectInfoRequest, ObjectInfoResponse,
-    SubmitCertificateResponse, SystemStateRequest, TransactionInfoRequest, TransactionInfoResponse,
-};
-use rtd_types::messages_grpc::{
-    HandleSoftBundleCertificatesRequestV3, HandleSoftBundleCertificatesResponseV3,
+    ObjectInfoRequest, ObjectInfoResponse, RawSubmitTxResponse, SystemStateRequest,
+    TransactionInfoRequest, TransactionInfoResponse,
 };
 use rtd_types::multiaddr::Multiaddr;
 use rtd_types::object::Object;
 use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::traffic_control::{ClientIdSource, Weight};
 use rtd_types::{
+    base_types::ObjectID,
     digests::{TransactionDigest, TransactionEffectsDigest},
     error::{RtdErrorKind, UserInputError},
 };
@@ -61,9 +46,6 @@ use rtd_types::{
         SubmitTxResult, WaitForEffectsRequest, WaitForEffectsResponse,
     },
 };
-use rtd_types::{
-    effects::TransactionEffectsAPI, executable_transaction::VerifiedExecutableTransaction,
-};
 use rtd_types::{effects::TransactionEvents, messages_grpc::SubmitTxType};
 use rtd_types::{error::*, transaction::*};
 use rtd_types::{
@@ -72,34 +54,35 @@ use rtd_types::{
         CheckpointRequest, CheckpointRequestV2, CheckpointResponse, CheckpointResponseV2,
     },
 };
-use tap::TapFallible;
-use tokio::sync::oneshot;
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
+};
 use tokio::time::timeout;
 use tonic::metadata::{Ascii, MetadataValue};
-use tracing::{Instrument, debug, error, error_span, info, instrument};
+use tracing::{debug, error, info, instrument};
 
-use crate::consensus_adapter::ConnectionMonitorStatusForTests;
+use crate::admission_queue::{AdmissionQueueContext, AdmissionQueueManager};
+use crate::consensus_transaction_pool::TransactionPoolContext;
+use crate::gasless_rate_limiter::GaslessRateLimiter;
 use crate::{
     authority::{AuthorityState, consensus_tx_status_cache::ConsensusTxStatus},
-    consensus_adapter::{ConsensusAdapter, ConsensusAdapterMetrics},
+    consensus_adapter::{ConsensusAdapter, ConsensusAdapterMetrics, ConsensusOverloadChecker},
     consensus_handler::SequencedConsensusTransactionKey,
     traffic_controller::{TrafficController, parse_ip, policies::TrafficTally},
 };
 use crate::{
     authority::{
-        ExecutionEnv, authority_per_epoch_store::AuthorityPerEpochStore,
+        authority_per_epoch_store::AuthorityPerEpochStore,
         consensus_tx_status_cache::NotifyReadConsensusTxStatusResult,
-        shared_object_version_manager::Schedulable,
     },
     checkpoints::CheckpointStore,
-    execution_scheduler::SchedulingSource,
     mysticeti_adapter::LazyMysticetiClient,
-    transaction_outputs::TransactionOutputs,
 };
-use nonempty::{NonEmpty, nonempty};
 use rtd_config::local_ip_utils::new_local_tcp_address_for_testing;
-use rtd_types::messages_grpc::PingType;
-use tonic::transport::server::TcpConnectInfo;
 
 #[cfg(test)]
 #[path = "unit_tests/server_tests.rs"]
@@ -157,17 +140,15 @@ impl AuthorityServer {
     }
 
     pub fn new_for_test(state: Arc<AuthorityState>) -> Self {
+        let slot_freed_notify = Arc::new(tokio::sync::Notify::new());
         let consensus_adapter = Arc::new(ConsensusAdapter::new(
             Arc::new(LazyMysticetiClient::new()),
             CheckpointStore::new_for_tests(),
             state.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            state.epoch_store_for_testing().protocol_config().clone(),
+            slot_freed_notify,
         ));
         Self::new_for_test_with_consensus_adapter(state, consensus_adapter)
     }
@@ -210,15 +191,7 @@ impl AuthorityServer {
 pub struct ValidatorServiceMetrics {
     pub signature_errors: IntCounter,
     pub tx_verification_latency: Histogram,
-    pub cert_verification_latency: Histogram,
-    pub consensus_latency: Histogram,
     pub handle_transaction_latency: Histogram,
-    pub submit_certificate_consensus_latency: Histogram,
-    pub handle_certificate_consensus_latency: Histogram,
-    pub handle_certificate_non_consensus_latency: Histogram,
-    pub handle_soft_bundle_certificates_consensus_latency: Histogram,
-    pub handle_soft_bundle_certificates_count: Histogram,
-    pub handle_soft_bundle_certificates_size_bytes: Histogram,
     pub handle_transaction_consensus_latency: Histogram,
     pub handle_submit_transaction_consensus_latency: HistogramVec,
     pub handle_wait_for_effects_ping_latency: HistogramVec,
@@ -227,10 +200,7 @@ pub struct ValidatorServiceMetrics {
     handle_submit_transaction_bytes: HistogramVec,
     handle_submit_transaction_batch_size: HistogramVec,
 
-    num_rejected_tx_in_epoch_boundary: IntCounter,
-    num_rejected_cert_in_epoch_boundary: IntCounter,
     num_rejected_tx_during_overload: IntCounterVec,
-    num_rejected_cert_during_overload: IntCounterVec,
     submission_rejected_transactions: IntCounterVec,
     submission_suppressed_already_processed: IntCounterVec,
     submission_suppressed_recently_submitted: IntCounterVec,
@@ -244,6 +214,8 @@ pub struct ValidatorServiceMetrics {
     forwarded_header_not_included: IntCounter,
     client_id_source_config_mismatch: IntCounter,
     x_forwarded_for_num_hops: Gauge,
+    pub gasless_rate_limited_count: IntCounter,
+    pub gasless_submission_outcomes: IntCounterVec,
 }
 
 impl ValidatorServiceMetrics {
@@ -262,66 +234,10 @@ impl ValidatorServiceMetrics {
                 registry,
             )
             .unwrap(),
-            cert_verification_latency: register_histogram_with_registry!(
-                "validator_service_cert_verification_latency",
-                "Latency of verifying a certificate",
-                linku_metrics::SUBSECOND_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            consensus_latency: register_histogram_with_registry!(
-                "validator_service_consensus_latency",
-                "Time spent between submitting a txn to consensus and getting back local acknowledgement. Execution and finalization time are not included.",
-                linku_metrics::SUBSECOND_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
             handle_transaction_latency: register_histogram_with_registry!(
                 "validator_service_handle_transaction_latency",
                 "Latency of handling a transaction",
                 linku_metrics::SUBSECOND_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            handle_certificate_consensus_latency: register_histogram_with_registry!(
-                "validator_service_handle_certificate_consensus_latency",
-                "Latency of handling a consensus transaction certificate",
-                linku_metrics::COARSE_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            submit_certificate_consensus_latency: register_histogram_with_registry!(
-                "validator_service_submit_certificate_consensus_latency",
-                "Latency of submit_certificate RPC handler",
-                linku_metrics::COARSE_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            handle_certificate_non_consensus_latency: register_histogram_with_registry!(
-                "validator_service_handle_certificate_non_consensus_latency",
-                "Latency of handling a non-consensus transaction certificate",
-                linku_metrics::SUBSECOND_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            handle_soft_bundle_certificates_consensus_latency: register_histogram_with_registry!(
-                "validator_service_handle_soft_bundle_certificates_consensus_latency",
-                "Latency of handling a consensus soft bundle",
-                linku_metrics::COARSE_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            handle_soft_bundle_certificates_count: register_histogram_with_registry!(
-                "handle_soft_bundle_certificates_count",
-                "The number of certificates included in a soft bundle",
-                linku_metrics::COUNT_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            handle_soft_bundle_certificates_size_bytes: register_histogram_with_registry!(
-                "handle_soft_bundle_certificates_size_bytes",
-                "The size of soft bundle in bytes",
-                linku_metrics::BYTES_BUCKETS.to_vec(),
                 registry,
             )
             .unwrap(),
@@ -372,28 +288,9 @@ impl ValidatorServiceMetrics {
                 registry,
             )
             .unwrap(),
-            num_rejected_tx_in_epoch_boundary: register_int_counter_with_registry!(
-                "validator_service_num_rejected_tx_in_epoch_boundary",
-                "Number of rejected transaction during epoch transitioning",
-                registry,
-            )
-            .unwrap(),
-            num_rejected_cert_in_epoch_boundary: register_int_counter_with_registry!(
-                "validator_service_num_rejected_cert_in_epoch_boundary",
-                "Number of rejected transaction certificate during epoch transitioning",
-                registry,
-            )
-            .unwrap(),
             num_rejected_tx_during_overload: register_int_counter_vec_with_registry!(
                 "validator_service_num_rejected_tx_during_overload",
                 "Number of rejected transaction due to system overload",
-                &["error_type"],
-                registry,
-            )
-            .unwrap(),
-            num_rejected_cert_during_overload: register_int_counter_vec_with_registry!(
-                "validator_service_num_rejected_cert_during_overload",
-                "Number of rejected transaction certificate due to system overload",
                 &["error_type"],
                 registry,
             )
@@ -407,41 +304,44 @@ impl ValidatorServiceMetrics {
             .unwrap(),
             submission_suppressed_already_processed: register_int_counter_vec_with_registry!(
                 "validator_service_submission_suppressed_already_processed",
-                "Number of submissions suppressed after consensus already processed them",
+                "Number of submitted transactions suppressed because consensus had already \
+                 processed them this epoch (re-submission of already-processed transactions)",
                 &["req_type"],
                 registry,
             )
             .unwrap(),
             submission_suppressed_recently_submitted: register_int_counter_vec_with_registry!(
                 "validator_service_submission_suppressed_recently_submitted",
-                "Number of submissions suppressed within the duplicate-submission window",
+                "Number of submitted transactions suppressed because the same transaction was \
+                 submitted within the recent-submission window",
                 &["req_type"],
                 registry,
             )
             .unwrap(),
             recently_submitted_cache_size: register_int_gauge_with_registry!(
                 "validator_service_recently_submitted_cache_size",
-                "Approximate transaction count in the duplicate-submission cache",
+                "Approximate number of transaction digests held in the recent-submission duplicate-suppression cache",
                 registry,
             )
             .unwrap(),
             recently_submitted_resubmission_interval: register_histogram_with_registry!(
                 "validator_service_recently_submitted_resubmission_interval_seconds",
-                "Time between a recorded transaction and a suppressed duplicate submission",
+                "Time between a transaction being recorded and a duplicate resubmission of it being suppressed",
                 linku_metrics::SUBSECOND_LATENCY_SEC_BUCKETS.to_vec(),
                 registry,
             )
             .unwrap(),
             submission_suppressed_inflight: register_int_counter_vec_with_registry!(
                 "validator_service_submission_suppressed_inflight",
-                "Number of submissions suppressed while an identical request is in flight",
+                "Number of submitted transactions suppressed because the same transaction was \
+                 already being handled by a concurrent in-flight submit request",
                 &["req_type"],
                 registry,
             )
             .unwrap(),
             inflight_transactions: register_int_gauge_with_registry!(
                 "validator_service_inflight_transactions",
-                "Number of transaction digests being handled by submit requests",
+                "Number of transactions from inflight submit requests",
                 registry,
             )
             .unwrap(),
@@ -481,6 +381,19 @@ impl ValidatorServiceMetrics {
                 registry,
             )
             .unwrap(),
+            gasless_rate_limited_count: register_int_counter_with_registry!(
+                "validator_service_gasless_rate_limited_count",
+                "Number of gasless transactions rejected by rate limiter",
+                registry,
+            )
+            .unwrap(),
+            gasless_submission_outcomes: register_int_counter_vec_with_registry!(
+                "validator_service_gasless_submission_outcomes",
+                "Number of valid gasless transaction submissions by outcome",
+                &["outcome"],
+                registry,
+            )
+            .unwrap(),
         }
     }
 
@@ -490,6 +403,31 @@ impl ValidatorServiceMetrics {
     }
 }
 
+/// Per-request routing decision: records where `handle_submit_transaction` sends one
+/// particular request.
+#[derive(Clone, Copy)]
+enum UserSubmissionMode {
+    /// Admit via the gas-price priority queue.
+    Queue,
+    /// Admit via the consensus-polled transaction pool.
+    Pool,
+    /// Submit directly to consensus, bypassing the queue — used when the queue
+    /// is turned off by config, temporarily disabled by failover, or for a ping
+    /// request. Individual txs are rejected when consensus is saturated
+    /// (pre-queue behavior).
+    Direct,
+}
+
+/// The user-transaction submission infrastructure this validator runs, fixed at
+/// startup from `NodeConfig`. Contrast with `UserSubmissionMode`, the
+/// per-request routing decision derived from this configuration.
+#[derive(Clone)]
+pub enum UserSubmissionPath {
+    Direct,
+    AdmissionQueue(AdmissionQueueContext),
+    Pool(Arc<TransactionPoolContext>),
+}
+
 #[derive(Clone)]
 pub struct ValidatorService {
     state: Arc<AuthorityState>,
@@ -497,11 +435,19 @@ pub struct ValidatorService {
     metrics: Arc<ValidatorServiceMetrics>,
     traffic_controller: Option<Arc<TrafficController>>,
     client_id_source: Option<ClientIdSource>,
+    gasless_limiter: GaslessRateLimiter,
+    user_submission_path: UserSubmissionPath,
+    /// Digests submitted within the last `recent_submission_window` (value: when recorded), to
+    /// drop duplicate resubmissions before they reach consensus.
     recently_submitted: Cache<TransactionDigest, Instant>,
+    /// How long a transaction is suppressed after submission (from node config).
     recent_submission_window: Duration,
+    /// Digests currently being handled by an in-flight submit handler. Acquired atomically at
+    /// entry and removed (then demoted into `recently_submitted`) when the handler returns.
     inflight_transactions: Arc<Mutex<HashSet<TransactionDigest>>>,
 }
 
+/// Assumed peak distinct-submission rate, used to size the dedup cache (per window).
 const RECENT_SUBMISSION_PEAK_TPS: u64 = 50_000;
 
 impl ValidatorService {
@@ -510,8 +456,10 @@ impl ValidatorService {
         consensus_adapter: Arc<ConsensusAdapter>,
         validator_metrics: Arc<ValidatorServiceMetrics>,
         client_id_source: Option<ClientIdSource>,
+        user_submission_path: UserSubmissionPath,
     ) -> Self {
         let traffic_controller = state.traffic_controller.clone();
+        let gasless_limiter = GaslessRateLimiter::new(state.consensus_gasless_counter.clone());
         let recent_submission_window = state.config.recent_submission_dedup_window();
         Self {
             state,
@@ -519,6 +467,8 @@ impl ValidatorService {
             metrics: validator_metrics,
             traffic_controller,
             client_id_source,
+            gasless_limiter,
+            user_submission_path,
             recently_submitted: Self::new_recently_submitted_cache(recent_submission_window),
             recent_submission_window,
             inflight_transactions: Arc::new(Mutex::new(HashSet::new())),
@@ -526,9 +476,12 @@ impl ValidatorService {
     }
 
     fn new_recently_submitted_cache(window: Duration) -> Cache<TransactionDigest, Instant> {
+        // Memory backstop only; the window bounds the cache, and amplified duplicates do not add
+        // entries (they share a digest). Sized for roughly one window at peak throughput.
+        let max_capacity = window.as_secs().max(1) * RECENT_SUBMISSION_PEAK_TPS;
         Cache::builder()
             .time_to_live(window)
-            .max_capacity(window.as_secs().max(1) * RECENT_SUBMISSION_PEAK_TPS)
+            .max_capacity(max_capacity)
             .build()
     }
 
@@ -537,6 +490,15 @@ impl ValidatorService {
         consensus_adapter: Arc<ConsensusAdapter>,
         metrics: Arc<ValidatorServiceMetrics>,
     ) -> Self {
+        let gasless_limiter = GaslessRateLimiter::new(state.consensus_gasless_counter.clone());
+        let epoch_store = state.epoch_store_for_testing().clone();
+        let slot_freed_notify = Arc::new(tokio::sync::Notify::new());
+        let manager = Arc::new(AdmissionQueueManager::new_for_tests(
+            consensus_adapter.clone(),
+            slot_freed_notify,
+        ));
+        let user_submission_path =
+            UserSubmissionPath::AdmissionQueue(AdmissionQueueContext::spawn(manager, epoch_store));
         let recent_submission_window = state.config.recent_submission_dedup_window();
         Self {
             state,
@@ -544,6 +506,8 @@ impl ValidatorService {
             metrics,
             traffic_controller: None,
             client_id_source: None,
+            gasless_limiter,
+            user_submission_path,
             recently_submitted: Self::new_recently_submitted_cache(recent_submission_window),
             recent_submission_window,
             inflight_transactions: Arc::new(Mutex::new(HashSet::new())),
@@ -554,104 +518,101 @@ impl ValidatorService {
         &self.state
     }
 
-    pub async fn execute_certificate_for_testing(
-        &self,
-        cert: CertifiedTransaction,
-    ) -> Result<tonic::Response<HandleCertificateResponseV2>, tonic::Status> {
-        let request = make_tonic_request_for_testing(cert);
-        self.handle_certificate_v2(request).await
-    }
+    /// Test method that performs transaction validation without going through gRPC.
+    pub fn handle_transaction_for_testing(&self, transaction: Transaction) -> RtdResult<()> {
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
 
-    pub async fn handle_transaction_for_benchmarking(
-        &self,
-        transaction: Transaction,
-    ) -> Result<tonic::Response<HandleTransactionResponse>, tonic::Status> {
-        let request = make_tonic_request_for_testing(transaction);
-        self.transaction(request).await
-    }
-
-    // When making changes to this function, see if the changes should be applied to
-    // `Self::handle_submit_transaction()` and `RtdTxValidator::vote_transaction()` as well.
-    async fn handle_transaction(
-        &self,
-        request: tonic::Request<Transaction>,
-    ) -> WrappedServiceResponse<HandleTransactionResponse> {
-        let Self {
-            state,
-            consensus_adapter,
-            metrics,
-            traffic_controller: _,
-            client_id_source: _,
-            recently_submitted: _,
-            recent_submission_window: _,
-            inflight_transactions: _,
-        } = self.clone();
-        let transaction = request.into_inner();
-        let epoch_store = state.load_epoch_store_one_call_per_task();
-
+        // Validity check (basic structural validation)
         transaction.validity_check(&epoch_store.tx_validity_check_context())?;
 
-        // When authority is overloaded and decide to reject this tx, we still lock the object
-        // and ask the client to retry in the future. This is because without locking, the
-        // input objects can be locked by a different tx in the future, however, the input objects
-        // may already be locked by this tx in other validators. This can cause non of the txes
-        // to have enough quorum to form a certificate, causing the objects to be locked for
-        // the entire epoch. By doing locking but pushback, retrying transaction will have
-        // higher chance to succeed.
-        let mut validator_pushback_error = None;
-        let overload_check_res = state.check_system_overload(
-            &*consensus_adapter,
-            transaction.data(),
-            state.check_system_overload_at_signing(),
-        );
-        if let Err(error) = overload_check_res {
-            metrics
-                .num_rejected_tx_during_overload
-                .with_label_values(&[error.as_ref()])
-                .inc();
-            // TODO: consider change the behavior for other types of overload errors.
-            match error.as_inner() {
-                RtdErrorKind::ValidatorOverloadedRetryAfter { .. } => {
-                    validator_pushback_error = Some(error)
-                }
-                _ => return Err(error.into()),
-            }
-        }
-
-        let _handle_tx_metrics_guard = metrics.handle_transaction_latency.start_timer();
-
-        let tx_verif_metrics_guard = metrics.tx_verification_latency.start_timer();
+        // Signature verification
         let transaction = epoch_store
-            // Aliases are not supported outside of MFP.
-            .verify_transaction_require_no_aliases(transaction)
-            .tap_err(|_| {
-                metrics.signature_errors.inc();
-            })?
+            .verify_transaction_require_no_aliases(transaction)?
             .into_tx();
-        drop(tx_verif_metrics_guard);
 
-        let tx_digest = transaction.digest();
+        // Validate the transaction
+        self.state
+            .handle_vote_transaction(&epoch_store, transaction)?;
 
-        // Enable Trace Propagation across spans/processes using tx_digest
-        let span = error_span!("ValidatorService::validator_state_process_tx", ?tx_digest);
+        Ok(())
+    }
 
-        let info = state
-            .handle_transaction(&epoch_store, transaction.clone())
-            .instrument(span)
-            .await
-            .tap_err(|e| {
-                if let RtdErrorKind::ValidatorHaltedAtEpochEnd = e.as_inner() {
-                    metrics.num_rejected_tx_in_epoch_boundary.inc();
-                }
-            })?;
+    /// Test method that performs transaction validation with overload checking.
+    /// Used for testing validator overload behavior.
+    pub fn handle_transaction_for_testing_with_overload_check(
+        &self,
+        transaction: Transaction,
+    ) -> RtdResult<()> {
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
 
-        if let Some(error) = validator_pushback_error {
-            // TODO: right now, we still sign the txn, but just don't return it. We can also skip signing
-            // to save more CPU.
-            return Err(error.into());
+        // Validity check (basic structural validation)
+        transaction.validity_check(&epoch_store.tx_validity_check_context())?;
+
+        // Check system overload
+        self.state.check_system_overload(
+            transaction.data(),
+            self.state.check_system_overload_at_signing(),
+        )?;
+
+        // Signature verification
+        let transaction = epoch_store
+            .verify_transaction_require_no_aliases(transaction)?
+            .into_tx();
+
+        // Validate the transaction
+        self.state
+            .handle_vote_transaction(&epoch_store, transaction)?;
+
+        Ok(())
+    }
+
+    /// Collect the IDs of input objects that are immutable.
+    /// This is used to create the ImmutableInputObjects claim for consensus messages.
+    async fn collect_immutable_object_ids(
+        &self,
+        tx: &VerifiedTransaction,
+        state: &AuthorityState,
+    ) -> RtdResult<Vec<ObjectID>> {
+        let input_objects = tx.data().transaction_data().input_objects()?;
+
+        // Collect object IDs from ImmOrOwnedMoveObject inputs
+        let object_ids: Vec<ObjectID> = input_objects
+            .iter()
+            .filter_map(|obj| match obj {
+                InputObjectKind::ImmOrOwnedMoveObject((id, _, _)) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        if object_ids.is_empty() {
+            return Ok(vec![]);
         }
 
-        Ok((tonic::Response::new(info), Weight::zero()))
+        // Load objects from cache and filter to immutable ones
+        let objects = state.get_object_cache_reader().get_objects(&object_ids);
+
+        // All objects should be found, since owned input objects have been validated to exist.
+        objects
+            .into_iter()
+            .zip_debug_eq(object_ids.iter())
+            .filter_map(|(obj, id)| {
+                let Some(o) = obj else {
+                    return Some(Err::<ObjectID, RtdError>(
+                        RtdErrorKind::UserInputError {
+                            error: UserInputError::ObjectNotFound {
+                                object_id: *id,
+                                version: None,
+                            },
+                        }
+                        .into(),
+                    ));
+                };
+                if o.is_immutable() {
+                    Some(Ok(*id))
+                } else {
+                    None
+                }
+            })
+            .collect::<RtdResult<Vec<ObjectID>>>()
     }
 
     #[instrument(
@@ -666,10 +627,12 @@ impl ValidatorService {
     ) -> WrappedServiceResponse<RawSubmitTxResponse> {
         let Self {
             state,
-            consensus_adapter,
+            consensus_adapter: _,
             metrics,
             traffic_controller: _,
             client_id_source,
+            gasless_limiter: _,
+            user_submission_path: _,
             recently_submitted: _,
             recent_submission_window: _,
             inflight_transactions: _,
@@ -686,13 +649,12 @@ impl ValidatorService {
 
         let next_epoch = start_epoch + 1;
         let mut max_retries = 1;
-        let mut inflight_guard = InflightTransactionsGuard::new(self);
 
+        let mut inflight_guard = InflightTransactionsGuard::new(self);
         loop {
             let res = self
                 .handle_submit_transaction_inner(
                     &state,
-                    &consensus_adapter,
                     &metrics,
                     &inner,
                     submitter_client_addr,
@@ -718,7 +680,7 @@ impl ValidatorService {
                             if new_epoch >= next_epoch {
                                 continue;
                             }
-
+                            // wait_for_epoch guarantees >= target; < would indicate a bug there.
                             debug_fatal!(
                                 "wait_for_epoch returned early: expected >= {}, got {}",
                                 next_epoch,
@@ -735,20 +697,12 @@ impl ValidatorService {
     async fn handle_submit_transaction_inner(
         &self,
         state: &AuthorityState,
-        consensus_adapter: &ConsensusAdapter,
         metrics: &ValidatorServiceMetrics,
         request: &RawSubmitTxRequest,
         submitter_client_addr: Option<IpAddr>,
         inflight_guard: &mut InflightTransactionsGuard,
     ) -> RtdResult<(RawSubmitTxResponse, Weight)> {
         let epoch_store = state.load_epoch_store_one_call_per_task();
-        if !epoch_store.protocol_config().mysticeti_fastpath() {
-            return Err(RtdErrorKind::UnsupportedFeatureError {
-                error: "Mysticeti fastpath".to_string(),
-            }
-            .into());
-        }
-
         let submit_type = SubmitTxType::try_from(request.submit_type).map_err(|e| {
             RtdErrorKind::GrpcMessageDeserializeError {
                 type_info: "RawSubmitTxRequest.submit_type".to_string(),
@@ -813,7 +767,15 @@ impl ValidatorService {
         let mut results: Vec<Option<SubmitTxResult>> = vec![None; request.transactions.len()];
         // Total size of all transactions in the request.
         let mut total_size_bytes = 0;
+        // Whether the request contains any gasless transaction.
+        let mut has_gasless = false;
+        // Set when a transaction duplicates an in-flight submission at admission. Tracked
+        // separately because it is detected after the per-tx results are finalized (those
+        // remain Submitted), so it cannot be derived from the results alone.
+        let mut duplicate_at_admission = false;
+        // First gas price seen in this soft bundle.
         let mut expected_soft_bundle_gas_price = None;
+        // Transaction digests seen in this request attempt, used to reject repeated transactions.
         let mut request_digests = HashSet::new();
 
         let req_type = if is_ping_request {
@@ -831,6 +793,8 @@ impl ValidatorService {
             .with_label_values(&[req_type])
             .start_timer();
 
+        let submit_mode = self.classify_submit_mode(is_ping_request);
+
         for (idx, tx_bytes) in request.transactions.iter().enumerate() {
             let transaction = match bcs::from_bytes::<Transaction>(tx_bytes) {
                 Ok(txn) => txn,
@@ -847,11 +811,17 @@ impl ValidatorService {
             let tx_size = transaction.validity_check(&epoch_store.tx_validity_check_context())?;
             let tx_digest = *transaction.digest();
 
+            // Reject up front rather than proposing a block that peers would reject: the client
+            // must submit to one of the proposers the transaction allows.
+            epoch_store.check_self_allowed_proposer(transaction.data().transaction_data())?;
+
+            // A request must not repeat a transaction.
             if !request_digests.insert(tx_digest) {
-                let error = RtdErrorKind::UserInputError {
+                let error: RtdError = RtdErrorKind::UserInputError {
                     error: UserInputError::RepeatedTransactions { digest: tx_digest },
                 }
                 .into();
+                // Reject individual repeated transactions in batch.
                 if is_soft_bundle_request {
                     return Err(error);
                 }
@@ -859,6 +829,7 @@ impl ValidatorService {
                 continue;
             }
 
+            // Soft bundles require all transactions to use the same gas price.
             if is_soft_bundle_request {
                 let gas_price = transaction.data().transaction_data().gas_price();
                 if let Some(expected) = expected_soft_bundle_gas_price {
@@ -878,8 +849,20 @@ impl ValidatorService {
                 }
             }
 
+            let is_gasless = transaction
+                .data()
+                .transaction_data()
+                .is_gasless_transaction();
+
+            if is_gasless {
+                has_gasless = true;
+                metrics
+                    .gasless_submission_outcomes
+                    .with_label_values(&["attempted"])
+                    .inc();
+            }
+
             let overload_check_res = state.check_system_overload(
-                consensus_adapter,
                 transaction.data(),
                 state.check_system_overload_at_signing(),
             );
@@ -888,7 +871,55 @@ impl ValidatorService {
                     .num_rejected_tx_during_overload
                     .with_label_values(&[error.as_ref()])
                     .inc();
+                if is_gasless {
+                    metrics
+                        .gasless_submission_outcomes
+                        .with_label_values(&["rejected_overload"])
+                        .inc();
+                }
                 results[idx] = Some(SubmitTxResult::Rejected { error });
+                continue;
+            }
+
+            // Use the pre-queue per-tx consensus overload reject on the direct
+            // submission path (queue off, failover, or ping). Skipped in pool
+            // mode: the check reads the ConsensusAdapter's inflight-submission buffers,
+            // which are not relevant when block contents are pulled by consensus.
+            if matches!(submit_mode, UserSubmissionMode::Direct)
+                && !matches!(&self.user_submission_path, UserSubmissionPath::Pool(_))
+                && let Err(error) = self.consensus_adapter.check_consensus_overload()
+            {
+                state.update_overload_metrics("consensus");
+                metrics
+                    .num_rejected_tx_during_overload
+                    .with_label_values(&[error.as_ref()])
+                    .inc();
+                if is_gasless {
+                    metrics
+                        .gasless_submission_outcomes
+                        .with_label_values(&["rejected_overload"])
+                        .inc();
+                }
+                results[idx] = Some(SubmitTxResult::Rejected { error });
+                continue;
+            }
+
+            if is_gasless
+                && !self
+                    .gasless_limiter
+                    .try_acquire(epoch_store.protocol_config())
+            {
+                metrics.gasless_rate_limited_count.inc();
+                metrics
+                    .gasless_submission_outcomes
+                    .with_label_values(&["rejected_rate_limited"])
+                    .inc();
+                results[idx] = Some(SubmitTxResult::Rejected {
+                    error: RtdErrorKind::ValidatorOverloadedRetryAfter {
+                        retry_after_secs: 1,
+                    }
+                    .into(),
+                });
                 continue;
             }
 
@@ -914,8 +945,6 @@ impl ValidatorService {
                 }
             };
 
-            tx_digests.push(tx_digest);
-
             debug!(
                 ?tx_digest,
                 "handle_submit_transaction: verified transaction"
@@ -928,11 +957,19 @@ impl ValidatorService {
                 .get_executed_effects(&tx_digest)
             {
                 let effects_digest = effects.digest();
-                if let Ok(executed_data) = self.complete_executed_data(effects, None).await {
+                if let Err(error) = state.check_effects_against_previously_signed(
+                    &epoch_store,
+                    &tx_digest,
+                    &effects_digest,
+                    "submit_transaction",
+                ) {
+                    results[idx] = Some(SubmitTxResult::Rejected { error });
+                    continue;
+                }
+                if let Ok(executed_data) = self.complete_executed_data(effects).await {
                     let executed_result = SubmitTxResult::Executed {
                         effects_digest,
                         details: Some(executed_data),
-                        fast_path: false,
                     };
                     results[idx] = Some(executed_result);
                     debug!(?tx_digest, "handle_submit_transaction: already executed");
@@ -955,10 +992,107 @@ impl ValidatorService {
                 continue;
             }
 
+            // Suppress resubmission of transactions consensus already processed this epoch:
+            // executed transactions whose effects details could not be reconstructed above (e.g.
+            // objects pruned), sequenced-but-deferred transactions, and dropped transactions.
             let consensus_key = SequencedConsensusTransactionKey::External(
                 ConsensusTransactionKey::Certificate(tx_digest),
             );
             if epoch_store.is_consensus_message_processed(&consensus_key)? {
+                // Prefer a concrete, non-retriable error over the generic, retriable
+                // TransactionProcessing suppression. A processed-but-unexecuted digest is
+                // commonly a dropped owned-object conflict loser; surfacing the terminal
+                // error lets the client stop retrying instead of polling for effects that
+                // will never come.
+                //
+                // First check the epoch owned-object lock table with the same conflict
+                // logic the consensus handler uses post-consensus. Locks are never
+                // released within an epoch, so this reports the conflict even before the
+                // winner executes, while the loser's input versions still validate as
+                // live.
+                if let Ok(input_objects) = verified_transaction
+                    .tx()
+                    .data()
+                    .transaction_data()
+                    .input_objects()
+                {
+                    let immutable_object_ids = self
+                        .collect_immutable_object_ids(verified_transaction.tx(), state)
+                        .await?;
+                    let owned_object_refs: Vec<_> = input_objects
+                        .iter()
+                        .filter_map(|obj| match obj {
+                            InputObjectKind::ImmOrOwnedMoveObject(obj_ref)
+                                if !immutable_object_ids.contains(&obj_ref.0) =>
+                            {
+                                Some(*obj_ref)
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    let existing_locks =
+                        epoch_store.get_owned_object_locks_map(&owned_object_refs)?;
+                    if let Err(error) = epoch_store.try_acquire_owned_object_locks_post_consensus(
+                        &owned_object_refs,
+                        tx_digest,
+                        &HashMap::new(),
+                        &existing_locks,
+                    ) {
+                        debug!(
+                            ?tx_digest,
+                            "handle_submit_transaction: processed transaction rejected on lock conflict: {error}"
+                        );
+                        metrics
+                            .submission_rejected_transactions
+                            .with_label_values(&[error.to_variant_name()])
+                            .inc();
+                        results[idx] = Some(SubmitTxResult::Rejected { error });
+                        continue;
+                    }
+                }
+                // Then revalidate against live state, which surfaces the terminal
+                // stale-version error once the conflict winner has executed.
+                if let Err(error) =
+                    state.handle_vote_transaction(&epoch_store, verified_transaction.tx().clone())
+                {
+                    // The transaction may have executed while being validated (e.g. it was
+                    // deferred rather than dropped).
+                    if let Some(effects) = state
+                        .get_transaction_cache_reader()
+                        .get_executed_effects(&tx_digest)
+                    {
+                        let effects_digest = effects.digest();
+                        if let Err(error) = state.check_effects_against_previously_signed(
+                            &epoch_store,
+                            &tx_digest,
+                            &effects_digest,
+                            "submit_transaction",
+                        ) {
+                            results[idx] = Some(SubmitTxResult::Rejected { error });
+                            continue;
+                        }
+                        if let Ok(executed_data) = self.complete_executed_data(effects).await {
+                            results[idx] = Some(SubmitTxResult::Executed {
+                                effects_digest,
+                                details: Some(executed_data),
+                            });
+                            continue;
+                        }
+                    }
+                    debug!(
+                        ?tx_digest,
+                        "handle_submit_transaction: processed transaction rejected on revalidation: {error}"
+                    );
+                    metrics
+                        .submission_rejected_transactions
+                        .with_label_values(&[error.to_variant_name()])
+                        .inc();
+                    results[idx] = Some(SubmitTxResult::Rejected { error });
+                    continue;
+                }
+                // Validation passed, so this processed digest may still be executable.
+                // Return retriable TransactionProcessing rather than resubmitting it to consensus.
+                // A later client retry can observe effects or a concrete terminal validation error.
                 metrics
                     .submission_suppressed_already_processed
                     .with_label_values(&[req_type])
@@ -966,7 +1100,7 @@ impl ValidatorService {
                 results[idx] = Some(SubmitTxResult::Rejected {
                     error: RtdErrorKind::TransactionProcessing {
                         digest: tx_digest,
-                        status: "sequenced by consensus".to_string(),
+                        status: "consensus message processed".to_string(),
                     }
                     .into(),
                 });
@@ -977,8 +1111,12 @@ impl ValidatorService {
                 continue;
             }
 
+            // Atomically acquire the digest for the duration of this handler. Reject concurrent
+            // and recent duplicates and record the result per result index.
             match inflight_guard.try_acquire(tx_digest) {
-                AcquireOutcome::Acquired | AcquireOutcome::AlreadyAcquiredByThisRequest => {}
+                AcquireOutcome::Acquired | AcquireOutcome::AlreadyAcquiredByThisRequest => {
+                    // Continue to process the transaction and submit to consensus.
+                }
                 AcquireOutcome::AlreadyAcquiredByAnotherRequest => {
                     metrics
                         .submission_suppressed_inflight
@@ -1004,7 +1142,7 @@ impl ValidatorService {
                     results[idx] = Some(SubmitTxResult::Rejected {
                         error: RtdErrorKind::TransactionSubmitted { digest: tx_digest }.into(),
                     });
-                    debug!(?tx_digest, "handle_submit_transaction: recently submitted");
+                    debug!(?tx_digest, "handle_submit_transaction: recently processed");
                     continue;
                 }
             }
@@ -1036,12 +1174,19 @@ impl ValidatorService {
                         .get_executed_effects(&tx_digest)
                     {
                         let effects_digest = effects.digest();
-                        if let Ok(executed_data) = self.complete_executed_data(effects, None).await
-                        {
+                        if let Err(error) = state.check_effects_against_previously_signed(
+                            &epoch_store,
+                            &tx_digest,
+                            &effects_digest,
+                            "submit_transaction",
+                        ) {
+                            results[idx] = Some(SubmitTxResult::Rejected { error });
+                            continue;
+                        }
+                        if let Ok(executed_data) = self.complete_executed_data(effects).await {
                             let executed_result = SubmitTxResult::Executed {
                                 effects_digest,
                                 details: Some(executed_data),
-                                fast_path: false,
                             };
                             results[idx] = Some(executed_result);
                             continue;
@@ -1059,23 +1204,69 @@ impl ValidatorService {
                 }
             }
 
-            if epoch_store.protocol_config().address_aliases() {
-                consensus_transactions.push(ConsensusTransaction::new_user_transaction_v2_message(
-                    &state.name,
-                    verified_transaction.into(),
-                ));
-            } else {
-                consensus_transactions.push(ConsensusTransaction::new_user_transaction_message(
-                    &state.name,
-                    verified_transaction.into_tx().into(),
+            // Create claims with aliases and / or immutable objects.
+            let mut claims = vec![];
+
+            let immutable_object_ids = self
+                .collect_immutable_object_ids(verified_transaction.tx(), state)
+                .await?;
+            if !immutable_object_ids.is_empty() {
+                claims.push(TransactionClaim::ImmutableInputObjects(
+                    immutable_object_ids,
                 ));
             }
+
+            let (tx, aliases) = verified_transaction.into_inner();
+            if epoch_store.protocol_config().address_aliases() {
+                if epoch_store
+                    .protocol_config()
+                    .fix_checkpoint_signature_mapping()
+                {
+                    claims.push(TransactionClaim::AddressAliasesV2(aliases));
+                } else {
+                    let v1_aliases: Vec<_> = tx
+                        .data()
+                        .intent_message()
+                        .value
+                        .required_signers()
+                        .into_iter()
+                        .zip_eq(aliases.into_iter().map(|(_, seq)| seq))
+                        .collect();
+                    #[allow(deprecated)]
+                    claims.push(TransactionClaim::AddressAliases(
+                        nonempty::NonEmpty::from_vec(v1_aliases)
+                            .expect("must have at least one required_signer"),
+                    ));
+                }
+            }
+
+            let tx_with_claims = TransactionWithClaims::new(tx.into(), claims);
+
+            consensus_transactions.push(ConsensusTransaction::new_user_transaction_v2_message(
+                &state.name,
+                tx_with_claims,
+            ));
+            if is_gasless {
+                metrics
+                    .gasless_submission_outcomes
+                    .with_label_values(&["submitted"])
+                    .inc();
+            }
+
             transaction_indexes.push(idx);
+            tx_digests.push(tx_digest);
             total_size_bytes += tx_size;
         }
 
         if consensus_transactions.is_empty() && !is_ping_request {
-            return Ok((Self::try_from_submit_tx_response(results)?, Weight::zero()));
+            let spam_weight = Self::request_spam_weight(
+                &results,
+                has_gasless,
+                duplicate_at_admission,
+                is_ping_request,
+            );
+            let response = Self::try_from_submit_tx_response(results)?;
+            return Ok((response, spam_weight));
         }
 
         // Set the max bytes size of the soft bundle to be half of the consensus max transactions in block size.
@@ -1116,76 +1307,175 @@ impl ValidatorService {
             .with_label_values(&[req_type])
             .start_timer();
 
+        if is_soft_bundle_request {
+            // We only allow the `consensus_transactions` to be empty for ping requests. This is how it should and is be treated from the downstream components.
+            // For any other case, having an empty `consensus_transactions` vector is an invalid state and we should have never reached at this point.
+            assert!(
+                !consensus_transactions.is_empty(),
+                "A valid soft bundle must have at least one transaction"
+            );
+        }
+
+        // Soft bundles are inserted as a single queue entry.
+        // Individual transactions are each inserted separately.
+        let tx_groups: Vec<Vec<ConsensusTransaction>> = if is_soft_bundle_request || is_ping_request
+        {
+            vec![consensus_transactions]
+        } else {
+            consensus_transactions
+                .into_iter()
+                .map(|t| vec![t])
+                .collect()
+        };
+
+        // Map each submission group back to the (result index, digest) of the transactions it
+        // contains, so a per-group outcome — consensus positions, or an "already processing"
+        // error — can be recorded against each individual transaction. Soft bundles submit as a
+        // single group; individual transactions submit one group each.
         let group_tx_meta = if is_soft_bundle_request {
             vec![
                 transaction_indexes
                     .into_iter()
-                    .zip(tx_digests)
+                    .zip_eq(tx_digests)
                     .collect::<Vec<_>>(),
             ]
         } else {
             transaction_indexes
                 .into_iter()
-                .zip(tx_digests)
+                .zip_eq(tx_digests)
                 .map(|pair| vec![pair])
                 .collect::<Vec<_>>()
         };
 
-        let group_results = if is_soft_bundle_request || is_ping_request {
-            // We only allow the `consensus_transactions` to be empty for ping requests. This is how it should and is be treated from the downstream components.
-            // For any other case, having an empty `consensus_transactions` vector is an invalid state and we should have never reached at this point.
-            assert!(
-                is_ping_request || !consensus_transactions.is_empty(),
-                "A valid soft bundle must have at least one transaction"
-            );
-            debug!(
-                "handle_submit_transaction: submitting consensus transactions ({}): {}",
-                req_type,
-                consensus_transactions
-                    .iter()
-                    .map(|t| t.local_display())
-                    .join(", ")
-            );
-            vec![
-                self.handle_submit_to_consensus_for_position(
-                    consensus_transactions,
-                    &epoch_store,
-                    submitter_client_addr,
-                )
-                .await,
-            ]
-        } else {
-            let futures = consensus_transactions.into_iter().map(|t| {
-                debug!(
-                    "handle_submit_transaction: submitting consensus transaction ({}): {}",
-                    req_type,
-                    t.local_display(),
-                );
-                self.handle_submit_to_consensus_for_position(
-                    vec![t],
-                    &epoch_store,
-                    submitter_client_addr,
-                )
-            });
-            future::join_all(futures).await
+        // Collect one result per submission group WITHOUT short-circuiting. An
+        // already-processing transaction is reported per-tx as a retriable below;
+        // any other error fails the whole request, after all groups have settled.
+        // Soft bundles submit as a single group; individual transactions submit one group each.
+        let group_results = match submit_mode {
+            UserSubmissionMode::Direct => {
+                let futures = tx_groups.into_iter().map(|txns| {
+                    debug!(
+                        "handle_submit_transaction: submitting consensus transactions ({}): {}",
+                        req_type,
+                        txns.iter().map(|t| t.local_display()).join(", ")
+                    );
+                    self.consensus_adapter.submit_and_get_positions(
+                        txns,
+                        &epoch_store,
+                        submitter_client_addr,
+                    )
+                });
+                future::join_all(futures).await
+            }
+            UserSubmissionMode::Queue => {
+                let UserSubmissionPath::AdmissionQueue(context) = &self.user_submission_path else {
+                    debug_fatal!("queue mode requires an admission queue");
+                    return Err(RtdErrorKind::GenericAuthorityError {
+                        error: "queue mode requires an admission queue".to_string(),
+                    }
+                    .into());
+                };
+                let aq = context.load();
+                let mut receivers = Vec::with_capacity(tx_groups.len());
+                for txns in tx_groups {
+                    let gas_price = Self::extract_gas_price(&txns);
+                    let (rx, newly_inserted) = aq
+                        .try_insert(gas_price, txns, submitter_client_addr)
+                        .await?;
+                    if !newly_inserted {
+                        // Duplicate of an in-flight submission; flag the request as spam. The
+                        // per-tx result is still Submitted, so this is tracked separately.
+                        duplicate_at_admission = true;
+                    }
+                    receivers.push(rx);
+                }
+                future::join_all(receivers.into_iter().map(|rx| async move {
+                    match rx.await {
+                        Ok(result) => result.map_err(RtdError::from),
+                        Err(_) => Err(RtdError::from(
+                            RtdErrorKind::TooManyTransactionsPendingConsensus,
+                        )),
+                    }
+                }))
+                .await
+            }
+            UserSubmissionMode::Pool => {
+                let UserSubmissionPath::Pool(context) = &self.user_submission_path else {
+                    debug_fatal!("pool mode requires a transaction pool");
+                    return Err(RtdErrorKind::GenericAuthorityError {
+                        error: "pool mode requires a transaction pool".to_string(),
+                    }
+                    .into());
+                };
+                {
+                    let reconfiguration_lock = epoch_store.get_reconfig_state_read_lock_guard();
+                    if !reconfiguration_lock.should_accept_user_certs() {
+                        context
+                            .adapter_metrics()
+                            .num_rejected_cert_in_epoch_boundary
+                            .inc();
+                        return Err(RtdErrorKind::ValidatorHaltedAtEpochEnd.into());
+                    }
+                }
+
+                let mut receivers = Vec::with_capacity(tx_groups.len());
+                for txns in tx_groups {
+                    // Gas-price-based DoS accounting; pull-mode user transactions bypass
+                    // the recording in ConsensusAdapter::submit_and_wait_inner, so record
+                    // here instead.
+                    epoch_store.record_submitted_user_transactions(&txns, submitter_client_addr);
+                    let gas_price = Self::extract_gas_price(&txns);
+                    let result = context
+                        .try_insert(epoch_store.epoch(), gas_price, txns)
+                        .await;
+                    if let Ok((_, false)) = &result {
+                        // Duplicate of an in-flight submission; flag the request as spam. The
+                        // per-tx result is still Submitted, so this is tracked separately.
+                        duplicate_at_admission = true;
+                    }
+                    receivers.push(result.map(|(receiver, _)| receiver));
+                }
+                let halted_rejections = context
+                    .adapter_metrics()
+                    .num_rejected_cert_in_epoch_boundary
+                    .clone();
+                future::join_all(receivers.into_iter().map(|receiver| {
+                    let halted_rejections = halted_rejections.clone();
+                    async move {
+                        let result = match receiver {
+                            Ok(receiver) => receiver.await.unwrap_or_else(|_| {
+                                Err(RtdErrorKind::TooManyTransactionsPendingConsensus.into())
+                            }),
+                            Err(error) => Err(error),
+                        };
+                        if let Err(error) = &result
+                            && matches!(error.as_inner(), RtdErrorKind::ValidatorHaltedAtEpochEnd)
+                        {
+                            halted_rejections.inc();
+                        }
+                        result
+                    }
+                }))
+                .await
+            }
         };
 
         if is_ping_request {
-            // For ping requests, return the special consensus position.
+            // For ping requests there is a single group returning the special consensus position.
             let consensus_positions = group_results
                 .into_iter()
                 .next()
-                .expect("ping request must have one submission group")?;
+                .expect("Ping request must have exactly one submission group")?;
             assert_eq!(consensus_positions.len(), 1);
             results.push(Some(SubmitTxResult::Submitted {
                 consensus_position: consensus_positions[0],
             }));
         } else {
-            for (group_result, txns_meta) in group_results.into_iter().zip(group_tx_meta) {
+            for (group_result, txns_meta) in group_results.into_iter().zip_debug_eq(group_tx_meta) {
                 match group_result {
                     Ok(consensus_positions) => {
                         for ((idx, tx_digest), consensus_position) in
-                            txns_meta.into_iter().zip(consensus_positions)
+                            txns_meta.into_iter().zip_debug_eq(consensus_positions)
                         {
                             debug!(
                                 ?tx_digest,
@@ -1195,13 +1485,23 @@ impl ValidatorService {
                             results[idx] = Some(SubmitTxResult::Submitted { consensus_position });
                         }
                     }
-                    Err(error) => {
+                    // The transaction(s) in this group are already being processed by consensus.
+                    // Report per-tx as a retriable rejection rather than failing the whole request.
+                    Err(err) => {
                         let RtdErrorKind::TransactionProcessing { status, .. } =
-                            error.as_inner().clone()
+                            err.as_inner().clone()
                         else {
-                            return Err(error);
+                            return Err(err);
                         };
+                        // For TransactionProcessing error, ensure the per txn result has the correct digest.
                         for (idx, tx_digest) in txns_meta {
+                            debug!(
+                                ?tx_digest,
+                                "handle_submit_transaction: transaction already processing: {err}"
+                            );
+                            // Same suppression the upfront `is_consensus_message_processed` check
+                            // records, just detected during submission instead of before it. The
+                            // two paths are mutually exclusive, so this does not double-count.
                             metrics
                                 .submission_suppressed_already_processed
                                 .with_label_values(&[req_type])
@@ -1219,7 +1519,48 @@ impl ValidatorService {
             }
         }
 
-        Ok((Self::try_from_submit_tx_response(results)?, Weight::zero()))
+        let spam_weight = Self::request_spam_weight(
+            &results,
+            has_gasless,
+            duplicate_at_admission,
+            is_ping_request,
+        );
+        let response = Self::try_from_submit_tx_response(results)?;
+        Ok((response, spam_weight))
+    }
+
+    /// Traffic-control spam weight for a whole submit request. The request is spam unless it is
+    /// entirely accepted gas-chargable work.
+    fn request_spam_weight(
+        results: &[Option<SubmitTxResult>],
+        has_gasless: bool,
+        duplicate_at_admission: bool,
+        is_ping: bool,
+    ) -> Weight {
+        if is_ping || has_gasless || duplicate_at_admission {
+            return Weight::one();
+        }
+        for result in results {
+            let Some(result) = result else {
+                // `results` is expected to be fully populated (every entry `Some`) for the
+                // request's transactions; a missing entry is a bug and is conservatively
+                // treated as spam.
+                debug_fatal!("transaction outcome unset when computing spam weight");
+                return Weight::one();
+            };
+            if Self::submission_spam_weight(result) == Weight::one() {
+                return Weight::one();
+            }
+        }
+        Weight::zero()
+    }
+
+    fn submission_spam_weight(result: &SubmitTxResult) -> Weight {
+        match result {
+            SubmitTxResult::Submitted { .. } => Weight::zero(),
+            // Non-submitted results can't be charged.
+            SubmitTxResult::Executed { .. } | SubmitTxResult::Rejected { .. } => Weight::one(),
+        }
     }
 
     fn try_from_submit_tx_response(
@@ -1238,327 +1579,46 @@ impl ValidatorService {
         })
     }
 
-    // In addition to the response from handling the certificates,
-    // returns a bool indicating whether the request should be tallied
-    // toward spam count. In general, this should be set to true for
-    // requests that are read-only and thus do not consume gas, such
-    // as when the transaction is already executed.
-    async fn handle_certificates(
-        &self,
-        certificates: NonEmpty<CertifiedTransaction>,
-        include_events: bool,
-        include_input_objects: bool,
-        include_output_objects: bool,
-        include_auxiliary_data: bool,
-        epoch_store: &Arc<AuthorityPerEpochStore>,
-        wait_for_effects: bool,
-    ) -> Result<(Option<Vec<HandleCertificateResponseV3>>, Weight), tonic::Status> {
-        // Validate if cert can be executed
-        // Fullnode does not serve handle_certificate call.
-        fp_ensure!(
-            !self.state.is_fullnode(epoch_store),
-            RtdErrorKind::FullNodeCantHandleCertificate.into()
-        );
-
-        let is_consensus_tx = certificates.iter().any(|cert| cert.is_consensus_tx());
-
-        let metrics = if certificates.len() == 1 {
-            if wait_for_effects {
-                if is_consensus_tx {
-                    &self.metrics.handle_certificate_consensus_latency
-                } else {
-                    &self.metrics.handle_certificate_non_consensus_latency
+    /// Extract the gas price from a batch of consensus transactions.
+    /// Returns the minimum gas price in the batch, or 0 if no user transactions.
+    fn extract_gas_price(transactions: &[ConsensusTransaction]) -> u64 {
+        use rtd_types::messages_consensus::ConsensusTransactionKind;
+        transactions
+            .iter()
+            .filter_map(|tx| match &tx.kind {
+                ConsensusTransactionKind::CertifiedTransaction(cert) => Some(cert.gas_price()),
+                ConsensusTransactionKind::UserTransaction(t) => {
+                    Some(t.data().transaction_data().gas_price())
                 }
-            } else {
-                &self.metrics.submit_certificate_consensus_latency
-            }
-        } else {
-            // `soft_bundle_validity_check` ensured that all certificates contain shared objects.
-            &self
-                .metrics
-                .handle_soft_bundle_certificates_consensus_latency
-        };
-
-        let _metrics_guard = metrics.start_timer();
-
-        // 1) Check if the certificate is already executed.
-        //    This is only needed when we have only one certificate (not a soft bundle).
-        //    When multiple certificates are provided, we will either submit all of them or none of them to consensus.
-        if certificates.len() == 1 {
-            let tx_digest = *certificates[0].digest();
-            debug!(tx_digest=?tx_digest, "Checking if certificate is already executed");
-
-            if let Some(signed_effects) = self
-                .state
-                .get_signed_effects_and_maybe_resign(&tx_digest, epoch_store)?
-            {
-                let events = if include_events && signed_effects.events_digest().is_some() {
-                    Some(
-                        self.state
-                            .get_transaction_events(signed_effects.transaction_digest())?,
-                    )
-                } else {
-                    None
-                };
-
-                return Ok((
-                    Some(vec![HandleCertificateResponseV3 {
-                        effects: signed_effects.into_inner(),
-                        events,
-                        input_objects: None,
-                        output_objects: None,
-                        auxiliary_data: None,
-                    }]),
-                    Weight::one(),
-                ));
-            };
-        }
-
-        // 2) Verify the certificates.
-        // Check system overload
-        for certificate in &certificates {
-            let overload_check_res = self.state.check_system_overload(
-                &*self.consensus_adapter,
-                certificate.data(),
-                self.state.check_system_overload_at_execution(),
-            );
-            if let Err(error) = overload_check_res {
-                self.metrics
-                    .num_rejected_cert_during_overload
-                    .with_label_values(&[error.as_ref()])
-                    .inc();
-                return Err(error.into());
-            }
-        }
-
-        let verified_certificates = {
-            let _timer = self.metrics.cert_verification_latency.start_timer();
-            epoch_store
-                .signature_verifier
-                .multi_verify_certs(certificates.into())
-                .await
-                .into_iter()
-                .collect::<Result<Vec<_>, _>>()?
-        };
-        let consensus_transactions =
-            NonEmpty::collect(verified_certificates.iter().map(|certificate| {
-                ConsensusTransaction::new_certificate_message(
-                    &self.state.name,
-                    certificate.clone().into(),
-                )
-            }))
-            .unwrap();
-
-        let (responses, weight) = self
-            .handle_submit_to_consensus(
-                consensus_transactions,
-                include_events,
-                include_input_objects,
-                include_output_objects,
-                include_auxiliary_data,
-                epoch_store,
-                wait_for_effects,
-            )
-            .await?;
-        // Sign the returned TransactionEffects.
-        let responses = if let Some(responses) = responses {
-            Some(
-                responses
-                    .into_iter()
-                    .map(|response| {
-                        let signed_effects =
-                            self.state.sign_effects(response.effects, epoch_store)?;
-                        Ok(HandleCertificateResponseV3 {
-                            effects: signed_effects.into_inner(),
-                            events: response.events,
-                            input_objects: if response.input_objects.is_empty() {
-                                None
-                            } else {
-                                Some(response.input_objects)
-                            },
-                            output_objects: if response.output_objects.is_empty() {
-                                None
-                            } else {
-                                Some(response.output_objects)
-                            },
-                            auxiliary_data: None,
-                        })
-                    })
-                    .collect::<Result<Vec<HandleCertificateResponseV3>, tonic::Status>>()?,
-            )
-        } else {
-            None
-        };
-
-        Ok((responses, weight))
+                ConsensusTransactionKind::UserTransactionV2(t) => {
+                    Some(t.tx().data().transaction_data().gas_price())
+                }
+                _ => None,
+            })
+            .min()
+            .unwrap_or(0)
     }
 
-    #[instrument(
-        name = "ValidatorService::handle_submit_to_consensus_for_position",
-        level = "debug",
-        skip_all,
-        err(level = "debug")
-    )]
-    async fn handle_submit_to_consensus_for_position(
-        &self,
-        // Empty when this is a ping request.
-        consensus_transactions: Vec<ConsensusTransaction>,
-        epoch_store: &Arc<AuthorityPerEpochStore>,
-        submitter_client_addr: Option<IpAddr>,
-    ) -> RtdResult<Vec<ConsensusPosition>> {
-        let (tx_consensus_positions, rx_consensus_positions) = oneshot::channel();
-
-        {
-            // code block within reconfiguration lock
-            let reconfiguration_lock = epoch_store.get_reconfig_state_read_lock_guard();
-            if !reconfiguration_lock.should_accept_user_certs() {
-                self.metrics.num_rejected_cert_in_epoch_boundary.inc();
-                return Err(RtdErrorKind::ValidatorHaltedAtEpochEnd.into());
-            }
-
-            // Submit to consensus and wait for a position. A transaction already
-            // processed by consensus returns a retriable processing error instead.
-            let _metrics_guard = self.metrics.consensus_latency.start_timer();
-
-            self.consensus_adapter.submit_batch(
-                &consensus_transactions,
-                Some(&reconfiguration_lock),
-                epoch_store,
-                Some(tx_consensus_positions),
-                submitter_client_addr,
-            )?;
+    fn classify_submit_mode(&self, is_ping_request: bool) -> UserSubmissionMode {
+        // Ping requests carry no transactions and must not wait behind queued
+        // work; submit them directly to consensus.
+        if is_ping_request {
+            return UserSubmissionMode::Direct;
         }
 
-        rx_consensus_positions.await.map_err(|e| {
-            RtdError::from(RtdErrorKind::FailedToSubmitToConsensus(format!(
-                "Failed to get consensus position: {e}"
-            )))
-        })?
-    }
-
-    async fn handle_submit_to_consensus(
-        &self,
-        consensus_transactions: NonEmpty<ConsensusTransaction>,
-        include_events: bool,
-        include_input_objects: bool,
-        include_output_objects: bool,
-        _include_auxiliary_data: bool,
-        epoch_store: &Arc<AuthorityPerEpochStore>,
-        wait_for_effects: bool,
-    ) -> Result<(Option<Vec<ExecutedData>>, Weight), tonic::Status> {
-        let consensus_transactions: Vec<_> = consensus_transactions.into();
-        {
-            // code block within reconfiguration lock
-            let reconfiguration_lock = epoch_store.get_reconfig_state_read_lock_guard();
-            if !reconfiguration_lock.should_accept_user_certs() {
-                self.metrics.num_rejected_cert_in_epoch_boundary.inc();
-                return Err(RtdErrorKind::ValidatorHaltedAtEpochEnd.into());
-            }
-
-            // 3) All transactions are sent to consensus (at least by some authorities)
-            // For certs with shared objects this will wait until either timeout or we have heard back from consensus.
-            // For certs with owned objects this will return without waiting for certificate to be sequenced.
-            // For uncertified transactions this will wait for fast path processing.
-            // First do quick dirty non-async check.
-            if !epoch_store.all_external_consensus_messages_processed(
-                consensus_transactions.iter().map(|tx| tx.key()),
-            )? {
-                let _metrics_guard = self.metrics.consensus_latency.start_timer();
-                self.consensus_adapter.submit_batch(
-                    &consensus_transactions,
-                    Some(&reconfiguration_lock),
-                    epoch_store,
-                    None,
-                    None, // not tracking submitter client addr for quorum driver path
-                )?;
-                // Do not wait for the result, because the transaction might have already executed.
-                // Instead, check or wait for the existence of certificate effects below.
-            }
-        }
-
-        if !wait_for_effects {
-            // It is useful to enqueue owned object transaction for execution locally,
-            // even when we are not returning effects to user
-            let fast_path_certificates = consensus_transactions
-                .iter()
-                .filter_map(|tx| {
-                    if let ConsensusTransactionKind::CertifiedTransaction(certificate) = &tx.kind {
-                        (!certificate.is_consensus_tx())
-                            // Certificates already verified by callers of this function.
-                            .then_some((
-                                VerifiedExecutableTransaction::new_from_certificate(
-                                    VerifiedCertificate::new_unchecked(*(certificate.clone())),
-                                ),
-                                ExecutionEnv::new()
-                                    .with_scheduling_source(SchedulingSource::NonFastPath),
-                            ))
-                    } else {
-                        None
-                    }
-                })
-                .map(|(tx, env)| (Schedulable::Transaction(tx), env))
-                .collect::<Vec<_>>();
-            if !fast_path_certificates.is_empty() {
-                self.state
-                    .execution_scheduler()
-                    .enqueue(fast_path_certificates, epoch_store);
-            }
-            return Ok((None, Weight::zero()));
-        }
-
-        // 4) Execute the certificates immediately if they contain only owned object transactions,
-        // or wait for the execution results if it contains shared objects.
-        let responses = futures::future::try_join_all(consensus_transactions.into_iter().map(
-            |tx| async move {
-                let effects = match &tx.kind {
-                    ConsensusTransactionKind::CertifiedTransaction(certificate) => {
-                        // Certificates already verified by callers of this function.
-                        let certificate = VerifiedCertificate::new_unchecked(*(certificate.clone()));
-                        self.state
-                            .wait_for_certificate_execution(&certificate, epoch_store)
-                            .await?
-                    }
-                    ConsensusTransactionKind::UserTransaction(tx) => {
-                        self.state.await_transaction_effects(*tx.digest(), epoch_store).await?
-                    }
-                    ConsensusTransactionKind::UserTransactionV2(tx) => {
-                        self.state.await_transaction_effects(*tx.tx().digest(), epoch_store).await?
-                    }
-                    _ => panic!("`handle_submit_to_consensus` received transaction that is not a CertifiedTransaction, UserTransaction, or UserTransactionV2"),
-                };
-                let events = if include_events && effects.events_digest().is_some() {
-                    Some(self.state.get_transaction_events(effects.transaction_digest())?)
+        match &self.user_submission_path {
+            UserSubmissionPath::Direct => UserSubmissionMode::Direct,
+            UserSubmissionPath::Pool(_) => UserSubmissionMode::Pool,
+            UserSubmissionPath::AdmissionQueue(context) => {
+                // If the queue actor is stuck, fall back to direct submission with the
+                // pre-queue saturation reject until it resumes making progress.
+                if context.load().failover_tripped() {
+                    UserSubmissionMode::Direct
                 } else {
-                    None
-                };
-
-                let input_objects = if include_input_objects {
-                    self.state.get_transaction_input_objects(&effects)?
-                } else {
-                    vec![]
-                };
-
-                let output_objects = if include_output_objects {
-                    self.state.get_transaction_output_objects(&effects)?
-                } else {
-                    vec![]
-                };
-
-                if let ConsensusTransactionKind::CertifiedTransaction(certificate) = &tx.kind {
-                    epoch_store.insert_tx_cert_sig(certificate.digest(), certificate.auth_sig())?;
+                    UserSubmissionMode::Queue
                 }
-
-                Ok::<_, RtdError>(ExecutedData {
-                    effects,
-                    events,
-                    input_objects,
-                    output_objects,
-                })
-            },
-        ))
-        .await?;
-
-        Ok((Some(responses), Weight::zero()))
+            }
+        }
     }
 
     async fn collect_effects_data(
@@ -1567,17 +1627,12 @@ impl ValidatorService {
         include_events: bool,
         include_input_objects: bool,
         include_output_objects: bool,
-        fastpath_outputs: Option<Arc<TransactionOutputs>>,
     ) -> RtdResult<(Option<TransactionEvents>, Vec<Object>, Vec<Object>)> {
         let events = if include_events && effects.events_digest().is_some() {
-            if let Some(fastpath_outputs) = &fastpath_outputs {
-                Some(fastpath_outputs.events.clone())
-            } else {
-                Some(
-                    self.state
-                        .get_transaction_events(effects.transaction_digest())?,
-                )
-            }
+            Some(
+                self.state
+                    .get_transaction_events(effects.transaction_digest())?,
+            )
         } else {
             None
         };
@@ -1589,11 +1644,7 @@ impl ValidatorService {
         };
 
         let output_objects = if include_output_objects {
-            if let Some(fastpath_outputs) = &fastpath_outputs {
-                fastpath_outputs.written.values().cloned().collect()
-            } else {
-                self.state.get_transaction_output_objects(effects)?
-            }
+            self.state.get_transaction_output_objects(effects)?
         } else {
             vec![]
         };
@@ -1604,18 +1655,28 @@ impl ValidatorService {
 
 type WrappedServiceResponse<T> = Result<(tonic::Response<T>, Weight), tonic::Status>;
 
+/// RAII guard tracking the transaction digests a single submit request is actively handling, so
+/// concurrent duplicates can be rejected. On drop, each acquired digest is removed from
+/// the in-flight set and demoted into `recently_submitted` cache, so resubmissions
+/// arriving shortly after the handler returns are still suppressed.
 struct InflightTransactionsGuard {
+    // Handle to inflight map and recently submitted cache.
     inflight: Arc<Mutex<HashSet<TransactionDigest>>>,
     recently_submitted: Cache<TransactionDigest, Instant>,
     window: Duration,
     metrics: Arc<ValidatorServiceMetrics>,
+    /// Digests this request successfully acquired.
     acquired: HashSet<TransactionDigest>,
 }
 
 enum AcquireOutcome {
+    /// Transaction digest newly acquired by this request.
     Acquired,
+    /// Transaction digest already acquired by this request before this internal retry attempt.
     AlreadyAcquiredByThisRequest,
+    /// Transaction digest being handled by another concurrent request — reject this index.
     AlreadyAcquiredByAnotherRequest,
+    /// Transaction digest recently processed — reject this index.
     RecentlyProcessed { since: Duration },
 }
 
@@ -1631,22 +1692,28 @@ impl InflightTransactionsGuard {
     }
 
     fn try_acquire(&mut self, digest: TransactionDigest) -> AcquireOutcome {
+        // A retry of this own request re-acquires the same digests.
         if self.acquired.contains(&digest) {
             return AcquireOutcome::AlreadyAcquiredByThisRequest;
         }
 
+        // Suppress resubmissions of recently processed transactions.
         if let Some(outcome) = self.recently_processed_outcome(digest) {
             return outcome;
         }
 
+        // Atomic check-and-acquire against concurrent in-flight transactions.
         {
             let mut set = self.inflight.lock();
+            // Only continue processing the transaction if it is not already inflight.
             if !set.insert(digest) {
                 return AcquireOutcome::AlreadyAcquiredByAnotherRequest;
             }
             self.metrics.inflight_transactions.set(set.len() as i64);
         }
 
+        // Without this re-check, a duplicated transaction arriving between the first check and
+        // the digest acquisition could slip through.
         if let Some(outcome) = self.recently_processed_outcome(digest) {
             let mut set = self.inflight.lock();
             set.remove(&digest);
@@ -1670,7 +1737,8 @@ impl Drop for InflightTransactionsGuard {
         if self.acquired.is_empty() {
             return;
         }
-
+        // Demote inflight transactions to recently submitted cache before taking the in-flight lock,
+        // to avoid cleaning up the cache with the lock.
         let now = Instant::now();
         for digest in &self.acquired {
             self.recently_submitted.insert(*digest, now);
@@ -1689,118 +1757,11 @@ impl Drop for InflightTransactionsGuard {
 }
 
 impl ValidatorService {
-    async fn transaction_impl(
-        &self,
-        request: tonic::Request<Transaction>,
-    ) -> WrappedServiceResponse<HandleTransactionResponse> {
-        self.handle_transaction(request).await
-    }
-
     async fn handle_submit_transaction_impl(
         &self,
         request: tonic::Request<RawSubmitTxRequest>,
     ) -> WrappedServiceResponse<RawSubmitTxResponse> {
         self.handle_submit_transaction(request).await
-    }
-
-    async fn submit_certificate_impl(
-        &self,
-        request: tonic::Request<CertifiedTransaction>,
-    ) -> WrappedServiceResponse<SubmitCertificateResponse> {
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
-        let certificate = request.into_inner();
-        certificate.validity_check(&epoch_store.tx_validity_check_context())?;
-
-        let span =
-            error_span!("ValidatorService::submit_certificate", tx_digest = ?certificate.digest());
-        self.handle_certificates(
-            nonempty![certificate],
-            true,
-            false,
-            false,
-            false,
-            &epoch_store,
-            false,
-        )
-        .instrument(span)
-        .await
-        .map(|(executed, spam_weight)| {
-            (
-                tonic::Response::new(SubmitCertificateResponse {
-                    executed: executed.map(|mut x| x.remove(0)).map(Into::into),
-                }),
-                spam_weight,
-            )
-        })
-    }
-
-    async fn handle_certificate_v2_impl(
-        &self,
-        request: tonic::Request<CertifiedTransaction>,
-    ) -> WrappedServiceResponse<HandleCertificateResponseV2> {
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
-        let certificate = request.into_inner();
-        certificate.validity_check(&epoch_store.tx_validity_check_context())?;
-
-        let span = error_span!("ValidatorService::handle_certificate_v2", tx_digest = ?certificate.digest());
-        self.handle_certificates(
-            nonempty![certificate],
-            true,
-            false,
-            false,
-            false,
-            &epoch_store,
-            true,
-        )
-        .instrument(span)
-        .await
-        .map(|(resp, spam_weight)| {
-            (
-                tonic::Response::new(
-                    resp.expect(
-                        "handle_certificate should not return none with wait_for_effects=true",
-                    )
-                    .remove(0)
-                    .into(),
-                ),
-                spam_weight,
-            )
-        })
-    }
-
-    async fn handle_certificate_v3_impl(
-        &self,
-        request: tonic::Request<HandleCertificateRequestV3>,
-    ) -> WrappedServiceResponse<HandleCertificateResponseV3> {
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
-        let request = request.into_inner();
-        request
-            .certificate
-            .validity_check(&epoch_store.tx_validity_check_context())?;
-
-        let span = error_span!("ValidatorService::handle_certificate_v3", tx_digest = ?request.certificate.digest());
-        self.handle_certificates(
-            nonempty![request.certificate],
-            request.include_events,
-            request.include_input_objects,
-            request.include_output_objects,
-            request.include_auxiliary_data,
-            &epoch_store,
-            true,
-        )
-        .instrument(span)
-        .await
-        .map(|(resp, spam_weight)| {
-            (
-                tonic::Response::new(
-                    resp.expect(
-                        "handle_certificate should not return none with wait_for_effects=true",
-                    )
-                    .remove(0),
-                ),
-                spam_weight,
-            )
-        })
     }
 
     async fn wait_for_effects_impl(
@@ -1822,7 +1783,7 @@ impl ValidatorService {
         Ok((tonic::Response::new(response), Weight::zero()))
     }
 
-    #[instrument(name= "ValidatorService::wait_for_effects_response", level = "error", skip_all, fields(consensus_position = ?request.consensus_position, fast_path_effects = tracing::field::Empty))]
+    #[instrument(name= "ValidatorService::wait_for_effects_response", level = "debug", skip_all, fields(consensus_position = ?request.consensus_position))]
     async fn wait_for_effects_response(
         &self,
         request: WaitForEffectsRequest,
@@ -1845,51 +1806,65 @@ impl ValidatorService {
         };
         let tx_digests = [tx_digest];
 
-        let fastpath_effects_future: Pin<Box<dyn Future<Output = _> + Send>> =
-            if let Some(consensus_position) = request.consensus_position {
-                Box::pin(self.wait_for_fastpath_effects(
-                    consensus_position,
-                    &tx_digests,
-                    request.include_details,
-                    epoch_store,
-                ))
-            } else {
-                Box::pin(futures::future::pending())
+        // When consensus_position is provided, also watch the consensus status cache
+        // so rejected/dropped transactions get a timely response instead of waiting
+        // forever for effects that will never be produced.
+        let consensus_status_future = async {
+            let consensus_position = match request.consensus_position {
+                Some(pos) => pos,
+                None => return futures::future::pending().await,
             };
+            let consensus_tx_status_cache = &epoch_store.consensus_tx_status_cache;
+            consensus_tx_status_cache.check_position_too_ahead(&consensus_position)?;
+            match consensus_tx_status_cache
+                .notify_read_transaction_status(consensus_position)
+                .await
+            {
+                NotifyReadConsensusTxStatusResult::Status(
+                    ConsensusTxStatus::Rejected | ConsensusTxStatus::Dropped,
+                ) => Ok(WaitForEffectsResponse::Rejected {
+                    error: epoch_store.get_rejection_vote_reason(consensus_position),
+                }),
+                NotifyReadConsensusTxStatusResult::Status(ConsensusTxStatus::Finalized) => {
+                    // Effects will be produced — yield to let the effects future win.
+                    futures::future::pending().await
+                }
+                NotifyReadConsensusTxStatusResult::Expired(round) => {
+                    Ok(WaitForEffectsResponse::Expired {
+                        epoch: epoch_store.epoch(),
+                        round: Some(round),
+                    })
+                }
+            }
+        };
 
         tokio::select! {
-            // Ensure that finalized effects are always prioritized.
-            biased;
-            // We always wait for effects regardless of consensus position via
-            // notify_read_executed_effects. This is safe because we have separated
-            // mysticeti fastpath outputs to a separate dirty cache
-            // UncommittedData::fastpath_transaction_outputs that will only get flushed
-            // once finalized. So the output of notify_read_executed_effects is
-            // guaranteed to be finalized effects or effects from QD execution.
-            mut effects = self.state
+            effects_result = self.state
                 .get_transaction_cache_reader()
-                .notify_read_executed_effects(
+                .notify_read_executed_effects_may_fail(
                     "AuthorityServer::wait_for_effects::notify_read_executed_effects_finalized",
                     &tx_digests,
                 ) => {
-                tracing::Span::current().record("fast_path_effects", false);
-                let effects = effects.pop().unwrap();
+                let effects = effects_result?.pop().unwrap();
+                let effects_digest = effects.digest();
+                self.state.check_effects_against_previously_signed(
+                    epoch_store,
+                    &tx_digest,
+                    &effects_digest,
+                    "wait_for_effects",
+                )?;
                 let details = if request.include_details {
-                    Some(self.complete_executed_data(effects.clone(), None).await?)
+                    Some(self.complete_executed_data(effects).await?)
                 } else {
                     None
                 };
-
                 Ok(WaitForEffectsResponse::Executed {
-                    effects_digest: effects.digest(),
+                    effects_digest,
                     details,
-                    fast_path: false,
                 })
             }
-
-            fastpath_response = fastpath_effects_future => {
-                tracing::Span::current().record("fast_path_effects", true);
-                fastpath_response
+            status_response = consensus_status_future => {
+                status_response
             }
         }
     }
@@ -1900,12 +1875,7 @@ impl ValidatorService {
         request: WaitForEffectsRequest,
         epoch_store: &Arc<AuthorityPerEpochStore>,
     ) -> RtdResult<WaitForEffectsResponse> {
-        let Some(consensus_tx_status_cache) = epoch_store.consensus_tx_status_cache.as_ref() else {
-            return Err(RtdErrorKind::UnsupportedFeatureError {
-                error: "Mysticeti fastpath".to_string(),
-            }
-            .into());
-        };
+        let consensus_tx_status_cache = &epoch_store.consensus_tx_status_cache;
 
         let Some(consensus_position) = request.consensus_position else {
             return Err(RtdErrorKind::InvalidRequest(
@@ -1930,145 +1900,32 @@ impl ValidatorService {
 
         consensus_tx_status_cache.check_position_too_ahead(&consensus_position)?;
 
-        let mut last_status = None;
         let details = if request.include_details {
             Some(Box::new(ExecutedData::default()))
         } else {
             None
         };
 
-        loop {
-            let status = consensus_tx_status_cache
-                .notify_read_transaction_status_change(consensus_position, last_status)
-                .await;
-            match status {
-                NotifyReadConsensusTxStatusResult::Status(status) => match status {
-                    ConsensusTxStatus::FastpathCertified => {
-                        // If the request is for consensus, we need to wait for the transaction to be finalised via Consensus.
-                        if ping == PingType::Consensus {
-                            last_status = Some(status);
-                            continue;
-                        }
-                        return Ok(WaitForEffectsResponse::Executed {
-                            effects_digest: TransactionEffectsDigest::ZERO,
-                            details,
-                            fast_path: true,
-                        });
-                    }
-                    ConsensusTxStatus::Rejected => {
-                        return Ok(WaitForEffectsResponse::Rejected { error: None });
-                    }
-                    ConsensusTxStatus::Finalized => {
-                        return Ok(WaitForEffectsResponse::Executed {
-                            effects_digest: TransactionEffectsDigest::ZERO,
-                            details,
-                            fast_path: false,
-                        });
-                    }
-                },
-                NotifyReadConsensusTxStatusResult::Expired(round) => {
-                    return Ok(WaitForEffectsResponse::Expired {
-                        epoch: epoch_store.epoch(),
-                        round: Some(round),
-                    });
+        let status = consensus_tx_status_cache
+            .notify_read_transaction_status(consensus_position)
+            .await;
+        match status {
+            NotifyReadConsensusTxStatusResult::Status(status) => match status {
+                ConsensusTxStatus::Rejected | ConsensusTxStatus::Dropped => {
+                    Ok(WaitForEffectsResponse::Rejected {
+                        error: epoch_store.get_rejection_vote_reason(consensus_position),
+                    })
                 }
-            }
-        }
-    }
-
-    #[instrument(level = "error", skip_all, err(level = "debug"))]
-    async fn wait_for_fastpath_effects(
-        &self,
-        consensus_position: ConsensusPosition,
-        tx_digests: &[TransactionDigest],
-        include_details: bool,
-        epoch_store: &Arc<AuthorityPerEpochStore>,
-    ) -> RtdResult<WaitForEffectsResponse> {
-        let Some(consensus_tx_status_cache) = epoch_store.consensus_tx_status_cache.as_ref() else {
-            return Err(RtdErrorKind::UnsupportedFeatureError {
-                error: "Mysticeti fastpath".to_string(),
-            }
-            .into());
-        };
-
-        let local_epoch = epoch_store.epoch();
-        match consensus_position.epoch.cmp(&local_epoch) {
-            Ordering::Less => {
-                // Ask TransactionDriver to retry submitting the transaction and get a new ConsensusPosition,
-                // if response from this validator is desired.
-                let response = WaitForEffectsResponse::Expired {
-                    epoch: local_epoch,
-                    round: None,
-                };
-                return Ok(response);
-            }
-            Ordering::Greater => {
-                // Ask TransactionDriver to retry this RPC until the validator's epoch catches up.
-                return Err(RtdErrorKind::WrongEpoch {
-                    expected_epoch: local_epoch,
-                    actual_epoch: consensus_position.epoch,
-                }
-                .into());
-            }
-            Ordering::Equal => {
-                // The validator's epoch is the same as the epoch of the transaction.
-                // We can proceed with the normal flow.
-            }
-        };
-
-        consensus_tx_status_cache.check_position_too_ahead(&consensus_position)?;
-
-        let mut current_status = None;
-        loop {
-            tokio::select! {
-                status_result = consensus_tx_status_cache
-                    .notify_read_transaction_status_change(consensus_position, current_status) => {
-                    match status_result {
-                        NotifyReadConsensusTxStatusResult::Status(new_status) => {
-                            match new_status {
-                                ConsensusTxStatus::Rejected => {
-                                    return Ok(WaitForEffectsResponse::Rejected {
-                                        error: epoch_store.get_rejection_vote_reason(
-                                            consensus_position
-                                        )
-                                    });
-                                }
-                                ConsensusTxStatus::FastpathCertified => {
-                                    current_status = Some(new_status);
-                                    continue;
-                                }
-                                ConsensusTxStatus::Finalized => {
-                                    current_status = Some(new_status);
-                                    continue;
-                                }
-                            }
-                        }
-                        NotifyReadConsensusTxStatusResult::Expired(round) => {
-                            return Ok(WaitForEffectsResponse::Expired {
-                                epoch: epoch_store.epoch(),
-                                round: Some(round),
-                            });
-                        }
-                    }
-                }
-
-                mut outputs = self.state.get_transaction_cache_reader().notify_read_fastpath_transaction_outputs(tx_digests),
-                    if current_status == Some(ConsensusTxStatus::FastpathCertified) || current_status == Some(ConsensusTxStatus::Finalized) => {
-                    let outputs = outputs.pop().unwrap();
-                    let effects = outputs.effects.clone();
-
-                    let details = if include_details {
-                        Some(self.complete_executed_data(effects.clone(), Some(outputs)).await?)
-                    } else {
-                        None
-                    };
-
-                    return Ok(WaitForEffectsResponse::Executed {
-                        effects_digest: effects.digest(),
-                        details,
-                        fast_path: current_status == Some(ConsensusTxStatus::FastpathCertified),
-                    });
-                }
+                ConsensusTxStatus::Finalized => Ok(WaitForEffectsResponse::Executed {
+                    effects_digest: TransactionEffectsDigest::ZERO,
+                    details,
+                }),
+            },
+            NotifyReadConsensusTxStatusResult::Expired(round) => {
+                Ok(WaitForEffectsResponse::Expired {
+                    epoch: epoch_store.epoch(),
+                    round: Some(round),
+                })
             }
         }
     }
@@ -2076,15 +1933,11 @@ impl ValidatorService {
     async fn complete_executed_data(
         &self,
         effects: TransactionEffects,
-        fastpath_outputs: Option<Arc<TransactionOutputs>>,
     ) -> RtdResult<Box<ExecutedData>> {
         let (events, input_objects, output_objects) = self
             .collect_effects_data(
-                &effects,
-                /* include_events */ true,
-                /* include_input_objects */ true,
+                &effects, /* include_events */ true, /* include_input_objects */ true,
                 /* include_output_objects */ true,
-                fastpath_outputs,
             )
             .await?;
         Ok(Box::new(ExecutedData {
@@ -2093,179 +1946,6 @@ impl ValidatorService {
             input_objects,
             output_objects,
         }))
-    }
-
-    async fn soft_bundle_validity_check(
-        &self,
-        certificates: &NonEmpty<CertifiedTransaction>,
-        epoch_store: &Arc<AuthorityPerEpochStore>,
-        total_size_bytes: u64,
-    ) -> Result<(), tonic::Status> {
-        let protocol_config = epoch_store.protocol_config();
-        let node_config = &self.state.config;
-
-        // Soft Bundle MUST be enabled both in protocol config and local node config.
-        //
-        // The local node config is by default enabled, but can be turned off by the node operator.
-        // This acts an extra safety measure where a validator node have the choice to turn this feature off,
-        // without having to upgrade the entire network.
-        fp_ensure!(
-            protocol_config.soft_bundle() && node_config.enable_soft_bundle,
-            RtdErrorKind::UnsupportedFeatureError {
-                error: "Soft Bundle".to_string()
-            }
-            .into()
-        );
-
-        // Enforce these checks per [SIP-19](https://github.com/rtd-foundation/sips/blob/main/sips/sip-19.md):
-        // - All certs must access at least one shared object.
-        // - All certs must not be already executed.
-        // - All certs must have the same gas price.
-        // - Number of certs must not exceed the max allowed.
-        // - Total size of all certs must not exceed the max allowed.
-        fp_ensure!(
-            certificates.len() as u64 <= protocol_config.max_soft_bundle_size(),
-            RtdErrorKind::UserInputError {
-                error: UserInputError::TooManyTransactionsInBatch {
-                    size: certificates.len(),
-                    limit: protocol_config.max_soft_bundle_size()
-                }
-            }
-            .into()
-        );
-
-        // We set the soft bundle max size to be half of the consensus max transactions in block size. We do this to account for
-        // serialization overheads and to ensure that the soft bundle is not too large when is attempted to be posted via consensus.
-        // Although half the block size is on the extreme side, it's should be good enough for now.
-        let soft_bundle_max_size_bytes =
-            protocol_config.consensus_max_transactions_in_block_bytes() / 2;
-        fp_ensure!(
-            total_size_bytes <= soft_bundle_max_size_bytes,
-            RtdErrorKind::UserInputError {
-                error: UserInputError::TotalTransactionSizeTooLargeInBatch {
-                    size: total_size_bytes as usize,
-                    limit: soft_bundle_max_size_bytes,
-                },
-            }
-            .into()
-        );
-
-        let mut gas_price = None;
-        for certificate in certificates {
-            let tx_digest = *certificate.digest();
-            fp_ensure!(
-                certificate.is_consensus_tx(),
-                RtdErrorKind::UserInputError {
-                    error: UserInputError::NoSharedObjectError { digest: tx_digest }
-                }
-                .into()
-            );
-            fp_ensure!(
-                !self.state.is_tx_already_executed(&tx_digest),
-                RtdErrorKind::UserInputError {
-                    error: UserInputError::AlreadyExecutedInSoftBundleError { digest: tx_digest }
-                }
-                .into()
-            );
-            if let Some(gas) = gas_price {
-                fp_ensure!(
-                    gas == certificate.gas_price(),
-                    RtdErrorKind::UserInputError {
-                        error: UserInputError::GasPriceMismatchError {
-                            digest: tx_digest,
-                            expected: gas,
-                            actual: certificate.gas_price()
-                        }
-                    }
-                    .into()
-                );
-            } else {
-                gas_price = Some(certificate.gas_price());
-            }
-        }
-
-        // For Soft Bundle, if at this point we know at least one certificate has already been processed,
-        // reject the entire bundle.  Otherwise, submit all certificates in one request.
-        // This is not a strict check as there may be race conditions where one or more certificates are
-        // already being processed by another actor, and we could not know it.
-        fp_ensure!(
-            !epoch_store.is_any_tx_certs_consensus_message_processed(certificates.iter())?,
-            RtdErrorKind::UserInputError {
-                error: UserInputError::CertificateAlreadyProcessed
-            }
-            .into()
-        );
-
-        Ok(())
-    }
-
-    async fn handle_soft_bundle_certificates_v3_impl(
-        &self,
-        request: tonic::Request<HandleSoftBundleCertificatesRequestV3>,
-    ) -> WrappedServiceResponse<HandleSoftBundleCertificatesResponseV3> {
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
-        let client_addr = if self.client_id_source.is_none() {
-            self.get_client_ip_addr(&request, &ClientIdSource::SocketAddr)
-        } else {
-            self.get_client_ip_addr(&request, self.client_id_source.as_ref().unwrap())
-        };
-        let request = request.into_inner();
-
-        let certificates = NonEmpty::from_vec(request.certificates)
-            .ok_or(RtdErrorKind::NoCertificateProvidedError)?;
-        let mut total_size_bytes = 0;
-        for certificate in &certificates {
-            // We need to check this first because we haven't verified the cert signature.
-            total_size_bytes +=
-                certificate.validity_check(&epoch_store.tx_validity_check_context())? as u64;
-        }
-
-        self.metrics
-            .handle_soft_bundle_certificates_count
-            .observe(certificates.len() as f64);
-
-        self.metrics
-            .handle_soft_bundle_certificates_size_bytes
-            .observe(total_size_bytes as f64);
-
-        // Now that individual certificates are valid, we check if the bundle is valid.
-        self.soft_bundle_validity_check(&certificates, &epoch_store, total_size_bytes)
-            .await?;
-
-        info!(
-            "Received Soft Bundle with {} certificates, from {}, tx digests are [{}], total size [{}]bytes",
-            certificates.len(),
-            client_addr
-                .map(|x| x.to_string())
-                .unwrap_or_else(|| "unknown".to_string()),
-            certificates
-                .iter()
-                .map(|x| x.digest().to_string())
-                .collect::<Vec<_>>()
-                .join(", "),
-            total_size_bytes
-        );
-
-        let span = error_span!("ValidatorService::handle_soft_bundle_certificates_v3");
-        self.handle_certificates(
-            certificates,
-            request.include_events,
-            request.include_input_objects,
-            request.include_output_objects,
-            request.include_auxiliary_data,
-            &epoch_store,
-            request.wait_for_effects,
-        )
-        .instrument(span)
-        .await
-        .map(|(resp, spam_weight)| {
-            (
-                tonic::Response::new(HandleSoftBundleCertificatesResponseV3 {
-                    responses: resp.unwrap_or_default(),
-                }),
-                spam_weight,
-            )
-        })
     }
 
     async fn object_info_impl(
@@ -2335,8 +2015,7 @@ impl ValidatorService {
         // Get last committed leader round from epoch store
         let last_committed_leader_round = epoch_store
             .consensus_tx_status_cache
-            .as_ref()
-            .and_then(|cache| cache.get_last_committed_leader_round())
+            .get_last_committed_leader_round()
             .unwrap_or(0);
 
         // Get last locally built checkpoint sequence
@@ -2486,6 +2165,7 @@ impl ValidatorService {
         &self,
         client: Option<IpAddr>,
         wrapped_response: WrappedServiceResponse<T>,
+        method_name: &str,
     ) -> Result<tonic::Response<T>, tonic::Status> {
         let (error, spam_weight, unwrapped_response) = match wrapped_response {
             Ok((result, spam_weight)) => (None, spam_weight.clone(), Ok(result)),
@@ -2507,22 +2187,11 @@ impl ValidatorService {
                 }),
                 spam_weight,
                 timestamp: SystemTime::now(),
+                method: Some(method_name.to_string()),
             })
         }
         unwrapped_response
     }
-}
-
-fn make_tonic_request_for_testing<T>(message: T) -> tonic::Request<T> {
-    // simulate a TCP connection, which would have added extensions to
-    // the request object that would be used downstream
-    let mut request = tonic::Request::new(message);
-    let tcp_connect_info = TcpConnectInfo {
-        local_addr: None,
-        remote_addr: Some(SocketAddr::new([127, 0, 0, 1].into(), 0)),
-    };
-    request.extensions_mut().insert(tcp_connect_info);
-    request
 }
 
 // TODO: refine error matching here
@@ -2546,7 +2215,7 @@ fn normalize(err: RtdError) -> Weight {
 /// unless it is necessary to override the return value.
 #[macro_export]
 macro_rules! handle_with_decoration {
-    ($self:ident, $func_name:ident, $request:ident) => {{
+    ($self:ident, $func_name:ident, $request:ident, $method_name:expr) => {{
         if $self.client_id_source.is_none() {
             return $self.$func_name($request).await.map(|(result, _)| result);
         }
@@ -2558,7 +2227,7 @@ macro_rules! handle_with_decoration {
 
         // handle traffic tallying
         let wrapped_response = $self.$func_name($request).await;
-        $self.handle_traffic_resp(client, wrapped_response)
+        $self.handle_traffic_resp(client, wrapped_response, $method_name)
     }};
 }
 
@@ -2575,107 +2244,62 @@ impl Validator for ValidatorService {
         spawn_monitored_task!(async move {
             // NB: traffic tally wrapping handled within the task rather than on task exit
             // to prevent an attacker from subverting traffic control by severing the connection
-            handle_with_decoration!(validator_service, handle_submit_transaction_impl, request)
+            handle_with_decoration!(
+                validator_service,
+                handle_submit_transaction_impl,
+                request,
+                "submit_transaction"
+            )
         })
         .await
         .unwrap()
-    }
-
-    async fn transaction(
-        &self,
-        request: tonic::Request<Transaction>,
-    ) -> Result<tonic::Response<HandleTransactionResponse>, tonic::Status> {
-        let validator_service = self.clone();
-
-        // Spawns a task which handles the transaction. The task will unconditionally continue
-        // processing in the event that the client connection is dropped.
-        spawn_monitored_task!(async move {
-            // NB: traffic tally wrapping handled within the task rather than on task exit
-            // to prevent an attacker from subverting traffic control by severing the connection
-            handle_with_decoration!(validator_service, transaction_impl, request)
-        })
-        .await
-        .unwrap()
-    }
-
-    async fn submit_certificate(
-        &self,
-        request: tonic::Request<CertifiedTransaction>,
-    ) -> Result<tonic::Response<SubmitCertificateResponse>, tonic::Status> {
-        let validator_service = self.clone();
-
-        // Spawns a task which handles the certificate. The task will unconditionally continue
-        // processing in the event that the client connection is dropped.
-        spawn_monitored_task!(async move {
-            // NB: traffic tally wrapping handled within the task rather than on task exit
-            // to prevent an attacker from subverting traffic control by severing the connection.
-            handle_with_decoration!(validator_service, submit_certificate_impl, request)
-        })
-        .await
-        .unwrap()
-    }
-
-    async fn handle_certificate_v2(
-        &self,
-        request: tonic::Request<CertifiedTransaction>,
-    ) -> Result<tonic::Response<HandleCertificateResponseV2>, tonic::Status> {
-        handle_with_decoration!(self, handle_certificate_v2_impl, request)
-    }
-
-    async fn handle_certificate_v3(
-        &self,
-        request: tonic::Request<HandleCertificateRequestV3>,
-    ) -> Result<tonic::Response<HandleCertificateResponseV3>, tonic::Status> {
-        handle_with_decoration!(self, handle_certificate_v3_impl, request)
     }
 
     async fn wait_for_effects(
         &self,
         request: tonic::Request<RawWaitForEffectsRequest>,
     ) -> Result<tonic::Response<RawWaitForEffectsResponse>, tonic::Status> {
-        handle_with_decoration!(self, wait_for_effects_impl, request)
-    }
-
-    async fn handle_soft_bundle_certificates_v3(
-        &self,
-        request: tonic::Request<HandleSoftBundleCertificatesRequestV3>,
-    ) -> Result<tonic::Response<HandleSoftBundleCertificatesResponseV3>, tonic::Status> {
-        handle_with_decoration!(self, handle_soft_bundle_certificates_v3_impl, request)
+        handle_with_decoration!(self, wait_for_effects_impl, request, "wait_for_effects")
     }
 
     async fn object_info(
         &self,
         request: tonic::Request<ObjectInfoRequest>,
     ) -> Result<tonic::Response<ObjectInfoResponse>, tonic::Status> {
-        handle_with_decoration!(self, object_info_impl, request)
+        handle_with_decoration!(self, object_info_impl, request, "object_info")
     }
 
     async fn transaction_info(
         &self,
         request: tonic::Request<TransactionInfoRequest>,
     ) -> Result<tonic::Response<TransactionInfoResponse>, tonic::Status> {
-        handle_with_decoration!(self, transaction_info_impl, request)
+        handle_with_decoration!(self, transaction_info_impl, request, "transaction_info")
     }
 
     async fn checkpoint(
         &self,
         request: tonic::Request<CheckpointRequest>,
     ) -> Result<tonic::Response<CheckpointResponse>, tonic::Status> {
-        handle_with_decoration!(self, checkpoint_impl, request)
+        handle_with_decoration!(self, checkpoint_impl, request, "checkpoint")
     }
 
     async fn checkpoint_v2(
         &self,
         request: tonic::Request<CheckpointRequestV2>,
     ) -> Result<tonic::Response<CheckpointResponseV2>, tonic::Status> {
-        handle_with_decoration!(self, checkpoint_v2_impl, request)
+        handle_with_decoration!(self, checkpoint_v2_impl, request, "checkpoint_v2")
     }
 
     async fn get_system_state_object(
         &self,
         request: tonic::Request<SystemStateRequest>,
     ) -> Result<tonic::Response<RtdSystemState>, tonic::Status> {
-        handle_with_decoration!(self, get_system_state_object_impl, request)
+        handle_with_decoration!(
+            self,
+            get_system_state_object_impl,
+            request,
+            "get_system_state_object"
+        )
     }
 
     async fn validator_health(
@@ -2683,13 +2307,14 @@ impl Validator for ValidatorService {
         request: tonic::Request<rtd_types::messages_grpc::RawValidatorHealthRequest>,
     ) -> Result<tonic::Response<rtd_types::messages_grpc::RawValidatorHealthResponse>, tonic::Status>
     {
-        handle_with_decoration!(self, validator_health_impl, request)
+        handle_with_decoration!(self, validator_health_impl, request, "validator_health")
     }
 }
 
 #[cfg(test)]
 mod inflight_guard_tests {
     use super::*;
+    use prometheus::Registry;
 
     fn make_guard(
         inflight: Arc<Mutex<HashSet<TransactionDigest>>>,
@@ -2712,46 +2337,53 @@ mod inflight_guard_tests {
         let metrics = Arc::new(ValidatorServiceMetrics::new(&Registry::new()));
         let digest = TransactionDigest::random();
 
-        let mut first = make_guard(inflight.clone(), cache.clone(), metrics.clone());
-        let mut second = make_guard(inflight, cache, metrics.clone());
+        let mut g1 = make_guard(inflight.clone(), cache.clone(), metrics.clone());
+        let mut g2 = make_guard(inflight.clone(), cache.clone(), metrics.clone());
 
-        assert!(matches!(
-            first.try_acquire(digest),
-            AcquireOutcome::Acquired
-        ));
+        // First handler acquires it.
+        assert!(matches!(g1.try_acquire(digest), AcquireOutcome::Acquired));
         assert_eq!(metrics.inflight_transactions.get(), 1);
+
+        // A concurrent handler sees another in-flight owner and is rejected.
         assert!(matches!(
-            second.try_acquire(digest),
+            g2.try_acquire(digest),
             AcquireOutcome::AlreadyAcquiredByAnotherRequest
         ));
+
+        // The owning handler re-acquiring (epoch-end retry) is NOT a duplicate.
         assert!(matches!(
-            first.try_acquire(digest),
+            g1.try_acquire(digest),
             AcquireOutcome::AlreadyAcquiredByThisRequest
         ));
     }
 
     #[test]
-    fn drop_demotes_to_recent_submission_cache() {
+    fn drop_demotes_into_recently_processed_outcome() {
         let inflight = Arc::new(Mutex::new(HashSet::new()));
         let cache = ValidatorService::new_recently_submitted_cache(Duration::from_secs(10));
         let metrics = Arc::new(ValidatorServiceMetrics::new(&Registry::new()));
         let digest = TransactionDigest::random();
 
         {
-            let mut guard = make_guard(inflight.clone(), cache.clone(), metrics.clone());
-            assert!(matches!(
-                guard.try_acquire(digest),
-                AcquireOutcome::Acquired
-            ));
-        }
+            let mut g = make_guard(inflight.clone(), cache.clone(), metrics.clone());
+            assert!(matches!(g.try_acquire(digest), AcquireOutcome::Acquired));
+            assert_eq!(inflight.lock().len(), 1);
+        } // guard dropped here -> remove from set + demote to TTL cache
 
-        assert!(inflight.lock().is_empty());
+        assert_eq!(
+            inflight.lock().len(),
+            0,
+            "acquired digest must be removed from the in-flight set on drop"
+        );
         assert_eq!(metrics.inflight_transactions.get(), 0);
+
+        // Make moka's read view deterministic before asserting the demoted entry.
         cache.run_pending_tasks();
 
-        let mut next = make_guard(inflight, cache, metrics);
+        // A fresh request now sees the digest as recently processed (tail window).
+        let mut g_after = make_guard(inflight.clone(), cache.clone(), metrics.clone());
         assert!(matches!(
-            next.try_acquire(digest),
+            g_after.try_acquire(digest),
             AcquireOutcome::RecentlyProcessed { .. }
         ));
     }

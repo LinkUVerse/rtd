@@ -1,10 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+pub mod addr_bal_deposit;
 pub mod adversarial;
 pub mod batch_payment;
+pub mod composite;
 pub mod delegation;
 pub mod expected_failure;
+pub mod large_transaction;
 pub mod party;
 pub mod payload;
 pub mod randomized_transaction;
@@ -19,7 +22,7 @@ pub mod workload_configuration;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::drivers::Interval;
+use crate::drivers::{Interval, SubmissionAmplification};
 use crate::workloads::payload::Payload;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::crypto::AccountKeyPair;
@@ -46,9 +49,15 @@ pub struct WorkloadBuilderInfo {
 pub struct WorkloadInfo {
     pub workload_params: WorkloadParams,
     pub workload: Box<dyn Workload<dyn Payload>>,
+    pub submission_amplification: SubmissionAmplification,
 }
 
 pub type Gas = (ObjectRef, RtdAddress, Arc<AccountKeyPair>);
+pub type MultiGas = (Vec<ObjectRef>, RtdAddress, Arc<AccountKeyPair>);
+
+pub fn gas_to_multi_gas(gas: Gas) -> MultiGas {
+    (vec![gas.0], gas.1, gas.2)
+}
 
 #[derive(Clone)]
 pub struct GasCoinConfig {

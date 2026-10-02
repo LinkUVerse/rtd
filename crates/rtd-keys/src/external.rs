@@ -13,8 +13,11 @@ use base64;
 use base64::{Engine as _, engine::general_purpose};
 use bcs;
 use fastcrypto::traits::{EncodeDecodeBase64, VerifyingKey};
-use jsonrpc::client::Endpoint;
+use jsonrpc::client::{Endpoint, JsonRpcError};
+use jsonrpc::types::RemoteError;
 use mockall::{automock, predicate::*};
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::{PublicKey, RtdKeyPair, RtdSignature, RtdSignatureInner, Signature};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value as JsonValue, json};
 use shared_crypto::intent::{Intent, IntentMessage};
@@ -22,9 +25,32 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::process::Stdio;
-use rtd_types::base_types::RtdAddress;
-use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair, RtdSignature, RtdSignatureInner};
 use tokio::process::Command;
+
+// TODO: Remove this legacy Ledger fallback after supported ledger-signer versions return
+// CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE for create_key.
+/// Legacy Ledger signers returned method-not-found when asked to create keys.
+const JSON_RPC_METHOD_NOT_FOUND_ERROR_CODE: i32 = -32601;
+/// Signers return this when asked to create a key, so generate can fall back to indexing an existing key.
+const CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE: i32 = -32013;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExternalExecError {
+    #[error(transparent)]
+    JsonRpc(#[from] JsonRpcError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("Command failed with status: {0}")]
+    CommandFailed(std::process::ExitStatus),
+    #[error("Command returned null result")]
+    NullResult,
+}
+
+impl From<RemoteError> for ExternalExecError {
+    fn from(error: RemoteError) -> Self {
+        JsonRpcError::from(error).into()
+    }
+}
 
 #[derive(Debug)]
 /// External keystore for managing keys and aliases with an external signer.
@@ -53,6 +79,33 @@ pub struct ExternalKey {
     pub key_id: String,
 }
 
+// No debug display for CreateKeyResponse as it may contain sensitive mnemonic.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CreateKeyResponse {
+    pub public_key: PublicKey,
+    pub key_id: String,
+    /// Only used for display, do not persist to file
+    #[serde(skip_serializing)]
+    pub mnemonic: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+/// Provision mode requested when creating a key on an external signer.
+pub enum ProvisionMode {
+    /// Creates a recoverable key without surfacing recovery material in this flow.
+    RecoverableAssumed,
+    /// Creates a recoverable key and returns recovery material immediately.
+    MnemonicBacked,
+    /// Creates a device-bound key with no recovery path.
+    NonRecoverable,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateKeyParams {
+    pub mode: ProvisionMode,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KeysResponse {
     pub keys: Vec<ExternalKey>,
@@ -77,18 +130,29 @@ pub struct SignResponse {
 #[automock]
 #[async_trait]
 pub trait CommandRunner: Send + Sync + Debug {
-    async fn run(&self, command: &str, method: &str, args: JsonValue) -> Result<JsonValue, Error>;
+    async fn run(
+        &self,
+        command: &str,
+        method: &str,
+        params: JsonValue,
+    ) -> Result<JsonValue, ExternalExecError>;
 }
 
 #[derive(Debug)]
 struct StdCommandRunner;
 #[async_trait]
 impl CommandRunner for StdCommandRunner {
-    async fn run(&self, command: &str, method: &str, args: JsonValue) -> Result<JsonValue, Error> {
+    async fn run(
+        &self,
+        command: &str,
+        method: &str,
+        params: JsonValue,
+    ) -> Result<JsonValue, ExternalExecError> {
         let mut cmd = Command::new(command)
             .arg("call")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            .kill_on_drop(true)
             .spawn()?;
 
         let mut endpoint = Endpoint::new(
@@ -96,25 +160,15 @@ impl CommandRunner for StdCommandRunner {
             cmd.stdin.take().expect("No stdin"),
         );
 
-        let res: JsonValue = endpoint.call(method, args).await?;
+        let res: JsonValue = endpoint.call(method, params).await?;
         if res.is_null() {
-            return Err(anyhow!("Command returned null result"));
+            return Err(ExternalExecError::NullResult);
         }
 
-        let output = cmd
-            .wait_with_output()
-            .await
-            .map_err(|e| anyhow!("Failed to wait for command to finish: {}", e))?;
+        let output = cmd.wait_with_output().await?;
 
         if !output.status.success() {
-            return Err(Error::msg(format!(
-                "Command failed with status: {}",
-                output.status
-            )));
-        }
-
-        if !res["error"].is_null() {
-            return Err(anyhow!("Command failed with error: {:?}", res["error"]));
+            return Err(ExternalExecError::CommandFailed(output.status));
         }
 
         Ok(res)
@@ -126,7 +180,8 @@ impl External {
     pub fn load_or_create(path: &PathBuf) -> Result<Self, Error> {
         let mut aliases_store_directory = path.clone();
         aliases_store_directory.set_extension(ALIASES_FILE_EXTENSION);
-        let aliases: BTreeMap<RtdAddress, Alias> = if aliases_store_directory.exists() {
+        let aliases_file_exists = aliases_store_directory.exists();
+        let aliases: BTreeMap<RtdAddress, Alias> = if aliases_file_exists {
             let aliases_store: String = std::fs::read_to_string(&aliases_store_directory)
                 .map_err(|e| anyhow!("Failed to read aliases file: {}", e))?;
             serde_json::from_str(&aliases_store)
@@ -135,7 +190,8 @@ impl External {
             BTreeMap::default()
         };
 
-        let keys: BTreeMap<RtdAddress, StoredKey> = if path.exists() {
+        let keystore_file_exists = path.exists();
+        let keys: BTreeMap<RtdAddress, StoredKey> = if keystore_file_exists {
             let keys_store: String = std::fs::read_to_string(path)
                 .map_err(|e| anyhow!("Failed to read keys file: {}", e))?;
             serde_json::from_str(&keys_store)
@@ -143,6 +199,24 @@ impl External {
         } else {
             BTreeMap::default()
         };
+
+        if !aliases_file_exists {
+            let aliases_store =
+                serde_json::to_string_pretty(&aliases).context("Error serializing keystore")?;
+            std::fs::write(&aliases_store_directory, aliases_store).with_context(|| {
+                format!(
+                    "Cannot write aliases to file: {}",
+                    aliases_store_directory.display()
+                )
+            })?;
+        }
+
+        if !keystore_file_exists {
+            let keys_store =
+                serde_json::to_string_pretty(&keys).context("Error serializing aliases")?;
+            std::fs::write(path, keys_store)
+                .with_context(|| format!("Cannot write keystore to file: {}", path.display()))?;
+        }
 
         Ok(Self {
             aliases,
@@ -176,9 +250,9 @@ impl External {
         &self,
         command: &str,
         method: &str,
-        args: JsonValue,
-    ) -> Result<JsonValue, Error> {
-        self.command_runner.run(command, method, args).await
+        params: JsonValue,
+    ) -> Result<JsonValue, ExternalExecError> {
+        self.command_runner.run(command, method, params).await
     }
 
     /// Add a Key ID from the given an external signer to the Rtd CLI index
@@ -187,22 +261,63 @@ impl External {
         ext_signer: String,
         key_id: String,
     ) -> Result<StoredKey, Error> {
-        let keys = self.signer_available_keys(ext_signer.clone()).await?;
-
-        let key: StoredKey = keys
-            .into_iter()
-            .find(|k| k.key_id == key_id)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Key with id {} not found for external signer {}",
-                    key_id,
-                    ext_signer
-                )
-            })?;
+        let key = match self.get_public_key(&ext_signer, &key_id).await {
+            Ok(key) => Ok(key),
+            Err(_) => self
+                .signer_available_keys(ext_signer.clone())
+                .await?
+                .into_iter()
+                .find(|k| k.key_id == key_id)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Key with id {} not found for external signer {}",
+                        key_id,
+                        ext_signer
+                    )
+                }),
+        }
+        .map_err(|e| {
+            anyhow!(
+                "Failed to get public key for external signer {} with key id {}: {}",
+                ext_signer,
+                key_id,
+                e
+            )
+        })?;
 
         self.keys.insert((&key.public_key).into(), key.clone());
+        self.aliases.insert(
+            (&key.public_key).into(),
+            Alias {
+                alias: self.create_alias(None)?,
+                public_key_base64: key.public_key.encode_base64(),
+            },
+        );
         self.save().await?;
         Ok(key)
+    }
+
+    pub async fn get_first_unindexed_key(
+        &mut self,
+        ext_signer: String,
+    ) -> Result<StoredKey, Error> {
+        let keys = self.signer_available_keys(ext_signer.clone()).await?;
+
+        keys.into_iter()
+            .find(|k| !self.is_indexed(k))
+            .ok_or_else(|| anyhow!("No available key found for external signer {}", ext_signer))
+    }
+
+    /// Get the public key for a given key ID from an external signer.
+    pub async fn get_public_key(&self, ext_signer: &str, key_id: &str) -> Result<StoredKey, Error> {
+        let result = self.exec(ext_signer, "public_key", json![key_id]).await?;
+        let public_key: ExternalKey = serde_json::from_value(result)
+            .map_err(|e| anyhow!("Failed to parse public key response: {}", e))?;
+        Ok(StoredKey {
+            public_key: public_key.public_key,
+            ext_signer: ext_signer.to_owned(),
+            key_id: public_key.key_id,
+        })
     }
 
     /// Return all Key IDs associated with an external signer, indexed or not
@@ -298,28 +413,75 @@ impl<'de> Deserialize<'de> for External {
 
 #[async_trait]
 impl AccountKeystore for External {
+    /// Generate a new key and add to the CLI, if generation is not supported function will fallback to adding
+    /// an existing key from the external signer.
     async fn generate(
         &mut self,
         alias: Option<String>,
         opts: GenerateOptions,
     ) -> Result<GeneratedKey, Error> {
-        let GenerateOptions::ExternalSigner(ext_signer) = opts else {
+        let GenerateOptions::ExternalSigner {
+            signer: ext_signer,
+            provision_mode,
+        } = opts
+        else {
             return Err(anyhow!("Signer must be provided for external keys."));
         };
+        let create_key_params = provision_mode
+            .map(|mode| {
+                serde_json::to_value(CreateKeyParams { mode })
+                    .map_err(|e| anyhow!("Failed to serialize create key params: {}", e))
+            })
+            .transpose()?
+            .unwrap_or(JsonValue::Null);
 
-        let res = self.exec(&ext_signer, "create_key", json![null]).await?;
-        let ExternalKey { key_id, public_key } = serde_json::from_value(res)
-            .map_err(|e| anyhow!("Failed to parse key response: {}", e))?;
-        let address: RtdAddress = (&public_key).into();
+        // Attempt to generate, fallback to indexing the first unindexed key.
+        let (stored_key, mnemonic) = match self
+            .exec(&ext_signer, "create_key", create_key_params)
+            .await
+        {
+            Ok(res) => serde_json::from_value(res)
+                .map(|k: CreateKeyResponse| {
+                    (
+                        StoredKey {
+                            public_key: k.public_key,
+                            ext_signer: ext_signer.clone(),
+                            key_id: k.key_id,
+                        },
+                        k.mnemonic,
+                    )
+                })
+                .map_err(|e| anyhow!("Failed to parse key response from external signer: {}", e))?,
+            Err(create_error) => {
+                let should_use_existing_key = matches!(
+                    &create_error,
+                    ExternalExecError::JsonRpc(JsonRpcError::RemoteError(error))
+                        if error.code == CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE
+                            || error.code == JSON_RPC_METHOD_NOT_FOUND_ERROR_CODE
+                );
 
-        self.keys.insert(
-            address,
-            StoredKey {
-                public_key: public_key.clone(),
-                ext_signer,
-                key_id: key_id.to_string(),
-            },
-        );
+                // Ledger signers cannot generate keys, so fall back to adding an existing key.
+                if !should_use_existing_key {
+                    return Err(anyhow!(
+                        "Failed to create a new key on the external signer: {create_error}"
+                    ));
+                }
+
+                match self.get_first_unindexed_key(ext_signer.clone()).await {
+                    Ok(stored_key) => (stored_key, None),
+                    Err(add_error) => {
+                        return Err(anyhow!(
+                            "Failed to create a new key on the external signer: {create_error}. Also failed to add the first unindexed key: {add_error}"
+                        ));
+                    }
+                }
+            }
+        };
+
+        let address: RtdAddress = (&stored_key.public_key).into();
+        let public_key = stored_key.public_key.clone();
+
+        self.keys.insert(address, stored_key);
 
         self.aliases.insert(
             address,
@@ -329,11 +491,11 @@ impl AccountKeystore for External {
             },
         );
 
-        let scheme = public_key.scheme();
         Ok(GeneratedKey {
             address,
+            scheme: public_key.scheme(),
             public_key,
-            scheme,
+            mnemonic,
         })
     }
 
@@ -593,30 +755,49 @@ impl AccountKeystore for External {
 
 #[cfg(test)]
 mod tests {
-    use super::{External, MockCommandRunner, StdCommandRunner, StoredKey};
+    use super::{
+        CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE, External, ExternalExecError,
+        JSON_RPC_METHOD_NOT_FOUND_ERROR_CODE, MockCommandRunner, StdCommandRunner, StoredKey,
+    };
+    use crate::external::ProvisionMode;
     use crate::key_identity::KeyIdentity;
-    use crate::keystore::{AccountKeystore, GenerateOptions, GeneratedKey};
-    use anyhow::anyhow;
+    use crate::keystore::{ALIASES_FILE_EXTENSION, AccountKeystore, GenerateOptions, GeneratedKey};
     use fastcrypto::ed25519::Ed25519KeyPair;
     use fastcrypto::secp256k1::Secp256k1KeyPair;
     use fastcrypto::traits::{EncodeDecodeBase64, KeyPair, ToFromBytes};
+    use jsonrpc::client::JsonRpcError;
+    use jsonrpc::types::RemoteError;
     use mockall::predicate::eq;
     use rand::prelude::StdRng;
     use rand::{SeedableRng, thread_rng};
+    use rtd_types::base_types::RtdAddress;
+    use rtd_types::crypto::SignatureScheme::{ED25519, Secp256k1};
+    use rtd_types::crypto::{PublicKey, RtdKeyPair, Signature};
     use serde_json::Value as JsonValue;
     use serde_json::{Value, json};
     use shared_crypto::intent::{Intent, IntentMessage};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::str::FromStr;
-    use rtd_types::base_types::RtdAddress;
-    use rtd_types::crypto::SignatureScheme::{ED25519, Secp256k1};
-    use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair};
     use tempfile::TempDir;
 
     const PUBLIC_KEY: &str = "ALJ0GaLcBTTwTTh5dvyc6xaxwrjkG1spQzlL+W4CGLqG";
     const UNTAGGED_PUBLIC_KEY: &str = "snQZotwFNPBNOHl2/JzrFrHCuOQbWylDOUv5bgIYuoY=";
     const ADDRESS: &str = "0x9219616732544c54259b3f5aeef5ec078535e322ee63f7de2ca8a197fd2a4f6f";
+    const PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE: i32 = -32012;
+    const PROVISION_MODE_NOT_SUPPORTED_MESSAGE: &str =
+        "Provision mode is not supported by yubikey-signer";
+    const CREATE_KEY_UNSUPPORTED_USE_EXISTING_MESSAGE: &str =
+        "create_key is not supported; use an existing key";
+
+    fn unsupported_action_error(method: &str) -> ExternalExecError {
+        RemoteError {
+            code: -32601,
+            message: format!("Unsupported action {method}"),
+            data: None,
+        }
+        .into()
+    }
 
     fn load_external_keystore() -> External {
         let cargo_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -631,16 +812,29 @@ mod tests {
 
     #[test]
     fn test_load_new_from_path() {
-        let cargo_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("unit_tests")
-            .join("fixtures")
-            .join("external_config");
+        let tmp_dir = TempDir::new().unwrap();
+        let keystore_path = tmp_dir.path().join("external.keystore");
 
-        let external = External::load_or_create(&cargo_dir).unwrap();
+        let external = External::load_or_create(&keystore_path).unwrap();
 
         assert!(external.aliases.is_empty());
         assert!(external.keys.is_empty());
         assert!(external.path.is_some());
+    }
+
+    #[test]
+    fn test_load_or_create_creates_external_files() {
+        let tmp_dir = TempDir::new().unwrap();
+        let keystore_path = tmp_dir.path().join("external.keystore");
+        let mut aliases_path = keystore_path.clone();
+        aliases_path.set_extension(ALIASES_FILE_EXTENSION);
+
+        let external = External::load_or_create(&keystore_path).unwrap();
+
+        assert!(external.aliases.is_empty());
+        assert!(external.keys.is_empty());
+        assert!(keystore_path.exists());
+        assert!(aliases_path.exists());
     }
 
     #[tokio::test]
@@ -727,21 +921,21 @@ mod tests {
             .returning(|_, _, _| Ok(JsonValue::Null));
 
         let external = External::new_for_test(Box::new(mock), None);
-        let args = json!(["arg1", "arg2"]);
+        let params = json!(["arg1", "arg2"]);
         assert!(
             external
-                .exec("rtd-key-tool", "test_method", args)
+                .exec("rtd-key-tool", "test_method", params)
                 .await
                 .is_ok()
         );
     }
 
     #[tokio::test]
-    async fn test_create_key_success() {
+    async fn test_generate_success() {
         let mut mock = MockCommandRunner::new();
         let key_id = "key-123";
         mock.expect_run()
-            .with(eq("signer"), eq("create_key"), eq(json![null]))
+            .with(eq("signer"), eq("create_key"), eq(JsonValue::Null))
             .returning(move |_, _, _| {
                 Ok(json!({
                     "key_id": key_id,
@@ -752,17 +946,25 @@ mod tests {
             });
         let mut external = External::new_for_test(Box::new(mock), None);
         let result = external
-            .generate(None, GenerateOptions::ExternalSigner("signer".to_string()))
+            .generate(
+                None,
+                GenerateOptions::ExternalSigner {
+                    signer: "signer".to_string(),
+                    provision_mode: None,
+                },
+            )
             .await;
         assert!(result.is_ok());
         let GeneratedKey {
             address,
             public_key,
             scheme,
+            mnemonic,
         } = result.unwrap();
         assert_eq!(scheme, ED25519);
         assert_eq!(address, RtdAddress::from_str(ADDRESS).unwrap());
         assert_eq!(public_key.encode_base64(), PUBLIC_KEY);
+        assert_eq!(mnemonic, None);
         assert!(external.keys.contains_key(&address));
 
         // With a different signature scheme
@@ -772,7 +974,7 @@ mod tests {
 
         let mut mock = MockCommandRunner::new();
         mock.expect_run()
-            .with(eq("signer"), eq("create_key"), eq(json![null]))
+            .with(eq("signer"), eq("create_key"), eq(JsonValue::Null))
             .returning(move |_, _, _| {
                 Ok(json!({
                     "key_id": key_id,
@@ -782,14 +984,56 @@ mod tests {
 
         let mut external = External::new_for_test(Box::new(mock), None);
         let result = external
-            .generate(None, GenerateOptions::ExternalSigner("signer".to_string()))
+            .generate(
+                None,
+                GenerateOptions::ExternalSigner {
+                    signer: "signer".to_string(),
+                    provision_mode: None,
+                },
+            )
             .await;
         let GeneratedKey { scheme, .. } = result.unwrap();
         assert_eq!(scheme, Secp256k1);
     }
 
     #[tokio::test]
-    async fn test_add_existing_key() {
+    async fn test_generate_with_provision_mode() {
+        let mut mock = MockCommandRunner::new();
+        let key_id = "key-123";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        mock.expect_run()
+            .with(
+                eq("signer"),
+                eq("create_key"),
+                eq(json!({ "mode": "mnemonic-backed" })),
+            )
+            .returning(move |_, _, _| {
+                Ok(json!({
+                    "key_id": key_id,
+                    "public_key": {
+                        "Ed25519": UNTAGGED_PUBLIC_KEY
+                    },
+                    "mnemonic": mnemonic
+                }))
+            });
+
+        let mut external = External::new_for_test(Box::new(mock), None);
+        let result = external
+            .generate(
+                None,
+                GenerateOptions::ExternalSigner {
+                    signer: "signer".to_string(),
+                    provision_mode: Some(ProvisionMode::MnemonicBacked),
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().mnemonic, Some(mnemonic.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_add_first_unindexed_key() {
         let mut mock = MockCommandRunner::new();
         let key_id = "key-123";
         mock.expect_run().returning(move |_, _, _| {
@@ -808,6 +1052,147 @@ mod tests {
         let tmp_keystore = tmp_dir.path().join("external.keystore");
         let mut external = External::new_for_test(Box::new(mock), Some(tmp_keystore));
         external.save().await.unwrap();
+        let stored_key = external.get_first_unindexed_key("signer".to_string()).await;
+        assert!(stored_key.is_ok());
+        let stored_key = stored_key.unwrap();
+        assert_eq!(stored_key.key_id, key_id);
+        assert_eq!(stored_key.public_key.encode_base64(), PUBLIC_KEY);
+    }
+
+    #[tokio::test]
+    async fn test_generate_fallback_add_first_unindexed_key() {
+        assert_generate_fallback_add_first_unindexed_key(
+            CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE,
+            CREATE_KEY_UNSUPPORTED_USE_EXISTING_MESSAGE,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_fallback_add_first_unindexed_key_legacy_method_not_found() {
+        assert_generate_fallback_add_first_unindexed_key(
+            JSON_RPC_METHOD_NOT_FOUND_ERROR_CODE,
+            "Unsupported action create_key",
+        )
+        .await;
+    }
+
+    async fn assert_generate_fallback_add_first_unindexed_key(
+        create_key_error_code: i32,
+        create_key_error_message: &'static str,
+    ) {
+        let mut mock = MockCommandRunner::new();
+        let key_id = "key-123";
+        mock.expect_run().returning(move |_, method, params| {
+            if method == "create_key" && params == JsonValue::Null {
+                return Err(RemoteError {
+                    code: create_key_error_code,
+                    message: create_key_error_message.to_string(),
+                    data: None,
+                }
+                .into());
+            }
+            if method == "keys" && params == json![null] {
+                return Ok(json!({
+                    "keys": [
+                        {
+                            "key_id": key_id,
+                            "public_key": {
+                                "Ed25519": UNTAGGED_PUBLIC_KEY
+                            }
+                        }
+                    ]
+                }));
+            }
+            panic!("Unexpected method called: {}", method);
+        });
+
+        let tmp_dir = TempDir::new().unwrap();
+        let tmp_keystore = tmp_dir.path().join("external.keystore");
+        let mut external = External::new_for_test(Box::new(mock), Some(tmp_keystore));
+        external.save().await.unwrap();
+        let result = external
+            .generate(
+                None,
+                GenerateOptions::ExternalSigner {
+                    signer: "signer".to_string(),
+                    provision_mode: None,
+                },
+            )
+            .await;
+        assert!(result.is_ok());
+        let GeneratedKey {
+            address,
+            public_key,
+            scheme,
+            mnemonic,
+        } = result.unwrap();
+        assert_eq!(scheme, ED25519);
+        assert_eq!(address, RtdAddress::from_str(ADDRESS).unwrap());
+        assert_eq!(public_key.encode_base64(), PUBLIC_KEY);
+        assert_eq!(mnemonic, None);
+    }
+
+    // Yubikey returns `PROVISIONMODE_NOT_SUPPORTED_ERROR_CODE` if the create_key method is called with RecoverableAssumed (default),
+    // this test ensures the CLI does not attempt to add keys it lists from the yubikey
+    // Only ledger should use get_first_unindexed_key() since it cannot generate individual keys.
+    #[tokio::test]
+    async fn test_generate_does_not_fallback_on_provision_mode_not_error() {
+        let mut mock = MockCommandRunner::new();
+        mock.expect_run().returning(move |_, method, params| {
+            if method == "create_key" && params == JsonValue::Null {
+                return Err(RemoteError {
+                    code: PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE,
+                    message: PROVISION_MODE_NOT_SUPPORTED_MESSAGE.to_string(),
+                    data: None,
+                }
+                .into());
+            }
+            if method == "keys" && params == json![null] {
+                panic!("keys should not be queried after a provision mode error");
+            }
+            panic!("Unexpected method called: {}", method);
+        });
+
+        let tmp_dir = TempDir::new().unwrap();
+        let tmp_keystore = tmp_dir.path().join("external.keystore");
+        let mut external = External::new_for_test(Box::new(mock), Some(tmp_keystore));
+        external.save().await.unwrap();
+        let result = external
+            .generate(
+                None,
+                GenerateOptions::ExternalSigner {
+                    signer: "signer".to_string(),
+                    provision_mode: None,
+                },
+            )
+            .await;
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains(PROVISION_MODE_NOT_SUPPORTED_MESSAGE));
+        assert!(!error.contains("Also failed to add the first unindexed key"));
+    }
+
+    #[tokio::test]
+    async fn test_add_existing_key() {
+        let mut mock = MockCommandRunner::new();
+        let key_id = "key-123";
+        mock.expect_run().returning(move |_, method, _| {
+            if method != "public_key" {
+                panic!("Unexpected method called: {}", method);
+            }
+
+            Ok(json!({
+                "key_id": key_id,
+                "public_key": {
+                    "Ed25519": UNTAGGED_PUBLIC_KEY
+                }
+            }))
+        });
+        let tmp_dir = TempDir::new().unwrap();
+        let tmp_keystore = tmp_dir.path().join("external.keystore");
+        let mut external = External::new_for_test(Box::new(mock), Some(tmp_keystore));
+        external.save().await.unwrap();
         external
             .add_existing("signer".to_string(), key_id.to_string())
             .await
@@ -815,6 +1200,48 @@ mod tests {
         let keys = external.keys;
         let key = keys.get(&RtdAddress::from_str(ADDRESS).expect("Invalid address format"));
         assert!(key.is_some());
+
+        let alias = external
+            .aliases
+            .get(&RtdAddress::from_str(ADDRESS).expect("Invalid address format"));
+        assert!(alias.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_add_existing_key_fallback_to_signer_available_keys() {
+        let mut mock = MockCommandRunner::new();
+        let key_id = "key-123";
+        mock.expect_run().returning(move |_, method, _| {
+            // Simulate lack of "public_key" method support
+            if method == "public_key" {
+                return Err(unsupported_action_error("public_key"));
+            }
+            if method == "keys" {
+                return Ok(json!({
+                    "keys": [
+                        {
+                            "key_id": key_id,
+                            "public_key": {
+                                "Ed25519": UNTAGGED_PUBLIC_KEY
+                            }
+                        }
+                    ]
+                }));
+            }
+            panic!("Unexpected method called: {}", method);
+        });
+
+        let tmp_dir = TempDir::new().unwrap();
+        let tmp_keystore = tmp_dir.path().join("external.keystore");
+        let mut external = External::new_for_test(Box::new(mock), Some(tmp_keystore));
+        external.save().await.unwrap();
+        let result = external
+            .add_existing("signer".to_string(), key_id.to_string())
+            .await;
+        assert!(result.is_ok());
+        let stored_key = result.unwrap();
+        assert_eq!(stored_key.key_id, key_id);
+        assert_eq!(stored_key.public_key.encode_base64(), PUBLIC_KEY);
     }
 
     #[tokio::test]
@@ -844,10 +1271,23 @@ mod tests {
     #[tokio::test]
     async fn test_exec_error_propagation() {
         let mut mock = MockCommandRunner::new();
-        mock.expect_run().returning(|_, _, _| Err(anyhow!("fail")));
+        mock.expect_run().returning(|_, _, _| {
+            Err(RemoteError {
+                code: -32601,
+                message: "Unsupported action method".to_string(),
+                data: None,
+            }
+            .into())
+        });
         let external = External::new_for_test(Box::new(mock), None);
         let result = external.exec("cmd", "method", json!([1, 2, 3])).await;
-        assert!(result.is_err());
+        match result {
+            Err(ExternalExecError::JsonRpc(JsonRpcError::RemoteError(error))) => {
+                assert_eq!(error.code, -32601);
+                assert_eq!(error.message, "Unsupported action method");
+            }
+            other => panic!("expected remote JSON-RPC error, got {other:?}"),
+        }
     }
 
     #[tokio::test]

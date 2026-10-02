@@ -1,7 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::anyhow;
+mod common;
+
+use common::test_chain;
 
 use rtd_light_client::proof::{
     base::{Proof, ProofBuilder, ProofContents, ProofTarget, ProofVerifier},
@@ -15,38 +17,35 @@ use rtd_types::{committee::Committee, effects::TransactionEffectsAPI, object::Ob
 
 use rtd_types::full_checkpoint_content::CheckpointData;
 
-use std::io::Read;
-use std::{fs, path::PathBuf};
-
-async fn read_full_checkpoint(checkpoint_path: &PathBuf) -> anyhow::Result<CheckpointData> {
-    println!("Reading checkpoint from {:?}", checkpoint_path);
-    let mut reader = fs::File::open(checkpoint_path.clone())?;
-    let mut buffer = Vec::new();
-    reader.read_to_end(&mut buffer)?;
-    let (_, data): (u8, CheckpointData) =
-        bcs::from_bytes(&buffer).map_err(|e| anyhow!("Unable to parse checkpoint file: {}", e))?;
-    Ok(data)
+fn read_data() -> (Committee, CheckpointData) {
+    let chain = test_chain();
+    (chain.committee.clone(), chain.end_of_epoch.clone())
 }
 
-async fn read_data(committee_seq: u64, seq: u64) -> (Committee, CheckpointData) {
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push(format!("test_files/{}.chk", committee_seq));
+fn read_transaction_data() -> (Committee, CheckpointData) {
+    let chain = test_chain();
+    (chain.committee.clone(), chain.transaction.clone())
+}
 
-    let committee_checkpoint = read_full_checkpoint(&d).await.unwrap();
-
-    let committee = extract_new_committee_info(&committee_checkpoint.checkpoint_summary).unwrap();
-
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push(format!("test_files/{}.chk", seq));
-
-    let full_checkpoint = read_full_checkpoint(&d).await.unwrap();
-
-    (committee, full_checkpoint)
+fn sample_event(checkpoint: &CheckpointData) -> (EventID, Event) {
+    let tx = checkpoint
+        .transactions
+        .iter()
+        .find(|tx| {
+            tx.events
+                .as_ref()
+                .is_some_and(|events| !events.data.is_empty())
+        })
+        .expect("RTD epoch change emits an event");
+    (
+        EventID::from((*tx.effects.transaction_digest(), 0)),
+        tx.events.as_ref().unwrap().data[0].clone(),
+    )
 }
 
 #[tokio::test]
 async fn check_can_read_test_data() {
-    let (_committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (_committee, full_checkpoint) = read_data();
     assert!(
         full_checkpoint
             .checkpoint_summary
@@ -57,7 +56,7 @@ async fn check_can_read_test_data() {
 
 #[tokio::test]
 async fn test_new_committee() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (committee, full_checkpoint) = read_data();
 
     // Make a committee object using this
     let new_committee = extract_new_committee_info(&full_checkpoint.checkpoint_summary).unwrap();
@@ -71,7 +70,7 @@ async fn test_new_committee() {
 // Fail if the new committee does not match the target of the proof
 #[tokio::test]
 async fn test_incorrect_new_committee() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (committee, full_checkpoint) = read_data();
 
     let committee_proof = Proof {
         checkpoint_summary: full_checkpoint.checkpoint_summary.clone(),
@@ -85,7 +84,7 @@ async fn test_incorrect_new_committee() {
 // Fail if the certificate is incorrect even if no proof targets are given
 #[tokio::test]
 async fn test_fail_incorrect_cert() {
-    let (_committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (_committee, full_checkpoint) = read_data();
 
     // Make a committee object using this
     let new_committee = extract_new_committee_info(&full_checkpoint.checkpoint_summary).unwrap();
@@ -98,7 +97,7 @@ async fn test_fail_incorrect_cert() {
 
 #[tokio::test]
 async fn test_object_target_fail_no_data() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (committee, full_checkpoint) = read_transaction_data();
 
     let sample_object: Object = full_checkpoint.transactions[0].output_objects[0].clone();
     let sample_ref = sample_object.compute_object_reference();
@@ -116,7 +115,7 @@ async fn test_object_target_fail_no_data() {
 
 #[tokio::test]
 async fn test_object_target_success() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (committee, full_checkpoint) = read_transaction_data();
 
     let sample_object: Object = full_checkpoint.transactions[0].output_objects[0].clone();
     let sample_ref = sample_object.compute_object_reference();
@@ -131,10 +130,10 @@ async fn test_object_target_success() {
 
 #[tokio::test]
 async fn test_object_target_fail_wrong_object() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
+    let (committee, full_checkpoint) = read_transaction_data();
 
     let sample_object: Object = full_checkpoint.transactions[0].output_objects[0].clone();
-    let wrong_object: Object = full_checkpoint.transactions[1].output_objects[1].clone();
+    let wrong_object: Object = full_checkpoint.transactions[0].output_objects[1].clone();
     let mut sample_ref = sample_object.compute_object_reference();
     let wrong_ref = wrong_object.compute_object_reference();
 
@@ -152,18 +151,8 @@ async fn test_object_target_fail_wrong_object() {
 
 #[tokio::test]
 async fn test_event_target_fail_no_data() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
-
-    let sample_event: Event = full_checkpoint.transactions[1]
-        .events
-        .as_ref()
-        .unwrap()
-        .data[0]
-        .clone();
-    let sample_eid = EventID::from((
-        *full_checkpoint.transactions[1].effects.transaction_digest(),
-        0,
-    ));
+    let (committee, full_checkpoint) = read_data();
+    let (sample_eid, sample_event) = sample_event(&full_checkpoint);
 
     let bad_proof = Proof {
         checkpoint_summary: full_checkpoint.checkpoint_summary.clone(),
@@ -176,18 +165,8 @@ async fn test_event_target_fail_no_data() {
 
 #[tokio::test]
 async fn test_event_target_success() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
-
-    let sample_event: Event = full_checkpoint.transactions[1]
-        .events
-        .as_ref()
-        .unwrap()
-        .data[0]
-        .clone();
-    let sample_eid = EventID::from((
-        *full_checkpoint.transactions[1].effects.transaction_digest(),
-        0,
-    ));
+    let (committee, full_checkpoint) = read_data();
+    let (sample_eid, sample_event) = sample_event(&full_checkpoint);
 
     let target = ProofTarget::new_events(vec![(sample_eid, sample_event)]);
     let event_proof = target.construct(&full_checkpoint).unwrap();
@@ -197,18 +176,9 @@ async fn test_event_target_success() {
 
 #[tokio::test]
 async fn test_event_target_fail_bad_event() {
-    let (committee, full_checkpoint) = read_data(15918264, 16005062).await;
-
-    let sample_event: Event = full_checkpoint.transactions[1]
-        .events
-        .as_ref()
-        .unwrap()
-        .data[0]
-        .clone();
-    let sample_eid = EventID::from((
-        *full_checkpoint.transactions[1].effects.transaction_digest(),
-        1, // WRONG
-    ));
+    let (committee, full_checkpoint) = read_data();
+    let (mut sample_eid, sample_event) = sample_event(&full_checkpoint);
+    sample_eid.event_seq += 1; // WRONG
 
     let target = ProofTarget::new_events(vec![(sample_eid, sample_event)]);
     let event_proof = target.construct(&full_checkpoint).unwrap();

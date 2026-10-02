@@ -8,7 +8,7 @@ use move_command_line_common::files::{
 };
 use move_compiler::command_line::DEFAULT_OUTPUT_DIR;
 use move_compiler::editions::Edition;
-use move_compiler::{diagnostics::warning_filters::WarningFiltersBuilder, shared::PackageConfig};
+use move_compiler::{diagnostics::filter::empty_filter_scope, shared::PackageConfig};
 use move_core_types::account_address::AccountAddress;
 use move_symbol_pool::Symbol;
 use std::fs::File;
@@ -324,8 +324,8 @@ impl ResolvedGraph {
 
     pub fn file_sources(&self) -> BTreeMap<FileHash, (FileName, String)> {
         self.package_table
-            .iter()
-            .flat_map(|(_, rpkg)| {
+            .values()
+            .flat_map(|rpkg| {
                 rpkg.get_sources(&self.build_options)
                     .unwrap()
                     .iter()
@@ -659,7 +659,7 @@ impl Package {
                 .edition
                 .or(config.default_edition)
                 .unwrap_or(Edition::LEGACY), // TODO require edition
-            warning_filter: WarningFiltersBuilder::new_for_source(),
+            warning_filter: empty_filter_scope(),
         }
     }
 }

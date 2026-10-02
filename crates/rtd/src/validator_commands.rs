@@ -3,6 +3,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use move_core_types::ident_str;
+use rtd_genesis_builder::validator_info::GenesisValidatorInfo;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt::{self, Debug, Display, Formatter, Write},
@@ -10,20 +11,19 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use rtd_genesis_builder::validator_info::GenesisValidatorInfo;
 use url::{ParseError, Url};
 
+use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc_api::Client;
+use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_types::{
     RTD_SYSTEM_PACKAGE_ID,
     base_types::{ObjectID, ObjectRef, RtdAddress},
     crypto::{AuthorityPublicKey, DEFAULT_EPOCH_ID, NetworkPublicKey, Signable},
-    dynamic_field::Field,
+    effects::TransactionEffectsAPI,
     multiaddr::Multiaddr,
     object::Owner,
-    rtd_system_state::{
-        rtd_system_state_inner_v1::{UnverifiedValidatorOperationCapV1, ValidatorV1},
-        rtd_system_state_summary::{RtdSystemStateSummary, RtdValidatorSummary},
-    },
+    rtd_system_state::rtd_system_state_inner_v1::{UnverifiedValidatorOperationCapV1, ValidatorV1},
 };
 use tap::tap::TapOptional;
 
@@ -35,15 +35,10 @@ use fastcrypto::{
     encoding::{Base64, Encoding},
     traits::KeyPair,
 };
-use serde::Serialize;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 use rtd_bridge::metrics::BridgeMetrics;
 use rtd_bridge::rtd_client::RtdClient as RtdBridgeClient;
 use rtd_bridge::rtd_transaction_builder::{
     build_committee_register_transaction, build_committee_update_url_transaction,
-};
-use rtd_json_rpc_types::{
-    RtdObjectDataOptions, RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
 };
 use rtd_keys::{
     key_derive::generate_new_key,
@@ -53,13 +48,14 @@ use rtd_keys::{
     },
 };
 use rtd_keys::{keypair_file::read_key, keystore::AccountKeystore};
-use rtd_sdk::RtdClient;
 use rtd_sdk::wallet_context::WalletContext;
-use rtd_types::crypto::{AuthorityKeyPair, NetworkKeyPair, SignatureScheme, RtdKeyPair};
+use rtd_types::crypto::{AuthorityKeyPair, NetworkKeyPair, RtdKeyPair, SignatureScheme};
 use rtd_types::crypto::{
     AuthorityPublicKeyBytes, generate_proof_of_possession, get_authority_key_pair,
 };
 use rtd_types::transaction::{CallArg, ObjectArg, Transaction, TransactionData};
+use serde::Serialize;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 
 #[path = "unit_tests/validator_tests.rs"]
 #[cfg(test)]
@@ -224,27 +220,27 @@ pub enum RtdValidatorCommandResponse {
     MakeValidatorInfo,
     DisplayMetadata,
     BecomeCandidate {
-        response: Option<RtdTransactionBlockResponse>,
+        response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     JoinCommittee {
-        response: Option<RtdTransactionBlockResponse>,
+        response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     LeaveCommittee {
-        response: Option<RtdTransactionBlockResponse>,
+        response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     UpdateMetadata {
-        response: Option<RtdTransactionBlockResponse>,
+        response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     UpdateGasPrice {
-        response: Option<RtdTransactionBlockResponse>,
+        response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     ReportValidator {
-        response: Option<RtdTransactionBlockResponse>,
+        response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     SerializedPayload(String),
@@ -253,11 +249,11 @@ pub enum RtdValidatorCommandResponse {
         serialized_data: String,
     },
     RegisterBridgeCommittee {
-        execution_response: Option<RtdTransactionBlockResponse>,
+        execution_response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
     UpdateBridgeCommitteeURL {
-        execution_response: Option<RtdTransactionBlockResponse>,
+        execution_response: Option<ExecutedTransaction>,
         serialized_unsigned_transaction: Option<String>,
     },
 }
@@ -472,7 +468,7 @@ impl RtdValidatorCommand {
             } => {
                 let validator_address = validator_address.unwrap_or(context.active_address()?);
                 // Default display with json serialization for better UX.
-                let rtd_client = context.get_client().await?;
+                let rtd_client = context.grpc_client()?;
                 display_metadata(&rtd_client, validator_address, json.unwrap_or(true)).await?;
                 RtdValidatorCommandResponse::DisplayMetadata
             }
@@ -605,15 +601,16 @@ impl RtdValidatorCommand {
                     print_unsigned_transaction_only,
                 )?;
                 // Make sure the address is a validator
-                let rtd_client = context.get_client().await?;
+                let rtd_client = context.grpc_client()?;
                 let active_validators = rtd_client
-                    .governance_api()
-                    .get_latest_rtd_system_state()
+                    .get_system_state(None)
                     .await?
-                    .active_validators;
+                    .validators()
+                    .active_validators()
+                    .to_owned();
                 if !active_validators
                     .into_iter()
-                    .any(|s| s.rtd_address == address)
+                    .any(|s| s.address() == address.to_string())
                 {
                     bail!("Address {} is not in the committee", address);
                 }
@@ -636,7 +633,7 @@ impl RtdValidatorCommand {
                 let gas_price = context.get_reference_gas_price().await?;
                 let tx_data = build_committee_register_transaction(
                     address,
-                    &gas.object_ref(),
+                    &gas.compute_object_reference(),
                     bridge,
                     ecdsa_keypair.public().as_bytes().to_vec(),
                     &bridge_authority_url,
@@ -655,7 +652,7 @@ impl RtdValidatorCommand {
                     let response = context.execute_transaction_must_succeed(tx).await;
                     println!(
                         "Committee registration successful. Transaction digest: {}",
-                        response.digest
+                        response.transaction.digest()
                     );
                     RtdValidatorCommandResponse::RegisterBridgeCommittee {
                         execution_response: Some(response),
@@ -715,7 +712,7 @@ impl RtdValidatorCommand {
                 let gas_price = context.get_reference_gas_price().await?;
                 let tx_data = build_committee_update_url_transaction(
                     address,
-                    &gas.object_ref(),
+                    &gas.compute_object_reference(),
                     bridge,
                     &bridge_authority_url,
                     gas_price,
@@ -733,7 +730,7 @@ impl RtdValidatorCommand {
                     let response = context.execute_transaction_must_succeed(tx).await;
                     println!(
                         "Update Bridge validator node URL successful. Transaction digest: {}",
-                        response.digest
+                        response.transaction.digest()
                     );
                     RtdValidatorCommandResponse::UpdateBridgeCommitteeURL {
                         execution_response: Some(response),
@@ -769,21 +766,16 @@ fn check_address(
 async fn get_cap_object_ref(
     context: &mut WalletContext,
     operation_cap_id: Option<ObjectID>,
-) -> Result<(ValidatorStatus, RtdValidatorSummary, ObjectRef)> {
-    let rtd_client = context.get_client().await?;
+) -> Result<(ValidatorStatus, proto::Validator, ObjectRef)> {
+    let mut rtd_client = context.grpc_client()?;
     if let Some(operation_cap_id) = operation_cap_id {
         let (status, summary) =
             get_validator_summary_from_cap_id(&rtd_client, operation_cap_id).await?;
         let cap_obj_ref = rtd_client
-            .read_api()
-            .get_object_with_options(
-                summary.operation_cap_id,
-                RtdObjectDataOptions::default().with_owner(),
-            )
+            .get_object(summary.operation_cap_id().parse()?)
             .await?
-            .object_ref_if_exists()
-            .ok_or_else(|| anyhow!("OperationCap {} does not exist", operation_cap_id))?;
-        Ok::<(ValidatorStatus, RtdValidatorSummary, ObjectRef), anyhow::Error>((
+            .compute_object_reference();
+        Ok::<(ValidatorStatus, proto::Validator, ObjectRef), anyhow::Error>((
             status,
             summary,
             cap_obj_ref,
@@ -796,21 +788,15 @@ async fn get_cap_object_ref(
             .ok_or_else(|| anyhow::anyhow!("{} is not a validator.", validator_address))?;
         // TODO we should allow validator to perform this operation even though the Cap is not at hand.
         // But for now we need to make sure the cap is owned by the sender.
-        let cap_object_id = summary.operation_cap_id;
-        let resp = rtd_client
-            .read_api()
-            .get_object_with_options(cap_object_id, RtdObjectDataOptions::default().with_owner())
-            .await
-            .map_err(|e| anyhow!(e))?;
+        let cap_object_id = summary.operation_cap_id();
+        let resp = rtd_client.get_object(cap_object_id.parse()?).await?;
         // Safe to unwrap as we ask with `with_owner`.
-        let owner = resp.owner().unwrap();
-        let cap_obj_ref = resp
-            .object_ref_if_exists()
-            .unwrap_or_else(|| panic!("OperationCap {} shall exist.", cap_object_id));
+        let owner = resp.owner().to_owned();
+        let cap_obj_ref = resp.compute_object_reference();
         if owner != Owner::AddressOwner(context.active_address()?) {
             anyhow::bail!(
                 "OperationCap {} is not owned by the sender address {} but {:?}",
-                summary.operation_cap_id,
+                summary.operation_cap_id(),
                 validator_address,
                 owner
             );
@@ -825,7 +811,7 @@ async fn update_gas_price(
     gas_price: u64,
     gas_budget: u64,
     serialize_unsigned_transaction: bool,
-) -> Result<(Option<RtdTransactionBlockResponse>, Option<String>)> {
+) -> Result<(Option<ExecutedTransaction>, Option<String>)> {
     let (_status, _summary, cap_obj_ref) = get_cap_object_ref(context, operation_cap_id).await?;
 
     // TODO: Only active/pending validators can set gas price.
@@ -851,10 +837,10 @@ async fn report_validator(
     undo_report: bool,
     gas_budget: u64,
     serialize_unsigned_transaction: bool,
-) -> Result<(Option<RtdTransactionBlockResponse>, Option<String>)> {
+) -> Result<(Option<ExecutedTransaction>, Option<String>)> {
     let (status, summary, cap_obj_ref) = get_cap_object_ref(context, operation_cap_id).await?;
 
-    let validator_address = summary.rtd_address;
+    let validator_address = summary.address();
     // Only active validators can report/un-report.
     if !matches!(status, ValidatorStatus::Active) {
         anyhow::bail!(
@@ -883,35 +869,33 @@ async fn report_validator(
 }
 
 async fn get_validator_summary_from_cap_id(
-    client: &RtdClient,
+    client: &Client,
     operation_cap_id: ObjectID,
-) -> anyhow::Result<(ValidatorStatus, RtdValidatorSummary)> {
-    let resp = client
-        .read_api()
-        .get_object_with_options(operation_cap_id, RtdObjectDataOptions::default().with_bcs())
-        .await?;
-    let bcs = resp.move_object_bcs().ok_or_else(|| {
+) -> anyhow::Result<(ValidatorStatus, proto::Validator)> {
+    let resp = client.clone().get_object(operation_cap_id).await?;
+    let bcs = resp.data.try_as_move().ok_or_else(|| {
         anyhow::anyhow!(
             "Object {} does not exist or does not return bcs bytes",
             operation_cap_id
         )
     })?;
-    let cap = bcs::from_bytes::<UnverifiedValidatorOperationCapV1>(bcs).map_err(|e| {
-        anyhow::anyhow!(
-            "Can't convert bcs bytes of object {} to UnverifiedValidatorOperationCapV1: {}",
-            operation_cap_id,
-            e,
-        )
-    })?;
+    let cap =
+        bcs::from_bytes::<UnverifiedValidatorOperationCapV1>(bcs.contents()).map_err(|e| {
+            anyhow::anyhow!(
+                "Can't convert bcs bytes of object {} to UnverifiedValidatorOperationCapV1: {}",
+                operation_cap_id,
+                e,
+            )
+        })?;
     let validator_address = cap.authorizer_validator_address;
     let (status, summary) = get_validator_summary(client, validator_address)
         .await?
         .ok_or_else(|| anyhow::anyhow!("{} is not a validator", validator_address))?;
-    if summary.operation_cap_id != operation_cap_id {
+    if summary.operation_cap_id() != operation_cap_id.to_string() {
         anyhow::bail!(
             "Validator {}'s current operation cap id is {}",
             validator_address,
-            summary.operation_cap_id
+            summary.operation_cap_id()
         );
     }
     Ok((status, summary))
@@ -924,13 +908,10 @@ async fn construct_unsigned_0x5_txn(
     call_args: Vec<CallArg>,
     gas_budget: u64,
 ) -> anyhow::Result<TransactionData> {
-    let rtd_client = context.get_client().await?;
+    let rtd_client = context.grpc_client()?;
     let mut args = vec![CallArg::RTD_SYSTEM_MUT];
     args.extend(call_args);
-    let rgp = rtd_client
-        .governance_api()
-        .get_reference_gas_price()
-        .await?;
+    let rgp = rtd_client.get_reference_gas_price().await?;
 
     let gas_obj_ref = get_gas_obj_ref(sender, &rtd_client, gas_budget).await?;
     TransactionData::new_move_call(
@@ -952,7 +933,7 @@ async fn call_0x5(
     call_args: Vec<CallArg>,
     gas_budget: u64,
     serialize_unsigned_transaction: bool,
-) -> anyhow::Result<(Option<RtdTransactionBlockResponse>, Option<String>)> {
+) -> anyhow::Result<(Option<ExecutedTransaction>, Option<String>)> {
     let sender = context.active_address()?;
     let tx_data =
         construct_unsigned_0x5_txn(context, sender, function, call_args, gas_budget).await?;
@@ -966,18 +947,10 @@ async fn call_0x5(
         .sign_secure(&sender, &tx_data, Intent::rtd_transaction())
         .await?;
     let transaction = Transaction::from_data(tx_data, vec![signature]);
-    let rtd_client = context.get_client().await?;
-    let response = rtd_client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            transaction,
-            RtdTransactionBlockResponseOptions::new()
-                .with_input()
-                .with_effects(),
-            Some(rtd_types::quorum_driver_types::ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
-        .await
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    let response = context
+        .grpc_client()?
+        .execute_transaction_and_wait_for_checkpoint(&transaction)
+        .await?;
     Ok((Some(response), None))
 }
 
@@ -1057,18 +1030,16 @@ impl Display for RtdValidatorCommandResponse {
     }
 }
 
-pub fn write_transaction_response(
-    response: &RtdTransactionBlockResponse,
-) -> Result<String, fmt::Error> {
+pub fn write_transaction_response(response: &ExecutedTransaction) -> Result<String, fmt::Error> {
     // we requested with for full_content, so the following content should be available.
-    let success = response.status_ok().unwrap();
+    let success = response.effects.status().is_ok();
     let lines = vec![
         String::from("----- Transaction Digest ----"),
-        response.digest.to_string(),
+        response.transaction.digest().to_string(),
         String::from("\n----- Transaction Data ----"),
-        response.transaction.as_ref().unwrap().to_string(),
+        serde_json::to_string_pretty(&response.transaction).unwrap(),
         String::from("----- Transaction Effects ----"),
-        response.effects.as_ref().unwrap().to_string(),
+        serde_json::to_string_pretty(&response.effects).unwrap(),
     ];
     let mut writer = String::new();
     for line in lines {
@@ -1117,31 +1088,39 @@ pub enum ValidatorStatus {
 }
 
 pub async fn get_validator_summary(
-    client: &RtdClient,
+    client: &Client,
     validator_address: RtdAddress,
-) -> anyhow::Result<Option<(ValidatorStatus, RtdValidatorSummary)>> {
-    let RtdSystemStateSummary {
-        active_validators,
-        pending_active_validators_id,
-        ..
-    } = client
-        .governance_api()
-        .get_latest_rtd_system_state()
-        .await?;
+) -> anyhow::Result<Option<(ValidatorStatus, proto::Validator)>> {
+    let system_state = client.get_system_state(None).await?;
     let mut status = None;
-    let mut active_validators = active_validators
-        .into_iter()
-        .map(|s| (s.rtd_address, s))
+    let mut active_validators = system_state
+        .validators()
+        .active_validators()
+        .iter()
+        .map(|s| (s.address().to_owned(), s))
         .collect::<BTreeMap<_, _>>();
-    let validator_info = if active_validators.contains_key(&validator_address) {
+    let validator_info = if active_validators.contains_key(&validator_address.to_string()) {
         status = Some(ValidatorStatus::Active);
-        Some(active_validators.remove(&validator_address).unwrap())
+        Some(
+            active_validators
+                .remove(&validator_address.to_string())
+                .unwrap()
+                .to_owned(),
+        )
     } else {
         // Check panding validators
-        get_pending_candidate_summary(validator_address, client, pending_active_validators_id)
-            .await?
-            .map(|v| v.into_rtd_validator_summary())
-            .tap_some(|_s| status = Some(ValidatorStatus::Pending))
+        get_pending_candidate_summary(
+            validator_address,
+            client,
+            system_state
+                .validators()
+                .pending_active_validators()
+                .id()
+                .parse()
+                .unwrap(),
+        )
+        .await?
+        .tap_some(|_s| status = Some(ValidatorStatus::Pending))
 
         // TODO also check candidate and inactive valdiators
     };
@@ -1154,7 +1133,7 @@ pub async fn get_validator_summary(
 }
 
 async fn display_metadata(
-    client: &RtdClient,
+    client: &Client,
     validator_address: RtdAddress,
     json: bool,
 ) -> anyhow::Result<()> {
@@ -1177,42 +1156,24 @@ async fn display_metadata(
 
 async fn get_pending_candidate_summary(
     validator_address: RtdAddress,
-    rtd_client: &RtdClient,
+    rtd_client: &Client,
     pending_active_validators_id: ObjectID,
-) -> anyhow::Result<Option<ValidatorV1>> {
+) -> anyhow::Result<Option<proto::Validator>> {
     let pending_validators = rtd_client
-        .read_api()
         .get_dynamic_fields(pending_active_validators_id, None, None)
-        .await?
-        .data
-        .into_iter()
-        .map(|dyi| dyi.object_id)
-        .collect::<Vec<_>>();
-    let resps = rtd_client
-        .read_api()
-        .multi_get_object_with_options(
-            pending_validators,
-            RtdObjectDataOptions::default().with_bcs(),
-        )
         .await?;
-    for resp in resps {
+    for resp in pending_validators.dynamic_fields() {
         // We always expect an objectId from the response as one of data/error should be included.
-        let object_id = resp.object_id()?;
-        let bcs = resp.move_object_bcs().ok_or_else(|| {
-            anyhow::anyhow!(
-                "Object {} does not exist or does not return bcs bytes",
-                object_id
-            )
-        })?;
-        let field = bcs::from_bytes::<Field<u64, ValidatorV1>>(bcs).map_err(|e| {
+        let object_id = resp.field_id();
+        let field = resp.value().deserialize::<ValidatorV1>().map_err(|e| {
             anyhow::anyhow!(
                 "Can't convert bcs bytes of object {} to ValidatorV1: {}",
                 object_id,
                 e,
             )
         })?;
-        if field.value.verified_metadata().rtd_address == validator_address {
-            return Ok(Some(field.value));
+        if field.verified_metadata().rtd_address == validator_address {
+            return Ok(Some(field.into()));
         }
     }
     Ok(None)
@@ -1259,7 +1220,7 @@ async fn update_metadata(
     metadata: MetadataUpdate,
     gas_budget: u64,
     serialize_unsigned_transaction: bool,
-) -> anyhow::Result<(Option<RtdTransactionBlockResponse>, Option<String>)> {
+) -> anyhow::Result<(Option<ExecutedTransaction>, Option<String>)> {
     use ValidatorStatus::*;
     match metadata {
         MetadataUpdate::Name { name } => {
@@ -1437,7 +1398,7 @@ async fn check_status(
     context: &mut WalletContext,
     allowed_status: HashSet<ValidatorStatus>,
 ) -> Result<ValidatorStatus> {
-    let rtd_client = context.get_client().await?;
+    let rtd_client = context.grpc_client()?;
     let validator_address = context.active_address()?;
     let summary = get_validator_summary(&rtd_client, validator_address).await?;
     if summary.is_none() {

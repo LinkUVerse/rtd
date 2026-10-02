@@ -1,0 +1,13 @@
+---
+title: What Is a Wallet?
+description: How keys, addresses, and signing work on RTD.
+keywords:
+  - RTD
+  - what is a wallet
+---
+
+An RTD wallet holds or controls the private keys used to sign transactions on an RTD chain. A public address identifies the account; the private key authorizes actions. The wallet may be a local CLI keystore, a browser application, or a hardware signer, provided that implementation has been tested with the actual RTD chain ID and coin type.
+
+A hot wallet keeps signing capability on a connected device. A cold or hardware wallet isolates keys from ordinary applications. In either case, keep recovery material offline, confirm the recipient and network before signing, and test a small transfer before moving a large balance.
+
+This fork does not establish an RTD-branded public wallet, hardware app, hosted zkLogin prover, or cross-chain wallet-linking service. See [self-custody](/onchain-finance/asset-custody/wallets/self-custody), [zkLogin wallets](/onchain-finance/asset-custody/wallets/zk-login-wallets), and [RTD networks](/develop/rtd-architecture/networks).

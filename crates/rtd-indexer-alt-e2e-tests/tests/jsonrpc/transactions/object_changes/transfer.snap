@@ -6,11 +6,13 @@ processed 6 tasks
 init:
 A: object(0,0), B: object(0,1)
 
+// When an object's owner changes, it is considered "transferred".
+
 task 1, lines 8-17:
 //# publish
 created: object(1,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 4544800,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 4552400,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 19-21:
 //# programmable --sender A --inputs @A
@@ -36,7 +38,7 @@ Response: {
   "jsonrpc": "2.0",
   "id": 0,
   "result": {
-    "digest": "CrVRtSGQYfefzNWfU6a6ZHmZzU2WMoCKn7nqHw4X2QBp",
+    "digest": "DpFuTMe2ihvvqKufmTkQSsdUF8wSwvCGNihYJP6v8diw",
     "objectChanges": [
       {
         "type": "transferred",
@@ -44,10 +46,10 @@ Response: {
         "recipient": {
           "AddressOwner": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a"
         },
-        "objectType": "0x1a5a31900509d00c257cef365edcbba723be53e2083ccbfda4e0a2ea0b284203::M::O",
-        "objectId": "0x00d176adb885597c7871d9e9ca7442c533dec70083b6275c03374be06b9b503f",
+        "objectType": "0xdef561ed59993db96b506f62ddb61ff9a391659ef24ff3bf51c2cf3780c0b955::M::O",
+        "objectId": "0x5aa66e1865a8fdc72455aee204aad54b0cf4e5ac551cdccc82d7f39011550dbe",
         "version": "3",
-        "digest": "JAK8Ws8AWQcHjd8xsfBRXe9FKXVnp6Ei56CtTjqCjiah"
+        "digest": "Bqb2vvo2vsskg1VTrzP7gGgwtG2ScUuAJtDHZaq2Vrvt"
       },
       {
         "type": "mutated",
@@ -56,10 +58,10 @@ Response: {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
         "objectType": "0x2::coin::Coin<0x2::rtd::RTD>",
-        "objectId": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+        "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
         "version": "3",
         "previousVersion": "2",
-        "digest": "GNoT9p5mUDUpCiAs4enq3HKjFZE8DjnKfC5xZyFZwgdR"
+        "digest": "FF3oSRXYfsRHkmVzscARDrnCSju1VD8WJbYyK43px7yU"
       }
     ],
     "timestampMs": "0",

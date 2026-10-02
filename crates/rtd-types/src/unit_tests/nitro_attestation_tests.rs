@@ -359,7 +359,8 @@ fn invalid_cose() {
 
 #[test]
 fn attestation_parse_all_pcrs() {
-    // Parse custom nonzero PCRs while retaining the behavior from before the required-PCR fix.
+    // parse with include_all_nonzero_pcrs=true, pcr16 should be present, in addition to 0, 1, 2, 4.
+    // But all zero required PCRs are missing: 3 and 8.
     let parsed_all_pcrs = parse_nitro_attestation(
         &Hex::decode(VALID_PCR16_ATTESTATION).unwrap(),
         true,
@@ -385,7 +386,9 @@ fn attestation_parse_all_pcrs() {
     );
     assert!(res.is_ok());
 
-    let parsed_with_required_pcrs = parse_nitro_attestation(
+    // parse with always_include_required_pcrs=true, all 0, 1, 2, 3, 4, 8 are present AND pcr16
+    // is included since its nonzero.
+    let parsed_with_zeroed = parse_nitro_attestation(
         &Hex::decode(VALID_PCR16_ATTESTATION).unwrap(),
         true,
         true,
@@ -393,7 +396,7 @@ fn attestation_parse_all_pcrs() {
     )
     .unwrap();
     assert_eq!(
-        parsed_with_required_pcrs
+        parsed_with_zeroed
             .2
             .pcr_map
             .keys()
@@ -402,7 +405,7 @@ fn attestation_parse_all_pcrs() {
         vec![0, 1, 2, 3, 4, 8, 16]
     );
 
-    // In legacy mode custom PCR16 is omitted, while all required PCRs are retained.
+    // parse with legacy flag false, pcr16 should be missing. All 0, 1, 2, 3, 4, 8 are present.
     let parsed = parse_nitro_attestation(
         &Hex::decode(VALID_PCR16_ATTESTATION).unwrap(),
         true,

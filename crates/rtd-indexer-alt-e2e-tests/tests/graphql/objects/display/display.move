@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --accounts A --addresses test=0x0 --simulator
+//# init --protocol-version 108 --accounts A --addresses test=0x0 --simulator
 
 // 1. Publish a package that includes a Display format.
 // 2. Create some objects from this package.
@@ -98,7 +98,7 @@ module test::mod {
   }
 }
 
-//# programmable --sender A --inputs object(1,1) "quy" "{bar.baz.qux.quy.val}!"
+//# programmable --sender A --inputs object(1,2) "quy" "{bar.baz.qux.quy.val}!"
 //> 0: rtd::display::edit<test::mod::Foo>(Input(0), Input(1), Input(2));
 //> 1: rtd::display::update_version<test::mod::Foo>(Input(0));
 

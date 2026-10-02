@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
+use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::{
-    base_types::{FullObjectID, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{FullObjectID, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_key_pair},
     effects::TransactionEffects,
-    error::RtdErrorKind,
-    execution_status::{CommandArgumentError, ExecutionFailureStatus},
+    execution_status::{CommandArgumentError, ExecutionErrorKind},
     object::Object,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     storage::FullObjectKey,
@@ -20,16 +20,14 @@ use rtd_types::{
 };
 
 use crate::authority::{
-    ExecutionEnv, authority_test_utils::execute_sequenced_certificate_to_effects,
+    ExecutionEnv,
+    authority_test_utils::{enqueue_and_execute_all, execute_from_consensus, submit_to_consensus},
     shared_object_version_manager::AssignedVersions,
 };
 use crate::{
     authority::{
         AuthorityState,
-        authority_tests::{
-            build_programmable_transaction, certify_shared_obj_transaction_no_execution,
-            enqueue_all_and_execute_all, execute_programmable_transaction,
-        },
+        authority_tests::{build_programmable_transaction, execute_programmable_transaction},
         move_integration_tests::build_and_publish_test_package,
         test_authority_builder::TestAuthorityBuilder,
     },
@@ -40,10 +38,11 @@ use rtd_types::base_types::TransactionDigest;
 use rtd_types::committee::EpochId;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::{ExecutionError, RtdError};
-use rtd_types::execution_status::ExecutionFailureStatus::{
+use rtd_types::executable_transaction::VerifiedExecutableTransaction;
+use rtd_types::execution_status::ExecutionErrorKind::{
     InputObjectDeleted, SharedObjectOperationNotAllowed,
 };
-use rtd_types::transaction::{ObjectArg, VerifiedCertificate};
+use rtd_types::transaction::ObjectArg;
 
 pub struct TestRunner {
     pub sender: RtdAddress,
@@ -55,16 +54,30 @@ pub struct TestRunner {
 
 impl TestRunner {
     pub async fn new(base_package_name: &str) -> Self {
+        Self::new_with_disable_effects_tx_dependencies(base_package_name, false).await
+    }
+
+    pub async fn new_with_disable_effects_tx_dependencies(
+        base_package_name: &str,
+        disable_effects_tx_dependencies: bool,
+    ) -> Self {
         telemetry_subscribers::init_for_testing();
         let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
 
-        let authority_state = TestAuthorityBuilder::new().build().await;
+        let mut protocol_config =
+            ProtocolConfig::get_for_version(ProtocolVersion::max(), Chain::Unknown);
+        protocol_config
+            .set_disable_effects_tx_dependencies_for_testing(disable_effects_tx_dependencies);
+        let authority_state = TestAuthorityBuilder::new()
+            .with_protocol_config(protocol_config)
+            .build()
+            .await;
 
         let mut gas_object_ids = vec![];
         for _ in 0..20 {
             let gas_object_id = ObjectID::random();
             let gas_object = Object::with_id_owner_for_testing(gas_object_id, sender);
-            authority_state.insert_genesis_object(gas_object).await;
+            authority_state.insert_genesis_object(gas_object);
             gas_object_ids.push(gas_object_id);
         }
 
@@ -131,12 +144,12 @@ impl TestRunner {
                 .await;
 
             let (mutate_obj_cert, assigned_versions) = self
-                .certify_shared_obj_transaction(mutate_obj_tx)
+                .prepare_shared_obj_transaction(mutate_obj_tx)
                 .await
                 .unwrap();
 
             let _ = self
-                .execute_sequenced_certificate_to_effects(mutate_obj_cert, assigned_versions)
+                .execute_from_consensus(mutate_obj_cert, assigned_versions)
                 .await;
 
             n -= 1;
@@ -200,34 +213,6 @@ impl TestRunner {
             (self.package.0)::o2::consume_o2(arg)
         };
         let delete_obj_tx = delete_object_transaction_builder.finish();
-        let gas_id = self.gas_object_ids.pop().unwrap();
-        self.create_signed_transaction_from_pt(delete_obj_tx, gas_id)
-            .await
-    }
-
-    pub async fn delete_shared_obj_with_owned_tx(
-        &mut self,
-        owned_obj: ObjectRef,
-        shared_obj_id: ObjectID,
-        initial_shared_version: SequenceNumber,
-    ) -> Transaction {
-        let mut object_transaction_builder = ProgrammableTransactionBuilder::new();
-        let arg_1 = object_transaction_builder
-            .obj(ObjectArg::ImmOrOwnedObject(owned_obj))
-            .unwrap();
-        let arg_2 = object_transaction_builder
-            .obj(ObjectArg::SharedObject {
-                id: shared_obj_id,
-                initial_shared_version,
-                mutability: SharedObjectMutability::Mutable,
-            })
-            .unwrap();
-
-        move_call! {
-            object_transaction_builder,
-            (self.package.0)::o2::consume_with_owned(arg_1, arg_2)
-        };
-        let delete_obj_tx = object_transaction_builder.finish();
         let gas_id = self.gas_object_ids.pop().unwrap();
         self.create_signed_transaction_from_pt(delete_obj_tx, gas_id)
             .await
@@ -538,31 +523,27 @@ impl TestRunner {
         .unwrap()
     }
 
-    pub async fn certify_shared_obj_transaction(
+    /// Creates a VerifiedExecutableTransaction and assigns shared object versions.
+    pub async fn prepare_shared_obj_transaction(
         &mut self,
         tx: Transaction,
-    ) -> Result<(VerifiedCertificate, AssignedVersions), RtdError> {
-        certify_shared_obj_transaction_no_execution(&self.authority_state, tx).await
+    ) -> Result<(VerifiedExecutableTransaction, AssignedVersions), RtdError> {
+        submit_to_consensus(&self.authority_state, tx).await
     }
 
     pub async fn enqueue_all_and_execute_all(
         &mut self,
-        certificates: Vec<(VerifiedCertificate, ExecutionEnv)>,
+        executables: Vec<(VerifiedExecutableTransaction, ExecutionEnv)>,
     ) -> Result<Vec<TransactionEffects>, RtdError> {
-        enqueue_all_and_execute_all(&self.authority_state, certificates).await
+        enqueue_and_execute_all(&self.authority_state, executables).await
     }
 
-    pub async fn execute_sequenced_certificate_to_effects(
+    pub async fn execute_from_consensus(
         &mut self,
-        certificate: VerifiedCertificate,
+        executable: VerifiedExecutableTransaction,
         assigned_versions: AssignedVersions,
     ) -> (TransactionEffects, Option<ExecutionError>) {
-        execute_sequenced_certificate_to_effects(
-            &self.authority_state,
-            certificate,
-            assigned_versions,
-        )
-        .await
+        execute_from_consensus(&self.authority_state, executable, assigned_versions).await
     }
 
     pub fn object_exists_in_marker_table(
@@ -591,13 +572,11 @@ async fn test_delete_shared_object() {
         .await;
 
     let (cert, assigned_versions) = user1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
-    let (effects, error) = user1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (effects, error) = user1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(error.is_none());
 
@@ -605,7 +584,7 @@ async fn test_delete_shared_object() {
 
     // assert the shared object was deleted
     let deleted_obj_id = effects.deleted()[0].0;
-    let shared_obj_id = effects.input_consensus_objects()[0].id_and_version().0;
+    let shared_obj_id = effects.accessed_consensus_objects()[0].id_and_version().0;
     assert_eq!(deleted_obj_id, shared_obj_id);
 
     // assert the version of the deleted shared object was incremented
@@ -647,19 +626,17 @@ async fn test_delete_shared_object_immut() {
         .await;
 
     let (cert, assigned_versions) = user1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
-    let (effects, _) = user1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (effects, _) = user1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(effects.status().is_err());
 
     assert!(matches!(
         effects.status().clone().unwrap_err().0,
-        ExecutionFailureStatus::CommandArgumentError {
+        ExecutionErrorKind::CommandArgumentError {
             arg_idx: 0,
             kind: CommandArgumentError::InvalidObjectByValue
         }
@@ -689,46 +666,44 @@ async fn test_delete_shared_object_immut_mut_mut_interleave() {
         .await;
 
     let (cert_immut1, assigned_versions_immut1) = user1
-        .certify_shared_obj_transaction(delete_obj_tx_immut1)
+        .prepare_shared_obj_transaction(delete_obj_tx_immut1)
         .await
         .unwrap();
 
     let (cert, assigned_versions) = user1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let (cert_immut2, assigned_versions_immut2) = user1
-        .certify_shared_obj_transaction(delete_obj_tx_immut2)
+        .prepare_shared_obj_transaction(delete_obj_tx_immut2)
         .await
         .unwrap();
 
     // Try and delete the shared object with the object passed as non-mutable
     let (effects, _) = user1
-        .execute_sequenced_certificate_to_effects(cert_immut1, assigned_versions_immut1)
+        .execute_from_consensus(cert_immut1, assigned_versions_immut1)
         .await;
 
     assert!(effects.status().is_err());
 
     assert!(matches!(
         effects.status().clone().unwrap_err().0,
-        ExecutionFailureStatus::CommandArgumentError {
+        ExecutionErrorKind::CommandArgumentError {
             arg_idx: 0,
             kind: CommandArgumentError::InvalidObjectByValue
         }
     ));
 
     // Now do an actual deletion
-    let (effects, error) = user1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (effects, error) = user1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(error.is_none());
     assert_eq!(effects.deleted().len(), 1);
 
     // assert the shared object was deleted
     let deleted_obj_id = effects.deleted()[0].0;
-    let shared_obj_id = effects.input_consensus_objects()[0].id_and_version().0;
+    let shared_obj_id = effects.accessed_consensus_objects()[0].id_and_version().0;
     assert_eq!(deleted_obj_id, shared_obj_id);
 
     // assert the version of the deleted shared object was incremented
@@ -756,13 +731,13 @@ async fn test_delete_shared_object_immut_mut_mut_interleave() {
 
     // Try to delete again with the object passed as mutable and make sure we get `InputObjectDeleted`.
     let (effects, _) = user1
-        .execute_sequenced_certificate_to_effects(cert_immut2, assigned_versions_immut2)
+        .execute_from_consensus(cert_immut2, assigned_versions_immut2)
         .await;
 
     assert!(effects.status().is_err());
     assert_eq!(
         effects.status().clone().unwrap_err().0,
-        ExecutionFailureStatus::InputObjectDeleted
+        ExecutionErrorKind::InputObjectDeleted
     );
 }
 
@@ -784,24 +759,24 @@ async fn test_delete_shared_object_immut_mut_immut_interleave() {
         .await;
 
     let (cert_immut1, assigned_versions_immut1) = user1
-        .certify_shared_obj_transaction(delete_obj_tx_immut1)
+        .prepare_shared_obj_transaction(delete_obj_tx_immut1)
         .await
         .unwrap();
 
     let (cert_immut2, assigned_versions_immut2) = user1
-        .certify_shared_obj_transaction(delete_obj_tx_immut2)
+        .prepare_shared_obj_transaction(delete_obj_tx_immut2)
         .await
         .unwrap();
 
     let (effects, _) = user1
-        .execute_sequenced_certificate_to_effects(cert_immut1, assigned_versions_immut1)
+        .execute_from_consensus(cert_immut1, assigned_versions_immut1)
         .await;
 
     assert!(effects.status().is_err());
 
     assert!(matches!(
         effects.status().clone().unwrap_err().0,
-        ExecutionFailureStatus::CommandArgumentError {
+        ExecutionErrorKind::CommandArgumentError {
             arg_idx: 0,
             kind: CommandArgumentError::InvalidObjectByValue
         }
@@ -814,13 +789,11 @@ async fn test_delete_shared_object_immut_mut_immut_interleave() {
         .await;
 
     let (cert, assigned_versions) = user1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
-    let (effects, error) = user1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (effects, error) = user1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(error.is_none());
 
@@ -828,7 +801,7 @@ async fn test_delete_shared_object_immut_mut_immut_interleave() {
 
     // assert the shared object was deleted
     let deleted_obj_id = effects.deleted()[0].0;
-    let shared_obj_id = effects.input_consensus_objects()[0].id_and_version().0;
+    let shared_obj_id = effects.accessed_consensus_objects()[0].id_and_version().0;
     assert_eq!(deleted_obj_id, shared_obj_id);
 
     // assert the version of the deleted shared object was incremented
@@ -855,15 +828,18 @@ async fn test_delete_shared_object_immut_mut_immut_interleave() {
     );
 
     let (effects, _) = user1
-        .execute_sequenced_certificate_to_effects(cert_immut2, assigned_versions_immut2)
+        .execute_from_consensus(cert_immut2, assigned_versions_immut2)
         .await;
 
     assert!(effects.status().is_err());
 }
 
-#[tokio::test]
-async fn test_mutate_after_delete() {
-    let mut user_1 = TestRunner::new("shared_object_deletion").await;
+async fn assert_mutate_after_delete_effects_dependencies(disable_effects_tx_dependencies: bool) {
+    let mut user_1 = TestRunner::new_with_disable_effects_tx_dependencies(
+        "shared_object_deletion",
+        disable_effects_tx_dependencies,
+    )
+    .await;
     let effects = user_1.create_shared_object().await;
 
     assert_eq!(effects.created().len(), 1);
@@ -881,23 +857,23 @@ async fn test_mutate_after_delete() {
         .await;
 
     let (delete_cert, assigned_versions_delete) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let (mutate_cert, assigned_versions_mutate) = user_1
-        .certify_shared_obj_transaction(mutate_obj_tx)
+        .prepare_shared_obj_transaction(mutate_obj_tx)
         .await
         .unwrap();
 
     let (orig_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert, assigned_versions_delete)
+        .execute_from_consensus(delete_cert, assigned_versions_delete)
         .await;
 
     let digest = orig_effects.transaction_digest();
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(mutate_cert, assigned_versions_mutate)
+        .execute_from_consensus(mutate_cert, assigned_versions_mutate)
         .await;
 
     assert!(matches!(error.unwrap().kind(), InputObjectDeleted));
@@ -908,10 +884,36 @@ async fn test_mutate_after_delete() {
     assert!(effects.unwrapped_then_deleted().is_empty());
     assert!(effects.wrapped().is_empty());
 
-    // The gas coin gets mutated
+    // The gas coin gets mutated even though the shared input was deleted.
     assert_eq!(effects.mutated().len(), 1);
+    let (gas_ref, _) = effects.mutated().pop().unwrap();
+    let gas = user_1.authority_state.get_object(&gas_ref.0).unwrap();
+    assert_eq!(gas.version(), gas_ref.1);
+    assert_eq!(gas.previous_transaction, *effects.transaction_digest());
 
-    assert!(effects.dependencies().contains(digest));
+    if disable_effects_tx_dependencies {
+        assert!(effects.dependencies().is_empty());
+    } else {
+        let package_digest = user_1
+            .authority_state
+            .get_object(&user_1.package.0)
+            .unwrap()
+            .previous_transaction;
+        let mut expected = vec![*digest, package_digest];
+        expected.sort();
+        expected.dedup();
+        assert_eq!(effects.dependencies(), expected);
+    }
+}
+
+#[tokio::test]
+async fn test_mutate_after_delete() {
+    assert_mutate_after_delete_effects_dependencies(false).await;
+}
+
+#[tokio::test]
+async fn test_mutate_after_delete_without_effects_dependencies() {
+    assert_mutate_after_delete_effects_dependencies(true).await;
 }
 
 #[tokio::test]
@@ -934,23 +936,23 @@ async fn test_delete_after_delete() {
         .await;
 
     let (delete_cert0, assigned_versions_delete0) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx0)
+        .prepare_shared_obj_transaction(delete_obj_tx0)
         .await
         .unwrap();
 
     let (delete_cert1, assigned_versions_delete1) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx1)
+        .prepare_shared_obj_transaction(delete_obj_tx1)
         .await
         .unwrap();
 
     let (orig_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert0, assigned_versions_delete0)
+        .execute_from_consensus(delete_cert0, assigned_versions_delete0)
         .await;
 
     let digest = orig_effects.transaction_digest();
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert1, assigned_versions_delete1)
+        .execute_from_consensus(delete_cert1, assigned_versions_delete1)
         .await;
 
     assert!(matches!(error.unwrap().kind(), InputObjectDeleted));
@@ -1029,11 +1031,11 @@ async fn test_shifting_mutate_and_deletes_multiple_objects() {
     // Tx_8
     let tx_8 = runner.mutate_shared_obj_tx(so2, so2_isv).await;
 
-    let txs = vec![tx_1, tx_2, tx_3, tx_4, tx_5, tx_6, tx_7, tx_8];
+    let txs = [tx_1, tx_2, tx_3, tx_4, tx_5, tx_6, tx_7, tx_8];
     let mut certs = vec![];
     for tx in txs.iter() {
         let (cert, assigned_versions) = runner
-            .certify_shared_obj_transaction(tx.clone())
+            .prepare_shared_obj_transaction(tx.clone())
             .await
             .unwrap();
         certs.push((
@@ -1058,7 +1060,7 @@ async fn test_shifting_mutate_and_deletes_multiple_objects() {
         assert!(effects.status().is_err());
         assert_eq!(
             effects.status().clone().unwrap_err().0,
-            ExecutionFailureStatus::InputObjectDeleted
+            ExecutionErrorKind::InputObjectDeleted
         );
         assert!(effects.dependencies().contains(txs[0].digest()));
     }
@@ -1069,7 +1071,7 @@ async fn test_shifting_mutate_and_deletes_multiple_objects() {
         assert!(effects.status().is_err());
         assert_eq!(
             effects.status().clone().unwrap_err().0,
-            ExecutionFailureStatus::InputObjectDeleted
+            ExecutionErrorKind::InputObjectDeleted
         );
         assert!(effects.dependencies().contains(txs[0].digest()));
         assert!(effects.dependencies().contains(txs[1].digest()));
@@ -1081,7 +1083,7 @@ async fn test_shifting_mutate_and_deletes_multiple_objects() {
         assert!(effects.status().is_err());
         assert_eq!(
             effects.status().clone().unwrap_err().0,
-            ExecutionFailureStatus::InputObjectDeleted
+            ExecutionErrorKind::InputObjectDeleted
         );
         assert!(effects.dependencies().contains(txs[2].digest()));
         assert!(effects.dependencies().contains(txs[1].digest()));
@@ -1112,7 +1114,7 @@ async fn test_shifting_mutate_and_deletes_multiple_objects() {
         assert!(effects.status().is_err());
         assert_eq!(
             effects.status().clone().unwrap_err().0,
-            ExecutionFailureStatus::InputObjectDeleted
+            ExecutionErrorKind::InputObjectDeleted
         );
         assert!(effects.dependencies().contains(txs[2].digest()));
         assert!(effects.dependencies().contains(txs[5].digest()));
@@ -1150,17 +1152,17 @@ async fn test_mutate_after_delete_enqueued() {
         .await;
 
     let delete_cert = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let mutate_cert = user_1
-        .certify_shared_obj_transaction(mutate_obj_tx)
+        .prepare_shared_obj_transaction(mutate_obj_tx)
         .await
         .unwrap();
 
     let mutate_cert_2 = user_1
-        .certify_shared_obj_transaction(mutate_obj_tx_2)
+        .prepare_shared_obj_transaction(mutate_obj_tx_2)
         .await
         .unwrap();
 
@@ -1228,17 +1230,17 @@ async fn test_delete_after_delete_enqueued() {
         .await;
 
     let delete_cert = user_1
-        .certify_shared_obj_transaction(delete_obj_tx0)
+        .prepare_shared_obj_transaction(delete_obj_tx0)
         .await
         .unwrap();
 
     let delete_cert1 = user_1
-        .certify_shared_obj_transaction(delete_obj_tx1)
+        .prepare_shared_obj_transaction(delete_obj_tx1)
         .await
         .unwrap();
 
     let delete_cert_2 = user_1
-        .certify_shared_obj_transaction(delete_obj_tx_2)
+        .prepare_shared_obj_transaction(delete_obj_tx_2)
         .await
         .unwrap();
 
@@ -1314,27 +1316,27 @@ async fn test_mutate_interleaved_read_only_enqueued_after_delete() {
         .await;
 
     let delete_cert = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let read_cert_1 = user_1
-        .certify_shared_obj_transaction(read_obj_tx_1)
+        .prepare_shared_obj_transaction(read_obj_tx_1)
         .await
         .unwrap();
 
     let mutate_cert = user_1
-        .certify_shared_obj_transaction(mutate_obj_tx)
+        .prepare_shared_obj_transaction(mutate_obj_tx)
         .await
         .unwrap();
 
     let read_cert_2 = user_1
-        .certify_shared_obj_transaction(read_obj_tx_2)
+        .prepare_shared_obj_transaction(read_obj_tx_2)
         .await
         .unwrap();
 
     let mutate_cert_2 = user_1
-        .certify_shared_obj_transaction(mutate_obj_tx_2)
+        .prepare_shared_obj_transaction(mutate_obj_tx_2)
         .await
         .unwrap();
 
@@ -1452,7 +1454,7 @@ async fn test_delete_with_shared_after_mutate_enqueued() {
         .await;
 
     let delete_cert = user_1
-        .certify_shared_obj_transaction(delete_tx)
+        .prepare_shared_obj_transaction(delete_tx)
         .await
         .unwrap();
 
@@ -1461,7 +1463,7 @@ async fn test_delete_with_shared_after_mutate_enqueued() {
         .await;
 
     let mutate_cert = user_1
-        .certify_shared_obj_transaction(mutate_tx)
+        .prepare_shared_obj_transaction(mutate_tx)
         .await
         .unwrap();
 
@@ -1487,7 +1489,7 @@ async fn test_delete_with_shared_after_mutate_enqueued() {
         .await;
 
     let second_mutate_cert = user_1
-        .certify_shared_obj_transaction(second_mutate_tx)
+        .prepare_shared_obj_transaction(second_mutate_tx)
         .await
         .unwrap();
 
@@ -1496,7 +1498,7 @@ async fn test_delete_with_shared_after_mutate_enqueued() {
         .await;
 
     let third_mutate_cert = user_1
-        .certify_shared_obj_transaction(third_mutate_tx)
+        .prepare_shared_obj_transaction(third_mutate_tx)
         .await
         .unwrap();
 
@@ -1562,12 +1564,12 @@ async fn test_wrap_not_allowed() {
         .await;
 
     let (wrap_cert, assigned_versions) = user_1
-        .certify_shared_obj_transaction(wrap_shared_obj_tx)
+        .prepare_shared_obj_transaction(wrap_shared_obj_tx)
         .await
         .unwrap();
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(wrap_cert, assigned_versions)
+        .execute_from_consensus(wrap_cert, assigned_versions)
         .await;
 
     assert!(matches!(
@@ -1596,13 +1598,11 @@ async fn test_vec_delete() {
         .await;
 
     let (cert, assigned_versions) = user_1
-        .certify_shared_obj_transaction(shared_obj_tx)
+        .prepare_shared_obj_transaction(shared_obj_tx)
         .await
         .unwrap();
 
-    let (_effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (_effects, error) = user_1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(error.is_none());
 }
@@ -1622,11 +1622,9 @@ async fn test_convert_to_owned_not_allowed() {
         .transfer_to_single_owner_tx(shared_obj_id, initial_shared_version)
         .await;
 
-    let (cert, assigned_versions) = user_1.certify_shared_obj_transaction(tx).await.unwrap();
+    let (cert, assigned_versions) = user_1.prepare_shared_obj_transaction(tx).await.unwrap();
 
-    let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (effects, error) = user_1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(matches!(
         error.unwrap().kind(),
@@ -1653,11 +1651,9 @@ async fn test_freeze_not_allowed() {
         .freeze_shared_obj_tx(shared_obj_id, initial_shared_version)
         .await;
 
-    let (cert, assigned_versions) = user_1.certify_shared_obj_transaction(tx).await.unwrap();
+    let (cert, assigned_versions) = user_1.prepare_shared_obj_transaction(tx).await.unwrap();
 
-    let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(cert, assigned_versions)
-        .await;
+    let (effects, error) = user_1.execute_from_consensus(cert, assigned_versions).await;
 
     assert!(matches!(
         error.unwrap().kind(),
@@ -1689,21 +1685,21 @@ async fn test_deletion_twice() {
         .await;
 
     let (delete_cert, delete_assigned_versions) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let (delete_cert_2, delete_assigned_versions_2) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx_2)
+        .prepare_shared_obj_transaction(delete_obj_tx_2)
         .await
         .unwrap();
 
     let (_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert, delete_assigned_versions)
+        .execute_from_consensus(delete_cert, delete_assigned_versions)
         .await;
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert_2, delete_assigned_versions_2)
+        .execute_from_consensus(delete_cert_2, delete_assigned_versions_2)
         .await;
 
     assert!(matches!(error.unwrap().kind(), InputObjectDeleted));
@@ -1729,19 +1725,19 @@ async fn test_certs_fail_after_delete() {
         .await;
 
     let (delete_cert, delete_assigned_versions) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let (_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert, delete_assigned_versions)
+        .execute_from_consensus(delete_cert, delete_assigned_versions)
         .await;
 
     let mutate_obj_tx = user_1
         .mutate_shared_obj_tx(shared_obj_id, initial_shared_version)
         .await;
 
-    let mutate_cert_result = user_1.certify_shared_obj_transaction(mutate_obj_tx).await;
+    let mutate_cert_result = user_1.prepare_shared_obj_transaction(mutate_obj_tx).await;
 
     // In same epoch, so can still certify this transaction even though it uses a deleted shared
     // object.
@@ -1777,28 +1773,28 @@ async fn test_delete_before_two_mutations() {
         .await;
 
     let (delete_cert, delete_assigned_versions) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let (mutate_cert_1, mutate_assigned_versions_1) = user_1
-        .certify_shared_obj_transaction(tx_mutate_1)
+        .prepare_shared_obj_transaction(tx_mutate_1)
         .await
         .unwrap();
 
     let (mutate_cert_2, mutate_assigned_versions_2) = user_1
-        .certify_shared_obj_transaction(tx_mutate_2)
+        .prepare_shared_obj_transaction(tx_mutate_2)
         .await
         .unwrap();
 
     let (delete_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert, delete_assigned_versions)
+        .execute_from_consensus(delete_cert, delete_assigned_versions)
         .await;
 
     let delete_digest = delete_effects.transaction_digest();
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(mutate_cert_1, mutate_assigned_versions_1)
+        .execute_from_consensus(mutate_cert_1, mutate_assigned_versions_1)
         .await;
 
     assert!(matches!(error.unwrap().kind(), InputObjectDeleted));
@@ -1816,7 +1812,7 @@ async fn test_delete_before_two_mutations() {
     assert_eq!(effects.mutated().len(), 1);
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(mutate_cert_2, mutate_assigned_versions_2)
+        .execute_from_consensus(mutate_cert_2, mutate_assigned_versions_2)
         .await;
 
     assert!(matches!(error.unwrap().kind(), InputObjectDeleted));
@@ -1831,42 +1827,6 @@ async fn test_delete_before_two_mutations() {
     assert_eq!(effects.mutated().len(), 1);
 
     assert!(effects.dependencies().contains(mutate_digest));
-}
-
-#[tokio::test]
-async fn test_object_lock_conflict() {
-    let mut user_1 = TestRunner::new("shared_object_deletion").await;
-    let effects = user_1.create_shared_object().await;
-
-    assert_eq!(effects.created().len(), 1);
-    let shared_obj = effects.created()[0].0;
-    let shared_obj_id = shared_obj.0;
-    let initial_shared_version = shared_obj.1;
-
-    let owned_effects = user_1.create_owned_object().await;
-
-    assert_eq!(owned_effects.created().len(), 1);
-    let owned_obj = owned_effects.created()[0].0;
-
-    let delete_obj_tx = user_1
-        .delete_shared_obj_with_owned_tx(owned_obj, shared_obj_id, initial_shared_version)
-        .await;
-
-    let _delete_cert = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
-        .await
-        .unwrap();
-
-    let mutate_obj_tx = user_1
-        .mutate_shared_obj_with_owned_tx(owned_obj, shared_obj_id, initial_shared_version)
-        .await;
-
-    let mutate_cert_res = user_1.certify_shared_obj_transaction(mutate_obj_tx).await;
-
-    assert!(matches!(
-        mutate_cert_res.err().map(|e| e.into_inner()),
-        Some(RtdErrorKind::ObjectLockConflict { .. })
-    ));
 }
 
 #[tokio::test]
@@ -1890,7 +1850,7 @@ async fn test_owned_object_version_increments_on_cert_denied() {
         .await;
 
     let (delete_cert, delete_assigned_versions) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
@@ -1899,19 +1859,19 @@ async fn test_owned_object_version_increments_on_cert_denied() {
         .await;
 
     let (mutate_cert, mutate_assigned_versions) = user_1
-        .certify_shared_obj_transaction(mutate_obj_tx)
+        .prepare_shared_obj_transaction(mutate_obj_tx)
         .await
         .unwrap();
 
     user_1
-        .execute_sequenced_certificate_to_effects(delete_cert, delete_assigned_versions)
+        .execute_from_consensus(delete_cert, delete_assigned_versions)
         .await;
 
     let version = user_1.get_object_latest_version(owned_obj_id);
     assert_eq!(version, 4.into());
 
     user_1
-        .execute_sequenced_certificate_to_effects(mutate_cert, mutate_assigned_versions)
+        .execute_from_consensus(mutate_cert, mutate_assigned_versions)
         .await;
 
     let next_version = user_1.get_object_latest_version(owned_obj_id);
@@ -1947,30 +1907,30 @@ async fn test_interspersed_mutations_with_delete() {
         .await;
 
     let (mutate_cert_1, mutate_assigned_versions_1) = user_1
-        .certify_shared_obj_transaction(tx_mutate_1)
+        .prepare_shared_obj_transaction(tx_mutate_1)
         .await
         .unwrap();
 
     let (delete_cert, delete_assigned_versions) = user_1
-        .certify_shared_obj_transaction(delete_obj_tx)
+        .prepare_shared_obj_transaction(delete_obj_tx)
         .await
         .unwrap();
 
     let (mutate_cert_2, mutate_assigned_versions_2) = user_1
-        .certify_shared_obj_transaction(tx_mutate_2)
+        .prepare_shared_obj_transaction(tx_mutate_2)
         .await
         .unwrap();
 
     let (_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(mutate_cert_1, mutate_assigned_versions_1)
+        .execute_from_consensus(mutate_cert_1, mutate_assigned_versions_1)
         .await;
 
     let (_effects, _error) = user_1
-        .execute_sequenced_certificate_to_effects(delete_cert, delete_assigned_versions)
+        .execute_from_consensus(delete_cert, delete_assigned_versions)
         .await;
 
     let (effects, error) = user_1
-        .execute_sequenced_certificate_to_effects(mutate_cert_2, mutate_assigned_versions_2)
+        .execute_from_consensus(mutate_cert_2, mutate_assigned_versions_2)
         .await;
 
     assert!(matches!(error.unwrap().kind(), InputObjectDeleted));

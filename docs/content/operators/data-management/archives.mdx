@@ -1,0 +1,50 @@
+---
+title: RTD archive data
+sidebar_label: Archive Data
+description: Configure archival fallback for a network you operate.
+keywords:
+  - RTD
+  - archive
+  - checkpoint
+  - full node
+---
+
+# RTD archive data
+
+An RTD node can read old checkpoints from an archive when its operator
+configures one. RTD has no verified public archival service, bucket, or
+Mainnet. The upstream Sui bucket names do not contain RTD chain data.
+
+## Set up archival fallback {#set-up-archival-fallback}
+
+Obtain an archive URL and the expected genesis digest from the operator of
+**your** RTD network. Verify the archive contains that same chain before
+adding it to `fullnode.yaml`:
+
+```yaml
+state-archive-read-config:
+  - ingestion-url: "https://your-rtd-archive.example.invalid"
+    concurrency: 5
+```
+
+The `.invalid` URL is a nonoperational placeholder. Replace it with a verified
+operator-owned source and configure credentials and billing according to that
+source. Never paste access keys into a configuration file that may appear in
+administrative diagnostics.
+
+### Verify archival fallback
+
+After restarting the node, inspect the node log and the archive sync counter:
+
+```sh
+curl -s http://localhost:9184/metrics | rg checkpoints_synced_from_archive
+```
+
+The counter must advance while the node actually catches up from the archive.
+
+### When to use each archive source {#archive-sources}
+
+Use a source that matches your genesis digest and retention needs. See
+[RTD data stores](/operators/data-management/available-data-stores) for the
+configuration boundary. A new full node should start from a verified snapshot
+when one is available for its exact chain.

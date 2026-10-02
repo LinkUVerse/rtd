@@ -1,0 +1,24 @@
+---
+title: Move Package Management
+description: Manage local RTD Move package dependencies and network-specific published addresses.
+keywords:
+  - RTD
+  - move package management
+---
+
+# Move package management
+
+Build Move packages against the framework and protocol version for the RTD network you intend to use. Local dependencies belong in `Move.toml` with a path relative to that manifest. The CLI resolves and compiles the package with `rtd move build`; run `rtd move test` before publishing.
+
+```toml
+[package]
+name = "example"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../crates/rtd-framework/packages/rtd-framework" }
+```
+
+The relative path above is an example; adjust it to the actual location of your package. A Git dependency requires a repository and revision that you control or have verified. Record the commit and checksum used for a deployment.
+
+When publishing to more than one RTD network, use that network's actual chain identifier and package IDs in the lockfile and deployment manifest. The familiar Sui Mainnet and Testnet chain IDs, Move Registry names, and upstream package URLs are not RTD configuration. RTD has no public Mainnet; select a network only after its operator supplies genesis, endpoints, and verified package addresses. See [RTD networks](/develop/rtd-architecture/networks) and [deploying packages](/develop/publish-upgrade-packages/deploy).

@@ -12,7 +12,7 @@ import { fromBase64 } from '@linku/rtd/utils';
 
 export type Network = 'mainnet' | 'testnet' | 'devnet' | 'localnet';
 
-export const ACTIVE_NETWORK = (process.env.NETWORK as Network) || 'testnet';
+export const ACTIVE_NETWORK = (process.env.NETWORK as Network) || 'localnet';
 
 export const RTD_BIN = `rtd`;
 
@@ -45,7 +45,9 @@ export const getSigner = () => {
 
 /** Get the client for the specified network. */
 export const getClient = (network: Network) => {
-	return new RtdClient({ url: getFullnodeUrl(network) });
+	const url = network === 'localnet' ? getFullnodeUrl('localnet') : process.env.RTD_RPC_URL;
+	if (!url) throw new Error(`RTD_RPC_URL is required for ${network}`);
+	return new RtdClient({ url });
 };
 
 /** A helper to sign & execute a transaction. */

@@ -1,8 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use bincode::{Decode, Encode};
-use rtd_indexer_alt_framework::types::{TypeTag, base_types::RtdAddress};
+use bincode::Decode;
+use bincode::Encode;
+use rtd_indexer_alt_framework::types::TypeTag;
+use rtd_indexer_alt_framework::types::base_types::RtdAddress;
 
 /// Key for the index that supports fetching an account's balance (the sum of balances of all coins
 /// it owns).

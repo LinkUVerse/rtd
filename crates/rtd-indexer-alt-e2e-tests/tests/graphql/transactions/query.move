@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --addresses Test=0x0 --accounts A --simulator
+//# init --protocol-version 108 --addresses Test=0x0 --accounts A --simulator
 
 //# publish
 module Test::M1 {
@@ -50,106 +50,6 @@ module Test::M1 {
 # When a range is not specified, transactions queries should return results starting from the smallest unpruned tx
 {
   transactions(first: 10) {
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      cursor
-      node {
-        digest
-        effects {
-            checkpoint {
-                sequenceNumber
-                digest
-            }
-        }
-      }
-    }
-  }
-}
-
-//# run-graphql --cursors 0 3
-# Offset from the back, select so the page is full
-{
-  transactions(first: 5, before: "@{cursor_1}") {
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      cursor
-      node {
-        digest
-        effects {
-            checkpoint {
-                sequenceNumber
-                digest
-            }
-        }
-      }
-    }
-  }
-}
-
-//# run-graphql --cursors 0 4
-# Offset from front and back, select two from the front so has_next_page and has_previous_page are true
-{
-  transactions(after: "@{cursor_0}", first: 2, before: "@{cursor_1}") {
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      cursor
-      node {
-        digest
-        effects {
-            checkpoint {
-                sequenceNumber
-                digest
-            }
-        }
-      }
-    }
-  }
-}
-
-//# run-graphql --cursors 0 6
-# Offset from front and back, select two from the front so has_next_page and has_previous_page are true
-{
-  transactions(after: "@{cursor_0}", last: 2, before: "@{cursor_1}") {
-    pageInfo {
-      startCursor
-      endCursor
-      hasPreviousPage
-      hasNextPage
-    }
-    edges {
-      cursor
-      node {
-        digest
-        effects {
-            checkpoint {
-                sequenceNumber
-                digest
-            }
-        }
-      }
-    }
-  }
-}
-
-//# run-graphql --cursors 0
-# Offset from front paginate backwards
-{
-  transactions(after: "@{cursor_0}", last: 2) {
     pageInfo {
       startCursor
       endCursor

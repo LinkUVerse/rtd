@@ -3,25 +3,25 @@
 
 use move_core_types::ident_str;
 use move_core_types::u256::U256;
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::path::PathBuf;
+use rand::Rng;
 use rtd_genesis_builder::validator_info::GenesisValidatorMetadata;
 use rtd_move_build::{BuildConfig, CompiledPackage};
-use rtd_sdk::rpc_types::{
-    RtdObjectDataOptions, RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponse,
-};
+use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+use rtd_types::committee::EpochId;
 use rtd_types::crypto::{AccountKeyPair, Signature, Signer, get_key_pair};
+use rtd_types::digests::ChainIdentifier;
 use rtd_types::digests::TransactionDigest;
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::gas_coin::GAS;
 use rtd_types::multisig::{BitmapUnit, MultiSig, MultiSigPublicKey};
 use rtd_types::multisig_legacy::{MultiSigLegacy, MultiSigPublicKeyLegacy};
 use rtd_types::object::Owner;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_types::signature::GenericSignature;
 use rtd_types::rtd_system_state::RTD_SYSTEM_MODULE_NAME;
+use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::{
     Argument, CallArg, DEFAULT_VALIDATOR_GAS_PRICE, FundsWithdrawalArg, ObjectArg,
     SharedObjectMutability, TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE,
@@ -29,6 +29,8 @@ use rtd_types::transaction::{
 };
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID, RTD_RANDOMNESS_STATE_OBJECT_ID};
 use rtd_types::{RTD_SYSTEM_PACKAGE_ID, TypeTag};
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub enum FundSource {
@@ -50,6 +52,14 @@ pub enum FundSource {
 pub enum ObjectFundObject {
     Owned(ObjectRef),
     Shared(ObjectID, SequenceNumber /* init shared version */),
+}
+
+/// Configuration for paying gas from address balance instead of a coin object.
+#[derive(Clone)]
+pub struct AddressBalanceGasConfig {
+    pub chain_identifier: ChainIdentifier,
+    pub current_epoch: EpochId,
+    pub nonce: u32,
 }
 
 impl FundSource {
@@ -89,28 +99,60 @@ impl FundSource {
 pub struct TestTransactionBuilder {
     ptb_builder: ProgrammableTransactionBuilder,
     sender: RtdAddress,
-    gas_object: ObjectRef,
+    gas_objects: Vec<ObjectRef>,
     gas_price: u64,
     gas_budget: Option<u64>,
+    address_balance_gas: Option<AddressBalanceGasConfig>,
 }
 
 impl TestTransactionBuilder {
     pub fn new(sender: RtdAddress, gas_object: ObjectRef, gas_price: u64) -> Self {
+        Self::new_impl(sender, vec![gas_object], gas_price)
+    }
+
+    pub fn new_with_gas_objects(
+        sender: RtdAddress,
+        gas_objects: Vec<ObjectRef>,
+        gas_price: u64,
+    ) -> Self {
+        Self::new_impl(sender, gas_objects, gas_price)
+    }
+
+    fn new_impl(sender: RtdAddress, gas_objects: Vec<ObjectRef>, gas_price: u64) -> Self {
         Self {
             ptb_builder: ProgrammableTransactionBuilder::new(),
             sender,
-            gas_object,
+            gas_objects,
             gas_price,
             gas_budget: None,
+            address_balance_gas: None,
         }
+    }
+
+    pub fn new_with_address_balance_gas(
+        sender: RtdAddress,
+        gas_price: u64,
+        chain_identifier: ChainIdentifier,
+        current_epoch: EpochId,
+        nonce: u32,
+    ) -> Self {
+        Self::new_impl(sender, vec![], gas_price).with_address_balance_gas(
+            chain_identifier,
+            current_epoch,
+            nonce,
+        )
     }
 
     pub fn sender(&self) -> RtdAddress {
         self.sender
     }
 
-    pub fn gas_object(&self) -> ObjectRef {
-        self.gas_object
+    pub fn gas_object(&self) -> Option<ObjectRef> {
+        assert!(
+            self.gas_objects.len() <= 1,
+            "gas_object() called but multiple gas objects are set; use gas_objects() instead"
+        );
+        self.gas_objects.first().copied()
     }
 
     pub fn ptb_builder_mut(&mut self) -> &mut ProgrammableTransactionBuilder {
@@ -150,6 +192,20 @@ impl TestTransactionBuilder {
 
     pub fn with_gas_budget(mut self, gas_budget: u64) -> Self {
         self.gas_budget = Some(gas_budget);
+        self
+    }
+
+    pub fn with_address_balance_gas(
+        mut self,
+        chain_identifier: ChainIdentifier,
+        current_epoch: EpochId,
+        nonce: u32,
+    ) -> Self {
+        self.address_balance_gas = Some(AddressBalanceGasConfig {
+            chain_identifier,
+            current_epoch,
+            nonce,
+        });
         self
     }
 
@@ -219,9 +275,7 @@ impl TestTransactionBuilder {
             vec![
                 CallArg::Pure(bcs::to_bytes("example_nft_name").unwrap()),
                 CallArg::Pure(bcs::to_bytes("example_nft_description").unwrap()),
-                CallArg::Pure(
-                    bcs::to_bytes("https://rtd.io/_nuxt/img/rtd-logo.8d3c44e.svg").unwrap(),
-                ),
+                CallArg::Pure(bcs::to_bytes("https://example.invalid/rtd-logo.svg").unwrap()),
             ],
         )
     }
@@ -244,6 +298,18 @@ impl TestTransactionBuilder {
                 CallArg::RTD_SYSTEM_MUT,
                 CallArg::Object(ObjectArg::ImmOrOwnedObject(stake_coin)),
                 CallArg::Pure(bcs::to_bytes(&validator).unwrap()),
+            ],
+        )
+    }
+
+    pub fn call_unstaking(self, staked_rtd: ObjectRef) -> Self {
+        self.move_call(
+            RTD_SYSTEM_PACKAGE_ID,
+            RTD_SYSTEM_MODULE_NAME.as_str(),
+            "request_withdraw_stake",
+            vec![
+                CallArg::RTD_SYSTEM_MUT,
+                CallArg::Object(ObjectArg::ImmOrOwnedObject(staked_rtd)),
             ],
         )
     }
@@ -396,7 +462,7 @@ impl TestTransactionBuilder {
             .sum::<u64>();
         match fund_source {
             FundSource::Coin(coin) => {
-                let source = if coin == self.gas_object {
+                let source = if self.gas_objects.first() == Some(&coin) {
                     Argument::GasCoin
                 } else {
                     self.ptb_builder
@@ -428,7 +494,7 @@ impl TestTransactionBuilder {
                     .ptb_builder
                     .funds_withdrawal(FundsWithdrawalArg::balance_from_sender(
                         reservation,
-                        type_arg.clone().into(),
+                        type_arg.clone(),
                     ))
                     .unwrap();
                 for (amount, recipient) in amounts_and_recipients {
@@ -487,6 +553,11 @@ impl TestTransactionBuilder {
 
     pub fn split_coin(mut self, coin: ObjectRef, amounts: Vec<u64>) -> Self {
         self.ptb_builder.split_coin(self.sender, coin, amounts);
+        self
+    }
+
+    pub fn merge_coins(mut self, target: ObjectRef, coins: Vec<ObjectRef>) -> Self {
+        self.ptb_builder.merge_coins(target, coins).unwrap();
         self
     }
 
@@ -574,18 +645,46 @@ impl TestTransactionBuilder {
 
     pub fn build(self) -> TransactionData {
         let pt = self.ptb_builder.finish();
-        TransactionData::new_programmable(
-            self.sender,
-            vec![self.gas_object],
-            pt,
-            self.gas_budget
-                .unwrap_or(self.gas_price * TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE),
-            self.gas_price,
-        )
+        let gas_budget = self
+            .gas_budget
+            .unwrap_or(self.gas_price * TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE);
+
+        if let Some(ab_gas) = self.address_balance_gas {
+            TransactionData::new_programmable_with_address_balance_gas(
+                self.sender,
+                pt,
+                gas_budget,
+                self.gas_price,
+                ab_gas.chain_identifier,
+                ab_gas.current_epoch,
+                ab_gas.nonce,
+            )
+        } else {
+            assert!(
+                !self.gas_objects.is_empty(),
+                "gas_objects required when not using address_balance_gas"
+            );
+            TransactionData::new_programmable(
+                self.sender,
+                self.gas_objects,
+                pt,
+                gas_budget,
+                self.gas_price,
+            )
+        }
     }
 
     pub fn build_and_sign(self, signer: &dyn Signer<Signature>) -> Transaction {
         Transaction::from_data_and_signer(self.build(), vec![signer])
+    }
+
+    // ensure that transaction is unique
+    pub fn ensure_unique(mut self) -> Self {
+        let nonce: u64 = rand::thread_rng().r#gen();
+        self.ptb_builder
+            .force_separate_pure(nonce)
+            .expect("nonce serialization is infallible");
+        self
     }
 
     pub fn build_and_sign_multisig(
@@ -700,6 +799,25 @@ pub async fn make_transfer_rtd_transaction(
         .await
 }
 
+pub async fn make_transfer_rtd_address_balance_transaction(
+    context: &WalletContext,
+    recipient: Option<RtdAddress>,
+    amount: u64,
+) -> Transaction {
+    let (sender, gas_object) = context.get_one_gas_object().await.unwrap().unwrap();
+    let gas_price = context.get_reference_gas_price().await.unwrap();
+    context
+        .sign_transaction(
+            &TestTransactionBuilder::new(sender, gas_object, gas_price)
+                .transfer_rtd_to_address_balance(
+                    FundSource::Coin(gas_object),
+                    vec![(amount, recipient.unwrap_or(sender))],
+                )
+                .build(),
+        )
+        .await
+}
+
 pub async fn make_staking_transaction(
     context: &WalletContext,
     validator_address: RtdAddress,
@@ -797,13 +915,11 @@ pub async fn publish_basics_package_and_make_counter(
         .await;
     let counter_ref = resp
         .effects
-        .unwrap()
         .created()
         .iter()
-        .find(|obj_ref| matches!(obj_ref.owner, Owner::Shared { .. }))
+        .find(|obj_ref| matches!(obj_ref.1, Owner::Shared { .. }))
         .unwrap()
-        .reference
-        .to_object_ref();
+        .0;
     (package_ref, counter_ref)
 }
 
@@ -827,13 +943,11 @@ pub async fn publish_basics_package_and_make_party_object(
         .await;
     let object_ref = resp
         .effects
-        .unwrap()
         .created()
         .iter()
-        .find(|obj_ref| matches!(obj_ref.owner, Owner::ConsensusAddressOwner { .. }))
+        .find(|obj_ref| matches!(obj_ref.1, Owner::ConsensusAddressOwner { .. }))
         .unwrap()
-        .reference
-        .to_object_ref();
+        .0;
     (package_ref, object_ref)
 }
 
@@ -846,7 +960,7 @@ pub async fn increment_counter(
     package_id: ObjectID,
     counter_id: ObjectID,
     initial_shared_version: SequenceNumber,
-) -> RtdTransactionBlockResponse {
+) -> ExecutedTransaction {
     let gas_object = if let Some(gas_object_id) = gas_object_id {
         context.get_object_ref(gas_object_id).await.unwrap()
     } else {
@@ -871,24 +985,16 @@ pub async fn increment_counter(
 pub async fn emit_new_random_u128(
     context: &WalletContext,
     package_id: ObjectID,
-) -> RtdTransactionBlockResponse {
+) -> ExecutedTransaction {
     let (sender, gas_object) = context.get_one_gas_object().await.unwrap().unwrap();
     let rgp = context.get_reference_gas_price().await.unwrap();
 
-    let client = context.get_client().await.unwrap();
+    let mut client = context.grpc_client().unwrap();
     let random_obj = client
-        .read_api()
-        .get_object_with_options(
-            RTD_RANDOMNESS_STATE_OBJECT_ID,
-            RtdObjectDataOptions::new().with_owner(),
-        )
+        .get_object(RTD_RANDOMNESS_STATE_OBJECT_ID)
         .await
-        .unwrap()
-        .into_object()
         .unwrap();
-    let random_obj_owner = random_obj
-        .owner
-        .expect("Expect Randomness object to have an owner");
+    let random_obj_owner = random_obj.owner().to_owned();
 
     let Owner::Shared {
         initial_shared_version,
@@ -930,7 +1036,7 @@ pub async fn publish_nfts_package(
         .await;
     let resp = context.execute_transaction_must_succeed(txn).await;
     let package_id = resp.get_new_package_obj().unwrap().0;
-    (package_id, gas_id, resp.digest)
+    (package_id, gas_id, resp.transaction.digest())
 }
 
 /// Pre-requisite: `publish_nfts_package` must be called before this function.  Executes a
@@ -952,17 +1058,9 @@ pub async fn create_nft(
         .await;
     let resp = context.execute_transaction_must_succeed(txn).await;
 
-    let object_id = resp
-        .effects
-        .as_ref()
-        .unwrap()
-        .created()
-        .first()
-        .unwrap()
-        .reference
-        .object_id;
+    let object_id = resp.effects.created().first().unwrap().0.0;
 
-    (sender, object_id, resp.digest)
+    (sender, object_id, resp.transaction.digest())
 }
 
 /// Executes a transaction to delete the given NFT.
@@ -971,7 +1069,7 @@ pub async fn delete_nft(
     sender: RtdAddress,
     package_id: ObjectID,
     nft_to_delete: ObjectRef,
-) -> RtdTransactionBlockResponse {
+) -> ExecutedTransaction {
     let gas = context
         .get_one_gas_object_owned_by_address(sender)
         .await

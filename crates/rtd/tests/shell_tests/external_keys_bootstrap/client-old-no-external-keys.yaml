@@ -1,0 +1,24 @@
+---
+keystore:
+  File: "./rtd.keystore"
+envs:
+  - alias: testnet
+    rpc: "http://bogus.invalid/"
+    ws: ~
+    basic_auth: ~
+    chain_id: 01234567
+  - alias: mainnet
+    rpc: "http://bogus.invalid/"
+    ws: ~
+    basic_auth: ~
+    chain_id: 89abcdef
+  - alias: devnet
+    rpc: "http://bogus.invalid/"
+    ws: ~
+    basic_auth: ~
+  - alias: local
+    rpc: "http://bogus.invalid/"
+    ws: ~
+    basic_auth: ~
+active_env: testnet
+active_address: ~

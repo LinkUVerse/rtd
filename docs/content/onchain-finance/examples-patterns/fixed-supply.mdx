@@ -1,0 +1,34 @@
+---
+title: Fixed Supply
+description: Create a currency, mint its full supply once, and give up the minting capability.
+keywords: [fixed supply, coin supply, total supply, currency registry]
+questions:
+  - How do I make a fixed-supply currency on RTD?
+  - What happens to the TreasuryCap after minting?
+answer: >-
+  The local example creates a currency with six decimals, mints one billion
+  whole units, and passes the TreasuryCap to make_supply_fixed so no more
+  units can be minted.
+---
+
+A fixed-supply currency mints its entire supply during initialization. The example in this repository uses `rtd::coin_registry` and fixes the supply while creating the currency. The code is a reference for a local RTD package; review and test it against the network you operate before publishing.
+
+## How the local example works
+
+1. A one-time witness creates the currency through `coin_registry::new_currency_with_otw`.
+2. The module initializer mints `1_000_000_000_000000` base units. With six decimals, that is one billion whole units.
+3. `currency.make_supply_fixed(treasury_cap)` consumes the minting capability. The resulting currency cannot mint more units through that capability.
+4. The builder is finalized, and the minted coin and `MetadataCap` are transferred to the publisher.
+
+<ImportContent source="examples/move/coin/sources/fixed_supply.move" mode="code" />
+
+Keep the `MetadataCap` separate from the supply guarantee: it controls metadata, while `make_supply_fixed` gives up minting. If you also need the package to remain immutable, review how the package's `UpgradeCap` is managed before deployment. Publishing and disposing of upgrade authority are separate decisions.
+
+Build and test the package in this checkout before using it:
+
+```sh
+rtd move build --path examples/move/coin
+rtd move test --path examples/move/coin
+```
+
+See [Currency and Coin standards](/onchain-finance/fungible-tokens) and [security best practices](/develop/security/best-practices) for related design choices.

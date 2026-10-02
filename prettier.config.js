@@ -8,7 +8,7 @@ module.exports = {
 	tabWidth: 2,
 	trailingComma: 'all',
 	useTabs: true,
-	plugins: ['@ianvs/prettier-plugin-sort-imports'],
+	plugins: ['@ianvs/prettier-plugin-sort-imports', '@linku/prettier-plugin-move'],
 	importOrder: [
 		'<BUILT_IN_MODULES>',
 		'<THIRD_PARTY_MODULES>',
@@ -23,6 +23,18 @@ module.exports = {
 			files: 'external-crates/move/documentation/book/**/*',
 			options: {
 				proseWrap: 'always',
+			},
+		},
+		{
+			files: '**/*.move',
+			options: {
+				parser: 'move',
+				printWidth: 100,
+				wrapComments: false,
+				tabWidth: 4,
+				useTabs: false,
+				useModuleLabel: true,
+				autoGroupImports: 'module',
 			},
 		},
 	],

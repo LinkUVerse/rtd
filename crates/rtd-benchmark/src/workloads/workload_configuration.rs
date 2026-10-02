@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::bank::BenchmarkBank;
-use crate::drivers::Interval;
+use crate::drivers::{Interval, SubmissionAmplification};
 use crate::options::{Opts, RunSpec};
 use crate::system_state_observer::SystemStateObserver;
+use crate::workloads::addr_bal_deposit::{AddrBalDepositConfig, AddrBalDepositWorkloadBuilder};
 use crate::workloads::batch_payment::BatchPaymentWorkloadBuilder;
 use crate::workloads::delegation::DelegationWorkloadBuilder;
 use crate::workloads::party::PartyWorkloadBuilder;
@@ -12,14 +13,19 @@ use crate::workloads::shared_counter::SharedCounterWorkloadBuilder;
 use crate::workloads::slow::SlowWorkloadBuilder;
 use crate::workloads::transfer_object::TransferObjectWorkloadBuilder;
 use crate::workloads::{ExpectedFailureType, GroupID, WorkloadBuilderInfo, WorkloadInfo};
-use anyhow::Result;
+use anyhow::{Result, bail};
+use futures::future::join_all;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_types::base_types::RtdAddress;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
 
 use super::adversarial::{AdversarialPayloadCfg, AdversarialWorkloadBuilder};
+use super::composite::{CompositeWorkloadBuilder, CompositeWorkloadConfig};
 use super::expected_failure::{ExpectedFailurePayloadCfg, ExpectedFailureWorkloadBuilder};
+use super::large_transaction::LargeTransactionWorkloadBuilder;
 use super::randomized_transaction::RandomizedTransactionWorkloadBuilder;
 use super::randomness::RandomnessWorkloadBuilder;
 use super::shared_object_deletion::SharedCounterDeletionWorkloadBuilder;
@@ -32,11 +38,14 @@ pub struct WorkloadWeights {
     pub batch_payment: u32,
     pub shared_deletion: u32,
     pub adversarial: u32,
+    pub large_transaction: u32,
     pub expected_failure: u32,
     pub randomness: u32,
     pub randomized_transaction: u32,
     pub slow: u32,
     pub party: u32,
+    pub conflicting_transfer: u32,
+    pub composite: u32,
 }
 
 pub struct WorkloadConfig {
@@ -45,14 +54,21 @@ pub struct WorkloadConfig {
     pub num_transfer_accounts: u64,
     pub weights: WorkloadWeights,
     pub adversarial_cfg: AdversarialPayloadCfg,
+    pub large_transaction_size_bytes: u64,
     pub expected_failure_cfg: ExpectedFailurePayloadCfg,
     pub batch_payment_size: u32,
     pub shared_counter_hotness_factor: u32,
     pub num_shared_counters: Option<u64>,
     pub shared_counter_max_tip: u64,
+    pub shared_counter_gas_price_multiplier: f64,
+    pub num_contested_objects: u64,
+    pub randomized_transaction_concurrency: u64,
     pub target_qps: u64,
     pub in_flight_ratio: u64,
     pub duration: Interval,
+    pub composite_config: Option<super::composite::CompositeWorkloadConfig>,
+    pub deposit_target_addresses: Vec<RtdAddress>,
+    pub deposit_seed_rtd: u64,
 }
 pub struct WorkloadConfiguration;
 
@@ -63,6 +79,7 @@ impl WorkloadConfiguration {
         system_state_observer: Arc<SystemStateObserver>,
     ) -> Result<BTreeMap<GroupID, Vec<WorkloadInfo>>> {
         let mut workload_builders = vec![];
+        let mut submission_amplification_by_group = BTreeMap::new();
 
         // Create the workload builders for each Run spec
         match opts.run_spec.clone() {
@@ -74,21 +91,34 @@ impl WorkloadConfiguration {
                 delegation,
                 batch_payment,
                 adversarial,
+                large_transaction,
+                large_transaction_size_bytes,
                 expected_failure,
                 randomness,
                 randomized_transaction,
                 slow,
                 party,
+                conflicting_transfer,
+                composite,
                 shared_counter_hotness_factor,
                 num_shared_counters,
                 shared_counter_max_tip,
+                shared_counter_gas_price_multiplier,
+                num_contested_objects,
                 batch_payment_size,
                 adversarial_cfg,
                 expected_failure_type,
                 target_qps,
                 num_workers,
                 in_flight_ratio,
+                amplification_probability,
+                amplification_validators_per_tx,
+                duplicate_probability,
+                duplicate_copies_per_validator,
+                validator_selection,
                 duration,
+                deposit_target_address,
+                deposit_seed_rtd,
             } => {
                 info!(
                     "Number of benchmark groups to run: {}",
@@ -99,6 +129,29 @@ impl WorkloadConfiguration {
                 // benchmark group will run in the same time for the same duration.
                 for workload_group in 0..num_of_benchmark_groups {
                     let i = workload_group as usize;
+                    let submission_amplification = SubmissionAmplification::new(
+                        amplification_probability[i],
+                        amplification_validators_per_tx[i],
+                        duplicate_probability[i],
+                        duplicate_copies_per_validator[i],
+                        validator_selection[i],
+                    )?;
+                    if opts.use_fullnode_for_execution && submission_amplification.is_enabled() {
+                        bail!(
+                            "duplicate/amplified validator submissions are only supported with local validator execution; set --use-fullnode-for-execution false"
+                        );
+                    }
+                    if submission_amplification.is_enabled() {
+                        info!(
+                            "Benchmark group {} submission amplification: {:?}, expected validator submission multiplier {:.2}",
+                            workload_group,
+                            submission_amplification,
+                            submission_amplification.expected_submission_multiplier()
+                        );
+                    }
+                    submission_amplification_by_group
+                        .insert(workload_group, submission_amplification);
+
                     let config = WorkloadConfig {
                         group: workload_group,
                         num_workers: num_workers[i],
@@ -110,12 +163,16 @@ impl WorkloadConfiguration {
                             batch_payment: batch_payment[i],
                             shared_deletion: shared_deletion[i],
                             adversarial: adversarial[i],
+                            large_transaction: large_transaction[i],
                             expected_failure: expected_failure[i],
                             randomness: randomness[i],
                             randomized_transaction: randomized_transaction[i],
                             slow: slow[i],
                             party: party[i],
+                            conflicting_transfer: conflicting_transfer[i],
+                            composite: composite[i],
                         },
+                        large_transaction_size_bytes: large_transaction_size_bytes[i],
                         adversarial_cfg: AdversarialPayloadCfg::from_str(&adversarial_cfg[i])
                             .unwrap(),
                         expected_failure_cfg: ExpectedFailurePayloadCfg {
@@ -126,9 +183,30 @@ impl WorkloadConfiguration {
                         shared_counter_hotness_factor: shared_counter_hotness_factor[i],
                         num_shared_counters: num_shared_counters.as_ref().map(|n| n[i]),
                         shared_counter_max_tip: shared_counter_max_tip[i],
+                        shared_counter_gas_price_multiplier: shared_counter_gas_price_multiplier[i],
+                        num_contested_objects: num_contested_objects[i],
+                        randomized_transaction_concurrency: 4,
                         target_qps: target_qps[i],
                         in_flight_ratio: in_flight_ratio[i],
                         duration: duration[i],
+                        composite_config: if composite[i] > 0 {
+                            Some(CompositeWorkloadConfig::balanced())
+                        } else {
+                            None
+                        },
+                        deposit_target_addresses: deposit_target_address
+                            .as_ref()
+                            .map(|addrs| {
+                                addrs
+                                    .iter()
+                                    .map(|addr| {
+                                        RtdAddress::from_str(addr)
+                                            .expect("Invalid deposit target address format")
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        deposit_seed_rtd,
                     };
                     let builders =
                         Self::create_workload_builders(config, system_state_observer.clone()).await;
@@ -140,6 +218,7 @@ impl WorkloadConfiguration {
                     bank,
                     system_state_observer,
                     opts.gas_request_chunk_size,
+                    submission_amplification_by_group,
                 )
                 .await
             }
@@ -151,6 +230,7 @@ impl WorkloadConfiguration {
         mut bank: BenchmarkBank,
         system_state_observer: Arc<SystemStateObserver>,
         gas_request_chunk_size: u64,
+        submission_amplification_by_group: BTreeMap<GroupID, SubmissionAmplification>,
     ) -> Result<BTreeMap<GroupID, Vec<WorkloadInfo>>> {
         // Generate the workloads and init them
         let reference_gas_price = system_state_observer.state.borrow().reference_gas_price;
@@ -159,23 +239,33 @@ impl WorkloadConfiguration {
             .flatten()
             .map(|x| (x.workload_params, x.workload_builder))
             .unzip();
-        let mut workloads = bank
+        let workloads = bank
             .generate(
                 workload_builders,
                 reference_gas_price,
                 gas_request_chunk_size,
             )
             .await?;
-        for workload in workloads.iter_mut() {
-            workload
-                .init(bank.proxy.clone(), system_state_observer.clone())
-                .await;
-        }
-
-        let all_workloads = workloads.into_iter().zip(workload_params).fold(
+        let init_futures = workloads.into_iter().map(|mut workload| {
+            let execution_proxy = bank.execution_proxy.clone();
+            let fullnode_proxies = bank.fullnode_proxies.clone();
+            let observer = system_state_observer.clone();
+            async move {
+                workload
+                    .init(execution_proxy, fullnode_proxies, observer)
+                    .await;
+                workload
+            }
+        });
+        let workloads: Vec<_> = join_all(init_futures).await;
+        let all_workloads = workloads.into_iter().zip_debug_eq(workload_params).fold(
             BTreeMap::<GroupID, Vec<WorkloadInfo>>::new(),
             |mut acc, (workload, workload_params)| {
                 let w = WorkloadInfo {
+                    submission_amplification: submission_amplification_by_group
+                        .get(&workload_params.group)
+                        .copied()
+                        .unwrap_or_default(),
                     workload,
                     workload_params,
                 };
@@ -195,14 +285,21 @@ impl WorkloadConfiguration {
             num_transfer_accounts,
             weights,
             adversarial_cfg,
+            large_transaction_size_bytes,
             expected_failure_cfg,
             batch_payment_size,
             shared_counter_hotness_factor,
             num_shared_counters,
             shared_counter_max_tip,
+            shared_counter_gas_price_multiplier,
+            num_contested_objects: _,
+            randomized_transaction_concurrency,
             target_qps,
             in_flight_ratio,
             duration,
+            composite_config,
+            deposit_target_addresses,
+            deposit_seed_rtd,
         }: WorkloadConfig,
         system_state_observer: Arc<SystemStateObserver>,
     ) -> Vec<Option<WorkloadBuilderInfo>> {
@@ -213,18 +310,43 @@ impl WorkloadConfiguration {
             num_workers,
             duration
         );
+        let reference_gas_price = system_state_observer.state.borrow().reference_gas_price;
+
+        if !deposit_target_addresses.is_empty() {
+            info!(
+                "Deposit target address mode: all traffic deposits to {} addresses",
+                deposit_target_addresses.len()
+            );
+            let config = AddrBalDepositConfig {
+                target_addresses: deposit_target_addresses,
+                deposit_amount: 1000,
+                seed_amount: deposit_seed_rtd * rtd_types::gas_coin::MIST_PER_RTD,
+                metrics: None,
+            };
+            return vec![AddrBalDepositWorkloadBuilder::build_info(
+                config,
+                target_qps,
+                num_workers,
+                in_flight_ratio,
+                duration,
+                group,
+            )];
+        }
+
         let total_weight = weights.shared_counter
             + weights.shared_deletion
             + weights.transfer_object
             + weights.delegation
             + weights.batch_payment
             + weights.adversarial
+            + weights.large_transaction
             + weights.randomness
             + weights.expected_failure
             + weights.randomized_transaction
             + weights.slow
-            + weights.party;
-        let reference_gas_price = system_state_observer.state.borrow().reference_gas_price;
+            + weights.party
+            + weights.conflicting_transfer
+            + weights.composite;
         let mut workload_builders = vec![];
         let shared_workload = SharedCounterWorkloadBuilder::from(
             weights.shared_counter as f32 / total_weight as f32,
@@ -234,6 +356,7 @@ impl WorkloadConfiguration {
             shared_counter_hotness_factor,
             num_shared_counters,
             shared_counter_max_tip,
+            shared_counter_gas_price_multiplier,
             reference_gas_price,
             duration,
             group,
@@ -290,6 +413,16 @@ impl WorkloadConfiguration {
             group,
         );
         workload_builders.push(adversarial_workload);
+        let large_transaction_workload = LargeTransactionWorkloadBuilder::from(
+            weights.large_transaction as f32 / total_weight as f32,
+            target_qps,
+            num_workers,
+            in_flight_ratio,
+            large_transaction_size_bytes,
+            duration,
+            group,
+        );
+        workload_builders.push(large_transaction_workload);
         let randomness_workload = RandomnessWorkloadBuilder::from(
             weights.randomness as f32 / total_weight as f32,
             target_qps,
@@ -319,6 +452,7 @@ impl WorkloadConfiguration {
             reference_gas_price,
             duration,
             group,
+            randomized_transaction_concurrency,
         );
         workload_builders.push(randomized_transaction_workload);
         let slow_workload = SlowWorkloadBuilder::from(
@@ -339,6 +473,19 @@ impl WorkloadConfiguration {
             group,
         );
         workload_builders.push(party_workload);
+        if let Some(config) = composite_config {
+            let composite_workload = CompositeWorkloadBuilder::from(
+                weights.composite as f32 / total_weight as f32,
+                target_qps,
+                num_workers,
+                in_flight_ratio,
+                config,
+                reference_gas_price,
+                duration,
+                group,
+            );
+            workload_builders.push(composite_workload);
+        }
         workload_builders
     }
 }

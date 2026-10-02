@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --accounts A --addresses P=0x0 --simulator
+//# init --protocol-version 108 --accounts A --addresses P=0x0 --simulator
 
 //# advance-epoch
 
@@ -49,7 +49,7 @@ module P::coin {
   }
 }
 
-//# programmable --sender A --inputs object(0x403) object(2,0)
+//# programmable --sender A --inputs object(0x403) object(2,2)
 //> P::coin::poke_deny_list(Input(0), Input(1))
 
 //# create-checkpoint

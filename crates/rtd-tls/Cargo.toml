@@ -2,10 +2,13 @@
 name = "rtd-tls"
 version = "0.0.0"
 license = "Apache-2.0"
-authors = ["Brandon Williams <brandon@linkulabs.com>"]
+authors = ["Brandon Williams"]
 description = "tools for rustls-based certificate generation and verification"
 edition = "2024"
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true

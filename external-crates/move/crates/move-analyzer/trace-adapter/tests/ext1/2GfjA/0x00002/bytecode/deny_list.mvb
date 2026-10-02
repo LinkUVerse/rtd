@@ -1097,7 +1097,7 @@ B3:
 	16: MoveLoc[0](Arg0: &mut TxContext)
 	17: Call per_type_list(&mut TxContext): PerTypeList
 	18: Call bag::add<u64, PerTypeList>(&mut Bag, u64, PerTypeList)
-	19: Call object::sui_deny_list_object_id(): UID
+	19: Call object::rtd_deny_list_object_id(): UID
 	20: MoveLoc[1](loc0: Bag)
 	21: Pack[0](DenyList)
 	22: Call transfer::share_object<DenyList>(DenyList)

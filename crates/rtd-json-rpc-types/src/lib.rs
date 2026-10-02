@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 
 pub use balance_changes::*;
 pub use object_changes::*;
-use serde_with::serde_as;
 pub use rtd_checkpoint::*;
 pub use rtd_coin::*;
 pub use rtd_event::*;
@@ -18,6 +17,7 @@ pub use rtd_object::*;
 pub use rtd_protocol::*;
 pub use rtd_transaction::*;
 use rtd_types::base_types::ObjectID;
+use serde_with::serde_as;
 
 #[cfg(test)]
 #[path = "unit_tests/rpc_types_tests.rs"]

@@ -1,9 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use async_graphql::*;
+use async_graphql::SimpleObject;
 
-use crate::api::scalars::{base64::Base64, rtd_address::RtdAddress};
+use crate::api::scalars::base64::Base64;
+use crate::api::scalars::rtd_address::RtdAddress;
 
 /// Publishes a Move Package.
 #[derive(SimpleObject, Clone)]

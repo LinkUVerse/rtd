@@ -3,6 +3,7 @@
 
 use std::borrow::Cow;
 
+use linku_common::ZipDebugEqIteratorExt;
 use move_binary_format::{
     CompiledModule,
     file_format::{Bytecode, FunctionDefinition, FunctionHandle, SignatureToken, Visibility},
@@ -255,7 +256,7 @@ fn verify_call(
             ty_args.len()
         )));
     }
-    for (idx, (ty_arg, &is_internal)) in ty_args.iter().zip(internal_flags).enumerate() {
+    for (idx, (ty_arg, &is_internal)) in ty_args.iter().zip_debug_eq(internal_flags).enumerate() {
         if !is_internal {
             continue;
         }

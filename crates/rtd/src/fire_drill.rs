@@ -16,19 +16,20 @@ use clap::*;
 use fastcrypto::ed25519::Ed25519KeyPair;
 use fastcrypto::traits::{KeyPair, ToFromBytes};
 use move_core_types::ident_str;
-use std::path::{Path, PathBuf};
 use rtd_config::node::{AuthorityKeyPairWithPath, KeyPairWithPath};
 use rtd_config::{Config, NodeConfig, PersistedConfig, local_ip_utils};
-use rtd_json_rpc_types::{RtdExecutionStatus, RtdTransactionBlockResponseOptions};
 use rtd_keys::keypair_file::read_keypair_from_file;
-use rtd_sdk::{RtdClient, RtdClientBuilder, rpc_types::RtdTransactionBlockEffectsAPI};
+use rtd_rpc_api::Client;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::crypto::{RtdKeyPair, generate_proof_of_possession, get_key_pair};
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::GasCoin;
 use rtd_types::multiaddr::{Multiaddr, Protocol};
 use rtd_types::transaction::{
     CallArg, TEST_ONLY_GAS_UNIT_FOR_GENERIC, Transaction, TransactionData,
 };
 use rtd_types::{RTD_SYSTEM_PACKAGE_ID, committee::EpochId, crypto::get_authority_key_pair};
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 #[derive(Parser)]
@@ -72,7 +73,7 @@ async fn run_metadata_rotation(metadata_rotation: MetadataRotation) -> anyhow::R
         ))
     })?;
 
-    let rtd_client = RtdClientBuilder::default().build(fullnode_rpc_url).await?;
+    let rtd_client = Client::new(fullnode_rpc_url)?;
     let rtd_address = RtdAddress::from(&account_key.public());
     let starting_epoch = current_epoch(&rtd_client).await?;
     info!(
@@ -102,25 +103,29 @@ async fn run_metadata_rotation(metadata_rotation: MetadataRotation) -> anyhow::R
 // TODO move this to a shared lib
 pub async fn get_gas_obj_ref(
     rtd_address: RtdAddress,
-    rtd_client: &RtdClient,
+    rtd_client: &Client,
     minimal_gas_balance: u64,
 ) -> anyhow::Result<ObjectRef> {
     let coins = rtd_client
-        .coin_read_api()
-        .get_coins(rtd_address, Some("0x2::rtd::RTD".into()), None, None)
+        .get_owned_objects(rtd_address, Some(GasCoin::type_()), None, None)
         .await?
-        .data;
-    let gas_obj = coins.iter().find(|c| c.balance >= minimal_gas_balance);
+        .items;
+    let gas_obj = coins.into_iter().find(|c| {
+        let Ok(c) = GasCoin::try_from(c) else {
+            return false;
+        };
+        c.value() >= minimal_gas_balance
+    });
     if gas_obj.is_none() {
         bail!("Validator doesn't have enough Rtd coins to cover transaction fees.");
     }
-    Ok(gas_obj.unwrap().object_ref())
+    Ok(gas_obj.unwrap().compute_object_reference())
 }
 
 async fn update_next_epoch_metadata(
     rtd_node_config_path: &Path,
     config: &NodeConfig,
-    rtd_client: &RtdClient,
+    rtd_client: &Client,
     account_key: &RtdKeyPair,
 ) -> anyhow::Result<PathBuf> {
     // Save backup config just in case
@@ -150,18 +155,15 @@ async fn update_next_epoch_metadata(
     let new_worker_key_pair_copy = new_worker_key_pair.copy();
     new_config.worker_key_pair = KeyPairWithPath::new(RtdKeyPair::Ed25519(new_worker_key_pair));
 
-    let validators = rtd_client
-        .governance_api()
-        .get_latest_rtd_system_state()
-        .await?
-        .active_validators;
+    let system_state = rtd_client.get_system_state(None).await?;
+    let validators = system_state.validators().active_validators();
     let self_validator = validators
         .iter()
-        .find(|v| v.rtd_address == rtd_address)
+        .find(|v| v.address() == rtd_address.to_string())
         .unwrap();
 
     // Network address
-    let mut new_network_address = Multiaddr::try_from(self_validator.net_address.clone()).unwrap();
+    let mut new_network_address = Multiaddr::try_from(self_validator.network_address()).unwrap();
     info!("Current network address: {:?}", new_network_address);
     let http = new_network_address.pop().unwrap();
     // pop out tcp
@@ -190,8 +192,7 @@ async fn update_next_epoch_metadata(
     new_config.p2p_config.listen_address = new_listen_address;
 
     // primary address
-    let mut new_primary_addresses =
-        Multiaddr::try_from(self_validator.primary_address.clone()).unwrap();
+    let mut new_primary_addresses = Multiaddr::try_from(self_validator.primary_address()).unwrap();
     info!("Current primary address: {:?}", new_primary_addresses);
     // pop out udp
     new_primary_addresses.pop().unwrap();
@@ -203,10 +204,9 @@ async fn update_next_epoch_metadata(
     let mut new_worker_addresses = Multiaddr::try_from(
         validators
             .iter()
-            .find(|v| v.rtd_address == rtd_address)
+            .find(|v| v.address() == rtd_address.to_string())
             .unwrap()
-            .worker_address
-            .clone(),
+            .worker_address(),
     )
     .unwrap();
     info!("Current worker address: {:?}", new_worker_addresses);
@@ -305,14 +305,11 @@ async fn update_metadata_on_chain(
     account_key: &RtdKeyPair,
     function: &'static str,
     call_args: Vec<CallArg>,
-    rtd_client: &RtdClient,
+    rtd_client: &Client,
 ) -> anyhow::Result<()> {
     let rtd_address = RtdAddress::from(&account_key.public());
     let gas_obj_ref = get_gas_obj_ref(rtd_address, rtd_client, 10000 * 100).await?;
-    let rgp = rtd_client
-        .governance_api()
-        .get_reference_gas_price()
-        .await?;
+    let rgp = rtd_client.get_reference_gas_price().await?;
     let mut args = vec![CallArg::RTD_SYSTEM_MUT];
     args.extend(call_args);
     let tx_data = TransactionData::new_move_call(
@@ -334,30 +331,22 @@ async fn update_metadata_on_chain(
 
 async fn execute_tx(
     account_key: &RtdKeyPair,
-    rtd_client: &RtdClient,
+    rtd_client: &Client,
     tx_data: TransactionData,
     action: &str,
 ) -> anyhow::Result<()> {
     let tx = Transaction::from_data_and_signer(tx_data, vec![account_key]);
     info!("Executing {:?}", tx.digest());
     let tx_digest = *tx.digest();
-    let resp = rtd_client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::full_content(),
-            Some(rtd_types::quorum_driver_types::ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
-        .await
-        .unwrap();
-    if *resp.effects.unwrap().status() != RtdExecutionStatus::Success {
+    let resp = rtd_client.clone().execute_transaction(&tx).await.unwrap();
+    if !resp.effects.status().is_ok() {
         anyhow::bail!("Tx to update metadata {:?} failed", tx_digest);
     }
     info!("{action} succeeded");
     Ok(())
 }
 
-async fn wait_for_next_epoch(rtd_client: &RtdClient, target_epoch: EpochId) -> anyhow::Result<()> {
+async fn wait_for_next_epoch(rtd_client: &Client, target_epoch: EpochId) -> anyhow::Result<()> {
     loop {
         let epoch_id = current_epoch(rtd_client).await?;
         if epoch_id > target_epoch {
@@ -374,6 +363,6 @@ async fn wait_for_next_epoch(rtd_client: &RtdClient, target_epoch: EpochId) -> a
     }
 }
 
-async fn current_epoch(rtd_client: &RtdClient) -> anyhow::Result<EpochId> {
-    Ok(rtd_client.read_api().get_committee_info(None).await?.epoch)
+async fn current_epoch(rtd_client: &Client) -> anyhow::Result<EpochId> {
+    Ok(rtd_client.clone().get_latest_checkpoint().await?.epoch)
 }

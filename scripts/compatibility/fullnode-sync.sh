@@ -7,12 +7,12 @@ set -e
 DEFAULT_NETWORK="testnet"
 CLEAN=0
 LOG_LEVEL="info"
-RTD_RUN_PATH="/opt/rtd"
+RTD_RUN_PATH="${RTD_RUN_PATH:-/opt/rtd}"
 VERBOSE=""
 
 function cleanup {
     echo "Performing exit cleanup..."
-    [ ! -z $RTD_NODE_PID ] && kill $RTD_NODE_PID && echo "Shutdown rtdnode process running on pid $RTD_NODE_PID"
+    [ -n "$RTD_NODE_PID" ] && kill "$RTD_NODE_PID" && echo "Shutdown rtd-node process running on pid $RTD_NODE_PID"
 }
 
 trap cleanup EXIT
@@ -51,8 +51,6 @@ while getopts "hvn:e:p:t:" OPT; do
     esac
 done
 
-[ ! -d "${RTD_RUN_PATH}/rtddb" ] && mkdir -p ${RTD_RUN_PATH}/rtddb
-
 if [[ -z "$NETWORK" ]]; then
     NETWORK=$DEFAULT_NETWORK
 elif [[ "$NETWORK" != "testnet" && "$NETWORK" != "devnet" ]]; then
@@ -60,36 +58,9 @@ elif [[ "$NETWORK" != "testnet" && "$NETWORK" != "devnet" ]]; then
     exit 1
 fi
 
-if [[ ! -f "${RTD_RUN_PATH}/genesis.blob" ]]; then
-    echo "Copying genesis.blob for ${NETWORK}"
-    curl -fLJO https://github.com/LinkUVerse/rtd-genesis/raw/main/${NETWORK}/genesis.blob
-    mv ./genesis.blob ${RTD_RUN_PATH}/genesis.blob
-    echo "Done"
-fi
-
-if [[ ! -f "${RTD_RUN_PATH}/fullnode.yaml" ]]; then
-    echo "Generating fullnode.yaml at ${RTD_RUN_PATH}/fullnode.yaml"
-    cp crates/rtd-config/data/fullnode-template.yaml ${RTD_RUN_PATH}/fullnode.yaml
-    sed -i "s|genesis.blob|${RTD_RUN_PATH}/genesis.blob|g" ${RTD_RUN_PATH}/fullnode.yaml
-    sed -i "s|rtddb|${RTD_RUN_PATH}/rtddb|g" ${RTD_RUN_PATH}/fullnode.yaml
-
-    if [[ $NETWORK != "devnet" ]]; then
-        cat >> "${RTD_RUN_PATH}/fullnode.yaml" <<- EOM
-
-p2p-config:
-  seed-peers:
-    - address: /dns/ewr-tnt-ssfn-00.testnet.rtd.io/udp/8084
-      peer-id: df8a8d128051c249e224f95fcc463f518a0ebed8986bbdcc11ed751181fecd38
-    - address: /dns/lax-tnt-ssfn-00.testnet.rtd.io/udp/8084
-      peer-id: f9a72a0a6c17eed09c27898eab389add704777c03e135846da2428f516a0c11d
-    - address: /dns/lhr-tnt-ssfn-00.testnet.rtd.io/udp/8084
-      peer-id: 9393d6056bb9c9d8475a3cf3525c747257f17c6a698a7062cbbd1875bc6ef71e
-    - address: /dns/mel-tnt-ssfn-00.testnet.rtd.io/udp/8084
-      peer-id: c88742f46e66a11cb8c84aca488065661401ef66f726cb9afeb8a5786d83456e
-EOM
-    fi
-    
-    echo "Done"
+if [[ ! -f "${RTD_RUN_PATH}/genesis.blob" || ! -f "${RTD_RUN_PATH}/fullnode.yaml" ]]; then
+    >&2 echo "Provide a verified RTD genesis.blob and fullnode.yaml in ${RTD_RUN_PATH} before syncing."
+    exit 1
 fi
 
 if [[ -z $RTD_BIN_PATH ]]; then
@@ -100,7 +71,7 @@ if [[ -z $RTD_BIN_PATH ]]; then
 fi
 
 
-echo "Starting rtdnode..."
+echo "Starting rtd-node..."
 RUST_LOG=$LOG_LEVEL $RTD_BIN_PATH --config-path ${RTD_RUN_PATH}/fullnode.yaml &
 RTD_NODE_PID=$!
 
@@ -119,4 +90,3 @@ fi
 
 kill $RTD_NODE_PID
 exit 0
-

@@ -1,10 +1,13 @@
 [package]
 name = "rtd-rosetta"
 version.workspace = true
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
+
+[lints]
+workspace = true
 
 [dependencies]
 axum.workspace = true
@@ -18,7 +21,6 @@ futures.workspace = true
 once_cell.workspace = true
 signature.workspace = true
 bcs.workspace = true
-hyper.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 async-trait.workspace = true
@@ -32,19 +34,21 @@ rtd-config.workspace = true
 rtd-keys.workspace = true
 rtd-rpc.workspace = true
 rtd-sdk-types.workspace = true
-linku-metrics.workspace = true
 shared-crypto.workspace = true
 lru.workspace = true
 tonic.workspace = true
+prost.workspace = true
 prost-types.workspace = true
 chrono.workspace = true
 
 move-core-types.workspace = true
+rand.workspace = true
 
 telemetry-subscribers.workspace = true
 enum_dispatch.workspace = true
 
 [dev-dependencies]
+rtd-types = { workspace = true, features = ["testing"] }
 rtd-swarm-config.workspace = true
 rtd-sdk.workspace = true
 rtd-move-build.workspace = true

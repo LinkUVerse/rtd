@@ -1,4 +1,11 @@
 ---
+- name: Require an explicit verified Rtd node artifact
+  ansible.builtin.assert:
+    that:
+      - (rtd_node_binary_url | default('')) is match('^https://[^/]+/.+')
+      - (rtd_node_binary_sha256 | default('')) is match('^[0-9a-fA-F]{64}$')
+    fail_msg: "Set rtd_node_binary_url to a trusted HTTPS artifact URL and rtd_node_binary_sha256 to its verified SHA-256 digest. RTD has no default public release endpoint."
+
 - name: Install required system packages
   apt: name={{ item }} state=latest update_cache=yes
   loop: [

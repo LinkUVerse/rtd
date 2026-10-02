@@ -5,8 +5,7 @@
   "publisher": "linku",
   "icon": "images/move.png",
   "license": "Apache-2.0",
-  "version": "1.0.34",
-  "preview": true,
+  "version": "2.0.0",
   "repository": {
     "url": "https://github.com/LinkUVerse/rtd.git",
     "type": "git"
@@ -35,6 +34,11 @@
       {
         "command": "move.serverVersion",
         "title": "Show Server Version",
+        "category": "Move"
+      },
+      {
+        "command": "move.serverRestart",
+        "title": "Restart Server",
         "category": "Move"
       },
       {

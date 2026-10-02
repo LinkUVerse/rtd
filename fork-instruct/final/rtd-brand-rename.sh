@@ -43,8 +43,8 @@ OLD_LOWER="sui"
 NEW_LOWER="rtd"
 
 # SDK 依赖配置
-OLD_SDK_REV="339c2272fd5b8fb4e1fa6662cfa9acdbb0d05704"
-NEW_SDK_REV="2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126"
+OLD_SDK_REV="618b6c8484a2394f73d9b5e21cce0ac228b2cf31"
+NEW_SDK_REV="fd95c4566e88cda3c4e5e590deda4e6aff864700"
 
 ################################################################################
 # 全局变量
@@ -211,13 +211,9 @@ phase_00_prepare() {
 phase_01_text_replace() {
     log_phase "Phase 01: 文本内容替换"
 
-    # 按长度从长到短的顺序替换，避免部分匹配问题
-    do_sed_replace "$OLD_ORG" "$NEW_ORG"
-    do_sed_replace "$OLD_BRAND" "$NEW_BRAND"
-    do_sed_replace "$OLD_BRAND_LOWER" "$NEW_BRAND_LOWER"
-    do_sed_replace "$OLD_UPPER" "$NEW_UPPER"
-    do_sed_replace "$OLD_MIXED" "$NEW_MIXED"
-    do_sed_replace "$OLD_LOWER" "$NEW_LOWER"
+    if [ "$DRY_RUN" = false ]; then
+        python3 "$SCRIPT_DIR/brand-replace.py" "$PROJECT_ROOT"
+    fi
 
     log_success "文本内容替换完成"
 }
@@ -255,7 +251,11 @@ phase_03_rename_crates() {
         for subdir in "crates/${OLD_LOWER}-framework/packages/${OLD_LOWER}-framework" \
                       "crates/${OLD_LOWER}-framework/packages/${OLD_LOWER}-system"; do
             if [ -d "$subdir" ]; then
-                new_subdir="${subdir//${OLD_LOWER}-/${NEW_LOWER}-}"
+                # Rename the child before its parent; the destination parent
+                # still has the upstream name at this point.
+                parent_dir="$(dirname "$subdir")"
+                base_name="$(basename "$subdir")"
+                new_subdir="$parent_dir/${base_name/${OLD_LOWER}-/${NEW_LOWER}-}"
                 safe_rename_dir "$subdir" "$new_subdir"
             fi
         done
@@ -673,6 +673,13 @@ phase_12_fix_special() {
         # 枚举变体应该是: Rtd
     fi
 
+    if [ "$DRY_RUN" = false ]; then
+        python3 "$SCRIPT_DIR/brand-rename-paths.py" "$PROJECT_ROOT"
+        python3 "$SCRIPT_DIR/brand-fix-protocol-literals.py" "$PROJECT_ROOT"
+        python3 "$SCRIPT_DIR/brand-fix-move-decompiler-bytecode.py" "$PROJECT_ROOT"
+        python3 "$SCRIPT_DIR/vendor-rtd-http.py" "$PROJECT_ROOT"
+    fi
+
     log_success "特殊情况修复完成"
 }
 
@@ -684,7 +691,7 @@ phase_13_recompile_move() {
 
     if [ "$DRY_RUN" = true ]; then
         log_info "[DRY-RUN] 将执行: UPDATE=1 cargo test -p ${NEW_LOWER}-framework --test build-system-packages"
-        log_info "[DRY-RUN] 将执行: rm -rf crates/${NEW_LOWER}-framework-snapshot/bytecode_snapshot/*"
+        log_info "[DRY-RUN] 保留 bytecode_snapshot；需按 manifest.json 验证或重新生成"
         return 0
     fi
 
@@ -697,14 +704,15 @@ phase_13_recompile_move() {
     else
         log_error "packages_compiled 重新编译失败"
         log_warn "请手动运行: UPDATE=1 cargo test -p ${NEW_LOWER}-framework --test build-system-packages"
+        return 1
     fi
 
-    # 13.2 删除旧的 bytecode_snapshot
-    log_info "13.2 删除旧的 bytecode_snapshot..."
+    # 新上游的 manifest.json 引用多个历史版本；清空目录会让 loader 和
+    # genesis-builder 找不到必需的系统包。保留快照，待逐版本生成并核验。
+    log_info "13.2 保留历史 bytecode_snapshot..."
     SNAPSHOT_DIR="crates/${NEW_LOWER}-framework-snapshot/bytecode_snapshot"
     if [ -d "$SNAPSHOT_DIR" ]; then
-        rm -rf "$SNAPSHOT_DIR"/*
-        log_success "bytecode_snapshot 已清空"
+        log_warn "未清空 $SNAPSHOT_DIR；请按 manifest.json 重新生成并验证快照"
     fi
 
     # 13.3 验证
@@ -741,10 +749,15 @@ phase_14_cleanup_verify() {
             log_step "删除缓存: $dir"
             rm -rf "$dir"
         done
+
+        # 更名会改变 rustfmt 对 import 分组与顺序的判断；CI 的 rustfmt 门禁要求
+        # 对整个工作区重新排版，不能只格式化手工修改的 crate。
+        log_info "14.2 格式化 Rust 工作区..."
+        cargo fmt --all || return 1
     fi
 
-    # 14.2 检查遗漏的目录
-    log_info "14.2 检查遗漏的 ${OLD_LOWER}*/${OLD_BRAND_LOWER}* 目录..."
+    # 14.3 检查遗漏的目录
+    log_info "14.3 检查遗漏的 ${OLD_LOWER}*/${OLD_BRAND_LOWER}* 目录..."
     echo ""
     echo "=== 遗漏的目录 ==="
     find . -type d \( -name "${OLD_LOWER}-*" -o -name "${OLD_LOWER}_*" -o -name "${OLD_BRAND_LOWER}-*" -o -name "${OLD_BRAND_LOWER}_*" -o -name "${OLD_LOWER}" \) \
@@ -754,8 +767,8 @@ phase_14_cleanup_verify() {
         ! -path "./fork-instruct/*" \
         2>/dev/null || echo "  (无遗漏)"
 
-    # 14.3 检查遗漏的文件
-    log_info "14.3 检查遗漏的 ${OLD_LOWER}* 文件..."
+    # 14.4 检查遗漏的文件
+    log_info "14.4 检查遗漏的 ${OLD_LOWER}* 文件..."
     echo ""
     echo "=== 遗漏的文件 ==="
     find . -type f \( -name "${OLD_LOWER}_*.rs" -o -name "*_${OLD_LOWER}.rs" -o -name "*_${OLD_LOWER}_*.rs" -o -name "${OLD_LOWER}.*" -o -name "${OLD_LOWER}-*" \) \
@@ -766,8 +779,8 @@ phase_14_cleanup_verify() {
         ! -name "*.pdf" \
         2>/dev/null || echo "  (无遗漏)"
 
-    # 14.4 统计替换结果
-    log_info "14.4 统计文本替换结果..."
+    # 14.5 统计替换结果
+    log_info "14.5 统计文本替换结果..."
     echo ""
     echo "=== 新品牌统计 ==="
     echo "  - $NEW_ORG 出现次数: $(grep -r "$NEW_ORG" . --include="*.rs" --include="*.toml" --include="*.md" 2>/dev/null | grep -v ".git" | grep -v "target" | grep -v "fork-instruct" | wc -l | tr -d ' ')"

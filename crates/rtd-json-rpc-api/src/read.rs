@@ -137,7 +137,7 @@ pub trait ReadApi {
     async fn get_latest_checkpoint_sequence_number(&self) -> RpcResult<BigInt<u64>>;
 
     /// Return the protocol config table for the given version number.
-    /// If the version number is not specified, If none is specified, the node uses the version of the latest epoch it has processed.
+    /// If none is specified, the node uses the version of the latest epoch it has processed.
     #[method(name = "getProtocolConfig")]
     async fn get_protocol_config(
         &self,
@@ -148,10 +148,6 @@ pub trait ReadApi {
     /// Return the first four bytes of the chain's genesis checkpoint digest.
     #[method(name = "getChainIdentifier")]
     async fn get_chain_identifier(&self) -> RpcResult<String>;
-
-    /// Return the complete genesis checkpoint digest for lifecycle-sensitive integrations.
-    #[method(name = "getFullChainIdentifier")]
-    async fn get_full_chain_identifier(&self) -> RpcResult<String>;
 
     /// Verify a zklogin signature for the given bytes, intent scope and author.
     #[method(name = "verifyZkLoginSignature")]

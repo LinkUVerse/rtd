@@ -9,6 +9,7 @@ use rtd::table::Table;
 use rtd_system::staking_pool::{Self, StakedRtd, PoolTokenExchangeRate};
 use rtd_system::test_runner;
 use rtd_system::validator_builder;
+use rtd_system::validator_preset;
 use rtd_system::validator_set;
 
 const VALIDATOR_ADDR_1: address = @1;
@@ -330,7 +331,9 @@ fun add_stake_post_active_flow() {
 // 4. Unstake from the preactive validator. There should be no rewards earned.
 fun add_preactive_remove_preactive() {
     let mut runner = test_runner::new().validators_initial_stake(100).validators_count(2).build();
-    let validator = validator_builder::preset().rtd_address(NEW_VALIDATOR_ADDR).build(runner.ctx());
+    let validator = validator_builder::preset(2)
+        .rtd_address(NEW_VALIDATOR_ADDR)
+        .build(runner.ctx());
 
     runner.add_validator_candidate(validator);
     runner.set_sender(STAKER_ADDR_1).stake_with(NEW_VALIDATOR_ADDR, 100);
@@ -358,7 +361,9 @@ fun add_preactive_remove_preactive() {
 // 4. Try staking to the validator candidate. This should fail because the validator candidate is pending.
 fun add_preactive_remove_pending_failure() {
     let mut runner = test_runner::new().validators_initial_stake(100).validators_count(2).build();
-    let validator = validator_builder::preset().rtd_address(NEW_VALIDATOR_ADDR).build(runner.ctx());
+    let validator = validator_builder::preset(2)
+        .rtd_address(NEW_VALIDATOR_ADDR)
+        .build(runner.ctx());
 
     // Add the validator candidate.
     runner.add_validator_candidate(validator);
@@ -390,7 +395,9 @@ fun add_preactive_remove_active() {
         .storage_fund_amount(100)
         .build();
 
-    let validator = validator_builder::preset().rtd_address(NEW_VALIDATOR_ADDR).build(runner.ctx());
+    let validator = validator_builder::preset(0)
+        .rtd_address(NEW_VALIDATOR_ADDR)
+        .build(runner.ctx());
 
     // Add the validator candidate.
     runner.add_validator_candidate(validator);
@@ -464,9 +471,20 @@ fun add_preactive_remove_active() {
 }
 
 #[test]
+// Scenario:
+// 1. Add a validator candidate
+// 2. Stake 100 RTD to the validator candidate
+// 3. Request to add the validator candidate to the active validator set.
+// 4. Advance epoch with no rewards.
+// 5. Advance epoch with some rewards.
+// 6. Request to remove the validator candidate from the active validator set.
+// 7. Advance epoch with no rewards.
+// 8. Unstake from the validator candidate.
 fun add_preactive_remove_post_active() {
     let mut runner = test_runner::new().validators_initial_stake(100).validators_count(2).build();
-    let validator = validator_builder::preset().rtd_address(NEW_VALIDATOR_ADDR).build(runner.ctx());
+    let validator = validator_builder::preset(2)
+        .rtd_address(NEW_VALIDATOR_ADDR)
+        .build(runner.ctx());
 
     // Add the validator candidate.
     runner.add_validator_candidate(validator);
@@ -499,9 +517,21 @@ fun add_preactive_remove_post_active() {
 }
 
 #[test]
+// Scenario:
+// 1. Add a validator candidate
+// 2. Stake 100 RTD to the validator candidate from each of the two stakers.
+// 3. Check values for the candidate.
+// 4. Withdraw the stake. And check that the stake is withdrawn and appears in the sender balance.
+// 5. Advance epoch, so that the stake 2 becomes active.
+// 6. Unstake and check that the stake is withdrawn immediately and appears in the sender balance.
+// 7. Check that the stake is removed completely, and that no pending stake is present.
 fun add_remove_stake_preactive_candidate() {
     let mut runner = test_runner::new().validators_initial_stake(100).validators_count(2).build();
-    let validator = validator_builder::preset().rtd_address(NEW_VALIDATOR_ADDR).build(runner.ctx());
+
+    // The first 2 validators are using presets 0-1.
+    let validator = validator_builder::preset(2)
+        .rtd_address(NEW_VALIDATOR_ADDR)
+        .build(runner.ctx());
     runner.add_validator_candidate(validator);
 
     // Stake 100 RTD to the validator candidate from each of the two stakers.
@@ -549,7 +579,7 @@ fun add_remove_stake_preactive_candidate() {
 // 5. Staker unstakes and gets no rewards.
 fun add_preactive_candidate_drop_out() {
     let mut runner = test_runner::new().validators_initial_stake(100).validators_count(2).build();
-    let validator = validator_builder::preset().build(runner.ctx());
+    let validator = validator_builder::preset(2).build(runner.ctx());
     let validator_address = validator.rtd_address();
     runner.add_validator_candidate(validator);
 
@@ -583,7 +613,9 @@ fun add_preactive_candidate_drop_out() {
 // 4. Unstake from the validator candidate
 fun remove_inactive_stake_from_inactive_candidate() {
     let mut runner = test_runner::new().validators_initial_stake(100).validators_count(2).build();
-    let validator = validator_builder::preset().build(runner.ctx());
+
+    // The first 2 validators are using presets 0-1.
+    let validator = validator_builder::preset(2).build(runner.ctx());
     let validator_address = validator.rtd_address();
 
     runner.add_validator_candidate(validator);
@@ -600,6 +632,59 @@ fun remove_inactive_stake_from_inactive_candidate() {
 
     // Check that the stake is withdrawn fully.
     assert_eq!(runner.set_sender(validator_address).rtd_balance(), 100 * MIST_PER_RTD);
+
+    runner.finish();
+}
+
+#[test]
+fun remove_multiple_validators() {
+    let mut runner = test_runner::new().validators_initial_stake(100).validators_count(1).build();
+    let validators = vector[
+        validator_preset::preset(1),
+        validator_preset::preset(2),
+        validator_preset::preset(3),
+    ];
+
+    // Get 3 validators, stake 100 RTD to each, request their addition to the validator set.
+    validators.do_ref!(|preset| {
+        let addr = preset.account_address();
+        runner.set_sender(addr);
+        let validator = validator_builder::from_preset(*preset).build(runner.ctx());
+
+        runner.add_validator_candidate(validator);
+        runner.stake_with(addr, 100);
+        runner.add_validator();
+    });
+
+    // Advance epoch, skip rewards.
+    runner.advance_epoch(option::none()).destroy_for_testing();
+
+    // Make sure all of them are in the active set.
+    runner.system_tx!(|system, _| {
+        validators.do_ref!(|preset| {
+            assert!(system.validators().is_active_validator(preset.account_address()));
+        });
+    });
+
+    // Request removal of first two.
+    2u64.do!(|i| {
+        let addr = validators[i].account_address();
+        runner.set_sender(addr).remove_validator();
+    });
+
+    // Advance epoch, skip rewards.
+    runner.advance_epoch(option::none()).destroy_for_testing();
+
+    // Make sure that the validators got removed correctly.
+    // Verifies that the sorting on the pending removals is performed correctly.
+    runner.system_tx!(|system, _| {
+        2u64.do!(|i| {
+            let addr = validators[i].account_address();
+            assert!(!system.validators().is_active_validator(addr));
+        });
+
+        assert!(system.validators().is_active_validator(validators[2].account_address()));
+    });
 
     runner.finish();
 }

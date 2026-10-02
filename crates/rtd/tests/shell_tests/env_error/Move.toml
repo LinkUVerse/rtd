@@ -1,0 +1,7 @@
+[package]
+name = "another_dep"
+implicit-dependencies = false
+
+[environments]
+testnet = "01234567"
+mainnet = "89abcdef"

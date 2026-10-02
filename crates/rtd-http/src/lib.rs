@@ -1,23 +1,26 @@
-// Copyright (c) LinkU Labs, Inc.
+// Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use connection_handler::OnConnectionClose;
-use http::{Request, Response};
+use http::Request;
+use http::Response;
 use hyper_util::service::TowerToHyperService;
-use io::ServerIo;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
-use tokio_rustls::rustls;
-use tower::{Service, ServiceBuilder, ServiceExt};
+use tower::Service;
+use tower::ServiceBuilder;
+use tower::ServiceExt;
 use tracing::trace;
 
 use self::body::BoxBody;
 use self::connection_info::ActiveConnections;
+use self::io::ServerIo;
 
+pub use bytes;
 pub use http;
+pub use tokio_rustls::rustls;
 
 pub mod body;
 mod config;
@@ -26,6 +29,7 @@ mod connection_info;
 mod fuse;
 mod io;
 mod listener;
+pub mod middleware;
 
 pub use config::Config;
 pub use listener::Listener;
@@ -67,8 +71,9 @@ impl Builder {
         cert_file: impl AsRef<std::path::Path>,
         private_key_file: impl AsRef<std::path::Path>,
     ) -> Result<Self, BoxError> {
+        use rustls::pki_types::CertificateDer;
+        use rustls::pki_types::PrivateKeyDer;
         use rustls::pki_types::pem::PemObject;
-        use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
         let certs = CertificateDer::pem_file_iter(cert_file)?.collect::<Result<_, _>>()?;
         let private_key = PrivateKeyDer::from_pem_file(private_key_file)?;
@@ -103,7 +108,7 @@ impl Builder {
     {
         let listener = listener::TcpListenerWithOptions::new(
             addr,
-            /* nodelay */ true,
+            self.config.tcp_nodelay,
             self.config.tcp_keepalive,
         )?;
 
@@ -287,33 +292,23 @@ where
 
     fn handle_incomming(&mut self, io: L::Io, remote_addr: L::Addr) {
         if let Some(tls) = self.tls_config.clone() {
-            let tls_acceptor = TlsAcceptor::from(tls);
-            let allow_insecure = self.config.allow_insecure;
-            self.pending_connections.spawn(async move {
-                if allow_insecure {
-                    // XXX: If we want to allow for supporting insecure traffic from other types of
-                    // io, we'll need to implement a generic peekable IO type
-                    if let Some(tcp) =
-                        <dyn std::any::Any>::downcast_ref::<tokio::net::TcpStream>(&io)
-                    {
-                        // Determine whether new connection is TLS.
-                        let mut buf = [0; 1];
-                        // `peek` blocks until at least some data is available, so if there is no error then
-                        // it must return the one byte we are requesting.
-                        tcp.peek(&mut buf).await?;
-                        // First byte of a TLS handshake is 0x16, so if it isn't 0x16 then its
-                        // insecure
-                        if buf != [0x16] {
-                            tracing::trace!("accepting insecure connection");
-                            return Ok((ServerIo::new_io(io), remote_addr));
-                        }
-                    } else {
-                        tracing::warn!("'allow_insecure' is configured but io type is not 'tokio::net::TcpStream'");
-                    }
-                }
+            if self.pending_connections.len() >= self.config.max_pending_connections {
+                tracing::warn!(
+                    pending = self.pending_connections.len(),
+                    "max pending connections reached, dropping new connection"
+                );
+                return;
+            }
 
+            let tls_acceptor = TlsAcceptor::from(tls);
+            let timeout_duration = self.config.tls_handshake_timeout;
+            self.pending_connections.spawn(async move {
                 tracing::trace!("accepting TLS connection");
-                let io = tls_acceptor.accept(io).await?;
+                let io = tokio::time::timeout(timeout_duration, tls_acceptor.accept(io))
+                    .await
+                    .map_err(|_| {
+                        std::io::Error::new(std::io::ErrorKind::TimedOut, "TLS handshake timed out")
+                    })??;
                 Ok((ServerIo::new_tls_io(io), remote_addr))
             });
         } else {
@@ -351,7 +346,8 @@ where
             .write()
             .unwrap()
             .insert(connection_id, connection_info);
-        let on_connection_close = OnConnectionClose::new(connection_id, self.connections.clone());
+        let on_connection_close =
+            connection_handler::OnConnectionClose::new(connection_id, self.connections.clone());
 
         self.connection_handlers
             .spawn(connection_handler::serve_connection(
@@ -360,6 +356,7 @@ where
                 self.config.connection_builder(),
                 connection_shutdown_token,
                 self.config.max_connection_age,
+                self.config.max_connection_age_grace,
                 on_connection_close,
             ));
     }

@@ -6,25 +6,27 @@ use crate::{
     account_address::AccountAddress,
     gas_algebra::{AbstractMemorySize, BOX_ABSTRACT_SIZE, ENUM_BASE_ABSTRACT_SIZE},
     identifier::{IdentStr, Identifier},
-    parsing::types::{ParsedModuleId, ParsedStructType, ParsedType},
+    parsing::types::{ParsedDatatype, ParsedModuleId, ParsedType},
 };
-use indexmap::IndexSet;
+
 use move_proc_macros::test_variant_order;
-use once_cell::sync::Lazy;
+
+use indexmap::IndexSet;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
+    sync::LazyLock,
 };
 
 /// Hex address: 0x1
 pub const CORE_CODE_ADDRESS: AccountAddress = AccountAddress::ONE;
 
 /// Rough estimate of abstract size for TypeTag
-pub static TYPETAG_ENUM_ABSTRACT_SIZE: Lazy<AbstractMemorySize> =
-    Lazy::new(|| ENUM_BASE_ABSTRACT_SIZE + BOX_ABSTRACT_SIZE);
+pub static TYPETAG_ENUM_ABSTRACT_SIZE: LazyLock<AbstractMemorySize> =
+    LazyLock::new(|| ENUM_BASE_ABSTRACT_SIZE + BOX_ABSTRACT_SIZE);
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, PartialOrd, Ord)]
 #[test_variant_order(src/unit_tests/staged_enum_variant_order/type_tag.yaml)]
@@ -69,7 +71,7 @@ impl TypeTag {
     ///
     /// - Addresses are hex-encoded lowercase values of length 32 (zero-padded).
     ///
-    /// Note: this function is guaranteed to be stable -- rtdtable for use inside Move native
+    /// Note: this function is guaranteed to be stable -- suitable for use inside Move native
     /// functions or the VM. By contrast, this type's `Display` implementation is subject to change
     /// and should be used inside code that needs to return a stable output (e.g. that might be
     /// committed to effects on-chain).
@@ -128,6 +130,29 @@ impl TypeTag {
                 TypeTag::Vector(x) => x.abstract_size_for_gas_metering(),
                 TypeTag::Struct(y) => y.abstract_size_for_gas_metering(),
             }
+    }
+
+    /// The number of nodes in the type.
+    pub fn node_count(&self) -> u64 {
+        let mut count = 0u64;
+        let mut frontier = vec![self];
+        while let Some(tag) = frontier.pop() {
+            count = count.saturating_add(1);
+            match tag {
+                TypeTag::Vector(inner) => frontier.push(inner),
+                TypeTag::Struct(tag) => frontier.extend(tag.type_params.iter()),
+                TypeTag::Bool
+                | TypeTag::U8
+                | TypeTag::U16
+                | TypeTag::U32
+                | TypeTag::U64
+                | TypeTag::U128
+                | TypeTag::U256
+                | TypeTag::Address
+                | TypeTag::Signer => (),
+            }
+        }
+        count
     }
 
     /// Return all of the addresses used inside of the type.
@@ -203,7 +228,7 @@ impl StructTag {
     ///
     /// - Addresses are hex-encoded lowercase values of length 32 (zero-padded).
     ///
-    /// Note: this function is guaranteed to be stable -- rtdtable for use inside Move native
+    /// Note: this function is guaranteed to be stable -- suitable for use inside Move native
     /// functions or the VM. By contrast, this type's `Display` implementation is subject to change
     /// and should be used inside code that needs to return a stable output (e.g. that might be
     /// committed to effects on-chain).
@@ -289,7 +314,7 @@ impl FromStr for StructTag {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        ParsedStructType::parse(s)?.into_struct_tag(&|_| None)
+        ParsedDatatype::parse(s)?.into_struct_tag(&|_| None)
     }
 }
 
@@ -306,6 +331,12 @@ pub struct ModuleId {
 impl From<ModuleId> for (AccountAddress, Identifier) {
     fn from(module_id: ModuleId) -> Self {
         (module_id.address, module_id.name)
+    }
+}
+
+impl<'id> From<&'id ModuleId> for (&'id AccountAddress, &'id Identifier) {
+    fn from(module_id: &'id ModuleId) -> Self {
+        (&module_id.address, &module_id.name)
     }
 }
 

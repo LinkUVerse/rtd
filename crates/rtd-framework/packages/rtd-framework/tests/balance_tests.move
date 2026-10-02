@@ -53,7 +53,7 @@ fun max_supply() {
 fun max_supply_overflow_fail() {
     let mut supply = balance::create_supply(MY_COIN {});
     supply.increase_supply(std::u64::max_value!()).destroy_for_testing();
-    supply.increase_supply(1).destroy_for_testing();
+    supply.increase_supply(1).destroy_for_testing(); // custom error code, not arithmetic error
 
     abort
 }

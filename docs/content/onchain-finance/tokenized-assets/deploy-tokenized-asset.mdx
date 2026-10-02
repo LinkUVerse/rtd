@@ -1,0 +1,15 @@
+---
+title: Deploy a Tokenized Asset
+description: Status and prerequisites for deploying an application-owned tokenized asset package to RTD.
+keywords:
+  - asset tokenization
+  - deploy
+  - Move
+  - RTD status
+---
+
+# Deploy a tokenized asset package
+
+The inherited deployment guide depended on an `asset-tokenization` repository and a WASM npm package that are not part of this RTD fork. There is currently no verified RTD version of those packages, so their former publish commands and object IDs are not valid RTD instructions.
+
+To deploy an application-owned package, obtain its source and verify that its dependencies are built from this RTD fork. Build and test it against a fresh local RTD chain, publish it with `rtd client publish`, and record the package ID and created objects from the actual transaction result. The [Move package guide](/develop/manage-packages/move-package-management) covers the current source workflow. Application teams must validate any offchain asset rights separately.

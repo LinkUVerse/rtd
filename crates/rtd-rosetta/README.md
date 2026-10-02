@@ -13,6 +13,11 @@ read and write transactions to the Rtd network.
 
 ## Local network quick start
 
+RTD has no public Devnet or Mainnet service. The optional `docker/rtd-rosetta-devnet`
+image must be built with a verified `RTD_GENESIS_BLOB_URL` and
+`RTD_GENESIS_BLOB_SHA256`; its remote Compose example also requires an explicit
+`RTD_ROSETTA_FULL_NODE_URL` for a network you operate.
+
 ### Build from source
 #### 0. Checkout and build Rtd
 Checkout the [Rtd source code](https://github.com/LinkUVerse/rtd) and compile using `cargo build --release`, the binaries will be located in `target/release` directory.

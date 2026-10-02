@@ -3,6 +3,8 @@ source: external-crates/move/crates/move-transactional-test-runner/src/framework
 ---
 processed 5 tasks
 
+// test invalid usages of shared coin
+
 init:
 A: object(0,0)
 
@@ -10,7 +12,7 @@ task 1, lines 8-26:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 5198400,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 5206000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 28:
 //# run test::m1::mint_shared

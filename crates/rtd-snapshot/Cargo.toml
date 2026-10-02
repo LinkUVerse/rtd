@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 license = "Apache-2.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lints]
+workspace = true
 
 [dependencies]
 integer-encoding.workspace = true
@@ -30,7 +33,6 @@ rtd-storage.workspace = true
 rtd-protocol-config.workspace = true
 fastcrypto = { workspace = true, features = ["copy_key"] }
 tokio = { workspace = true, features = ["full"] }
-serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

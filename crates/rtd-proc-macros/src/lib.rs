@@ -13,139 +13,6 @@ use syn::{
     spanned::Spanned,
 };
 
-#[proc_macro_attribute]
-pub fn init_static_initializers(_args: TokenStream, item: TokenStream) -> TokenStream {
-    let mut input = parse_macro_input!(item as syn::ItemFn);
-
-    let body = &input.block;
-    input.block = syn::parse2(quote! {
-        {
-            // We have some lazily-initialized static state in the program. The initializers
-            // alter the thread-local hash container state any time they create a new hash
-            // container. Therefore, we need to ensure that these initializers are run in a
-            // separate thread before the first test thread is launched. Otherwise, they would
-            // run inside of the first test thread, but not subsequent ones.
-            //
-            // Note that none of this has any effect on process-level determinism. Without this
-            // code, we can still get the same test results from two processes started with the
-            // same seed.
-            //
-            // However, when using sim_test(check_determinism) or MSIM_TEST_CHECK_DETERMINISM=1,
-            // we want the same test invocation to be deterministic when run twice
-            // _in the same process_, so we need to take care of this. This will also
-            // be very important for being able to reproduce a failure that occurs in the Nth
-            // iteration of a multi-iteration test run.
-            std::thread::spawn(|| {
-                use rtd_protocol_config::ProtocolConfig;
-                ::rtd_simulator::telemetry_subscribers::init_for_testing();
-                ::rtd_simulator::rtd_types::execution_params::get_denied_certificates_for_sim_test();
-                ::rtd_simulator::rtd_framework::BuiltInFramework::all_package_ids();
-                ::rtd_simulator::rtd_types::gas::RtdGasStatus::new_unmetered();
-
-                // For reasons I can't understand, LruCache causes divergent behavior the second
-                // time one is constructed and inserted into, so construct one before the first
-                // test run for determinism.
-                let mut cache = ::rtd_simulator::lru::LruCache::new(1.try_into().unwrap());
-                cache.put(1, 1);
-
-                use std::sync::Arc;
-
-                use ::rtd_simulator::anemo_tower::callback::CallbackLayer;
-                use ::rtd_simulator::anemo_tower::trace::DefaultMakeSpan;
-                use ::rtd_simulator::anemo_tower::trace::DefaultOnFailure;
-                use ::rtd_simulator::anemo_tower::trace::TraceLayer;
-                use ::rtd_simulator::fastcrypto::traits::KeyPair;
-                use ::rtd_simulator::linku_network::metrics::MetricsMakeCallbackHandler;
-                use ::rtd_simulator::linku_network::metrics::NetworkMetrics;
-                use ::rtd_simulator::rand_crate::rngs::{StdRng, OsRng};
-                use ::rtd_simulator::rand::SeedableRng;
-                use ::rtd_simulator::tower::ServiceBuilder;
-
-                // anemo uses x509-parser, which has many lazy static variables. start a network to
-                // initialize all that static state before the first test.
-                let rt = ::rtd_simulator::runtime::Runtime::new();
-                rt.block_on(async move {
-                    use ::rtd_simulator::anemo::{Network, Request};
-
-                    {
-                        // Initialize the static initializers here:
-                        // https://github.com/move-language/move/blob/652badf6fd67e1d4cc2aa6dc69d63ad14083b673/language/tools/move-package/src/package_lock.rs#L12
-                        use std::path::PathBuf;
-                        use rtd_simulator::rtd_move_build::BuildConfig;
-                        use rtd_simulator::tempfile::TempDir;
-
-                        let mut path = PathBuf::from(env!("SIMTEST_STATIC_INIT_MOVE"));
-                        let mut build_config = BuildConfig::new_for_testing();
-                        build_config.config.install_dir = Some(TempDir::new().unwrap().keep());
-                        let _all_module_bytes = build_config
-                            .build_async(&path)
-                            .await
-                            .unwrap()
-                            .get_package_bytes(/* with_unpublished_deps */ false);
-                    }
-
-                    let make_network = |port: u16| {
-                        let registry = prometheus::Registry::new();
-                        let inbound_network_metrics =
-                            NetworkMetrics::new("rtd", "inbound", &registry);
-                        let outbound_network_metrics =
-                            NetworkMetrics::new("rtd", "outbound", &registry);
-
-                        let service = ServiceBuilder::new()
-                            .layer(
-                                TraceLayer::new_for_server_errors()
-                                    .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
-                                    .on_failure(DefaultOnFailure::new().level(tracing::Level::WARN)),
-                            )
-                            .layer(CallbackLayer::new(MetricsMakeCallbackHandler::new(
-                                Arc::new(inbound_network_metrics),
-                                usize::MAX,
-                            )))
-                            .service(::rtd_simulator::anemo::Router::new());
-
-                        let outbound_layer = ServiceBuilder::new()
-                            .layer(
-                                TraceLayer::new_for_client_and_server_errors()
-                                    .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
-                                    .on_failure(DefaultOnFailure::new().level(tracing::Level::WARN)),
-                            )
-                            .layer(CallbackLayer::new(MetricsMakeCallbackHandler::new(
-                                Arc::new(outbound_network_metrics),
-                                usize::MAX,
-                            )))
-                            .into_inner();
-
-
-                        Network::bind(format!("127.0.0.1:{}", port))
-                            .server_name("static-init-network")
-                            .private_key(
-                                ::rtd_simulator::fastcrypto::ed25519::Ed25519KeyPair::generate(&mut StdRng::from_rng(OsRng).unwrap())
-                                    .private()
-                                    .0
-                                    .to_bytes(),
-                            )
-                            .start(service)
-                            .unwrap()
-                    };
-                    let n1 = make_network(80);
-                    let n2 = make_network(81);
-
-                    let _peer = n1.connect(n2.local_addr()).await.unwrap();
-                });
-            }).join().unwrap();
-
-            #body
-        }
-    })
-    .expect("Parsing failure");
-
-    let result = quote! {
-        #input
-    };
-
-    result.into()
-}
-
 /// The rtd_test macro will invoke either `#[msim::test]` or `#[tokio::test]`,
 /// depending on whether the simulator config var is enabled.
 ///
@@ -168,7 +35,6 @@ pub fn rtd_test(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let result = quote! {
         #header
-        #[::rtd_macros::init_static_initializers]
         #input
     };
 
@@ -179,8 +45,8 @@ pub fn rtd_test(args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Otherwise, it will emit an ignored test - if forcibly run, the ignored test will panic.
 ///
-/// This macro must be used in order to pass any simulator-specific arguments, such as
-/// `check_determinism`, which is not understood by tokio.
+/// This macro must be used in order to pass any simulator-specific arguments (e.g. a
+/// custom `config`), which are not understood by tokio.
 #[proc_macro_attribute]
 pub fn sim_test(args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::ItemFn);
@@ -199,12 +65,19 @@ pub fn sim_test(args: TokenStream, item: TokenStream) -> TokenStream {
         let body = &input.block;
         quote! {
             #[::rtd_simulator::sim_test(crate = "rtd_simulator", #(#args),*)]
-            #[::rtd_macros::init_static_initializers]
             #ignore
             #sig {
                 async fn body_fn() #return_type { #body }
 
-                let ret = body_fn().await;
+                let timeout_secs: u64 = std::env::var("RTD_SIM_TEST_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1000);
+                let timeout_duration = tokio::time::Duration::from_secs(timeout_secs);
+
+                let ret = tokio::time::timeout(timeout_duration, body_fn())
+                    .await
+                    .expect("sim_test timed out");
 
                 ::rtd_simulator::task::shutdown_all_nodes();
 

@@ -1,20 +1,24 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
+use anyhow::anyhow;
 use async_trait::async_trait;
-use diesel::{ExpressionMethods, upsert::excluded};
+use diesel::ExpressionMethods;
+use diesel::upsert::excluded;
 use diesel_async::RunQueryDsl;
-use futures::future::try_join_all;
-use rtd_indexer_alt_framework::{
-    FieldCount,
-    pipeline::{Processor, sequential::Handler},
-    postgres::{Connection, Db},
-    types::{display::DisplayVersionUpdatedEvent, full_checkpoint_content::Checkpoint},
-};
-use rtd_indexer_alt_schema::{displays::StoredDisplay, schema::sum_displays};
+use rtd_indexer_alt_framework::FieldCount;
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::pipeline::sequential::Handler;
+use rtd_indexer_alt_framework::postgres::Connection;
+use rtd_indexer_alt_framework::postgres::Db;
+use rtd_indexer_alt_framework::types::display::DisplayVersionUpdatedEvent;
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_schema::displays::StoredDisplay;
+use rtd_indexer_alt_schema::schema::sum_displays;
 
 const MAX_INSERT_CHUNK_ROWS: usize = i16::MAX as usize / StoredDisplay::FIELD_COUNT;
 
@@ -73,21 +77,21 @@ impl Handler for SumDisplays {
 
     async fn commit<'a>(&self, batch: &Self::Batch, conn: &mut Connection<'a>) -> Result<usize> {
         let values: Vec<_> = batch.values().cloned().collect();
-        let updates = values
-            .chunks(MAX_INSERT_CHUNK_ROWS)
-            .map(|chunk: &[StoredDisplay]| {
-                diesel::insert_into(sum_displays::table)
-                    .values(chunk)
-                    .on_conflict(sum_displays::object_type)
-                    .do_update()
-                    .set((
-                        sum_displays::display_id.eq(excluded(sum_displays::display_id)),
-                        sum_displays::display_version.eq(excluded(sum_displays::display_version)),
-                        sum_displays::display.eq(excluded(sum_displays::display)),
-                    ))
-                    .execute(conn)
-            });
+        let mut updates = 0;
+        for chunk in values.chunks(MAX_INSERT_CHUNK_ROWS) {
+            updates += diesel::insert_into(sum_displays::table)
+                .values(chunk)
+                .on_conflict(sum_displays::object_type)
+                .do_update()
+                .set((
+                    sum_displays::display_id.eq(excluded(sum_displays::display_id)),
+                    sum_displays::display_version.eq(excluded(sum_displays::display_version)),
+                    sum_displays::display.eq(excluded(sum_displays::display)),
+                ))
+                .execute(conn)
+                .await?;
+        }
 
-        Ok(try_join_all(updates).await?.into_iter().sum())
+        Ok(updates)
     }
 }

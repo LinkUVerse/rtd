@@ -1,0 +1,32 @@
+---
+title: Registry
+description: Upstream Sui DeepBook Predict registry and capability design; no RTD instance exists.
+keywords:
+  - deepbook predict
+  - registry
+  - upstream design
+---
+
+This is an upstream Sui source design reference. **There is no verified RTD Predict registry**, and no package or shared object ID in an upstream deployment can be used on RTD.
+
+## Registry state
+
+The source design uses a shared `Registry` to map an underlying and expiry to a market and to store market creation policy. Its capability allowlists separate the authority to configure the protocol, create markets, pause risky actions, and start pool valuation. The actual fields and accessors must be reviewed in the Move version chosen for an RTD port.
+
+## Market lookup
+
+A client should resolve a market from the registry deployed on the same chain and validate that it is not expired, settled, or paused before building a trade. A market ID taken from a Sui deployment, stale local genesis, or unrelated registry cannot serve this purpose.
+
+## Cadence configuration
+
+Cadence rules are governance settings for when markets may be created and how many may be open. Their values are deployment state. No BTC underlying, cadence, market, or numeric terms have been verified on RTD. An application should read them from the actual registry rather than copy an upstream table.
+
+## Capabilities
+
+The source distinguishes administrative, pause, market lifecycle, and pool valuation capabilities. A port must confirm that each capability is created, delegated, revoked, and checked as intended. A successful package publish alone does not establish that any operator holds valid capabilities or that markets will be maintained.
+
+## Protocol configuration {#protocol-config}
+
+Risk bounds, pause flags, oracle freshness, and timing windows are stored in protocol configuration. They must be read from a deployed RTD object and tested with the ported source. The numeric values and event history formerly shown for RTD Mainnet and Testnet were inherited from upstream examples and have been removed.
+
+See [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) for deployment status and [Design](/onchain-finance/deepbook/deepbook-predict/design) for the system model.

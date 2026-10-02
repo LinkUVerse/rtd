@@ -1,12 +1,11 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::execution_value::{RawValueType, Value};
-use crate::type_resolver::TypeTagResolver;
 use move_core_types::language_storage::TypeTag;
-use rtd_types::{
-    error::ExecutionError, execution::ExecutionResult, transaction::Argument, transfer::Receiving,
-};
+use rtd_types::error::{ExecutionError, ExecutionErrorTrait};
+use rtd_types::execution_status::ExecutionFailure;
+use rtd_types::{execution::ExecutionResult, transaction::Argument};
+use std::marker::PhantomData;
 
 pub type TransactionIndex = usize;
 
@@ -15,6 +14,8 @@ pub trait ExecutionMode {
     type ArgumentUpdates;
     /// the gathered results from batched executions
     type ExecutionResults;
+    /// The error type produced during execution
+    type Error: ExecutionErrorTrait;
 
     /// Controls the calling of arbitrary Move functions
     fn allow_arbitrary_function_calls() -> bool;
@@ -30,36 +31,18 @@ pub trait ExecutionMode {
     /// UpgradeCap is produced
     fn packages_are_predefined() -> bool;
 
-    fn empty_arguments() -> Self::ArgumentUpdates;
-
     fn empty_results() -> Self::ExecutionResults;
-
-    fn add_argument_update(
-        resolver: &impl TypeTagResolver,
-        acc: &mut Self::ArgumentUpdates,
-        arg: Argument,
-        _new_value: &Value,
-    ) -> Result<(), ExecutionError>;
-
-    fn finish_command(
-        resolver: &impl TypeTagResolver,
-        acc: &mut Self::ExecutionResults,
-        argument_updates: Self::ArgumentUpdates,
-        command_result: &[Value],
-    ) -> Result<(), ExecutionError>;
-
-    // == Arg/Result V2 ==
 
     const TRACK_EXECUTION: bool;
 
-    fn add_argument_update_v2(
+    fn add_argument_update(
         acc: &mut Self::ArgumentUpdates,
         arg: Argument,
         bytes: Vec<u8>,
         type_: TypeTag,
     ) -> Result<(), ExecutionError>;
 
-    fn finish_command_v2(
+    fn finish_command(
         acc: &mut Self::ExecutionResults,
         argument_updates: Vec<(Argument, Vec<u8>, TypeTag)>,
         command_result: Vec<(Vec<u8>, TypeTag)>,
@@ -67,11 +50,15 @@ pub trait ExecutionMode {
 }
 
 #[derive(Copy, Clone)]
-pub struct Normal;
+pub struct Normal<E = ExecutionFailure>(PhantomData<fn() -> E>);
 
-impl ExecutionMode for Normal {
+impl<E> ExecutionMode for Normal<E>
+where
+    E: ExecutionErrorTrait,
+{
     type ArgumentUpdates = ();
     type ExecutionResults = ();
+    type Error = E;
 
     fn allow_arbitrary_function_calls() -> bool {
         false
@@ -89,31 +76,11 @@ impl ExecutionMode for Normal {
         false
     }
 
-    fn empty_arguments() -> Self::ArgumentUpdates {}
-
     fn empty_results() -> Self::ExecutionResults {}
-
-    fn add_argument_update(
-        _resolver: &impl TypeTagResolver,
-        _acc: &mut Self::ArgumentUpdates,
-        _arg: Argument,
-        _new_value: &Value,
-    ) -> Result<(), ExecutionError> {
-        Ok(())
-    }
-
-    fn finish_command(
-        _resolver: &impl TypeTagResolver,
-        _acc: &mut Self::ExecutionResults,
-        _argument_updates: Self::ArgumentUpdates,
-        _command_result: &[Value],
-    ) -> Result<(), ExecutionError> {
-        Ok(())
-    }
 
     const TRACK_EXECUTION: bool = false;
 
-    fn add_argument_update_v2(
+    fn add_argument_update(
         _acc: &mut Self::ArgumentUpdates,
         _arg: Argument,
         _bytes: Vec<u8>,
@@ -122,7 +89,7 @@ impl ExecutionMode for Normal {
         invariant_violation!("should not be called");
     }
 
-    fn finish_command_v2(
+    fn finish_command(
         _acc: &mut Self::ExecutionResults,
         _argument_updates: Vec<(Argument, Vec<u8>, TypeTag)>,
         _command_result: Vec<(Vec<u8>, TypeTag)>,
@@ -137,6 +104,7 @@ pub struct Genesis;
 impl ExecutionMode for Genesis {
     type ArgumentUpdates = ();
     type ExecutionResults = ();
+    type Error = ExecutionError;
 
     fn allow_arbitrary_function_calls() -> bool {
         true
@@ -154,31 +122,11 @@ impl ExecutionMode for Genesis {
         false
     }
 
-    fn empty_arguments() -> Self::ArgumentUpdates {}
-
     fn empty_results() -> Self::ExecutionResults {}
-
-    fn add_argument_update(
-        _resolver: &impl TypeTagResolver,
-        _acc: &mut Self::ArgumentUpdates,
-        _arg: Argument,
-        _new_value: &Value,
-    ) -> Result<(), ExecutionError> {
-        Ok(())
-    }
-
-    fn finish_command(
-        _resolver: &impl TypeTagResolver,
-        _acc: &mut Self::ExecutionResults,
-        _argument_updates: Self::ArgumentUpdates,
-        _command_result: &[Value],
-    ) -> Result<(), ExecutionError> {
-        Ok(())
-    }
 
     const TRACK_EXECUTION: bool = false;
 
-    fn add_argument_update_v2(
+    fn add_argument_update(
         _acc: &mut Self::ArgumentUpdates,
         _arg: Argument,
         _bytes: Vec<u8>,
@@ -187,7 +135,7 @@ impl ExecutionMode for Genesis {
         invariant_violation!("should not be called");
     }
 
-    fn finish_command_v2(
+    fn finish_command(
         _acc: &mut Self::ExecutionResults,
         _argument_updates: Vec<(Argument, Vec<u8>, TypeTag)>,
         _command_result: Vec<(Vec<u8>, TypeTag)>,
@@ -197,14 +145,18 @@ impl ExecutionMode for Genesis {
 }
 
 #[derive(Copy, Clone)]
-pub struct System;
+pub struct System<E = ExecutionError>(PhantomData<fn() -> E>);
 
 /// Execution mode for executing a system transaction, including the epoch change
 /// transaction and the consensus commit prologue. In this mode, we allow calls to
 /// any function bypassing visibility.
-impl ExecutionMode for System {
+impl<E> ExecutionMode for System<E>
+where
+    E: ExecutionErrorTrait,
+{
     type ArgumentUpdates = ();
     type ExecutionResults = ();
+    type Error = E;
 
     fn allow_arbitrary_function_calls() -> bool {
         // allows bypassing visibility for system calls
@@ -225,31 +177,11 @@ impl ExecutionMode for System {
         true
     }
 
-    fn empty_arguments() -> Self::ArgumentUpdates {}
-
     fn empty_results() -> Self::ExecutionResults {}
-
-    fn add_argument_update(
-        _resolver: &impl TypeTagResolver,
-        _acc: &mut Self::ArgumentUpdates,
-        _arg: Argument,
-        _new_value: &Value,
-    ) -> Result<(), ExecutionError> {
-        Ok(())
-    }
-
-    fn finish_command(
-        _resolver: &impl TypeTagResolver,
-        _acc: &mut Self::ExecutionResults,
-        _argument_updates: Self::ArgumentUpdates,
-        _command_result: &[Value],
-    ) -> Result<(), ExecutionError> {
-        Ok(())
-    }
 
     const TRACK_EXECUTION: bool = false;
 
-    fn add_argument_update_v2(
+    fn add_argument_update(
         _acc: &mut Self::ArgumentUpdates,
         _arg: Argument,
         _bytes: Vec<u8>,
@@ -258,7 +190,7 @@ impl ExecutionMode for System {
         invariant_violation!("should not be called");
     }
 
-    fn finish_command_v2(
+    fn finish_command(
         _acc: &mut Self::ExecutionResults,
         _argument_updates: Vec<(Argument, Vec<u8>, TypeTag)>,
         _command_result: Vec<(Vec<u8>, TypeTag)>,
@@ -275,6 +207,7 @@ pub struct DevInspect<const SKIP_ALL_CHECKS: bool>;
 impl<const SKIP_ALL_CHECKS: bool> ExecutionMode for DevInspect<SKIP_ALL_CHECKS> {
     type ArgumentUpdates = Vec<(Argument, Vec<u8>, TypeTag)>;
     type ExecutionResults = Vec<ExecutionResult>;
+    type Error = ExecutionError;
 
     fn allow_arbitrary_function_calls() -> bool {
         SKIP_ALL_CHECKS
@@ -292,42 +225,13 @@ impl<const SKIP_ALL_CHECKS: bool> ExecutionMode for DevInspect<SKIP_ALL_CHECKS> 
         false
     }
 
-    fn empty_arguments() -> Self::ArgumentUpdates {
-        vec![]
-    }
-
     fn empty_results() -> Self::ExecutionResults {
         vec![]
     }
 
-    fn add_argument_update(
-        resolver: &impl TypeTagResolver,
-        acc: &mut Self::ArgumentUpdates,
-        arg: Argument,
-        new_value: &Value,
-    ) -> Result<(), ExecutionError> {
-        let (bytes, type_tag) = value_to_bytes_and_tag(resolver, new_value)?;
-        acc.push((arg, bytes, type_tag));
-        Ok(())
-    }
-
-    fn finish_command(
-        resolver: &impl TypeTagResolver,
-        acc: &mut Self::ExecutionResults,
-        argument_updates: Self::ArgumentUpdates,
-        command_result: &[Value],
-    ) -> Result<(), ExecutionError> {
-        let command_bytes = command_result
-            .iter()
-            .map(|value| value_to_bytes_and_tag(resolver, value))
-            .collect::<Result<_, _>>()?;
-        acc.push((argument_updates, command_bytes));
-        Ok(())
-    }
-
     const TRACK_EXECUTION: bool = true;
 
-    fn add_argument_update_v2(
+    fn add_argument_update(
         acc: &mut Self::ArgumentUpdates,
         arg: Argument,
         bytes: Vec<u8>,
@@ -337,7 +241,7 @@ impl<const SKIP_ALL_CHECKS: bool> ExecutionMode for DevInspect<SKIP_ALL_CHECKS> 
         Ok(())
     }
 
-    fn finish_command_v2(
+    fn finish_command(
         acc: &mut Self::ExecutionResults,
         argument_updates: Vec<(Argument, Vec<u8>, TypeTag)>,
         command_result: Vec<(Vec<u8>, TypeTag)>,
@@ -345,31 +249,4 @@ impl<const SKIP_ALL_CHECKS: bool> ExecutionMode for DevInspect<SKIP_ALL_CHECKS> 
         acc.push((argument_updates, command_result));
         Ok(())
     }
-}
-
-fn value_to_bytes_and_tag(
-    resolver: &impl TypeTagResolver,
-    value: &Value,
-) -> Result<(Vec<u8>, TypeTag), ExecutionError> {
-    let (type_tag, bytes) = match value {
-        Value::Object(obj) => {
-            let tag = resolver.get_type_tag(&obj.type_)?;
-            let mut bytes = vec![];
-            obj.write_bcs_bytes(&mut bytes, None)?;
-            (tag, bytes)
-        }
-        Value::Raw(RawValueType::Any, bytes) => {
-            // this case shouldn't happen
-            (TypeTag::Vector(Box::new(TypeTag::U8)), bytes.clone())
-        }
-        Value::Raw(RawValueType::Loaded { ty, .. }, bytes) => {
-            let tag = resolver.get_type_tag(ty)?;
-            (tag, bytes.clone())
-        }
-        Value::Receiving(id, seqno, _) => (
-            Receiving::type_tag(),
-            Receiving::new(*id, *seqno).to_bcs_bytes(),
-        ),
-    };
-    Ok((bytes, type_tag))
 }

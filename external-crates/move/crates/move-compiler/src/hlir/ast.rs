@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    diagnostics::warning_filters::{WarningFilters, WarningFiltersTable},
+    diagnostics::filter::FilterScope,
     expansion::ast::{
         AbilitySet, Attributes, Friend, ModuleIdent, Mutability, ability_modifiers_ast_debug,
     },
     naming::ast::{BuiltinTypeName, BuiltinTypeName_, DatatypeTypeParameter, TParam},
     parser::ast::{
-        self as P, BinOp, ConstantName, DatatypeName, ENTRY_MODIFIER, Field, FunctionName,
-        TargetKind, UnaryOp, VariantName,
+        self as P, Ability_, BinOp, ConstantName, DatatypeName, ENTRY_MODIFIER, Field,
+        FunctionName, TargetKind, UnaryOp, VariantName,
     },
     shared::{
         Name, NumericalAddress, TName, ast_debug::*, program_info::TypingProgramInfo,
@@ -20,7 +20,7 @@ use crate::{
 use move_ir_types::location::*;
 use move_symbol_pool::Symbol;
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeSet, VecDeque},
     sync::Arc,
 };
 
@@ -33,8 +33,6 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct Program {
     pub info: Arc<TypingProgramInfo>,
-    /// Safety: This table should not be dropped as long as any `WarningFilters` are alive
-    pub warning_filters_table: Arc<WarningFiltersTable>,
     pub modules: UniqueMap<ModuleIdent, ModuleDefinition>,
 }
 
@@ -44,7 +42,7 @@ pub struct Program {
 
 #[derive(Debug, Clone)]
 pub struct ModuleDefinition {
-    pub warning_filter: WarningFilters,
+    pub warning_filter: FilterScope,
     // package name metadata from compiler arguments, not used for any language rules
     pub package_name: Option<Symbol>,
     pub attributes: Attributes,
@@ -64,7 +62,7 @@ pub struct ModuleDefinition {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StructDefinition {
-    pub warning_filter: WarningFilters,
+    pub warning_filter: FilterScope,
     // index in the original order as defined in the source file
     pub index: usize,
     pub attributes: Attributes,
@@ -81,7 +79,7 @@ pub enum StructFields {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDefinition {
-    pub warning_filter: WarningFilters,
+    pub warning_filter: FilterScope,
     // index in the original order as defined in the source file
     pub index: usize,
     pub attributes: Attributes,
@@ -104,7 +102,7 @@ pub struct VariantDefinition {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Constant {
-    pub warning_filter: WarningFilters,
+    pub warning_filter: FilterScope,
     // index in the original order as defined in the source file
     pub index: usize,
     pub attributes: Attributes,
@@ -144,7 +142,7 @@ pub type FunctionBody = Spanned<FunctionBody_>;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Function {
-    pub warning_filter: WarningFilters,
+    pub warning_filter: FilterScope,
     // index in the original order as defined in the source file
     pub index: usize,
     pub attributes: Attributes,
@@ -240,10 +238,6 @@ pub enum Statement_ {
 pub type Statement = Spanned<Statement_>;
 
 pub type Block = VecDeque<Statement>;
-
-pub type BasicBlocks = BTreeMap<Label, BasicBlock>;
-
-pub type BasicBlock = VecDeque<Command>;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
 pub struct Label(pub usize);
@@ -391,7 +385,7 @@ pub enum UnannotatedExp_ {
         from_user: bool,
         var: Var,
     },
-    Constant(ConstantName),
+    Constant(ModuleIdent, ConstantName),
     ErrorConstant {
         line_number_loc: Loc,
         error_constant: Option<ConstantName>,
@@ -663,6 +657,15 @@ impl BaseType_ {
         }
     }
 
+    pub fn has_ability_(&self, ability: Ability_) -> bool {
+        match self {
+            BaseType_::Apply(abilities, _, _) | BaseType_::Param(TParam { abilities, .. }) => {
+                abilities.has_ability_(ability)
+            }
+            BaseType_::Unreachable | BaseType_::UnresolvedError => true,
+        }
+    }
+
     pub fn bool(loc: Loc) -> BaseType {
         Self::builtin(loc, BuiltinTypeName_::Bool, vec![])
     }
@@ -759,6 +762,13 @@ impl SingleType_ {
         match self {
             SingleType_::Ref(_, _) => AbilitySet::references(loc),
             SingleType_::Base(b) => b.value.abilities(loc),
+        }
+    }
+
+    pub fn has_ability_(&self, ability: Ability_) -> bool {
+        match self {
+            SingleType_::Ref(_, _) => AbilitySet::REFERENCES.contains(&ability),
+            SingleType_::Base(b) => b.value.has_ability_(ability),
         }
     }
 
@@ -951,11 +961,7 @@ impl std::fmt::Display for Label {
 
 impl AstDebug for Program {
     fn ast_debug(&self, w: &mut AstWriter) {
-        let Program {
-            modules,
-            info: _,
-            warning_filters_table: _,
-        } = self;
+        let Program { modules, info: _ } = self;
 
         for (m, mdef) in modules.key_cloned_iter() {
             w.write(format!("module {}", m));
@@ -1525,7 +1531,7 @@ impl AstDebug for UnannotatedExp_ {
                 w.write("copy@");
                 v.ast_debug(w)
             }
-            E::Constant(c) => w.write(format!("{}", c)),
+            E::Constant(m, c) => w.write(format!("{}::{}", m, c)),
             E::ModuleCall(mcall) => {
                 mcall.ast_debug(w);
             }

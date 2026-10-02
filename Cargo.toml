@@ -5,7 +5,9 @@ exclude = [
   "examples/tic-tac-toe/cli",
   "examples/regulated-coin/rust-client",
   "examples/custom-indexer/rust",
+  "examples/rust/basic-rtd-indexer",
   "examples/rust/clickhouse-rtd-indexer",
+  "examples/rust/walrus-attributes-indexer",
   "external-crates/move/crates/jsonrpc",
   "external-crates/move/crates/bytecode-interpreter-crypto",
   "external-crates/move/crates/bytecode-verifier-libfuzzer",
@@ -39,206 +41,196 @@ exclude = [
   "external-crates/move/crates/move-ir-to-bytecode",
   "external-crates/move/crates/move-ir-to-bytecode-syntax",
   "external-crates/move/crates/move-ir-types",
-  "external-crates/move/crates/move-model",
   "external-crates/move/crates/move-model-2",
   "external-crates/move/crates/move-package",
   "external-crates/move/crates/move-package-alt",
   "external-crates/move/crates/move-package-alt-compilation",
   "external-crates/move/crates/move-proc-macros",
   "external-crates/move/crates/move-regex-borrow-graph",
-  "external-crates/move/crates/move-stackless-bytecode",
   "external-crates/move/crates/move-stackless-bytecode-2",
   "external-crates/move/crates/move-stdlib",
-  "external-crates/move/crates/move-stdlib-natives",
   "external-crates/move/crates/move-symbol-pool",
   "external-crates/move/crates/move-transactional-test-runner",
   "external-crates/move/crates/move-trace-format",
   "external-crates/move/crates/move-unit-test",
   "external-crates/move/crates/move-vm-config",
-  "external-crates/move/crates/move-vm-integration-tests",
   "external-crates/move/crates/move-vm-profiler",
   "external-crates/move/crates/move-vm-runtime",
-  "external-crates/move/crates/move-vm-test-utils",
   "external-crates/move/crates/move-vm-transactional-tests",
-  "external-crates/move/crates/move-vm-types",
   "external-crates/move/crates/serializer-tests",
   "external-crates/move/crates/test-generation",
-  "external-crates/move/move-execution/v0/crates/move-bytecode-verifier",
-  "external-crates/move/move-execution/v0/crates/move-stdlib-natives",
-  "external-crates/move/move-execution/v0/crates/move-vm-runtime",
-  "external-crates/move/move-execution/v0/crates/move-vm-types",
-  "external-crates/move/move-execution/v1/crates/move-bytecode-verifier",
-  "external-crates/move/move-execution/v1/crates/move-stdlib-natives",
-  "external-crates/move/move-execution/v1/crates/move-vm-runtime",
-  "external-crates/move/move-execution/v1/crates/move-vm-types",
-  "external-crates/move/move-execution/v2/crates/move-abstract-interpreter",
-  "external-crates/move/move-execution/v2/crates/move-bytecode-verifier",
-  "external-crates/move/move-execution/v2/crates/move-stdlib-natives",
-  "external-crates/move/move-execution/v2/crates/move-vm-runtime",
-  "external-crates/move/move-execution/v2/crates/move-vm-types",
+  "external-crates/move/historical-versions/v0/crates/move-bytecode-verifier",
+  "external-crates/move/historical-versions/v0/crates/move-stdlib-natives",
+  "external-crates/move/historical-versions/v0/crates/move-vm-runtime",
+  "external-crates/move/historical-versions/v0/crates/move-vm-types",
+  "external-crates/move/historical-versions/v1/crates/move-bytecode-verifier",
+  "external-crates/move/historical-versions/v1/crates/move-stdlib-natives",
+  "external-crates/move/historical-versions/v1/crates/move-vm-runtime",
+  "external-crates/move/historical-versions/v1/crates/move-vm-types",
+  "external-crates/move/historical-versions/v2/crates/move-abstract-interpreter",
+  "external-crates/move/historical-versions/v2/crates/move-bytecode-verifier",
+  "external-crates/move/historical-versions/v2/crates/move-stdlib-natives",
+  "external-crates/move/historical-versions/v2/crates/move-vm-runtime",
+  "external-crates/move/historical-versions/v2/crates/move-vm-types",
+  "external-crates/move/historical-versions/v3/crates/move-abstract-interpreter",
+  "external-crates/move/historical-versions/v3/crates/move-bytecode-verifier",
+  "external-crates/move/historical-versions/v3/crates/move-stdlib-natives",
+  "external-crates/move/historical-versions/v3/crates/move-vm-runtime",
+  "external-crates/move/historical-versions/v3/crates/move-vm-types",
 ]
 
 members = [
-  "consensus/config",
-  "consensus/core",
-  "consensus/simtests",
-  "consensus/types",
-  "crates/anemo-benchmark",
-  "crates/bin-version",
-  "crates/linku-common",
-  "crates/linku-metrics",
-  "crates/linku-network",
-  "crates/linku-service",
-  "crates/prometheus-closure-metric",
-  "crates/shared-crypto",
-  "crates/simulacrum",
-  "crates/rtd",
-  "crates/rtd-adapter-transactional-tests",
-  "crates/rtd-analytics-indexer",
-  "crates/rtd-analytics-indexer-derive",
-  "crates/rtd-authority-aggregation",
-  "crates/rtd-aws-orchestrator",
-  "crates/rtd-benchmark",
-  "crates/rtd-bridge",
-  "crates/rtd-bridge-cli",
-  "crates/rtd-bridge-indexer",
-  "crates/rtd-bridge-indexer-alt",
-  "crates/rtd-bridge-schema",
-  "crates/rtd-checkpoint-blob-indexer",
-  "crates/rtd-cluster-test",
-  "crates/rtd-config",
-  "crates/rtd-core",
-  "crates/rtd-cost",
-  "crates/rtd-data-ingestion",
-  "crates/rtd-data-ingestion-core",
-  "crates/rtd-data-store",
-  "crates/rtd-deepbook-indexer",
-  "crates/rtd-default-config",
-  "crates/rtd-display",
-  "crates/rtd-e2e-tests",
-  "crates/rtd-enum-compat-util",
-  "crates/rtd-faucet",
-  "crates/rtd-field-count",
-  "crates/rtd-field-count-derive",
-  "crates/rtd-framework",
-  "crates/rtd-framework-snapshot",
-  "crates/rtd-framework-tests",
-  "crates/rtd-futures",
-  "crates/rtd-genesis-builder",
-  "crates/rtd-graphql-e2e-tests",
-  "crates/rtd-graphql-rpc",
-  "crates/rtd-graphql-rpc-client",
-  "crates/rtd-graphql-rpc-headers",
-  "crates/rtd-http",
-  "crates/rtd-indexer",
-  "crates/rtd-indexer-alt",
-  "crates/rtd-indexer-alt-consistent-api",
-  "crates/rtd-indexer-alt-consistent-store",
-  "crates/rtd-indexer-alt-e2e-tests",
-  "crates/rtd-indexer-alt-framework",
-  "crates/rtd-indexer-alt-framework-store-traits",
-  "crates/rtd-indexer-alt-graphql",
-  "crates/rtd-indexer-alt-jsonrpc",
-  "crates/rtd-indexer-alt-metrics",
-  "crates/rtd-indexer-alt-object-store",
-  "crates/rtd-indexer-alt-reader",
-  "crates/rtd-indexer-alt-restorer",
-  "crates/rtd-indexer-alt-schema",
-  "crates/rtd-indexer-builder",
-  "crates/rtd-json",
-  "crates/rtd-json-rpc",
-  "crates/rtd-json-rpc-api",
-  "crates/rtd-json-rpc-tests",
-  "crates/rtd-json-rpc-types",
-  "crates/rtd-keys",
-  "crates/rtd-kv-rpc",
-  "crates/rtd-kvstore",
-  "crates/rtd-light-client",
-  "crates/rtd-macros",
-  "crates/rtd-metric-checker",
-  "crates/rtd-metrics-push-client",
-  "crates/rtd-move",
-  "crates/rtd-move-build",
-  "crates/rtd-move-lsp",
-  "crates/rtd-name-service",
-  "crates/rtd-network",
-  "crates/rtd-node",
-  "crates/rtd-open-rpc",
-  "crates/rtd-open-rpc-macros",
-  "crates/rtd-oracle",
-  "crates/rtd-package-alt",
-  "crates/rtd-package-dump",
-  "crates/rtd-package-management",
-  "crates/rtd-package-resolver",
-  "crates/rtd-pg-db",
-  "crates/rtd-proc-macros",
-  "crates/rtd-protocol-config",
-  "crates/rtd-protocol-config-macros",
-  "crates/rtd-proxy",
-  "crates/rtd-replay",
-  "crates/rtd-replay-2",
-  "crates/rtd-rosetta",
-  "crates/rtd-rpc-api",
-  "crates/rtd-rpc-benchmark",
-  "crates/rtd-rpc-loadgen",
-  "crates/rtd-rpc-resolver",
-  "crates/rtd-sdk",
-  "crates/rtd-security-watchdog",
-  "crates/rtd-simulator",
-  "crates/rtd-single-node-benchmark",
-  "crates/rtd-snapshot",
-  "crates/rtd-source-validation",
-  "crates/rtd-sql-macro",
-  "crates/rtd-storage",
-  "crates/rtd-surfer",
-  "crates/rtd-swarm",
-  "crates/rtd-swarm-config",
-  "crates/rtd-synthetic-ingestion",
-  "crates/rtd-telemetry",
-  "crates/rtd-test-transaction-builder",
-  "crates/rtd-test-validator",
-  "crates/rtd-tls",
-  "crates/rtd-tool",
-  "crates/rtd-transaction-builder",
-  "crates/rtd-transaction-checks",
-  "crates/rtd-transactional-test-runner",
-  "crates/rtd-types",
-  "crates/rtd-upgrade-compatibility-transactional-tests",
-  "crates/rtd-verifier-transactional-tests",
-  "crates/rtdns-indexer",
-  "crates/telemetry-subscribers",
-  "crates/test-cluster",
-  "crates/transaction-fuzzer",
-  "crates/typed-store",
-  "crates/typed-store-derive",
-  "crates/typed-store-error",
-  "crates/typed-store-workspace-hack",
-  "crates/x",
-  "rtd-execution",
-  "rtd-execution/cut",
-  "rtd-execution/latest/rtd-adapter",
-  "rtd-execution/latest/rtd-move-natives",
-  "rtd-execution/latest/rtd-verifier",
-  "rtd-execution/v0/rtd-adapter",
-  "rtd-execution/v0/rtd-move-natives",
-  "rtd-execution/v0/rtd-verifier",
-  "rtd-execution/v1/rtd-adapter",
-  "rtd-execution/v1/rtd-move-natives",
-  "rtd-execution/v1/rtd-verifier",
-  "rtd-execution/v2/rtd-adapter",
-  "rtd-execution/v2/rtd-move-natives",
-  "rtd-execution/v2/rtd-verifier",
+    "consensus/config",
+    "consensus/core",
+    "consensus/simtests",
+    "consensus/types",
+    "crates/anemo-benchmark",
+    "crates/bin-version",
+    "crates/linku-common",
+    "crates/linku-metrics",
+    "crates/linku-network",
+    "crates/linku-service",
+    "crates/prometheus-closure-metric",
+    "crates/shared-crypto",
+    "crates/simulacrum",
+    "crates/rtd",
+    "crates/rtd-adapter-transactional-tests",
+    "crates/rtd-analytics-indexer",
+    "crates/rtd-analytics-indexer-derive",
+    "crates/rtd-authority-aggregation",
+    "crates/rtd-benchmark",
+    "crates/rtd-bridge",
+    "crates/rtd-bridge-cli",
+    "crates/rtd-bridge-indexer",
+    "crates/rtd-bridge-indexer-alt",
+    "crates/rtd-bridge-schema",
+    "crates/rtd-checkpoint-blob-indexer",
+    "crates/rtd-cluster-test",
+    "crates/rtd-config",
+    "crates/rtd-consistent-store",
+    "crates/rtd-core",
+    "crates/rtd-cost",
+    "crates/rtd-data-ingestion-core",
+    "crates/rtd-data-store",
+    "crates/rtd-display",
+    "crates/rtd-e2e-tests",
+    "crates/rtd-enum-compat-util",
+    "crates/rtd-execution-backtest",
+    "crates/rtd-faucet",
+    "crates/rtd-field-count",
+    "crates/rtd-field-count-derive",
+    "crates/rtd-fork",
+    "crates/rtd-fork-e2e-tests",
+    "crates/rtd-framework",
+    "crates/rtd-framework-snapshot",
+    "crates/rtd-framework-tests",
+    "crates/rtd-futures",
+    "crates/rtd-http",
+    "crates/rtd-genesis-builder",
+    "crates/rtd-indexer-alt",
+    "crates/rtd-indexer-alt-consistent-api",
+    "crates/rtd-indexer-alt-consistent-store",
+    "crates/rtd-indexer-alt-e2e-tests",
+    "crates/rtd-indexer-alt-framework",
+    "crates/rtd-indexer-alt-framework-store-traits",
+    "crates/rtd-indexer-alt-graphql",
+    "crates/rtd-indexer-alt-jsonrpc",
+    "crates/rtd-indexer-alt-metrics",
+    "crates/rtd-indexer-alt-object-store",
+    "crates/rtd-indexer-alt-reader",
+    "crates/rtd-indexer-alt-schema",
+    "crates/rtd-inverted-index",
+    "crates/rtd-json",
+    "crates/rtd-json-rpc",
+    "crates/rtd-json-rpc-api",
+    "crates/rtd-json-rpc-tests",
+    "crates/rtd-json-rpc-types",
+    "crates/rtd-keys",
+    "crates/rtd-kv-rpc",
+    "crates/rtd-kvstore",
+    "crates/rtd-light-client",
+    "crates/rtd-macros",
+    "crates/rtd-metric-checker",
+    "crates/rtd-metrics-push-client",
+    "crates/rtd-move",
+    "crates/rtd-move-build",
+    "crates/rtd-move-lsp",
+    "crates/rtd-name-service",
+    "crates/rtd-network",
+    "crates/rtd-node",
+    "crates/rtd-open-rpc",
+    "crates/rtd-open-rpc-macros",
+    "crates/rtd-oracle",
+    "crates/rtd-package-alt",
+    "crates/rtd-package-dump",
+    "crates/rtd-package-management",
+    "crates/rtd-package-resolver",
+    "crates/rtd-pg-db",
+    "crates/rtd-proc-macros",
+    "crates/rtd-prompt",
+    "crates/rtd-protocol-config",
+    "crates/rtd-protocol-config-macros",
+    "crates/rtd-proxy",
+    "crates/rtd-replay-2",
+    "crates/rtd-rosetta",
+    "crates/rtd-rpc-api",
+    "crates/rtd-rpc-benchmark",
+    "crates/rtd-rpc-cursor",
+    "crates/rtd-rpc-loadgen",
+    "crates/rtd-rpc-resolver",
+    "crates/rtd-rpc-store",
+    "crates/rtd-sdk",
+    "crates/rtd-simulator",
+    "crates/rtd-single-node-benchmark",
+    "crates/rtd-snapshot",
+    "crates/rtd-source-verification",
+    "crates/rtd-sql-macro",
+    "crates/rtd-storage",
+    "crates/rtd-surfer",
+    "crates/rtd-swarm",
+    "crates/rtd-swarm-config",
+    "crates/rtd-synthetic-ingestion",
+    "crates/rtd-telemetry",
+    "crates/rtd-test-transaction-builder",
+    "crates/rtd-test-validator",
+    "crates/rtd-tls",
+    "crates/rtd-tool",
+    "crates/rtd-transaction-builder",
+    "crates/rtd-transaction-checks",
+    "crates/rtd-transactional-test-runner",
+    "crates/rtd-types",
+    "crates/rtd-upgrade-compatibility-transactional-tests",
+    "crates/rtd-verifier-transactional-tests",
+    "crates/telemetry-subscribers",
+    "crates/test-cluster",
+    "crates/transaction-fuzzer",
+    "crates/typed-store",
+    "crates/typed-store-derive",
+    "crates/typed-store-error",
+    "crates/typed-store-workspace-hack",
+    "crates/x",
+    "rtd-execution",
+    "rtd-execution/cut",
+    "rtd-execution/historical-versions/v0/rtd-adapter",
+    "rtd-execution/historical-versions/v0/rtd-move-natives",
+    "rtd-execution/historical-versions/v0/rtd-verifier",
+    "rtd-execution/historical-versions/v1/rtd-adapter",
+    "rtd-execution/historical-versions/v1/rtd-move-natives",
+    "rtd-execution/historical-versions/v1/rtd-verifier",
+    "rtd-execution/historical-versions/v2/rtd-adapter",
+    "rtd-execution/historical-versions/v2/rtd-move-natives",
+    "rtd-execution/historical-versions/v2/rtd-verifier",
+    "rtd-execution/historical-versions/v3/rtd-adapter",
+    "rtd-execution/historical-versions/v3/rtd-move-natives",
+    "rtd-execution/historical-versions/v3/rtd-verifier",
+    "rtd-execution/latest/rtd-adapter",
+    "rtd-execution/latest/rtd-move-natives",
+    "rtd-execution/latest/rtd-verifier",
 ]
 
 [workspace.package]
 # This version string will be inherited by rtd-core, rtd-faucet, rtd-node, rtd-tools, rtd-sdk, rtd-move-build, and rtd crates.
-version = "1.63.0"
-
-[profile.dev]
-# Local validators and fullnodes continuously execute checkpoints. With Cargo's unoptimized
-# default dev profile, a persisted fullnode cannot catch a running validator after restart.
-# Level 1 keeps debug assertions and debug symbols while making target/debug usable as a dev chain.
-opt-level = 1
+version = "1.81.0"
 
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
@@ -293,12 +285,20 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fail_points)',
 ] }
 
+# Project-wide clippy lints, applied by `cargo clippy` / `cargo xclippy`. Every workspace
+# member must opt in with `[lints] workspace = true` (enforced by `cargo xlint`).
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+disallowed_macros = "warn"
+disallowed_methods = "warn"
+unnecessary_get_then_check = "allow"
+
 # Dependencies that should be kept in sync through the whole workspace
 [workspace.dependencies]
 antithesis_sdk = "0.2.5"
 anyhow = "1.0.71"
-arrow = "54"
-arrow-array = "54"
+arrow = "57.3"
+arrow-array = "57.3"
 arc-swap = { version = "1.5.1", features = ["serde"] }
 assert_cmd = "2.0.6"
 async-graphql = "=7.0.1"
@@ -308,13 +308,6 @@ async-recursion = "1.0.4"
 async-stream = "0.3.6"
 async-trait = "0.1.61"
 atomic_float = "0.1"
-aws-config = { version = "1.5.16", features = ["behavior-version-latest"] }
-aws-runtime = "1.5.5"
-aws-sdk-dynamodb = "1.65.0"
-aws-sdk-ec2 = "1.110.0"
-aws-sdk-kms = "1.60.0"
-aws-smithy-http = "0.60.12"
-aws-smithy-runtime-api = "1.7.3"
 axum = { version = "0.8", default-features = false, features = [
   "macros",
   "tokio",
@@ -338,7 +331,6 @@ backoff = { version = "0.4.0", features = [
   "tokio",
   "tokio_1",
 ] }
-backon = "1.4.0"
 base64 = "0.21.2"
 base64-url = "2"
 bcs = "0.1.4"
@@ -347,16 +339,14 @@ bimap = "0.6.2"
 bincode = "1.3.3"
 bip32 = "0.4.0"
 byteorder = "1.4.3"
-bytes = { version = "1.5.0", features = ["serde"] }
+bytes = { version = "1.11.1", features = ["serde"] }
 cached = "0.43.0"
 camino = "1.1.1"
 cfg-if = "1.0.0"
-chrono = { version = "0.4.39", features = ["clock", "serde"] }
+chrono = { version = "0.4.44", features = ["clock", "serde"] }
 clap = { version = "4.4", features = ["derive", "wrap_help"] }
-codespan-reporting = "0.11.1"
-collectable = "0.0.2"
+clap_complete = "4.4"
 colored = "2.0.0"
-color-eyre = "0.6.2"
 comfy-table = "6.1.3"
 console-subscriber = "0.4.1"
 const-str = "0.5.3"
@@ -374,17 +364,15 @@ dashmap = "5.5.3"
 # datatest-stable = "0.1.2"
 datatest-stable = { git = "https://github.com/nextest-rs/datatest-stable.git", rev = "72db7f6d1bbe36a5407e96b9488a581f763e106f" }
 derive-syn-parse = "0.1.5"
-derive_builder = "0.12.0"
 derive_more = "1.0.0"
-diesel = "2.2"
-diesel_migrations = "2.2"
-diesel-async = "0.5"
-dirs = "4.0.0"
+diesel = "2.3"
+diesel_migrations = "2.3"
+diesel-async = "0.9"
+dirs = "5.0.1"
 duration-str = "0.5.0"
 ed25519 = { version = "2", features = ["pkcs8", "alloc", "zeroize"] }
 ed25519-consensus = { version = "2.0.1", features = ["serde"] }
 either = "1.8.0"
-petgraph = "0.5.1"
 enum_dispatch = "^0.3"
 expect-test = "1.4.0"
 eyre = "0.6.8"
@@ -394,16 +382,15 @@ fs_extra = "1.3.0"
 futures = "0.3.28"
 futures-core = "0.3.21"
 git-version = "0.3.5"
-glob = "0.3.1"
 governor = "0.6.0"
-gcp_auth = "0.12.3"
-hashbrown = "0.12"
+gcp_auth = "0.12.6"
+h2 = "0.4.19"
 hdrhistogram = "7.5.1"
 headers = "0.4.0"
 hex = "0.4.3"
-hex-literal = "0.3.4"
 http = "1"
 http-body = "1"
+http-body-util = "0.1"
 humantime = "2.1.0"
 hyper = "1"
 hyper-util = "0.1.6"
@@ -414,16 +401,14 @@ hyper-rustls = { version = "0.27", default-features = false, features = [
   "ring",
   "tls12",
 ] }
-im = "15"
-impl-trait-for-tuples = "0.2.0"
+imbl = "7.0.1"
 indexmap = { version = "2.8.0", features = ["serde"] }
 indoc = "2.0.6"
 indicatif = "0.18.3"
 inquire = "0.6.0"
-insta = { version = "1.21.1", features = ["redactions", "yaml", "json"] }
+insta = { version = "1.46.2", features = ["redactions", "yaml", "json"] }
 insta-cmd = "0.6.0"
 integer-encoding = "3.0.1"
-ipnetwork = "0.20.0"
 iso8601 = "0.6.3"
 itertools = "0.13.0"
 tikv-jemalloc-ctl = "^0.5"
@@ -440,8 +425,7 @@ jsonrpsee = { version = "0.24.9", features = [
 ] }
 json_to_table = { git = "https://github.com/zhiburt/tabled/", rev = "e449317a1c02eb6b29e409ad6617e5d9eb7b3bd4" }
 leb128 = "0.2.5"
-lru = "0.10"
-match_opt = "0.1.2"
+lru = "0.18.2"
 miette = { version = "7", features = ["fancy"] }
 mime = "0.3"
 mockall = "0.11.4"
@@ -450,47 +434,46 @@ moka = { version = "0.12", default-features = false, features = [
   "atomic64",
 ] }
 more-asserts = "0.3.1"
-msim = { git = "https://github.com/link-u-web3/linku-sim.git", rev = "9d787303d855f6cec92eb94933717d4ee1963548", package = "msim" }
-msim-macros = { git = "https://github.com/link-u-web3/linku-sim.git", rev = "9d787303d855f6cec92eb94933717d4ee1963548", package = "msim-macros" }
-multiaddr = "0.17.0"
+msim = { git = "https://github.com/LinkUVerse/linku-sim.git", rev = "6b8e1e8cdce408e73d46538773fc85a56c082db7", package = "msim" }
+msim-macros = { git = "https://github.com/LinkUVerse/linku-sim.git", rev = "6b8e1e8cdce408e73d46538773fc85a56c082db7", package = "msim-macros" }
+multiaddr = "0.18.2"
 nexlint = { git = "https://github.com/nextest-rs/nexlint.git", rev = "7ce56bd591242a57660ed05f14ca2483c37d895b" }
 nexlint-lints = { git = "https://github.com/nextest-rs/nexlint.git", rev = "7ce56bd591242a57660ed05f14ca2483c37d895b" }
 nonempty = { version = "0.9.0", features = ["serialize"] }
 nonzero_ext = "0.3.0"
 notify = "6.1.1"
-ntest = "0.9.0"
 num-bigint = "0.4.4"
 num_cpus = "1.15.0"
 num_enum = "0.6.1"
-object_store = { version = "0.11.2", features = [
+object_store = { version = "0.13.0", features = [
   "aws",
   "gcp",
   "azure",
   "http",
 ] }
 once_cell = "1.18.0"
-ouroboros = "0.17"
+oneshot = { version = "0.2.1", features = ["std"] }
+ouroboros = "0.18.4"
 parking_lot = { version = "0.12.3", features = ["arc_lock"] }
-parquet = "54"
+parquet = "57.3"
 pin-project = "1"
 pin-project-lite = "0.2.13"
 pkcs8 = { version = "0.10.0", features = ["std"] }
 pprof = { version = "0.14.0", features = ["cpp", "frame-pointer"] }
 pretty_assertions = "1.3.0"
-prettytable-rs = "0.10.0"
 proc-macro2 = "1.0.47"
-prometheus = "0.13.3"
+prometheus = { version = "0.14", features = ["protobuf"] }
 prometheus-http-query = { version = "0.8", default-features = false, features = [
   "rustls-tls",
 ] }
-prometheus-parse = { git = "https://github.com/asonnino/prometheus-parser.git", rev = "75334db" }
 proptest = "1.6.0"
 proptest-derive = "0.5"
 prost = "0.14.1"
 prost-build = "0.14.1"
+prost-reflect = { version = "0.16.2", features = ["serde"] }
 prost-types = "0.14.1"
 protox = "0.9"
-protobuf = { version = "2.28", features = ["with-bytes"] }
+protobuf = { version = "3.7", features = ["with-bytes"] }
 quinn-proto = "0.11.7"
 quote = "1.0.23"
 rand = "0.8.5"
@@ -502,21 +485,16 @@ reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "rustls-tls",
 ] }
-roaring = "0.10.6"
+roaring = "0.11.3"
 ron = "0.8.0"
 rstest = "0.16.0"
-russh = "0.38.0"
-russh-keys = "0.38.0"
-rust-version = "1.56.1"
+rustc-hash = "2"
 rustls = { version = "0.23", default-features = false, features = [
   "std",
   "tls12",
   "ring",
 ] }
-rustls-pemfile = "2"
-rustversion = "1.0.9"
-rustyline = "9.1.2"
-rustyline-derive = "0.7.0"
+rustls-pki-types = "1.11"
 schemars = { version = "0.8.21", features = ["either"] }
 scoped-futures = "0.1.3"
 scopeguard = "1.1"
@@ -526,12 +504,9 @@ serde-name = "0.2.1"
 serde-reflection = "0.5"
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 serde_repr = "0.1"
-serde_spanned = "0.6.8"
-serde_test = "1.0.147"
 serde_with = "3.8"
 # serde_yaml = "0.9.21"
 serde_yaml = "0.8.26"
-shell-words = "1.1.0"
 shellexpand = "3.1.0"
 signature = "1.6.0"
 similar = "2.4.0"
@@ -540,43 +515,41 @@ simple-server-timing-header = "0.1.1"
 slip10_ed25519 = "0.1.3"
 smallvec = "1.10.0"
 snap = "1.1.0"
-snowflake-api = "0.11.0"
+snowflake-api = "0.14.0"
 static_assertions = "1.1.0"
 strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 syn = { version = "1.0.104", features = ["full", "derive", "extra-traits"] }
 # syn = { version = "2", features = ["full", "fold", "extra-traits"] }
-synstructure = "0.12"
 sysinfo = "0.35.2"
 tabled = { version = "0.12" }
 tap = "1.0.1"
-tar = "0.4.40"
+tar = "0.4.45"
 tempfile = "3.20.0"
 test-fuzz = "3.0.4"
 thiserror = "1.0.40"
 tiny-bip39 = "1.0.0"
-# TODO: Remove the `=` symbol once msim supports 1.48 too.
-tokio = "=1.47.1"
-tokio-retry = "0.3"
+tokio = "=1.52.1"
 tokio-rustls = { version = "0.26", default-features = false, features = [
   "tls12",
   "ring",
 ] }
-tokio-stream = { version = "0.1.14", features = ["sync", "net"] }
-tokio-util = "0.7.10"
+tokio-stream = { version = "0.1.14", features = ["sync", "net", "time"] }
+tokio-tungstenite = { version = "0.26.2", features = ["connect"] }
+tokio-util = "0.7.18"
 toml = { version = "0.7.4", features = ["preserve_order"] }
 toml_edit = { version = "0.19.10" }
-tonic = { version = "0.14.2", features = [
+tonic = { version = "0.14.6", features = [
   "zstd",
   "transport",
   "tls-webpki-roots",
 ] }
-tonic-build = "0.14.2"
-tonic-prost = "0.14.2"
-tonic-prost-build = "0.14.2"
-tonic-health = "0.14.2"
-tonic-reflection = "0.14.2"
-tonic-web = "0.14.2"
+tonic-build = "0.14.6"
+tonic-prost = "0.14.6"
+tonic-prost-build = "0.14.6"
+tonic-health = "0.14.6"
+tonic-reflection = "0.14.6"
+tonic-web = "0.14.6"
 tonic-rustls = "0.3.0"
 tower = { version = "0.5", features = [
   "full",
@@ -585,7 +558,7 @@ tower = { version = "0.5", features = [
   "load-shed",
   "limit",
 ] }
-tower-http = { version = "0.5", features = [
+tower-http = { version = "0.6", features = [
   "cors",
   "full",
   "trace",
@@ -596,7 +569,8 @@ tower-layer = "0.3.2"
 twox-hash = "1.6.3"
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
-tracing-subscriber = { version = "0.3.15", default-features = false, features = [
+tracing-error = "0.2.1"
+tracing-subscriber = { version = "0.3.22", default-features = false, features = [
   "std",
   "smallvec",
   "fmt",
@@ -606,25 +580,23 @@ tracing-subscriber = { version = "0.3.15", default-features = false, features = 
   "registry",
   "env-filter",
 ] }
-ttl_cache = "0.5.1"
 uint = "0.10.0"
 unescape = "0.1.0"
 ureq = "2.9.1"
 url = "2.3.1"
 uuid = { version = "1.1.2", features = ["v4", "fast-rng"] }
 walkdir = "2.5.0"
-webpki = { version = "0.103", package = "rustls-webpki", features = [
+webpki = { version = "0.103.10", package = "rustls-webpki", features = [
   "alloc",
   "std",
   "ring",
 ] }
+which = "8.0.2"
 winnow = "0.7"
-wiremock = "0.5"
+wiremock = "0.6"
 x509-parser = { version = "0.17.0", features = ["verify"] }
-zstd = "0.12.3"
-zeroize = "1.6.0"
+zstd = "0.13.2"
 versions = "4.1.0"
-linked-hash-map = "0.5.6"
 shlex = "1.3.0"
 starlark = "0.13.0"
 
@@ -643,14 +615,10 @@ move-package-alt = { path = "external-crates/move/crates/move-package-alt" }
 move-package-alt-compilation = { path = "external-crates/move/crates/move-package-alt-compilation" }
 move-unit-test = { path = "external-crates/move/crates/move-unit-test" }
 move-vm-config = { path = "external-crates/move/crates/move-vm-config" }
-move-vm-test-utils = { path = "external-crates/move/crates/move-vm-test-utils/", features = [
-  "tiered-gas",
-] }
 move-vm-profiler = { path = "external-crates/move/crates/move-vm-profiler" }
 move-command-line-common = { path = "external-crates/move/crates/move-command-line-common" }
 move-transactional-test-runner = { path = "external-crates/move/crates/move-transactional-test-runner" }
 move-ir-types = { path = "external-crates/move/crates/move-ir-types" }
-move-stackless-bytecode = { path = "external-crates/move/crates/move-stackless-bytecode" }
 move-stackless-bytecode-2 = { path = "external-crates/move/crates/move-stackless-bytecode-2" }
 move-symbol-pool = { path = "external-crates/move/crates/move-symbol-pool" }
 move-abstract-interpreter = { path = "external-crates/move/crates/move-abstract-interpreter" }
@@ -658,10 +626,10 @@ move-abstract-stack = { path = "external-crates/move/crates/move-abstract-stack"
 move-analyzer = { path = "external-crates/move/crates/move-analyzer" }
 move-trace-format = { path = "external-crates/move/crates/move-trace-format" }
 
-fastcrypto = { git = "https://github.com/link-u-web3/fastcrypto", rev = "4db0e90c732bbf7420ca20de808b698883148d9c" }
-fastcrypto-tbls = { git = "https://github.com/link-u-web3/fastcrypto", rev = "4db0e90c732bbf7420ca20de808b698883148d9c" }
-fastcrypto-zkp = { git = "https://github.com/link-u-web3/fastcrypto", rev = "4db0e90c732bbf7420ca20de808b698883148d9c", package = "fastcrypto-zkp" }
-fastcrypto-vdf = { git = "https://github.com/link-u-web3/fastcrypto", rev = "4db0e90c732bbf7420ca20de808b698883148d9c", features = [
+fastcrypto = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce" }
+fastcrypto-tbls = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce" }
+fastcrypto-zkp = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce", package = "fastcrypto-zkp" }
+fastcrypto-vdf = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce", features = [
   "experimental",
 ] }
 passkey-types = { version = "0.4.0" }
@@ -669,6 +637,7 @@ passkey-client = { version = "0.4.0" }
 passkey-authenticator = { version = "0.4.0" }
 coset = "0.3"
 p256 = { version = "0.13.2", features = ["ecdsa"] }
+quick_cache = { version = "0.6.18", features = ["stats"] }
 
 p384 = { version = "0.13.0", default-features = false, features = [
   "ecdsa",
@@ -677,15 +646,15 @@ p384 = { version = "0.13.0", default-features = false, features = [
 ciborium = "0.2"
 
 # anemo dependencies
-anemo = { git = "https://github.com/link-u-web3/anemo.git", rev = "4b5f0f1d06a31c8ef78ec2e5b446bc633e4e2f77" }
-anemo-build = { git = "https://github.com/link-u-web3/anemo.git", rev = "4b5f0f1d06a31c8ef78ec2e5b446bc633e4e2f77" }
-anemo-cli = { git = "https://github.com/link-u-web3/anemo.git", rev = "4b5f0f1d06a31c8ef78ec2e5b446bc633e4e2f77" }
-anemo-tower = { git = "https://github.com/link-u-web3/anemo.git", rev = "4b5f0f1d06a31c8ef78ec2e5b446bc633e4e2f77" }
+anemo = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
+anemo-build = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
+anemo-cli = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
+anemo-tower = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
 
 # core-types from the new sdk for use in gRPC
-rtd-sdk-types = { git = "https://github.com/link-u-web3/rtd-rust-sdk.git", rev = "2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126", features = [ "hash", "serde" ] }
-rtd-crypto = { git = "https://github.com/link-u-web3/rtd-rust-sdk.git", rev = "2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
-rtd-rpc = { git = "https://github.com/link-u-web3/rtd-rust-sdk.git", rev = "2fff36e9d4b7fbad1b7e44a1b9aefbd3f042d126" }
+rtd-sdk-types = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "hash", "serde" ] }
+rtd-crypto = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
+rtd-rpc = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "unstable" ] }
 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }
@@ -707,12 +676,11 @@ rtd-bridge = { path = "crates/rtd-bridge" }
 rtd-bridge-schema = { path = "crates/rtd-bridge-schema" }
 rtd-cluster-test = { path = "crates/rtd-cluster-test" }
 rtd-config = { path = "crates/rtd-config" }
+rtd-consistent-store = { path = "crates/rtd-consistent-store" }
 rtd-core = { path = "crates/rtd-core" }
 rtd-cost = { path = "crates/rtd-cost" }
-rtd-data-ingestion = { path = "crates/rtd-data-ingestion" }
 rtd-data-ingestion-core = { path = "crates/rtd-data-ingestion-core" }
 rtd-data-store = { path = "crates/rtd-data-store" }
-rtd-default-config = { path = "crates/rtd-default-config" }
 rtd-display = { path = "crates/rtd-display" }
 rtd-e2e-tests = { path = "crates/rtd-e2e-tests" }
 rtd-enum-compat-util = { path = "crates/rtd-enum-compat-util" }
@@ -723,12 +691,8 @@ rtd-futures = { path = "crates/rtd-futures" }
 rtd-framework = { path = "crates/rtd-framework" }
 rtd-framework-snapshot = { path = "crates/rtd-framework-snapshot" }
 rtd-framework-tests = { path = "crates/rtd-framework-tests" }
-rtd-graphql-rpc = { path = "crates/rtd-graphql-rpc" }
-rtd-graphql-rpc-client = { path = "crates/rtd-graphql-rpc-client" }
-rtd-graphql-rpc-headers = { path = "crates/rtd-graphql-rpc-headers" }
 rtd-genesis-builder = { path = "crates/rtd-genesis-builder" }
 rtd-http = { path = "crates/rtd-http" }
-rtd-indexer = { path = "crates/rtd-indexer" }
 rtd-indexer-alt = { path = "crates/rtd-indexer-alt" }
 rtd-indexer-alt-consistent-api = { path = "crates/rtd-indexer-alt-consistent-api" }
 rtd-indexer-alt-consistent-store = { path = "crates/rtd-indexer-alt-consistent-store" }
@@ -738,15 +702,14 @@ rtd-indexer-alt-graphql = { path = "crates/rtd-indexer-alt-graphql" }
 rtd-indexer-alt-jsonrpc = { path = "crates/rtd-indexer-alt-jsonrpc" }
 rtd-indexer-alt-metrics = { path = "crates/rtd-indexer-alt-metrics" }
 rtd-indexer-alt-reader = { path = "crates/rtd-indexer-alt-reader" }
-rtd-indexer-alt-restorer = { path = "crates/rtd-indexer-alt-restorer" }
 rtd-indexer-alt-schema = { path = "crates/rtd-indexer-alt-schema" }
-rtd-indexer-builder = { path = "crates/rtd-indexer-builder" }
 rtd-indexer-alt-object-store = { path = "crates/rtd-indexer-alt-object-store" }
 rtd-json = { path = "crates/rtd-json" }
 rtd-json-rpc = { path = "crates/rtd-json-rpc" }
 rtd-json-rpc-api = { path = "crates/rtd-json-rpc-api" }
 rtd-json-rpc-types = { path = "crates/rtd-json-rpc-types" }
 rtd-keys = { path = "crates/rtd-keys" }
+rtd-inverted-index = { path = "crates/rtd-inverted-index" }
 rtd-kvstore = { path = "crates/rtd-kvstore" }
 rtd-kv-rpc = { path = "crates/rtd-kv-rpc" }
 rtd-light-client = { path = "crates/rtd-light-client" }
@@ -767,17 +730,17 @@ rtd-package-management = { path = "crates/rtd-package-management" }
 rtd-package-resolver = { path = "crates/rtd-package-resolver" }
 rtd-pg-db = { path = "crates/rtd-pg-db" }
 rtd-proc-macros = { path = "crates/rtd-proc-macros" }
+rtd-prompt = { path = "crates/rtd-prompt" }
 rtd-protocol-config = { path = "crates/rtd-protocol-config" }
 rtd-protocol-config-macros = { path = "crates/rtd-protocol-config-macros" }
 rtd-proxy = { path = "crates/rtd-proxy" }
-rtd-replay = { path = "crates/rtd-replay" }
 rtd-replay-2 = { path = "crates/rtd-replay-2" }
 rtd-rosetta = { path = "crates/rtd-rosetta" }
 rtd-rpc-loadgen = { path = "crates/rtd-rpc-loadgen" }
 rtd-sdk = { path = "crates/rtd-sdk" }
 rtd-simulator = { path = "crates/rtd-simulator" }
 rtd-snapshot = { path = "crates/rtd-snapshot" }
-rtd-source-validation = { path = "crates/rtd-source-validation" }
+rtd-source-verification = { path = "crates/rtd-source-verification" }
 rtd-sql-macro = { path = "crates/rtd-sql-macro" }
 rtd-storage = { path = "crates/rtd-storage" }
 rtd-surfer = { path = "crates/rtd-surfer" }
@@ -789,7 +752,9 @@ rtd-test-transaction-builder = { path = "crates/rtd-test-transaction-builder" }
 rtd-test-validator = { path = "crates/rtd-test-validator" }
 rtd-tls = { path = "crates/rtd-tls" }
 rtd-rpc-api = { path = "crates/rtd-rpc-api" }
+rtd-rpc-cursor = { path = "crates/rtd-rpc-cursor" }
 rtd-rpc-resolver = { path = "crates/rtd-rpc-resolver" }
+rtd-rpc-store = { path = "crates/rtd-rpc-store" }
 rtd-tool = { path = "crates/rtd-tool" }
 rtd-transaction-builder = { path = "crates/rtd-transaction-builder" }
 rtd-transaction-checks = { path = "crates/rtd-transaction-checks" }
@@ -818,6 +783,6 @@ rtd-execution = { path = "rtd-execution" }
 # move-bytecode-verifier = { path = "external-crates/move/move-bytecode-verifier" }
 
 [patch.crates-io]
-async-graphql = { git = "https://github.com/link-u-web3/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
-async-graphql-axum = { git = "https://github.com/link-u-web3/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
-async-graphql-value = { git = "https://github.com/link-u-web3/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
+async-graphql = { git = "https://github.com/amnn/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
+async-graphql-axum = { git = "https://github.com/amnn/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
+async-graphql-value = { git = "https://github.com/amnn/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }

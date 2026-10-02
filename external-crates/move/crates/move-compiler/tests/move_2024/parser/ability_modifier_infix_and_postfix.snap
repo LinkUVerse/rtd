@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: core
   edition: 2024.alpha
   lint: false
 ---
-error[E01003]: invalid modifier
+error[EC01003]: invalid modifier
   ┌─ tests/move_2024/parser/ability_modifier_infix_and_postfix.move:3:41
   │
 3 │     public struct Foo has copy, drop {} has store;

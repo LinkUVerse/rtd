@@ -3,13 +3,15 @@
 
 use std::path::PathBuf;
 
+use clap::Subcommand;
+use rtd_indexer_alt_framework::ingestion::ClientArgs;
+use rtd_indexer_alt_framework::postgres::DbArgs;
+use rtd_indexer_alt_metrics::MetricsArgs;
+use url::Url;
+
 use crate::IndexerArgs;
 #[cfg(feature = "benchmark")]
 use crate::benchmark::BenchmarkArgs;
-use clap::Subcommand;
-use rtd_indexer_alt_framework::{ingestion::ClientArgs, postgres::DbArgs};
-use rtd_indexer_alt_metrics::MetricsArgs;
-use url::Url;
 
 #[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
@@ -44,6 +46,10 @@ pub enum Command {
         /// Path to the indexer's configuration TOML file.
         #[arg(long)]
         config: PathBuf,
+
+        /// Refuse another Alt writer in the same PostgreSQL database and exit if the lock session dies.
+        #[arg(long, default_value_t = false)]
+        require_exclusive_writer: bool,
     },
 
     /// Output the contents of the default configuration to STDOUT.

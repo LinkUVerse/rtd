@@ -1,0 +1,28 @@
+---
+title: Predict
+description: Upstream Sui expiry market design; not a deployed RTD contract reference.
+keywords:
+  - deepbook predict
+  - expiry market
+  - upstream design
+---
+
+This page is a source design reference for the upstream Sui DeepBook Predict `expiry_market` module. **No RTD Predict package, market object, or ABI is verified.** Function names and argument types must be checked against the exact source version selected for an RTD port.
+
+## Expiry market {#expiry-market}
+
+An `ExpiryMarket` represents one underlying and expiry. It keeps the strike exposure, working collateral, mint pause state, and eventual settlement result for that market. The registry provides discovery; trading operates on the market object itself. A newly created market also needs working collateral before it can support positions.
+
+## Quotes and minting {#quote-a-mint}
+
+The upstream flow constructs a pricer from the market, protocol configuration, and currently bound oracle objects. A mint quote combines the position's probability with fees and admission checks. Minting then spends the account's quote coin and creates a position with bounded total cost and fill price. A quote is time sensitive; applications should submit explicit bounds and inspect the final transaction effects.
+
+## Redemption and settlement {#redeem-a-position}
+
+A live position can be closed using a fresh price while trading remains open. After expiry, the market must record a settlement price before a winning position can claim its payout. The selected source revision defines which oracle observations qualify and when a fallback may be used. A local RTD deployment must test both paths with real feed data and collateral accounting.
+
+## Events and errors {#events}
+
+Order creation, replacement, redemption, and market settlement produce contract-specific events in the upstream design. Their names, fields, and abort codes are **not an RTD integration contract** until a ported package is built and deployed. Generate bindings from that package and verify emitted values on its chain.
+
+See [Design](/onchain-finance/deepbook/deepbook-predict/design) for the relationships between markets, accounts, oracles, and the pool. See [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) for RTD deployment status.

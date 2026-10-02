@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { StackFrame } from '@vscode/debugadapter';
+import { addSourceToTrace, MANIFEST_FILE_NAME } from './add_source';
 import {
     WorkspaceFolder,
     DebugConfiguration,
@@ -12,7 +13,34 @@ import {
     TextDocument,
     Position
 } from 'vscode';
-import { decompress } from 'fzstd';
+/**
+ * Shape of the `ZSTDDecoder` class from the `zstddec/stream` package.
+ * Hand-typed here because we load the package via `await import()` (its module
+ * format is not directly compatible with the format this project compiles to)
+ * and need a local type to work with the returned object.
+ */
+interface ZstdDecoder {
+    init(): Promise<void>;
+    decode(array: Uint8Array, uncompressedSize?: number): Uint8Array;
+    decodeStreaming(arrays: Iterable<Uint8Array>): Generator<Uint8Array>;
+}
+
+/**
+ * Number of lines kept verbatim (effects included) for traces small enough to
+ * display in full. Traces larger than this fall back to the
+ * `PREVIEW_MAX_NON_EFFECT_LINES` cap below with `Effect`-prefixed lines
+ * dropped, to fit VSCode's editor render budget.
+ */
+const PREVIEW_MAX_LINES_WITH_EFFECTS = 1000;
+
+/**
+ * Number of non-`Effect` lines emitted for traces larger than
+ * `PREVIEW_MAX_LINES_WITH_EFFECTS`.
+ */
+const PREVIEW_MAX_NON_EFFECT_LINES = 10000;
+
+const NEWLINE_BYTE = 0x0A;
+const EFFECT_LINE_PREFIX = '{"Effect":';
 
 /**
  * Log level for the debug adapter.
@@ -60,6 +88,11 @@ const TRACE_FILE_LANGUAGE_ID = TRACE_FILE_URI_SCHEME;
 const TRACE_CUSTOM_EDITOR_ID = 'mtrace.viewer';
 
 /**
+ * Custom debug-adapter event carrying a warning for the user.
+ */
+const MOVE_WARNING_EVENT = 'moveWarning';
+
+/**
  * Provider of on-hover information during debug session.
  */
 class MoveEvaluatableExpressionProvider {
@@ -100,6 +133,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     let previousSourcePath: string | undefined;
+    // Keys are opaque; each diagnostic kind chooses its own de-duplication scope.
+    const shownDebugWarnings = new Set<string>();
     const decorationType = vscode.window.createTextEditorDecorationType({
         color: 'grey',
         backgroundColor: 'rgba(220, 220, 220, 0.3)' // grey with 30% opacity
@@ -167,10 +202,28 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.debug.onDidTerminateDebugSession(() => {
         // reset all decorations when the debug session is terminated
         // to avoid showing lines for code that was optimized away
+        shownDebugWarnings.clear();
         const editor = vscode.window.activeTextEditor;
         if (editor) {
             editor.setDecorations(decorationType, []);
         }
+    }));
+
+    context.subscriptions.push(vscode.debug.onDidReceiveDebugSessionCustomEvent(event => {
+        if (event.event !== MOVE_WARNING_EVENT) {
+            return;
+        }
+        const message = typeof event.body?.message === 'string'
+            ? event.body.message
+            : undefined;
+        const key = typeof event.body?.key === 'string'
+            ? event.body.key
+            : undefined;
+        if (!message || !key || shownDebugWarnings.has(key)) {
+            return;
+        }
+        shownDebugWarnings.add(key);
+        vscode.window.showWarningMessage(message);
     }));
 
     // register custom command to toggle disassembly view
@@ -189,6 +242,28 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
+    // register custom command to add source-level debugging artifacts to a trace
+    // (used from the trace viewer before a debug session is started)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('move.addSourceToTrace', addSourceToTraceCommand)
+    );
+
+    // surface the "add source" command as a CodeLens at the top of a trace, and
+    // refresh it when a debug session starts/ends (the lens is hidden while debugging)
+    const addSourceCodeLensProvider = new AddSourceCodeLensProvider();
+    context.subscriptions.push(
+        vscode.languages.registerCodeLensProvider(
+            [
+                { scheme: TRACE_FILE_URI_SCHEME },
+                { language: TRACE_FILE_LANGUAGE_ID }
+            ],
+            addSourceCodeLensProvider
+        )
+    );
+    context.subscriptions.push(
+        vscode.debug.onDidChangeActiveDebugSession(() => addSourceCodeLensProvider.refresh())
+    );
+
     // send custom request to the debug adapter when the active text editor changes
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(async editor => {
         if (editor) {
@@ -200,14 +275,13 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 
     // Create and register custom content provider for compressed trace files,
-    // as well as custom editor for Move trace files.
-    // TODO: for now it's OK to decompress the whole trace here because the debugger
-    // does not handle streaming traces at the moment anyway, but it will have to change
-    // once it does.
+    // as well as custom editor for Move trace files. Both providers stream the
+    // file via `decompressTraceFileForPreview` so they never materialise more
+    // than ~10K lines, which is what fits in VSCode's editor render budget.
     const trace_content_provider: vscode.TextDocumentContentProvider = {
         async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
             try {
-                return trimTraceFileContent(await decompressTraceFile(uri.path));
+                return await decompressTraceFileForPreview(uri.path);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
                 return `Failed to decode trace:\n${msg}`;
@@ -230,7 +304,7 @@ export function activate(context: vscode.ExtensionContext) {
     // When opening compressed trace file in the "default" editor,
     // close the editor and open another one showing decompressed
     // content.
-    vscode.workspace.onDidOpenTextDocument(async doc => {
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async doc => {
         if (doc.uri.scheme === 'file' && doc.uri.fsPath.endsWith('.json.zst')) {
             // Close binary trace file after it was opened
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
@@ -241,7 +315,7 @@ export function activate(context: vscode.ExtensionContext) {
             await vscode.window.showTextDocument(mtraceDoc, { preview: false });
             vscode.commands.executeCommand('vscode.open', mtraceUri);
         }
-    });
+    }));
 }
 
 /**
@@ -266,23 +340,62 @@ class MoveTraceViewProvider implements vscode.CustomReadonlyEditorProvider {
             // Do not fire custom editor for trace files already displayed
             // correctly via mtrace scheme.
             vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+            return;
         }
 
         webviewPanel.webview.options = { enableScripts: true };
 
+        // For traces containing external events, offer an "add source" button in the
+        // viewer that runs the `move.addSourceToTrace` command for this trace. This is
+        // needed because we cannot use CodeLens in a webview.
+        const canAddSource = isExternalEventsTrace(document.uri.fsPath);
+        if (canAddSource) {
+            webviewPanel.webview.onDidReceiveMessage(message => {
+                if (message?.type === 'addSource') {
+                    vscode.commands.executeCommand('move.addSourceToTrace', document.uri);
+                }
+            });
+        }
+
         try {
-            const traceContent = trimTraceFileContent(await decompressTraceFile(document.uri.fsPath));
-            webviewPanel.webview.html = this.renderHtml(traceContent);
+            const traceContent = await decompressTraceFileForPreview(document.uri.fsPath);
+            webviewPanel.webview.html = this.renderHtml(traceContent, canAddSource);
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             webviewPanel.webview.html = `<pre style="color:red;">Failed to load trace: ${msg}</pre>`;
         }
     }
 
-    private renderHtml(decodedText: string): string {
+    private renderHtml(decodedText: string, canAddSource: boolean): string {
+        const addSourceTooltip = 'Copy a built package\'s source and source maps into this '
+            + 'trace to enable source-level debugging.';
+        const addSourceButton = canAddSource
+            ? `<button id="add-source" title="${addSourceTooltip}">Add Source to Trace</button>
+          <script>
+            const vscode = acquireVsCodeApi();
+            document.getElementById('add-source').onclick =
+                () => vscode.postMessage({ type: 'addSource' });
+          </script>`
+            : '';
+        // the `--vscode-*` variables below make the button match the editor theme
         return `
         <html>
+          <head>
+            <style>
+              button {
+                color: var(--vscode-button-foreground);
+                background-color: var(--vscode-button-background);
+                font-family: var(--vscode-font-family);
+                border: none;
+                margin: 8px;
+                padding: 6px 14px;
+                cursor: pointer;
+              }
+              button:hover { background-color: var(--vscode-button-hoverBackground); }
+            </style>
+          </head>
           <body>
+            ${addSourceButton}
             <pre>${decodedText.replace(/</g, '&lt;')}</pre>
           </body>
         </html>
@@ -425,7 +538,7 @@ async function findTraceInfo(editor: vscode.TextEditor): Promise<string | undefi
 async function findPkgRoot(active_file_path: string): Promise<string | undefined> {
     const containsManifest = (dir: string): boolean => {
         const filesInDir = fs.readdirSync(dir);
-        return filesInDir.includes('Move.toml');
+        return filesInDir.includes(MANIFEST_FILE_NAME);
     };
 
     const activeFileDir = path.dirname(active_file_path);
@@ -502,7 +615,7 @@ function findTracedFunctionsFromPath(pkgRoot: string, pkgModules: string[]): str
  * @returns traced function info containing package address, module, and function itself.
  */
 async function getTracedFunctionInfo(traceFilePath: string): Promise<TracedFunctionInfo> {
-    const traceLines = await decompressTraceFile(traceFilePath);
+    const traceLines = await readTraceFileFirstLines(traceFilePath, 2);
     if (traceLines.length <= 1) {
         throw new Error(`Empty trace file at '${traceFilePath}`);
     }
@@ -551,8 +664,7 @@ async function getTracedFunctionInfo(traceFilePath: string): Promise<TracedFunct
   *
  */
 async function constructTraceInfo(tracePath: string): Promise<string | undefined> {
-    if (tracePath.endsWith(TRACE_FILE_EXT) &&
-        path.basename(tracePath, TRACE_FILE_EXT) === EXT_EVENTS_TRACE_FILE_NAME) {
+    if (isExternalEventsTrace(tracePath)) {
         return undefined;
     }
     const tracedFunctionInfo = await getTracedFunctionInfo(tracePath);
@@ -651,80 +763,6 @@ async function pickTraceFileToDebug(
 }
 
 /**
- * Splits decompressed trace file data into lines without creating a large intermediate string.
- * This avoids hitting JavaScript's maximum string length limit for large trace files.
- *
- * @param decompressed the decompressed buffer containing trace data
- * @returns array of strings representing lines from the trace file
- */
-function splitTraceFileLines(decompressed: Uint8Array): string[] {
-    const NEWLINE_BYTE = 0x0A;
-    const decoder = new TextDecoder();
-    const lines: string[] = [];
-
-    let lineStart = 0;
-
-    for (let i = 0; i <= decompressed.length; i++) {
-        if (i === decompressed.length || decompressed[i] === NEWLINE_BYTE) {
-            // end of the buffer or a new line
-            if (i > lineStart) {
-                const lineBytes = decompressed.slice(lineStart, i);
-                const line = decoder.decode(lineBytes).trimEnd();
-                lines.push(line);
-            }
-            lineStart = i + 1;
-        }
-    }
-
-    return lines;
-}
-
-/**
- * Reads and decompresses a trace file.
- * @param traceFilePath path to the trace file.
- * @returns decompressed trace file content as a string.
- */
-async function decompressTraceFile(traceFilePath: string): Promise<string[]> {
-    // Read as Buffer then view it as a Uint8Array for fzstd which expects Uint8Array
-    const buf = fs.readFileSync(traceFilePath);
-    const u8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    // fzstd.decompress is synchronous, no need to await
-    const decompressed = decompress(u8);
-    return splitTraceFileLines(decompressed);
-}
-
-/**
- * Trims the trace file content to have it fit in VSCode's
- * 50M display limit.
- * @param traceFileContent content of the trace file.
- * @returns string representation of the trace file content.
- */
-function trimTraceFileContent(lines: string[]): string {
-    // Max numbers of lines to display, including effects
-    const maxLinesWithEffects = 1000;
-    if (lines.length <= maxLinesWithEffects) {
-        return lines.join('\n');
-    }
-    // Max number of lines to display without effects
-    // (if the number of lines in the trace is greater thatn
-    // maxLinesWithEffects, let's filter out the effects, but
-    // display a larger number of lines to hopefully include
-    // the whole trace sans effects).
-    let maxLines = 10000;
-    let result = "";
-    for (let i = 0; i < lines.length; i++) {
-        if (!lines[i].startsWith('{\"Effect\":')) {
-            maxLines--;
-            result += lines[i] + '\n';
-        }
-        if (maxLines === 0) {
-            break;
-        }
-    }
-    return result;
-}
-
-/**
  * Get the URI of the currently active trace view tab.
  * @returns uri of the active trace view tab or undefined if no such tab is active.
  */
@@ -744,4 +782,208 @@ function traceViewTabUri(): vscode.Uri | undefined {
         }
     }
     return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Adding source-level debugging artifacts to a trace
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks if a trace file contains external events, as opposed to a trace of a
+ * single Move function execution (e.g. one generated from a unit test). Traces
+ * containing external events are stored in a file with a fixed base name
+ * (`EXT_EVENTS_TRACE_FILE_NAME`).
+ *
+ * @param tracePath path to the trace file.
+ * @returns `true` if the trace file contains external events, `false` otherwise.
+ */
+function isExternalEventsTrace(tracePath: string): boolean {
+    return tracePath.endsWith(TRACE_FILE_EXT)
+        && path.basename(tracePath, TRACE_FILE_EXT) === EXT_EVENTS_TRACE_FILE_NAME;
+}
+
+/**
+ * Handler for the `move.addSourceToTrace` command. If the given trace contains
+ * external events, adds source-level debugging artifacts to it (see
+ * `addSourceToTrace` in `./add_source`). Meant to be invoked before a debug
+ * session is started, so that the artifacts are picked up when the session is
+ * launched.
+ *
+ * @param traceUri URI of the trace, always passed by the invoking UI element
+ * (the trace viewer button or the CodeLens).
+ */
+async function addSourceToTraceCommand(traceUri: vscode.Uri): Promise<void> {
+    const tracePath = traceUri.fsPath;
+    if (!isExternalEventsTrace(tracePath)) {
+        vscode.window.showErrorMessage(
+            'Adding source is only supported for traces containing external events'
+        );
+        return;
+    }
+    try {
+        await addSourceToTrace(tracePath);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to add source to trace: ${msg}`);
+    }
+}
+
+/**
+ * Provides a CodeLens pinned at the top of a trace containing external events that
+ * lets the user add source-level debugging artifacts to the trace (via the
+ * `move.addSourceToTrace` command). The lens is only shown while no debug session
+ * is active, so that the artifacts are picked up when a session is launched (no
+ * restart needed).
+ */
+class AddSourceCodeLensProvider implements vscode.CodeLensProvider {
+    private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
+    readonly onDidChangeCodeLenses = this.onDidChangeEmitter.event;
+
+    /**
+     * Requests a refresh of the provided lenses. Used when a debug session starts or
+     * ends, as that changes whether the lens should be shown.
+     */
+    refresh(): void {
+        this.onDidChangeEmitter.fire();
+    }
+
+    /**
+     * Called by VSCode whenever it needs the lenses for a document
+     * (and again after `onDidChangeCodeLenses` fires).
+     */
+    provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+        if (vscode.debug.activeDebugSession || !isExternalEventsTrace(document.uri.fsPath)) {
+            return [];
+        }
+        // a lens is rendered above the line its range starts on, so an empty
+        // range at position (0, 0) is all that is needed to pin the lens above
+        // the first line of the trace (it does not refer to any actual text)
+        const lensRange = new vscode.Range(0, 0, 0, 0);
+        return [new vscode.CodeLens(lensRange, {
+            title: '$(add) Add Source to Trace (enable source-level debugging)',
+            command: 'move.addSourceToTrace',
+            arguments: [document.uri]
+        })];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Trace file decompression and streaming helpers
+// ---------------------------------------------------------------------------
+
+let decoderPromise: Promise<ZstdDecoder> | undefined;
+
+/**
+ * Returns a lazily-initialized, cached `ZSTDDecoder` instance from
+ * the `zstddec/stream` package.
+ */
+async function getDecoder(): Promise<ZstdDecoder> {
+    if (!decoderPromise) {
+        decoderPromise = (async () => {
+            const mod = await import('zstddec/stream');
+            const decoder = new mod.ZSTDDecoder();
+            await decoder.init();
+            return decoder as unknown as ZstdDecoder;
+        })();
+    }
+    return decoderPromise;
+}
+
+/**
+ * Streams a zstd-compressed trace file and yields decompressed lines one at
+ * a time. The compressed file is read in full but decompressed data is
+ * processed in batches, so peak memory is dominated by the compressed file
+ * size, not the decompressed one.
+ */
+async function* streamTraceLines(
+    traceFilePath: string,
+): AsyncGenerator<string, void, void> {
+    const decoder = await getDecoder();
+    const buf = fs.readFileSync(traceFilePath);
+    const u8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    const td = new TextDecoder();
+    let leftover: Uint8Array | undefined;
+    for (const decompressed of decoder.decodeStreaming([u8])) {
+        if (decompressed.length === 0) continue;
+        const cur = leftover && leftover.length > 0
+            // Cast needed: Buffer extends Uint8Array at runtime but TS
+            // considers them incompatible due to SharedArrayBuffer in Buffer's
+            // type signature.
+            ? Buffer.concat([leftover, decompressed]) as Uint8Array
+            : decompressed;
+        leftover = undefined;
+        let lineStart = 0;
+        for (let i = 0; i < cur.length; i++) {
+            if (cur[i] !== NEWLINE_BYTE) continue;
+            if (i > lineStart) {
+                yield td.decode(cur.subarray(lineStart, i)).trimEnd();
+            }
+            lineStart = i + 1;
+        }
+        if (lineStart < cur.length) {
+            leftover = cur.subarray(lineStart);
+        }
+    }
+    if (leftover && leftover.length > 0) {
+        const tail = td.decode(leftover).trimEnd();
+        if (tail) yield tail;
+    }
+}
+
+/**
+ * Streams a trace file and returns the editor-preview text. For small traces
+ * (≤ `PREVIEW_MAX_LINES_WITH_EFFECTS` lines) every line is emitted verbatim.
+ * For larger traces, `Effect`-prefixed lines are dropped and the first
+ * `PREVIEW_MAX_NON_EFFECT_LINES` non-effect lines are emitted, then the
+ * stream stops early without materialising the rest of the file.
+ */
+async function decompressTraceFileForPreview(traceFilePath: string): Promise<string> {
+    const buffered: string[] = [];
+    const nonEffects: string[] = [];
+    let largeMode = false;
+
+    for await (const line of streamTraceLines(traceFilePath)) {
+        if (!largeMode) {
+            buffered.push(line);
+            if (buffered.length > PREVIEW_MAX_LINES_WITH_EFFECTS) {
+                // Crossed the small-trace threshold: re-classify the buffered
+                // tail through the large-mode filter and continue streaming.
+                for (const l of buffered) {
+                    if (!l.startsWith(EFFECT_LINE_PREFIX)) {
+                        nonEffects.push(l);
+                        if (nonEffects.length >= PREVIEW_MAX_NON_EFFECT_LINES) {
+                            return nonEffects.join('\n');
+                        }
+                    }
+                }
+                buffered.length = 0;
+                largeMode = true;
+            }
+        } else {
+            if (!line.startsWith(EFFECT_LINE_PREFIX)) {
+                nonEffects.push(line);
+                if (nonEffects.length >= PREVIEW_MAX_NON_EFFECT_LINES) {
+                    return nonEffects.join('\n');
+                }
+            }
+        }
+    }
+    return largeMode ? nonEffects.join('\n') : buffered.join('\n');
+}
+
+/**
+ * Streams the first `n` lines from a trace file and stops decoding the rest.
+ * Used to extract metadata (e.g. the trace header / first event) without
+ * decompressing the entire file.
+ */
+async function readTraceFileFirstLines(
+    traceFilePath: string,
+    n: number,
+): Promise<string[]> {
+    const lines: string[] = [];
+    for await (const line of streamTraceLines(traceFilePath)) {
+        lines.push(line);
+        if (lines.length >= n) break;
+    }
+    return lines;
 }

@@ -6,6 +6,9 @@ processed 5 tasks
 init:
 A: object(0,0)
 
+// 1. Parent ID does not exist
+// 2. Parent ID exists, but the field does not
+
 task 1, lines 9-11:
 //# programmable --sender A --inputs @A
 //> 0: rtd::bag::new();
@@ -39,7 +42,7 @@ Response: {
   "result": {
     "error": {
       "code": "dynamicFieldNotFound",
-      "parent_object_id": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad"
+      "parent_object_id": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9"
     }
   }
 }

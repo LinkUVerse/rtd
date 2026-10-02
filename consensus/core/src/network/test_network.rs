@@ -12,16 +12,20 @@ use crate::{
     block::VerifiedBlock,
     commit::{CommitRange, TrustedCommit},
     error::ConsensusResult,
-    network::{BlockStream, NetworkService},
+    network::{
+        BlockStream, NodeId, ObserverBlockStream, ObserverNetworkService, ObserverStreamItem,
+        PeerId, ValidatorNetworkService,
+    },
 };
 
-use super::ExtendedSerializedBlock;
+use super::{ExtendedSerializedBlock, SerializedBlockForm};
 
 pub(crate) struct TestService {
     pub(crate) handle_send_block: Vec<(AuthorityIndex, ExtendedSerializedBlock)>,
     pub(crate) handle_fetch_blocks: Vec<(AuthorityIndex, Vec<BlockRef>)>,
     pub(crate) handle_subscribe_blocks: Vec<(AuthorityIndex, Round)>,
     pub(crate) handle_fetch_commits: Vec<(AuthorityIndex, CommitRange)>,
+    pub(crate) handle_stream_blocks: Vec<NodeId>,
     pub(crate) own_blocks: Vec<ExtendedSerializedBlock>,
 }
 
@@ -32,6 +36,7 @@ impl TestService {
             handle_fetch_blocks: Vec::new(),
             handle_subscribe_blocks: Vec::new(),
             handle_fetch_commits: Vec::new(),
+            handle_stream_blocks: Vec::new(),
             own_blocks: Vec::new(),
         }
     }
@@ -43,7 +48,7 @@ impl TestService {
 }
 
 #[async_trait]
-impl NetworkService for Mutex<TestService> {
+impl ValidatorNetworkService for Mutex<TestService> {
     async fn handle_send_block(
         &self,
         peer: AuthorityIndex,
@@ -75,8 +80,8 @@ impl NetworkService for Mutex<TestService> {
         &self,
         peer: AuthorityIndex,
         block_refs: Vec<BlockRef>,
-        _highest_accepted_rounds: Vec<Round>,
-        _breadth_first: bool,
+        _fetch_after_rounds: Vec<Round>,
+        _fetch_missing_ancestors: bool,
     ) -> ConsensusResult<Vec<Bytes>> {
         self.lock().handle_fetch_blocks.push((peer, block_refs));
         Ok(vec![])
@@ -104,5 +109,74 @@ impl NetworkService for Mutex<TestService> {
         _peer: AuthorityIndex,
     ) -> ConsensusResult<(Vec<Round>, Vec<Round>)> {
         unimplemented!("Unimplemented")
+    }
+}
+
+#[async_trait]
+impl ObserverNetworkService for Mutex<TestService> {
+    async fn handle_block(&self, _peer: PeerId, _block: Bytes) -> ConsensusResult<()> {
+        unimplemented!("ObserverNetworkService handle_block not implemented for TestService")
+    }
+
+    async fn handle_stream_blocks(
+        &self,
+        peer: NodeId,
+        highest_round_per_authority: Vec<Round>,
+    ) -> ConsensusResult<ObserverBlockStream> {
+        use futures::stream;
+
+        {
+            let mut state = self.lock();
+            state.handle_stream_blocks.push(peer);
+        }
+
+        let blocks_to_send = {
+            let state = self.lock();
+            let min_round = highest_round_per_authority
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or(0);
+
+            state
+                .own_blocks
+                .iter()
+                .skip(min_round as usize + 1)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+
+        let block_stream =
+            stream::iter(
+                blocks_to_send
+                    .into_iter()
+                    .map(|extended_block| ObserverStreamItem {
+                        blocks: vec![match extended_block.block {
+                            SerializedBlockForm::Full(bytes) => bytes,
+                            SerializedBlockForm::Slim(bytes) => bytes,
+                        }],
+                        auxiliary_data: Default::default(),
+                    }),
+            );
+
+        Ok(Box::pin(block_stream))
+    }
+
+    async fn handle_fetch_blocks(
+        &self,
+        _peer: NodeId,
+        _block_refs: Vec<BlockRef>,
+        _fetch_after_rounds: Vec<Round>,
+        _fetch_missing_ancestors: bool,
+    ) -> ConsensusResult<Vec<Bytes>> {
+        unimplemented!("ObserverNetworkService fetch_blocks not implemented for TestService")
+    }
+
+    async fn handle_fetch_commits(
+        &self,
+        _peer: NodeId,
+        _commit_range: CommitRange,
+    ) -> ConsensusResult<(Vec<TrustedCommit>, Vec<VerifiedBlock>)> {
+        unimplemented!("ObserverNetworkService fetch_commits not implemented for TestService")
     }
 }

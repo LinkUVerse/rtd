@@ -11,7 +11,7 @@ use std::{
 
 use crate::lexer::*;
 use move_command_line_common::files::FileHash;
-use move_core_types::{account_address::AccountAddress, u256};
+use move_core_types::{account_address::AccountAddress, runtime_value::MoveValue, u256};
 use move_ir_types::{ast::*, location::*};
 use move_symbol_pool::Symbol;
 
@@ -165,20 +165,6 @@ fn parse_name_begin_ty(tokens: &mut Lexer) -> Result<Symbol, ParseError<Loc, any
     Ok(Symbol::from(name))
 }
 
-fn parse_dot_name<'input>(
-    tokens: &mut Lexer<'input>,
-) -> Result<&'input str, ParseError<Loc, anyhow::Error>> {
-    if tokens.peek() != Tok::DotNameValue {
-        return Err(ParseError::InvalidToken {
-            location: current_token_loc(tokens),
-            message: "expected Tok::DotNameValue".to_string(),
-        });
-    }
-    let name = tokens.content();
-    tokens.advance()?;
-    Ok(name)
-}
-
 // AccountAddress: AccountAddress = {
 //     < s: r"0[xX][0-9a-fA-F]+" > => { ... }
 // };
@@ -230,6 +216,27 @@ fn parse_var(tokens: &mut Lexer) -> Result<Var, ParseError<Loc, anyhow::Error>> 
     Ok(spanned(tokens.file_hash(), start_loc, end_loc, var))
 }
 
+/// A name beginning with an uppercase letter denotes a constant. Local
+/// variables and parameters must not begin with an uppercase letter.
+fn is_constant_name(name: &str) -> bool {
+    name.starts_with(|c: char| c.is_ascii_uppercase())
+}
+
+/// Parse a variable that introduces a local binding (a `let`, parameter, or
+/// unpack binding), which must not begin with an uppercase letter.
+fn parse_binding_var(tokens: &mut Lexer) -> Result<Var, ParseError<Loc, anyhow::Error>> {
+    let var = parse_var(tokens)?;
+    if is_constant_name(var.value.0.as_str()) {
+        return Err(ParseError::InvalidToken {
+            location: var.loc,
+            message: "local and parameter names must not begin with an uppercase letter \
+                      (that is reserved for constants)"
+                .to_string(),
+        });
+    }
+    Ok(var)
+}
+
 // Field: Field = {
 //     <n:Name> =>? parse_field(n),
 // };
@@ -245,9 +252,7 @@ fn parse_field(tokens: &mut Lexer) -> Result<Field, ParseError<Loc, anyhow::Erro
 fn parse_field_ident(tokens: &mut Lexer) -> Result<FieldIdent, ParseError<Loc, anyhow::Error>> {
     let start_loc = tokens.start_loc();
     let (name, type_actuals) = parse_name_and_type_actuals(tokens)?;
-    // For now, the lexer produces 2 ':' tokens instead of a single '::' token.
-    consume_token(tokens, Tok::Colon)?;
-    consume_token(tokens, Tok::Colon)?;
+    consume_token(tokens, Tok::ColonColon)?;
     let field = parse_field(tokens)?;
     let end_loc = tokens.previous_end_loc();
     Ok(spanned(
@@ -458,7 +463,7 @@ fn parse_rhs_of_binary_exp(
 
 // QualifiedFunctionName : FunctionCall = {
 //     <f: Builtin> => FunctionCall::Builtin(f),
-//     <module_dot_name: DotName> <type_actuals: TypeActuals> =>? { ... }
+//     <m: Name> "::" <n: Name> <type_actuals: TypeActuals> =>? { ... }
 // }
 
 fn parse_qualified_function_name(
@@ -466,13 +471,11 @@ fn parse_qualified_function_name(
 ) -> Result<FunctionCall, ParseError<Loc, anyhow::Error>> {
     let start_loc = tokens.start_loc();
     let call = match tokens.peek() {
-        Tok::VecPack(_)
-        | Tok::VecLen
+        Tok::VecLen
         | Tok::VecImmBorrow
         | Tok::VecMutBorrow
         | Tok::VecPushBack
         | Tok::VecPopBack
-        | Tok::VecUnpack(_)
         | Tok::VecSwap
         | Tok::Freeze
         | Tok::ToU8
@@ -484,14 +487,13 @@ fn parse_qualified_function_name(
             let f = parse_builtin(tokens)?;
             FunctionCall_::Builtin(f)
         }
-        Tok::DotNameValue => {
-            let module_dot_name = parse_dot_name(tokens)?;
-            let type_actuals = parse_type_actuals(tokens)?;
-            let v: Vec<&str> = module_dot_name.split('.').collect();
-            assert!(v.len() == 2);
+        Tok::NameValue => {
+            let module = ModuleName(parse_name(tokens)?);
+            consume_token(tokens, Tok::ColonColon)?;
+            let (name, type_actuals) = parse_name_and_type_actuals(tokens)?;
             FunctionCall_::ModuleFunctionCall {
-                module: ModuleName(Symbol::from(v[0])),
-                name: FunctionName(Symbol::from(v[1])),
+                module,
+                name: FunctionName(name),
                 type_actuals,
             }
         }
@@ -526,20 +528,37 @@ fn parse_borrow_field_(
     // only a simple name token is allowed, and it must not be
     // the start of a pack expression.
     let e = if tokens.peek() == Tok::NameValue {
-        if tokens.lookahead()? != Tok::LBrace {
-            let var = parse_var(tokens)?;
-            return Ok(Exp_::BorrowLocal(mutable, var));
+        match tokens.lookahead()? {
+            Tok::LBrace => {
+                let start_loc = tokens.start_loc();
+                let name = parse_name(tokens)?;
+                let end_loc = tokens.previous_end_loc();
+                let type_actuals: Vec<Type> = vec![];
+                spanned(
+                    tokens.file_hash(),
+                    start_loc,
+                    end_loc,
+                    parse_pack_(tokens, name, type_actuals)?,
+                )
+            }
+            // Module-qualified expression like `M::foo(...)` — parse as a
+            // general expression so field borrow applies to the call result.
+            Tok::ColonColon => parse_unary_exp(tokens)?,
+            _ => {
+                let var = parse_var(tokens)?;
+                if is_constant_name(var.value.0.as_str()) {
+                    return Err(ParseError::InvalidToken {
+                        location: var.loc,
+                        message: if mutable {
+                            "constants cannot be mutably borrowed".to_string()
+                        } else {
+                            "borrowing constants is not yet supported".to_string()
+                        },
+                    });
+                }
+                return Ok(Exp_::BorrowLocal(mutable, var));
+            }
         }
-        let start_loc = tokens.start_loc();
-        let name = parse_name(tokens)?;
-        let end_loc = tokens.previous_end_loc();
-        let type_actuals: Vec<Type> = vec![];
-        spanned(
-            tokens.file_hash(),
-            start_loc,
-            end_loc,
-            parse_pack_(tokens, name, type_actuals)?,
-        )
     } else {
         parse_unary_exp(tokens)?
     };
@@ -608,14 +627,40 @@ fn parse_call(
 // }
 
 fn parse_call_or_term_(tokens: &mut Lexer) -> Result<Exp_, ParseError<Loc, anyhow::Error>> {
+    // `vector<T; N>(args)` — vector pack expression.
+    if is_vector_pack_unpack_prefix(tokens) {
+        let (ty, n) = parse_vector_pack_prefix(tokens)?;
+        let args = parse_call_or_term(tokens)?;
+        return Ok(Exp_::VecPack(ty, n, Box::new(args)));
+    }
+
+    let is_module_call = tokens.peek() == Tok::NameValue && tokens.lookahead()? == Tok::ColonColon;
+    if is_module_call {
+        let f = parse_qualified_function_name(tokens)?;
+        return if tokens.peek() == Tok::LBrace {
+            let FunctionCall_::ModuleFunctionCall {
+                module: ModuleName(enum_name),
+                name: FunctionName(variant_name),
+                type_actuals,
+            } = f.value
+            else {
+                return Err(ParseError::InvalidToken {
+                    location: f.loc,
+                    message: "Invalid variant pack call".to_string(),
+                });
+            };
+            parse_variant_pack_(tokens, enum_name, variant_name, type_actuals)
+        } else {
+            let exp = parse_call_or_term(tokens)?;
+            Ok(Exp_::FunctionCall(f, Box::new(exp)))
+        };
+    }
     match tokens.peek() {
-        Tok::VecPack(_)
-        | Tok::VecLen
+        Tok::VecLen
         | Tok::VecImmBorrow
         | Tok::VecMutBorrow
         | Tok::VecPushBack
         | Tok::VecPopBack
-        | Tok::VecUnpack(_)
         | Tok::VecSwap
         | Tok::Freeze
         | Tok::ToU8
@@ -627,26 +672,6 @@ fn parse_call_or_term_(tokens: &mut Lexer) -> Result<Exp_, ParseError<Loc, anyho
             let f = parse_qualified_function_name(tokens)?;
             let exp = parse_call_or_term(tokens)?;
             Ok(Exp_::FunctionCall(f, Box::new(exp)))
-        }
-        Tok::DotNameValue => {
-            let f = parse_qualified_function_name(tokens)?;
-            if tokens.peek() == Tok::LBrace {
-                let FunctionCall_::ModuleFunctionCall {
-                    module: ModuleName(enum_name),
-                    name: FunctionName(variant_name),
-                    type_actuals,
-                } = f.value
-                else {
-                    return Err(ParseError::InvalidToken {
-                        location: f.loc,
-                        message: "Invalid variant pack call".to_string(),
-                    });
-                };
-                parse_variant_pack_(tokens, enum_name, variant_name, type_actuals)
-            } else {
-                let exp = parse_call_or_term(tokens)?;
-                Ok(Exp_::FunctionCall(f, Box::new(exp)))
-            }
         }
         _ => parse_term_(tokens),
     }
@@ -718,22 +743,46 @@ fn parse_term_(tokens: &mut Lexer) -> Result<Exp_, ParseError<Loc, anyhow::Error
             tokens.advance()?;
             let v = parse_var(tokens)?;
             consume_token(tokens, Tok::RParen)?;
+            if is_constant_name(v.value.0.as_str()) {
+                return Err(ParseError::InvalidToken {
+                    location: v.loc,
+                    message: "constants cannot be moved; use copy(...) to load a constant"
+                        .to_string(),
+                });
+            }
             Ok(Exp_::Move(v))
         }
         Tok::Copy => {
             tokens.advance()?;
             let v = parse_var(tokens)?;
             consume_token(tokens, Tok::RParen)?;
-            Ok(Exp_::Copy(v))
+            // `copy(C)` (uppercase) loads a named constant; `copy(c)` copies a local.
+            Ok(if is_constant_name(v.value.0.as_str()) {
+                Exp_::Constant(ConstantName(v.value.0))
+            } else {
+                Exp_::Copy(v)
+            })
         }
         Tok::AmpMut => {
             tokens.advance()?;
             let v = parse_var(tokens)?;
+            if is_constant_name(v.value.0.as_str()) {
+                return Err(ParseError::InvalidToken {
+                    location: v.loc,
+                    message: "constants cannot be mutably borrowed".to_string(),
+                });
+            }
             Ok(Exp_::BorrowLocal(true, v))
         }
         Tok::Amp => {
             tokens.advance()?;
             let v = parse_var(tokens)?;
+            if is_constant_name(v.value.0.as_str()) {
+                return Err(ParseError::InvalidToken {
+                    location: v.loc,
+                    message: "borrowing constants is not yet supported".to_string(),
+                });
+            }
             Ok(Exp_::BorrowLocal(false, v))
         }
         Tok::AccountAddressValue
@@ -768,19 +817,17 @@ fn parse_term_(tokens: &mut Lexer) -> Result<Exp_, ParseError<Loc, anyhow::Error
     }
 }
 
-// QualifiedStructIdent : QualifiedStructIdent = {
-//     <module_dot_struct: DotName> =>? { ... }
+// QualifiedStructIdent : (QualifiedStructIdent, Vec<Type>) = {
+//     <m: Name> "::" <n_and_tys: NameAndTypeActuals> =>? { ... }
 // }
 
 fn parse_qualified_struct_ident(
     tokens: &mut Lexer,
-) -> Result<QualifiedDatatypeIdent, ParseError<Loc, anyhow::Error>> {
-    let module_dot_struct = parse_dot_name(tokens)?;
-    let v: Vec<&str> = module_dot_struct.split('.').collect();
-    assert!(v.len() == 2);
-    let m: ModuleName = ModuleName(Symbol::from(v[0]));
-    let n: DatatypeName = DatatypeName(Symbol::from(v[1]));
-    Ok(QualifiedDatatypeIdent::new(m, n))
+) -> Result<(QualifiedDatatypeIdent, Vec<Type>), ParseError<Loc, anyhow::Error>> {
+    let m = ModuleName(parse_name(tokens)?);
+    consume_token(tokens, Tok::ColonColon)?;
+    let (n_sym, tys) = parse_name_and_type_actuals(tokens)?;
+    Ok((QualifiedDatatypeIdent::new(m, DatatypeName(n_sym)), tys))
 }
 
 // ModuleName: ModuleName = {
@@ -800,14 +847,66 @@ fn parse_module_name(tokens: &mut Lexer) -> Result<ModuleName, ParseError<Loc, a
 //     "vec_*<" <type_actuals: TypeActuals> ">" =>? { ... },
 //     "freeze" => Builtin::Freeze,
 // }
+//
+// VectorPack (expression):
+//     "vector" "<" <ty: Type> ";" <n: U64> ">" <args: CallOrTerm>
+//         => Exp_::VecPack(ty, n, args)
+//
+// VectorUnpack (statement):
+//     "vector" "<" <ty: Type> ";" <n: U64> ">"
+//         "(" <lvs: Comma<LValue>> ")" "=" <e: Exp> ";"
+//         => Statement_::VecUnpack(ty, n, lvs, e)
+//
+// Pack and unpack share the prefix `vector<T; N>` and disambiguate by
+// position: pack lives in expression position, unpack lives in statement
+// position with `=`. See `parse_vector_pack_prefix`, the dispatch in
+// `parse_call_or_term_`, and `parse_vector_unpack_statement` below.
+
+fn parse_u64_literal(tokens: &mut Lexer) -> Result<u64, ParseError<Loc, anyhow::Error>> {
+    if tokens.peek() != Tok::U64Value {
+        return Err(ParseError::InvalidToken {
+            location: current_token_loc(tokens),
+            message: "expected unsigned integer literal".to_string(),
+        });
+    }
+    let mut s = tokens.content();
+    if s.ends_with("u64") {
+        s = &s[..s.len() - 3];
+    }
+    let n = u64::from_str(s).map_err(|_| ParseError::InvalidToken {
+        location: current_token_loc(tokens),
+        message: format!("invalid u64 literal: {}", s),
+    })?;
+    tokens.advance()?;
+    Ok(n)
+}
+
+// Returns true when the upcoming tokens are the prefix of a vector pack or
+// unpack form: `vector<` (a `NameBeginTyValue` whose content is `"vector<"`).
+// Used to dispatch in expression and statement positions before committing
+// to parsing.
+fn is_vector_pack_unpack_prefix(tokens: &Lexer) -> bool {
+    tokens.peek() == Tok::NameBeginTyValue && tokens.content() == "vector<"
+}
+
+// Parses `vector < <Type> ; <U64> >`, returning (element type, arity).
+// Caller has confirmed via `is_vector_pack_unpack_prefix` that the upcoming
+// tokens are `vector<...`.
+fn parse_vector_pack_prefix(
+    tokens: &mut Lexer,
+) -> Result<(Type, u64), ParseError<Loc, anyhow::Error>> {
+    debug_assert!(is_vector_pack_unpack_prefix(tokens));
+    tokens.advance()?; // consume `vector<` (a single NameBeginTyValue token)
+    let ty = parse_type(tokens)?;
+    consume_token(tokens, Tok::Semicolon)?;
+    let arity = parse_u64_literal(tokens)?;
+    adjust_token(tokens, &[Tok::Greater])?;
+    consume_token(tokens, Tok::Greater)?;
+    Ok((ty, arity))
+}
 
 fn parse_builtin(tokens: &mut Lexer) -> Result<Builtin, ParseError<Loc, anyhow::Error>> {
     match tokens.peek() {
-        Tok::VecPack(num) => {
-            tokens.advance()?;
-            let type_actuals = parse_type_actuals(tokens)?;
-            Ok(Builtin::VecPack(type_actuals, num))
-        }
         Tok::VecLen => {
             tokens.advance()?;
             let type_actuals = parse_type_actuals(tokens)?;
@@ -832,11 +931,6 @@ fn parse_builtin(tokens: &mut Lexer) -> Result<Builtin, ParseError<Loc, anyhow::
             tokens.advance()?;
             let type_actuals = parse_type_actuals(tokens)?;
             Ok(Builtin::VecPopBack(type_actuals))
-        }
-        Tok::VecUnpack(num) => {
-            tokens.advance()?;
-            let type_actuals = parse_type_actuals(tokens)?;
-            Ok(Builtin::VecUnpack(type_actuals, num))
         }
         Tok::VecSwap => {
             tokens.advance()?;
@@ -888,6 +982,12 @@ fn parse_lvalue_(tokens: &mut Lexer) -> Result<LValue_, ParseError<Loc, anyhow::
     match tokens.peek() {
         Tok::NameValue => {
             let l = parse_var(tokens)?;
+            if is_constant_name(l.value.0.as_str()) {
+                return Err(ParseError::InvalidToken {
+                    location: l.loc,
+                    message: "cannot assign to a constant".to_string(),
+                });
+            }
             Ok(LValue_::Var(l))
         }
         Tok::Star => {
@@ -924,7 +1024,7 @@ fn parse_field_bindings(
     let f = parse_field(tokens)?;
     if tokens.peek() == Tok::Colon {
         tokens.advance()?; // consume the colon
-        let v = parse_var(tokens)?;
+        let v = parse_binding_var(tokens)?;
         Ok((f, v))
     } else {
         Ok((
@@ -959,6 +1059,33 @@ fn parse_assign_(tokens: &mut Lexer) -> Result<Statement_, ParseError<Loc, anyho
     consume_token(tokens, Tok::Equal)?;
     let e = parse_exp(tokens)?;
     Ok(Statement_::Assign(lvalues, e))
+}
+
+// `vector<T; N>(lvalues) = expr;` — vector unpack statement form. Mirrors
+// the shape of struct unpack `Foo<T> { f: var } = expr` (see `parse_unpack_`):
+// same prefix `vector<T; N>` lives in pack/expression position too, but here
+// the parens hold LValues (var / `_` / `*ref`) and the bracket count = arity.
+fn parse_vector_unpack_statement(
+    tokens: &mut Lexer,
+) -> Result<Statement_, ParseError<Loc, anyhow::Error>> {
+    let (ty, n) = parse_vector_pack_prefix(tokens)?;
+    consume_token(tokens, Tok::LParen)?;
+    let lparen_end = tokens.previous_end_loc();
+    let lvalues = parse_comma_list(tokens, &[Tok::RParen], parse_lvalue, true)?;
+    consume_token(tokens, Tok::RParen)?;
+
+    if lvalues.len() as u64 != n {
+        return Err(ParseError::InvalidToken {
+            location: make_loc(tokens.file_hash(), lparen_end, tokens.previous_end_loc()),
+            message: format!(
+                "vector unpack arity mismatch: expected {n} lvalues, got {}",
+                lvalues.len()
+            ),
+        });
+    }
+    consume_token(tokens, Tok::Equal)?;
+    let rhs = parse_exp(tokens)?;
+    Ok(Statement_::VecUnpack(ty, n, lvalues, Box::new(rhs)))
 }
 
 fn parse_unpack_(
@@ -1072,13 +1199,43 @@ fn parse_statement_(tokens: &mut Lexer) -> Result<Statement_, ParseError<Loc, an
             ))
         }
         Tok::NameValue => {
-            // This could be either an LValue for an assignment or
-            // NameAndTypeActuals (with no type_actuals) for an unpack.
-            if tokens.lookahead()? == Tok::LBrace {
-                let name = parse_name(tokens)?;
-                parse_unpack_(tokens, name, vec![])
-            } else {
-                parse_assign_(tokens)
+            // This could be: an LValue for an assignment, a NameAndTypeActuals
+            // (with no type_actuals) for an unpack, or a module-qualified
+            // function call / variant unpack of the form `M::foo(...)` /
+            // `M::Variant { ... } = e`. Vector unpack `vector<T; N>(lvs) = e`
+            // is dispatched via the `Tok::NameBeginTyValue` arm below.
+            match tokens.lookahead()? {
+                Tok::LBrace => {
+                    let name = parse_name(tokens)?;
+                    parse_unpack_(tokens, name, vec![])
+                }
+                Tok::ColonColon => {
+                    let start_loc = tokens.start_loc();
+                    let f = parse_qualified_function_name(tokens)?;
+                    if tokens.peek() == Tok::LBrace {
+                        let FunctionCall_::ModuleFunctionCall {
+                            module: ModuleName(enum_name),
+                            name: FunctionName(variant_name),
+                            type_actuals,
+                        } = f.value
+                        else {
+                            return Err(ParseError::InvalidToken {
+                                location: f.loc,
+                                message: "Invalid variant unpack call".to_string(),
+                            });
+                        };
+                        parse_variant_unpack_(
+                            tokens,
+                            enum_name,
+                            variant_name,
+                            type_actuals,
+                            UnpackType::ByValue,
+                        )
+                    } else {
+                        Ok(Statement_::Exp(Box::new(parse_call(tokens, f, start_loc)?)))
+                    }
+                }
+                _ => parse_assign_(tokens),
             }
         }
         Tok::Return => {
@@ -1095,6 +1252,12 @@ fn parse_statement_(tokens: &mut Lexer) -> Result<Statement_, ParseError<Loc, an
         }
         Tok::Star | Tok::Underscore => parse_assign_(tokens),
         Tok::NameBeginTyValue => {
+            // `vector<T; N>(lvs) = e;` — vector unpack statement form.
+            // Distinguished from struct unpack `Foo<T> { f: x } = e;` by the
+            // `vector<` content of the lex token.
+            if is_vector_pack_unpack_prefix(tokens) {
+                return parse_vector_unpack_statement(tokens);
+            }
             let (name, tys) = parse_name_and_type_actuals(tokens)?;
             parse_unpack_(tokens, name, tys)
         }
@@ -1102,13 +1265,11 @@ fn parse_statement_(tokens: &mut Lexer) -> Result<Statement_, ParseError<Loc, an
             consume_token(tokens, Tok::VariantSwitch)?;
             parse_variant_switch_(tokens)
         }
-        Tok::VecPack(_)
-        | Tok::VecLen
+        Tok::VecLen
         | Tok::VecImmBorrow
         | Tok::VecMutBorrow
         | Tok::VecPushBack
         | Tok::VecPopBack
-        | Tok::VecUnpack(_)
         | Tok::VecSwap
         | Tok::Freeze
         | Tok::ToU8
@@ -1116,32 +1277,10 @@ fn parse_statement_(tokens: &mut Lexer) -> Result<Statement_, ParseError<Loc, an
         | Tok::ToU32
         | Tok::ToU64
         | Tok::ToU128
-        | Tok::DotNameValue
         | Tok::ToU256 => {
             let start_loc = tokens.start_loc();
             let f = parse_qualified_function_name(tokens)?;
-            if tokens.peek() == Tok::LBrace {
-                let FunctionCall_::ModuleFunctionCall {
-                    module: ModuleName(enum_name),
-                    name: FunctionName(variant_name),
-                    type_actuals,
-                } = f.value
-                else {
-                    return Err(ParseError::InvalidToken {
-                        location: f.loc,
-                        message: "Invalid variant unpack call".to_string(),
-                    });
-                };
-                parse_variant_unpack_(
-                    tokens,
-                    enum_name,
-                    variant_name,
-                    type_actuals,
-                    UnpackType::ByValue,
-                )
-            } else {
-                Ok(Statement_::Exp(Box::new(parse_call(tokens, f, start_loc)?)))
-            }
+            Ok(Statement_::Exp(Box::new(parse_call(tokens, f, start_loc)?)))
         }
         x @ (Tok::Amp | Tok::AmpMut) => {
             let start_loc = current_token_loc(tokens);
@@ -1250,7 +1389,7 @@ fn parse_block(tokens: &mut Lexer) -> Result<Block, ParseError<Loc, anyhow::Erro
 
 fn parse_declaration(tokens: &mut Lexer) -> Result<(Var, Type), ParseError<Loc, anyhow::Error>> {
     consume_token(tokens, Tok::Let)?;
-    let v = parse_var(tokens)?;
+    let v = parse_binding_var(tokens)?;
     consume_token(tokens, Tok::Colon)?;
     let t = parse_type(tokens)?;
     consume_token(tokens, Tok::Semicolon)?;
@@ -1375,11 +1514,6 @@ fn parse_type(tokens: &mut Lexer) -> Result<Type, ParseError<Loc, anyhow::Error>
             consume_token(tokens, Tok::Greater)?;
             Type_::Vector(Box::new(ty))
         }
-        Tok::DotNameValue => {
-            let s = parse_qualified_struct_ident(tokens)?;
-            let tys = parse_type_actuals(tokens)?;
-            Type_::Datatype(s, tys)
-        }
         Tok::Amp => {
             tokens.advance()?;
             Type_::Reference(false, Box::new(parse_type(tokens)?))
@@ -1387,6 +1521,10 @@ fn parse_type(tokens: &mut Lexer) -> Result<Type, ParseError<Loc, anyhow::Error>
         Tok::AmpMut => {
             tokens.advance()?;
             Type_::Reference(true, Box::new(parse_type(tokens)?))
+        }
+        Tok::NameValue if tokens.lookahead()? == Tok::ColonColon => {
+            let (s, tys) = parse_qualified_struct_ident(tokens)?;
+            Type_::Datatype(s, tys)
         }
         Tok::NameValue => Type_::TypeParameter(TypeVar_(parse_name(tokens)?)),
         t => {
@@ -1538,7 +1676,7 @@ fn parse_name_and_type_actuals(
 // }
 
 fn parse_arg_decl(tokens: &mut Lexer) -> Result<(Var, Type), ParseError<Loc, anyhow::Error>> {
-    let v = parse_var(tokens)?;
+    let v = parse_binding_var(tokens)?;
     consume_token(tokens, Tok::Colon)?;
     let t = parse_type(tokens)?;
     Ok((v, t))
@@ -1559,34 +1697,127 @@ fn parse_return_type(tokens: &mut Lexer) -> Result<Vec<Type>, ParseError<Loc, an
     Ok(v)
 }
 
-// FunctionVisibility : FunctionVisibility = {
-//   (Public("("<v: Script | Friend>")")?)?
+//**************************************************************************************************
+// Modifiers
+//**************************************************************************************************
+
+/// Module-member modifiers (visibility, native, entry) parsed up front before
+/// dispatching to the appropriate decl parser. Modeled on the source-language
+/// `Modifiers` struct in `move-compiler/src/parser/syntax.rs`.
+struct Modifiers {
+    visibility: Option<(FunctionVisibility, Loc)>,
+    native: Option<Loc>,
+    entry: Option<Loc>,
+}
+
+impl Modifiers {
+    fn empty() -> Self {
+        Self {
+            visibility: None,
+            native: None,
+            entry: None,
+        }
+    }
+}
+
+// ModuleMemberModifiers = <ModuleMemberModifier>*
+// ModuleMemberModifier  = <Visibility> | "native" | "entry"
+// Each modifier may appear at most once; any order is accepted.
+fn parse_module_member_modifiers(
+    tokens: &mut Lexer,
+) -> Result<Modifiers, ParseError<Loc, anyhow::Error>> {
+    let mut mods = Modifiers::empty();
+    loop {
+        match tokens.peek() {
+            Tok::Public => {
+                let vis_loc = current_token_loc(tokens);
+                let vis = parse_visibility(tokens)?;
+                if mods.visibility.is_some() {
+                    return Err(duplicate_modifier_error(vis_loc, "visibility"));
+                }
+                mods.visibility = Some((vis, vis_loc));
+            }
+            Tok::Native => {
+                let loc = current_token_loc(tokens);
+                tokens.advance()?;
+                if mods.native.is_some() {
+                    return Err(duplicate_modifier_error(loc, "'native'"));
+                }
+                mods.native = Some(loc);
+            }
+            Tok::NameValue if tokens.content() == "entry" => {
+                let loc = current_token_loc(tokens);
+                tokens.advance()?;
+                if mods.entry.is_some() {
+                    return Err(duplicate_modifier_error(loc, "'entry'"));
+                }
+                mods.entry = Some(loc);
+            }
+            _ => break,
+        }
+    }
+    Ok(mods)
+}
+
+fn duplicate_modifier_error(loc: Loc, modifier: &str) -> ParseError<Loc, anyhow::Error> {
+    ParseError::InvalidToken {
+        location: loc,
+        message: format!("Duplicate {modifier} modifier"),
+    }
+}
+
+fn check_no_modifier(
+    modifier_loc: Option<Loc>,
+    modifier_name: &str,
+    decl: &str,
+) -> Result<(), ParseError<Loc, anyhow::Error>> {
+    if let Some(loc) = modifier_loc {
+        return Err(ParseError::InvalidToken {
+            location: loc,
+            message: format!("'{modifier_name}' is not a valid modifier on {decl} declarations"),
+        });
+    }
+    Ok(())
+}
+
+fn require_public_visibility(
+    visibility: Option<(FunctionVisibility, Loc)>,
+    decl_keyword_loc: Loc,
+    decl: &str,
+) -> Result<(), ParseError<Loc, anyhow::Error>> {
+    match visibility {
+        Some((FunctionVisibility::Public, _)) => Ok(()),
+        Some((_, loc)) => Err(ParseError::InvalidToken {
+            location: loc,
+            message: format!("only 'public' visibility is supported on {decl} declarations"),
+        }),
+        None => Err(ParseError::InvalidToken {
+            location: decl_keyword_loc,
+            message: format!("{decl} declarations require an explicit 'public' visibility"),
+        }),
+    }
+}
+
+// Visibility : FunctionVisibility = {
+//   (Public("(" "friend" ")")?)?
 // }
-fn parse_function_visibility(
+fn parse_visibility(
     tokens: &mut Lexer,
 ) -> Result<FunctionVisibility, ParseError<Loc, anyhow::Error>> {
     let visibility = if match_token(tokens, Tok::Public)? {
-        let sub_public_vis = if match_token(tokens, Tok::LParen)? {
+        if match_token(tokens, Tok::LParen)? {
             let sub_token = tokens.peek();
-            match &sub_token {
-                Tok::Script | Tok::Friend => (),
-                t => {
-                    return Err(ParseError::InvalidToken {
-                        location: current_token_loc(tokens),
-                        message: format!("expected Tok::Script or Tok::Friend, not {:?}", t),
-                    });
-                }
+            if sub_token != Tok::Friend {
+                return Err(ParseError::InvalidToken {
+                    location: current_token_loc(tokens),
+                    message: format!("expected Tok::Friend, not {:?}", sub_token),
+                });
             }
             tokens.advance()?;
             consume_token(tokens, Tok::RParen)?;
-            Some(sub_token)
+            FunctionVisibility::Friend
         } else {
-            None
-        };
-        match sub_public_vis {
-            None => FunctionVisibility::Public,
-            Some(Tok::Friend) => FunctionVisibility::Friend,
-            _ => panic!("Unexpected token that is not a visibility modifier"),
+            FunctionVisibility::Public
         }
     } else {
         FunctionVisibility::Internal
@@ -1600,14 +1831,16 @@ fn parse_function_visibility(
 // }
 
 // MoveFunctionDecl : (FunctionName, Function) = {
-//     <v: FunctionVisibility> <name_and_type_parameters: NameAndTypeFormals>
+//     <v: FunctionVisibility> <entry: "entry"?> "fun"
+//     <name_and_type_parameters: NameAndTypeFormals>
 //     "(" <args: (ArgDecl)*> ")" <ret: ReturnType?>
 //         <acquires: AcquireList?>
 //         <locals_body: FunctionBlock> =>? { ... }
 // }
 
 // NativeFunctionDecl: (FunctionName, Function) = {
-//     <nat: NativeTag> <v: FunctionVisibility> <name_and_type_parameters: NameAndTypeFormals>
+//     <nat: NativeTag> <v: FunctionVisibility> <entry: "entry"?> "fun"
+//     <name_and_type_parameters: NameAndTypeFormals>
 //     "(" <args: Comma<ArgDecl>> ")" <ret: ReturnType?>
 //         <acquires: AcquireList?>
 //         ";" =>? { ... }
@@ -1615,23 +1848,24 @@ fn parse_function_visibility(
 
 fn parse_function_decl(
     tokens: &mut Lexer,
+    start_loc: usize,
+    modifiers: Modifiers,
 ) -> Result<(FunctionName, Function), ParseError<Loc, anyhow::Error>> {
-    let start_loc = tokens.start_loc();
+    let Modifiers {
+        visibility,
+        native,
+        entry,
+    } = modifiers;
+    let visibility = visibility
+        .map(|(v, _)| v)
+        .unwrap_or(FunctionVisibility::Internal);
+    let is_native = native.is_some();
+    let is_entry = entry.is_some();
 
-    let is_native = if tokens.peek() == Tok::Native {
-        tokens.advance()?;
-        true
-    } else {
-        false
-    };
-
-    let visibility = parse_function_visibility(tokens)?;
-    let is_entry = if tokens.peek() == Tok::NameValue && tokens.content() == "entry" {
-        tokens.advance()?;
-        true
-    } else {
-        false
-    };
+    // The dispatcher in `parse_module` has already verified the upcoming
+    // token is the `fun` keyword.
+    debug_assert!(tokens.peek() == Tok::NameValue && tokens.content() == "fun");
+    tokens.advance()?;
 
     let (name, type_parameters) = parse_name_and_type_parameters(tokens, parse_type_parameter)?;
     consume_token(tokens, Tok::LParen)?;
@@ -1682,23 +1916,24 @@ fn parse_field_decl(tokens: &mut Lexer) -> Result<(Field, Type), ParseError<Loc,
 }
 
 // StructDecl: StructDefinition_ = {
-//     "struct" <name_and_type_parameters:
-//     NameAndTypeFormals> ("has" <Ability> ("," <Ability)*)? "{" <data: Comma<FieldDecl>> "}"
-//     =>? { ... }
-//     <native: NativeTag> <name_and_type_parameters: NameAndTypeFormals>
-//     ("has" <Ability> ("," <Ability)*)?";" =>? { ... }
+//     "public" "native"? "struct" <name_and_type_parameters: NameAndTypeFormals>
+//         ("has" <Ability> ("," <Ability>)*)?
+//         ( "{" <data: Comma<FieldDecl>> "}" | ";" )
 // }
 fn parse_struct_decl(
     tokens: &mut Lexer,
+    start_loc: usize,
+    modifiers: Modifiers,
 ) -> Result<StructDefinition, ParseError<Loc, anyhow::Error>> {
-    let start_loc = tokens.start_loc();
-
-    let is_native = if tokens.peek() == Tok::Native {
-        tokens.advance()?;
-        true
-    } else {
-        false
-    };
+    let Modifiers {
+        visibility,
+        native,
+        entry,
+    } = modifiers;
+    let struct_keyword_loc = current_token_loc(tokens);
+    require_public_visibility(visibility, struct_keyword_loc, "struct")?;
+    check_no_modifier(entry, "entry", "struct")?;
+    let is_native = native.is_some();
 
     consume_token(tokens, Tok::Struct)?;
     let (name, type_parameters) =
@@ -1744,12 +1979,24 @@ fn parse_struct_decl(
 }
 
 // EnumDecl: EnumDefinition = {
-//     "enum" <name_and_type_parameters:
-//     NameAndTypeFormals> ("has" <Ability> ("," <Ability)*)? "{" <data: Comma<VariantDecl>> "}"
-//     => { ... }
+//     "public" "enum" <name_and_type_parameters: NameAndTypeFormals>
+//         ("has" <Ability> ("," <Ability>)*)?
+//         "{" <data: Comma<VariantDecl>> "}"
 // }
-fn parse_enum_decl(tokens: &mut Lexer) -> Result<EnumDefinition, ParseError<Loc, anyhow::Error>> {
-    let start_loc = tokens.start_loc();
+fn parse_enum_decl(
+    tokens: &mut Lexer,
+    start_loc: usize,
+    modifiers: Modifiers,
+) -> Result<EnumDefinition, ParseError<Loc, anyhow::Error>> {
+    let Modifiers {
+        visibility,
+        native,
+        entry,
+    } = modifiers;
+    let enum_keyword_loc = current_token_loc(tokens);
+    require_public_visibility(visibility, enum_keyword_loc, "enum")?;
+    check_no_modifier(native, "native", "enum")?;
+    check_no_modifier(entry, "entry", "enum")?;
 
     consume_token(tokens, Tok::Enum)?;
 
@@ -1809,21 +2056,114 @@ fn parse_variant_decl(
     ))
 }
 
+// ConstantDecl: Constant = {
+//     "const" <name: Name> ":" <ty: Type> "=" <value: ConstantValue> ";"
+// }
+// Constants take no module-member modifiers. The declared type is not checked
+// against the value here — that is the bytecode verifier's job.
+fn parse_constant_decl(
+    tokens: &mut Lexer,
+    modifiers: Modifiers,
+) -> Result<Constant, ParseError<Loc, anyhow::Error>> {
+    let Modifiers {
+        visibility,
+        native,
+        entry,
+    } = modifiers;
+    if let Some((vis, loc)) = visibility {
+        let modifier = match vis {
+            FunctionVisibility::Public => "public",
+            FunctionVisibility::Friend => "public(friend)",
+            FunctionVisibility::Internal => unreachable!("not a parseable visibility"),
+        };
+        check_no_modifier(Some(loc), modifier, "constant")?;
+    };
+    check_no_modifier(native, "native", "constant")?;
+    check_no_modifier(entry, "entry", "constant")?;
+
+    consume_token(tokens, Tok::Const)?;
+    let name_loc = current_token_loc(tokens);
+    let name = ConstantName(parse_name(tokens)?);
+    if !is_constant_name(name.0.as_str()) {
+        return Err(ParseError::InvalidToken {
+            location: name_loc,
+            message: "constant names must begin with an uppercase letter".to_string(),
+        });
+    }
+    consume_token(tokens, Tok::Colon)?;
+    let signature = parse_type(tokens)?;
+    consume_token(tokens, Tok::Equal)?;
+    let value = parse_constant_value(tokens)?;
+    consume_token(tokens, Tok::Semicolon)?;
+    Ok(Constant {
+        name,
+        signature,
+        value,
+        is_error_constant: false,
+    })
+}
+
+// ConstantValue: MoveValue = {
+//     <i: U8 | U16 | U32 | U64 | U128 | U256>  // integer literals require a suffix
+//     "true" | "false"
+//     <a: AccountAddress>
+//     <b: ByteArray>                           // h"..", lowered to vector<u8>
+//     "vector" "(" <elems: Comma<ConstantValue>> ")"
+// }
+// Each value is self-describing, so the parsed `MoveValue` is independent of the constant's
+// declared type.
+fn parse_constant_value(tokens: &mut Lexer) -> Result<MoveValue, ParseError<Loc, anyhow::Error>> {
+    // `vector(elem, ...)` — element values are self-describing; there is no
+    // element-type annotation.
+    if tokens.peek() == Tok::NameValue && tokens.content() == "vector" {
+        tokens.advance()?; // consume `vector`
+        consume_token(tokens, Tok::LParen)?;
+        let elems = parse_comma_list(tokens, &[Tok::RParen], parse_constant_value, true)?;
+        consume_token(tokens, Tok::RParen)?;
+        return Ok(MoveValue::Vector(elems));
+    }
+    // `@addr` — named or literal address, mirroring address expressions.
+    if tokens.peek() == Tok::At {
+        tokens.advance()?;
+        return Ok(MoveValue::Address(parse_account_address(tokens)?));
+    }
+    // A bare integer (no suffix) lexes as `U64Value`; constant values must be
+    // self-describing, so require an explicit suffix.
+    if tokens.peek() == Tok::U64Value && !tokens.content().ends_with("u64") {
+        return Err(ParseError::InvalidToken {
+            location: current_token_loc(tokens),
+            message: "integer constant value requires a type suffix (e.g. 7u64)".to_string(),
+        });
+    }
+    // Reuse the expression literal parser for scalars and byte arrays so the
+    // numeric parsing (and its overflow behavior) is shared with expressions.
+    let val = parse_copyable_val(tokens)?;
+    Ok(copyable_val_to_move_value(val.value))
+}
+
+fn copyable_val_to_move_value(val: CopyableVal_) -> MoveValue {
+    match val {
+        CopyableVal_::Address(a) => MoveValue::Address(a),
+        CopyableVal_::U8(i) => MoveValue::U8(i),
+        CopyableVal_::U16(i) => MoveValue::U16(i),
+        CopyableVal_::U32(i) => MoveValue::U32(i),
+        CopyableVal_::U64(i) => MoveValue::U64(i),
+        CopyableVal_::U128(i) => MoveValue::U128(i),
+        CopyableVal_::U256(i) => MoveValue::U256(i),
+        CopyableVal_::Bool(b) => MoveValue::Bool(b),
+        CopyableVal_::ByteArray(bytes) => {
+            MoveValue::Vector(bytes.into_iter().map(MoveValue::U8).collect())
+        }
+    }
+}
+
 // ModuleIdent: ModuleIdent = {
-//     <a: AccountAddress> "." <m: ModuleName> => ModuleIdent::new(m, a),
+//     <a: AccountAddress> "::" <m: ModuleName> => ModuleIdent::new(m, a),
 // }
 
 fn parse_module_ident(tokens: &mut Lexer) -> Result<ModuleIdent, ParseError<Loc, anyhow::Error>> {
-    if tokens.peek() == Tok::DotNameValue {
-        let start_loc = current_token_loc(tokens);
-        let module_dot_name = parse_dot_name(tokens)?;
-        let v: Vec<&str> = module_dot_name.split('.').collect();
-        assert!(v.len() == 2);
-        let address = parse_address_literal(tokens, v[0], start_loc)?;
-        return Ok(ModuleIdent::new(ModuleName(Symbol::from(v[1])), address));
-    }
     let a = parse_account_address(tokens)?;
-    consume_token(tokens, Tok::Period)?;
+    consume_token(tokens, Tok::ColonColon)?;
     let m = parse_module_name(tokens)?;
     Ok(ModuleIdent::new(m, a))
 }
@@ -1875,7 +2215,8 @@ fn parse_import_decl(
 
 // pub Module : ModuleDefinition = {
 //     ["unpublishable"]
-//     "module" <n: Name> "{"
+//     // `mvir` here is the IR-side keyword for what Move source calls `module`.
+//     "mvir" <n: Name> "{"
 //         <friends: (FriendDecl)*>
 //         <imports: (ImportDecl)*>
 //         <structs: (StructDecl)*>
@@ -1883,15 +2224,6 @@ fn parse_import_decl(
 //         <functions: (FunctionDecl)*>
 //     "}" =>? ModuleDefinition::new(n, imports, structs, functions),
 // }
-
-fn is_struct_decl(tokens: &mut Lexer) -> Result<bool, ParseError<Loc, anyhow::Error>> {
-    let t = tokens.peek();
-    Ok(t == Tok::Struct || (t == Tok::Native && tokens.lookahead()? == Tok::Struct))
-}
-
-fn is_enum_decl(tokens: &mut Lexer) -> bool {
-    tokens.peek() == Tok::Enum
-}
 
 fn parse_module(tokens: &mut Lexer) -> Result<ModuleDefinition, ParseError<Loc, anyhow::Error>> {
     let publishable =
@@ -1902,7 +2234,7 @@ fn parse_module(tokens: &mut Lexer) -> Result<ModuleDefinition, ParseError<Loc, 
             true
         };
     let start_loc = tokens.start_loc();
-    consume_token(tokens, Tok::Module)?;
+    consume_token(tokens, Tok::Mvir)?;
     let identifier = parse_module_ident(tokens)?;
     consume_token(tokens, Tok::LBrace)?;
 
@@ -1917,18 +2249,35 @@ fn parse_module(tokens: &mut Lexer) -> Result<ModuleDefinition, ParseError<Loc, 
     }
 
     let mut structs: Vec<StructDefinition> = vec![];
-    while is_struct_decl(tokens)? {
-        structs.push(parse_struct_decl(tokens)?);
-    }
-
     let mut enums: Vec<EnumDefinition> = vec![];
-    while is_enum_decl(tokens) {
-        enums.push(parse_enum_decl(tokens)?);
-    }
-
+    let mut constants: Vec<Constant> = vec![];
     let mut functions: Vec<(FunctionName, Function)> = vec![];
     while tokens.peek() != Tok::RBrace {
-        functions.push(parse_function_decl(tokens)?);
+        let decl_start_loc = tokens.start_loc();
+        let modifiers = parse_module_member_modifiers(tokens)?;
+
+        match tokens.peek() {
+            Tok::Struct => {
+                structs.push(parse_struct_decl(tokens, decl_start_loc, modifiers)?);
+            }
+            Tok::Enum => {
+                enums.push(parse_enum_decl(tokens, decl_start_loc, modifiers)?);
+            }
+            Tok::Const => {
+                constants.push(parse_constant_decl(tokens, modifiers)?);
+            }
+            // `fun` is detected by content (matching the existing `entry`
+            // pattern); only function decls start with that keyword.
+            Tok::NameValue if tokens.content() == "fun" => {
+                functions.push(parse_function_decl(tokens, decl_start_loc, modifiers)?);
+            }
+            _ => {
+                return Err(ParseError::InvalidToken {
+                    location: current_token_loc(tokens),
+                    message: "expected 'const', 'struct', 'enum', or 'fun' declaration".to_string(),
+                });
+            }
+        }
     }
     tokens.advance()?; // consume the RBrace
     let end_loc = tokens.previous_end_loc();
@@ -1944,7 +2293,7 @@ fn parse_module(tokens: &mut Lexer) -> Result<ModuleDefinition, ParseError<Loc, 
         vec![],
         structs,
         enums,
-        vec![],
+        constants,
         functions,
     ))
 }

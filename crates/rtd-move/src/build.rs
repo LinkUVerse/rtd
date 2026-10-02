@@ -4,10 +4,10 @@
 use clap::Parser;
 use move_cli::base::{self};
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
-use std::{fs, path::Path};
 use rtd_move_build::BuildConfig;
-use rtd_package_alt::find_environment;
+use rtd_package_alt::{RtdFlavor, find_environment};
 use rtd_sdk::wallet_context::WalletContext;
+use std::{fs, path::Path};
 
 const LAYOUTS_DIR: &str = "layouts";
 const STRUCT_LAYOUTS_FILENAME: &str = "struct_layouts.yaml";
@@ -19,9 +19,16 @@ pub struct Build {
     /// when dumping bytecode as base64)
     #[clap(long, global = true)]
     pub with_unpublished_dependencies: bool,
-    /// Whether we are printing in base64.
-    #[clap(long, global = true)]
+    /// Dump the compiled bytecode as base64-encoded strings in a JSON object, together with the
+    /// digest and list of dependencies.
+    #[clap(long, visible_alias = "dump", global = true)]
     pub dump_bytecode_as_base64: bool,
+    /// By default, the CLI will drop any unused dependencies from the output and makes calls to
+    /// the RPC. This flag disables that behavior and avoids any RPC calls, keeping all
+    /// dependencies in the output (the dependency list). This is useful for offline compilation.
+    /// Only to be used with `--dump-bytecode-as-base64`.
+    #[clap(long, global = true, requires = "dump_bytecode_as_base64")]
+    pub no_tree_shaking: bool,
     /// If true, generate struct layout schemas for
     /// all struct types passed into `entry` functions declared by modules in this package
     /// These layout schemas can be consumed by clients (e.g.,
@@ -55,12 +62,13 @@ impl Build {
         wallet: &WalletContext,
     ) -> anyhow::Result<()> {
         let environment =
-            find_environment(rerooted_path, config.environment.clone(), wallet).await?;
+            find_environment(rerooted_path, config.environment.clone(), wallet, false).await?;
         let pkg = BuildConfig {
             config,
             run_bytecode_verifier: true,
             print_diags_to_stderr: true,
             environment,
+            flavor: RtdFlavor::with_client(wallet),
         }
         .build(rerooted_path)?;
 

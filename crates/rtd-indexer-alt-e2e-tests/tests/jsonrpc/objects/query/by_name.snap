@@ -6,11 +6,16 @@ processed 11 tasks
 init:
 A: object(0,0), B: object(0,1)
 
+// 1. All the objects of a generic type, for a particular owner
+// 2. All the objects of a non-generic type, for that same owner
+// 3. ...limited
+// 4. ...limited, with a cursor
+
 task 1, lines 11-38:
 //# publish
 created: object(1,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 7075600,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 7098400,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 40-42:
 //# programmable --sender B --inputs @B
@@ -55,22 +60,22 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0xa149cfb5a4d73dc0e453acf798b86ae510abc6ef0842bde71b79ac28846caad4",
+          "objectId": "0x59720c59f1aca69b08f2569e87cb4e2ef08ce7a87aaf0fc6c8ca0797c430e47c",
           "version": "3",
-          "digest": "8fBZV9wTyZLsfFpk6juQX599wMXGH2ELV7auRea72HDe",
-          "type": "0xea172d9fc530d31939523f79e455a7709df18773cf0e7194c9ef04fe8db0c634::M::O1<u16>"
+          "digest": "BoUxTJvYpy2dpocVZwp1YRdU6zYhoMmMFjw2CVumhW86",
+          "type": "0x8fe22b3d961f90c5bc68a69e65b0ef1e6ec709dd24eb4b7bda3d3fcdf482b56f::M::O1<u16>"
         }
       },
       {
         "data": {
-          "objectId": "0x72a1babb319e33c79676c8b6273887a6745c39e337e96379fe09e489338e9f44",
+          "objectId": "0xce63ce34487c17b033c4328aebc70e09f308bb91268831f80332a3e50b554fca",
           "version": "2",
-          "digest": "5ZzFto6F55thAMFLz9Q4rfQehjjJo3GQvUu5zhUo3DD8",
-          "type": "0xea172d9fc530d31939523f79e455a7709df18773cf0e7194c9ef04fe8db0c634::M::O1<u32>"
+          "digest": "3Qh9A7PAmLrcyPYHpcPSwXnQThGHG9967VPuG5Hhbt95",
+          "type": "0x8fe22b3d961f90c5bc68a69e65b0ef1e6ec709dd24eb4b7bda3d3fcdf482b56f::M::O1<u32>"
         }
       }
     ],
-    "nextCursor": "IHKhursxnjPHlnbItic4h6Z0XDnjN+ljef4J5Ikzjp9EAQAAAAAAAAA=",
+    "nextCursor": "gQEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh6P4is9lh+Qxbxopp5lsO8ebscJ3STrS3vaPT/N9IK1bwAAAAAAAAABTQAAAAAAAAACTzEAAAAAAAAAAQAAAAkAzmPONEh8F7AzxDKK68cOCfMIu5EmiDH4AzKj5QtVT8o=",
     "hasNextPage": false
   }
 }
@@ -84,14 +89,14 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0x8e780346fb537c4dbfe2622b77b9179d6ff80b5b6cd30c746ec094576944a460",
+          "objectId": "0x849ea61f9b521bd7c1cbcdb845747b6d72ae5c79ec31aef4e9d8e67892ed8d3f",
           "version": "2",
-          "digest": "8JdoHUTLVvnAdd9kpzep3Gm8uiJPNFdtarXSd8bAf84f",
-          "type": "0xea172d9fc530d31939523f79e455a7709df18773cf0e7194c9ef04fe8db0c634::M::O2"
+          "digest": "DEf6S285BqKiPw7j2LJYKJr9rmgRMboi25Pz5rQ1uiJo",
+          "type": "0x8fe22b3d961f90c5bc68a69e65b0ef1e6ec709dd24eb4b7bda3d3fcdf482b56f::M::O2"
         }
       }
     ],
-    "nextCursor": "II54A0b7U3xNv+JiK3e5F51v+AtbbNMMdG7AlFdpRKRgAQAAAAAAAAA=",
+    "nextCursor": "fQD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHo/iKz2WH5DFvGimnmWw7x5uxwndJOtLe9o9P830grVvAAAAAAAAAAFNAAAAAAAAAAJPMgAAAAAAAAAAAISeph+bUhvXwcvNuEV0e21yrlx57DGu9OnY5niS7Y0/",
     "hasNextPage": false
   }
 }
@@ -105,20 +110,20 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0xa149cfb5a4d73dc0e453acf798b86ae510abc6ef0842bde71b79ac28846caad4",
+          "objectId": "0x59720c59f1aca69b08f2569e87cb4e2ef08ce7a87aaf0fc6c8ca0797c430e47c",
           "version": "3",
-          "digest": "8fBZV9wTyZLsfFpk6juQX599wMXGH2ELV7auRea72HDe",
-          "type": "0xea172d9fc530d31939523f79e455a7709df18773cf0e7194c9ef04fe8db0c634::M::O1<u16>"
+          "digest": "BoUxTJvYpy2dpocVZwp1YRdU6zYhoMmMFjw2CVumhW86",
+          "type": "0x8fe22b3d961f90c5bc68a69e65b0ef1e6ec709dd24eb4b7bda3d3fcdf482b56f::M::O1<u16>"
         }
       }
     ],
-    "nextCursor": "IKFJz7Wk1z3A5FOs95i4auUQq8bvCEK95xt5rCiEbKrUAgAAAAAAAAA=",
+    "nextCursor": "gQEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh6P4is9lh+Qxbxopp5lsO8ebscJ3STrS3vaPT/N9IK1bwAAAAAAAAABTQAAAAAAAAACTzEAAAAAAAAAAQAAAAgAWXIMWfGsppsI8laeh8tOLvCM56h6rw/GyMoHl8Qw5Hw=",
     "hasNextPage": true
   }
 }
 
 task 10, lines 96-108:
-//# run-jsonrpc --cursors bcs(bcs(@{obj_5_0}),2)
+//# run-jsonrpc --cursors bcs(bin(0u8,@{A},@{P}::M::O1<u16>,0u8,@{obj_5_0}))
 Response: {
   "jsonrpc": "2.0",
   "id": 3,
@@ -126,14 +131,14 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0x72a1babb319e33c79676c8b6273887a6745c39e337e96379fe09e489338e9f44",
+          "objectId": "0xce63ce34487c17b033c4328aebc70e09f308bb91268831f80332a3e50b554fca",
           "version": "2",
-          "digest": "5ZzFto6F55thAMFLz9Q4rfQehjjJo3GQvUu5zhUo3DD8",
-          "type": "0xea172d9fc530d31939523f79e455a7709df18773cf0e7194c9ef04fe8db0c634::M::O1<u32>"
+          "digest": "3Qh9A7PAmLrcyPYHpcPSwXnQThGHG9967VPuG5Hhbt95",
+          "type": "0x8fe22b3d961f90c5bc68a69e65b0ef1e6ec709dd24eb4b7bda3d3fcdf482b56f::M::O1<u32>"
         }
       }
     ],
-    "nextCursor": "IHKhursxnjPHlnbItic4h6Z0XDnjN+ljef4J5Ikzjp9EAQAAAAAAAAA=",
+    "nextCursor": "gQEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh6P4is9lh+Qxbxopp5lsO8ebscJ3STrS3vaPT/N9IK1bwAAAAAAAAABTQAAAAAAAAACTzEAAAAAAAAAAQAAAAkAzmPONEh8F7AzxDKK68cOCfMIu5EmiDH4AzKj5QtVT8o=",
     "hasNextPage": false
   }
 }

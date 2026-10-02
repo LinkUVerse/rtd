@@ -39,6 +39,7 @@ use std::{
     collections::BTreeMap,
     convert::identity,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use heck::CamelCase;
@@ -54,13 +55,18 @@ use crate::{
     errors::PackageResult,
     flavor::{
         Vanilla,
-        vanilla::{self, DEFAULT_ENV_ID, DEFAULT_ENV_NAME, default_environment},
+        vanilla::{self, DEFAULT_ENV_ID, DEFAULT_ENV_NAME},
     },
     package::{
-        EnvironmentID, EnvironmentName, RootPackage, package_lock::PackageSystemLock,
+        EnvironmentID, EnvironmentName, RootPackage,
+        package_loader::{LoadType, PackageConfig, PackageLoader},
+        package_lock::PackageSystemLock,
         paths::PackagePath,
     },
-    schema::{Environment, ModeName, OriginalID, PublishAddresses, PublishedID},
+    schema::{
+        Environment, EphemeralDependencyInfo, LocalPub, ModeName, OriginalID, Publication,
+        PublishAddresses, PublishedID,
+    },
     test_utils::{Project, project},
 };
 
@@ -118,6 +124,16 @@ pub struct PackageSpec {
     /// Custom addresses for legacy packages (name -> Option<address>)
     /// If None is provided, the address is considered to be the legacy `_`.
     legacy_addresses: BTreeMap<String, Option<String>>,
+
+    /// On-chain dependencies (not backed by graph nodes)
+    on_chain_deps: Vec<OnChainSpec>,
+}
+
+/// An on-chain dependency, stored directly on the source node (no target node in the graph).
+struct OnChainSpec {
+    /// The raw value for the `on-chain` field (e.g. `true` or `"0x01"`)
+    on_chain_value: String,
+    spec: DepSpec,
 }
 
 struct GitSpec {
@@ -266,6 +282,26 @@ impl TestPackageGraph {
         self
     }
 
+    /// Add an on-chain dependency from `source` to a package named `name`. `on_chain_value` is
+    /// either `"true"` (for `on-chain = true`) or a hex address like `"0x01"` (rendered as
+    /// `on-chain = "0x01"` with quotes added automatically).
+    pub fn add_on_chain_dep(
+        mut self,
+        source: impl AsRef<str>,
+        name: impl AsRef<str>,
+        on_chain_value: &str,
+        build: impl FnOnce(DepSpec) -> DepSpec,
+    ) -> Self {
+        let dep_spec = build(DepSpec::new(&name));
+        self.inner[self.nodes[source.as_ref()]]
+            .on_chain_deps
+            .push(OnChainSpec {
+                on_chain_value: on_chain_value.to_string(),
+                spec: dep_spec,
+            });
+        self
+    }
+
     pub fn at(mut self, path: impl AsRef<Path>) -> Self {
         self.root = Some(path.as_ref().to_path_buf());
         self
@@ -377,6 +413,17 @@ impl TestPackageGraph {
         for git_dep in &self.inner[node].git_deps {
             let dep_str = self.format_git_dep(git_dep);
             if let Some(env) = &git_dep.spec.use_env {
+                dep_replacements.push_str(&dep_str);
+                dep_replacements.push('\n');
+            } else {
+                deps.push_str(&dep_str);
+                deps.push('\n');
+            }
+        }
+
+        for on_chain_dep in &self.inner[node].on_chain_deps {
+            let dep_str = Self::format_on_chain_dep(on_chain_dep);
+            if on_chain_dep.spec.in_env.is_some() {
                 dep_replacements.push_str(&dep_str);
                 dep_replacements.push('\n');
             } else {
@@ -507,6 +554,16 @@ impl TestPackageGraph {
         Self::decorate_dep(&format!(r#"local = "../{path}""#), dep)
     }
 
+    fn format_on_chain_dep(dep: &OnChainSpec) -> String {
+        let val = &dep.on_chain_value;
+        let location = if val == "true" || val == "false" {
+            format!("on-chain = {val}")
+        } else {
+            format!(r#"on-chain = "{val}""#)
+        };
+        Self::decorate_dep(&location, &dep.spec)
+    }
+
     fn format_git_dep(&self, dep: &GitSpec) -> String {
         let GitSpec {
             repo,
@@ -598,6 +655,7 @@ impl PackageSpec {
             implicit_deps: true,
             environments: BTreeMap::new(),
             legacy_addresses: BTreeMap::new(),
+            on_chain_deps: vec![],
         }
     }
 
@@ -656,7 +714,7 @@ impl PackageSpec {
         self
     }
 
-    /// Change this package to a legacy package. Legacy packages will produce manfests with
+    /// Change this package to a legacy package. Legacy packages will produce manifests with
     /// upper-cased names for the package and the dependency, and will contain an `[addresses]`
     /// section with a single variable given by the package name.
     ///
@@ -771,16 +829,36 @@ impl Scenario {
         &self,
         package: impl AsRef<str>,
     ) -> PackageResult<PackageGraph<Vanilla>> {
-        let path = PackagePath::new(self.path_for(package)).unwrap();
+        let path = PackagePath::new(self.path_for(&package)).unwrap();
+
+        let config = PackageLoader::new(
+            self.path_for(&package),
+            Vanilla::default_environment(),
+            Vanilla::new(),
+        )
+        .config()
+        .clone();
+
         let mtx = path.lock().unwrap();
 
-        PackageGraph::<Vanilla>::load_from_manifests(&path, &vanilla::default_environment(), &mtx)
+        PackageGraph::load_from_manifests(&path, &Vanilla::default_environment(), &mtx, &config)
             .await
     }
 
     /// Loads the root package for `package` in the default environment and with no modes
     pub async fn root_package(&self, package: impl AsRef<str>) -> RootPackage<Vanilla> {
-        self.try_root_package(package)
+        self.try_root_package(package, |cfg| cfg)
+            .await
+            .map_err(|e| e.emit())
+            .expect("could load package")
+    }
+
+    pub async fn root_package_with_config(
+        &self,
+        package: impl AsRef<str>,
+        config: impl Fn(PackageLoader<Vanilla>) -> PackageLoader<Vanilla>,
+    ) -> RootPackage<Vanilla> {
+        self.try_root_package(package, config)
             .await
             .map_err(|e| e.emit())
             .expect("could load package")
@@ -789,7 +867,7 @@ impl Scenario {
     /// Loads the root package for `package` and expects an error; returns the (redacted) contents
     /// of the error
     pub async fn root_package_err(&self, package: impl AsRef<str>) -> String {
-        match self.try_root_package(package).await {
+        match self.try_root_package(package, |cfg| cfg).await {
             Ok(_) => panic!("expected root package to fail to load"),
             Err(err) => err
                 .to_string()
@@ -797,12 +875,20 @@ impl Scenario {
         }
     }
 
-    /// Loads the root package for `package` in the default environment and with no modes
+    /// Loads the root package for `package` in the default environment and with no modes.
+    /// Uses `Vanilla` flavor by default.
     pub async fn try_root_package(
         &self,
         package: impl AsRef<str>,
+        config: impl Fn(PackageLoader<Vanilla>) -> PackageLoader<Vanilla>,
     ) -> PackageResult<RootPackage<Vanilla>> {
-        RootPackage::<Vanilla>::load(self.path_for(package), default_environment(), vec![]).await
+        config(PackageLoader::new(
+            self.path_for(package),
+            Vanilla::default_environment(),
+            Vanilla::new(),
+        ))
+        .load()
+        .await
     }
 
     pub fn read_file(&self, file: impl AsRef<Path>) -> String {
@@ -817,6 +903,34 @@ impl Scenario {
         let mut file_contents = std::fs::read_to_string(&path).unwrap();
         file_contents.push_str(contents.as_ref());
         std::fs::write(&path, &file_contents).unwrap();
+    }
+
+    /// Return an ephemeral entry for the given package with the given addresses
+    pub fn ephemeral_for(
+        &self,
+        package: impl AsRef<str>,
+        original_id: OriginalID,
+        published_at: PublishedID,
+    ) -> (EphemeralDependencyInfo, Publication<Vanilla>) {
+        let source = EphemeralDependencyInfo(crate::schema::LocalDepInfo {
+            local: self
+                .root_path
+                .join(package.as_ref())
+                .canonicalize()
+                .expect("valid path"),
+        });
+
+        let publish = Publication {
+            chain_id: DEFAULT_ENV_ID.to_string(),
+            addresses: PublishAddresses {
+                published_at,
+                original_id,
+            },
+            version: 0,
+            metadata: Default::default(),
+        };
+
+        (source, publish)
     }
 }
 

@@ -33,7 +33,9 @@ $ vim /opt/rtd/config/rtd-node.yaml #on validator host
 #       peer-id: abcdefg2
 ```
 
-2. State sync fullnodes should have indexing disabled, run with pruning, and push metrics to LinkU's metric proxy
+2. State sync fullnodes should have indexing disabled and run with pruning.
+   Metrics pushing is optional and requires a proxy operated by your network.
+   RTD has no public Mainnet metrics proxy.
 
 This is a simple change, just add the following configs to your fullnode:
 ```
@@ -50,12 +52,11 @@ authority-store-pruning-config:
 
 metrics:
   push-interval-seconds: 60
-  push-url: https://metrics-proxy.mainnet.rtd.io:8443/publish/metrics
+  # Configure push-url only after your own metrics proxy is deployed.
 ```
 
 This coupled with starting your node from a formal snapshot should mean a very small database footprint for ssfns
 
 
 ![ssfn diagram](https://github.com/LinkUVerse/rtd/blob/main/nre/ssfn-diagram.png)
-
 

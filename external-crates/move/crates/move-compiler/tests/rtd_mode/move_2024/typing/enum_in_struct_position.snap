@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: 2024.alpha
   lint: false
 ---
-error[Rtd E02007]: invalid object declaration
+error[ESC02007]: invalid object declaration
    ┌─ tests/rtd_mode/move_2024/typing/enum_in_struct_position.move:10:17
    │
 10 │     public enum Obj has key, store {
@@ -13,27 +13,7 @@ error[Rtd E02007]: invalid object declaration
    │                 │        
    │                 Invalid object 'Obj'
 
-error[Rtd E02002]: invalid 'entry' function signature
-   ┌─ tests/rtd_mode/move_2024/typing/enum_in_struct_position.move:16:5
-   │
- 2 │     public enum E {
-   │                 - To satisfy the constraint, the 'drop' ability would need to be added here
-   ·
-16 │     entry fun ret(): E {
-   │     ^^^^^            - The type 'a::m::E' does not have the ability 'drop'
-   │     │                 
-   │     Invalid return type for entry function 'ret'
-
-error[Rtd E02002]: invalid 'entry' function signature
-   ┌─ tests/rtd_mode/move_2024/typing/enum_in_struct_position.move:20:18
-   │
-20 │     entry fun x3(_: E) {
-   │     -----        ^  - 'entry' parameters must be primitives (by-value), vectors of primitives, objects (by-reference or by-value), vectors of objects, or 'Receiving' arguments (by-reference or by-value)
-   │     │            │   
-   │     │            Invalid 'entry' parameter type for parameter '_'
-   │     'x3' was declared 'entry' here
-
-error[Rtd E02009]: invalid private transfer call
+error[ESC02009]: invalid private transfer call
    ┌─ tests/rtd_mode/move_2024/typing/enum_in_struct_position.move:27:9
    │
 10 │     public enum Obj has key, store {

@@ -1,20 +1,57 @@
 ---
 title: Glossary
-slug: /rtd-glossary
 description: Learn about terminology specific to Rtd.
-keywords: [ casual history, casual order, certificate, epoch, equivocation, eventual consistency, finality, gas, genesis, multi-writer objects, objects, proof-of-stake, proof of stake, single-writer objects, rtd, RTD token, total order, transaction, transfer, validator ]
+keywords:
+  - casual history
+  - casual order
+  - certificate
+  - epoch
+  - equivocation
+  - eventual consistency
+  - finality
+  - gas
+  - genesis
+  - multi-writer objects
+  - objects
+  - proof-of-stake
+  - proof of stake
+  - single-writer objects
+  - rtd
+  - RTD token
+  - total order
+  - transaction
+  - transfer
+  - validator
 pagination_prev: null
+goal:
+  description: Reader can look up unfamiliar Rtd terms and concepts by name
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - min_words: 100
+      label: Needs more reference content
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Glossary in Rtd?
+  - Where can I find the glossary reference?
+  - How does glossary work on Rtd?
+answer: Find terms used in Rtd defined below.
 ---
 
 Find terms used in Rtd defined below.
 
 ### Archival Service {#archival-service}
 
-A gRPC API layer that exposes access to this store, enabling point lookups of historical data, ex., LedgerService
+A gRPC API layer that exposes access to this store, enabling point lookups of historical data (for example, LedgerService).
 
 ### Archival Store {#archival-store}
 
-A long-term storage system that holds checkpoint-indexed Rtd data, i.e., Bigtable.
+A long-term storage system that holds checkpoint-indexed Rtd data, that is, Bigtable.
 
 ### Causal history {#causal-history}
 
@@ -35,11 +72,11 @@ A token that can be used only for a specific service, by an authorized account, 
 
 #### DeepBook {#deepbook}
 
-A decentralized central limit order book (CLOB) built on Rtd. The Rtd documentation refers to the DeepBook standard as "DeepBookV3" to avoid confusion with the recently deprecated version of DeepBook (DeepBookV2).
+DeepBook is an upstream Sui decentralized central limit order book. Its package IDs and deployments are not RTD deployments; a separate RTD port and network deployment must be verified before describing it as an RTD application.
 
 #### Devnet {#devnet}
 
-A development network where data is wiped regularly as part of scheduled software updates.
+A development network, when operated for a particular RTD deployment. This source tree does not establish a public RTD Devnet or its wipe schedule.
  
 ### Epoch {#epoch}
 
@@ -76,7 +113,7 @@ A decentralized system for commerce applications on Rtd. The Rtd Kiosk standard 
 
 ### Mainnet {#mainnet}
 
-The Rtd production network. 
+The future RTD production network. RTD has not launched Mainnet, and future Mainnet will not provide JSON-RPC.
 
 ### Multi-writer objects {#multi-writer-objects}
 
@@ -110,11 +147,11 @@ Allows a validator to authorize another account to perform certain actions on it
 
 ### Single-writer objects {#single-writer-objects}
 
-Single-writer objects are owned by one address. In Rtd, transactions affecting only single-writer objects owned by the same address may proceed with only a verification of the sender's address, greatly speeding transaction times. These are _simple transactions_. See Single-Writer Apps for example applications of this simple transaction model.
+Single-writer objects are owned by one address. In Rtd, transactions affecting only single-writer objects owned by the same address might proceed with only a verification of the sender's address, greatly speeding transaction times. These are basic transactions. See Single-Writer Apps for example applications of this basic transaction model.
 
 ### Smart contract {#smart-contract}
 
-A [smart contract](https://en.wikipedia.org/wiki/Smart_contract) is an agreement based upon the protocol for conducting transactions in a blockchain. In Rtd, smart contracts are written in the [Move](https://github.com/LinkUVerse/awesome-move) programming language.
+A [smart contract](https://en.wikipedia.org/wiki/Smart_contract) is an agreement based upon the protocol for conducting transactions in a blockchain. In Rtd, smart contracts are written in the [Move](https://move-book.com/) programming language.
 
 ### Rtd {#rtd}
 
@@ -132,13 +169,9 @@ A secure storage system for managing your Rtd cryptographic key pairs.
 
 A CLI tool that provides commands for managing and generating addresses, and interacting with private keys, signatures, or zkLogin.
 
-#### RtdLink {#rtdlink}
-
-A LinkU Labs product that connects wallets across chains to support use cases such as cross chain wallet verification, asset ownership verification, and asset distributions across chains.
-
 #### Rtd Object Display {#rtd-object-display}
 
-A template engine that enables on-chain management of off-chain representation (display) for a type. 
+A template engine that enables onchain management of offchain representation (display) for a type. 
 
 #### Soulbound {#soulbound}
 
@@ -146,7 +179,7 @@ An asset that is bound to an account and cannot be transferred.
 
 #### Testnet {#testnet}
 
-A development network. Data deployed to Testnet persists through the regular update process, but might be wiped when necessary. Testnet data wipes are announced ahead of time.
+A network used to test a blockchain deployment. This repository does not establish a public RTD Testnet; obtain its genesis, endpoint, and retention policy from the operator of any RTD test network you use.
 
 ### Total order {#total-order}
 
@@ -154,13 +187,13 @@ A development network. Data deployed to Testnet persists through the regular upd
 
 ### Transaction {#transaction}
 
-A transaction in Rtd is a change to the blockchain. This may be a simple transaction affecting only single-writer, single-address objects, such as minting an NFT or transferring an NFT or another token. These transactions may bypass the consensus protocol in Rtd.
+A transaction in Rtd is a change to the blockchain. This might be a basic transaction affecting only single-writer, single-address objects, such as minting an NFT or transferring an NFT or another token. These transactions might bypass the consensus protocol in Rtd.
 
 More complex transactions affecting objects that are shared or owned by multiple addresses, such as asset management and other DeFi use cases, do go through consensus.
 
 ### Transfer {#transfer}
 
-A transfer is switching the owner address of a token to a new one via command in Rtd. This is accomplished via the Rtd CLI client command line interface. It is one of the more common of many commands available in the CLI client.
+A transfer is switching the owner address of a token to a new one through a command in Rtd. This is accomplished through the Rtd CLI client command line interface. It is one of the more common of many commands available in the CLI client.
 
 ### Validator {#validator}
 
@@ -168,5 +201,4 @@ A validator in Rtd plays a passive role analogous to the more active role of val
 
 #### Wallet Standard {#wallet-standard}
 
-A cross-chain standard that defines how dApps can automatically discover and interact with wallets.
-
+A cross-chain standard that defines how apps can automatically discover and interact with wallets.

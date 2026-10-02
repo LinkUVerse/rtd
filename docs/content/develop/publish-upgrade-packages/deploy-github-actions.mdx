@@ -1,0 +1,53 @@
+---
+title: CI for RTD Move Packages
+description: Build and test RTD Move packages in CI against a reviewed source revision.
+keywords: [rtd, move, ci, github actions, build, test]
+goal:
+  description: Reader can run source-pinned RTD Move build checks in CI
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Has reader questions
+    - has_answer: true
+      label: Has a direct answer
+questions:
+  - How do I test an RTD Move package in CI?
+  - Is automatic RTD public-network publishing configured?
+answer: >-
+  Pin the reviewed RTD source revision and run the matching CLI to build and
+  test packages. Public-network publishing needs verified endpoints and keys.
+---
+
+A CI job can build and test a Move package against a reviewed RTD source
+revision. It should not publish to a public network until that network's
+chain ID, RPC endpoint, CLI release, funded signer, and upgrade policy have
+been verified.
+
+Build the CLI from this repository and check the version:
+
+```sh
+cargo build -p rtd
+./target/debug/rtd --version
+```
+
+Then run the package checks using that binary from the package directory:
+
+```sh
+/path/to/rtd move build
+/path/to/rtd move test
+```
+
+Pin the exact RTD source commit in the workflow. A branch name can advance
+between CI runs and change the framework bytecode or CLI behavior. Keep signing
+keys out of CI logs and artifacts. A publish job should target an explicitly
+configured RTD RPC endpoint and confirm its genesis digest and chain ID before
+sending any transaction. Require operator approval for an irreversible package
+publish or upgrade.
+
+The previous version of this page used an upstream `suiup` repository and
+unverified Testnet/Mainnet releases. Those commands have been removed because
+this fork has no verified public installer or network-specific binary release.

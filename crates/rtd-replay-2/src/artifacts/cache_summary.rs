@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::StructTag;
+use rtd_types::{base_types::ObjectID, object::Object};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use rtd_types::{base_types::ObjectID, object::Object};
 
 /// Detailed information about a Move package.
 #[derive(Debug, Clone, Serialize, Deserialize)]

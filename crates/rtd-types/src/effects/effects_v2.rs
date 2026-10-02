@@ -6,13 +6,15 @@ use super::{EffectsObjectChange, IDOperation, ObjectChange};
 use crate::accumulator_event::AccumulatorEvent;
 use crate::accumulator_root::AccumulatorObjId;
 use crate::base_types::{
-    EpochId, ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest,
+    EpochId, ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest,
     VersionDigest,
 };
 use crate::digests::{EffectsAuxDataDigest, TransactionEventsDigest};
 use crate::effects::{InputConsensusObject, TransactionEffectsAPI};
 use crate::execution::SharedInput;
-use crate::execution_status::{ExecutionFailureStatus, ExecutionStatus, MoveLocation};
+use crate::execution_status::{
+    ExecutionErrorKind, ExecutionFailure, ExecutionStatus, MoveLocation,
+};
 use crate::gas::GasCostSummary;
 #[cfg(debug_assertions)]
 use crate::is_system_package;
@@ -41,6 +43,7 @@ pub struct TransactionEffectsV2 {
     /// can be None if the transaction does not emit any event.
     pub(crate) events_digest: Option<TransactionEventsDigest>,
     /// The set of transaction digests this transaction depends on.
+    /// Empty when the protocol disables effects dependencies.
     pub(crate) dependencies: Vec<TransactionDigest>,
 
     /// The version number of all the written Move objects by this transaction.
@@ -91,10 +94,10 @@ impl TransactionEffectsAPI for TransactionEffectsV2 {
     }
 
     fn move_abort(&self) -> Option<(MoveLocation, u64)> {
-        let ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::MoveAbort(move_location, code),
+        let ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::MoveAbort(move_location, code),
             ..
-        } = self.status()
+        }) = self.status()
         else {
             return None;
         };
@@ -118,7 +121,7 @@ impl TransactionEffectsAPI for TransactionEffectsV2 {
             .collect()
     }
 
-    fn input_consensus_objects(&self) -> Vec<InputConsensusObject> {
+    fn accessed_consensus_objects(&self) -> Vec<InputConsensusObject> {
         self.changed_objects
             .iter()
             .filter_map(|(id, change)| match &change.input_state {
@@ -435,21 +438,28 @@ impl TransactionEffectsAPI for TransactionEffectsV2 {
             .collect()
     }
 
-    fn gas_object(&self) -> (ObjectRef, Owner) {
-        if let Some(gas_object_index) = self.gas_object_index {
-            let entry = &self.changed_objects[gas_object_index as usize];
+    fn gas_object(&self) -> Option<(ObjectRef, Owner)> {
+        self.gas_object_index.map(|index| {
+            let entry = &self.changed_objects[index as usize];
             match &entry.1.output_state {
                 ObjectOut::ObjectWrite((digest, owner)) => {
                     ((entry.0, self.lamport_version, *digest), owner.clone())
                 }
-                _ => panic!("Gas object must be an ObjectWrite in changed_objects"),
+                ObjectOut::NotExist => {
+                    // Gas coin was deleted. Preserve the ID but return the marker digest and a
+                    // dummy owner.
+                    (
+                        (
+                            entry.0,
+                            self.lamport_version,
+                            ObjectDigest::OBJECT_DIGEST_DELETED,
+                        ),
+                        Owner::AddressOwner(RtdAddress::default()),
+                    )
+                }
+                _ => panic!("Gas object must be an ObjectWrite or Deleted in changed_objects"),
             }
-        } else {
-            (
-                (ObjectID::ZERO, SequenceNumber::default(), ObjectDigest::MIN),
-                Owner::AddressOwner(RtdAddress::default()),
-            )
-        }
+        })
     }
 
     fn events_digest(&self) -> Option<&TransactionEventsDigest> {
@@ -573,20 +583,16 @@ impl TransactionEffectsAPI for TransactionEffectsV2 {
 }
 
 impl TransactionEffectsV2 {
-    pub fn new(
-        status: ExecutionStatus,
-        executed_epoch: EpochId,
-        gas_used: GasCostSummary,
+    /// Derive the unchanged consensus objects of a transaction from its shared inputs, the
+    /// per-epoch config objects it read, and the system objects it read during execution, given
+    /// the set of objects it changed.
+    pub fn compute_unchanged_consensus_objects(
         shared_objects: Vec<SharedInput>,
         loaded_per_epoch_config_objects: BTreeSet<ObjectID>,
-        transaction_digest: TransactionDigest,
-        lamport_version: SequenceNumber,
-        changed_objects: BTreeMap<ObjectID, EffectsObjectChange>,
-        gas_object: Option<ObjectID>,
-        events_digest: Option<TransactionEventsDigest>,
-        dependencies: Vec<TransactionDigest>,
-    ) -> Self {
-        let unchanged_consensus_objects = shared_objects
+        changed_objects: &BTreeMap<ObjectID, EffectsObjectChange>,
+        loaded_system_objects: BTreeMap<ObjectID, VersionDigest>,
+    ) -> Vec<(ObjectID, UnchangedConsensusKind)> {
+        let mut unchanged_consensus_objects: Vec<_> = shared_objects
             .into_iter()
             .filter_map(|shared_input| match shared_input {
                 SharedInput::Existing((id, version, digest)) => {
@@ -626,6 +632,67 @@ impl TransactionEffectsV2 {
                     .map(|id| (id, UnchangedConsensusKind::PerEpochConfig)),
             )
             .collect();
+
+        // Record system objects read during execution (e.g. the accumulator root) as read-only
+        // consensus objects, so nodes executing from these effects (checkpoint execution, crash
+        // recovery) can reproduce the read. Skip any that already appear
+        // as a changed object or as an unchanged consensus object — those versions are already
+        // recorded. Alongside each already-recorded id, keep the version (and digest) its entry
+        // carries — the input version for a changed object, the recorded version for a read-only
+        // one — so we can check it matches what the in-execution read observed.
+        let already_recorded: BTreeMap<ObjectID, Option<VersionDigest>> = changed_objects
+            .iter()
+            .map(|(id, change)| {
+                let recorded = match &change.input_state {
+                    ObjectIn::Exist((version_digest, _)) => Some(*version_digest),
+                    _ => None,
+                };
+                (*id, recorded)
+            })
+            .chain(unchanged_consensus_objects.iter().map(|(id, kind)| {
+                let recorded = match kind {
+                    UnchangedConsensusKind::ReadOnlyRoot(version_digest) => Some(*version_digest),
+                    _ => None,
+                };
+                (*id, recorded)
+            }))
+            .collect();
+        for (id, version_digest) in loaded_system_objects {
+            match already_recorded.get(&id) {
+                None => {
+                    unchanged_consensus_objects
+                        .push((id, UnchangedConsensusKind::ReadOnlyRoot(version_digest)));
+                }
+                Some(recorded) => {
+                    // The existing entry must record the same version the in-execution read
+                    // observed — both come from the version this transaction was sequenced
+                    // against. `None` means the entry's kind carries no version to compare
+                    // (e.g. a created object or a per-epoch-config read), which no implicitly
+                    // readable system object should ever coincide with.
+                    if *recorded != Some(version_digest) {
+                        linku_common::debug_fatal!(
+                            "system object {id} read at version {version_digest:?} but its \
+                             effects entry records {recorded:?}"
+                        );
+                    }
+                }
+            }
+        }
+        unchanged_consensus_objects
+    }
+
+    pub fn new(
+        status: ExecutionStatus,
+        executed_epoch: EpochId,
+        gas_used: GasCostSummary,
+        unchanged_consensus_objects: Vec<(ObjectID, UnchangedConsensusKind)>,
+        transaction_digest: TransactionDigest,
+        lamport_version: SequenceNumber,
+        changed_objects: BTreeMap<ObjectID, EffectsObjectChange>,
+        gas_object: Option<ObjectID>,
+        events_digest: Option<TransactionEventsDigest>,
+        dependencies: Vec<TransactionDigest>,
+    ) -> Self {
         let changed_objects: Vec<_> = changed_objects.into_iter().collect();
 
         let gas_object_index = gas_object.map(|gas_id| {
@@ -740,9 +807,10 @@ impl TransactionEffectsV2 {
                 }
             }
         }
-        // Make sure that gas object exists in changed_objects.
-        let (_, owner) = self.gas_object();
-        assert!(matches!(owner, Owner::AddressOwner(_)));
+        // Make sure that gas object, if present, has an address owner.
+        if let Some((_, owner)) = self.gas_object() {
+            assert!(matches!(owner, Owner::AddressOwner(_)));
+        }
 
         for (id, _) in &self.unchanged_consensus_objects {
             assert!(

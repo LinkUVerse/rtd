@@ -1,16 +1,21 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use async_graphql::dataloader::{DataLoader, Loader};
-use diesel::{
-    prelude::QueryableByName,
-    sql_types::{Array, Bytea},
-};
+use async_graphql::dataloader::DataLoader;
+use async_graphql::dataloader::Loader;
+use diesel::prelude::QueryableByName;
+use diesel::sql_types::Array;
+use diesel::sql_types::Bytea;
 use move_core_types::account_address::AccountAddress;
 use rtd_indexer_alt_schema::schema::kv_packages;
-use rtd_package_resolver::{Package, PackageStore, PackageStoreWithLruCache, Result, error::Error};
+use rtd_package_resolver::Package;
+use rtd_package_resolver::PackageStore;
+use rtd_package_resolver::PackageStoreWithLruCache;
+use rtd_package_resolver::Result;
+use rtd_package_resolver::error::Error;
 use rtd_types::object::Object;
 
 use crate::pg_reader::PgReader;
@@ -63,7 +68,7 @@ impl Loader<PackageKey> for PgReader {
             serialized_object: Vec<u8>,
         }
 
-        let ids: Vec<_> = keys.iter().map(|PackageKey(id)| id.to_vec()).collect();
+        let ids: Vec<_> = keys.iter().map(|PackageKey(id)| id.into_bytes()).collect();
         let query = diesel::sql_query(
             r#"
                 SELECT

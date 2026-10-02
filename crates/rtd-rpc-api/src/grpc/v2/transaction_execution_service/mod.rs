@@ -24,35 +24,6 @@ use tap::Pipe;
 
 mod simulate;
 
-async fn run_simulation<T>(
-    simulation: impl FnOnce() -> Result<T, RpcError> + Send + 'static,
-) -> Result<T, tonic::Status>
-where
-    T: Send + 'static,
-{
-    tokio::task::spawn_blocking(simulation)
-        .await
-        .map_err(|error| {
-            tonic::Status::internal(format!("simulate_transaction task failed: {error}"))
-        })?
-        .map_err(Into::into)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::run_simulation;
-
-    #[tokio::test]
-    async fn simulation_work_uses_the_blocking_pool() {
-        let async_thread = std::thread::current().id();
-        let blocking_thread = run_simulation(|| Ok(std::thread::current().id()))
-            .await
-            .unwrap();
-
-        assert_ne!(async_thread, blocking_thread);
-    }
-}
-
 #[tonic::async_trait]
 impl TransactionExecutionService for RpcService {
     async fn execute_transaction(
@@ -76,15 +47,18 @@ impl TransactionExecutionService for RpcService {
     ) -> Result<tonic::Response<SimulateTransactionResponse>, tonic::Status> {
         let service = self.clone();
         let request = request.into_inner();
-        run_simulation(move || simulate::simulate_transaction(&service, request))
+        tokio::task::spawn_blocking(move || simulate::simulate_transaction(&service, request))
             .await
+            .map_err(|e| tonic::Status::internal(format!("simulate_transaction task failed: {e}")))?
             .map(tonic::Response::new)
+            .map_err(Into::into)
     }
 }
 
-pub const EXECUTE_TRANSACTION_READ_MASK_DEFAULT: &str = "effects";
-// Current maximum number of supported UserSignatures:
-// one for the sender and one for an optional sponsor.
+pub const EXECUTE_TRANSACTION_READ_MASK_DEFAULT: &str =
+    crate::read_mask_defaults::EXECUTE_TRANSACTION;
+// Current maximum number of supported UserSignature's,
+// one for the sender and one for an optional sponsor
 const MAX_NUMBER_OF_SIGNATURES: usize = 2;
 
 #[tracing::instrument(skip(service, executor))]
@@ -147,7 +121,7 @@ pub async fn execute_transaction(
         FieldMaskTree::from(read_mask)
     };
 
-    let request = rtd_types::quorum_driver_types::ExecuteTransactionRequestV3 {
+    let request = rtd_types::transaction_driver_types::ExecuteTransactionRequestV3 {
         transaction: signed_transaction.try_into()?,
         include_events: read_mask.contains(ExecutedTransaction::EVENTS_FIELD.name),
         include_input_objects: read_mask.contains(ExecutedTransaction::BALANCE_CHANGES_FIELD.name)
@@ -159,9 +133,9 @@ pub async fn execute_transaction(
         include_auxiliary_data: false,
     };
 
-    let rtd_types::quorum_driver_types::ExecuteTransactionResponseV3 {
+    let rtd_types::transaction_driver_types::ExecuteTransactionResponseV3 {
         effects:
-            rtd_types::quorum_driver_types::FinalizedEffects {
+            rtd_types::transaction_driver_types::FinalizedEffects {
                 effects,
                 finality_info: _,
             },
@@ -172,10 +146,8 @@ pub async fn execute_transaction(
     } = executor.execute_transaction(request, None).await?;
 
     let executed_transaction = {
-        let events = read_mask
-            .subtree(ExecutedTransaction::EVENTS_FIELD)
-            .and_then(|mask| events.map(|events| service.render_events_to_proto(&events, &mask)));
-
+        // Build the objects set first so we can use it for event JSON rendering.
+        // This allows resolving types from packages that were just published in this transaction.
         let objects = {
             let mut objects = rtd_types::full_checkpoint_content::ObjectSet::default();
             for o in input_objects
@@ -188,6 +160,12 @@ pub async fn execute_transaction(
             objects
         };
 
+        let events = read_mask
+            .subtree(ExecutedTransaction::EVENTS_FIELD)
+            .and_then(|mask| {
+                events.map(|events| service.render_events_to_proto(&events, &mask, &objects))
+            });
+
         let balance_changes = if read_mask.contains(ExecutedTransaction::BALANCE_CHANGES_FIELD) {
             derive_balance_changes_2(&effects, &objects)
                 .into_iter()
@@ -199,19 +177,7 @@ pub async fn execute_transaction(
 
         let effects = read_mask
             .subtree(ExecutedTransaction::EFFECTS_FIELD)
-            .map(|mask| {
-                service.render_effects_to_proto(
-                    &effects,
-                    &[],
-                    |object_id| {
-                        objects
-                            .iter()
-                            .find(|o| o.id() == *object_id)
-                            .map(|o| o.into())
-                    },
-                    &mask,
-                )
-            });
+            .map(|mask| service.render_effects_to_proto(&effects, &[], &objects, &mask));
 
         let mut message = ExecutedTransaction::default();
         message.digest = read_mask
@@ -243,7 +209,7 @@ pub async fn execute_transaction(
                 ObjectSet::default().with_objects(
                     objects
                         .iter()
-                        .map(|o| service.render_object_to_proto(o, &mask))
+                        .map(|o| service.render_object_to_proto(o, &mask, &objects))
                         .collect(),
                 )
             });

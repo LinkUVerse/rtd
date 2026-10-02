@@ -1,0 +1,18 @@
+---
+title: Paying for Transactions
+description: Gas payment options in the RTD source fork.
+keywords:
+  - RTD
+  - transaction payment
+---
+
+# Paying for RTD transactions
+
+An RTD transaction consumes computation and may incur storage costs. On an identified RTD network, a sender normally supplies RTD gas. A separately authorized sponsor can pay gas after checking the exact transaction it signs. The protocol also contains address-balance gas and gasless transaction features whose availability depends on the network's protocol configuration.
+
+The current fork's gasless token allowlist is empty. No RTD stablecoin transfer is documented as zero-fee. RTD has no public Mainnet, and future Mainnet will not expose JSON-RPC. Do not reuse Sui coin IDs, market quotes, or public endpoints.
+
+- [Gas in RTD](/develop/transaction-payment/gas-in-rtd)
+- [Sponsored transactions](/develop/transaction-payment/sponsor-txn)
+- [Gasless stablecoin status](/develop/transaction-payment/gasless-stablecoin-transfers)
+- [Address balances](/onchain-finance/asset-custody/address-balances)

@@ -3,7 +3,7 @@
 
 use move_core_types::account_address::AccountAddress;
 use move_symbol_pool::Symbol;
-use rtd_move_build::{BuildConfig, CompiledPackage};
+use rtd_move_build::{BuildConfig, CompiledPackage, PublishedDependency};
 use rtd_types::crypto::Signature;
 use rtd_types::move_package::UpgradePolicy;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
@@ -38,14 +38,30 @@ pub fn build_test_modules_with_dep_addr(
         dep_id_mapping.len(),
         package.dependency_ids.unpublished.len()
     );
-    for unpublished_dep in &package.dependency_ids.unpublished {
-        let published_id = dep_id_mapping.get(unpublished_dep).unwrap();
+    let unpublished_deps = package
+        .dependency_ids
+        .unpublished
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    for unpublished_dep in unpublished_deps {
+        let published_id = dep_id_mapping
+            .get(&unpublished_dep.id)
+            .or_else(|| dep_id_mapping.get(&unpublished_dep.name))
+            .unwrap();
         // Make sure we aren't overriding a package
         assert!(
             package
                 .dependency_ids
                 .published
-                .insert(*unpublished_dep, *published_id)
+                .insert(
+                    unpublished_dep.id,
+                    PublishedDependency::new(
+                        unpublished_dep.id,
+                        unpublished_dep.name,
+                        *published_id,
+                    ),
+                )
                 .is_none()
         )
     }
@@ -92,7 +108,7 @@ pub async fn publish_package_on_single_authority(
     );
 
     let signed = to_sender_signed_transaction(txn_data, sender_key);
-    let (_cert, effects) = send_and_confirm_transaction(state, signed).await?;
+    let (_tx, effects) = submit_and_execute(state, signed).await?;
     assert!(effects.data().status().is_ok());
     let package_id = effects
         .data()
@@ -144,7 +160,7 @@ pub async fn upgrade_package_on_single_authority(
     )
     .unwrap();
     let signed = to_sender_signed_transaction(data, sender_key);
-    let (_cert, effects) = send_and_confirm_transaction(state, signed).await?;
+    let (_tx, effects) = submit_and_execute(state, signed).await?;
     assert!(effects.data().status().is_ok());
     let package_id = effects
         .data()

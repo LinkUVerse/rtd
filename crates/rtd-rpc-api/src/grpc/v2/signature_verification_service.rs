@@ -1,10 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
 use rtd_crypto::Verifier;
+use rtd_crypto::zklogin::ZkLoginCircuitMode;
+use rtd_protocol_config::ProtocolConfig;
 use rtd_sdk_types::Jwk;
 use rtd_sdk_types::JwkId;
+use std::collections::HashMap;
 use tap::Pipe;
 
 use crate::ErrorReason;
@@ -143,10 +145,46 @@ fn verify_signature(
         }
     }
 
+    // Building the zklogin verifier when the signature can actually contain a zklogin signature.
+    let mut verifier = rtd_crypto::UserSignatureVerifier::new();
+    if signature_may_contain_zklogin(&signature) {
+        verifier.with_zklogin_verifier(build_zklogin_verifier(service, &request.jwks)?);
+    }
+
+    let mut message = VerifySignatureResponse::default();
+    match verifier.verify(&signing_digest, &signature) {
+        Ok(()) => message.is_valid = Some(true),
+        Err(error) => {
+            message.is_valid = Some(false);
+            message.reason = Some(error.to_string());
+        }
+    }
+
+    Ok(message)
+}
+
+fn signature_may_contain_zklogin(signature: &rtd_sdk_types::UserSignature) -> bool {
+    match signature {
+        rtd_sdk_types::UserSignature::ZkLogin(_) => true,
+        rtd_sdk_types::UserSignature::Multisig(multisig) => {
+            multisig.committee().members().iter().any(|member| {
+                matches!(
+                    member.public_key(),
+                    rtd_sdk_types::MultisigMemberPublicKey::ZkLogin(_)
+                )
+            })
+        }
+        _ => false,
+    }
+}
+
+fn build_zklogin_verifier(
+    service: &RpcService,
+    request_jwks: &[rtd_rpc::proto::rtd::rpc::v2::ActiveJwk],
+) -> Result<rtd_crypto::zklogin::ZkloginVerifier> {
     // If jwks from the request is empty we load the current set of active jwks that are onchain
     let jwks = {
-        let mut jwks = request
-            .jwks
+        let mut jwks = request_jwks
             .iter()
             .enumerate()
             .map(|(i, jwk)| {
@@ -174,24 +212,39 @@ fn verify_signature(
         jwks
     };
 
-    let mut zklogin_verifier = match service.chain_id().chain() {
+    let chain = service.chain_id().chain();
+    let mut zklogin_verifier = match chain {
         rtd_protocol_config::Chain::Mainnet | rtd_protocol_config::Chain::Testnet => {
             rtd_crypto::zklogin::ZkloginVerifier::new_mainnet()
         }
         rtd_protocol_config::Chain::Unknown => rtd_crypto::zklogin::ZkloginVerifier::new_dev(),
     };
-    *zklogin_verifier.jwks_mut() = jwks;
-    let mut verifier = rtd_crypto::UserSignatureVerifier::new();
-    verifier.with_zklogin_verifier(zklogin_verifier);
 
-    let mut message = VerifySignatureResponse::default();
-    match verifier.verify(&signing_digest, &signature) {
-        Ok(()) => message.is_valid = Some(true),
-        Err(error) => {
-            message.is_valid = Some(false);
-            message.reason = Some(error.to_string());
+    // Get circuit mode from protocol config and set to verifier.
+    let system_state = service.reader.get_system_state_summary()?;
+    let circuit_mode =
+        ProtocolConfig::get_for_version_if_supported(system_state.protocol_version.into(), chain)
+            .map(|config| config.zklogin_circuit_mode());
+    zklogin_verifier.set_circuit_mode(match circuit_mode {
+        Some(0) => ZkLoginCircuitMode::V1Only,
+        Some(1) => ZkLoginCircuitMode::Both,
+        Some(2) => ZkLoginCircuitMode::V2Only,
+        None => {
+            return Err(RpcError::new(
+                tonic::Code::Internal,
+                format!(
+                    "protocol version {} is not supported",
+                    system_state.protocol_version
+                ),
+            ));
         }
-    }
-
-    Ok(message)
+        Some(mode) => {
+            return Err(RpcError::new(
+                tonic::Code::Internal,
+                format!("invalid zklogin circuit mode in protocol config: {mode}"),
+            ));
+        }
+    });
+    *zklogin_verifier.jwks_mut() = jwks;
+    Ok(zklogin_verifier)
 }

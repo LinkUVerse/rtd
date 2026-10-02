@@ -11,7 +11,7 @@ pub mod type_arg_fuzzer;
 use executor::Executor;
 use proptest::collection::vec;
 use proptest::test_runner::TestRunner;
-use std::fmt::Debug;
+use rand::Rng;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::crypto::AccountKeyPair;
@@ -19,6 +19,7 @@ use rtd_types::crypto::get_key_pair;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::object::{MoveObject, OBJECT_START_VERSION, Object, Owner};
 use rtd_types::{gas_coin::TOTAL_SUPPLY_MIST, transaction::GasData};
+use std::fmt::Debug;
 
 use proptest::prelude::*;
 use rand::{SeedableRng, rngs::StdRng};
@@ -32,14 +33,34 @@ fn new_gas_coin_with_balance_and_owner(balance: u64, owner: Owner) -> Object {
 }
 
 /// Given a list of gas coin owners, generate random gas data and gas coins
-/// with the given owners.
+/// with the given owners. When `allow_address_balance` is true, randomly
+/// generates address-balance gas payments (empty payment vector) instead.
 fn generate_random_gas_data(
     seed: [u8; 32],
     gas_coin_owners: Vec<Owner>, // arbitrarily generated owners, can be shared or immutable or obj-owned too
     owned_by_sender: bool,       // whether to set owned gas coins to be owned by the sender
+    force_all_sender_owned: bool, // whether to force ALL gas coins to be owned by the sender
+    allow_address_balance: bool, // whether to sometimes generate address-balance gas payments
 ) -> GasDataWithObjects {
     let (sender, sender_key): (RtdAddress, AccountKeyPair) = get_key_pair();
     let mut rng = StdRng::from_seed(seed);
+
+    // When allowed, randomly choose address-balance gas payment (empty payment vector)
+    if allow_address_balance && rng.gen_bool(0.5) {
+        return GasDataWithObjects {
+            gas_data: GasData {
+                payment: vec![],
+                owner: sender,
+                price: rng
+                    .gen_range(0..=ProtocolConfig::get_for_max_version_UNSAFE().max_gas_price()),
+                budget: rng
+                    .gen_range(0..=ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas()),
+            },
+            objects: vec![],
+            sender_key,
+        };
+    }
+
     let mut gas_objects = vec![];
     let mut object_refs = vec![];
 
@@ -50,11 +71,17 @@ fn generate_random_gas_data(
     let num_gas_objects = gas_coin_owners.len();
     let gas_coin_owners = gas_coin_owners
         .iter()
-        .map(|o| match o {
-            Owner::ObjectOwner(_) | Owner::AddressOwner(_) if owned_by_sender => {
+        .map(|o| {
+            if force_all_sender_owned {
                 Owner::AddressOwner(sender)
+            } else if owned_by_sender {
+                match o {
+                    Owner::ObjectOwner(_) | Owner::AddressOwner(_) => Owner::AddressOwner(sender),
+                    _ => o.clone(),
+                }
+            } else {
+                o.clone()
             }
-            _ => o.clone(),
         })
         .collect::<Vec<_>>();
     for owner in gas_coin_owners.iter().take(num_gas_objects - 1) {
@@ -105,6 +132,12 @@ pub struct GasDataWithObjects {
 pub struct GasDataGenConfig {
     pub max_num_gas_objects: usize,
     pub owned_by_sender: bool,
+    /// When true, ALL generated gas coins are forced to `AddressOwner(sender)`,
+    /// regardless of the randomly generated owner type.
+    pub force_all_sender_owned: bool,
+    /// When true, the strategy will sometimes generate address-balance gas
+    /// payments (empty `payment` vector, no gas coin objects).
+    pub allow_address_balance: bool,
 }
 
 impl GasDataGenConfig {
@@ -113,6 +146,8 @@ impl GasDataGenConfig {
             max_num_gas_objects: ProtocolConfig::get_for_max_version_UNSAFE()
                 .max_gas_payment_objects() as usize,
             owned_by_sender: true,
+            force_all_sender_owned: false,
+            allow_address_balance: false,
         }
     }
 
@@ -121,6 +156,33 @@ impl GasDataGenConfig {
             max_num_gas_objects: ProtocolConfig::get_for_max_version_UNSAFE()
                 .max_gas_payment_objects() as usize,
             owned_by_sender: false,
+            force_all_sender_owned: false,
+            allow_address_balance: false,
+        }
+    }
+
+    /// All gas coins are `AddressOwner(sender)`. Use this for execution modes
+    /// that skip ownership checks (e.g. dev-inspect with `skip_checks=true`)
+    /// where non-sender-owned gas would panic during execution.
+    pub fn sender_owned_only() -> Self {
+        Self {
+            max_num_gas_objects: ProtocolConfig::get_for_max_version_UNSAFE()
+                .max_gas_payment_objects() as usize,
+            owned_by_sender: true,
+            force_all_sender_owned: true,
+            allow_address_balance: false,
+        }
+    }
+
+    /// Mix of coin-based and address-balance gas payments.
+    /// Address-balance payments use an empty `payment` vector and no gas coin objects.
+    pub fn with_address_balance() -> Self {
+        Self {
+            max_num_gas_objects: ProtocolConfig::get_for_max_version_UNSAFE()
+                .max_gas_payment_objects() as usize,
+            owned_by_sender: true,
+            force_all_sender_owned: false,
+            allow_address_balance: true,
         }
     }
 }
@@ -135,7 +197,13 @@ impl proptest::arbitrary::Arbitrary for GasDataWithObjects {
             vec(any::<Owner>(), 1..=params.max_num_gas_objects),
         )
             .prop_map(move |(seed, owners)| {
-                generate_random_gas_data(seed, owners, params.owned_by_sender)
+                generate_random_gas_data(
+                    seed,
+                    owners,
+                    params.owned_by_sender,
+                    params.force_all_sender_owned,
+                    params.allow_address_balance,
+                )
             })
             .boxed()
     }
@@ -156,11 +224,32 @@ pub fn run_proptest<D>(
 ) where
     D: Debug + 'static,
 {
+    run_proptest_with_executor(num_test_cases, Executor::new(), strategy, test_fn)
+}
+
+/// Same as `run_proptest` but uses a fullnode executor (required for dry-run and dev-inspect).
+pub fn run_proptest_with_fullnode<D>(
+    num_test_cases: u32,
+    strategy: impl Strategy<Value = D>,
+    test_fn: impl Fn(D, Executor) -> Result<(), TestCaseError>,
+) where
+    D: Debug + 'static,
+{
+    run_proptest_with_executor(num_test_cases, Executor::new_fullnode(), strategy, test_fn)
+}
+
+fn run_proptest_with_executor<D>(
+    num_test_cases: u32,
+    executor: Executor,
+    strategy: impl Strategy<Value = D>,
+    test_fn: impl Fn(D, Executor) -> Result<(), TestCaseError>,
+) where
+    D: Debug + 'static,
+{
     let mut runner = TestRunner::new(ProptestConfig {
         cases: num_test_cases,
         ..Default::default()
     });
-    let executor = Executor::new();
     let strategy_with_authority = strategy.prop_map(|data| TestData {
         data,
         executor: executor.clone(),

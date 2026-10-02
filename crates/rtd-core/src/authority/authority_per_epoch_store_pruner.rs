@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::authority::authority_per_epoch_store::EPOCH_DB_PREFIX;
 use itertools::Itertools;
+use rtd_config::node::AuthorityStorePruningConfig;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use rtd_config::node::AuthorityStorePruningConfig;
 use tokio::sync::oneshot;
 use tracing::log::{info, warn};
 use typed_store::rocks::safe_drop_db;
@@ -77,7 +77,7 @@ impl AuthorityPerEpochStorePruner {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(tidehunter)))]
 mod tests {
     use crate::authority::authority_per_epoch_store_pruner::AuthorityPerEpochStorePruner;
     use std::fs;

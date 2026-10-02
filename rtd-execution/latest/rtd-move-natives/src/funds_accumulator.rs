@@ -3,16 +3,27 @@
 
 use std::collections::VecDeque;
 
-use move_binary_format::errors::{PartialVMError, PartialVMResult};
-use move_binary_format::{safe_unwrap, safe_unwrap_err};
-use move_core_types::{account_address::AccountAddress, u256::U256, vm_status::StatusCode};
-use move_vm_runtime::{native_charge_gas_early_exit, native_functions::NativeContext};
-use move_vm_types::{
-    loaded_data::runtime_types::Type,
-    natives::function::NativeResult,
-    values::{Struct, Value},
+use move_binary_format::{
+    errors::{PartialVMError, PartialVMResult},
+    safe_assert_eq, safe_unwrap,
 };
-use rtd_types::base_types::ObjectID;
+use move_core_types::{
+    account_address::AccountAddress, gas_algebra::InternalGas, u256::U256, vm_status::StatusCode,
+};
+use move_vm_runtime::{
+    execution::{
+        Type,
+        values::{Struct, Value},
+    },
+    native_charge_gas_early_exit,
+    natives::functions::{NativeContext, NativeResult},
+};
+use rtd_types::{
+    accumulator_root::check_accumulator_type_bounds,
+    base_types::{ObjectID, RtdAddress},
+    funds_accumulator::E_OBJECT_FUNDS_INSUFFICIENT,
+    storage::ObjectFundsSufficiency,
+};
 use smallvec::smallvec;
 
 use crate::{
@@ -22,6 +33,13 @@ use crate::{
 
 const E_OVERFLOW: u64 = 0;
 const E_ADDRESS_BALANCE_NOT_ENABLED: u64 = 1;
+const E_ACCUMULATOR_TYPE_TOO_LARGE: u64 = 4;
+
+#[derive(Clone)]
+pub struct ReserveObjectFundsForWithdrawalCostParams {
+    pub base_cost: Option<InternalGas>,
+    pub cold_read_cost: Option<InternalGas>,
+}
 
 pub fn add_to_accumulator_address(
     context: &mut NativeContext,
@@ -50,15 +68,12 @@ pub fn add_to_accumulator_address(
             ),
         );
     };
-    let recipient = safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>());
+    let recipient = safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>());
     let accumulator: ObjectID =
-        safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
+        safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
 
     // TODO this will need to look at the layout of T when this is not guaranteed to be a Balance
-    let Some([amount]): Option<[Value; 1]> = value
-        .unpack()
-        .ok()
-        .and_then(|vs| vs.collect::<Vec<_>>().try_into().ok())
+    let Some([amount]): Option<[Value; 1]> = value.unpack().collect::<Vec<_>>().try_into().ok()
     else {
         debug_assert!(false);
         return Err(
@@ -82,6 +97,10 @@ pub fn add_to_accumulator_address(
 
     if !obj_runtime.protocol_config.enable_accumulators() {
         return Ok(NativeResult::err(cost, E_ADDRESS_BALANCE_NOT_ENABLED));
+    }
+
+    if !check_accumulator_type_bounds(obj_runtime.protocol_config, &ty_tag) {
+        return Ok(NativeResult::err(cost, E_ACCUMULATOR_TYPE_TOO_LARGE));
     }
 
     obj_runtime.emit_accumulator_event(
@@ -113,17 +132,24 @@ pub fn withdraw_from_accumulator_address(
 
     let ty_tag = context.type_to_type_tag(&safe_unwrap!(ty_args.pop()))?;
 
-    let value = safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<U256>());
-    let recipient = safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>());
+    let value = safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<U256>());
+    let recipient = safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>());
     let accumulator: ObjectID =
-        safe_unwrap_err!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
+        safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
 
     // TODO this will need to look at the layout of T when this is not guaranteed to be a Balance
     let Ok(amount): Result<u64, _> = value.try_into() else {
         return Ok(NativeResult::err(context.gas_used(), E_OVERFLOW));
     };
 
+    let cost = context.gas_used();
+
     let obj_runtime: &mut ObjectRuntime = context.extensions_mut().get_mut()?;
+
+    if !check_accumulator_type_bounds(obj_runtime.protocol_config, &ty_tag) {
+        return Ok(NativeResult::err(cost, E_ACCUMULATOR_TYPE_TOO_LARGE));
+    }
+
     obj_runtime.emit_accumulator_event(
         accumulator,
         MoveAccumulatorAction::Split,
@@ -134,4 +160,69 @@ pub fn withdraw_from_accumulator_address(
     // TODO this will need to look at the layout of T when this is not guaranteed to be a Balance
     let withdrawn = Value::struct_(Struct::pack(vec![Value::u64(amount)]));
     Ok(NativeResult::ok(context.gas_used(), smallvec![withdrawn]))
+}
+
+pub fn reserve_object_funds_for_withdrawal(
+    context: &mut NativeContext,
+    mut ty_args: Vec<Type>,
+    mut args: VecDeque<Value>,
+) -> PartialVMResult<NativeResult> {
+    safe_assert_eq!(ty_args.len(), 1);
+    safe_assert_eq!(args.len(), 2);
+
+    let (ty_tag, limit, owner) = {
+        let obj_runtime: &ObjectRuntime = context.extensions().get()?;
+        if !obj_runtime
+            .protocol_config
+            .check_object_funds_withdraw_in_execution()
+        {
+            // Before check_object_funds_withdraw_in_execution is enabled, object funds withdrawals are not
+            // checked in execution. They are checked post-execution, and potentially retried if insufficient.
+            return Ok(NativeResult::ok(context.gas_used(), smallvec![]));
+        }
+
+        let cost_params = context
+            .extensions()
+            .get::<NativesCostTable>()?
+            .reserve_object_funds_for_withdrawal_cost_params
+            .clone();
+        let base_cost = cost_params.base_cost.ok_or_else(|| {
+            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+                "reserve_object_funds_for_withdrawal base gas cost is not set".to_string(),
+            )
+        })?;
+        native_charge_gas_early_exit!(context, base_cost);
+
+        let ty_tag = context.type_to_type_tag(&safe_unwrap!(ty_args.pop()))?;
+        let limit = safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<U256>());
+        let owner: RtdAddress =
+            safe_unwrap!(safe_unwrap!(args.pop_back()).value_as::<AccountAddress>()).into();
+
+        // We want to charge extra gas if we need to read the object available funds from storage.
+        // This should only need to be done once per account.
+        // Check here so that we can charge gas before reading from storage.
+        if obj_runtime.object_funds_sufficiency_needs_store_read(owner, &ty_tag, limit) {
+            let cold_read_cost = cost_params.cold_read_cost.ok_or_else(|| {
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+                    "reserve_object_funds_for_withdrawal cold read gas cost is not set".to_string(),
+                )
+            })?;
+            native_charge_gas_early_exit!(context, cold_read_cost);
+        }
+        (ty_tag, limit, owner)
+    };
+
+    let obj_runtime: &mut ObjectRuntime = context.extensions_mut().get_mut()?;
+    match obj_runtime.check_object_funds_sufficiency(owner, &ty_tag, limit) {
+        ObjectFundsSufficiency::Sufficient => Ok(NativeResult::ok(context.gas_used(), smallvec![])),
+        ObjectFundsSufficiency::Insufficient => Ok(NativeResult::err(
+            context.gas_used(),
+            E_OBJECT_FUNDS_INSUFFICIENT,
+        )),
+        ObjectFundsSufficiency::Overflow => Ok(NativeResult::err(context.gas_used(), E_OVERFLOW)),
+        ObjectFundsSufficiency::LoadError(msg) => Err(PartialVMError::new(
+            StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+        )
+        .with_message(msg)),
+    }
 }

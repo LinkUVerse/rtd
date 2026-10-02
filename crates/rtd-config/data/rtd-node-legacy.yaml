@@ -47,10 +47,10 @@ grpc-load-shed: null
 grpc-concurrency-limit: 20000000000
 p2p-config:
   listen-address: 0.0.0.0:8084
-  external-address: /dns/hello.rtd.io/udp/8084
+  external-address: /dns/hello.example.invalid/udp/8084
   seed-peers:
   - peer-id: 1cab034c3d3e43f8a33d39b3e358815537439ad8dc89c6660cac2e4ee994f017
-    address: /dns/test.rtd.io/udp/8084
+    address: /dns/test.example.invalid/udp/8084
   state-sync:
     checkpoint-content-timeout-ms: 10000
   anemo-config:
@@ -96,7 +96,8 @@ state-snapshot-write-config:
   concurrency: 0
 indexer-max-subscriptions: null
 transaction-kv-store-read-config:
-  base-url: https://transactions.rtd.io/
+  # No public RTD transaction archive has been configured.
+  base-url: ""
   cache-size: 100000
 jwk-fetch-interval-seconds: 3600
 zklogin-oauth-providers:
@@ -108,11 +109,7 @@ zklogin-oauth-providers:
   - Apple
   - Playtron
   - Twitch
-  Unknown:
-  - Apple
-  - Playtron
-  - Twitch
-  - TestIssuer
+  Unknown: []
 authority-overload-config:
   max-txn-age-in-queue:
     secs: 0

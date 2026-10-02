@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: core
   edition: 2024.alpha
   lint: false
 ---
-error[E02017]: invalid 'use fun' declaration
+error[EC02017]: invalid 'use fun' declaration
   ┌─ tests/move_2024/naming/use_fun_with_builtin.move:2:5
   │
 2 │     use fun freeze as vector.freeze;

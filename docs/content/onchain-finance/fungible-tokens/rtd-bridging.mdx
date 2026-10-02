@@ -1,0 +1,40 @@
+---
+title: Bridging Tokens
+description: Bridge source code and deployment requirements for an RTD network.
+keywords:
+  - bridge
+  - rtd bridge
+  - cross-chain transfer
+  - validator committee
+  - wrapped assets
+questions:
+  - Is there a public RTD bridge?
+  - Can I use Sui bridge addresses on RTD?
+answer: >-
+  No public RTD bridge or supported external bridge integration has been
+  verified. The fork includes bridge source code, but each RTD network needs
+  its own deployment, validators, counterpart contracts, and asset IDs.
+---
+
+The RTD fork contains bridge source code. This does **not** mean a public RTD bridge is running. RTD has no public Mainnet, and no Wormhole, Portal, ZetaChain, fiat provider, or Ethereum bridge counterpart has been verified for RTD. Do not send funds to addresses copied from Sui documentation.
+
+## What the source code provides
+
+The repository includes the Move bridge package at `crates/rtd-framework/packages/bridge`, an EVM counterpart under `bridge/evm`, bridge node code in `crates/rtd-bridge`, and an indexer in `crates/rtd-bridge-indexer`. These are components for building a deployment; they are not evidence that a bridge committee, relay, supported asset, or public web interface exists.
+
+The bridge design requires a committee to attest to source-chain events before a destination-chain action can be executed. A transfer must be validated on both chains, and the application must wait for the destination-chain transaction to finalize before crediting the recipient. Exact confirmation depth, threshold, limits, pricing, and supported assets are deployment parameters. The Sui bridge's historical values do not apply to RTD.
+
+## Requirements before enabling transfers
+
+1. Establish an RTD network with a known genesis and chain ID. Record the intended source and destination chain IDs.
+2. Deploy and verify the RTD Move bridge package and EVM counterpart for that network. Record package IDs, object IDs, and contract addresses from the deployment transaction, not from an upstream Sui table.
+3. Configure bridge validators, their keys, voting threshold, event watchers, relays, and operational monitoring.
+4. Register each supported asset and its destination type. Verify decimals, mint authority, supply controls, and withdrawal limits against both chains.
+5. Test deposits, withdrawals, reorganizations, duplicate events, stalled relays, and recovery using small nonproduction assets.
+6. Publish verified addresses and supported assets only after an independent deployment review.
+
+The local RTD development chain is resettable, so its bridge addresses cannot be treated as stable public addresses. The [bridge node configuration](/operators/bridge-node-configuration) describes one component of a possible deployment, but does not make the bridge operational by itself.
+
+## Application settlement
+
+A source-chain transaction proves only that a transfer was initiated. Credit a user only after the destination-chain bridge action has succeeded and the expected asset type and recipient have been checked. Persist the source event, destination transaction digest, amount, and final status so a delayed relay or retry cannot credit twice.

@@ -5,10 +5,14 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use bytes::Bytes;
+use object_store::Error as ObjectStoreError;
+use object_store::ObjectStoreExt as _;
+use object_store::PutMode;
+use object_store::PutPayload;
 use object_store::path::Path as ObjectPath;
-use object_store::{Error as ObjectStoreError, PutMode, PutPayload};
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::pipeline::concurrent::BatchStatus;
 use rtd_indexer_alt_framework::pipeline::concurrent::Handler;
-use rtd_indexer_alt_framework::pipeline::{Processor, concurrent::BatchStatus};
 use rtd_indexer_alt_framework::store::Store;
 use rtd_indexer_alt_object_store::ObjectStore;
 use rtd_types::full_checkpoint_content::Checkpoint;

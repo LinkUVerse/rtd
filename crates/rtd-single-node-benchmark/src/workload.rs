@@ -3,10 +3,12 @@
 
 use crate::benchmark_context::BenchmarkContext;
 use crate::command::WorkloadKind;
-use crate::tx_generator::{MoveTxGenerator, PackagePublishTxGenerator, TxGenerator};
+use crate::tx_generator::{
+    MoveTxGenerator, PackagePublishTxGenerator, SendFundsTxGenerator, TxGenerator,
+};
+use rtd_test_transaction_builder::PublishData;
 use std::path::PathBuf;
 use std::sync::Arc;
-use rtd_test_transaction_builder::PublishData;
 
 #[derive(Clone)]
 pub struct Workload {
@@ -69,6 +71,19 @@ impl Workload {
             WorkloadKind::Publish {
                 manifest_file: manifest_path,
             } => Arc::new(PackagePublishTxGenerator::new(ctx, manifest_path.clone()).await),
+            WorkloadKind::SendFunds {
+                seed_amount,
+                transfer_amount,
+            } => {
+                ctx.seed_address_balances(*seed_amount).await;
+                let chain_identifier = ctx.get_chain_identifier();
+                let epoch = ctx.get_epoch();
+                Arc::new(SendFundsTxGenerator::new(
+                    chain_identifier,
+                    epoch,
+                    *transfer_amount,
+                ))
+            }
         }
     }
 }

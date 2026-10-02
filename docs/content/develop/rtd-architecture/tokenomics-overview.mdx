@@ -1,0 +1,64 @@
+---
+title: RTD Token Mechanics
+sidebar_label: Token Mechanics
+description: Source-level RTD coin and staking mechanics, with public policy pending.
+keywords: [rtd token, supply, staking, storage fund, genesis]
+goal:
+  description: Reader can identify source-level token mechanics without assuming a public allocation
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Has reader questions
+    - has_answer: true
+      label: Has a direct answer
+questions:
+  - What does the RTD source define for its native coin?
+  - Is there an approved RTD public token distribution?
+answer: >-
+  The fork defines RTD as its native coin and retains a ten-billion-unit
+  source-level supply constant. Public allocation, vesting, and exchange
+  claims have not been approved for RTD.
+---
+
+The RTD source fork defines the native `Coin<rtd::rtd::RTD>` type. In
+`crates/rtd-framework/packages/rtd-framework/sources/rtd.move`, one RTD is
+represented by one billion MIST, and the source-level total supply constant is
+ten billion RTD. These constants describe the code used for genesis creation;
+they do not establish that a public RTD network has launched or that any tokens
+are available for sale.
+
+The fork also contains validator staking and storage-fund Move modules inherited
+from the Sui architecture. Their actual parameters and initial balances depend
+on a specific RTD genesis and protocol configuration. For the protocol design,
+see [Consensus](/develop/rtd-architecture/consensus) and [Storage on Rtd](/develop/rtd-architecture/rtd-storage).
+
+## Public economic policy
+
+No verified RTD public genesis allocation, investor vesting schedule, airdrop
+policy, exchange listing, circulating supply, or market price is established by
+this repository. The original [Sui economics paper](/paper/sui-tokenomics.pdf)
+is retained as upstream research with its original authorship; it is not an RTD
+economic whitepaper.
+
+Before publishing any RTD tokenomics claims, the network operator must approve
+the genesis distribution and reconcile every supply, staking, subsidy, and
+storage-fund statement against that genesis and deployed protocol. Until then,
+use this page only as a guide to source-level mechanics, not as financial or
+network-launch information.
+
+## Storage fund
+
+The fork retains storage-fund mechanics in its system packages. The amount
+funded at genesis and the effective rebate parameters must be read from the
+specific RTD network configuration; the inherited Sui figures are not RTD
+policy.
+
+## Understanding the voting power formula
+
+Validator voting power depends on the stake recorded by the deployed system
+state and its protocol configuration. Verify it against the actual RTD network
+state before using it for governance or economic calculations.

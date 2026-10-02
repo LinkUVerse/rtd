@@ -6,7 +6,7 @@ use move_core_types::{account_address::AccountAddress, identifier::Identifier};
 use proptest::arbitrary::*;
 use proptest::prelude::*;
 
-use rtd_core::test_utils::send_and_confirm_transaction;
+use rtd_core::authority::authority_test_utils::submit_and_execute;
 use rtd_types::base_types::ObjectID;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::error::RtdError;
@@ -170,6 +170,6 @@ pub fn run_pt_effects(
     );
     let signed_txn = to_sender_signed_transaction(tx_data, &account.initial_data.account.key);
     exec.rt
-        .block_on(send_and_confirm_transaction(&exec.state, None, signed_txn))
+        .block_on(submit_and_execute(&exec.state, signed_txn))
         .map(|(_, effects)| effects.into_data())
 }

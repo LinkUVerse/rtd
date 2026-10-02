@@ -1,76 +1,10 @@
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
-<Tabs groupId="install-tool">
-
-<TabItem label="rtdup" value="rtdup">
-
-First, install `rtdup`:
+Build the RTD CLI from this repository's source checkout:
 
 ```sh
-$ curl -sSfL \
-  https://raw.githubusercontent.com/LinkUlabs/rtdup/main/install.sh \
-  | sh
+cargo build -p rtd
+./target/debug/rtd --version
 ```
 
-Then, install Rtd:
-
-```sh
-$ rtdup install rtd@testnet
-```
-
-For alternative installation methods, refer to the [`rtdup` repository](https://github.com/LinkUVerse/rtdup).
-
-:::danger
-
-Installing Rtd with `rtdup` does not configure the client. To use `rtd` commands, you must [configure the Rtd client](/guides/developer/getting-started/configure-rtd-client.mdx).
-
-To confirm that Rtd installed correctly:
-
-1. Open a terminal or console
-2. Type `rtd --version` and press Enter
-
-If you receive a "command not found" error, verify the Rtd binaries directory is in your `PATH` environment variable.
-
-:::
-
-</TabItem>
-
-<TabItem label="Homebrew" value="brew">
-
-You must have [Homebrew](https://brew.sh/) installed before running the following command:
-
-```sh
-$ brew install rtd
-```
-
-To confirm that Rtd installed correctly:
-
-1. Open a terminal or console
-2. Type `rtd --version` and press Enter
-
-If you receive a "command not found" error, verify the Rtd binaries directory is in your `PATH` environment variable.
-
-
-</TabItem>
-
-<TabItem label="Chocolatey" value="choco">
-
-You must have [Chocolately](https://chocolatey.org/) installed before running the following command:
-
-```sh
-$ choco install rtd
-```
-
-Find more [versions of Rtd for Windows](https://community.chocolatey.org/packages/rtd) on the Chocolatey community website.
-
-To confirm that Rtd installed correctly:
-
-1. Open a terminal or console
-2. Type `rtd --version` and press Enter
-
-If you receive a "command not found" error, verify the Rtd binaries directory is in your `PATH` environment variable.
-
-</TabItem>
-
-</Tabs>
+The fork has no verified `suiup`, Homebrew, Chocolatey, or public binary
+release channel. Configure the resulting CLI for your own RTD network before
+building or publishing packages. See [Build the RTD CLI](/getting-started/onboarding/rtd-install).

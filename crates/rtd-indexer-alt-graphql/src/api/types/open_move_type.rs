@@ -3,9 +3,13 @@
 
 use std::fmt;
 
-use async_graphql::{Object, scalar};
-use serde::{Deserialize, Serialize};
-use rtd_package_resolver::{OpenSignature, OpenSignatureBody, Reference};
+use async_graphql::Object;
+use async_graphql::scalar;
+use rtd_package_resolver::OpenSignature;
+use rtd_package_resolver::OpenSignatureBody;
+use rtd_package_resolver::Reference;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub(crate) struct OpenMoveType {
     signature: OpenMoveTypeSignature,
@@ -227,11 +231,12 @@ impl fmt::Display for OpenMoveTypeSignatureBody {
 mod tests {
     use std::str::FromStr;
 
-    use super::*;
-
     use insta::assert_snapshot;
     use move_core_types::language_storage::StructTag;
-    use rtd_package_resolver::{DatatypeKey, DatatypeRef};
+    use rtd_package_resolver::DatatypeKey;
+    use rtd_package_resolver::DatatypeRef;
+
+    use super::*;
 
     use OpenSignatureBody as S;
 

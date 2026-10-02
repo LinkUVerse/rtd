@@ -1,0 +1,12 @@
+[package]
+name = "oracle_adapter"
+edition = "2024.beta"
+
+[dependencies]
+# Historical upstream reference only. This package cannot be built or used on
+# RTD until an RTD-compatible Pyth package and matching state objects exist.
+# Replace this dependency with the verified RTD fork and commit before building.
+Pyth = { git = "https://github.com/pyth-network/pyth-crosschain.git", subdir = "target_chains/rtd/contracts", rev = "62c7a5bc0fc857ba6417ad780190552d4919ceca" }
+
+[addresses]
+oracle_adapter = "0x0"

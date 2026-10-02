@@ -5,19 +5,14 @@ use anyhow::{Context, bail};
 use camino::Utf8Path;
 use fastcrypto::hash::HashFunction;
 use fastcrypto::traits::KeyPair;
-use move_binary_format::CompiledModule;
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::ident_str;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
-use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
-use std::sync::Arc;
 use rtd_config::genesis::{
     Genesis, GenesisCeremonyParameters, GenesisChainParameters, TokenDistributionSchedule,
     UnsignedGenesis,
 };
 use rtd_execution::{self, Executor};
-use rtd_framework::{BuiltInFramework, SystemPackage};
+use rtd_framework::SystemPackage;
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::base_types::{ExecutionDigests, ObjectID, SequenceNumber, TransactionDigest};
 use rtd_types::bridge::{BRIDGE_CREATE_FUNCTION_NAME, BRIDGE_MODULE_NAME, BridgeChainId};
@@ -43,14 +38,17 @@ use rtd_types::messages_checkpoint::{
     CertifiedCheckpointSummary, CheckpointContents, CheckpointSummary,
     CheckpointVersionSpecificData, CheckpointVersionSpecificDataV1,
 };
-use rtd_types::metrics::LimitsMetrics;
+use rtd_types::metrics::ExecutionMetrics;
 use rtd_types::object::{Object, Owner};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rtd_system_state::{RtdSystemState, RtdSystemStateTrait, get_rtd_system_state};
-use rtd_types::transaction::{
-    CallArg, CheckedInputObjects, Command, InputObjectKind, ObjectReadResult, Transaction,
-};
+use rtd_types::transaction::{CallArg, CheckedInputObjects, Transaction};
 use rtd_types::{BRIDGE_ADDRESS, RTD_BRIDGE_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_ADDRESS};
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 use tracing::trace;
 use validator_info::{GenesisValidatorInfo, GenesisValidatorMetadata, ValidatorInfo};
 
@@ -316,7 +314,7 @@ impl Builder {
 
         let protocol_config = get_genesis_protocol_config(ProtocolVersion::new(protocol_version));
 
-        if protocol_config.create_authenticator_state_in_genesis() {
+        if protocol_config.enable_jwk_consensus_updates() {
             let authenticator_state = unsigned_genesis.authenticator_state_object().unwrap();
             assert!(authenticator_state.active_jwks.is_empty());
         } else {
@@ -328,12 +326,12 @@ impl Builder {
         );
 
         assert_eq!(
-            protocol_config.enable_bridge(),
+            protocol_config.bridge(),
             unsigned_genesis.has_bridge_object()
         );
 
         assert_eq!(
-            protocol_config.enable_coin_deny_list_v1(),
+            protocol_config.enable_coin_deny_list(),
             unsigned_genesis.coin_deny_list_state().is_some(),
         );
 
@@ -345,7 +343,7 @@ impl Builder {
         for (validator, onchain_validator) in self
             .validators
             .values()
-            .zip(system_state.validators.active_validators.iter())
+            .zip_debug_eq(system_state.validators.active_validators.iter())
         {
             let metadata = onchain_validator.verified_metadata();
 
@@ -693,11 +691,11 @@ fn create_genesis_digest(
 ) -> TransactionDigest {
     let mut hasher = DefaultHash::default();
     hasher.update(b"rtd-genesis");
-    hasher.update(bcs::to_bytes(genesis_chain_parameters).unwrap());
-    hasher.update(bcs::to_bytes(genesis_validators).unwrap());
-    hasher.update(bcs::to_bytes(token_distribution_schedule).unwrap());
+    bcs::serialize_into(&mut hasher, genesis_chain_parameters).unwrap();
+    bcs::serialize_into(&mut hasher, genesis_validators).unwrap();
+    bcs::serialize_into(&mut hasher, token_distribution_schedule).unwrap();
     for system_package in system_packages {
-        hasher.update(bcs::to_bytes(&system_package.bytes).unwrap());
+        bcs::serialize_into(&mut hasher, &system_package.bytes).unwrap();
     }
 
     let hash = hasher.finalize();
@@ -712,6 +710,15 @@ fn get_genesis_protocol_config(version: ProtocolVersion) -> ProtocolConfig {
     // ChainIdentifier::default().chain() which can be overridden by the
     // RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE if necessary
     ProtocolConfig::get_for_version(version, ChainIdentifier::default().chain())
+}
+
+fn load_genesis_system_packages(version: ProtocolVersion) -> Vec<SystemPackage> {
+    rtd_framework_snapshot::load_bytecode_snapshot(version.as_u64()).unwrap_or_else(|error| {
+        panic!(
+            "Cannot build RTD genesis for protocol version {}: {error:#}. Generate the matching RTD framework snapshot first",
+            version.as_u64()
+        )
+    })
 }
 
 fn build_unsigned_genesis_data(
@@ -740,12 +747,9 @@ fn build_unsigned_genesis_data(
 
     let epoch_data = EpochData::new_genesis(genesis_chain_parameters.chain_start_timestamp_ms);
 
-    // Get the correct system packages for our protocol version. If we cannot find the snapshot
-    // that means that we must be at the latest version and we should use the latest version of the
-    // framework.
-    let mut system_packages =
-        rtd_framework_snapshot::load_bytecode_snapshot(parameters.protocol_version.as_u64())
-            .unwrap_or_else(|_| BuiltInFramework::iter_system_packages().cloned().collect());
+    // Genesis must use bytecode recorded for its exact RTD protocol version. A missing or
+    // upstream-chain snapshot is an error, never a reason to substitute today's framework.
+    let mut system_packages = load_genesis_system_packages(parameters.protocol_version);
 
     // if system packages are provided in `objects`, update them with the provided bytes.
     // This is a no-op under normal conditions and only an issue with certain tests.
@@ -760,7 +764,7 @@ fn build_unsigned_genesis_data(
 
     // Use a throwaway metrics registry for genesis transaction execution.
     let registry = prometheus::Registry::new();
-    let metrics = Arc::new(LimitsMetrics::new(&registry));
+    let metrics = Arc::new(ExecutionMetrics::new(&registry));
 
     let objects = create_genesis_objects(
         &epoch_data,
@@ -873,7 +877,7 @@ fn create_genesis_checkpoint(
 fn create_genesis_transaction(
     objects: Vec<Object>,
     protocol_config: &ProtocolConfig,
-    metrics: Arc<LimitsMetrics>,
+    metrics: Arc<ExecutionMetrics>,
     epoch_data: &EpochData,
 ) -> (
     Transaction,
@@ -922,18 +926,23 @@ fn create_genesis_transaction(
         gas_data.payment = vec![];
         let input_objects = CheckedInputObjects::new_for_genesis(vec![]);
         let (inner_temp_store, _, effects, _timings, _execution_error) = executor
-            .execute_transaction_to_effects(
+            .execute_transaction_to_effects_and_execution_error(
                 &InMemoryStorage::new(Vec::new()),
                 protocol_config,
                 metrics,
                 expensive_checks,
-                ExecutionOrEarlyError::Ok(()),
+                ExecutionOrEarlyError::ok(None),
                 &epoch_data.epoch_id(),
                 epoch_data.epoch_start_timestamp(),
                 input_objects,
+                rtd_types::base_types::SystemObjectVersions::empty(),
+                // The genesis transaction cannot withdraw object funds, so there are never
+                // unsettled withdrawals for it to account for.
+                &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
                 gas_data,
-                RtdGasStatus::new_unmetered(),
+                RtdGasStatus::new_unmetered(protocol_config),
                 kind,
+                None, // compat_args
                 signer,
                 genesis_digest,
                 &mut None,
@@ -961,7 +970,7 @@ fn create_genesis_objects(
     parameters: &GenesisChainParameters,
     token_distribution_schedule: &TokenDistributionSchedule,
     system_packages: Vec<SystemPackage>,
-    metrics: Arc<LimitsMetrics>,
+    metrics: Arc<ExecutionMetrics>,
 ) -> Vec<Object> {
     let mut store = InMemoryStorage::new(Vec::new());
     // We don't know the chain ID here since we haven't yet created the genesis checkpoint.
@@ -977,17 +986,7 @@ fn create_genesis_objects(
         .expect("Creating an executor should not fail here");
 
     for system_package in system_packages.into_iter() {
-        process_package(
-            &mut store,
-            executor.as_ref(),
-            epoch_data,
-            genesis_digest,
-            &system_package.modules(),
-            system_package.dependencies,
-            &protocol_config,
-            metrics.clone(),
-        )
-        .unwrap();
+        process_package(&mut store, system_package).unwrap();
     }
 
     {
@@ -1013,72 +1012,29 @@ fn create_genesis_objects(
 
 fn process_package(
     store: &mut InMemoryStorage,
-    executor: &dyn Executor,
-    epoch_data: &EpochData,
-    genesis_digest: &TransactionDigest,
-    modules: &[CompiledModule],
-    dependencies: Vec<ObjectID>,
-    protocol_config: &ProtocolConfig,
-    metrics: Arc<LimitsMetrics>,
+    system_package: SystemPackage,
 ) -> anyhow::Result<()> {
-    let dependency_objects = store.get_objects(&dependencies);
-    // When publishing genesis packages, since the std framework packages all have
-    // non-zero addresses, [`Transaction::input_objects_in_compiled_modules`] will consider
-    // them as dependencies even though they are not. Hence input_objects contain objects
-    // that don't exist on-chain because they are yet to be published.
     #[cfg(debug_assertions)]
     {
         use move_core_types::account_address::AccountAddress;
-        let to_be_published_addresses: std::collections::HashSet<_> = modules
+        let to_be_published_addresses: std::collections::HashSet<_> = system_package
+            .modules()
             .iter()
             .map(|module| *module.self_id().address())
             .collect();
+        let dependencies = &system_package.dependencies;
+        let dependency_objects = store.get_objects(dependencies);
         assert!(
             // An object either exists on-chain, or is one of the packages to be published.
             dependencies
                 .iter()
-                .zip(dependency_objects.iter())
+                .zip_debug_eq(dependency_objects.iter())
                 .all(|(dependency, obj_opt)| obj_opt.is_some()
                     || to_be_published_addresses.contains(&AccountAddress::from(*dependency)))
         );
     }
-    let loaded_dependencies: Vec<_> = dependencies
-        .iter()
-        .zip(dependency_objects)
-        .filter_map(|(dependency, object)| {
-            Some(ObjectReadResult::new(
-                InputObjectKind::MovePackage(*dependency),
-                object?.clone().into(),
-            ))
-        })
-        .collect();
-
-    let module_bytes = modules
-        .iter()
-        .map(|m| {
-            let mut buf = vec![];
-            m.serialize_with_version(m.version, &mut buf).unwrap();
-            buf
-        })
-        .collect();
-    let pt = {
-        let mut builder = ProgrammableTransactionBuilder::new();
-        // executing in Genesis mode does not create an `UpgradeCap`.
-        builder.command(Command::Publish(module_bytes, dependencies));
-        builder.finish()
-    };
-    let InnerTemporaryStore { written, .. } = executor.update_genesis_state(
-        &*store,
-        protocol_config,
-        metrics,
-        epoch_data.epoch_id(),
-        epoch_data.epoch_start_timestamp(),
-        genesis_digest,
-        CheckedInputObjects::new_for_genesis(loaded_dependencies),
-        pt,
-    )?;
-
-    store.finish(written);
+    // This is genesis, so insert the system package objects directly without going through Move.
+    store.insert_object(system_package.genesis_object());
 
     Ok(())
 }
@@ -1091,7 +1047,7 @@ pub fn generate_genesis_system_object(
     genesis_digest: &TransactionDigest,
     genesis_chain_parameters: &GenesisChainParameters,
     token_distribution_schedule: &TokenDistributionSchedule,
-    metrics: Arc<LimitsMetrics>,
+    metrics: Arc<ExecutionMetrics>,
 ) -> anyhow::Result<()> {
     let protocol_config = ProtocolConfig::get_for_version(
         ProtocolVersion::new(genesis_chain_parameters.protocol_version),
@@ -1120,7 +1076,7 @@ pub fn generate_genesis_system_object(
 
         // Step 3: Create ProtocolConfig-controlled system objects, unless disabled (which only
         // happens in tests).
-        if protocol_config.create_authenticator_state_in_genesis() {
+        if protocol_config.enable_jwk_consensus_updates() {
             builder.move_call(
                 RTD_FRAMEWORK_ADDRESS.into(),
                 ident_str!("authenticator_state").to_owned(),
@@ -1159,7 +1115,17 @@ pub fn generate_genesis_system_object(
             )?;
         }
 
-        if protocol_config.enable_coin_deny_list_v1() {
+        if protocol_config.enable_display_registry() {
+            builder.move_call(
+                RTD_FRAMEWORK_ADDRESS.into(),
+                ident_str!("display_registry").to_owned(),
+                ident_str!("create").to_owned(),
+                vec![],
+                vec![],
+            )?;
+        }
+
+        if protocol_config.enable_coin_deny_list() {
             builder.move_call(
                 RTD_FRAMEWORK_ADDRESS.into(),
                 DENY_LIST_MODULE.to_owned(),
@@ -1169,7 +1135,7 @@ pub fn generate_genesis_system_object(
             )?;
         }
 
-        if protocol_config.enable_bridge() {
+        if protocol_config.bridge() {
             let bridge_uid = builder
                 .input(CallArg::Pure(UID::new(RTD_BRIDGE_OBJECT_ID).to_bcs_bytes()))
                 .unwrap();
@@ -1189,6 +1155,16 @@ pub fn generate_genesis_system_object(
             builder.move_call(
                 RTD_FRAMEWORK_ADDRESS.into(),
                 ident_str!("address_alias").to_owned(),
+                ident_str!("create").to_owned(),
+                vec![],
+                vec![],
+            )?;
+        }
+
+        if protocol_config.create_forwarding_address_registry() {
+            builder.move_call(
+                RTD_FRAMEWORK_ADDRESS.into(),
+                ident_str!("forwarding_address").to_owned(),
                 ident_str!("create").to_owned(),
                 vec![],
                 vec![],
@@ -1255,8 +1231,8 @@ pub fn generate_genesis_system_object(
 
 #[cfg(test)]
 mod test {
-    use crate::Builder;
     use crate::validator_info::ValidatorInfo;
+    use crate::{Builder, load_genesis_system_packages};
     use fastcrypto::traits::KeyPair;
     use rtd_config::genesis::*;
     use rtd_config::local_ip_utils;
@@ -1267,6 +1243,14 @@ mod test {
         AccountKeyPair, AuthorityKeyPair, NetworkKeyPair, generate_proof_of_possession,
         get_key_pair_from_rng,
     };
+    use rtd_types::gas_coin::GasCoin;
+
+    #[test]
+    #[should_panic(expected = "predates RTD genesis")]
+    fn genesis_rejects_legacy_protocol_snapshot_instead_of_using_current_framework() {
+        let legacy_version = rtd_framework_snapshot::FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION - 1;
+        load_genesis_system_packages(rtd_protocol_config::ProtocolVersion::new(legacy_version));
+    }
 
     #[test]
     fn allocation_csv() {
@@ -1294,11 +1278,12 @@ mod test {
         let worker_key: NetworkKeyPair = get_key_pair_from_rng(&mut rand::rngs::OsRng).1;
         let account_key: AccountKeyPair = get_key_pair_from_rng(&mut rand::rngs::OsRng).1;
         let network_key: NetworkKeyPair = get_key_pair_from_rng(&mut rand::rngs::OsRng).1;
+        let validator_address = RtdAddress::from(account_key.public());
         let validator = ValidatorInfo {
             name: "0".into(),
             protocol_key: key.public().into(),
             worker_key: worker_key.public().clone(),
-            account_address: RtdAddress::from(account_key.public()),
+            account_address: validator_address,
             network_key: network_key.public().clone(),
             gas_price: DEFAULT_VALIDATOR_GAS_PRICE,
             commission_rate: DEFAULT_COMMISSION_RATE,
@@ -1311,9 +1296,24 @@ mod test {
             project_url: String::new(),
         };
         let pop = generate_proof_of_possession(&key, account_key.public().into());
-        let mut builder = Builder::new().add_validator(validator, pop);
+        let mut distribution = TokenDistributionScheduleBuilder::new();
+        distribution.default_allocation_for_validators([validator_address]);
+        distribution.add_allocation(TokenAllocation {
+            recipient_address: validator_address,
+            amount_mist: 1_000_000_000,
+            staked_with_validator: None,
+        });
+        let mut builder = Builder::new()
+            .add_validator(validator, pop)
+            .with_token_distribution_schedule(distribution.build());
 
         let genesis = builder.build_unsigned_genesis_checkpoint();
+        let gas_coin = genesis
+            .objects()
+            .iter()
+            .find(|object| object.is_gas_coin())
+            .expect("RTD genesis must allocate a native gas coin");
+        assert_eq!(gas_coin.struct_tag(), Some(GasCoin::type_()));
         for object in genesis.objects() {
             println!("ObjectID: {} Type: {:?}", object.id(), object.type_());
         }

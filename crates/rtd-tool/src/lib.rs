@@ -2,38 +2,39 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use backoff::ExponentialBackoff;
 use fastcrypto::traits::ToFromBytes;
 use futures::future::AbortHandle;
 use futures::future::join_all;
 use itertools::Itertools;
+use rtd_config::{NodeConfig, genesis::Genesis};
+use rtd_core::authority_client::{AuthorityAPI, NetworkAuthorityClient};
+use rtd_core::execution_cache::build_execution_cache_from_env;
+use rtd_network::default_linku_network_config;
+use rtd_protocol_config::Chain;
+use rtd_rpc_api::Client;
+use rtd_storage::object_store::http::HttpDownloaderBuilder;
+use rtd_storage::object_store::util::MANIFEST_FILENAME;
+use rtd_storage::object_store::util::Manifest;
+use rtd_storage::object_store::util::{build_object_store, end_of_epoch_data, fetch_checkpoint};
+use rtd_types::committee::QUORUM_THRESHOLD;
+use rtd_types::crypto::AuthorityPublicKeyBytes;
+use rtd_types::digests::ChainIdentifier;
+use rtd_types::global_state_hash::GlobalStateHash;
+use rtd_types::messages_grpc::LayoutGenerationOption;
+use rtd_types::multiaddr::Multiaddr;
+use rtd_types::{base_types::*, object::Owner};
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{fs, io};
-use rtd_config::{NodeConfig, genesis::Genesis};
-use rtd_core::authority_client::{AuthorityAPI, NetworkAuthorityClient};
-use rtd_core::execution_cache::build_execution_cache_from_env;
-use rtd_data_ingestion_core::{CheckpointReader, create_remote_store_client, end_of_epoch_data};
-use rtd_network::default_linku_network_config;
-use rtd_protocol_config::Chain;
-use rtd_sdk::RtdClient;
-use rtd_sdk::RtdClientBuilder;
-use rtd_storage::object_store::http::HttpDownloaderBuilder;
-use rtd_storage::object_store::util::MANIFEST_FILENAME;
-use rtd_storage::object_store::util::Manifest;
-use rtd_storage::object_store::util::PerEpochManifest;
-use rtd_types::committee::QUORUM_THRESHOLD;
-use rtd_types::crypto::AuthorityPublicKeyBytes;
-use rtd_types::global_state_hash::GlobalStateHash;
-use rtd_types::messages_grpc::LayoutGenerationOption;
-use rtd_types::multiaddr::Multiaddr;
-use rtd_types::{base_types::*, object::Owner};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
@@ -44,65 +45,36 @@ use fastcrypto::hash::MultisetHash;
 use futures::{StreamExt, TryStreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use prometheus::Registry;
-use serde::{Deserialize, Serialize};
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use rtd_core::authority::AuthorityStore;
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
 use rtd_core::checkpoints::CheckpointStore;
 use rtd_core::epoch::committee_store::CommitteeStore;
 use rtd_core::storage::RocksDbStore;
-use rtd_snapshot::reader::StateSnapshotReaderV1;
+use rtd_snapshot::reader::{StateAccumulatorSender, StateSnapshotReaderV1};
 use rtd_snapshot::setup_db_state;
 use rtd_storage::object_store::ObjectStoreGetExt;
-use rtd_storage::object_store::util::{copy_file, exists, get_path};
+use rtd_storage::object_store::util::{exists, get_path};
 use rtd_types::full_checkpoint_content::CheckpointData;
 use rtd_types::messages_checkpoint::{CheckpointCommitment, ECMHLiveObjectSetDigest};
 use rtd_types::messages_grpc::{
     ObjectInfoRequest, ObjectInfoRequestKind, ObjectInfoResponse, TransactionInfoRequest,
     TransactionStatus,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::formal_snapshot_util::read_summaries_for_list_no_verify;
 use rtd_core::authority::authority_store_pruner::PrunerWatermarks;
 use rtd_types::storage::ReadStore;
-use tracing::{info, warn};
+use tracing::info;
 use typed_store::DBMetrics;
 
 pub mod commands;
-#[cfg(not(tidehunter))]
+pub mod db_shell;
 pub mod db_tool;
 mod formal_snapshot_util;
-
-async fn fetch_checkpoint_with_retry(
-    client: &dyn object_store::ObjectStore,
-    checkpoint_number: u64,
-    max_retries: usize,
-) -> Result<(Arc<CheckpointData>, usize)> {
-    let mut attempts = 0;
-    let max_attempts = max_retries + 1;
-    loop {
-        attempts += 1;
-        match CheckpointReader::fetch_from_object_store(client, checkpoint_number).await {
-            Ok(result) => return Ok(result),
-            Err(e) => {
-                if attempts >= max_attempts {
-                    return Err(anyhow!(
-                        "Failed to fetch checkpoint {} after {} attempts: {}",
-                        checkpoint_number,
-                        attempts,
-                        e
-                    ));
-                }
-                let backoff_ms = 1000 * attempts as u64;
-                warn!(
-                    "Failed to fetch checkpoint {} (attempt {}/{}): {}, retrying in {}ms",
-                    checkpoint_number, attempts, max_attempts, e, backoff_ms
-                );
-                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-            }
-        }
-    }
-}
+#[cfg(all(feature = "tideconsole", not(windows)))]
+pub mod tideconsole_cmd;
 
 #[derive(
     Clone, Serialize, Deserialize, Debug, PartialEq, Copy, PartialOrd, Ord, Eq, ValueEnum, Default,
@@ -124,20 +96,21 @@ pub enum SnapshotVerifyMode {
 
 // This functions requires at least one of genesis or fullnode_rpc to be `Some`.
 async fn make_clients(
-    rtd_client: &Arc<RtdClient>,
+    rtd_client: &Client,
 ) -> Result<BTreeMap<AuthorityName, (Multiaddr, NetworkAuthorityClient)>> {
     let mut net_config = default_linku_network_config();
     net_config.connect_timeout = Some(Duration::from_secs(5));
     let mut authority_clients = BTreeMap::new();
 
     let active_validators = rtd_client
-        .governance_api()
-        .get_latest_rtd_system_state()
+        .get_system_state_summary(None)
         .await?
         .active_validators;
 
     for validator in active_validators {
-        let net_addr = Multiaddr::try_from(validator.net_address).unwrap();
+        let net_addr = Multiaddr::try_from(validator.net_address)
+            .unwrap()
+            .rewrite_http_to_https();
         let tls_config = rtd_tls::create_rustls_client_config(
             rtd_types::crypto::NetworkPublicKey::from_bytes(&validator.network_pubkey_bytes)?,
             rtd_tls::RTD_VALIDATOR_SERVER_NAME.to_string(),
@@ -406,7 +379,7 @@ pub async fn get_transaction_block(
     show_input_tx: bool,
     fullnode_rpc: String,
 ) -> Result<String> {
-    let rtd_client = Arc::new(RtdClientBuilder::default().build(fullnode_rpc).await?);
+    let rtd_client = Client::new(fullnode_rpc)?;
     let clients = make_clients(&rtd_client).await?;
     let timer = Instant::now();
     let responses = join_all(clients.iter().map(|(name, (address, client))| async {
@@ -817,9 +790,11 @@ pub async fn download_formal_snapshot(
     snapshot_store_config: ObjectStoreConfig,
     ingestion_url: &str,
     num_parallel_downloads: usize,
+    num_parallel_chunks: usize,
     network: Chain,
     verify: SnapshotVerifyMode,
     max_retries: usize,
+    metrics_port: u16,
 ) -> Result<(), anyhow::Error> {
     let m = MultiProgress::new();
     let msg = format!(
@@ -835,8 +810,8 @@ pub async fn download_formal_snapshot(
     }
 
     // Start prometheus server so that we can serve metrics during snapshot download
-    let registry_service =
-        linku_metrics::start_prometheus_server("127.0.0.1:9184".parse().unwrap());
+    let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), metrics_port);
+    let registry_service = linku_metrics::start_prometheus_server(metrics_addr);
     let prometheus_registry = registry_service.default_registry();
     DBMetrics::init(registry_service.clone());
     linku_metrics::init_metrics(&prometheus_registry);
@@ -846,8 +821,17 @@ pub async fn download_formal_snapshot(
         None,
         None,
     ));
-    let genesis = Genesis::load(genesis).unwrap();
-    let genesis_committee = genesis.committee()?;
+    let genesis = Genesis::load(genesis)?;
+    let genesis_chain = ChainIdentifier::from(*genesis.checkpoint().digest()).chain();
+    if genesis_chain != network {
+        return Err(anyhow!(
+            "Genesis file is for chain {}, but formal snapshot download is configured for --network {}. \
+            Use the matching genesis.blob or pass the correct --network flag.",
+            genesis_chain.as_str(),
+            network.as_str(),
+        ));
+    }
+    let genesis_committee = genesis.committee();
     let committee_store = Arc::new(CommitteeStore::new(
         path.join("epochs"),
         &genesis_committee,
@@ -858,12 +842,11 @@ pub async fn download_formal_snapshot(
         Arc::new(PrunerWatermarks::default()),
     );
 
-    let end_of_epoch_checkpoint_seq_nums: Vec<_> =
-        end_of_epoch_data(ingestion_url.to_string(), vec![], 5)
-            .await?
-            .into_iter()
-            .take((epoch + 1) as usize)
-            .collect();
+    let end_of_epoch_checkpoint_seq_nums: Vec<_> = end_of_epoch_data(ingestion_url, vec![])
+        .await?
+        .into_iter()
+        .take((epoch + 1) as usize)
+        .collect();
 
     let summaries_handle = start_summary_sync(
         perpetual_db.clone(),
@@ -889,9 +872,9 @@ pub async fn download_formal_snapshot(
                 epoch,
                 ingestion_url,
                 num_parallel_downloads,
+                max_retries,
                 m,
                 end_of_epoch_checkpoint_seq_nums,
-                max_retries,
             )
             .await
         })
@@ -908,6 +891,7 @@ pub async fn download_formal_snapshot(
     // TODO if verify is false, we should skip generating these and
     // not pass in a channel to the reader
     let (sender, mut receiver) = mpsc::channel(num_parallel_downloads);
+    let (accumulation_done_sender, accumulation_done_receiver) = oneshot::channel();
     let m_clone = m.clone();
 
     let snapshot_handle = tokio::spawn(async move {
@@ -924,44 +908,58 @@ pub async fn download_formal_snapshot(
             m_clone,
             false, // skip_reset_local_store
             max_retries,
+            num_parallel_chunks,
         )
         .await
-        .unwrap_or_else(|err| panic!("Failed to create reader: {}", err));
+        .context("Failed to create snapshot reader")?;
         reader
-            .read(&perpetual_db_clone, abort_registration, Some(sender))
+            .read(
+                perpetual_db_clone.clone(),
+                abort_registration,
+                Some(StateAccumulatorSender {
+                    partials: sender,
+                    completion: accumulation_done_sender,
+                }),
+            )
             .await
-            .unwrap_or_else(|err| panic!("Failed during read: {}", err));
+            .context("Failed to read snapshot")?;
         info!("Snapshot download complete");
         Ok::<(), anyhow::Error>(())
     });
+    tokio::pin!(summaries_handle);
+    tokio::pin!(snapshot_handle);
+    tokio::pin!(backfill_handle);
+
     let mut root_global_state_hash = GlobalStateHash::default();
     let mut num_live_objects = 0;
     while let Some((partial_hash, num_objects)) = receiver.recv().await {
         num_live_objects += num_objects;
         root_global_state_hash.union(&partial_hash);
     }
-    tokio::pin!(summaries_handle);
-    tokio::pin!(snapshot_handle);
-    tokio::pin!(backfill_handle);
+    if accumulation_done_receiver.await.is_err() {
+        (&mut snapshot_handle)
+            .await
+            .map_err(|error| anyhow!("Snapshot task failed: {error}"))??;
+        return Err(anyhow!("Snapshot accumulation did not complete"));
+    }
 
     let mut summaries_done = false;
     let mut snapshot_done = false;
     let mut backfill_done = false;
 
-    // Wait for summaries (required for verification) while monitoring other tasks for early failures
     while !summaries_done {
         tokio::select! {
             result = &mut summaries_handle, if !summaries_done => {
                 summaries_done = true;
-                result.expect("Summaries task panicked")?;
+                result.map_err(|error| anyhow!("Summaries task failed: {error}"))??;
             }
             result = &mut backfill_handle, if !backfill_done => {
                 backfill_done = true;
-                result.expect("Backfill task panicked")?;
+                result.map_err(|error| anyhow!("Backfill task failed: {error}"))??;
             }
             result = &mut snapshot_handle, if !snapshot_done => {
                 snapshot_done = true;
-                result.expect("Snapshot task panicked")?;
+                result.map_err(|error| anyhow!("Snapshot task failed: {error}"))??;
             }
         }
     }
@@ -1021,16 +1019,15 @@ pub async fn download_formal_snapshot(
         )?;
     }
 
-    // Wait for remaining tasks to complete
     while !snapshot_done || !backfill_done {
         tokio::select! {
             result = &mut backfill_handle, if !backfill_done => {
                 backfill_done = true;
-                result.expect("Backfill task panicked")?;
+                result.map_err(|error| anyhow!("Backfill task failed: {error}"))??;
             }
             result = &mut snapshot_handle, if !snapshot_done => {
                 snapshot_done = true;
-                result.expect("Snapshot task panicked")?;
+                result.map_err(|error| anyhow!("Snapshot task failed: {error}"))??;
             }
         }
     }
@@ -1053,6 +1050,24 @@ pub async fn download_formal_snapshot(
     )
     .await?;
 
+    // After a large backfill, rebuild the tidehunter control region to reclaim disk space
+    // and reduce startup time. No-op when compiled without tidehunter.
+    #[cfg(tidehunter)]
+    {
+        perpetual_db
+            .force_rebuild_control_region()
+            .expect("Failed to rebuild tidehunter control region after snapshot restore");
+        // The tidehunter Db spawns background threads (periodic snapshot, relocator,
+        // flusher pool, etc.) that own file handles inside the staging directory.
+        // Wait for them to exit before renaming staging -> live, otherwise a
+        // periodic timer could try to open a new file under the (now missing) path.
+        println!(
+            "Waiting for tidehunter background threads to finish before renaming staging to live"
+        );
+        perpetual_db.wait_for_tidehunter_background_threads();
+        println!("Tidehunter background threads finished, proceeding with rename");
+    }
+
     let new_path = path.parent().unwrap().join("live");
     if new_path.exists() {
         fs::remove_dir_all(new_path.clone())?;
@@ -1072,9 +1087,9 @@ async fn backfill_epoch_transaction_digests(
     epoch: EpochId,
     ingestion_url: String,
     concurrency: usize,
+    max_retries: usize,
     m: MultiProgress,
     end_of_epoch_checkpoint_seq_nums: Vec<u64>,
-    max_retries: usize,
 ) -> Result<()> {
     if epoch == 0 {
         return Ok(());
@@ -1116,7 +1131,7 @@ async fn backfill_epoch_transaction_digests(
         ),
     );
 
-    let client = Arc::new(create_remote_store_client(ingestion_url, vec![], 60)?);
+    let client = build_object_store(&ingestion_url, vec![], vec![])?;
     let checkpoint_counter = Arc::new(AtomicU64::new(0));
     let tx_counter = Arc::new(AtomicU64::new(0));
     let cloned_checkpoint_counter = checkpoint_counter.clone();
@@ -1144,14 +1159,50 @@ async fn backfill_epoch_transaction_digests(
     futures::stream::iter(checkpoints_to_fetch)
         .map(|sq| {
             let client = client.clone();
-            async move { fetch_checkpoint_with_retry(&**client, sq, max_retries).await }
+            async move {
+                // Retry with exponential backoff. This backfill runs concurrently with the
+                // CPU-bound state accumulation; on a busy host the async runtime can be starved
+                // long enough that a single checkpoint fetch times out, and the
+                // `.try_for_each().await?` below then aborts the entire (multi-hour) snapshot
+                // restore, discarding all progress. Retry (up to `max_retries` attempts) so the
+                // fetch waits out the contention and completes instead.
+                let attempts = AtomicUsize::new(0);
+                backoff::future::retry_notify(
+                    ExponentialBackoff {
+                        max_interval: Duration::from_secs(30),
+                        max_elapsed_time: None,
+                        ..Default::default()
+                    },
+                    || async {
+                        fetch_checkpoint(&client, sq).await.map_err(|e| {
+                            if attempts.fetch_add(1, Ordering::Relaxed) + 1 >= max_retries {
+                                backoff::Error::permanent(e)
+                            } else {
+                                backoff::Error::transient(e)
+                            }
+                        })
+                    },
+                    |e, delay: Duration| {
+                        tracing::warn!(
+                            "backfill: checkpoint {} fetch failed (attempt {}/{}): {}; retrying in {:?}",
+                            sq,
+                            attempts.load(Ordering::Relaxed),
+                            max_retries,
+                            e,
+                            delay,
+                        );
+                    },
+                )
+                .await
+                .map(|c| Arc::new(CheckpointData::from(c)))
+            }
         })
         .buffer_unordered(concurrency)
         .try_for_each(|checkpoint| {
             let perpetual_db = perpetual_db.clone();
             let tx_counter = tx_counter.clone();
             let checkpoint_counter = checkpoint_counter.clone();
-            let checkpoint_data = checkpoint.0;
+            let checkpoint_data = checkpoint;
 
             async move {
                 let tx_digests: Vec<_> = checkpoint_data
@@ -1180,145 +1231,5 @@ async fn backfill_epoch_transaction_digests(
         checkpoint_counter.load(Ordering::Relaxed)
     );
 
-    Ok(())
-}
-
-pub async fn download_db_snapshot(
-    path: &Path,
-    epoch: u64,
-    snapshot_store_config: ObjectStoreConfig,
-    skip_indexes: bool,
-    num_parallel_downloads: usize,
-    max_retries: usize,
-) -> Result<(), anyhow::Error> {
-    let remote_store = if snapshot_store_config.no_sign_request {
-        snapshot_store_config.make_http()?
-    } else {
-        snapshot_store_config.make().map(Arc::new)?
-    };
-
-    // We rely on the top level MANIFEST file which contains all valid epochs
-    let manifest_contents = remote_store.get_bytes(&get_path(MANIFEST_FILENAME)).await?;
-    let root_manifest: Manifest = serde_json::from_slice(&manifest_contents)
-        .map_err(|err| anyhow!("Error parsing MANIFEST from bytes: {}", err))?;
-
-    if !root_manifest.epoch_exists(epoch) {
-        return Err(anyhow!(
-            "Epoch dir {} doesn't exist on the remote store",
-            epoch
-        ));
-    }
-
-    let epoch_path = format!("epoch_{}", epoch);
-    let epoch_dir = get_path(&epoch_path);
-
-    let manifest_file = epoch_dir.child(MANIFEST_FILENAME);
-    let epoch_manifest_contents =
-        String::from_utf8(remote_store.get_bytes(&manifest_file).await?.to_vec())
-            .map_err(|err| anyhow!("Error parsing {}/MANIFEST from bytes: {}", epoch_path, err))?;
-
-    let epoch_manifest =
-        PerEpochManifest::deserialize_from_newline_delimited(&epoch_manifest_contents);
-
-    let mut files: Vec<String> = vec![];
-    files.extend(epoch_manifest.filter_by_prefix("store/perpetual").lines);
-    files.extend(epoch_manifest.filter_by_prefix("epochs").lines);
-    files.extend(epoch_manifest.filter_by_prefix("checkpoints").lines);
-    if !skip_indexes {
-        files.extend(epoch_manifest.filter_by_prefix("indexes").lines)
-    }
-    let local_store = ObjectStoreConfig {
-        object_store: Some(ObjectStoreType::File),
-        directory: Some(path.to_path_buf()),
-        ..Default::default()
-    }
-    .make()?;
-    let m = MultiProgress::new();
-    let path = path.to_path_buf();
-    let snapshot_handle = tokio::spawn(async move {
-        let progress_bar = m.add(
-            ProgressBar::new(files.len() as u64).with_style(
-                ProgressStyle::with_template(
-                    "[{elapsed_precise}] {wide_bar} {pos} out of {len} files done ({msg})",
-                )
-                .unwrap(),
-            ),
-        );
-        let cloned_progress_bar = progress_bar.clone();
-        let file_counter = Arc::new(AtomicUsize::new(0));
-        futures::stream::iter(files.iter())
-            .map(|file| {
-                let local_store = local_store.clone();
-                let remote_store = remote_store.clone();
-                let counter_cloned = file_counter.clone();
-                async move {
-                    counter_cloned.fetch_add(1, Ordering::Relaxed);
-                    let file_path = get_path(format!("epoch_{}/{}", epoch, file).as_str());
-
-                    let mut attempts = 0;
-                    let max_attempts = max_retries + 1;
-                    loop {
-                        attempts += 1;
-                        match copy_file(&file_path, &file_path, &remote_store, &local_store).await {
-                            Ok(()) => break,
-                            Err(e) if attempts >= max_attempts => {
-                                return Err(anyhow::anyhow!(
-                                    "Failed to download {} after {} attempts: {}",
-                                    file_path,
-                                    attempts,
-                                    e
-                                ));
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to download {} (attempt {}/{}): {}, retrying in {}ms",
-                                    file_path,
-                                    attempts,
-                                    max_attempts,
-                                    e,
-                                    1000 * attempts
-                                );
-                                tokio::time::sleep(Duration::from_millis(1000 * attempts as u64))
-                                    .await;
-                            }
-                        }
-                    }
-
-                    Ok::<::object_store::path::Path, anyhow::Error>(file_path.clone())
-                }
-            })
-            .boxed()
-            .buffer_unordered(num_parallel_downloads)
-            .try_for_each(|path| {
-                file_counter.fetch_sub(1, Ordering::Relaxed);
-                cloned_progress_bar.inc(1);
-                cloned_progress_bar.set_message(format!(
-                    "Downloading file: {}, #downloads_in_progress: {}",
-                    path,
-                    file_counter.load(Ordering::Relaxed)
-                ));
-                futures::future::ready(Ok(()))
-            })
-            .await?;
-        progress_bar.finish_with_message("Snapshot file download is complete");
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let tasks: Vec<_> = vec![Box::pin(snapshot_handle)];
-    join_all(tasks)
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .for_each(|result| result.expect("Task failed"));
-
-    let store_dir = path.join("store");
-    if store_dir.exists() {
-        fs::remove_dir_all(&store_dir)?;
-    }
-    let epochs_dir = path.join("epochs");
-    if epochs_dir.exists() {
-        fs::remove_dir_all(&epochs_dir)?;
-    }
     Ok(())
 }

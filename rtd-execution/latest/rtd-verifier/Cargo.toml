@@ -2,10 +2,13 @@
 name = "rtd-verifier-latest"
 version = "0.1.0"
 edition = "2024"
-authors = ["LinkU Labs <eng@linkulabs.com>"]
+authors = ["LinkU Labs"]
 description = "Move framework for Rtd platform"
 license = "Apache-2.0"
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 move-binary-format.workspace = true
@@ -17,5 +20,6 @@ move-abstract-stack.workspace = true
 
 move-bytecode-verifier = { path = "../../../external-crates/move/crates/move-bytecode-verifier" }
 
+linku-common.workspace = true
 rtd-types.workspace = true
 rtd-protocol-config.workspace = true

@@ -1,0 +1,211 @@
+---
+title: Running a Remote Store
+description: >-
+  Setup instructions for running the checkpoint blob indexer to populate a
+  remote store with protobuf checkpoint blobs.
+keywords:
+  - remote store
+  - checkpoint
+  - blob
+  - indexer
+  - object store
+  - S3
+  - MinIO
+  - operator
+goal:
+  description: >-
+    Operator can run the checkpoint blob indexer to populate a remote store with
+    protobuf checkpoint blobs
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - min_words: 300
+      label: Needs more operational depth
+    - pattern: '```'
+      min: 1
+      label: Has configuration or command examples
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - How do I run a remote store?
+  - How do I set up running a remote store?
+  - What are the requirements for running a remote store?
+answer: >-
+  Setup instructions for running the checkpoint blob indexer to populate a
+  remote store with protobuf checkpoint blobs.
+---
+
+The remote store contains protobuf-encoded checkpoint blobs. RTD production storage must be an operator-owned, open-source MinIO deployment; `S3` below names its wire protocol, not Amazon's cloud service. Full nodes read from it for state sync and indexers read from it for backfills. The `rtd-checkpoint-blob-indexer` populates this store by reading checkpoints from a source and writing compressed protobuf blobs to a destination. Google Cloud Storage, Amazon S3, Azure Blob and other managed cloud stores are not supported RTD production dependencies.
+
+RTD has no verified public checkpoint bucket. All bucket names below must be
+supplied by the operator of the RTD chain being indexed.
+
+## Architecture overview
+
+```mermaid
+graph LR
+    A[Source: Existing Remote Store / Full Node gRPC] --> B[rtd-checkpoint-blob-indexer]
+    B --> C[Your self-hosted MinIO<br/>S3-compatible API]
+```
+
+<Tabs className="tabsHeadingCentered--small">
+<TabItem value="prereq" label="Prerequisites">
+
+- Access to a checkpoint source (see [Available Data Stores](/operators/data-management/available-data-stores)):
+   - **Your verified, full-retention MinIO published bucket:** Verify that its checkpoints match the RTD genesis digest and chain ID.
+   - **Your own full node:** Must have gRPC enabled for steady-state streaming.
+- A separate self-hosted MinIO staging bucket with scoped write credentials. Indexers must read only from the verified published bucket.
+- The `rtd-checkpoint-blob-indexer` binary.
+
+</TabItem>
+</Tabs>
+
+## Pipelines
+
+The indexer runs three pipelines. Only the first two should be enabled:
+
+| Pipeline | Output | Description |
+|----------|--------|-------------|
+| `checkpoint_blob` | `{seq}.binpb.zst` | Protobuf-encoded checkpoint blobs. **This is the format to use.** |
+| `epochs` | `epochs.json` | Sorted list of epoch-boundary checkpoint sequence numbers. Required metadata. |
+| `checkpoint_bcs` | `{seq}.chk` | BCS-encoded checkpoints. **Deprecated and being decommissioned. Do not enable this pipeline.** |
+
+## Backfill from an existing bucket
+
+If your RTD network operator provides a verified MinIO checkpoint bucket, use
+`--remote-store-s3` as the source and `--s3` for your destination. Set
+`AWS_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
+`AWS_DEFAULT_REGION` to the approved self-hosted MinIO endpoint and scoped
+credentials. The CLI requires `--config` even when using its default tuning.
+
+#### Example: Backfill from an operator-owned MinIO bucket
+
+```sh
+rtd-checkpoint-blob-indexer \
+    --config checkpoint-blob.toml \
+    --pipeline checkpoint_blob --pipeline epochs \
+    --remote-store-s3 YOUR_VERIFIED_PUBLISHED_BUCKET \
+    --s3 YOUR_STAGING_BUCKET \
+    --compression-level 3
+```
+
+The bucket names above are required placeholders. Confirm retention, chain ID,
+object versions, credentials and access boundaries before backfill. No public
+RTD checkpoint HTTPS endpoint is configured by this fork. Publishing from the
+staging bucket requires separate verification and immutable promotion; a
+watermark file in the same bucket is not an access boundary.
+
+## Alternative: Backfill from a full node
+
+If you have an unpruned full node, you can use it as the checkpoint source instead of a bucket:
+
+```sh
+rtd-checkpoint-blob-indexer \
+    --config checkpoint-blob.toml \
+    --pipeline checkpoint_blob --pipeline epochs \
+    --rpc-api-url http://my-fullnode:9000 \
+    --s3 YOUR_STAGING_BUCKET \
+    --compression-level 3
+```
+
+## Steady-state operation
+
+Once the backfill has caught up to the network tip, switch to full node gRPC streaming for the lowest latency. Use `--rpc-api-url` for checkpoint fetching and `--streaming-url` for live streaming:
+
+```sh
+rtd-checkpoint-blob-indexer \
+    --config checkpoint-blob.toml \
+    --pipeline checkpoint_blob --pipeline epochs \
+    --rpc-api-url http://my-fullnode:9000 \
+    --streaming-url http://my-fullnode:9000 \
+    --s3 YOUR_STAGING_BUCKET \
+    --compression-level 3
+```
+
+The full node only needs gRPC enabled. JSON-RPC is not required.
+
+### Running multiple instances
+
+The current blob writer performs ordinary object writes. Do not run multiple active writers against the same staging keys until RTD has implemented and tested conflict rejection, version pinning, and a single-writer handover procedure. Measure throughput and lag on your own RTD chain; there is no public-network sizing baseline.
+
+## CLI reference
+
+### Destination flags (mutually exclusive, one required)
+
+| Flag | Description |
+|------|-------------|
+| `--s3 <BUCKET>` | Write to self-hosted MinIO using S3 protocol. Env: explicit private `AWS_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`. |
+| `--http <URL>` | Write to an operator-owned HTTPS endpoint; verify its storage and access contract separately. |
+| `--path <DIR>` | Write to a local directory for development. |
+
+### Source flags (mutually exclusive, one required)
+
+| Flag | Description |
+|------|-------------|
+| `--remote-store-url <URL>` | Fetch checkpoints from an operator-owned HTTPS store. Check its chain ID and retention; no public RTD endpoint is configured. |
+| `--remote-store-s3 <BUCKET>` | Fetch checkpoints from the self-hosted, verified MinIO published bucket. |
+| `--local-ingestion-path <DIR>` | Read a local checkpoint directory for development. |
+| `--rpc-api-url <URL>` | Fetch checkpoints from a full node gRPC endpoint. |
+
+### Other flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--config <PATH>` | — | Path to optional TOML configuration file. The framework defaults are sufficient for most deployments. See [Configuration](#configuration-toml). |
+| `--compression-level <LEVEL>` | None (uncompressed) | Zstd compression level. **Strongly recommended.** Without this flag, files are written as `.binpb` instead of `.binpb.zst`. The indexer framework expects `.binpb.zst` when reading from a remote store, so downstream consumers cannot find uncompressed files. A value of `3` is a good default. |
+| `--streaming-url <URL>` | — | Full node gRPC URL for streaming live checkpoints. Used alongside `--rpc-api-url` for lowest latency at the network tip. |
+| `--first-checkpoint <N>` | 0 | Checkpoint to start indexing from. |
+| `--last-checkpoint <N>` | — | Checkpoint to stop indexing at (inclusive). Useful for bounded backfill jobs. |
+| `--pipeline <NAME>` | All pipelines | Only run the specified pipeline(s). Can be repeated. |
+| `--request-timeout <DURATION>` | `30s` | HTTP request timeout for object store operations. |
+| `--metrics-address <ADDR>` | `0.0.0.0:9184` | Prometheus metrics bind address. |
+
+## Configuration (TOML)
+
+Use `--pipeline` to run only the two recommended pipelines and exclude the deprecated BCS pipeline:
+
+```sh
+--pipeline checkpoint_blob --pipeline epochs
+```
+
+Pass the following TOML configuration file through `--config` to tune the committer for object store workloads:
+
+```toml
+[committer]
+write-concurrency = 500
+watermark-interval-ms = 120000
+watermark-interval-jitter-ms = 120000
+```
+
+- **`write-concurrency`**: Allows up to 500 concurrent writes to the object store. Decrease this if you observe heavy throttling from your storage provider.
+- **`watermark-interval-ms`**: Reduces the frequency of watermark updates from the framework default to avoid hot-key issues on the watermark file in the object store.
+- **`watermark-interval-jitter-ms`**: Adds random jitter to the watermark interval, staggering writes when running multiple indexer instances so they don't write to the same key simultaneously.
+
+The configuration options (`[ingestion]`, `[committer]`, `[pipeline.<name>]`) are the same as the indexer framework's standard settings. See [Pipeline architecture: Performance tuning](/develop/accessing-data/custom-indexer/pipeline-architecture#performance-tuning) for the full reference.
+
+## Output format
+
+The indexer writes the following files to the destination object store:
+
+| Path | Description |
+|------|-------------|
+| `{seq}.binpb.zst` | Zstd-compressed protobuf checkpoint blob (when `--compression-level` is set). **This is the expected format.** |
+| `{seq}.binpb` | Uncompressed protobuf checkpoint blob (without `--compression-level`). **Not recommended.** The indexer framework looks for `.binpb.zst` when ingesting from a remote store. |
+| `epochs.json` | JSON array of epoch-boundary checkpoint sequence numbers, sorted. |
+| `_metadata/watermarks/` | Internal watermark files used by the indexer to track progress. |
+
+## Monitoring
+
+The indexer exports Prometheus metrics on port 9184 at `/metrics` (configurable through `--metrics-address`). Metrics use the `checkpoint_blob_` prefix. The indexer uses the same [indexer framework metrics](/develop/accessing-data/custom-indexer/indexer-runtime-perf) as the other indexers (ingestion, pipeline, watermark, and commit metrics), with pipeline-specific labels.
+
+```yaml
+scrape_configs:
+  - job_name: rtd-checkpoint-blob-indexer
+    static_configs:
+      - targets: ['<HOST>:9184']
+```

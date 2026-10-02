@@ -12,12 +12,14 @@ use backoff::future::retry;
 use fastcrypto::encoding::Base64;
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use futures::future::join_all;
-use im::hashmap::HashMap as ImHashMap;
+use imbl::hashmap::HashMap as ImHashMap;
 use indexmap::map::IndexMap;
 use itertools::Itertools;
 use jsonrpsee::RpcModule;
 use jsonrpsee::core::RpcResult;
+use linku_common::ZipDebugEqIteratorExt;
 use move_bytecode_utils::module_cache::GetModule;
+use move_core_types::account_address::AccountAddress;
 use move_core_types::annotated_value::{MoveStructLayout, MoveTypeLayout};
 use move_core_types::language_storage::StructTag;
 use once_cell::sync::Lazy;
@@ -27,6 +29,7 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::signature::{GenericSignature, VerifyParams};
 use rtd_types::signature_verification::VerifiedDigestCache;
 use rtd_types::storage::ObjectKey;
+use serde_json::Value as Json;
 use shared_crypto::intent::{IntentMessage, PersonalMessage};
 use tap::TapFallible;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -48,6 +51,7 @@ use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use rtd_storage::key_value_store::TransactionKeyValueStore;
 use rtd_types::base_types::{ObjectID, SequenceNumber, TransactionDigest};
 use rtd_types::display::DisplayVersionUpdatedEvent;
+use rtd_types::display_registry;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents};
 use rtd_types::error::{RtdError, RtdObjectResponseError};
 use rtd_types::messages_checkpoint::{CheckpointSequenceNumber, CheckpointTimestamp};
@@ -68,11 +72,67 @@ use rtd_json_rpc_types::ZkLoginVerifyResult;
 use rtd_types::authenticator_state::{ActiveJwk, get_authenticator_state};
 use shared_crypto::intent::Intent;
 
-/// A field access in a  Display string cannot exceed this level of nesting.
-const MAX_DISPLAY_NESTED_LEVEL: usize = 10;
+/// Default max depth used while converting rendered Display values to JSON.
+const DEFAULT_MAX_DISPLAY_MOVE_VALUE_DEPTH: usize = 32;
 
 /// Default budget for Display output size.
 const DEFAULT_MAX_DISPLAY_OUTPUT_SIZE: usize = 1024 * 1024;
+
+/// A field access in a Display string cannot exceed this level of nesting.
+static MAX_DISPLAY_FIELD_DEPTH: Lazy<usize> = Lazy::new(|| {
+    let max_opt = std::env::var("MAX_DISPLAY_FIELD_DEPTH")
+        .ok()
+        .and_then(|s| s.parse().ok());
+
+    if let Some(max) = max_opt {
+        info!("Using custom value for 'MAX_DISPLAY_FIELD_DEPTH': {max}");
+        max
+    } else {
+        rtd_display::v2::Limits::default().max_depth
+    }
+});
+
+/// Parser node budget for Display v2.
+static MAX_DISPLAY_FORMAT_NODES: Lazy<usize> = Lazy::new(|| {
+    let max_opt = std::env::var("MAX_DISPLAY_FORMAT_NODES")
+        .ok()
+        .and_then(|s| s.parse().ok());
+
+    if let Some(max) = max_opt {
+        info!("Using custom value for 'MAX_DISPLAY_FORMAT_NODES': {max}");
+        max
+    } else {
+        rtd_display::v2::Limits::default().max_nodes
+    }
+});
+
+/// Max object loads budget for Display v2.
+static MAX_DISPLAY_OBJECT_LOADS: Lazy<usize> = Lazy::new(|| {
+    let max_opt = std::env::var("MAX_DISPLAY_OBJECT_LOADS")
+        .ok()
+        .and_then(|s| s.parse().ok());
+
+    if let Some(max) = max_opt {
+        info!("Using custom value for 'MAX_DISPLAY_OBJECT_LOADS': {max}");
+        max
+    } else {
+        rtd_display::v2::Limits::default().max_loads
+    }
+});
+
+/// Maximum depth used while converting rendered Display values to JSON.
+static MAX_DISPLAY_MOVE_VALUE_DEPTH: Lazy<usize> = Lazy::new(|| {
+    let max_opt = std::env::var("MAX_MOVE_VALUE_DEPTH")
+        .ok()
+        .and_then(|s| s.parse().ok());
+
+    if let Some(max) = max_opt {
+        info!("Using custom value for 'MAX_MOVE_VALUE_DEPTH': {max}");
+        max
+    } else {
+        DEFAULT_MAX_DISPLAY_MOVE_VALUE_DEPTH
+    }
+});
 
 /// Overall display output cannot exceed this size.
 static MAX_DISPLAY_OUTPUT_SIZE: Lazy<usize> = Lazy::new(|| {
@@ -87,6 +147,38 @@ static MAX_DISPLAY_OUTPUT_SIZE: Lazy<usize> = Lazy::new(|| {
         DEFAULT_MAX_DISPLAY_OUTPUT_SIZE
     }
 });
+
+struct DisplayStore<'s> {
+    state: &'s dyn StateRead,
+}
+
+impl<'s> DisplayStore<'s> {
+    fn new(state: &'s dyn StateRead) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait]
+impl rtd_display::v2::Store for DisplayStore<'_> {
+    async fn latest(
+        &self,
+        id: AccountAddress,
+    ) -> anyhow::Result<Option<(MoveTypeLayout, Vec<u8>)>> {
+        let read = self.state.get_object_read(&id.into())?;
+        let ObjectRead::Exists(_, object, Some(layout)) = read else {
+            return Ok(None);
+        };
+
+        let Some(move_object) = object.data.try_as_move() else {
+            return Ok(None);
+        };
+
+        Ok(Some((
+            MoveTypeLayout::Struct(Box::new(layout)),
+            move_object.contents().to_vec(),
+        )))
+    }
+}
 
 // An implementation of the read portion of the JSON-RPC interface intended for use in
 // Fullnodes.
@@ -183,15 +275,25 @@ impl ReadApi {
         let verified_checkpoints = transaction_kv_store
             .multi_get_checkpoints_summaries(&checkpoint_numbers)
             .await?;
-
         let checkpoint_contents = transaction_kv_store
             .multi_get_checkpoints_contents(&checkpoint_numbers)
             .await?;
 
+        // Summaries and contents are resolved from separate tables, and checkpoint
+        // pruning can delete a checkpoint's contents while leaving its
+        // sequence-addressable summary in place. Pair each summary with the
+        // contents for the *same* sequence number by zipping the two `Option`
+        // vectors index-by-index. Independently dropping the `None`s and zipping
+        // the dense remainders would shift later contents onto earlier summaries,
+        // yielding response rows whose summary and transaction list describe
+        // different checkpoints.
         let mut checkpoints = Vec::with_capacity(checkpoint_numbers.len());
-        for (maybe_summary, maybe_contents) in
-            verified_checkpoints.into_iter().zip(checkpoint_contents)
+        for (maybe_summary, maybe_contents) in verified_checkpoints
+            .into_iter()
+            .zip_debug_eq(checkpoint_contents)
         {
+            // Skip any sequence number whose summary or contents are unavailable
+            // (e.g. pruned) rather than pairing it with another checkpoint's data.
             let (Some(summary), Some(contents)) = (maybe_summary, maybe_contents) else {
                 continue;
             };
@@ -242,8 +344,9 @@ impl ReadApi {
                     |err| debug!(digests=?digests_clone, "Failed to multi get transactions: {:?}", err),
                 )?;
 
-            for ((_digest, cache_entry), txn) in
-                temp_response.iter_mut().zip(transactions.into_iter())
+            for ((_digest, cache_entry), txn) in temp_response
+                .iter_mut()
+                .zip_debug_eq(transactions.into_iter())
             {
                 cache_entry.transaction = txn;
             }
@@ -259,8 +362,9 @@ impl ReadApi {
                 .tap_err(
                     |err| debug!(digests=?digests_clone, "Failed to multi get effects for transactions: {:?}", err),
                 )?;
-            for ((_digest, cache_entry), e) in
-                temp_response.iter_mut().zip(effects_list.into_iter())
+            for ((_digest, cache_entry), e) in temp_response
+                .iter_mut()
+                .zip_debug_eq(effects_list.into_iter())
             {
                 cache_entry.effects = e;
             }
@@ -275,7 +379,7 @@ impl ReadApi {
                 |err| debug!(digests=?digests, "Failed to multi get checkpoint sequence number: {:?}", err))?;
         for ((_digest, cache_entry), seq) in temp_response
             .iter_mut()
-            .zip(checkpoint_seq_list.into_iter())
+            .zip_debug_eq(checkpoint_seq_list.into_iter())
         {
             cache_entry.checkpoint_seq = seq;
         }
@@ -303,15 +407,14 @@ impl ReadApi {
         // construct a hashmap of checkpoint -> timestamp for fast lookup
         let checkpoint_to_timestamp = unique_checkpoint_numbers
             .into_iter()
-            .zip(timestamps)
+            .zip_debug_eq(timestamps)
             .collect::<HashMap<_, _>>();
 
         // fill cache with the timestamp
         for (_, cache_entry) in temp_response.iter_mut() {
-            if cache_entry.checkpoint_seq.is_some() {
-                // safe to unwrap because is_some is checked
+            if let Some(checkpoint_seq) = cache_entry.checkpoint_seq.as_ref() {
                 cache_entry.timestamp = *checkpoint_to_timestamp
-                    .get(cache_entry.checkpoint_seq.as_ref().unwrap())
+                    .get(checkpoint_seq)
                     // Safe to unwrap because checkpoint_seq is guaranteed to exist in checkpoint_to_timestamp
                     .unwrap();
             }
@@ -449,7 +552,7 @@ impl ReadApi {
                 ));
             }
             let results = join_all(results).await;
-            for (result, entry) in results.into_iter().zip(temp_response.iter_mut()) {
+            for (result, entry) in results.into_iter().zip_debug_eq(temp_response.iter_mut()) {
                 match result {
                     Ok(balance_changes) => entry.1.balance_changes = Some(balance_changes),
                     Err(e) => entry
@@ -492,7 +595,7 @@ impl ReadApi {
                 ));
             }
             let results = join_all(results).await;
-            for (result, entry) in results.into_iter().zip(temp_response.iter_mut()) {
+            for (result, entry) in results.into_iter().zip_debug_eq(temp_response.iter_mut()) {
                 match result {
                     Ok(object_changes) => entry.1.object_changes = Some(object_changes),
                     Err(e) => entry
@@ -926,9 +1029,11 @@ impl ReadApiServer for ReadApi {
                         .map(|(seq, e)| {
                             let layout = store
                                 .executor()
-                                .type_layout_resolver(Box::new(
-                                    &state.get_backing_package_store().as_ref(),
-                                ))
+                                .type_layout_resolver(
+                                    store.protocol_config(),
+                                    Box::new(
+                                        &state.get_backing_package_store().as_ref(),
+                                    ))
                                 .get_annotated_layout(&e.type_)?;
                             RtdEvent::try_from(e, transaction_digest, seq as u64, None, layout)
                         })
@@ -1046,15 +1151,6 @@ impl ReadApiServer for ReadApi {
             Ok(ci.to_string())
         })
     }
-
-    #[instrument(skip(self))]
-    async fn get_full_chain_identifier(&self) -> RpcResult<String> {
-        with_tracing!(async move {
-            let ci = self.state.get_chain_identifier()?;
-            Ok(ci.full_id())
-        })
-    }
-
     #[instrument(skip(self))]
     async fn verify_zklogin_signature(
         &self,
@@ -1102,10 +1198,10 @@ impl ReadApiServer for ReadApi {
         for active_jwk in new_jwks.iter() {
             let ActiveJwk { jwk_id, jwk, .. } = active_jwk;
             match oidc_provider_jwks.entry(jwk_id.clone()) {
-                im::hashmap::Entry::Occupied(_) => {
+                imbl::hashmap::Entry::Occupied(_) => {
                     warn!("JWK with kid {:?} already exists", jwk_id);
                 }
-                im::hashmap::Entry::Vacant(entry) => {
+                imbl::hashmap::Entry::Vacant(entry) => {
                     entry.insert(jwk.clone());
                 }
             }
@@ -1114,10 +1210,12 @@ impl ReadApiServer for ReadApi {
             oidc_provider_jwks,
             vec![],
             zklogin_env_native,
+            epoch_store.protocol_config().zklogin_circuit_mode(),
             true,
             true,
             true,
             Some(30),
+            true,
             true,
         );
         match intent_scope {
@@ -1190,9 +1288,10 @@ fn to_rtd_transaction_events(
 ) -> Result<RtdTransactionBlockEvents, Error> {
     let epoch_store = fullnode_api.state.load_epoch_store_one_call_per_task();
     let backing_package_store = fullnode_api.state.get_backing_package_store();
-    let mut layout_resolver = epoch_store
-        .executor()
-        .type_layout_resolver(Box::new(backing_package_store.as_ref()));
+    let mut layout_resolver = epoch_store.executor().type_layout_resolver(
+        epoch_store.protocol_config(),
+        Box::new(backing_package_store.as_ref()),
+    );
     Ok(RtdTransactionBlockEvents::try_from(
         events,
         tx_digest,
@@ -1220,6 +1319,9 @@ pub enum ObjectDisplayError {
 
     #[error(transparent)]
     StateReadError(#[from] StateReadError),
+
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
 }
 
 #[instrument(skip(fullnode_api, kv_store))]
@@ -1229,7 +1331,11 @@ async fn get_display_fields(
     original_object: &Object,
     original_layout: &Option<MoveStructLayout>,
 ) -> Result<DisplayFieldsResponse, ObjectDisplayError> {
-    let Some(layout) = original_layout else {
+    let (layout, type_) = if let Some(layout) = original_layout {
+        let type_ = &layout.type_;
+        let layout = MoveTypeLayout::Struct(Box::new(layout.clone()));
+        (layout, type_)
+    } else {
         return Ok(DisplayFieldsResponse {
             data: None,
             error: None,
@@ -1240,39 +1346,84 @@ async fn get_display_fields(
         return Err(ObjectDisplayError::MoveObject);
     };
 
-    let Some(display_object) =
-        get_display_object_by_type(kv_store, fullnode_api, &layout.type_).await?
-    else {
-        return Ok(DisplayFieldsResponse {
-            data: None,
-            error: None,
-        });
-    };
+    let display: Vec<(String, Result<Json, anyhow::Error>)> =
+        if let Some(display_object) = get_display_object_v2_by_type(fullnode_api, type_)? {
+            let root = rtd_display::v2::OwnedSlice::new(layout, move_object.contents().to_owned());
+            let store = DisplayStore::new(fullnode_api.state.as_ref());
+            let interpreter = rtd_display::v2::Interpreter::new(root, store);
+            let limits = rtd_display::v2::Limits {
+                max_depth: *MAX_DISPLAY_FIELD_DEPTH,
+                max_nodes: *MAX_DISPLAY_FORMAT_NODES,
+                max_loads: *MAX_DISPLAY_OBJECT_LOADS,
+            };
 
-    let format = match Format::parse(MAX_DISPLAY_NESTED_LEVEL, &display_object.fields) {
-        Ok(format) => format,
-        Err(e) => {
+            match rtd_display::v2::Display::parse(limits, display_object.fields()) {
+                Ok(display) => match display
+                    .display::<Json>(
+                        *MAX_DISPLAY_MOVE_VALUE_DEPTH,
+                        *MAX_DISPLAY_OUTPUT_SIZE,
+                        &interpreter,
+                    )
+                    .await
+                {
+                    Ok(fields) => fields
+                        .into_iter()
+                        .map(|(field, value)| (field, value.map_err(anyhow::Error::from)))
+                        .collect(),
+                    Err(e) => {
+                        return Ok(DisplayFieldsResponse {
+                            data: None,
+                            error: Some(RtdObjectResponseError::DisplayError {
+                                error: e.to_string(),
+                            }),
+                        });
+                    }
+                },
+
+                Err(e) => {
+                    return Ok(DisplayFieldsResponse {
+                        data: None,
+                        error: Some(RtdObjectResponseError::DisplayError {
+                            error: e.to_string(),
+                        }),
+                    });
+                }
+            }
+        } else if let Some(display_object) =
+            get_display_object_v1_by_type(kv_store, fullnode_api, type_).await?
+        {
+            let format = match Format::parse(*MAX_DISPLAY_FIELD_DEPTH, &display_object.fields) {
+                Ok(format) => format,
+                Err(e) => {
+                    return Ok(DisplayFieldsResponse {
+                        data: None,
+                        error: Some(RtdObjectResponseError::DisplayError {
+                            error: e.to_string(),
+                        }),
+                    });
+                }
+            };
+
+            match format.display(*MAX_DISPLAY_OUTPUT_SIZE, move_object.contents(), &layout) {
+                Ok(fields) => fields
+                    .into_iter()
+                    .map(|(field, value)| (field, value.map(Json::String)))
+                    .collect(),
+                Err(e) => {
+                    return Ok(DisplayFieldsResponse {
+                        data: None,
+                        error: Some(RtdObjectResponseError::DisplayError {
+                            error: e.to_string(),
+                        }),
+                    });
+                }
+            }
+        } else {
             return Ok(DisplayFieldsResponse {
                 data: None,
-                error: Some(RtdObjectResponseError::DisplayError {
-                    error: e.to_string(),
-                }),
+                error: None,
             });
-        }
-    };
-
-    let layout = MoveTypeLayout::Struct(Box::new(layout.clone()));
-    let display = match format.display(*MAX_DISPLAY_OUTPUT_SIZE, move_object.contents(), &layout) {
-        Ok(fields) => fields,
-        Err(e) => {
-            return Ok(DisplayFieldsResponse {
-                data: None,
-                error: Some(RtdObjectResponseError::DisplayError {
-                    error: e.to_string(),
-                }),
-            });
-        }
-    };
+        };
 
     let mut fields = BTreeMap::new();
     let mut errors = vec![];
@@ -1297,11 +1448,10 @@ async fn get_display_fields(
 }
 
 #[instrument(skip(kv_store, fullnode_api))]
-async fn get_display_object_by_type(
+async fn get_display_object_v1_by_type(
     kv_store: &Arc<TransactionKeyValueStore>,
     fullnode_api: &ReadApi,
     object_type: &StructTag,
-    // TODO: add query version support
 ) -> Result<Option<DisplayVersionUpdatedEvent>, ObjectDisplayError> {
     let mut events = fullnode_api
         .state
@@ -1315,13 +1465,29 @@ async fn get_display_object_by_type(
         .await?;
 
     // If there's any recent version of Display, give it to the client.
-    // TODO: add support for version query.
     if let Some(event) = events.pop() {
         let display: DisplayVersionUpdatedEvent = bcs::from_bytes(&event.bcs.into_bytes())?;
         Ok(Some(display))
     } else {
         Ok(None)
     }
+}
+
+#[instrument(skip(fullnode_api))]
+fn get_display_object_v2_by_type(
+    fullnode_api: &ReadApi,
+    object_type: &StructTag,
+) -> Result<Option<display_registry::Display>, ObjectDisplayError> {
+    let object_id = display_registry::display_object_id(object_type.clone().into())?;
+    let ObjectRead::Exists(_, object, _) = fullnode_api.state.get_object_read(&object_id)? else {
+        return Ok(None);
+    };
+
+    let Some(move_object) = object.data.try_as_move() else {
+        return Ok(None);
+    };
+
+    Ok(Some(bcs::from_bytes(move_object.contents())?))
 }
 
 #[instrument(skip_all)]
@@ -1425,6 +1591,26 @@ fn calculate_checkpoint_numbers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::authority_state::MockStateRead;
+    use mockall::mock;
+    use roaring::RoaringBitmap;
+    use rtd_storage::key_value_store::{
+        KVStoreCheckpointData, KVStoreTransactionData, TransactionKeyValueStoreTrait,
+    };
+    use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
+    use rtd_types::base_types::ExecutionDigests;
+    use rtd_types::crypto::AuthorityStrongQuorumSignInfo;
+    use rtd_types::digests::TransactionEffectsDigest;
+    use rtd_types::effects::TransactionEvents;
+    use rtd_types::error::RtdResult;
+    use rtd_types::gas::GasCostSummary;
+    use rtd_types::message_envelope::Envelope;
+    use rtd_types::messages_checkpoint::{
+        CertifiedCheckpointSummary, CheckpointContents, CheckpointDigest, CheckpointSummary,
+    };
+    use rtd_types::object::Object;
+    use rtd_types::storage::ObjectKey;
+    use std::collections::HashMap;
 
     #[test]
     fn test_calculate_checkpoint_numbers() {
@@ -1502,5 +1688,170 @@ mod tests {
             calculate_checkpoint_numbers(cursor, limit, descending_order, max_checkpoint);
 
         assert_eq!(checkpoint_numbers, (0..=15).rev().collect::<Vec<_>>());
+    }
+
+    mock! {
+        CheckpointKvStore {}
+        #[async_trait]
+        impl TransactionKeyValueStoreTrait for CheckpointKvStore {
+            async fn multi_get(
+                &self,
+                transactions: &[TransactionDigest],
+                effects: &[TransactionDigest],
+            ) -> RtdResult<KVStoreTransactionData>;
+
+            async fn multi_get_checkpoints(
+                &self,
+                checkpoint_summaries: &[CheckpointSequenceNumber],
+                checkpoint_contents: &[CheckpointSequenceNumber],
+                checkpoint_summaries_by_digest: &[CheckpointDigest],
+            ) -> RtdResult<KVStoreCheckpointData>;
+
+            async fn deprecated_get_transaction_checkpoint(
+                &self,
+                digest: TransactionDigest,
+            ) -> RtdResult<Option<CheckpointSequenceNumber>>;
+
+            async fn get_object(
+                &self,
+                object_id: ObjectID,
+                version: SequenceNumber,
+            ) -> RtdResult<Option<Object>>;
+
+            async fn multi_get_objects(
+                &self,
+                object_keys: &[ObjectKey],
+            ) -> RtdResult<Vec<Option<Object>>>;
+
+            async fn multi_get_transaction_checkpoint(
+                &self,
+                digests: &[TransactionDigest],
+            ) -> RtdResult<Vec<Option<CheckpointSequenceNumber>>>;
+
+            async fn multi_get_events_by_tx_digests(
+                &self,
+                digests: &[TransactionDigest],
+            ) -> RtdResult<Vec<Option<TransactionEvents>>>;
+        }
+    }
+
+    // Builds `CheckpointContents` whose single transaction digest uniquely
+    // encodes `seq`, so a returned `Checkpoint` can be traced back to the
+    // sequence number whose contents it actually carries.
+    fn test_checkpoint_contents(seq: CheckpointSequenceNumber) -> CheckpointContents {
+        let mut tx = [0u8; 32];
+        tx[0] = 0xA;
+        tx[1..9].copy_from_slice(&seq.to_le_bytes());
+        let mut fx = [0u8; 32];
+        fx[0] = 0xE;
+        fx[1..9].copy_from_slice(&seq.to_le_bytes());
+        CheckpointContents::new_with_digests_only_for_tests([ExecutionDigests::new(
+            TransactionDigest::new(tx),
+            TransactionEffectsDigest::new(fx),
+        )])
+    }
+
+    // Builds a certified summary for `seq`. The aggregate signature is a
+    // placeholder; `get_checkpoints_internal` never verifies it.
+    fn test_certified_summary(
+        seq: CheckpointSequenceNumber,
+        contents: &CheckpointContents,
+    ) -> CertifiedCheckpointSummary {
+        let summary = CheckpointSummary::new(
+            &ProtocolConfig::get_for_max_version_UNSAFE(),
+            0,
+            seq,
+            seq,
+            contents,
+            None,
+            GasCostSummary::default(),
+            None,
+            0,
+            Vec::new(),
+            Vec::new(),
+        );
+        let auth_sig = AuthorityStrongQuorumSignInfo {
+            epoch: 0,
+            signature: Default::default(),
+            signers_map: RoaringBitmap::new(),
+        };
+        Envelope::new_from_data_and_sig(summary, auth_sig)
+    }
+
+    // Regression test for a pruning-induced misalignment: when a checkpoint's
+    // contents are pruned but its sequence-addressable summary survives,
+    // `get_checkpoints_internal` must not pair that summary (or any later one)
+    // with a different checkpoint's contents.
+    #[tokio::test]
+    async fn test_get_checkpoints_internal_preserves_alignment_across_pruned_contents() {
+        let max_checkpoint: CheckpointSequenceNumber = 13;
+        // Contents for this sequence are pruned while its summary remains. It
+        // sits in the interior of the requested range to show that alignment is
+        // preserved regardless of where the hole falls.
+        let pruned_seq: CheckpointSequenceNumber = 11;
+
+        let mut all_contents: HashMap<CheckpointSequenceNumber, CheckpointContents> =
+            HashMap::new();
+        for seq in 0..=max_checkpoint {
+            all_contents.insert(seq, test_checkpoint_contents(seq));
+        }
+
+        let mut mock_state = MockStateRead::new();
+        mock_state
+            .expect_get_latest_checkpoint_sequence_number()
+            .returning(move || Ok(max_checkpoint));
+
+        let store_contents = all_contents.clone();
+        let mut mock_kv = MockCheckpointKvStore::new();
+        mock_kv.expect_multi_get_checkpoints().times(2).returning(
+            move |summaries, contents, _by_digest| {
+                // Summaries survive pruning for every requested sequence.
+                let summaries = summaries
+                    .iter()
+                    .map(|seq| Some(test_certified_summary(*seq, &store_contents[seq])))
+                    .collect();
+                // Contents are missing for the pruned sequence only.
+                let contents = contents
+                    .iter()
+                    .map(|seq| (*seq != pruned_seq).then(|| store_contents[seq].clone()))
+                    .collect();
+                Ok((summaries, contents, vec![]))
+            },
+        );
+
+        let state: Arc<dyn StateRead> = Arc::new(mock_state);
+        let kv_store = Arc::new(TransactionKeyValueStore::new(
+            "test",
+            KeyValueStoreMetrics::new_for_tests(),
+            Arc::new(mock_kv),
+        ));
+
+        // cursor = 9, ascending, limit 4 => requested sequences [10, 11, 12, 13].
+        let checkpoints = ReadApi::get_checkpoints_internal(state, kv_store, Some(9), 4, false)
+            .await
+            .unwrap();
+
+        // The pruned sequence is omitted; every other sequence is returned once.
+        assert_eq!(
+            checkpoints
+                .iter()
+                .map(|c| c.sequence_number)
+                .collect::<Vec<_>>(),
+            vec![10, 12, 13],
+        );
+
+        // Crucially, each returned checkpoint still carries the transactions of
+        // its own sequence number rather than a neighbor's.
+        for checkpoint in &checkpoints {
+            let expected: Vec<TransactionDigest> = all_contents[&checkpoint.sequence_number]
+                .iter()
+                .map(|digests| digests.transaction)
+                .collect();
+            assert_eq!(
+                checkpoint.transactions, expected,
+                "checkpoint {} was paired with another checkpoint's contents",
+                checkpoint.sequence_number,
+            );
+        }
     }
 }

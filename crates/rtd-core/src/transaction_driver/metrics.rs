@@ -8,8 +8,9 @@ use prometheus::{
     register_int_counter_vec_with_registry, register_int_counter_with_registry,
 };
 
-const SUBMIT_TRANSACTION_RETRIES_BUCKETS: &[f64] = &[
-    0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 15.0, 20.0, 30.0,
+const REQUEST_COUNT_BUCKETS: &[f64] = &[
+    0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 15.0, 20.0, 30.0, 60.0, 90.0, 120.0,
+    150.0,
 ];
 
 // TODO(mysticeti-fastpath): For validator names, use display name instead of concise name.
@@ -19,6 +20,7 @@ pub struct TransactionDriverMetrics {
     pub(crate) drive_transaction_errors: IntCounterVec,
     pub(crate) total_transactions_submitted: IntCounterVec,
     pub(crate) submit_transaction_retries: Histogram,
+    pub(crate) submit_transaction_backups: Histogram,
     pub(crate) submit_transaction_latency: HistogramVec,
     pub(crate) validator_submit_transaction_errors: IntCounterVec,
     pub(crate) validator_submit_transaction_successes: IntCounterVec,
@@ -27,13 +29,13 @@ pub struct TransactionDriverMetrics {
     pub(crate) expiration_acks: IntCounterVec,
     pub(crate) effects_digest_mismatches: IntCounter,
     pub(crate) transaction_retries: HistogramVec,
-    pub(crate) transaction_fastpath_acked: IntCounterVec,
     pub(crate) certified_effects_ack_latency: HistogramVec,
     pub(crate) certified_effects_ack_attempts: IntCounterVec,
     pub(crate) certified_effects_ack_successes: IntCounterVec,
     pub(crate) validator_selections: IntCounterVec,
     pub(crate) submit_amplification_factor: Histogram,
-    pub(crate) latency_check_runs: IntCounterVec,
+    pub(crate) submitted_txns_with_allowed_proposers: IntCounterVec,
+    pub(crate) latency_check_runs: IntCounter,
 }
 
 impl TransactionDriverMetrics {
@@ -64,7 +66,14 @@ impl TransactionDriverMetrics {
             submit_transaction_retries: register_histogram_with_registry!(
                 "transaction_driver_submit_transaction_retries",
                 "Number of retries needed for successful transaction submission",
-                SUBMIT_TRANSACTION_RETRIES_BUCKETS.to_vec(),
+                REQUEST_COUNT_BUCKETS.to_vec(),
+                registry,
+            )
+            .unwrap(),
+            submit_transaction_backups: register_histogram_with_registry!(
+                "transaction_driver_submit_transaction_backups",
+                "Number of backup requests sent for a transaction submission",
+                REQUEST_COUNT_BUCKETS.to_vec(),
                 registry,
             )
             .unwrap(),
@@ -122,14 +131,7 @@ impl TransactionDriverMetrics {
                 "transaction_driver_transaction_retries",
                 "Number of retries per transaction attempt in drive_transaction",
                 &["result", "tx_type", "ping"],
-                SUBMIT_TRANSACTION_RETRIES_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            transaction_fastpath_acked: register_int_counter_vec_with_registry!(
-                "transaction_driver_transaction_fastpath_acked",
-                "Number of transactions that were executed using fast path",
-                &["validator", "ping"],
+                REQUEST_COUNT_BUCKETS.to_vec(),
                 registry,
             )
             .unwrap(),
@@ -169,10 +171,16 @@ impl TransactionDriverMetrics {
                 registry,
             )
             .unwrap(),
-            latency_check_runs: register_int_counter_vec_with_registry!(
+            submitted_txns_with_allowed_proposers: register_int_counter_vec_with_registry!(
+                "transaction_driver_submitted_txns_with_allowed_proposers",
+                "Number of submitted transactions that restrict their allowed proposers vs not",
+                &["restricted"],
+                registry,
+            )
+            .unwrap(),
+            latency_check_runs: register_int_counter_with_registry!(
                 "transaction_driver_latency_check_runs",
-                "Number of times the latency check runs",
-                &["tx_type"],
+                "Number of times the latency check runs for consensus path",
                 registry,
             )
             .unwrap(),

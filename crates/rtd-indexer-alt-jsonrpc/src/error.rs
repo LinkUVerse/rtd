@@ -1,13 +1,16 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{any::Any, convert::Infallible, fmt::Display, sync::Arc};
+use std::any::Any;
+use std::convert::Infallible;
+use std::fmt::Display;
+use std::sync::Arc;
 
-use axum::{Json, response::IntoResponse};
-use jsonrpsee::types::{
-    ErrorObject,
-    error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE},
-};
+use axum::Json;
+use axum::response::IntoResponse;
+use jsonrpsee::types::ErrorObject;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use serde_json::json;
 use tower_http::catch_panic::ResponseForPanic;
 
@@ -73,7 +76,8 @@ pub(crate) enum RpcError<E: std::error::Error = Infallible> {
     InternalError(#[from] anyhow::Error),
 }
 
-/// Converts panics during request processing into JSON-RPC internal errors.
+/// Handler for panics that occur during request processing. Converts panics into JSON-RPC error
+/// responses with a 500 status code.
 #[derive(Clone)]
 pub(crate) struct PanicHandler {
     metrics: Arc<RpcMetrics>,
@@ -137,19 +141,6 @@ pub(crate) fn invalid_params<E: std::error::Error>(err: E) -> RpcError<E> {
     RpcError::InvalidParams(err)
 }
 
-/// Helper function to convert a jsonrpc client error into an `ErrorObject`.
-pub(crate) fn client_error_to_error_object(
-    error: jsonrpsee::core::ClientError,
-) -> ErrorObject<'static> {
-    match error {
-        // `Call` is the only error type that actually conveys meaningful error
-        // from a user calling the method. Other error variants are all more or less
-        // internal errors.
-        jsonrpsee::core::ClientError::Call(e) => e,
-        _ => ErrorObject::owned(INTERNAL_ERROR_CODE, error.to_string(), None::<()>),
-    }
-}
-
 impl ResponseForPanic for PanicHandler {
     type ResponseBody = axum::body::Body;
 
@@ -170,11 +161,12 @@ impl ResponseForPanic for PanicHandler {
         let err: RpcError = err.into();
         let err: ErrorObject<'static> = err.into();
 
-        Json(json!({
+        let resp = json!({
             "jsonrpc": "2.0",
             "error": err,
             "id": null,
-        }))
-        .into_response()
+        });
+
+        Json(resp).into_response()
     }
 }

@@ -5,7 +5,7 @@ use clap::*;
 
 use strum_macros::EnumString;
 
-use crate::drivers::Interval;
+use crate::drivers::{Interval, SubmissionAmplification, ValidatorSelection};
 use std::str::FromStr;
 
 #[derive(Parser)]
@@ -100,9 +100,14 @@ pub struct Opts {
     /// built at the same commit as the validators.
     #[clap(long, global = true)]
     pub protocol_version: Option<u64>,
+
+    /// If set, the stress binary will exit with a non-zero status code if the
+    /// achieved TPS is below this threshold.
+    #[clap(long, global = true)]
+    pub min_tps: Option<f64>,
 }
 
-#[derive(Debug, Clone, Parser, Eq, PartialEq, EnumString)]
+#[derive(Debug, Clone, Parser, PartialEq, EnumString)]
 #[non_exhaustive]
 #[clap(rename_all = "kebab-case")]
 pub enum RunSpec {
@@ -166,6 +171,13 @@ pub enum RunSpec {
         // relative weight of adversarial transactions in the benchmark workload
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
         adversarial: Vec<u32>,
+        // relative weight of large transactions (payload-only transactions of a configurable
+        // size, for block-size benchmarking)
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
+        large_transaction: Vec<u32>,
+        // payload bytes attached to each large transaction (capped by max_tx_size).
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [100_000])]
+        large_transaction_size_bytes: Vec<u64>,
         // relative weight of shared deletion transactions in the benchmark workload
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
         shared_deletion: Vec<u32>,
@@ -184,6 +196,26 @@ pub enum RunSpec {
         // relative weight of party transactions in the benchmark workload
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
         party: Vec<u32>,
+        // relative weight of conflicting transfer transactions in the benchmark workload
+        // DEPRECATED: use composite instead (not deleting yet to avoid breaking stress docker)
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
+        conflicting_transfer: Vec<u32>,
+        // relative weight of composite transactions in the benchmark workload
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
+        composite: Vec<u32>,
+        // Target address(es) for deposit load test. When set, runs the
+        // addr_bal_deposit workload exclusively: every transaction withdraws
+        // from the sender's address balance and deposits to these addresses.
+        // Multiple addresses can be specified to deposit to all of them in
+        // a single transaction.
+        #[clap(long, num_args(1..), value_delimiter = ',')]
+        deposit_target_address: Option<Vec<String>>,
+        // Amount of RTD (not MIST) to seed each sender's address balance with.
+        // Each payload sender gets a gas coin of this size, half of which is
+        // deposited into the sender's address balance during init.
+        // Total primary gas needed = this value * target_qps * in_flight_ratio.
+        #[clap(long, default_value = "100000")]
+        deposit_seed_rtd: u64,
 
         // --- workload-specific options --- (TODO: use subcommands or similar)
         // 100 for max hotness i.e all requests target
@@ -204,6 +236,10 @@ pub enum RunSpec {
         // The actual increment for each transaction is chosen at random a value between 0 and this value.
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
         shared_counter_max_tip: Vec<u64>,
+        // Gas price for shared counter transactions as a multiple of the RGP, applied before
+        // `shared_counter_max_tip`. Must be at least 1.0.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [1.0], value_parser = parse_gas_price_multiplier)]
+        shared_counter_gas_price_multiplier: Vec<f64>,
         // batch size use for batch payment workload
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [15])]
         batch_payment_size: Vec<u32>,
@@ -217,6 +253,10 @@ pub enum RunSpec {
         // See `ExpectedFailureType` enum for `expected_failure_type`
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0])]
         expected_failure_type: Vec<u32>,
+        // Number of contested objects for conflicting transfer workload.
+        // Each contested object will have PAYLOADS_PER_CONTESTED_OBJECT payloads contending for it.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [2])]
+        num_contested_objects: Vec<u64>,
 
         // --- generic options ---
         // Target qps
@@ -228,9 +268,65 @@ pub enum RunSpec {
         // Max in-flight ratio
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [5])]
         in_flight_ratio: Vec<u64>,
+        // Probability that a logical transaction is submitted to multiple validators.
+        // Defaults to zero, so amplified traffic must be explicitly enabled.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0.0])]
+        amplification_probability: Vec<f64>,
+        // Number of validators to submit to when amplification_probability triggers.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [SubmissionAmplification::DEFAULT_AMPLIFICATION_VALIDATORS_PER_TX])]
+        amplification_validators_per_tx: Vec<usize>,
+        // Probability that each selected validator receives multiple copies.
+        // Defaults to zero, so duplicate traffic must be explicitly enabled.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [0.0])]
+        duplicate_probability: Vec<f64>,
+        // Number of copies sent to each selected validator when duplicate_probability triggers.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [SubmissionAmplification::DEFAULT_DUPLICATE_COPIES_PER_VALIDATOR])]
+        duplicate_copies_per_validator: Vec<usize>,
+        // Validator selection strategy for duplicate/amplified submissions.
+        #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [SubmissionAmplification::DEFAULT_VALIDATOR_SELECTION])]
+        validator_selection: Vec<ValidatorSelection>,
 
         // Setting the duration of each benchmark. Benchmarks will run in sequence.
         #[clap(long, num_args(1..), value_delimiter = ',', default_values_t = [Interval::from_str("unbounded").unwrap()])]
         duration: Vec<Interval>,
     },
+}
+
+fn parse_gas_price_multiplier(s: &str) -> Result<f64, String> {
+    let multiplier: f64 = s.parse().map_err(|e| format!("{e}"))?;
+    if multiplier.is_finite() && multiplier >= 1.0 {
+        Ok(multiplier)
+    } else {
+        Err(format!(
+            "gas price multiplier must be at least 1.0, got {s}"
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_multiplier(value: &str) -> Result<Vec<f64>, clap::Error> {
+        let opts = Opts::try_parse_from([
+            "stress",
+            "bench",
+            "--shared-counter-gas-price-multiplier",
+            value,
+        ])?;
+        let RunSpec::Bench {
+            shared_counter_gas_price_multiplier,
+            ..
+        } = opts.run_spec;
+        Ok(shared_counter_gas_price_multiplier)
+    }
+
+    #[test]
+    fn shared_counter_gas_price_multiplier_requires_at_least_one() {
+        assert_eq!(parse_multiplier("1.0").unwrap(), vec![1.0]);
+        assert_eq!(parse_multiplier("2.5,10").unwrap(), vec![2.5, 10.0]);
+        assert!(parse_multiplier("0.99").is_err());
+        assert!(parse_multiplier("0").is_err());
+        assert!(parse_multiplier("nan").is_err());
+    }
 }

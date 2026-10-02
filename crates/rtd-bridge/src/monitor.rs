@@ -17,9 +17,12 @@ use crate::retry_with_max_elapsed_time;
 use crate::rtd_client::{RtdClient, RtdClientInner};
 use crate::types::{BridgeCommittee, IsBridgePaused};
 use arc_swap::ArcSwap;
+use futures::StreamExt;
+use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::proto::rtd::rpc::v2::{Checkpoint, SubscribeCheckpointsRequest};
+use rtd_types::TypeTag;
 use std::collections::HashMap;
 use std::sync::Arc;
-use rtd_types::TypeTag;
 use tokio::time::Duration;
 use tracing::{error, info, warn};
 
@@ -122,6 +125,7 @@ where
 
         match event {
             RtdBridgeEvent::RtdToEthTokenBridgeV1(_) => (),
+            RtdBridgeEvent::RtdToEthTokenBridgeV2(_) => (),
             RtdBridgeEvent::TokenTransferApproved(_) => (),
             RtdBridgeEvent::TokenTransferClaimed(_) => (),
             RtdBridgeEvent::TokenTransferAlreadyApproved(_) => (),
@@ -234,99 +238,100 @@ where
 
         match event {
             EthBridgeEvent::EthBridgeCommitteeEvents(event) => match event {
-                EthBridgeCommitteeEvents::BlocklistUpdatedFilter(event) => {
-                    bump_eth_counter!(if event.is_blocklisted {
+                EthBridgeCommitteeEvents::BlocklistUpdated(event) => {
+                    bump_eth_counter!(if event.isBlocklisted {
                         "validator_blocklisted"
                     } else {
                         "validator_unblocklisted"
                     });
                 }
-                EthBridgeCommitteeEvents::InitializedFilter(_) => {
+                EthBridgeCommitteeEvents::Initialized(_) => {
                     bump_eth_counter!("committee_contract_initialized");
                 }
-                EthBridgeCommitteeEvents::UpgradedFilter(_) => {
+                EthBridgeCommitteeEvents::Upgraded(_) => {
                     bump_eth_counter!("committee_contract_upgraded");
                 }
-                EthBridgeCommitteeEvents::BlocklistUpdatedV2Filter(e) => {
-                    bump_eth_counter!(if e.is_blocklisted {
+                EthBridgeCommitteeEvents::BlocklistUpdatedV2(e) => {
+                    bump_eth_counter!(if e.isBlocklisted {
                         "validator_blocklisted"
                     } else {
                         "validator_unblocklisted"
                     });
                 }
-                EthBridgeCommitteeEvents::ContractUpgradedFilter(_) => {
+                EthBridgeCommitteeEvents::ContractUpgraded(_) => {
                     bump_eth_counter!("committee_contract_upgraded");
                 }
             },
             EthBridgeEvent::EthBridgeLimiterEvents(event) => match event {
-                EthBridgeLimiterEvents::InitializedFilter(_) => {
+                EthBridgeLimiterEvents::Initialized(_) => {
                     bump_eth_counter!("limiter_contract_initialized");
                 }
-                EthBridgeLimiterEvents::UpgradedFilter(_) => {
+                EthBridgeLimiterEvents::Upgraded(_) => {
                     bump_eth_counter!("limiter_contract_upgraded");
                 }
-                EthBridgeLimiterEvents::OwnershipTransferredFilter(_) => {
+                EthBridgeLimiterEvents::OwnershipTransferred(_) => {
                     bump_eth_counter!("limiter_contract_ownership_transferred");
                 }
-                EthBridgeLimiterEvents::LimitUpdatedFilter(_) => {
+                EthBridgeLimiterEvents::LimitUpdated(_) => {
                     bump_eth_counter!("limit_updated");
                 }
                 // This event is deprecated but we keep it for ABI compatibility
                 // TODO: We can safely update abi and remove it once the testnet bridge contract is upgraded
-                EthBridgeLimiterEvents::HourlyTransferAmountUpdatedFilter(_) => (),
-                EthBridgeLimiterEvents::ContractUpgradedFilter(_) => {
+                EthBridgeLimiterEvents::HourlyTransferAmountUpdated(_) => (),
+                EthBridgeLimiterEvents::ContractUpgraded(_) => {
                     bump_eth_counter!("limiter_contract_upgraded");
                 }
-                EthBridgeLimiterEvents::LimitUpdatedV2Filter(_) => {
+                EthBridgeLimiterEvents::LimitUpdatedV2(_) => {
                     bump_eth_counter!("limit_updated");
                 }
             },
             EthBridgeEvent::EthBridgeConfigEvents(event) => match event {
-                EthBridgeConfigEvents::InitializedFilter(_) => {
+                EthBridgeConfigEvents::Initialized(_) => {
                     bump_eth_counter!("config_contract_initialized");
                 }
-                EthBridgeConfigEvents::UpgradedFilter(_) => {
+                EthBridgeConfigEvents::Upgraded(_) => {
                     bump_eth_counter!("config_contract_upgraded");
                 }
-                EthBridgeConfigEvents::TokenAddedFilter(_) => {
+                EthBridgeConfigEvents::TokenAdded(_) => {
                     bump_eth_counter!("new_token_added");
                 }
-                EthBridgeConfigEvents::TokenPriceUpdatedFilter(_) => {
+                EthBridgeConfigEvents::TokenPriceUpdated(_) => {
                     bump_eth_counter!("update_token_price");
                 }
-                EthBridgeConfigEvents::ContractUpgradedFilter(_) => {
+                EthBridgeConfigEvents::ContractUpgraded(_) => {
                     bump_eth_counter!("config_contract_upgraded");
                 }
-                EthBridgeConfigEvents::TokenPriceUpdatedV2Filter(_) => {
+                EthBridgeConfigEvents::TokenPriceUpdatedV2(_) => {
                     bump_eth_counter!("update_token_price");
                 }
-                EthBridgeConfigEvents::TokensAddedV2Filter(_) => {
+                EthBridgeConfigEvents::TokensAddedV2(_) => {
                     bump_eth_counter!("new_token_added");
                 }
             },
             EthBridgeEvent::EthCommitteeUpgradeableContractEvents(event) => match event {
-                EthCommitteeUpgradeableContractEvents::InitializedFilter(_) => {
+                EthCommitteeUpgradeableContractEvents::Initialized(_) => {
                     bump_eth_counter!("upgradeable_contract_initialized");
                 }
-                EthCommitteeUpgradeableContractEvents::UpgradedFilter(_) => {
+                EthCommitteeUpgradeableContractEvents::Upgraded(_) => {
                     bump_eth_counter!("upgradeable_contract_upgraded");
                 }
             },
             EthBridgeEvent::EthRtdBridgeEvents(event) => match event {
-                EthRtdBridgeEvents::TokensClaimedFilter(_) => (),
-                EthRtdBridgeEvents::TokensDepositedFilter(_) => (),
-                EthRtdBridgeEvents::PausedFilter(_) => bump_eth_counter!("bridge_paused"),
-                EthRtdBridgeEvents::UnpausedFilter(_) => bump_eth_counter!("bridge_unpaused"),
-                EthRtdBridgeEvents::UpgradedFilter(_) => {
+                EthRtdBridgeEvents::TokensClaimed(_) => (),
+                EthRtdBridgeEvents::TokensDeposited(_) => (),
+                EthRtdBridgeEvents::TokensDepositedV2(_) => (),
+                EthRtdBridgeEvents::Paused(_) => bump_eth_counter!("bridge_paused"),
+                EthRtdBridgeEvents::Unpaused(_) => bump_eth_counter!("bridge_unpaused"),
+                EthRtdBridgeEvents::Upgraded(_) => {
                     bump_eth_counter!("bridge_contract_upgraded")
                 }
-                EthRtdBridgeEvents::InitializedFilter(_) => {
+                EthRtdBridgeEvents::Initialized(_) => {
                     bump_eth_counter!("bridge_contract_initialized")
                 }
-                EthRtdBridgeEvents::ContractUpgradedFilter(_) => {
+                EthRtdBridgeEvents::ContractUpgraded(_) => {
                     bump_eth_counter!("bridge_contract_upgraded")
                 }
-                EthRtdBridgeEvents::EmergencyOperationFilter(e) => {
+                EthRtdBridgeEvents::EmergencyOperation(e) => {
                     if e.paused {
                         bump_eth_counter!("bridge_paused")
                     } else {
@@ -462,6 +467,85 @@ async fn get_latest_bridge_pause_status_with_emergency_event<C: RtdClientInner>(
                 event, summary.is_frozen
             );
             return summary.is_frozen;
+        }
+    }
+}
+
+pub async fn subscribe_bridge_events(
+    mut client: rtd_rpc::Client,
+    sender: linku_metrics::metered_channel::Sender<RtdBridgeEvent>,
+) {
+    let subscription_read_mask = FieldMask::from_paths([
+        Checkpoint::path_builder().sequence_number(),
+        Checkpoint::path_builder()
+            .transactions()
+            .events()
+            .bcs()
+            .value(),
+        Checkpoint::path_builder().transactions().digest(),
+    ]);
+
+    loop {
+        let mut subscription = match client
+            .subscription_client()
+            .subscribe_checkpoints(
+                SubscribeCheckpointsRequest::default()
+                    .with_read_mask(subscription_read_mask.clone()),
+            )
+            .await
+        {
+            Ok(subscription) => subscription,
+            Err(e) => {
+                tracing::warn!("error trying to subscribe to checkpoints: {e}");
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                continue;
+            }
+        }
+        .into_inner();
+
+        while let Some(item) = subscription.next().await {
+            let checkpoint = match item {
+                Ok(checkpoint) => checkpoint,
+                Err(e) => {
+                    tracing::warn!("error in checkpoint stream: {e}");
+                    break;
+                }
+            };
+
+            let ckpt = checkpoint.cursor();
+            tracing::debug!("recieved checkpoint {ckpt}");
+
+            for txn in checkpoint.checkpoint().transactions() {
+                let txn_digest = txn.digest();
+                let Some(bcs_events) = txn.events_opt().map(|events| events.bcs()) else {
+                    continue;
+                };
+
+                let Ok(events) = bcs_events.deserialize::<rtd_types::effects::TransactionEvents>()
+                else {
+                    tracing::warn!(
+                        "error deserializing events from txn {txn_digest} in checkpoint {ckpt}"
+                    );
+                    continue;
+                };
+
+                for event in events.data {
+                    match RtdBridgeEvent::try_from_event(&event) {
+                        Ok(Some(bridge_event)) => {
+                            sender
+                                .send(bridge_event)
+                                .await
+                                .expect("Sending event to monitor channel should not fail");
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                "error deserializing RtdBridgeEvent from txn {txn_digest} in checkpoint {ckpt}: {e}"
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 }

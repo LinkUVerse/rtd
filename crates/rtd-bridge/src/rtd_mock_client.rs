@@ -6,22 +6,20 @@
 use crate::error::{BridgeError, BridgeResult};
 use crate::test_utils::DUMMY_MUTALBE_BRIDGE_OBJECT_ARG;
 use async_trait::async_trait;
-use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex};
-use rtd_json_rpc_types::{EventFilter, EventPage, RtdEvent};
-use rtd_types::Identifier;
+use rtd_json_rpc_types::RtdEvent;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::ObjectRef;
 use rtd_types::bridge::{
     BridgeCommitteeSummary, BridgeSummary, MoveTypeBridgeRecord, MoveTypeParsedTokenTransferMessage,
 };
 use rtd_types::digests::TransactionDigest;
-use rtd_types::event::EventID;
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::object::Owner;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::Transaction;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex};
 
 use crate::rtd_client::{ExecuteTransactionResult, RtdClientInner};
 use crate::types::{BridgeAction, BridgeActionStatus, IsBridgePaused, RtdEvents};
@@ -33,8 +31,6 @@ pub struct RtdMockClient {
     // the top two fields do not change during tests so we don't need them to be Arc<Mutex>>
     chain_identifier: String,
     latest_checkpoint_sequence_number: Arc<AtomicU64>,
-    events: Arc<Mutex<HashMap<(ObjectID, Identifier, Option<EventID>), EventPage>>>,
-    past_event_query_params: Arc<Mutex<VecDeque<(ObjectID, Identifier, Option<EventID>)>>>,
     events_by_tx_digest:
         Arc<Mutex<HashMap<TransactionDigest, Result<Vec<RtdEvent>, rtd_sdk::error::Error>>>>,
     transaction_responses:
@@ -45,6 +41,9 @@ pub struct RtdMockClient {
     bridge_committee_summary: Arc<Mutex<Option<BridgeCommitteeSummary>>>,
     is_paused: Arc<Mutex<Option<IsBridgePaused>>>,
     requested_transactions_tx: tokio::sync::broadcast::Sender<TransactionDigest>,
+    // gRPC-related mock data
+    bridge_records: Arc<Mutex<HashMap<(u8, u64), MoveTypeBridgeRecord>>>,
+    next_seq_nums: Arc<Mutex<HashMap<u8, u64>>>,
 }
 
 impl RtdMockClient {
@@ -52,8 +51,6 @@ impl RtdMockClient {
         Self {
             chain_identifier: "".to_string(),
             latest_checkpoint_sequence_number: Arc::new(AtomicU64::new(0)),
-            events: Default::default(),
-            past_event_query_params: Default::default(),
             events_by_tx_digest: Default::default(),
             transaction_responses: Default::default(),
             wildcard_transaction_response: Default::default(),
@@ -62,20 +59,9 @@ impl RtdMockClient {
             bridge_committee_summary: Default::default(),
             is_paused: Default::default(),
             requested_transactions_tx: tokio::sync::broadcast::channel(10000).0,
+            bridge_records: Default::default(),
+            next_seq_nums: Default::default(),
         }
-    }
-
-    pub fn add_event_response(
-        &self,
-        package: ObjectID,
-        module: Identifier,
-        cursor: EventID,
-        events: EventPage,
-    ) {
-        self.events
-            .lock()
-            .unwrap()
-            .insert((package, module, Some(cursor)), events);
     }
 
     pub fn add_events_by_tx_digest(&self, tx_digest: TransactionDigest, events: Vec<RtdEvent>) {
@@ -145,39 +131,31 @@ impl RtdMockClient {
     ) -> tokio::sync::broadcast::Receiver<TransactionDigest> {
         self.requested_transactions_tx.subscribe()
     }
+
+    /// Add a bridge record for testing gRPC-based iteration
+    pub fn add_bridge_record(
+        &self,
+        source_chain_id: u8,
+        seq_num: u64,
+        record: MoveTypeBridgeRecord,
+    ) {
+        self.bridge_records
+            .lock()
+            .unwrap()
+            .insert((source_chain_id, seq_num), record);
+    }
+
+    /// Set the next sequence number for a source chain
+    pub fn set_next_seq_num(&self, source_chain_id: u8, next_seq_num: u64) {
+        self.next_seq_nums
+            .lock()
+            .unwrap()
+            .insert(source_chain_id, next_seq_num);
+    }
 }
 
 #[async_trait]
 impl RtdClientInner for RtdMockClient {
-    // Unwraps in this function: We assume the responses are pre-populated
-    // by the test before calling into this function.
-    async fn query_events(
-        &self,
-        query: EventFilter,
-        cursor: Option<EventID>,
-    ) -> Result<EventPage, BridgeError> {
-        let events = self.events.lock().unwrap();
-        match query {
-            EventFilter::MoveEventModule { package, module } => {
-                self.past_event_query_params.lock().unwrap().push_back((
-                    package,
-                    module.clone(),
-                    cursor,
-                ));
-                Ok(events
-                    .get(&(package, module.clone(), cursor))
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "No preset events found for package: {:?}, module: {:?}, cursor: {:?}",
-                            package, module, cursor
-                        )
-                    }))
-            }
-            _ => unimplemented!(),
-        }
-    }
-
     async fn get_events_by_tx_digest(
         &self,
         tx_digest: TransactionDigest,
@@ -308,5 +286,34 @@ impl RtdClientInner for RtdMockClient {
                     gas_object_id
                 )
             })
+    }
+
+    async fn get_bridge_records_in_range(
+        &self,
+        source_chain_id: u8,
+        start_seq_num: u64,
+        end_seq_num: u64,
+    ) -> Result<Vec<(u64, MoveTypeBridgeRecord)>, BridgeError> {
+        let records = self.bridge_records.lock().unwrap();
+        let mut result = Vec::new();
+        for seq_num in start_seq_num..=end_seq_num {
+            if let Some(record) = records.get(&(source_chain_id, seq_num)) {
+                result.push((seq_num, (*record).clone()));
+            }
+        }
+        Ok(result)
+    }
+
+    async fn get_token_transfer_next_seq_number(
+        &self,
+        source_chain_id: u8,
+    ) -> Result<u64, BridgeError> {
+        Ok(self
+            .next_seq_nums
+            .lock()
+            .unwrap()
+            .get(&source_chain_id)
+            .copied()
+            .unwrap_or(0))
     }
 }

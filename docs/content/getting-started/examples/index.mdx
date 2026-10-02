@@ -1,0 +1,19 @@
+---
+title: Example Apps
+description: Local source examples for RTD Move development.
+keywords:
+  - examples
+  - sample code
+  - move
+questions:
+  - Where are RTD Move examples?
+  - How should I run an example?
+answer: >-
+  The verified Move examples are in this repository's examples/move directory.
+  Build and test against source, then publish only to an RTD network whose
+  genesis and chain ID you have verified.
+---
+
+The `examples/move` directory in this repository contains Move source examples such as `first_package`, `coin`, `dynamic_fields`, `nft`, and `random`. Define an environment in the package's `Move.toml` for your verified RTD chain ID, then run `rtd move build --build-env <ENV>` and `rtd move test --build-env <ENV>` from the example package directory. See [Build and Publish](/getting-started/onboarding/hello-world) for a local example.
+
+The fork does not currently verify that the upstream bootcamp, CTF, frontend, or indexer repositories have RTD counterparts. Their Sui deployments and package IDs cannot be reused on RTD. If you port an external example, replace its network endpoint, package IDs, dependencies, and SDK imports, then test against your own RTD genesis. No RTD public Testnet or faucet is established by this documentation.

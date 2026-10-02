@@ -6,6 +6,7 @@
 
 use anyhow::{Context, bail};
 use indexmap::IndexMap;
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::{ident_str, identifier::Identifier, language_storage::TypeTag};
 use serde::Serialize;
 
@@ -379,7 +380,7 @@ impl ProgrammableTransactionBuilder {
         // to minimize the number of transfers that must be performed
         let mut recipient_map: IndexMap<RtdAddress, Vec<usize>> = IndexMap::new();
         let mut amt_args = Vec::with_capacity(recipients.len());
-        for (i, (recipient, amount)) in recipients.into_iter().zip(amounts).enumerate() {
+        for (i, (recipient, amount)) in recipients.into_iter().zip_debug_eq(amounts).enumerate() {
             recipient_map.entry(recipient).or_default().push(i);
             amt_args.push(self.pure(amount)?);
         }

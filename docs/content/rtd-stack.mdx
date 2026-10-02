@@ -1,0 +1,51 @@
+---
+title: Rtd Stack Status
+description: >-
+  Review RTD source-level primitives and the deployment status of inherited
+  Sui ecosystem integrations.
+keywords:
+  - onchain randomness
+  - onchain time
+  - zklogin
+  - nautilus
+  - seal
+  - walrus
+  - suiplay
+  - sagat
+  - Rtd stack
+goal:
+  description: >-
+    Reader can distinguish RTD source-level primitives from inherited services
+    that require independent deployment and verification.
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - Which Rtd Stack topics are source-level capabilities?
+  - Which inherited integrations have been deployed on RTD?
+answer: >-
+  The fork contains Move and protocol primitives, but the inherited Sui
+  ecosystem services listed here are not verified RTD deployments.
+---
+
+This section contains two kinds of material: primitives present in the RTD
+source fork, and ecosystem applications inherited from upstream Sui
+documentation. A source module does not establish an independently operated
+service. RTD has no public Mainnet, and this documentation does not verify RTD
+deployments for Walrus, Seal, RtdNS, Nautilus, Enoki, Move Registry, DeepBook,
+Messaging, or RtdPlay0X1.
+
+Use the source and protocol pages to understand potential capabilities for a
+network you operate. Check each integration's status page before using any
+package ID, endpoint, SDK, wallet, or transaction example. Upstream Sui
+identifiers and service URLs cannot be used as RTD network configuration.
+
+import DocCardList from '@theme/DocCardList';
+
+<DocCardList />

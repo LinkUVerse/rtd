@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: 2024.alpha
   lint: false
 ---
-error[Rtd E02007]: invalid object declaration
+error[ESC02007]: invalid object declaration
   ┌─ tests/move_2024/rtd_mode/enums_no_key.move:3:17
   │
 3 │     public enum S has key {

@@ -21,7 +21,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
         <Theme appearance="light">
             <QueryClientProvider client={queryClient}>
-                <RtdClientProvider networks={networkConfig} defaultNetwork="testnet">
+                <RtdClientProvider networks={networkConfig} defaultNetwork="localnet">
                     <WalletProvider autoConnect>
                         <>
                             <Toaster position="top-center" />

@@ -1,0 +1,30 @@
+---
+title: Install from Source
+sidebar_label: Install from Source
+description: Build and install the RTD CLI from a reviewed fork source revision.
+keywords:
+  - install RTD
+  - source build
+  - Cargo
+questions:
+  - How do I install the RTD CLI from source?
+  - Which RTD revision should I build?
+answer: >-
+  Build the RTD CLI from a reviewed source revision that matches the network
+  you operate. No RTD public-network release branch or installer is verified.
+---
+
+Install Rust and Cargo using the [official Rust toolchain instructions](https://www.rust-lang.org/tools/install), then select the RTD source revision that your target network operator has approved. Use the current checkout for local development:
+
+```sh
+cargo install --locked --path crates/rtd --features tracing
+rtd --version
+```
+
+The `tracing` feature enables Move trace and test coverage support. Build `rtd-node` separately if you will operate a node:
+
+```sh
+cargo build --locked --release -p rtd-node
+```
+
+The binary version alone does not prove network compatibility. Verify genesis, chain ID, and protocol version with your network operator before using the CLI. Branches named `mainnet`, `testnet`, or `devnet` in an upstream or fork repository do not by themselves establish a deployed RTD public network. RTD has not launched Mainnet.

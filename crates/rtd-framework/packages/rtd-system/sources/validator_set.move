@@ -17,7 +17,7 @@ use rtd_system::staking_pool::{
     StakedRtd,
     pool_id,
     FungibleStakedRtd,
-    fungible_staked_rtd_pool_id
+    fungible_staked_rtd_pool_id,
 };
 use rtd_system::validator::{Validator, staking_pool_id, rtd_address};
 use rtd_system::validator_cap::{UnverifiedValidatorOperationCap, ValidatorOperationCap};
@@ -35,12 +35,14 @@ const EMinJoiningStakeNotReached: u64 = 5;
 const EAlreadyValidatorCandidate: u64 = 6;
 const EValidatorNotCandidate: u64 = 7;
 const ENotValidatorCandidate: u64 = 8;
-const ENotActiveOrPendingValidator: u64 = 9;
+// const ENotActiveOrPendingValidator: u64 = 9;
 const EStakingBelowThreshold: u64 = 10;
 const EValidatorAlreadyRemoved: u64 = 11;
 const ENotAPendingValidator: u64 = 12;
 const EValidatorSetEmpty: u64 = 13;
 const EInvalidCap: u64 = 101;
+const EInvalidValidatorSelector: u64 = 14;
+const EAlreadyValidator: u64 = 15;
 
 // same as in rtd_system
 const ACTIVE_VALIDATOR_ONLY: u8 = 1;
@@ -168,14 +170,20 @@ public(package) fun request_add_validator_candidate(
     validator: Validator,
     ctx: &mut TxContext,
 ) {
-    // The next assertions are not critical for the protocol, but they are here to catch problematic configs earlier.
-    assert!(
-        !self.is_duplicate_with_active_validator(&validator)
-            && !self.is_duplicate_with_pending_validator(&validator),
-        EDuplicateValidator,
-    );
     let validator_address = validator.rtd_address();
     assert!(!self.validator_candidates.contains(validator_address), EAlreadyValidatorCandidate);
+    assert!(
+        find_validator(&self.active_validators, validator_address).is_none(),
+        EAlreadyValidator,
+    );
+    assert!(
+        find_validator_from_table_vec(&self.pending_active_validators, validator_address).is_none(),
+        EAlreadyValidator,
+    );
+
+    // The next assertions are not critical for the protocol, but they are here
+    // to catch problematic configs earlier.
+    self.assert_no_pending_or_active_duplicates(&validator);
 
     assert!(validator.is_preactive(), EValidatorNotCandidate);
     // Add validator to the candidates mapping and the pool id mappings so that users can start
@@ -208,15 +216,13 @@ public(package) fun request_remove_validator_candidate(
 
 /// Called by `rtd_system` to add a new validator to `pending_active_validators`, which will be
 /// processed at the end of epoch.
+///
+/// Aborts if the validator contains duplicate metadata values with an active or pending validator.
 public(package) fun request_add_validator(self: &mut ValidatorSet, ctx: &TxContext) {
     let validator_address = ctx.sender();
     assert!(self.validator_candidates.contains(validator_address), ENotValidatorCandidate);
     let validator = self.validator_candidates.remove(validator_address).destroy();
-    assert!(
-        !self.is_duplicate_with_active_validator(&validator)
-            && !self.is_duplicate_with_pending_validator(&validator),
-        EDuplicateValidator,
-    );
+    self.assert_no_pending_or_active_duplicates(&validator);
     assert!(validator.is_preactive(), EValidatorNotCandidate);
     assert!(self.can_join(validator.total_stake(), ctx), EMinJoiningStakeNotReached);
 
@@ -228,7 +234,7 @@ fun can_join(self: &ValidatorSet, stake: u64, ctx: &TxContext): bool {
     let (min_joining_voting_power, _, _) = self.get_voting_power_thresholds(ctx);
 
     // if the validator will have at least `min_joining_voting_power` after joining, they can join.
-    // this formula comes from SIP-39: https://github.com/rtd-foundation/sips/blob/main/sips/sip-39.md
+    // Preserve the inherited voting-power admission formula until RTD defines its own proposal.
     let future_total_stake = self.total_stake + stake;
     let future_validator_voting_power = voting_power::derive_raw_voting_power(
         stake,
@@ -241,11 +247,11 @@ fun can_join(self: &ValidatorSet, stake: u64, ctx: &TxContext): bool {
 fun get_voting_power_thresholds(self: &ValidatorSet, ctx: &TxContext): (u64, u64, u64) {
     let start_epoch = {
         let key = VotingPowerAdmissionStartEpochKey();
-        if (self.extra_fields.contains(key)) self.extra_fields[key]
-        else ctx.epoch() + 1 // will give us the phase 1 values
+        if (self.extra_fields.contains(key)) self.extra_fields[key] // will give us the phase 1 values
+        else ctx.epoch() + 1
     };
 
-    // these numbers come from SIP-39: https://github.com/rtd-foundation/sips/blob/main/sips/sip-39.md
+    // Preserve the inherited three-phase thresholds until RTD defines its own proposal.
     let curr_epoch = ctx.epoch();
     if (curr_epoch < start_epoch + PHASE_LENGTH) (12, 8, 4) // phase 1
     else if (curr_epoch < start_epoch + (2 * PHASE_LENGTH)) (6, 4, 2) // phase 2
@@ -256,12 +262,8 @@ public(package) fun assert_no_pending_or_active_duplicates(
     self: &ValidatorSet,
     validator: &Validator,
 ) {
-    // Validator here must be active or pending, and thus must be identified as duplicate exactly once.
-    assert!(
-        count_duplicates_vec(&self.active_validators, validator) +
-            count_duplicates_tablevec(&self.pending_active_validators, validator) == 1,
-        EDuplicateValidator,
-    );
+    assert!(!self.is_duplicate_with_active_validator(validator), EDuplicateValidator);
+    assert!(!self.is_duplicate_with_pending_validator(validator), EDuplicateValidator);
 }
 
 /// Called by `rtd_system`, to remove a validator.
@@ -360,18 +362,6 @@ public(package) fun redeem_fungible_staked_rtd(
     validator.redeem_fungible_staked_rtd(fungible_staked_rtd, ctx)
 }
 
-// ==== validator config setting functions ====
-
-public(package) fun request_set_commission_rate(
-    self: &mut ValidatorSet,
-    new_commission_rate: u64,
-    ctx: &TxContext,
-) {
-    let validator_address = ctx.sender();
-    let validator = get_validator_mut(&mut self.active_validators, validator_address);
-    validator.request_set_commission_rate(new_commission_rate);
-}
-
 // ==== epoch change functions ====
 
 /// Update the validator set at the end of epoch.
@@ -461,9 +451,11 @@ public(package) fun advance_epoch(
         ctx,
     );
 
-    adjust_stake_and_gas_price(&mut self.active_validators);
+    // Process the pending stake changes for each validator.
+    self.active_validators.do_mut!(|v| v.adjust_stake_and_gas_price());
 
-    process_pending_stakes_and_withdraws(&mut self.active_validators, ctx);
+    // Process all active validators' pending stake deposits and withdraws.
+    self.active_validators.do_mut!(|v| v.process_pending_stakes_and_withdraws(ctx));
 
     // Emit events after we have processed all the rewards distribution and pending stakes.
     emit_validator_epoch_events(
@@ -488,7 +480,7 @@ public(package) fun advance_epoch(
 
     // At this point, self.active_validators are updated for next epoch.
     // Now we process the staged validator metadata.
-    self.effectuate_staged_metadata();
+    self.active_validators.do_mut!(|v| v.effectuate_staged_metadata());
 }
 
 /// This function does the following:
@@ -600,23 +592,13 @@ fun update_validator_positions_and_calculate_total_stake(
             // return validator object to the candidate pool. want to do this directly instead of
             // calling request_add_validator_candidate because staking_pool_mappings already has an
             // entry for this validator, and the duplicate checks are redundant
-            self
-                .validator_candidates
-                .add(
-                    validator.rtd_address(),
-                    validator.wrap_v1(ctx),
-                );
+            self.validator_candidates.add(validator.rtd_address(), validator.wrap_v1(ctx));
             total_removed_stake = total_removed_stake + validator_stake;
         }
     });
 
     // new total stake is the initial total minus the amount removed via validators we kicked out
     initial_total_stake - total_removed_stake
-}
-
-/// Effectuate pending next epoch metadata if they are staged.
-fun effectuate_staged_metadata(self: &mut ValidatorSet) {
-    self.active_validators.do_mut!(|v| v.effectuate_staged_metadata());
 }
 
 /// Called by `rtd_system` to derive reference gas price for the new epoch.
@@ -648,23 +630,19 @@ public fun total_stake(self: &ValidatorSet): u64 {
 }
 
 public fun validator_total_stake_amount(self: &ValidatorSet, validator_address: address): u64 {
-    let validator = get_validator_ref(&self.active_validators, validator_address);
-    validator.total_stake()
+    self.active_validator(validator_address).total_stake()
 }
 
 public fun validator_stake_amount(self: &ValidatorSet, validator_address: address): u64 {
-    let validator = get_validator_ref(&self.active_validators, validator_address);
-    validator.total_stake()
+    self.active_validator(validator_address).total_stake()
 }
 
 public fun validator_voting_power(self: &ValidatorSet, validator_address: address): u64 {
-    let validator = get_validator_ref(&self.active_validators, validator_address);
-    validator.voting_power()
+    self.active_validator(validator_address).voting_power()
 }
 
 public fun validator_staking_pool_id(self: &ValidatorSet, validator_address: address): ID {
-    let validator = get_validator_ref(&self.active_validators, validator_address);
-    validator.staking_pool_id()
+    self.active_validator(validator_address).staking_pool_id()
 }
 
 public fun staking_pool_mappings(self: &ValidatorSet): &Table<ID, address> {
@@ -683,28 +661,28 @@ public fun validator_address_by_pool_id(self: &mut ValidatorSet, pool_id: &ID): 
 
 public(package) fun pool_exchange_rates(
     self: &mut ValidatorSet,
-    pool_id: &ID,
+    pool_id: ID,
 ): &Table<u64, PoolTokenExchangeRate> {
     // If the pool id is recorded in the mapping, then it must be either candidate or active.
-    let validator = if (self.staking_pool_mappings.contains(*pool_id)) {
-        let validator_address = self.staking_pool_mappings[*pool_id];
-        self.get_active_or_pending_or_candidate_validator_ref(validator_address, ANY_VALIDATOR)
+    let validator = if (self.staking_pool_mappings.contains(pool_id)) {
+        let validator_address = self.staking_pool_mappings[pool_id];
+        self.any_validator(validator_address)
     } else {
         // otherwise it's inactive
-        self.inactive_validators[*pool_id].load_validator_maybe_upgrade()
+        self.inactive_validators[pool_id].load_validator_maybe_upgrade()
     };
 
     validator.get_staking_pool_ref().exchange_rates()
 }
 
-public(package) fun validator_by_pool_id(self: &mut ValidatorSet, pool_id: &ID): &Validator {
+public(package) fun validator_by_pool_id(self: &mut ValidatorSet, pool_id: ID): &Validator {
     // If the pool id is recorded in the mapping, then it must be either candidate or active.
-    let validator = if (self.staking_pool_mappings.contains(*pool_id)) {
-        let validator_address = self.staking_pool_mappings[*pool_id];
-        self.get_active_or_pending_or_candidate_validator_ref(validator_address, ANY_VALIDATOR)
+    let validator = if (self.staking_pool_mappings.contains(pool_id)) {
+        let validator_address = self.staking_pool_mappings[pool_id];
+        self.any_validator(validator_address)
     } else {
         // otherwise it's inactive
-        self.inactive_validators[*pool_id].load_validator_maybe_upgrade()
+        self.inactive_validators[pool_id].load_validator_maybe_upgrade()
     };
 
     validator
@@ -728,34 +706,23 @@ public(package) fun is_active_validator_by_rtd_address(
 /// Checks whether `new_validator` is duplicate with any currently active validators.
 /// It differs from `is_active_validator_by_rtd_address` in that the former checks
 /// only the rtd address but this function looks at more metadata.
-fun is_duplicate_with_active_validator(self: &ValidatorSet, new_validator: &Validator): bool {
-    is_duplicate_validator(&self.active_validators, new_validator)
-}
-
-public(package) fun is_duplicate_validator(
-    validators: &vector<Validator>,
-    new_validator: &Validator,
-): bool {
-    count_duplicates_vec(validators, new_validator) > 0
-}
-
-fun count_duplicates_vec(validators: &vector<Validator>, validator: &Validator): u64 {
-    validators.count!(|v| v.is_duplicate(validator))
+fun is_duplicate_with_active_validator(self: &ValidatorSet, search: &Validator): bool {
+    self
+        .active_validators
+        .any!(|v| v.rtd_address() != search.rtd_address() && v.is_duplicate(search))
 }
 
 /// Checks whether `new_validator` is duplicate with any currently pending validators.
-fun is_duplicate_with_pending_validator(self: &ValidatorSet, new_validator: &Validator): bool {
-    count_duplicates_tablevec(&self.pending_active_validators, new_validator) > 0
-}
-
-fun count_duplicates_tablevec(validators: &TableVec<Validator>, validator: &Validator): u64 {
-    let mut result = 0;
-    validators.length().do!(|i| {
-        if (validators[i].is_duplicate(validator)) {
-            result = result + 1;
-        };
-    });
-    result
+fun is_duplicate_with_pending_validator(self: &ValidatorSet, search: &Validator): bool {
+    'search: {
+        self.pending_active_validators.length().do!(|i| {
+            let v = &self.pending_active_validators[i];
+            if (v.rtd_address() != search.rtd_address() && v.is_duplicate(search)) {
+                return 'search true
+            };
+        });
+        false
+    }
 }
 
 /// Get mutable reference to either a candidate or an active validator by address.
@@ -764,9 +731,9 @@ fun get_candidate_or_active_validator_mut(
     validator_address: address,
 ): &mut Validator {
     if (self.validator_candidates.contains(validator_address)) {
-        self.validator_candidates[validator_address].load_validator_maybe_upgrade()
+        self.candidate_validator_mut(validator_address)
     } else {
-        get_validator_mut(&mut self.active_validators, validator_address)
+        self.active_validator_mut(validator_address)
     }
 }
 
@@ -784,16 +751,15 @@ fun find_validator_from_table_vec(
     validators: &TableVec<Validator>,
     validator_address: address,
 ): Option<u64> {
-    let length = validators.length();
-    let mut i = 0;
-    while (i < length) {
-        let v = &validators[i];
-        if (v.rtd_address() == validator_address) {
-            return option::some(i)
-        };
-        i = i + 1;
-    };
-    option::none()
+    'search: {
+        validators.length().do!(|i| {
+            if (validators[i].rtd_address() == validator_address) {
+                return 'search option::some(i)
+            };
+        });
+
+        option::none()
+    }
 }
 
 /// Given a vector of validator addresses, return their indices in the validator set.
@@ -802,93 +768,97 @@ fun get_validator_indices(
     validators: &vector<Validator>,
     validator_addresses: &vector<address>,
 ): vector<u64> {
-    let mut res = vector[];
-    validator_addresses.do_ref!(|addr| {
-        let idx = find_validator(validators, *addr).destroy_or!(abort ENotAValidator);
-        res.push_back(idx);
-    });
-    res
+    validator_addresses.map_ref!(|addr| {
+        find_validator(validators, *addr).destroy_or!(abort ENotAValidator)
+    })
 }
 
-public(package) fun get_validator_mut(
-    validators: &mut vector<Validator>,
-    validator_address: address,
-): &mut Validator {
-    let idx = find_validator(validators, validator_address).destroy_or!(abort ENotAValidator);
-    &mut validators[idx]
-}
+// === Validator Accessors ===
 
-#[test_only]
-public(package) fun get_validator_by_address_mut(
-    self: &mut ValidatorSet,
-    addr: address,
-): &mut Validator {
-    self.get_candidate_or_active_validator_mut(addr)
-}
-
-#[test_only]
-public(package) fun get_validator(
-    validators: &vector<Validator>,
-    validator_address: address,
-): &Validator {
-    let idx = find_validator(validators, validator_address).destroy_or!(abort ENotAValidator);
-    &validators[idx]
-}
-
-/// Get mutable reference to an active or (if active does not exist) pending or (if pending and
-/// active do not exist) or candidate validator by address.
-/// Note: this function should be called carefully, only after verifying the transaction
-/// sender has the ability to modify the `Validator`.
-fun get_active_or_pending_or_candidate_validator_mut(
-    self: &mut ValidatorSet,
-    validator_address: address,
-    include_candidate: bool,
-): &mut Validator {
-    let mut validator_index_opt = find_validator(&self.active_validators, validator_address);
-    if (validator_index_opt.is_some()) {
-        let validator_index = validator_index_opt.extract();
-        let validator = &mut self.active_validators[validator_index];
-        return validator
+/// Get reference to validator in any state: active, pending, or candidate.
+public(package) fun any_validator(self: &mut ValidatorSet, validator: address): &Validator {
+    let active_idx = find_validator(&self.active_validators, validator);
+    if (active_idx.is_some()) {
+        return &self.active_validators[active_idx.destroy_some()]
     };
-    let mut validator_index_opt = find_validator_from_table_vec(
+
+    let pending_idx = find_validator_from_table_vec(
         &self.pending_active_validators,
-        validator_address,
+        validator,
     );
-    // consider both pending validators and the candidate ones
-    if (validator_index_opt.is_some()) {
-        let validator_index = validator_index_opt.extract();
-        let validator = &mut self.pending_active_validators[validator_index];
-        return validator
+    if (pending_idx.is_some()) {
+        return &self.pending_active_validators[pending_idx.destroy_some()]
     };
-    assert!(include_candidate, ENotActiveOrPendingValidator);
-    self.validator_candidates[validator_address].load_validator_maybe_upgrade()
+
+    self.validator_candidates[validator].load_validator_maybe_upgrade()
 }
 
-public(package) fun get_validator_mut_with_verified_cap(
-    self: &mut ValidatorSet,
-    verified_cap: &ValidatorOperationCap,
-    include_candidate: bool,
-): &mut Validator {
-    self.get_active_or_pending_or_candidate_validator_mut(
-        *verified_cap.verified_operation_cap_address(),
-        include_candidate,
-    )
+/// Get mutable reference to validator in any state: active, pending, or candidate.
+public(package) fun any_validator_mut(self: &mut ValidatorSet, validator: address): &mut Validator {
+    let active_idx = find_validator(&self.active_validators, validator);
+    if (active_idx.is_some()) {
+        return &mut self.active_validators[active_idx.destroy_some()]
+    };
+
+    let pending_idx = find_validator_from_table_vec(
+        &self.pending_active_validators,
+        validator,
+    );
+    if (pending_idx.is_some()) {
+        return &mut self.pending_active_validators[pending_idx.destroy_some()]
+    };
+
+    self.validator_candidates[validator].load_validator_maybe_upgrade()
 }
 
-public(package) fun get_validator_mut_with_ctx(
-    self: &mut ValidatorSet,
-    ctx: &TxContext,
-): &mut Validator {
-    let validator_address = ctx.sender();
-    self.get_active_or_pending_or_candidate_validator_mut(validator_address, false)
+/// Get reference to an active validator by address.
+public(package) fun active_validator(self: &ValidatorSet, validator: address): &Validator {
+    let idx = find_validator(&self.active_validators, validator).destroy_or!(abort ENotAValidator);
+    &self.active_validators[idx]
 }
 
-public(package) fun get_validator_mut_with_ctx_including_candidates(
+/// Get mutable reference to an active validator by address.
+public(package) fun active_validator_mut(
     self: &mut ValidatorSet,
-    ctx: &TxContext,
+    validator: address,
 ): &mut Validator {
-    let validator_address = ctx.sender();
-    self.get_active_or_pending_or_candidate_validator_mut(validator_address, true)
+    let idx = find_validator(&self.active_validators, validator).destroy_or!(abort ENotAValidator);
+    &mut self.active_validators[idx]
+}
+
+/// Get reference to a pending validator by address.
+public(package) fun pending_validator(self: &ValidatorSet, validator: address): &Validator {
+    let idx = find_validator_from_table_vec(&self.pending_active_validators, validator).destroy_or!(
+        abort ENotAPendingValidator,
+    );
+    &self.pending_active_validators[idx]
+}
+
+/// Get mutable reference to a pending validator by address.
+public(package) fun pending_validator_mut(
+    self: &mut ValidatorSet,
+    validator: address,
+): &mut Validator {
+    let idx = find_validator_from_table_vec(
+        &self.pending_active_validators,
+        validator,
+    ).destroy_or!(abort ENotAPendingValidator);
+    &mut self.pending_active_validators[idx]
+}
+
+/// Get mutable reference to a candidate validator by address.
+public(package) fun candidate_validator(self: &mut ValidatorSet, validator: address): &Validator {
+    assert!(self.validator_candidates.contains(validator), ENotValidatorCandidate);
+    self.validator_candidates[validator].load_validator_maybe_upgrade()
+}
+
+/// Get mutable reference to a candidate validator by address.
+public(package) fun candidate_validator_mut(
+    self: &mut ValidatorSet,
+    validator: address,
+): &mut Validator {
+    assert!(self.validator_candidates.contains(validator), ENotValidatorCandidate);
+    self.validator_candidates[validator].load_validator_maybe_upgrade()
 }
 
 fun get_validator_ref(validators: &vector<Validator>, validator_address: address): &Validator {
@@ -917,28 +887,6 @@ public(package) fun get_active_or_pending_or_candidate_validator_ref(
     self.validator_candidates[validator_address].load_validator_maybe_upgrade()
 }
 
-public fun get_active_validator_ref(self: &ValidatorSet, addr: address): &Validator {
-    let idx = find_validator(&self.active_validators, addr).destroy_or!(abort ENotAValidator);
-    &self.active_validators[idx]
-}
-
-public fun get_pending_validator_ref(self: &ValidatorSet, addr: address): &Validator {
-    let idx = find_validator_from_table_vec(
-        &self.pending_active_validators,
-        addr,
-    ).destroy_or!(abort ENotAPendingValidator);
-
-    &self.pending_active_validators[idx]
-}
-
-#[test_only]
-public fun get_candidate_validator_ref(
-    self: &ValidatorSet,
-    validator_address: address,
-): &Validator {
-    self.validator_candidates[validator_address].get_inner_validator_ref()
-}
-
 /// Verify the capability is valid for a Validator.
 /// If `active_validator_only` is true, only verify the Cap for an active validator.
 /// Otherwise, verify the Cap for au either active or pending validator.
@@ -948,11 +896,20 @@ public(package) fun verify_cap(
     which_validator: u8,
 ): ValidatorOperationCap {
     let cap_address = *cap.unverified_operation_cap_address();
-    let validator = if (which_validator == ACTIVE_VALIDATOR_ONLY) {
-        self.get_active_validator_ref(cap_address)
-    } else {
-        self.get_active_or_pending_or_candidate_validator_ref(cap_address, which_validator)
+    let validator = match (which_validator) {
+        ACTIVE_VALIDATOR_ONLY => self.active_validator(cap_address),
+        ACTIVE_OR_PENDING_VALIDATOR => {
+            let active_idx = find_validator(&self.active_validators, cap_address);
+            if (active_idx.is_some()) {
+                &self.active_validators[active_idx.destroy_some()]
+            } else {
+                self.pending_validator(cap_address)
+            }
+        },
+        ANY_VALIDATOR => self.any_validator(cap_address),
+        _ => abort EInvalidValidatorSelector,
     };
+
     assert!(validator.operation_cap_id() == &object::id(cap), EInvalidCap);
     cap.into_verified()
 }
@@ -964,7 +921,11 @@ fun process_pending_removals(
     validator_report_records: &mut VecMap<address, VecSet<address>>,
     ctx: &mut TxContext,
 ) {
-    sort_removal_list(&mut self.pending_removals);
+    // Pending removals needs to be sorted in ASC order. So we maintain the
+    // indexes after each validator's removal.
+    self.pending_removals.insertion_sort_by!(|a, b| *a <= *b);
+
+    // Drain pending removals and process validator's departure.
     self.pending_removals.length().do!(|_| {
         let index = self.pending_removals.pop_back();
         let validator = self.active_validators.remove(index);
@@ -1007,12 +968,7 @@ fun process_validator_departure(
     // Deactivate the validator and its staking pool
     let removed_stake = validator.total_stake();
     validator.deactivate(new_epoch);
-    self
-        .inactive_validators
-        .add(
-            validator_pool_id,
-            validator.wrap_v1(ctx),
-        );
+    self.inactive_validators.add(validator_pool_id, validator.wrap_v1(ctx));
     removed_stake
 }
 
@@ -1039,40 +995,11 @@ fun clean_report_records_leaving_validator(
     });
 }
 
-/// Sort all the pending removal indexes.
-fun sort_removal_list(withdraw_list: &mut vector<u64>) {
-    let length = withdraw_list.length();
-    let mut i = 1;
-    while (i < length) {
-        let cur = withdraw_list[i];
-        let mut j = i;
-        while (j > 0) {
-            j = j - 1;
-            if (withdraw_list[j] > cur) {
-                withdraw_list.swap(j, j + 1);
-            } else {
-                break
-            };
-        };
-        i = i + 1;
-    };
-}
-
-/// Process all active validators' pending stake deposits and withdraws.
-fun process_pending_stakes_and_withdraws(validators: &mut vector<Validator>, ctx: &TxContext) {
-    validators.do_mut!(|v| v.process_pending_stakes_and_withdraws(ctx))
-}
-
 /// Calculate the total active validator stake.
 public(package) fun calculate_total_stakes(validators: &vector<Validator>): u64 {
     let mut stake = 0;
     validators.do_ref!(|v| stake = stake + v.total_stake());
     stake
-}
-
-/// Process the pending stake changes for each validator.
-fun adjust_stake_and_gas_price(validators: &mut vector<Validator>) {
-    validators.do_mut!(|v| v.adjust_stake_and_gas_price())
 }
 
 /// Compute both the individual reward adjustments and total reward adjustment for staking rewards
@@ -1403,4 +1330,41 @@ fun get_candidate_or_active_validator(self: &ValidatorSet, validator_address: ad
     } else {
         get_validator(&self.active_validators, validator_address)
     }
+}
+
+#[test_only]
+public fun get_candidate_validator_ref(
+    self: &ValidatorSet,
+    validator_address: address,
+): &Validator {
+    self.validator_candidates[validator_address].get_inner_validator_ref()
+}
+
+#[test_only]
+public(package) fun get_validator_by_address_mut(
+    self: &mut ValidatorSet,
+    addr: address,
+): &mut Validator {
+    self.get_candidate_or_active_validator_mut(addr)
+}
+
+#[test_only]
+public(package) fun get_validator(
+    validators: &vector<Validator>,
+    validator_address: address,
+): &Validator {
+    let idx = find_validator(validators, validator_address).destroy_or!(abort ENotAValidator);
+    &validators[idx]
+}
+
+// === Deprecated ===
+
+#[deprecated]
+public fun get_active_validator_ref(_self: &ValidatorSet, _addr: address): &Validator {
+    abort
+}
+
+#[deprecated]
+public fun get_pending_validator_ref(_self: &ValidatorSet, _addr: address): &Validator {
+    abort
 }

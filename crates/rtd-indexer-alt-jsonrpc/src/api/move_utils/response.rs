@@ -2,20 +2,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::anyhow;
-use move_binary_format::file_format::{Ability, AbilitySet, Visibility};
-use rtd_json_rpc_types::{
-    RtdMoveAbility, RtdMoveAbilitySet, RtdMoveNormalizedFunction, RtdMoveNormalizedType,
-    RtdMoveVisibility,
-};
-use rtd_package_resolver::{FunctionDef, OpenSignature, OpenSignatureBody, Reference};
-use rtd_types::{Identifier, base_types::ObjectID};
+use move_binary_format::file_format::Ability;
+use move_binary_format::file_format::AbilitySet;
+use move_binary_format::file_format::Visibility;
+use rtd_json_rpc_types::RtdMoveAbility;
+use rtd_json_rpc_types::RtdMoveAbilitySet;
+use rtd_json_rpc_types::RtdMoveNormalizedFunction;
+use rtd_json_rpc_types::RtdMoveNormalizedType;
+use rtd_json_rpc_types::RtdMoveVisibility;
+use rtd_package_resolver::FunctionDef;
+use rtd_package_resolver::OpenSignature;
+use rtd_package_resolver::OpenSignatureBody;
+use rtd_package_resolver::Reference;
+use rtd_types::Identifier;
+use rtd_types::base_types::ObjectID;
 
-use crate::{
-    context::Context,
-    error::{RpcError, invalid_params},
-};
-
-use super::error::Error;
+use crate::api::move_utils::error::Error;
+use crate::context::Context;
+use crate::error::RpcError;
+use crate::error::invalid_params;
 
 /// Load information about a function, and convert it into a JSON-RPC response.
 pub(super) async fn function(

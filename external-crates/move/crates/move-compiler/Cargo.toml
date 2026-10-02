@@ -12,11 +12,11 @@ anyhow.workspace = true
 codespan-reporting.workspace = true
 dunce.workspace = true
 hex.workspace = true
+indexmap.workspace = true
 regex.workspace = true
 clap.workspace = true
 petgraph.workspace = true
 tempfile.workspace = true
-once_cell.workspace = true
 lsp-types.workspace = true
 rayon.workspace = true
 serde.workspace = true
@@ -45,5 +45,5 @@ move-stdlib.workspace = true
 datatest-stable.workspace = true
 
 [[test]]
-name = "move_check_testrtdte"
+name = "move_check_testsuite"
 harness = false

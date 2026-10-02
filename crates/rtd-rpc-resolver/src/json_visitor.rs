@@ -9,17 +9,18 @@
 //! collections. It should not be used in memory-constrained contexts like RPC
 //! handlers where the size of the data is unbounded.
 
-use move_core_types::{
-    annotated_value::{MoveStruct, MoveTypeLayout, MoveValue},
-    annotated_visitor as AV,
-    language_storage::TypeTag,
-};
-use serde_json::{Map, Value};
-use rtd_package_resolver::{PackageStore, Resolver, error::Error as ResolverError};
-use rtd_types::{
-    event::Event,
-    object::{option_visitor as OV, rpc_visitor as RV},
-};
+use move_core_types::annotated_value::MoveStruct;
+use move_core_types::annotated_value::MoveTypeLayout;
+use move_core_types::annotated_value::MoveValue;
+use move_core_types::annotated_visitor as AV;
+use move_core_types::language_storage::TypeTag;
+use rtd_package_resolver::PackageStore;
+use rtd_package_resolver::Resolver;
+use rtd_package_resolver::error::Error as ResolverError;
+use rtd_types::event::Event;
+use rtd_types::object::option_visitor as OV;
+use rtd_types::object::rpc_visitor as RV;
+use serde_json::Value;
 
 /// Error type for JSON visitor operations
 #[derive(thiserror::Error, Debug)]
@@ -54,12 +55,10 @@ pub enum DeserializationError {
 /// - Byte vectors (`Vec<u8>`) are Base64-encoded strings
 pub struct JsonVisitor;
 
-struct JsonWriter;
-
 impl JsonVisitor {
     /// Deserialize BCS bytes as JSON using the provided type layout.
     pub fn deserialize_value(bytes: &[u8], layout: &MoveTypeLayout) -> anyhow::Result<Value> {
-        let mut visitor = RV::RpcVisitor::new(JsonWriter);
+        let mut visitor = RV::RpcVisitor::new(RV::Unmetered);
         Ok(MoveValue::visit_deserialize(bytes, layout, &mut visitor)?)
     }
 
@@ -68,7 +67,7 @@ impl JsonVisitor {
         bytes: &[u8],
         layout: &move_core_types::annotated_value::MoveStructLayout,
     ) -> anyhow::Result<Value> {
-        let mut visitor = RV::RpcVisitor::new(JsonWriter);
+        let mut visitor = RV::RpcVisitor::new(RV::Unmetered);
         Ok(MoveStruct::visit_deserialize(bytes, layout, &mut visitor)?)
     }
 
@@ -116,67 +115,13 @@ impl JsonVisitor {
     }
 }
 
-impl RV::Writer for JsonWriter {
-    type Value = Value;
-    type Error = Error;
-
-    type Vec = Vec<Value>;
-    type Map = Map<String, Value>;
-
-    type Nested<'a> = Self;
-
-    fn nest(&mut self) -> Result<Self, Error> {
-        Ok(Self)
-    }
-
-    fn write_null(&mut self) -> Result<Value, Error> {
-        Ok(Value::Null)
-    }
-
-    fn write_bool(&mut self, value: bool) -> Result<Value, Error> {
-        Ok(Value::Bool(value))
-    }
-
-    fn write_number(&mut self, value: u32) -> Result<Value, Error> {
-        Ok(Value::Number(value.into()))
-    }
-
-    fn write_str(&mut self, value: String) -> Result<Value, Error> {
-        Ok(Value::String(value))
-    }
-
-    fn write_vec(&mut self, value: Self::Vec) -> Result<Value, Error> {
-        Ok(Value::Array(value))
-    }
-
-    fn write_map(&mut self, value: Self::Map) -> Result<Value, Error> {
-        Ok(Value::Object(value))
-    }
-
-    fn vec_push_element(&mut self, vec: &mut Vec<Value>, val: Value) -> Result<(), Error> {
-        vec.push(val);
-        Ok(())
-    }
-
-    fn map_push_field(
-        &mut self,
-        map: &mut Map<String, Value>,
-        key: String,
-        val: Value,
-    ) -> Result<(), Error> {
-        map.insert(key, val);
-        Ok(())
-    }
-}
-
 impl From<RV::Error> for Error {
-    fn from(RV::Error: RV::Error) -> Self {
-        Error::UnexpectedType
-    }
-}
-
-impl From<OV::Error> for Error {
-    fn from(OV::Error: OV::Error) -> Self {
-        Error::UnexpectedType
+    fn from(error: RV::Error) -> Self {
+        match error {
+            RV::Error::Visitor(error) => Error::Visitor(error),
+            RV::Error::Option(OV::Error) => Error::UnexpectedType,
+            RV::Error::UnexpectedType => Error::UnexpectedType,
+            RV::Error::Meter(_) => unreachable!("JsonVisitor is unmetered"),
+        }
     }
 }

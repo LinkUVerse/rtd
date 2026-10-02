@@ -4,20 +4,27 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use move_core_types::{ident_str, language_storage::StructTag};
+use move_core_types::ident_str;
+use move_core_types::language_storage::StructTag;
 use reqwest::Client;
-use serde_json::{Value, json};
-use simulacrum::Simulacrum;
-use rtd_indexer_alt::config::{IndexerConfig, PipelineLayer};
-use rtd_indexer_alt_e2e_tests::{FullCluster, OffchainClusterConfig, find};
-use rtd_indexer_alt_jsonrpc::config::{PackageResolverLayer, RpcConfig as JsonRpcConfig};
+use rtd_indexer_alt::config::IndexerConfig;
+use rtd_indexer_alt::config::PipelineLayer;
+use rtd_indexer_alt_jsonrpc::config::PackageResolverLayer;
+use rtd_indexer_alt_jsonrpc::config::RpcConfig as JsonRpcConfig;
 use rtd_move_build::BuildConfig;
-use rtd_types::{
-    Identifier, TypeTag,
-    base_types::ObjectID,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{Transaction, TransactionData},
-};
+use rtd_types::Identifier;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
+use serde_json::Value;
+use serde_json::json;
+use simulacrum::Simulacrum;
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
+use rtd_indexer_alt_e2e_tests::find;
 
 /// 5 RTD gas budget
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
@@ -143,7 +150,6 @@ impl TypeLimitCluster {
                         cp_sequence_numbers: Some(Default::default()),
                         kv_objects: Some(Default::default()),
                         kv_packages: Some(Default::default()),
-                        obj_info: Some(Default::default()),
                         obj_versions: Some(Default::default()),
                         ..Default::default()
                     },

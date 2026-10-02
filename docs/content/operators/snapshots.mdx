@@ -1,0 +1,179 @@
+---
+title: Database Snapshots
+description: >-
+  Database snapshots of the Rtd network enable full node operators a way to
+  bootstrap a full node without having to execute all the transactions that
+  occurred after genesis.
+keywords:
+  - node snapshots
+  - database snapshots
+  - full node snapshots
+  - formal snapshots
+  - rocksdb
+  - rocksdb snapshot
+  - restoring a node
+  - restoring a full node
+  - restoring from snapshot
+  - managed snapshots
+  - enabling snapshots
+goal:
+  description: >-
+    Operator understands database snapshots of the Rtd network enable full node
+    operators a way to bootstrap a full node
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - min_words: 300
+      label: Needs more operational depth
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - How do I use Rtd database snapshots?
+  - How do I restore a Rtd node from a snapshot?
+  - How do I obtain a snapshot for my RTD network?
+answer: >-
+  Database snapshots of the Rtd network enable full node operators a way to
+  bootstrap a full node without having to execute all the transactions that
+  occurred after genesis.
+---
+
+Database snapshots provide a point-in-time view of a database's store. In Rtd, the database snapshot captures a running database's view of the Rtd network from a particular node at the end of an epoch. While validators can enable snapshots, they are typically most valuable for full node operators.
+
+Snapshots of the Rtd network enable full node operators to bootstrap a full node without having to execute all transactions since genesis. RTD production snapshots use an operator-owned MinIO deployment through the S3 protocol, or a local filesystem for development. The snapshot export runs separately from normal requests. Validate its effect on node resources and recovery time for your own network.
+
+RTD has no verified public snapshot service. For a network you operate, publish snapshots only with a documented chain ID, genesis digest, epoch, and trusted access policy.
+
+## Supported snapshot types
+
+Rtd supports two types of snapshots:
+
+- **RocksDB snapshots** are a point-in-time view of a database store. The snapshot keeps the state of the system at the moment it generates the snapshot, including non-pruned data, additional indices, and other data.
+- **Formal snapshots** are database agnostic with a minimalistic format. They contain only the data necessary to restore a node to a valid state at the specified epoch. Consequently, they have a much smaller storage footprint and are generally faster to restore from when compared to database snapshots. Formal snapshots are also supported natively by the Rtd protocol. You can cryptographically verify the contents of the formal snapshot against a commitment from the committee at the epoch you are restoring to. This verification happens automatically and by default during a formal snapshot restore (unless you explicitly bypass it).
+
+:::info
+
+Formal snapshots are not suitable for use if you are running an RPC node that does any historical data lookups. For more information on node data management, see [Data Management](/operators/data-management).
+
+:::
+
+You can configure a full node snapshot to generate a state snapshot at the end of each epoch.
+A single full node can generate RocksDB snapshots, formal snapshots, or both.
+
+## Formal snapshots
+
+Formal snapshots provide a mechanism for a node to restore to a canonical state (the state of a full pruned and compacted node at the end of an epoch) at some prior point in time without having to execute all the transactions that have occurred since genesis. Unlike existing database snapshots, these formal snapshots have the following properties:
+
+1. **Minimalism:** Formal snapshots currently contain only the end of epoch live object set (the set of all object versions eligible for use as input objects for future transactions). Rtd syncs all other critical chain information from the chain or derives it. Thus, formal snapshots contain only the necessary data required for a node to startup at epoch boundary and participate in the network.
+1. **Agnosticism:** Formal snapshots are by nature agnostic to the underlying database choice or implementation of the protocol. As the live object set is protocol defined, so is the formal snapshot.
+1. **Verifiability:** Formal snapshots have first-class support in the core Rtd protocol. As such, they must be trustless/verifiable by the node operator upon download. To support this, the protocol signs a commitment to the live object state at end of epoch, which formal snapshots are checked against at restore time. If this verification fails, the node state is moved back to the state before the snapshot restore attempt.
+
+Because these snapshots do not contain indexes, they are most immediately useful for validators and state sync Full nodes (SSFNs). Publish them to a separate RTD-operated MinIO snapshot bucket, verify each snapshot against its committee commitment, and rehearse recovery into an isolated node. A remote copy helps only if the bucket and its credentials are available during the incident.
+
+## Restoring a full node using snapshots
+
+You can restore a full node using either RocksDB snapshots or formal snapshots.
+
+### Restoring using RocksDB snapshots
+
+To restore from a RocksDB snapshot, follow these steps:
+
+1. Obtain a snapshot from the operator of your RTD network. Verify that its genesis digest, chain ID, and epoch match the node you are restoring. RTD has no verified public Mainnet, Testnet, or managed snapshot bucket.
+1. Download the snapshot from your private MinIO bucket to a temporary directory. For example, if the `db-path` value points to `/opt/rtd/db/authorities_db/full_node_db` and you want to restore epoch 10, configure a read-only `mc` alias using credentials from your self-hosted secret manager, then run `mc mirror rtd-minio/<YOUR_RTD_SNAPSHOT_BUCKET>/epoch_10 /tmp/epoch_10`. Verify the downloaded files and the operator's snapshot manifest before replacing the node database.
+
+1. Place the downloaded `epoch_[NUM]` directory at `live/` under your node's `db_path`, for example `cp -r /tmp/epoch_[NUM] /opt/rtd/db/authorities_db/full_node_db/live`.
+1. Make sure you update the ownership of the downloaded directory to the rtd user (whichever linux user you run `rtd-node` as)
+   `sudo chown -R rtd:rtd  /opt/rtd/db/authorities_db/full_node_db/live`.
+1. Start the Rtd node.
+
+:::info
+
+When you restore a full node from a snapshot, write it to the path `/opt/rtd/db/authorities_db/full_node_db/live`. When restoring a validator node, you can shorten the database destination to `/opt/rtd/db/authorities_db/live`. Check the `db_path` field of your full node or Validator configs to confirm the path location.
+
+:::
+
+### Restoring using formal snapshots
+
+To restore using a formal snapshot, build `rtd-tool` from the approved RTD source revision or obtain it from a distribution channel verified by your network operator.
+See [Install Rtd](/getting-started/onboarding/rtd-install) for more details.
+
+To restore a node from a formal snapshot, complete the following steps:
+
+1. If it's running, stop the node.
+2. Run the command:
+   ```
+   rtd-tool download-formal-snapshot --latest --genesis "<PATH-TO-GENESIS-BLOB>" \
+        --network unknown --snapshot-bucket <YOUR_RTD_SNAPSHOT_BUCKET> --snapshot-bucket-type s3 \
+        --path <PATH-TO-NODE-DB> --num-parallel-downloads 50
+   ```
+   - `--epoch`: The epoch that you want to download. Confirm it with the operator of your network; RTD has no verified public snapshot bucket or explorer.
+   - `--latest`: Rather than explicitly passing an epoch through `--epoch`, you can pass the `--latest` flag, which automatically selects the latest snapshot.
+   - `--genesis`: The path to the location of the network's `genesis.blob`.
+   - `--network`: Use `unknown` for an RTD network unless the tool and network operator explicitly map that network to another value. The CLI's inherited `mainnet` default does not identify an RTD Mainnet.
+   - `--path`: Path to snapshot directory on local filesystem.
+   - `--no-sign-request`: Do not use this inherited shortcut for an RTD network. It conflicts with explicit bucket flags and has no RTD public bucket configured.
+   - `--snapshot-bucket`: Source snapshot bucket name, for example `YOUR_RTD_SNAPSHOT_BUCKET`. This cannot be used with `--no-sign-request`.
+   - `--snapshot-bucket-type`: Use `s3` for RTD-operated MinIO or `file` with `--snapshot-path` for a local snapshot. Other cloud types are unavailable. This cannot be used with `--no-sign-request`.
+
+   Set `AWS_SNAPSHOT_ENDPOINT` to the private MinIO HTTPS endpoint, along with `AWS_SNAPSHOT_ACCESS_KEY_ID`, `AWS_SNAPSHOT_SECRET_ACCESS_KEY`, and `AWS_SNAPSHOT_REGION`. These inherited `AWS_*` names are S3 protocol settings and must not point to Amazon infrastructure. Set `RTD_CHECKPOINT_INGESTION_URL` to an independently verified same-chain checkpoint source required by this tool. Inject credentials through the deployment secret manager and check the built tool's `--help` before restore.
+
+
+## Snapshot sources
+
+RTD has no verified public snapshot tier or published bucket name. The operator of each network must provide a private MinIO snapshot bucket, retention policy, backup copy, chain identity proof, and access requirements. See [Available Data Stores](/operators/data-management/available-data-stores) for configuration patterns, not a list of deployed RTD services.
+
+## Enabling snapshots
+
+Full nodes do not take snapshots by default. To enable this feature you must apply specific configs to your full node.
+
+Follow these steps to change the configs for a full node:
+
+1. Stop your node, if it's running.
+2. Open your `fullnode.yaml` config file and apply config updates as the following sections show.
+3. Save the `fullnode.yaml` file and restart the node.
+
+### Enabling DB snapshots
+
+Add an entry to the config file for `db-checkpoint-config`. This example uses a private RTD MinIO endpoint through the S3 API:
+   ```yaml
+   db-checkpoint-config:
+     perform-db-checkpoints-at-epoch-end: true
+     perform-index-db-checkpoints-at-epoch-end: true
+     object-store-config:
+       object-store: "S3"
+       bucket: "<BUCKET-NAME>"
+       aws-access-key-id: "<ACCESS-KEY>"
+       aws-secret-access-key: "<SHARED-KEY>"
+       aws-endpoint: "https://<YOUR_PRIVATE_MINIO_ENDPOINT>"
+       aws-region: "<BUCKET-REGION>"
+       aws-virtual-hosted-style-request: false
+       aws-allow-http: false
+       object-store-connection-limit: 20
+   ```
+   - `object-store`: `S3` selects MinIO's S3 protocol adapter, not Amazon infrastructure.
+   - `bucket`: Private MinIO snapshot bucket name.
+   - `aws-access-key-id` and `aws-secret-access-key`: Scoped MinIO write credentials.
+   - `aws-endpoint` and `aws-region`: Explicit private HTTPS endpoint and configured protocol region.
+   - `object-store-connection-limit`: Number of simultaneous connections to the object store.
+
+### Enabling formal snapshots
+
+ Add an entry to the config file for `state-snapshot-write-config`, using a separate private MinIO bucket:
+   ```yaml
+   state-snapshot-write-config:
+     object-store-config:
+       object-store: "S3"
+       bucket: "<BUCKET-NAME>"
+       aws-access-key-id: "<ACCESS-KEY>"
+       aws-secret-access-key: "<SHARED-KEY>"
+       aws-endpoint: "https://<YOUR_PRIVATE_MINIO_ENDPOINT>"
+       aws-region: "<BUCKET-REGION>"
+       aws-virtual-hosted-style-request: false
+       aws-allow-http: false
+       object-store-connection-limit: 200
+   ```
+   The settings use inherited S3 protocol field names. The node must reject missing, managed-cloud, or plaintext production endpoints. Check the snapshot manifest and restore a copy before depending on the bucket for recovery. RTD-operated distributed MinIO and its source maintenance, versioning, replication, and disaster recovery remain separate production acceptance gates.

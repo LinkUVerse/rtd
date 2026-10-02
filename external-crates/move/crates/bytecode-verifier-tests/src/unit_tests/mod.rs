@@ -13,6 +13,7 @@ pub mod bounds_tests;
 pub mod code_unit_tests;
 pub mod constants_tests;
 pub mod control_flow_tests;
+pub mod dependency_tests;
 pub mod duplication_tests;
 pub mod generic_ops_tests;
 pub mod large_type_test;
@@ -58,6 +59,13 @@ pub(crate) fn production_config() -> (VerifierConfig, MeterConfig) {
             private_generics_verifier_v2: false,
             sanity_check_with_regex_reference_safety: Some(2_200_000),
             deprecate_global_storage_ops: true,
+            disable_entry_point_signature_check: true,
+            switch_to_regex_reference_safety: false,
+            framework_tx_context_mut_restrictions: false,
+            disallow_jump_orphans: true,
+            max_generic_instantiation_type_nodes_per_function: Some(10_000),
+            max_generic_instantiation_type_nodes_per_module: Some(500_000),
+            include_function_signatures_in_instantiation_limits: true,
         },
         MeterConfig::old_default(),
     )

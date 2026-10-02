@@ -24,18 +24,8 @@ export function KioskCreation({ onCreate }: { onCreate: () => void }) {
 					the assets you place in it.
 				</p>
 				<p className="pb-3">
-					The demo app works only on <strong>Rtd Testnet.</strong> Make sure that your wallet
-					connects to Testnet and that you have at least 1 RTD to cover gas fees. You can get test
-					RTD tokens using{' '}
-					<a
-						href="https://docs.rtd.io/build/faucet"
-						target="_blank"
-						rel="noreferrer"
-						className="underline"
-					>
-						the faucet
-					</a>
-					.
+				Connect your wallet to an RTD network that runs this kiosk package and ensure the
+				address has enough RTD for gas. Obtain test tokens from that network's operator.
 				</p>
 				<p className="pb-3">
 					When you click <strong>Create Kiosk</strong>, your wallet opens. Click{' '}

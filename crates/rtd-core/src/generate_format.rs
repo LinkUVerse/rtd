@@ -23,7 +23,7 @@ use rtd_types::effects::{AccumulatorOperation, AccumulatorValue, TransactionEven
 use rtd_types::event::Event;
 use rtd_types::execution::ExecutionTimeObservationKey;
 use rtd_types::execution_status::{
-    CommandArgumentError, ExecutionFailureStatus, ExecutionStatus, PackageUpgradeError,
+    CommandArgumentError, ExecutionErrorKind, ExecutionStatus, PackageUpgradeError,
     TypeArgumentError,
 };
 use rtd_types::full_checkpoint_content::{CheckpointData, CheckpointTransaction};
@@ -198,7 +198,7 @@ fn get_registry() -> Result<Registry> {
     tracer.trace_type::<Owner>(&samples).unwrap();
     tracer.trace_type::<ExecutionStatus>(&samples).unwrap();
     tracer
-        .trace_type::<ExecutionFailureStatus>(&samples)
+        .trace_type::<ExecutionErrorKind>(&samples)
         .unwrap();
     tracer.trace_type::<Reservation>(&samples).unwrap();
     tracer.trace_type::<WithdrawFrom>(&samples).unwrap();

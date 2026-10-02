@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: legacy
   lint: false
 ---
-error[Rtd E02004]: invalid one-time witness declaration
+error[ESC02004]: invalid one-time witness declaration
   ┌─ tests/rtd_mode/one_time_witness/many_fields_invalid.move:5:12
   │
 5 │     struct M has drop { some_field: bool, some_field2: bool }

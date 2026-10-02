@@ -23,10 +23,8 @@ title: Module `rtd_system::validator_set`
 -  [Function `request_withdraw_stake`](#rtd_system_validator_set_request_withdraw_stake)
 -  [Function `convert_to_fungible_staked_rtd`](#rtd_system_validator_set_convert_to_fungible_staked_rtd)
 -  [Function `redeem_fungible_staked_rtd`](#rtd_system_validator_set_redeem_fungible_staked_rtd)
--  [Function `request_set_commission_rate`](#rtd_system_validator_set_request_set_commission_rate)
 -  [Function `advance_epoch`](#rtd_system_validator_set_advance_epoch)
 -  [Function `update_validator_positions_and_calculate_total_stake`](#rtd_system_validator_set_update_validator_positions_and_calculate_total_stake)
--  [Function `effectuate_staged_metadata`](#rtd_system_validator_set_effectuate_staged_metadata)
 -  [Function `derive_reference_gas_price`](#rtd_system_validator_set_derive_reference_gas_price)
 -  [Function `total_stake`](#rtd_system_validator_set_total_stake)
 -  [Function `validator_total_stake_amount`](#rtd_system_validator_set_validator_total_stake_amount)
@@ -40,31 +38,26 @@ title: Module `rtd_system::validator_set`
 -  [Function `next_epoch_validator_count`](#rtd_system_validator_set_next_epoch_validator_count)
 -  [Function `is_active_validator_by_rtd_address`](#rtd_system_validator_set_is_active_validator_by_rtd_address)
 -  [Function `is_duplicate_with_active_validator`](#rtd_system_validator_set_is_duplicate_with_active_validator)
--  [Function `is_duplicate_validator`](#rtd_system_validator_set_is_duplicate_validator)
--  [Function `count_duplicates_vec`](#rtd_system_validator_set_count_duplicates_vec)
 -  [Function `is_duplicate_with_pending_validator`](#rtd_system_validator_set_is_duplicate_with_pending_validator)
--  [Function `count_duplicates_tablevec`](#rtd_system_validator_set_count_duplicates_tablevec)
 -  [Function `get_candidate_or_active_validator_mut`](#rtd_system_validator_set_get_candidate_or_active_validator_mut)
 -  [Function `find_validator`](#rtd_system_validator_set_find_validator)
 -  [Function `find_validator_from_table_vec`](#rtd_system_validator_set_find_validator_from_table_vec)
 -  [Function `get_validator_indices`](#rtd_system_validator_set_get_validator_indices)
--  [Function `get_validator_mut`](#rtd_system_validator_set_get_validator_mut)
--  [Function `get_active_or_pending_or_candidate_validator_mut`](#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut)
--  [Function `get_validator_mut_with_verified_cap`](#rtd_system_validator_set_get_validator_mut_with_verified_cap)
--  [Function `get_validator_mut_with_ctx`](#rtd_system_validator_set_get_validator_mut_with_ctx)
--  [Function `get_validator_mut_with_ctx_including_candidates`](#rtd_system_validator_set_get_validator_mut_with_ctx_including_candidates)
+-  [Function `any_validator`](#rtd_system_validator_set_any_validator)
+-  [Function `any_validator_mut`](#rtd_system_validator_set_any_validator_mut)
+-  [Function `active_validator`](#rtd_system_validator_set_active_validator)
+-  [Function `active_validator_mut`](#rtd_system_validator_set_active_validator_mut)
+-  [Function `pending_validator`](#rtd_system_validator_set_pending_validator)
+-  [Function `pending_validator_mut`](#rtd_system_validator_set_pending_validator_mut)
+-  [Function `candidate_validator`](#rtd_system_validator_set_candidate_validator)
+-  [Function `candidate_validator_mut`](#rtd_system_validator_set_candidate_validator_mut)
 -  [Function `get_validator_ref`](#rtd_system_validator_set_get_validator_ref)
 -  [Function `get_active_or_pending_or_candidate_validator_ref`](#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_ref)
--  [Function `get_active_validator_ref`](#rtd_system_validator_set_get_active_validator_ref)
--  [Function `get_pending_validator_ref`](#rtd_system_validator_set_get_pending_validator_ref)
 -  [Function `verify_cap`](#rtd_system_validator_set_verify_cap)
 -  [Function `process_pending_removals`](#rtd_system_validator_set_process_pending_removals)
 -  [Function `process_validator_departure`](#rtd_system_validator_set_process_validator_departure)
 -  [Function `clean_report_records_leaving_validator`](#rtd_system_validator_set_clean_report_records_leaving_validator)
--  [Function `sort_removal_list`](#rtd_system_validator_set_sort_removal_list)
--  [Function `process_pending_stakes_and_withdraws`](#rtd_system_validator_set_process_pending_stakes_and_withdraws)
 -  [Function `calculate_total_stakes`](#rtd_system_validator_set_calculate_total_stakes)
--  [Function `adjust_stake_and_gas_price`](#rtd_system_validator_set_adjust_stake_and_gas_price)
 -  [Function `compute_reward_adjustments`](#rtd_system_validator_set_compute_reward_adjustments)
 -  [Function `compute_slashed_validators`](#rtd_system_validator_set_compute_slashed_validators)
 -  [Function `compute_unadjusted_reward_distribution`](#rtd_system_validator_set_compute_unadjusted_reward_distribution)
@@ -79,10 +72,11 @@ title: Module `rtd_system::validator_set`
 -  [Function `is_at_risk_validator`](#rtd_system_validator_set_is_at_risk_validator)
 -  [Function `active_validator_addresses`](#rtd_system_validator_set_active_validator_addresses)
 -  [Macro function `mul_div`](#rtd_system_validator_set_mul_div)
+-  [Function `get_active_validator_ref`](#rtd_system_validator_set_get_active_validator_ref)
+-  [Function `get_pending_validator_ref`](#rtd_system_validator_set_get_pending_validator_ref)
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -123,6 +117,7 @@ title: Module `rtd_system::validator_set`
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
@@ -553,15 +548,6 @@ of new validators based on a minimum voting power rather than a minimum stake.
 
 
 
-<a name="rtd_system_validator_set_ENotActiveOrPendingValidator"></a>
-
-
-
-<pre><code><b>const</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotActiveOrPendingValidator">ENotActiveOrPendingValidator</a>: u64 = 9;
-</code></pre>
-
-
-
 <a name="rtd_system_validator_set_EStakingBelowThreshold"></a>
 
 
@@ -603,6 +589,24 @@ of new validators based on a minimum voting power rather than a minimum stake.
 
 
 <pre><code><b>const</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EInvalidCap">EInvalidCap</a>: u64 = 101;
+</code></pre>
+
+
+
+<a name="rtd_system_validator_set_EInvalidValidatorSelector"></a>
+
+
+
+<pre><code><b>const</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EInvalidValidatorSelector">EInvalidValidatorSelector</a>: u64 = 14;
+</code></pre>
+
+
+
+<a name="rtd_system_validator_set_EAlreadyValidator"></a>
+
+
+
+<pre><code><b>const</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EAlreadyValidator">EAlreadyValidator</a>: u64 = 15;
 </code></pre>
 
 
@@ -709,7 +713,7 @@ of new validators based on a minimum voting power rather than a minimum stake.
 
 ## Function `request_add_validator_candidate`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator candidate.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator candidate.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_add_validator_candidate">request_add_validator_candidate</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
@@ -726,14 +730,19 @@ Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_
     <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: Validator,
     ctx: &<b>mut</b> TxContext,
 ) {
-    // The next assertions are not critical <b>for</b> the protocol, but they are here to catch problematic configs earlier.
-    <b>assert</b>!(
-        !self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>)
-            && !self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>),
-        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EDuplicateValidator">EDuplicateValidator</a>,
-    );
     <b>let</b> validator_address = <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.rtd_address();
     <b>assert</b>!(!self.validator_candidates.contains(validator_address), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EAlreadyValidatorCandidate">EAlreadyValidatorCandidate</a>);
+    <b>assert</b>!(
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address).is_none(),
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EAlreadyValidator">EAlreadyValidator</a>,
+    );
+    <b>assert</b>!(
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(&self.pending_active_validators, validator_address).is_none(),
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EAlreadyValidator">EAlreadyValidator</a>,
+    );
+    // The next assertions are not critical <b>for</b> the protocol, but they are here
+    // to catch problematic configs earlier.
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_assert_no_pending_or_active_duplicates">assert_no_pending_or_active_duplicates</a>(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>);
     <b>assert</b>!(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.is_preactive(), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EValidatorNotCandidate">EValidatorNotCandidate</a>);
     // Add <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> to the candidates mapping and the pool id mappings so that users can start
     // staking with this candidate.
@@ -750,7 +759,7 @@ Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_
 
 ## Function `request_remove_validator_candidate`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to remove a validator candidate, and move them to <code>inactive_validators</code>.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to remove a validator candidate, and move them to <code>inactive_validators</code>.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_remove_validator_candidate">request_remove_validator_candidate</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
@@ -788,8 +797,10 @@ Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_
 
 ## Function `request_add_validator`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator to <code>pending_active_validators</code>, which will be
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to add a new validator to <code>pending_active_validators</code>, which will be
 processed at the end of epoch.
+
+Aborts if the validator contains duplicate metadata values with an active or pending validator.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_add_validator">request_add_validator</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
@@ -805,11 +816,7 @@ processed at the end of epoch.
     <b>let</b> validator_address = ctx.sender();
     <b>assert</b>!(self.validator_candidates.contains(validator_address), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotValidatorCandidate">ENotValidatorCandidate</a>);
     <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = self.validator_candidates.remove(validator_address).destroy();
-    <b>assert</b>!(
-        !self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>)
-            && !self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>),
-        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EDuplicateValidator">EDuplicateValidator</a>,
-    );
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_assert_no_pending_or_active_duplicates">assert_no_pending_or_active_duplicates</a>(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>);
     <b>assert</b>!(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.is_preactive(), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EValidatorNotCandidate">EValidatorNotCandidate</a>);
     <b>assert</b>!(self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_can_join">can_join</a>(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>(), ctx), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EMinJoiningStakeNotReached">EMinJoiningStakeNotReached</a>);
     self.pending_active_validators.push_back(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>);
@@ -839,7 +846,7 @@ Return <code><b>true</b></code> if a  candidate validator with <code>stake</code
 <pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_can_join">can_join</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, stake: u64, ctx: &TxContext): bool {
     <b>let</b> (min_joining_voting_power, _, _) = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_voting_power_thresholds">get_voting_power_thresholds</a>(ctx);
     // <b>if</b> the <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> will have at least `min_joining_voting_power` after joining, they can join.
-    // this formula comes from SIP-39: https://github.com/rtd-foundation/sips/blob/main/sips/sip-39.md
+    // Preserve the inherited voting-power admission formula until RTD defines its own proposal.
     <b>let</b> future_total_stake = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a> + stake;
     <b>let</b> future_validator_voting_power = <a href="../rtd_system/voting_power.md#rtd_system_voting_power_derive_raw_voting_power">voting_power::derive_raw_voting_power</a>(
         stake,
@@ -872,10 +879,10 @@ return (min, low, very low voting power) thresholds
 <pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_voting_power_thresholds">get_voting_power_thresholds</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, ctx: &TxContext): (u64, u64, u64) {
     <b>let</b> start_epoch = {
         <b>let</b> key = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_VotingPowerAdmissionStartEpochKey">VotingPowerAdmissionStartEpochKey</a>();
-        <b>if</b> (self.extra_fields.contains(key)) self.extra_fields[key]
-        <b>else</b> ctx.epoch() + 1 // will give us the phase 1 values
+        <b>if</b> (self.extra_fields.contains(key)) self.extra_fields[key] // will give us the phase 1 values
+        <b>else</b> ctx.epoch() + 1
     };
-    // these numbers come from SIP-39: https://github.com/rtd-foundation/sips/blob/main/sips/sip-39.md
+    // Preserve the inherited three-phase thresholds until RTD defines its own proposal.
     <b>let</b> curr_epoch = ctx.epoch();
     <b>if</b> (curr_epoch &lt; start_epoch + <a href="../rtd_system/validator_set.md#rtd_system_validator_set_PHASE_LENGTH">PHASE_LENGTH</a>) (12, 8, 4) // phase 1
     <b>else</b> <b>if</b> (curr_epoch &lt; start_epoch + (2 * <a href="../rtd_system/validator_set.md#rtd_system_validator_set_PHASE_LENGTH">PHASE_LENGTH</a>)) (6, 4, 2) // phase 2
@@ -906,12 +913,8 @@ return (min, low, very low voting power) thresholds
     self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
     <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: &Validator,
 ) {
-    // Validator here must be active or pending, and thus must be identified <b>as</b> duplicate exactly once.
-    <b>assert</b>!(
-        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_vec">count_duplicates_vec</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>) +
-            <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_tablevec">count_duplicates_tablevec</a>(&self.pending_active_validators, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>) == 1,
-        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EDuplicateValidator">EDuplicateValidator</a>,
-    );
+    <b>assert</b>!(!self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EDuplicateValidator">EDuplicateValidator</a>);
+    <b>assert</b>!(!self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EDuplicateValidator">EDuplicateValidator</a>);
 }
 </code></pre>
 
@@ -923,7 +926,7 @@ return (min, low, very low voting power) thresholds
 
 ## Function `request_remove_validator`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code>, to remove a validator.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code>, to remove a validator.
 The index of the validator is added to <code>pending_removals</code> and
 will be processed at the end of epoch.
 Only an active validator can request to be removed.
@@ -957,7 +960,7 @@ Only an active validator can request to be removed.
 
 ## Function `request_add_stake`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code>, to add a new stake to the validator.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code>, to add a new stake to the validator.
 This request is added to the validator's staking pool's pending stake entries, processed at the end
 of the epoch.
 Aborts in case the staking amount is smaller than MIN_STAKING_THRESHOLD
@@ -994,12 +997,12 @@ Aborts in case the staking amount is smaller than MIN_STAKING_THRESHOLD
 
 ## Function `request_withdraw_stake`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code>, to withdraw some share of a stake from the validator. The share to withdraw
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code>, to withdraw some share of a stake from the validator. The share to withdraw
 is denoted by <code>principal_withdraw_amount</code>. One of two things occurs in this function:
 1. If the <code>staked_rtd</code> is staked with an active validator, the request is added to the validator's
-staking pool's pending stake withdraw entries, processed at the end of the epoch.
+   staking pool's pending stake withdraw entries, processed at the end of the epoch.
 2. If the <code>staked_rtd</code> was staked with a validator that is no longer active,
-the stake and any rewards corresponding to it will be immediately processed.
+   the stake and any rewards corresponding to it will be immediately processed.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_withdraw_stake">request_withdraw_stake</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, staked_rtd: <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_StakedRtd">rtd_system::staking_pool::StakedRtd</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;
@@ -1110,47 +1113,17 @@ the stake and any rewards corresponding to it will be immediately processed.
 
 </details>
 
-<a name="rtd_system_validator_set_request_set_commission_rate"></a>
-
-## Function `request_set_commission_rate`
-
-
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_set_commission_rate">request_set_commission_rate</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, new_commission_rate: u64, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_set_commission_rate">request_set_commission_rate</a>(
-    self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
-    new_commission_rate: u64,
-    ctx: &TxContext,
-) {
-    <b>let</b> validator_address = ctx.sender();
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut">get_validator_mut</a>(&<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address);
-    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_set_commission_rate">request_set_commission_rate</a>(new_commission_rate);
-}
-</code></pre>
-
-
-
-</details>
-
 <a name="rtd_system_validator_set_advance_epoch"></a>
 
 ## Function `advance_epoch`
 
 Update the validator set at the end of epoch.
 It does the following things:
-1. Distribute stake award.
-2. Process pending stake deposits and withdraws for each validator (<code>adjust_stake</code>).
-3. Process pending stake deposits, and withdraws.
-4. Process pending validator application and withdraws.
-5. At the end, we calculate the total stake for the new epoch.
+  1. Distribute stake award.
+  2. Process pending stake deposits and withdraws for each validator (<code>adjust_stake</code>).
+  3. Process pending stake deposits, and withdraws.
+  4. Process pending validator application and withdraws.
+  5. At the end, we calculate the total stake for the new epoch.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_advance_epoch">advance_epoch</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, computation_reward: &<b>mut</b> <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, storage_fund_reward: &<b>mut</b> <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, validator_report_records: &<b>mut</b> <a href="../rtd/vec_map.md#rtd_vec_map_VecMap">rtd::vec_map::VecMap</a>&lt;<b>address</b>, <a href="../rtd/vec_set.md#rtd_vec_set_VecSet">rtd::vec_set::VecSet</a>&lt;<b>address</b>&gt;&gt;, reward_slashing_rate: u64, low_stake_grace_period: u64, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
@@ -1208,7 +1181,7 @@ It does the following things:
     );
     // Compute the adjusted amounts of stake each <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> should get given the tallying rule
     // reward adjustments we computed before.
-    // `<a href="../rtd_system/validator_set.md#rtd_system_validator_set_compute_adjusted_reward_distribution">compute_adjusted_reward_distribution</a>` must be called before `<a href="../rtd_system/validator_set.md#rtd_system_validator_set_distribute_reward">distribute_reward</a>` and `<a href="../rtd_system/validator_set.md#rtd_system_validator_set_adjust_stake_and_gas_price">adjust_stake_and_gas_price</a>` to
+    // `<a href="../rtd_system/validator_set.md#rtd_system_validator_set_compute_adjusted_reward_distribution">compute_adjusted_reward_distribution</a>` must be called before `<a href="../rtd_system/validator_set.md#rtd_system_validator_set_distribute_reward">distribute_reward</a>` and `adjust_stake_and_gas_price` to
     // make sure we are using the current epoch's stake information to compute reward distribution.
     <b>let</b> (
         adjusted_staking_reward_amounts,
@@ -1234,8 +1207,10 @@ It does the following things:
         storage_fund_reward,
         ctx,
     );
-    <a href="../rtd_system/validator_set.md#rtd_system_validator_set_adjust_stake_and_gas_price">adjust_stake_and_gas_price</a>(&<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>);
-    <a href="../rtd_system/validator_set.md#rtd_system_validator_set_process_pending_stakes_and_withdraws">process_pending_stakes_and_withdraws</a>(&<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, ctx);
+    // Process the pending stake changes <b>for</b> each <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>.do_mut!(|v| v.adjust_stake_and_gas_price());
+    // Process all active validators' pending stake deposits and withdraws.
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>.do_mut!(|v| v.process_pending_stakes_and_withdraws(ctx));
     // Emit events after we have processed all the rewards distribution and pending stakes.
     <a href="../rtd_system/validator_set.md#rtd_system_validator_set_emit_validator_epoch_events">emit_validator_epoch_events</a>(
         new_epoch,
@@ -1256,7 +1231,7 @@ It does the following things:
     <a href="../rtd_system/voting_power.md#rtd_system_voting_power_set_voting_power">voting_power::set_voting_power</a>(&<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, new_total_stake);
     // At this point, self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a> are updated <b>for</b> next epoch.
     // Now we process the staged <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> metadata.
-    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_effectuate_staged_metadata">effectuate_staged_metadata</a>();
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>.do_mut!(|v| v.effectuate_staged_metadata());
 }
 </code></pre>
 
@@ -1271,9 +1246,9 @@ It does the following things:
 This function does the following:
 - removes validators from <code>at_risk</code> group if their voting power is above the LOW threshold
 - increments the number of epochs a validator has been below the LOW threshold but above the
-VERY LOW threshold
+    VERY LOW threshold
 - removes validators from the active set if they have been below the LOW threshold for more than
-<code>low_stake_grace_period</code> epochs
+    <code>low_stake_grace_period</code> epochs
 - removes validators from the active set immediately if they are below the VERY LOW threshold
 - activates pending validators if they have sufficient voting power
 
@@ -1384,12 +1359,7 @@ VERY LOW threshold
             // <b>return</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> object to the candidate pool. want to do this directly instead of
             // calling <a href="../rtd_system/validator_set.md#rtd_system_validator_set_request_add_validator_candidate">request_add_validator_candidate</a> because <a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a> already <b>has</b> an
             // <b>entry</b> <b>for</b> this <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>, and the duplicate checks are redundant
-            self
-                .validator_candidates
-                .add(
-                    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.rtd_address(),
-                    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.wrap_v1(ctx),
-                );
+            self.validator_candidates.add(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.rtd_address(), <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.wrap_v1(ctx));
             total_removed_stake = total_removed_stake + validator_stake;
         }
     });
@@ -1402,36 +1372,11 @@ VERY LOW threshold
 
 </details>
 
-<a name="rtd_system_validator_set_effectuate_staged_metadata"></a>
-
-## Function `effectuate_staged_metadata`
-
-Effectuate pending next epoch metadata if they are staged.
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_effectuate_staged_metadata">effectuate_staged_metadata</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_effectuate_staged_metadata">effectuate_staged_metadata</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>) {
-    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>.do_mut!(|v| v.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_effectuate_staged_metadata">effectuate_staged_metadata</a>());
-}
-</code></pre>
-
-
-
-</details>
-
 <a name="rtd_system_validator_set_derive_reference_gas_price"></a>
 
 ## Function `derive_reference_gas_price`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> to derive reference gas price for the new epoch.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> to derive reference gas price for the new epoch.
 Derive the reference gas price based on the gas price quote submitted by each validator.
 The returned gas price should be greater than or equal to 2/3 of the validators submitted
 gas price, weighted by stake.
@@ -1508,8 +1453,7 @@ gas price, weighted by stake.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_total_stake_amount">validator_total_stake_amount</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, validator_address: <b>address</b>): u64 {
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_ref">get_validator_ref</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address);
-    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>()
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(validator_address).<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>()
 }
 </code></pre>
 
@@ -1533,8 +1477,7 @@ gas price, weighted by stake.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_stake_amount">validator_stake_amount</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, validator_address: <b>address</b>): u64 {
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_ref">get_validator_ref</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address);
-    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>()
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(validator_address).<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>()
 }
 </code></pre>
 
@@ -1558,8 +1501,7 @@ gas price, weighted by stake.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_voting_power">validator_voting_power</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, validator_address: <b>address</b>): u64 {
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_ref">get_validator_ref</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address);
-    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a>()
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(validator_address).<a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a>()
 }
 </code></pre>
 
@@ -1583,8 +1525,7 @@ gas price, weighted by stake.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_staking_pool_id">validator_staking_pool_id</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, validator_address: <b>address</b>): ID {
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_ref">get_validator_ref</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address);
-    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.staking_pool_id()
+    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(validator_address).staking_pool_id()
 }
 </code></pre>
 
@@ -1652,7 +1593,7 @@ gas price, weighted by stake.
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pool_exchange_rates">pool_exchange_rates</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, pool_id: &<a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): &<a href="../rtd/table.md#rtd_table_Table">rtd::table::Table</a>&lt;u64, <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_PoolTokenExchangeRate">rtd_system::staking_pool::PoolTokenExchangeRate</a>&gt;
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pool_exchange_rates">pool_exchange_rates</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, pool_id: <a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): &<a href="../rtd/table.md#rtd_table_Table">rtd::table::Table</a>&lt;u64, <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool_PoolTokenExchangeRate">rtd_system::staking_pool::PoolTokenExchangeRate</a>&gt;
 </code></pre>
 
 
@@ -1663,15 +1604,15 @@ gas price, weighted by stake.
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pool_exchange_rates">pool_exchange_rates</a>(
     self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
-    pool_id: &ID,
+    pool_id: ID,
 ): &Table&lt;u64, PoolTokenExchangeRate&gt; {
     // If the pool id is recorded in the mapping, then it must be either candidate or active.
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <b>if</b> (self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>.contains(*pool_id)) {
-        <b>let</b> validator_address = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>[*pool_id];
-        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_ref">get_active_or_pending_or_candidate_validator_ref</a>(validator_address, <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ANY_VALIDATOR">ANY_VALIDATOR</a>)
+    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <b>if</b> (self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>.contains(pool_id)) {
+        <b>let</b> validator_address = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>[pool_id];
+        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator">any_validator</a>(validator_address)
     } <b>else</b> {
         // otherwise it's inactive
-        self.inactive_validators[*pool_id].load_validator_maybe_upgrade()
+        self.inactive_validators[pool_id].load_validator_maybe_upgrade()
     };
     <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.get_staking_pool_ref().exchange_rates()
 }
@@ -1687,7 +1628,7 @@ gas price, weighted by stake.
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_by_pool_id">validator_by_pool_id</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, pool_id: &<a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_by_pool_id">validator_by_pool_id</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, pool_id: <a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
 </code></pre>
 
 
@@ -1696,14 +1637,14 @@ gas price, weighted by stake.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_by_pool_id">validator_by_pool_id</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, pool_id: &ID): &Validator {
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_validator_by_pool_id">validator_by_pool_id</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, pool_id: ID): &Validator {
     // If the pool id is recorded in the mapping, then it must be either candidate or active.
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <b>if</b> (self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>.contains(*pool_id)) {
-        <b>let</b> validator_address = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>[*pool_id];
-        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_ref">get_active_or_pending_or_candidate_validator_ref</a>(validator_address, <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ANY_VALIDATOR">ANY_VALIDATOR</a>)
+    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <b>if</b> (self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>.contains(pool_id)) {
+        <b>let</b> validator_address = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_staking_pool_mappings">staking_pool_mappings</a>[pool_id];
+        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator">any_validator</a>(validator_address)
     } <b>else</b> {
         // otherwise it's inactive
-        self.inactive_validators[*pool_id].load_validator_maybe_upgrade()
+        self.inactive_validators[pool_id].load_validator_maybe_upgrade()
     };
     <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>
 }
@@ -1775,7 +1716,7 @@ It differs from <code><a href="../rtd_system/validator_set.md#rtd_system_validat
 only the rtd address but this function looks at more metadata.
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, new_validator: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): bool
+<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, search: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): bool
 </code></pre>
 
 
@@ -1784,59 +1725,10 @@ only the rtd address but this function looks at more metadata.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, new_validator: &Validator): bool {
-    <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_validator">is_duplicate_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, new_validator)
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_is_duplicate_validator"></a>
-
-## Function `is_duplicate_validator`
-
-
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_validator">is_duplicate_validator</a>(validators: &vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, new_validator: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): bool
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_validator">is_duplicate_validator</a>(
-    validators: &vector&lt;Validator&gt;,
-    new_validator: &Validator,
-): bool {
-    <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_vec">count_duplicates_vec</a>(validators, new_validator) &gt; 0
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_count_duplicates_vec"></a>
-
-## Function `count_duplicates_vec`
-
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_vec">count_duplicates_vec</a>(validators: &vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): u64
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_vec">count_duplicates_vec</a>(validators: &vector&lt;Validator&gt;, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: &Validator): u64 {
-    validators.count!(|v| v.is_duplicate(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>))
+<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_active_validator">is_duplicate_with_active_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, search: &Validator): bool {
+    self
+        .<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>
+        .any!(|v| v.rtd_address() != search.rtd_address() && v.is_duplicate(search))
 }
 </code></pre>
 
@@ -1851,7 +1743,7 @@ only the rtd address but this function looks at more metadata.
 Checks whether <code>new_validator</code> is duplicate with any currently pending validators.
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, new_validator: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): bool
+<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, search: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): bool
 </code></pre>
 
 
@@ -1860,38 +1752,16 @@ Checks whether <code>new_validator</code> is duplicate with any currently pendin
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, new_validator: &Validator): bool {
-    <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_tablevec">count_duplicates_tablevec</a>(&self.pending_active_validators, new_validator) &gt; 0
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_count_duplicates_tablevec"></a>
-
-## Function `count_duplicates_tablevec`
-
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_tablevec">count_duplicates_tablevec</a>(validators: &<a href="../rtd/table_vec.md#rtd_table_vec_TableVec">rtd::table_vec::TableVec</a>&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>): u64
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_count_duplicates_tablevec">count_duplicates_tablevec</a>(validators: &TableVec&lt;Validator&gt;, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: &Validator): u64 {
-    <b>let</b> <b>mut</b> result = 0;
-    validators.length().do!(|i| {
-        <b>if</b> (validators[i].is_duplicate(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>)) {
-            result = result + 1;
-        };
-    });
-    result
+<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_with_pending_validator">is_duplicate_with_pending_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, search: &Validator): bool {
+    'search: {
+        self.pending_active_validators.length().do!(|i| {
+            <b>let</b> v = &self.pending_active_validators[i];
+            <b>if</b> (v.rtd_address() != search.rtd_address() && v.is_duplicate(search)) {
+                <b>return</b> 'search <b>true</b>
+            };
+        });
+        <b>false</b>
+    }
 }
 </code></pre>
 
@@ -1920,9 +1790,9 @@ Get mutable reference to either a candidate or an active validator by address.
     validator_address: <b>address</b>,
 ): &<b>mut</b> Validator {
     <b>if</b> (self.validator_candidates.contains(validator_address)) {
-        self.validator_candidates[validator_address].load_validator_maybe_upgrade()
+        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_candidate_validator_mut">candidate_validator_mut</a>(validator_address)
     } <b>else</b> {
-        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut">get_validator_mut</a>(&<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address)
+        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator_mut">active_validator_mut</a>(validator_address)
     }
 }
 </code></pre>
@@ -1980,16 +1850,14 @@ If not found, returns (false, 0).
     validators: &TableVec&lt;Validator&gt;,
     validator_address: <b>address</b>,
 ): Option&lt;u64&gt; {
-    <b>let</b> length = validators.length();
-    <b>let</b> <b>mut</b> i = 0;
-    <b>while</b> (i &lt; length) {
-        <b>let</b> v = &validators[i];
-        <b>if</b> (v.rtd_address() == validator_address) {
-            <b>return</b> option::some(i)
-        };
-        i = i + 1;
-    };
-    option::none()
+    'search: {
+        validators.length().do!(|i| {
+            <b>if</b> (validators[i].rtd_address() == validator_address) {
+                <b>return</b> 'search option::some(i)
+            };
+        });
+        option::none()
+    }
 }
 </code></pre>
 
@@ -2018,12 +1886,9 @@ Aborts if any address isn't in the given validator set.
     validators: &vector&lt;Validator&gt;,
     validator_addresses: &vector&lt;<b>address</b>&gt;,
 ): vector&lt;u64&gt; {
-    <b>let</b> <b>mut</b> res = vector[];
-    validator_addresses.do_ref!(|addr| {
-        <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(validators, *addr).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAValidator">ENotAValidator</a>);
-        res.push_back(idx);
-    });
-    res
+    validator_addresses.map_ref!(|addr| {
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(validators, *addr).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAValidator">ENotAValidator</a>)
+    })
 }
 </code></pre>
 
@@ -2031,13 +1896,14 @@ Aborts if any address isn't in the given validator set.
 
 </details>
 
-<a name="rtd_system_validator_set_get_validator_mut"></a>
+<a name="rtd_system_validator_set_any_validator"></a>
 
-## Function `get_validator_mut`
+## Function `any_validator`
+
+Get reference to validator in any state: active, pending, or candidate.
 
 
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut">get_validator_mut</a>(validators: &<b>mut</b> vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, validator_address: <b>address</b>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator">any_validator</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
 </code></pre>
 
 
@@ -2046,61 +1912,19 @@ Aborts if any address isn't in the given validator set.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut">get_validator_mut</a>(
-    validators: &<b>mut</b> vector&lt;Validator&gt;,
-    validator_address: <b>address</b>,
-): &<b>mut</b> Validator {
-    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(validators, validator_address).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAValidator">ENotAValidator</a>);
-    &<b>mut</b> validators[idx]
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut"></a>
-
-## Function `get_active_or_pending_or_candidate_validator_mut`
-
-Get mutable reference to an active or (if active does not exist) pending or (if pending and
-active do not exist) or candidate validator by address.
-Note: this function should be called carefully, only after verifying the transaction
-sender has the ability to modify the <code>Validator</code>.
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut">get_active_or_pending_or_candidate_validator_mut</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, validator_address: <b>address</b>, include_candidate: bool): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut">get_active_or_pending_or_candidate_validator_mut</a>(
-    self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
-    validator_address: <b>address</b>,
-    include_candidate: bool,
-): &<b>mut</b> Validator {
-    <b>let</b> <b>mut</b> validator_index_opt = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, validator_address);
-    <b>if</b> (validator_index_opt.is_some()) {
-        <b>let</b> validator_index = validator_index_opt.extract();
-        <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = &<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[validator_index];
-        <b>return</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator">any_validator</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &Validator {
+    <b>let</b> active_idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>);
+    <b>if</b> (active_idx.is_some()) {
+        <b>return</b> &self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[active_idx.destroy_some()]
     };
-    <b>let</b> <b>mut</b> validator_index_opt = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(
+    <b>let</b> pending_idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(
         &self.pending_active_validators,
-        validator_address,
+        <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>,
     );
-    // consider both pending validators and the candidate ones
-    <b>if</b> (validator_index_opt.is_some()) {
-        <b>let</b> validator_index = validator_index_opt.extract();
-        <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = &<b>mut</b> self.pending_active_validators[validator_index];
-        <b>return</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>
+    <b>if</b> (pending_idx.is_some()) {
+        <b>return</b> &self.pending_active_validators[pending_idx.destroy_some()]
     };
-    <b>assert</b>!(include_candidate, <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotActiveOrPendingValidator">ENotActiveOrPendingValidator</a>);
-    self.validator_candidates[validator_address].load_validator_maybe_upgrade()
+    self.validator_candidates[<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>].load_validator_maybe_upgrade()
 }
 </code></pre>
 
@@ -2108,13 +1932,14 @@ sender has the ability to modify the <code>Validator</code>.
 
 </details>
 
-<a name="rtd_system_validator_set_get_validator_mut_with_verified_cap"></a>
+<a name="rtd_system_validator_set_any_validator_mut"></a>
 
-## Function `get_validator_mut_with_verified_cap`
+## Function `any_validator_mut`
+
+Get mutable reference to validator in any state: active, pending, or candidate.
 
 
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut_with_verified_cap">get_validator_mut_with_verified_cap</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, verified_cap: &<a href="../rtd_system/validator_cap.md#rtd_system_validator_cap_ValidatorOperationCap">rtd_system::validator_cap::ValidatorOperationCap</a>, include_candidate: bool): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator_mut">any_validator_mut</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
 </code></pre>
 
 
@@ -2123,15 +1948,19 @@ sender has the ability to modify the <code>Validator</code>.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut_with_verified_cap">get_validator_mut_with_verified_cap</a>(
-    self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
-    verified_cap: &ValidatorOperationCap,
-    include_candidate: bool,
-): &<b>mut</b> Validator {
-    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut">get_active_or_pending_or_candidate_validator_mut</a>(
-        *verified_cap.verified_operation_cap_address(),
-        include_candidate,
-    )
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator_mut">any_validator_mut</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<b>mut</b> Validator {
+    <b>let</b> active_idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>);
+    <b>if</b> (active_idx.is_some()) {
+        <b>return</b> &<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[active_idx.destroy_some()]
+    };
+    <b>let</b> pending_idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(
+        &self.pending_active_validators,
+        <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>,
+    );
+    <b>if</b> (pending_idx.is_some()) {
+        <b>return</b> &<b>mut</b> self.pending_active_validators[pending_idx.destroy_some()]
+    };
+    self.validator_candidates[<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>].load_validator_maybe_upgrade()
 }
 </code></pre>
 
@@ -2139,13 +1968,14 @@ sender has the ability to modify the <code>Validator</code>.
 
 </details>
 
-<a name="rtd_system_validator_set_get_validator_mut_with_ctx"></a>
+<a name="rtd_system_validator_set_active_validator"></a>
 
-## Function `get_validator_mut_with_ctx`
+## Function `active_validator`
+
+Get reference to an active validator by address.
 
 
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut_with_ctx">get_validator_mut_with_ctx</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
 </code></pre>
 
 
@@ -2154,12 +1984,9 @@ sender has the ability to modify the <code>Validator</code>.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut_with_ctx">get_validator_mut_with_ctx</a>(
-    self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
-    ctx: &TxContext,
-): &<b>mut</b> Validator {
-    <b>let</b> validator_address = ctx.sender();
-    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut">get_active_or_pending_or_candidate_validator_mut</a>(validator_address, <b>false</b>)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &Validator {
+    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAValidator">ENotAValidator</a>);
+    &self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[idx]
 }
 </code></pre>
 
@@ -2167,13 +1994,14 @@ sender has the ability to modify the <code>Validator</code>.
 
 </details>
 
-<a name="rtd_system_validator_set_get_validator_mut_with_ctx_including_candidates"></a>
+<a name="rtd_system_validator_set_active_validator_mut"></a>
 
-## Function `get_validator_mut_with_ctx_including_candidates`
+## Function `active_validator_mut`
+
+Get mutable reference to an active validator by address.
 
 
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut_with_ctx_including_candidates">get_validator_mut_with_ctx_including_candidates</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator_mut">active_validator_mut</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
 </code></pre>
 
 
@@ -2182,12 +2010,127 @@ sender has the ability to modify the <code>Validator</code>.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut_with_ctx_including_candidates">get_validator_mut_with_ctx_including_candidates</a>(
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator_mut">active_validator_mut</a>(
     self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
-    ctx: &TxContext,
+    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>,
 ): &<b>mut</b> Validator {
-    <b>let</b> validator_address = ctx.sender();
-    self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_mut">get_active_or_pending_or_candidate_validator_mut</a>(validator_address, <b>true</b>)
+    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAValidator">ENotAValidator</a>);
+    &<b>mut</b> self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[idx]
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_system_validator_set_pending_validator"></a>
+
+## Function `pending_validator`
+
+Get reference to a pending validator by address.
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pending_validator">pending_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pending_validator">pending_validator</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &Validator {
+    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(&self.pending_active_validators, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>).destroy_or!(
+        <b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAPendingValidator">ENotAPendingValidator</a>,
+    );
+    &self.pending_active_validators[idx]
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_system_validator_set_pending_validator_mut"></a>
+
+## Function `pending_validator_mut`
+
+Get mutable reference to a pending validator by address.
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pending_validator_mut">pending_validator_mut</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_pending_validator_mut">pending_validator_mut</a>(
+    self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
+    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>,
+): &<b>mut</b> Validator {
+    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(
+        &self.pending_active_validators,
+        <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>,
+    ).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAPendingValidator">ENotAPendingValidator</a>);
+    &<b>mut</b> self.pending_active_validators[idx]
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_system_validator_set_candidate_validator"></a>
+
+## Function `candidate_validator`
+
+Get mutable reference to a candidate validator by address.
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_candidate_validator">candidate_validator</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_candidate_validator">candidate_validator</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &Validator {
+    <b>assert</b>!(self.validator_candidates.contains(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotValidatorCandidate">ENotValidatorCandidate</a>);
+    self.validator_candidates[<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>].load_validator_maybe_upgrade()
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_system_validator_set_candidate_validator_mut"></a>
+
+## Function `candidate_validator_mut`
+
+Get mutable reference to a candidate validator by address.
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_candidate_validator_mut">candidate_validator_mut</a>(self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>): &<b>mut</b> <a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_candidate_validator_mut">candidate_validator_mut</a>(
+    self: &<b>mut</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>,
+    <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>: <b>address</b>,
+): &<b>mut</b> Validator {
+    <b>assert</b>!(self.validator_candidates.contains(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotValidatorCandidate">ENotValidatorCandidate</a>);
+    self.validator_candidates[<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>].load_validator_maybe_upgrade()
 }
 </code></pre>
 
@@ -2261,59 +2204,6 @@ sender has the ability to modify the <code>Validator</code>.
 
 </details>
 
-<a name="rtd_system_validator_set_get_active_validator_ref"></a>
-
-## Function `get_active_validator_ref`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_validator_ref">get_active_validator_ref</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, addr: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_validator_ref">get_active_validator_ref</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, addr: <b>address</b>): &Validator {
-    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, addr).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAValidator">ENotAValidator</a>);
-    &self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[idx]
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_get_pending_validator_ref"></a>
-
-## Function `get_pending_validator_ref`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_pending_validator_ref">get_pending_validator_ref</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, addr: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_pending_validator_ref">get_pending_validator_ref</a>(self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, addr: <b>address</b>): &Validator {
-    <b>let</b> idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator_from_table_vec">find_validator_from_table_vec</a>(
-        &self.pending_active_validators,
-        addr,
-    ).destroy_or!(<b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ENotAPendingValidator">ENotAPendingValidator</a>);
-    &self.pending_active_validators[idx]
-}
-</code></pre>
-
-
-
-</details>
-
 <a name="rtd_system_validator_set_verify_cap"></a>
 
 ## Function `verify_cap`
@@ -2338,10 +2228,18 @@ Otherwise, verify the Cap for au either active or pending validator.
     which_validator: u8,
 ): ValidatorOperationCap {
     <b>let</b> cap_address = *cap.unverified_operation_cap_address();
-    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <b>if</b> (which_validator == <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ACTIVE_VALIDATOR_ONLY">ACTIVE_VALIDATOR_ONLY</a>) {
-        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_validator_ref">get_active_validator_ref</a>(cap_address)
-    } <b>else</b> {
-        self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_or_pending_or_candidate_validator_ref">get_active_or_pending_or_candidate_validator_ref</a>(cap_address, which_validator)
+    <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = match (which_validator) {
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ACTIVE_VALIDATOR_ONLY">ACTIVE_VALIDATOR_ONLY</a> =&gt; self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validator">active_validator</a>(cap_address),
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ACTIVE_OR_PENDING_VALIDATOR">ACTIVE_OR_PENDING_VALIDATOR</a> =&gt; {
+            <b>let</b> active_idx = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_find_validator">find_validator</a>(&self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>, cap_address);
+            <b>if</b> (active_idx.is_some()) {
+                &self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>[active_idx.destroy_some()]
+            } <b>else</b> {
+                self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_pending_validator">pending_validator</a>(cap_address)
+            }
+        },
+        <a href="../rtd_system/validator_set.md#rtd_system_validator_set_ANY_VALIDATOR">ANY_VALIDATOR</a> =&gt; self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_any_validator">any_validator</a>(cap_address),
+        _ =&gt; <b>abort</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EInvalidValidatorSelector">EInvalidValidatorSelector</a>,
     };
     <b>assert</b>!(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.operation_cap_id() == &object::id(cap), <a href="../rtd_system/validator_set.md#rtd_system_validator_set_EInvalidCap">EInvalidCap</a>);
     cap.into_verified()
@@ -2374,7 +2272,10 @@ is removed from <code>validators</code> and its staking pool is put into the <co
     validator_report_records: &<b>mut</b> VecMap&lt;<b>address</b>, VecSet&lt;<b>address</b>&gt;&gt;,
     ctx: &<b>mut</b> TxContext,
 ) {
-    <a href="../rtd_system/validator_set.md#rtd_system_validator_set_sort_removal_list">sort_removal_list</a>(&<b>mut</b> self.pending_removals);
+    // Pending removals needs to be sorted in ASC order. So we maintain the
+    // indexes after each <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>'s removal.
+    self.pending_removals.insertion_sort_by!(|a, b| *a &lt;= *b);
+    // Drain pending removals and process <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>'s departure.
     self.pending_removals.length().do!(|_| {
         <b>let</b> index = self.pending_removals.pop_back();
         <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = self.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_active_validators">active_validators</a>.remove(index);
@@ -2433,12 +2334,7 @@ Remove <code><a href="../rtd_system/validator.md#rtd_system_validator">validator
     // Deactivate the <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> and its staking pool
     <b>let</b> removed_stake = <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>();
     <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.deactivate(new_epoch);
-    self
-        .inactive_validators
-        .add(
-            validator_pool_id,
-            <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.wrap_v1(ctx),
-        );
+    self.inactive_validators.add(validator_pool_id, <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.wrap_v1(ctx));
     removed_stake
 }
 </code></pre>
@@ -2489,70 +2385,6 @@ Remove <code><a href="../rtd_system/validator.md#rtd_system_validator">validator
 
 </details>
 
-<a name="rtd_system_validator_set_sort_removal_list"></a>
-
-## Function `sort_removal_list`
-
-Sort all the pending removal indexes.
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_sort_removal_list">sort_removal_list</a>(withdraw_list: &<b>mut</b> vector&lt;u64&gt;)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_sort_removal_list">sort_removal_list</a>(withdraw_list: &<b>mut</b> vector&lt;u64&gt;) {
-    <b>let</b> length = withdraw_list.length();
-    <b>let</b> <b>mut</b> i = 1;
-    <b>while</b> (i &lt; length) {
-        <b>let</b> cur = withdraw_list[i];
-        <b>let</b> <b>mut</b> j = i;
-        <b>while</b> (j &gt; 0) {
-            j = j - 1;
-            <b>if</b> (withdraw_list[j] &gt; cur) {
-                withdraw_list.swap(j, j + 1);
-            } <b>else</b> {
-                <b>break</b>
-            };
-        };
-        i = i + 1;
-    };
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_process_pending_stakes_and_withdraws"></a>
-
-## Function `process_pending_stakes_and_withdraws`
-
-Process all active validators' pending stake deposits and withdraws.
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_process_pending_stakes_and_withdraws">process_pending_stakes_and_withdraws</a>(validators: &<b>mut</b> vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_process_pending_stakes_and_withdraws">process_pending_stakes_and_withdraws</a>(validators: &<b>mut</b> vector&lt;Validator&gt;, ctx: &TxContext) {
-    validators.do_mut!(|v| v.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_process_pending_stakes_and_withdraws">process_pending_stakes_and_withdraws</a>(ctx))
-}
-</code></pre>
-
-
-
-</details>
-
 <a name="rtd_system_validator_set_calculate_total_stakes"></a>
 
 ## Function `calculate_total_stakes`
@@ -2573,31 +2405,6 @@ Calculate the total active validator stake.
     <b>let</b> <b>mut</b> stake = 0;
     validators.do_ref!(|v| stake = stake + v.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_total_stake">total_stake</a>());
     stake
-}
-</code></pre>
-
-
-
-</details>
-
-<a name="rtd_system_validator_set_adjust_stake_and_gas_price"></a>
-
-## Function `adjust_stake_and_gas_price`
-
-Process the pending stake changes for each validator.
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_adjust_stake_and_gas_price">adjust_stake_and_gas_price</a>(validators: &<b>mut</b> vector&lt;<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>&gt;)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_adjust_stake_and_gas_price">adjust_stake_and_gas_price</a>(validators: &<b>mut</b> vector&lt;Validator&gt;) {
-    validators.do_mut!(|v| v.<a href="../rtd_system/validator_set.md#rtd_system_validator_set_adjust_stake_and_gas_price">adjust_stake_and_gas_price</a>())
 }
 </code></pre>
 
@@ -3174,6 +2981,54 @@ Return true if <code>addr</code> is currently an at-risk validator below the min
 
 <pre><code><b>macro</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_mul_div">mul_div</a>($a: u64, $b: u64, $c: u64): u64 {
     (($a <b>as</b> u128) * ($b <b>as</b> u128) / ($c <b>as</b> u128)) <b>as</b> u64
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_system_validator_set_get_active_validator_ref"></a>
+
+## Function `get_active_validator_ref`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_validator_ref">get_active_validator_ref</a>(_self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, _addr: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_active_validator_ref">get_active_validator_ref</a>(_self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, _addr: <b>address</b>): &Validator {
+    <b>abort</b>
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_system_validator_set_get_pending_validator_ref"></a>
+
+## Function `get_pending_validator_ref`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_pending_validator_ref">get_pending_validator_ref</a>(_self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">rtd_system::validator_set::ValidatorSet</a>, _addr: <b>address</b>): &<a href="../rtd_system/validator.md#rtd_system_validator_Validator">rtd_system::validator::Validator</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_pending_validator_ref">get_pending_validator_ref</a>(_self: &<a href="../rtd_system/validator_set.md#rtd_system_validator_set_ValidatorSet">ValidatorSet</a>, _addr: <b>address</b>): &Validator {
+    <b>abort</b>
 }
 </code></pre>
 

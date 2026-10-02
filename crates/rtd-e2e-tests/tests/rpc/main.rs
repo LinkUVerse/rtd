@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod client;
+mod restore;
 mod v2;
 
 async fn transfer_coin(context: &rtd_sdk::wallet_context::WalletContext) -> rtd_sdk_types::Digest {
@@ -24,7 +25,7 @@ async fn transfer_coin(context: &rtd_sdk::wallet_context::WalletContext) -> rtd_
         )
         .await;
     let resp = context.execute_transaction_must_succeed(txn).await;
-    resp.digest.into()
+    resp.transaction.digest().into()
 }
 
 async fn stake_with_validator(cluster: &test_cluster::TestCluster) -> rtd_sdk_types::Digest {
@@ -45,5 +46,5 @@ async fn stake_with_validator(cluster: &test_cluster::TestCluster) -> rtd_sdk_ty
         )
         .await;
     let resp = context.execute_transaction_must_succeed(txn).await;
-    resp.digest.into()
+    resp.transaction.digest().into()
 }

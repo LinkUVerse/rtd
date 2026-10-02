@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: core
   edition: 2024.alpha
   lint: false
 ---
-warning[W04039]: unable to determine princiapl type for literal
+warning[WC04039]: unable to determine literal's type
   ┌─ tests/move_2024/typing/uninferred_string_literal.move:2:27
   │
 2 │     fun test() { let _x = "hi"; }

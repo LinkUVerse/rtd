@@ -1,0 +1,14 @@
+---
+title: "DeepBook"
+description: "Status of the upstream DeepBook material in the RTD source fork."
+keywords:
+  - RTD
+  - deepbook
+---
+# DeepBook deployment status
+
+DeepBook is an upstream Sui application. This RTD source fork does not establish a deployed DeepBookV3, Margin, or Predict package on an RTD network. RTD has not launched a public Mainnet, and no public RTD DeepBook Testnet has been verified.
+
+The pared-down RTD TypeScript SDK does not include an `@linku/deepbook-v3` package. Upstream package IDs, coin types, pool IDs, DEEP token addresses, market data, faucet instructions, and order workflows must not be used as RTD configuration.
+
+A future RTD integration requires a separately ported and tested Move package, compatible SDK, locally verified transactions, and operator-published network identifiers. See [RTD networks](/develop/rtd-architecture/networks) for the current network status.

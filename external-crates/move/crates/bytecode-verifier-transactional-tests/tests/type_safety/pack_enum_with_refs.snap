@@ -1,6 +1,5 @@
 ---
 source: crates/move-transactional-test-runner/src/framework.rs
-input_file: crates/bytecode-verifier-transactional-tests/tests/type_safety/pack_enum_with_refs.mvir
 ---
 processed 9 tasks
 
@@ -22,6 +21,7 @@ Error: Unable to publish module '00000000000000000000000000000000000000000000000
     location: 0x2::O,
     indices: [],
     offsets: [],
+    message: "reference not allowed",
 }
 
 task 2, lines 25-28:
@@ -32,6 +32,7 @@ Error: Unable to publish module '00000000000000000000000000000000000000000000000
     location: 0x2::O,
     indices: [(FieldDefinition, 0), (VariantTag, 0), (EnumDefinition, 0)],
     offsets: [],
+    message: "reference not allowed",
 }
 
 task 3, lines 30-40:
@@ -52,9 +53,10 @@ Error: Unable to publish module '00000000000000000000000000000000000000000000000
     location: 0x2::O,
     indices: [],
     offsets: [],
+    message: "reference not allowed",
 }
 
-task 5, lines 54-60:
+task 5, lines 54-57:
 //# publish
 Error: Unable to publish module '0000000000000000000000000000000000000000000000000000000000000002::O'. Got VMError: {
     major_status: INVALID_SIGNATURE_TOKEN,
@@ -62,7 +64,10 @@ Error: Unable to publish module '00000000000000000000000000000000000000000000000
     location: 0x2::O,
     indices: [(FieldDefinition, 0), (VariantTag, 0), (EnumDefinition, 0)],
     offsets: [],
+    message: "reference not allowed",
 }
+
+// Mono decls now
 
 task 6, lines 62-72:
 //# publish
@@ -82,6 +87,7 @@ Error: Unable to publish module '00000000000000000000000000000000000000000000000
     location: 0x2::O,
     indices: [(FieldDefinition, 0), (VariantTag, 0), (EnumDefinition, 0)],
     offsets: [],
+    message: "reference not allowed",
 }
 
 task 8, lines 86-89:
@@ -92,4 +98,5 @@ Error: Unable to publish module '00000000000000000000000000000000000000000000000
     location: 0x2::O,
     indices: [(FieldDefinition, 0), (VariantTag, 0), (EnumDefinition, 0)],
     offsets: [],
+    message: "reference not allowed",
 }

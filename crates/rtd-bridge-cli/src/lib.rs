@@ -1,26 +1,20 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use alloy::dyn_abi::DynSolValue;
+use alloy::primitives::{Address as EthAddress, Bytes, U256};
+use alloy::providers::{Provider, WalletProvider};
 use anyhow::anyhow;
 use clap::*;
-use ethers::providers::Middleware;
-use ethers::types::Address as EthAddress;
-use ethers::types::U256;
 use fastcrypto::encoding::Encoding;
 use fastcrypto::encoding::Hex;
 use fastcrypto::hash::{HashFunction, Keccak256};
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::ident_str;
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentMessage;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
 use rtd_bridge::abi::EthBridgeCommittee;
 use rtd_bridge::abi::{EthRtdBridge, eth_rtd_bridge};
 use rtd_bridge::crypto::BridgeAuthorityPublicKeyBytes;
-use rtd_bridge::error::BridgeResult;
+use rtd_bridge::encoding::TOKEN_TRANSFER_MESSAGE_VERSION_V2;
 use rtd_bridge::rtd_client::RtdBridgeClient;
 use rtd_bridge::types::BridgeAction;
 use rtd_bridge::types::{
@@ -28,18 +22,27 @@ use rtd_bridge::types::{
     BlocklistType, EmergencyAction, EmergencyActionType, EvmContractUpgradeAction,
     LimitUpdateAction,
 };
-use rtd_bridge::utils::{EthSigner, get_eth_signer_client};
+use rtd_bridge::utils::{EthSignerProvider, get_eth_signer_provider};
 use rtd_config::Config;
-use rtd_json_rpc_types::RtdObjectDataOptions;
 use rtd_keys::keypair_file::read_key;
-use rtd_sdk::RtdClientBuilder;
+use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
+use rtd_rpc_api::Client;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::base_types::{ObjectID, ObjectRef};
 use rtd_types::bridge::{BRIDGE_MODULE_NAME, BridgeChainId};
-use rtd_types::crypto::{Signature, RtdKeyPair};
+use rtd_types::crypto::{RtdKeyPair, Signature};
+use rtd_types::gas_coin::{GAS, GasCoin};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_types::transaction::{ObjectArg, Transaction, TransactionData};
+use rtd_types::transaction::{CallArg, ObjectArg, Transaction, TransactionData};
 use rtd_types::{BRIDGE_PACKAGE_ID, TypeTag};
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentMessage;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::Arc;
 use tracing::info;
 
 pub const SEPOLIA_BRIDGE_PROXY_ADDR: &str = "0xAE68F87938439afEEDd6552B0E83D2CbC2473623";
@@ -54,6 +57,22 @@ pub struct Args {
 #[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
 pub enum Network {
     Testnet,
+}
+
+/// Bridge message version. V2 adds timestamp-awareness for limiter bypass on mature messages.
+#[derive(ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
+pub enum BridgeVersion {
+    V1,
+    V2,
+}
+
+impl std::fmt::Display for BridgeVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BridgeVersion::V1 => write!(f, "v1"),
+            BridgeVersion::V2 => write!(f, "v2"),
+        }
+    }
 }
 
 #[derive(Parser)]
@@ -327,31 +346,27 @@ fn encode_call_data(function_selector: &str, params: &[String]) -> Vec<u8> {
 
     assert_eq!(param_types.len(), params.len(), "Invalid number of params");
 
-    let mut call_data = Keccak256::digest(function_selector).digest[0..4].to_vec();
     let mut tokens = vec![];
-    for (param, param_type) in params.iter().zip(param_types.iter()) {
-        match param_type.to_lowercase().as_str() {
+    for (param, param_type) in params.iter().zip_debug_eq(param_types.iter()) {
+        let token = match param_type.to_lowercase().as_str() {
             "uint256" => {
-                tokens.push(ethers::abi::Token::Uint(
-                    ethers::types::U256::from_dec_str(param).expect("Invalid U256"),
-                ));
+                DynSolValue::Uint(U256::from_str_radix(param, 10).expect("Invalid U256"), 256)
             }
-            "bool" => {
-                tokens.push(ethers::abi::Token::Bool(match param.as_str() {
-                    "true" => true,
-                    "false" => false,
-                    _ => panic!("Invalid bool in params"),
-                }));
-            }
-            "string" => {
-                tokens.push(ethers::abi::Token::String(param.clone()));
-            }
+            "bool" => DynSolValue::Bool(match param.as_str() {
+                "true" => true,
+                "false" => false,
+                _ => panic!("Invalid bool in params"),
+            }),
+            "string" => DynSolValue::String(param.clone()),
             // TODO: need to support more types if needed
             _ => panic!("Invalid param type"),
-        }
+        };
+        tokens.push(token);
     }
+
+    let mut call_data = Keccak256::digest(function_selector).digest[0..4].to_vec();
     if !tokens.is_empty() {
-        call_data.extend(ethers::abi::encode(&tokens));
+        call_data.extend(DynSolValue::Tuple(tokens).abi_encode());
     }
     call_data
 }
@@ -412,7 +427,7 @@ pub struct LoadedBridgeCliConfig {
     /// Key pair for Rtd operations
     rtd_key: RtdKeyPair,
     /// Key pair for Eth operations, must be Secp256k1 key
-    eth_signer: EthSigner,
+    eth_signer_provider: EthSignerProvider,
 }
 
 impl LoadedBridgeCliConfig {
@@ -445,23 +460,24 @@ impl LoadedBridgeCliConfig {
             (None, None) => unreachable!(),
         };
 
-        let provider = Arc::new(
-            ethers::prelude::Provider::<ethers::providers::Http>::try_from(&cli_config.eth_rpc_url)
-                .unwrap()
-                .interval(std::time::Duration::from_millis(2000)),
+        let private_key_hex = Hex::encode(eth_key.to_bytes_no_flag());
+        let eth_signer_provider =
+            get_eth_signer_provider(&cli_config.eth_rpc_url, &private_key_hex)?;
+        let rtd_bridge = EthRtdBridge::new(
+            cli_config.eth_bridge_proxy_address,
+            eth_signer_provider.clone(),
         );
-        let private_key = Hex::encode(eth_key.to_bytes_no_flag());
-        let eth_signer = get_eth_signer_client(&cli_config.eth_rpc_url, &private_key).await?;
-        let rtd_bridge = EthRtdBridge::new(cli_config.eth_bridge_proxy_address, provider.clone());
         let eth_bridge_committee_proxy_address: EthAddress = rtd_bridge.committee().call().await?;
         let eth_bridge_limiter_proxy_address: EthAddress = rtd_bridge.limiter().call().await?;
-        let eth_committee =
-            EthBridgeCommittee::new(eth_bridge_committee_proxy_address, provider.clone());
+        let eth_committee = EthBridgeCommittee::new(
+            eth_bridge_committee_proxy_address,
+            eth_signer_provider.clone(),
+        );
         let eth_bridge_committee_proxy_address: EthAddress = rtd_bridge.committee().call().await?;
         let eth_bridge_config_proxy_address: EthAddress = eth_committee.config().call().await?;
 
-        let eth_address = eth_signer.address();
-        let eth_chain_id = provider.get_chainid().await?;
+        let eth_address = eth_signer_provider.default_signer_address();
+        let eth_chain_id = eth_signer_provider.get_chain_id().await?;
         let rtd_address = RtdAddress::from(&rtd_key.public());
         println!("Using Rtd address: {:?}", rtd_address);
         println!("Using Eth address: {:?}", eth_address);
@@ -475,14 +491,14 @@ impl LoadedBridgeCliConfig {
             eth_bridge_limiter_proxy_address,
             eth_bridge_config_proxy_address,
             rtd_key,
-            eth_signer,
+            eth_signer_provider,
         })
     }
 }
 
 impl LoadedBridgeCliConfig {
-    pub fn eth_signer(self: &LoadedBridgeCliConfig) -> &EthSigner {
-        &self.eth_signer
+    pub fn eth_signer_provider(self: &LoadedBridgeCliConfig) -> EthSignerProvider {
+        self.eth_signer_provider.clone()
     }
 
     pub async fn get_rtd_account_info(
@@ -490,24 +506,30 @@ impl LoadedBridgeCliConfig {
     ) -> anyhow::Result<(RtdKeyPair, RtdAddress, ObjectRef)> {
         let pubkey = self.rtd_key.public();
         let rtd_client_address = RtdAddress::from(&pubkey);
-        let rtd_sdk_client = RtdClientBuilder::default()
-            .build(self.rtd_rpc_url.clone())
-            .await?;
-        let gases = rtd_sdk_client
-            .coin_read_api()
-            .get_coins(rtd_client_address, None, None, None)
+        let rtd_client = Client::new(&self.rtd_rpc_url)?;
+        let gases = rtd_client
+            .get_owned_objects(rtd_client_address, Some(GasCoin::type_()), None, None)
             .await?
-            .data;
+            .items;
         // TODO: is 5 Rtd a good number?
         let gas = gases
             .into_iter()
-            .find(|coin| coin.balance >= 5_000_000_000)
+            .find(|coin| {
+                GasCoin::try_from(coin)
+                    .ok()
+                    .map(|coin| coin.value() >= 5_000_000_000)
+                    .unwrap_or(false)
+            })
             .ok_or(anyhow!(
                 "Did not find gas object with enough balance for {}",
                 rtd_client_address
             ))?;
-        println!("Using Gas object: {}", gas.coin_object_id);
-        Ok((self.rtd_key.copy(), rtd_client_address, gas.object_ref()))
+        println!("Using Gas object: {}", gas.id());
+        Ok((
+            self.rtd_key.copy(),
+            rtd_client_address,
+            gas.compute_object_reference(),
+        ))
     }
 }
 #[derive(Parser)]
@@ -516,11 +538,14 @@ pub enum BridgeClientCommands {
     #[clap(name = "deposit-native-ether-on-eth")]
     DepositNativeEtherOnEth {
         #[clap(long)]
-        ether_amount: f64,
+        ether_amount: String,
         #[clap(long)]
         target_chain: u8,
         #[clap(long)]
         rtd_recipient_address: RtdAddress,
+        /// Bridge message version (v1 = original, v2 = timestamp-aware with limiter bypass)
+        #[clap(long, default_value_t = BridgeVersion::V1, value_enum)]
+        bridge_version: BridgeVersion,
     },
     #[clap(name = "deposit-on-rtd")]
     DepositOnRtd {
@@ -532,11 +557,29 @@ pub enum BridgeClientCommands {
         target_chain: u8,
         #[clap(long)]
         recipient_address: EthAddress,
+        /// Bridge message version (v1 = original, v2 = timestamp-aware with limiter bypass)
+        #[clap(long, default_value_t = BridgeVersion::V1, value_enum)]
+        bridge_version: BridgeVersion,
     },
+    /// Claim bridged tokens on Eth for a Rtd→ETH transfer.
+    /// Auto-detects V1/V2 from the on-chain record and calls the appropriate EVM function.
     #[clap(name = "claim-on-eth")]
     ClaimOnEth {
         #[clap(long)]
         seq_num: u64,
+        #[clap(long, default_value_t = true, action = clap::ArgAction::Set)]
+        dry_run: bool,
+    },
+    /// Claim bridged tokens on Rtd for an ETH→Rtd transfer that has been approved but not yet claimed.
+    /// Auto-detects V1/V2 from the on-chain record (V2 messages >48h old bypass the rate limiter).
+    #[clap(name = "claim-on-rtd")]
+    ClaimOnRtd {
+        /// The bridge sequence number of the ETH→Rtd transfer
+        #[clap(long)]
+        seq_num: u64,
+        /// The source chain ID (the ETH chain from which the transfer originated)
+        #[clap(long)]
+        source_chain: u8,
         #[clap(long, default_value_t = true, action = clap::ArgAction::Set)]
         dry_run: bool,
     },
@@ -553,38 +596,23 @@ impl BridgeClientCommands {
                 ether_amount,
                 target_chain,
                 rtd_recipient_address,
+                bridge_version,
             } => {
-                let eth_rtd_bridge = EthRtdBridge::new(
-                    config.eth_bridge_proxy_address,
-                    Arc::new(config.eth_signer().clone()),
-                );
-                // Note: even with f64 there may still be loss of precision even there are a lot of 0s
-                let int_part = ether_amount.trunc() as u64;
-                let frac_part = ether_amount.fract();
-                let int_wei = U256::from(int_part) * U256::exp10(18);
-                let frac_wei = U256::from((frac_part * 1_000_000_000_000_000_000f64) as u64);
-                let amount = int_wei + frac_wei;
-                let eth_tx = eth_rtd_bridge
-                    .bridge_eth(rtd_recipient_address.to_vec().into(), target_chain)
-                    .value(amount);
-                let pending_tx = eth_tx.send().await.unwrap();
-                let tx_receipt = pending_tx.await.unwrap().unwrap();
-                info!(
-                    "Deposited {ether_amount} Ethers to {:?} (target chain {target_chain}). Receipt: {:?}",
-                    rtd_recipient_address, tx_receipt,
-                );
-                Ok(())
-            }
-            BridgeClientCommands::ClaimOnEth { seq_num, dry_run } => {
-                claim_on_eth(seq_num, config, rtd_bridge_client, dry_run)
-                    .await
-                    .map_err(|e| anyhow!("{:?}", e))
+                deposit_native_ether_on_eth(
+                    &ether_amount,
+                    target_chain,
+                    rtd_recipient_address,
+                    config,
+                    bridge_version,
+                )
+                .await
             }
             BridgeClientCommands::DepositOnRtd {
                 coin_object_id,
                 coin_type,
                 target_chain,
                 recipient_address,
+                bridge_version,
             } => {
                 let target_chain = BridgeChainId::try_from(target_chain).expect("Invalid chain id");
                 let coin_type = TypeTag::from_str(&coin_type).expect("Invalid coin type");
@@ -595,11 +623,56 @@ impl BridgeClientCommands {
                     recipient_address,
                     config,
                     rtd_bridge_client,
+                    bridge_version,
                 )
                 .await
             }
+            BridgeClientCommands::ClaimOnEth { seq_num, dry_run } => {
+                claim_on_eth(seq_num, config, rtd_bridge_client, dry_run).await
+            }
+            BridgeClientCommands::ClaimOnRtd {
+                seq_num,
+                source_chain,
+                dry_run,
+            } => claim_on_rtd(seq_num, source_chain, config, rtd_bridge_client, dry_run).await,
         }
     }
+}
+
+async fn deposit_native_ether_on_eth(
+    ether_amount: &str,
+    target_chain: u8,
+    rtd_recipient_address: RtdAddress,
+    config: &LoadedBridgeCliConfig,
+    version: BridgeVersion,
+) -> anyhow::Result<()> {
+    let eth_rtd_bridge = EthRtdBridge::new(
+        config.eth_bridge_proxy_address,
+        config.eth_signer_provider().clone(),
+    );
+    let amount: U256 = alloy::primitives::utils::parse_units(ether_amount, "ether")?.into();
+    let pending_tx = match version {
+        BridgeVersion::V2 => {
+            eth_rtd_bridge
+                .bridgeETHV2(rtd_recipient_address.to_vec().into(), target_chain)
+                .value(amount)
+                .send()
+                .await?
+        }
+        BridgeVersion::V1 => {
+            eth_rtd_bridge
+                .bridgeETH(rtd_recipient_address.to_vec().into(), target_chain)
+                .value(amount)
+                .send()
+                .await?
+        }
+    };
+    let tx_receipt = pending_tx.get_receipt().await?;
+    info!(
+        "Deposited {ether_amount} Ethers ({version:?}) to {:?} (target chain {target_chain}). Receipt: {:?}",
+        rtd_recipient_address, tx_receipt,
+    );
+    Ok(())
 }
 
 async fn deposit_on_rtd(
@@ -609,58 +682,93 @@ async fn deposit_on_rtd(
     recipient_address: EthAddress,
     config: &LoadedBridgeCliConfig,
     rtd_bridge_client: RtdBridgeClient,
+    version: BridgeVersion,
 ) -> anyhow::Result<()> {
     let target_chain = target_chain as u8;
-    let rtd_client = rtd_bridge_client.jsonrpc_client();
+    let mut rtd_client = rtd_bridge_client.grpc_client().clone();
     let bridge_object_arg = rtd_bridge_client
         .get_mutable_bridge_object_arg_must_succeed()
         .await;
-    let rgp = rtd_client
-        .governance_api()
-        .get_reference_gas_price()
-        .await
-        .unwrap();
+    let rgp = rtd_client.get_reference_gas_price().await.unwrap();
     let sender = RtdAddress::from(&config.rtd_key.public());
+    let gas_type = rtd_sdk_types::TypeTag::from_str(&GAS::type_().to_canonical_string(true))?;
     let gas_obj_ref = rtd_client
-        .coin_read_api()
-        .select_coins(sender, None, 1_000_000_000, vec![])
+        .inner_mut()
+        .select_coins(&sender.into(), &gas_type, 1_000_000_000, &[])
         .await?
-        .first()
-        .ok_or(anyhow!("No coin found for address {}", sender))?
-        .object_ref();
-    let coin_obj_ref = rtd_client
-        .read_api()
-        .get_object_with_options(coin_object_id, RtdObjectDataOptions::default())
+        .into_iter()
+        .map(|coin| {
+            (
+                coin.object_id().parse().unwrap(),
+                coin.version().into(),
+                coin.digest().parse().unwrap(),
+            )
+        })
+        .collect();
+    let coin_obj = rtd_client
+        .inner_mut()
+        .ledger_client()
+        .get_object(
+            GetObjectRequest::new(&(coin_object_id.into()))
+                .with_read_mask(FieldMask::from_paths(["object_id", "version", "digest"])),
+        )
         .await?
-        .data
-        .unwrap()
-        .object_ref();
+        .into_inner()
+        .object
+        .unwrap_or_default();
+    let coin_obj_ref = (
+        coin_obj.object_id().parse()?,
+        coin_obj.version().into(),
+        coin_obj.digest().parse()?,
+    );
 
     let mut builder = ProgrammableTransactionBuilder::new();
     let arg_target_chain = builder.pure(target_chain).unwrap();
-    let arg_target_address = builder.pure(recipient_address.as_bytes()).unwrap();
+    let arg_target_address = builder.pure(recipient_address.as_slice()).unwrap();
     let arg_token = builder
         .obj(ObjectArg::ImmOrOwnedObject(coin_obj_ref))
         .unwrap();
     let arg_bridge = builder.obj(bridge_object_arg).unwrap();
 
-    builder.programmable_move_call(
-        BRIDGE_PACKAGE_ID,
-        BRIDGE_MODULE_NAME.to_owned(),
-        ident_str!("send_token").to_owned(),
-        vec![coin_type],
-        vec![arg_bridge, arg_target_chain, arg_target_address, arg_token],
-    );
+    match version {
+        BridgeVersion::V2 => {
+            let arg_clock = builder.input(CallArg::CLOCK_IMM).unwrap();
+            builder.programmable_move_call(
+                BRIDGE_PACKAGE_ID,
+                BRIDGE_MODULE_NAME.to_owned(),
+                ident_str!("send_token_v2").to_owned(),
+                vec![coin_type],
+                vec![
+                    arg_bridge,
+                    arg_target_chain,
+                    arg_target_address,
+                    arg_token,
+                    arg_clock,
+                ],
+            );
+        }
+        BridgeVersion::V1 => {
+            builder.programmable_move_call(
+                BRIDGE_PACKAGE_ID,
+                BRIDGE_MODULE_NAME.to_owned(),
+                ident_str!("send_token").to_owned(),
+                vec![coin_type],
+                vec![arg_bridge, arg_target_chain, arg_target_address, arg_token],
+            );
+        }
+    }
     let pt = builder.finish();
-    let tx_data =
-        TransactionData::new_programmable(sender, vec![gas_obj_ref], pt, 500_000_000, rgp);
+    let tx_data = TransactionData::new_programmable(sender, gas_obj_ref, pt, 500_000_000, rgp);
     let sig = Signature::new_secure(
         &IntentMessage::new(Intent::rtd_transaction(), tx_data.clone()),
         &config.rtd_key,
     );
     let signed_tx = Transaction::from_data(tx_data, vec![sig]);
     let tx_digest = *signed_tx.digest();
-    info!(?tx_digest, "Sending deposit transction to Rtd.");
+    info!(
+        ?tx_digest,
+        "Sending deposit transaction ({version:?}) to Rtd."
+    );
     let resp = rtd_bridge_client
         .execute_transaction_block_with_effects(signed_tx)
         .await
@@ -669,13 +777,15 @@ async fn deposit_on_rtd(
         rtd_json_rpc_types::RtdExecutionStatus::Success => {
             info!(
                 ?tx_digest,
-                "Deposit transaction succeeded. Events: {:?}", resp.events
+                "Deposit transaction ({version:?}) succeeded. Events: {:?}", resp.events
             );
             Ok(())
         }
-        rtd_json_rpc_types::RtdExecutionStatus::Failure { error } => {
-            Err(anyhow!("Transaction {:?} failed: {:?}", tx_digest, error))
-        }
+        rtd_json_rpc_types::RtdExecutionStatus::Failure { error } => Err(anyhow!(
+            "Deposit ({version:?}) transaction {:?} failed: {:?}",
+            tx_digest,
+            error
+        )),
     }
 }
 
@@ -684,16 +794,28 @@ async fn claim_on_eth(
     config: &LoadedBridgeCliConfig,
     rtd_bridge_client: RtdBridgeClient,
     dry_run: bool,
-) -> BridgeResult<()> {
-    let rtd_chain_id = rtd_bridge_client.get_bridge_summary().await?.chain_id;
+) -> anyhow::Result<()> {
+    let rtd_chain_id = rtd_bridge_client
+        .get_bridge_summary()
+        .await
+        .map_err(|e| anyhow!("{:?}", e))?
+        .chain_id;
     let parsed_message = rtd_bridge_client
         .get_parsed_token_transfer_message(rtd_chain_id, seq_num)
-        .await?;
+        .await
+        .map_err(|e| anyhow!("{:?}", e))?;
     if parsed_message.is_none() {
         println!("No record found for seq_num: {seq_num}, chain id: {rtd_chain_id}");
         return Ok(());
     }
     let parsed_message = parsed_message.unwrap();
+    let message_version = parsed_message.message_version;
+    let version_label = if message_version == TOKEN_TRANSFER_MESSAGE_VERSION_V2 {
+        "V2"
+    } else {
+        "V1"
+    };
+
     let sigs = rtd_bridge_client
         .get_token_transfer_action_onchain_signatures_until_success(rtd_chain_id, seq_num)
         .await;
@@ -704,43 +826,170 @@ async fn claim_on_eth(
     let signatures = sigs
         .unwrap()
         .into_iter()
-        .map(|sig: Vec<u8>| ethers::types::Bytes::from(sig))
+        .map(|sig: Vec<u8>| Bytes::from(sig))
         .collect::<Vec<_>>();
 
     let eth_rtd_bridge = EthRtdBridge::new(
         config.eth_bridge_proxy_address,
-        Arc::new(config.eth_signer().clone()),
+        Arc::new(config.eth_signer_provider().clone()),
     );
-    let message = eth_rtd_bridge::Message::from(parsed_message);
-    let tx = eth_rtd_bridge.transfer_bridged_tokens_with_signatures(signatures, message);
+    let message = eth_rtd_bridge::BridgeUtils::Message::from(parsed_message);
+    let tx = if message_version == TOKEN_TRANSFER_MESSAGE_VERSION_V2 {
+        eth_rtd_bridge
+            .transferBridgedTokensWithSignaturesV2(signatures, message)
+            .into_transaction_request()
+    } else {
+        eth_rtd_bridge
+            .transferBridgedTokensWithSignatures(signatures, message)
+            .into_transaction_request()
+    };
+
     if dry_run {
-        let tx = tx.tx;
-        let resp = config.eth_signer.estimate_gas(&tx, None).await;
+        let resp = config.eth_signer_provider.estimate_gas(tx).await?;
         println!(
-            "Rtd to Eth bridge transfer claim dry run result: {:?}",
+            "Rtd to Eth bridge transfer ({version_label}) claim dry run result: {:?}",
             resp
         );
     } else {
-        let eth_claim_tx_receipt = tx.send().await.unwrap().await.unwrap().unwrap();
+        let eth_claim_tx_receipt = config
+            .eth_signer_provider
+            .send_transaction(tx)
+            .await?
+            .get_receipt()
+            .await?;
         println!(
-            "Rtd to Eth bridge transfer claimed: {:?}",
+            "Rtd to Eth bridge transfer ({version_label}) claimed: {:?}",
             eth_claim_tx_receipt
         );
     }
     Ok(())
 }
 
+async fn claim_on_rtd(
+    seq_num: u64,
+    source_chain: u8,
+    config: &LoadedBridgeCliConfig,
+    rtd_bridge_client: RtdBridgeClient,
+    dry_run: bool,
+) -> anyhow::Result<()> {
+    // Look up the on-chain bridge record to determine the token type
+    let parsed_message = rtd_bridge_client
+        .get_parsed_token_transfer_message(source_chain, seq_num)
+        .await
+        .map_err(|e| anyhow!("{:?}", e))?;
+    let Some(parsed_message) = parsed_message else {
+        println!("No record found for seq_num: {seq_num}, source chain: {source_chain}");
+        return Ok(());
+    };
+
+    let message_version = parsed_message.message_version;
+    let version_label = if message_version == TOKEN_TRANSFER_MESSAGE_VERSION_V2 {
+        "V2"
+    } else {
+        "V1"
+    };
+
+    let token_type = parsed_message.parsed_payload.token_type;
+
+    // Get the token type tag mapping
+    let id_token_map = rtd_bridge_client
+        .get_token_id_map()
+        .await
+        .map_err(|e| anyhow!("{:?}", e))?;
+    let type_tag = id_token_map.get(&token_type).ok_or_else(|| {
+        anyhow!(
+            "Unknown token type {token_type} for seq_num {seq_num}, source chain {source_chain}"
+        )
+    })?;
+
+    let bridge_object_arg = rtd_bridge_client
+        .get_mutable_bridge_object_arg_must_succeed()
+        .await;
+    let (rtd_key, sender, gas_obj_ref) = config.get_rtd_account_info().await?;
+    let rgp = rtd_bridge_client
+        .get_reference_gas_price_until_success()
+        .await;
+
+    // Build the PTB: call bridge::claim_and_transfer_token<T>(bridge, clock, source_chain, seq_num)
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let arg_bridge = builder.obj(bridge_object_arg).unwrap();
+    let arg_clock = builder.input(CallArg::CLOCK_IMM).unwrap();
+    let arg_source_chain = builder.pure(source_chain).unwrap();
+    let arg_seq_num = builder.pure(seq_num).unwrap();
+
+    builder.programmable_move_call(
+        BRIDGE_PACKAGE_ID,
+        BRIDGE_MODULE_NAME.to_owned(),
+        ident_str!("claim_and_transfer_token").to_owned(),
+        vec![type_tag.clone()],
+        vec![arg_bridge, arg_clock, arg_source_chain, arg_seq_num],
+    );
+
+    let pt = builder.finish();
+    let tx_data =
+        TransactionData::new_programmable(sender, vec![gas_obj_ref], pt, 500_000_000, rgp);
+
+    if dry_run {
+        let rtd_client = rtd_bridge_client.grpc_client().clone();
+        let resp = rtd_client
+            .simulate_transaction(&tx_data, true, true)
+            .await
+            .map_err(|e| anyhow!("Dry run (simulate) failed: {:?}", e))?;
+        println!(
+            "Claim on Rtd ({version_label}) dry run result for seq_num {seq_num}, source chain {source_chain}: {:?}",
+            resp
+        );
+    } else {
+        let sig = Signature::new_secure(
+            &IntentMessage::new(Intent::rtd_transaction(), tx_data.clone()),
+            &rtd_key,
+        );
+        let signed_tx = Transaction::from_data(tx_data, vec![sig]);
+        let tx_digest = *signed_tx.digest();
+        info!(
+            ?tx_digest,
+            "Sending claim_and_transfer_token ({version_label}) transaction to Rtd for seq_num {seq_num}, source chain {source_chain}."
+        );
+        let resp = rtd_bridge_client
+            .execute_transaction_block_with_effects(signed_tx)
+            .await
+            .map_err(|e| anyhow!("Failed to execute claim transaction: {:?}", e))?;
+        match &resp.status {
+            rtd_json_rpc_types::RtdExecutionStatus::Success => {
+                info!(
+                    ?tx_digest,
+                    "Claim ({version_label}) transaction succeeded. Events: {:?}", resp.events
+                );
+                println!(
+                    "Successfully claimed ({version_label}) tokens on Rtd for seq_num: {seq_num}, source chain: {source_chain}"
+                );
+            }
+            rtd_json_rpc_types::RtdExecutionStatus::Failure { error } => {
+                return Err(anyhow!(
+                    "Claim ({version_label}) transaction {:?} failed: {:?}",
+                    tx_digest,
+                    error
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use ethers::abi::FunctionExt;
-
     use super::*;
+    use alloy::{
+        dyn_abi::{DynSolType, DynSolValue},
+        json_abi::JsonAbi,
+        primitives::U256,
+    };
 
     #[tokio::test]
     async fn test_encode_call_data() {
         let abi_json =
             std::fs::read_to_string("../rtd-bridge/abi/tests/mock_rtd_bridge_v2.json").unwrap();
-        let abi: ethers::abi::Abi = serde_json::from_str(&abi_json).unwrap();
+        let abi: JsonAbi = serde_json::from_str(&abi_json).unwrap();
 
         let function_selector = "initializeV2Params(uint256,bool,string)";
         let params = vec!["420".to_string(), "false".to_string(), "hello".to_string()];
@@ -755,13 +1004,23 @@ mod tests {
             .expect("Function not found");
 
         // Decode the data excluding the selector
-        let tokens = function.decode_input(&call_data[4..]).unwrap();
+        let input_types = function
+            .inputs
+            .iter()
+            .map(|param| DynSolType::parse(&param.ty).unwrap())
+            .collect::<Vec<_>>();
+        let tuple_type = DynSolType::Tuple(input_types);
+        let decoded = tuple_type
+            .abi_decode(&call_data[4..])
+            .expect("Decoding failed");
+        let decoded_values = decoded.as_tuple().expect("Expected a tuple");
+
         assert_eq!(
-            tokens,
+            decoded_values,
             vec![
-                ethers::abi::Token::Uint(ethers::types::U256::from_dec_str("420").unwrap()),
-                ethers::abi::Token::Bool(false),
-                ethers::abi::Token::String("hello".to_string())
+                DynSolValue::Uint(U256::from(420), 256),
+                DynSolValue::Bool(false),
+                DynSolValue::String("hello".to_string())
             ]
         )
     }

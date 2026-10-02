@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::sim_test;
 use rtd_rpc::proto::rtd::rpc::v2::Argument;
@@ -16,16 +15,20 @@ use rtd_rpc::proto::rtd::rpc::v2::ObjectReference;
 use rtd_rpc::proto::rtd::rpc::v2::ProgrammableTransaction;
 use rtd_rpc::proto::rtd::rpc::v2::SimulateTransactionRequest;
 use rtd_rpc::proto::rtd::rpc::v2::Transaction;
+use rtd_rpc::proto::rtd::rpc::v2::TransactionExpiration as ProtoTransactionExpiration;
 use rtd_rpc::proto::rtd::rpc::v2::TransactionKind;
 use rtd_rpc::proto::rtd::rpc::v2::TransferObjects;
 use rtd_rpc::proto::rtd::rpc::v2::UserSignature;
+use rtd_rpc::proto::rtd::rpc::v2::simulate_transaction_request::TransactionChecks as ProtoTransactionChecks;
 use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
+use rtd_rpc::proto::rtd::rpc::v2::transaction_expiration::TransactionExpirationKind;
 use rtd_rpc_api::Client;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::Command as RtdCommand;
 use rtd_types::transaction::{ObjectArg, TransactionData, TransactionDataAPI};
+use shared_crypto::intent::Intent;
 use test_cluster::TestClusterBuilder;
 
 fn proto_to_response(
@@ -59,7 +62,10 @@ fn proto_to_response(
 
 #[sim_test]
 async fn resolve_transaction_simple_transfer() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(test_cluster.rpc_url()).unwrap();
     let mut alpha_client =
@@ -118,8 +124,62 @@ async fn resolve_transaction_simple_transfer() {
 }
 
 #[sim_test]
+async fn simulate_transaction_read_mask_selects_command_outputs_without_transaction() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+    let (sender, mut gas) = test_cluster.wallet.get_one_account().await.unwrap();
+    gas.sort_by_key(|object_ref| object_ref.0);
+
+    let mut builder = ProgrammableTransactionBuilder::new();
+    builder
+        .pay_rtd(vec![RtdAddress::random_for_testing_only()], vec![500])
+        .unwrap();
+    let transaction_data = TransactionData::new_programmable(
+        sender,
+        vec![gas[0]],
+        builder.finish(),
+        50_000_000,
+        test_cluster.wallet.get_reference_gas_price().await.unwrap(),
+    );
+
+    let mut transaction = Transaction::default();
+    transaction.bcs = Some(Bcs::serialize(&transaction_data).unwrap());
+
+    let mut request = SimulateTransactionRequest::new(transaction);
+    request.set_checks(ProtoTransactionChecks::Enabled);
+    request.read_mask = Some(FieldMask {
+        paths: vec!["command_outputs".to_owned()],
+    });
+
+    let response = alpha_client
+        .simulate_transaction(request)
+        .await
+        .unwrap()
+        .into_inner();
+
+    // This mask is intentionally narrow. The command outputs require VM execution data, but the
+    // executed transaction wrapper is expensive and should stay absent unless explicitly requested.
+    assert!(response.transaction.is_none());
+    assert_eq!(response.command_outputs.len(), 2);
+    assert!(!response.command_outputs[0].mutated_by_ref.is_empty());
+    assert!(!response.command_outputs[0].return_values.is_empty());
+    assert!(response.command_outputs[1].mutated_by_ref.is_empty());
+    assert!(response.command_outputs[1].return_values.is_empty());
+}
+
+#[sim_test]
 async fn resolve_transaction_transfer_with_sponsor() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(test_cluster.rpc_url()).unwrap();
     let mut alpha_client =
@@ -200,7 +260,10 @@ async fn resolve_transaction_transfer_with_sponsor() {
 
 #[sim_test]
 async fn resolve_transaction_borrowed_shared_object() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(test_cluster.rpc_url()).unwrap();
     let mut alpha_client =
@@ -251,7 +314,10 @@ async fn resolve_transaction_borrowed_shared_object() {
 
 #[sim_test]
 async fn resolve_transaction_mutable_shared_object() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(test_cluster.rpc_url()).unwrap();
     let mut alpha_client =
@@ -323,7 +389,10 @@ async fn resolve_transaction_mutable_shared_object() {
 
 #[sim_test]
 async fn resolve_transaction_insufficient_gas() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
     let mut alpha_client =
         TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
             .await
@@ -358,7 +427,7 @@ async fn resolve_transaction_insufficient_gas() {
         .unwrap_err();
 
     assert_eq!(error.code(), tonic::Code::InvalidArgument);
-    assert_contains(error.message(), "unable to select sufficient gas");
+    assert_contains(error.message(), "Unable to perform gas selection");
 }
 
 fn assert_contains(haystack: &str, needle: &str) {
@@ -369,7 +438,10 @@ fn assert_contains(haystack: &str, needle: &str) {
 
 #[sim_test]
 async fn resolve_transaction_gas_budget_clamping() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(test_cluster.rpc_url()).unwrap();
     let mut alpha_client =
@@ -442,7 +514,10 @@ async fn resolve_transaction_gas_budget_clamping() {
 
 #[sim_test]
 async fn resolve_transaction_insufficient_gas_with_payment_objects() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
     let mut alpha_client =
         TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
             .await
@@ -584,7 +659,10 @@ async fn resolve_transaction_insufficient_gas_with_payment_objects() {
 async fn resolve_transaction_shared_object_with_generic_type_parameter() {
     use rtd_test_transaction_builder::publish_basics_package_and_make_party_object;
 
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(test_cluster.rpc_url()).unwrap();
     let mut alpha_client =
@@ -672,4 +750,290 @@ async fn resolve_transaction_shared_object_with_generic_type_parameter() {
 
     assert!(effects.status().is_ok());
     assert_eq!(effects_from_simulation, effects);
+}
+
+#[sim_test]
+async fn test_gas_selection_with_address_balance() {
+    let _guard = rtd_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+        cfg.set_create_root_accumulator_object_for_testing(true);
+        cfg.enable_address_balance_gas_payments_for_testing();
+        cfg
+    });
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = rtd_rpc::Client::new(test_cluster.rpc_url()).unwrap();
+
+    let receiver = test_cluster.get_address_1();
+
+    // Transfer some RTD to address balance, but not enough to pay for gas
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(receiver),
+        10_000,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    let mut transaction = Transaction::default();
+    {
+        let ptb = transaction.kind_mut().programmable_transaction_mut();
+        ptb.set_inputs(vec![Input::default().with_object_id("0x6")]);
+        ptb.set_commands(vec![Command::from(
+            MoveCall::default()
+                .with_package("0x2")
+                .with_module("clock")
+                .with_function("timestamp_ms")
+                .with_arguments(vec![Argument::new_input(0)]),
+        )])
+    }
+    transaction.set_sender(receiver.to_string());
+
+    // First check that we still fallback to coin selection if we have a balance but not enough to
+    // pay for the required budget.
+    let resolved = client
+        .execution_client()
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction.clone()).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Assert that the txn simulated correctly
+    assert!(resolved.transaction().effects().status().success());
+    // Assert that gas coins is not empty which means we still used coins
+    assert!(
+        !resolved
+            .transaction()
+            .transaction()
+            .gas_payment()
+            .objects()
+            .is_empty()
+    );
+    assert!(resolved.transaction().effects().gas_object_opt().is_some());
+    // Coin-paid transactions need no validity window of their own, so the expiration is left
+    // alone unless simulate can restrict the transaction to this node's preferred proposers.
+    let kind = resolved.transaction().transaction().expiration().kind();
+    assert!(
+        matches!(
+            kind,
+            TransactionExpirationKind::None | TransactionExpirationKind::Validity
+        ),
+        "unexpected expiration kind: {kind:?}"
+    );
+
+    // Transfer some more RTD to address balance, enough to pay for gas
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(receiver),
+        100_000_000_000,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    // Now check that we properly select address balance to use
+    let resolved = client
+        .execution_client()
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Assert that the txn simulated correctly
+    assert!(resolved.transaction().effects().status().success());
+    // Assert that gas coins is empty which means we used address balance
+    assert!(
+        resolved
+            .transaction()
+            .transaction()
+            .gas_payment()
+            .objects()
+            .is_empty()
+    );
+    assert!(resolved.transaction().effects().gas_object_opt().is_none());
+    // There is an accumulator_write in effects
+    assert!(
+        resolved.transaction().effects().changed_objects()[0]
+            .accumulator_write_opt()
+            .is_some()
+    );
+    // Assert an epoch-scoped expiration was set: `Validity` when simulate could also name the
+    // transaction's proposers, `ValidDuring` otherwise.
+    let kind = resolved.transaction().transaction().expiration().kind();
+    assert!(
+        matches!(
+            kind,
+            TransactionExpirationKind::ValidDuring | TransactionExpirationKind::Validity
+        ),
+        "unexpected expiration kind: {kind:?}"
+    );
+}
+
+#[sim_test]
+async fn simulate_transaction_with_valid_during_expiration() {
+    let _guard = rtd_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+        cfg.set_create_root_accumulator_object_for_testing(true);
+        cfg.enable_address_balance_gas_payments_for_testing();
+        cfg
+    });
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = rtd_rpc::Client::new(test_cluster.rpc_url()).unwrap();
+    let chain_id = test_cluster.get_chain_identifier();
+    let receiver = test_cluster.get_address_1();
+
+    // Fund the receiver's address balance with enough RTD to cover the gas budget.
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(receiver),
+        100_000_000_000,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    let current_epoch = test_cluster
+        .fullnode_handle
+        .rtd_node
+        .with(|node| node.state().epoch_store_for_testing().epoch());
+
+    let supplied_nonce: u32 = 0xdead_beef;
+    let supplied_chain_str = rtd_sdk_types::Digest::new(*chain_id.as_bytes()).to_string();
+
+    let mut transaction = Transaction::default();
+    {
+        let ptb = transaction.kind_mut().programmable_transaction_mut();
+        ptb.set_inputs(vec![Input::default().with_object_id("0x6")]);
+        ptb.set_commands(vec![Command::from(
+            MoveCall::default()
+                .with_package("0x2")
+                .with_module("clock")
+                .with_function("timestamp_ms")
+                .with_arguments(vec![Argument::new_input(0)]),
+        )])
+    }
+    transaction.set_sender(receiver.to_string());
+    transaction.set_expiration(
+        ProtoTransactionExpiration::default()
+            .with_kind(TransactionExpirationKind::ValidDuring)
+            .with_epoch(current_epoch.saturating_add(1))
+            .with_min_epoch(current_epoch)
+            .with_chain(supplied_chain_str.clone())
+            .with_nonce(supplied_nonce),
+    );
+
+    let resolved = client
+        .execution_client()
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    // The transaction must simulate successfully and have used the address balance for gas.
+    assert!(resolved.transaction().effects().status().success());
+    assert!(
+        resolved
+            .transaction()
+            .transaction()
+            .gas_payment()
+            .objects()
+            .is_empty()
+    );
+
+    // The supplied `ValidDuring` expiration must round-trip through the conversion unchanged.
+    let resolved_expiration = resolved.transaction().transaction().expiration();
+    assert_eq!(
+        resolved_expiration.kind(),
+        TransactionExpirationKind::ValidDuring
+    );
+    assert_eq!(resolved_expiration.epoch, Some(current_epoch + 1));
+    assert_eq!(resolved_expiration.min_epoch, Some(current_epoch));
+    assert!(resolved_expiration.min_timestamp.is_none());
+    assert!(resolved_expiration.max_timestamp.is_none());
+    assert_eq!(
+        resolved_expiration.chain.as_deref(),
+        Some(supplied_chain_str.as_str())
+    );
+    assert_eq!(resolved_expiration.nonce, Some(supplied_nonce));
+
+    // The BCS-encoded `TransactionData` must also carry the supplied `ValidDuring` expiration.
+    let (transaction_data, _, _) = proto_to_response(resolved);
+    assert!(matches!(
+        transaction_data.expiration(),
+        rtd_types::transaction::TransactionExpiration::ValidDuring {
+            min_epoch: Some(min),
+            max_epoch: Some(max),
+            min_timestamp: None,
+            max_timestamp: None,
+            chain,
+            nonce,
+        } if *min == current_epoch
+            && *max == current_epoch + 1
+            && *chain == chain_id
+            && *nonce == supplied_nonce
+    ));
+}
+
+#[test]
+fn valid_during_transaction_expiration_round_trips_through_proto() {
+    use rtd_types::transaction::TransactionExpiration;
+
+    let chain = rtd_types::digests::ChainIdentifier::from(
+        rtd_types::digests::CheckpointDigest::new([7u8; 32]),
+    );
+    let original = TransactionExpiration::ValidDuring {
+        min_epoch: Some(42),
+        max_epoch: Some(43),
+        min_timestamp: Some(1_700_000_000_123),
+        max_timestamp: Some(1_700_000_999_456),
+        chain,
+        nonce: 0xc0ffee,
+    };
+
+    let proto = ProtoTransactionExpiration::from(original.clone());
+    let round_tripped = TransactionExpiration::try_from(&proto).unwrap();
+
+    assert_eq!(round_tripped, original);
+}
+
+#[test]
+fn validity_transaction_expiration_round_trips_through_proto() {
+    use rtd_types::transaction::{AllowedProposers, TransactionExpiration};
+
+    let chain = rtd_types::digests::ChainIdentifier::from(
+        rtd_types::digests::CheckpointDigest::new([7u8; 32]),
+    );
+    let expiration = |allowed_proposers| TransactionExpiration::Validity {
+        min_epoch: Some(42),
+        max_epoch: Some(43),
+        min_timestamp: Some(1_700_000_000_123),
+        max_timestamp: Some(1_700_000_999_456),
+        chain,
+        nonce: 0xc0ffee,
+        allowed_proposers,
+    };
+
+    // The proposer set is the part that used to be dropped on the way through the proto.
+    for original in [
+        expiration(Some(AllowedProposers {
+            epoch: 42,
+            proposers: nonempty::nonempty![0, 2, 5],
+        })),
+        expiration(None),
+    ] {
+        let proto = ProtoTransactionExpiration::from(original.clone());
+        let round_tripped = TransactionExpiration::try_from(&proto).unwrap();
+        assert_eq!(round_tripped, original);
+    }
 }

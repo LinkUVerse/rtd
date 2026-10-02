@@ -3,16 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::location::*;
+
 use move_core_types::{
     account_address::AccountAddress, identifier::Identifier, language_storage::ModuleId,
     runtime_value::MoveValue,
 };
 use move_symbol_pool::Symbol;
-use once_cell::sync::Lazy;
+
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashSet, VecDeque},
     fmt,
+    sync::LazyLock,
 };
 
 //**************************************************************************************************
@@ -394,8 +396,6 @@ pub type Function = Spanned<Function_>;
 /// type system and/or have access to some runtime/storage context
 #[derive(Debug, PartialEq, Clone)]
 pub enum Builtin {
-    /// Pack a vector fix a fixed number of elements. Zero elements means an empty vector.
-    VecPack(Vec<Type>, u64),
     /// Get the length of a vector
     VecLen(Vec<Type>),
     /// Acquire an immutable reference to the element at a given index of the vector
@@ -406,8 +406,6 @@ pub enum Builtin {
     VecPushBack(Vec<Type>),
     /// Pop and return an element from the end of the vector
     VecPopBack(Vec<Type>),
-    /// Destroy a vector of a fixed length. Zero length means destroying an empty vector.
-    VecUnpack(Vec<Type>, u64),
     /// Swap the elements at twi indices in the vector
     VecSwap(Vec<Type>),
 
@@ -484,6 +482,10 @@ pub enum Statement_ {
     JumpIfFalse(Box<Exp>, BlockLabel),
     /// `n { f_1: x_1, ... , f_j: x_j  } = e`
     Unpack(DatatypeName, Vec<Type>, Fields<Var>, Box<Exp>),
+    /// Destroy a vector of a fixed length, binding each popped value to the
+    /// corresponding LValue: `vector<T; N>(lv_1, ..., lv_N) = e`. The
+    /// `Box<Exp>` is the input vector expression.
+    VecUnpack(Type, u64, Vec<LValue>, Box<Exp>),
     /// `e::v { f_1: x_1, ... , f_j: x_j  } = e`
     UnpackVariant(
         DatatypeName,
@@ -617,6 +619,10 @@ pub enum Exp_ {
     /// as the current struct class (i.e., the class of the method we're currently executing).
     /// `n { f_1: e_1, ... , f_j: e_j }`
     Pack(DatatypeName, Vec<Type>, ExpFields),
+    /// Pack a vector of a fixed number of elements: `vector<T; N>(<args>)`. The
+    /// `Box<Exp>` is the args expression (typically an `ExprList`) supplying
+    /// the N stack values to pack.
+    VecPack(Type, u64, Box<Exp>),
     /// `&e.f`, `&mut e.f`
     Borrow {
         /// mutable or not
@@ -639,6 +645,10 @@ pub enum Exp_ {
     /// Takes the given field values and instantiates the variant of the enum.
     /// `e::v { f_1: e_1, ... , f_j: e_j }`
     PackVariant(DatatypeName, VariantName, Vec<Type>, ExpFields),
+    /// Load a named constant by value: `const::NAME`. Constant names live in
+    /// their own namespace (not carried into the bytecode) so they cannot
+    /// collide with struct, function, or local names.
+    Constant(ConstantName),
 }
 
 /// The type for a `Exp_` and its location
@@ -754,7 +764,7 @@ impl Program {
     }
 }
 
-static SELF_MODULE_NAME: Lazy<Symbol> = Lazy::new(|| Symbol::from("Self"));
+static SELF_MODULE_NAME: LazyLock<Symbol> = LazyLock::new(|| Symbol::from("Self"));
 
 impl ModuleName {
     /// Name for the current module handle
@@ -1130,7 +1140,7 @@ impl fmt::Display for ModuleName {
 
 impl fmt::Display for ModuleIdent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}.{}", self.address, self.name)
+        write!(f, "{:?}::{}", self.address, self.name)
     }
 }
 
@@ -1379,7 +1389,7 @@ impl fmt::Display for FunctionSignature {
 
 impl fmt::Display for QualifiedDatatypeIdent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.module, self.name)
+        write!(f, "{}::{}", self.module, self.name)
     }
 }
 
@@ -1453,15 +1463,11 @@ impl fmt::Display for Var_ {
 impl fmt::Display for Builtin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Builtin::VecPack(tys, num) => write!(f, "vec_pack_{}{}", num, format_type_actuals(tys)),
             Builtin::VecLen(tys) => write!(f, "vec_len{}", format_type_actuals(tys)),
             Builtin::VecImmBorrow(tys) => write!(f, "vec_imm_borrow{}", format_type_actuals(tys)),
             Builtin::VecMutBorrow(tys) => write!(f, "vec_mut_borrow{}", format_type_actuals(tys)),
             Builtin::VecPushBack(tys) => write!(f, "vec_push_back{}", format_type_actuals(tys)),
             Builtin::VecPopBack(tys) => write!(f, "vec_pop_back{}", format_type_actuals(tys)),
-            Builtin::VecUnpack(tys, num) => {
-                write!(f, "vec_unpack_{}{}", num, format_type_actuals(tys))
-            }
             Builtin::VecSwap(tys) => write!(f, "vec_swap{}", format_type_actuals(tys)),
             Builtin::Freeze => write!(f, "freeze"),
             Builtin::ToU8 => write!(f, "to_u8"),
@@ -1484,7 +1490,7 @@ impl fmt::Display for FunctionCall_ {
                 type_actuals,
             } => write!(
                 f,
-                "{}.{}{}",
+                "{}::{}{}",
                 module,
                 name,
                 format_type_actuals(type_actuals)
@@ -1543,6 +1549,14 @@ impl fmt::Display for Statement_ {
                         "{} {} : {},",
                         acc, field, var
                     )),
+                e
+            ),
+            Statement_::VecUnpack(ty, n, lvalues, e) => write!(
+                f,
+                "vector<{}; {}>({}) = {};",
+                ty,
+                n,
+                intersperse(lvalues, ", "),
                 e
             ),
             Statement_::UnpackVariant(name, variant_name, tys, bindings, e, unpack_type) => {
@@ -1669,6 +1683,7 @@ impl fmt::Display for Exp_ {
                     acc, field, op,
                 ))
             ),
+            Exp_::VecPack(ty, n, args) => write!(f, "vector<{}; {}>{}", ty, n, args),
             Exp_::Borrow {
                 is_mutable,
                 exp,
@@ -1706,6 +1721,7 @@ impl fmt::Display for Exp_ {
                     ))
                 )
             }
+            Exp_::Constant(name) => write!(f, "copy({})", name.0),
         }
     }
 }
@@ -1739,7 +1755,9 @@ impl fmt::Display for Bytecode_ {
             Bytecode_::CopyLoc(v) => write!(f, "CopyLoc {}", v),
             Bytecode_::MoveLoc(v) => write!(f, "MoveLoc {}", v),
             Bytecode_::StLoc(v) => write!(f, "StLoc {}", v),
-            Bytecode_::Call(m, n, tys) => write!(f, "Call {}.{}{}", m, n, format_type_actuals(tys)),
+            Bytecode_::Call(m, n, tys) => {
+                write!(f, "Call {}::{}{}", m, n, format_type_actuals(tys))
+            }
             Bytecode_::Pack(n, tys) => write!(f, "Pack {}{}", n, format_type_actuals(tys)),
             Bytecode_::Unpack(n, tys) => write!(f, "Unpack {}{}", n, format_type_actuals(tys)),
             Bytecode_::ReadRef => write!(f, "ReadRef"),

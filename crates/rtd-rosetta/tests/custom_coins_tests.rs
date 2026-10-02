@@ -9,10 +9,10 @@ mod test_coin_utils;
 use std::num::NonZeroUsize;
 
 use prost_types::FieldMask;
-use serde_json::json;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+use serde_json::json;
 
 use rtd_rosetta::operations::Operations;
 mod test_utils;
@@ -324,7 +324,6 @@ async fn test_custom_coin_without_symbol() {
     const COIN1_BALANCE: u64 = 100_000_000_000_000_000;
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
-    let _client = test_cluster.wallet.get_client().await.unwrap();
     let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
     let keystore = &test_cluster.wallet.config.keystore;
 

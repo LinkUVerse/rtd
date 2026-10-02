@@ -21,20 +21,17 @@ use colored::Colorize;
 use move_compiler::{
     Compiler, Flags,
     compiled_unit::AnnotatedCompiledUnit,
-    diagnostics::warning_filters::WarningFiltersBuilder,
+    diagnostics::filter::empty_filter_scope,
     editions::{Edition, Flavor},
-    linters,
+    linters, rtd_mode,
     shared::{
         PackageConfig, PackagePaths, SaveFlag, SaveHook, files::MappedFiles,
         known_attributes::ModeAttribute,
     },
-    rtd_mode,
 };
 use move_docgen::DocgenFlags;
 use move_package_alt::{
-    flavor::MoveFlavor,
-    graph::PackageInfo,
-    package::RootPackage,
+    MoveFlavor, PackageInfo, RootPackage,
     schema::{Environment, PackageID},
 };
 use move_symbol_pool::Symbol;
@@ -46,9 +43,13 @@ pub async fn compile_package<W: Write + Send, F: MoveFlavor>(
     path: &Path,
     build_config: &BuildConfig,
     env: &Environment,
+    flavor: F,
     writer: &mut W,
 ) -> anyhow::Result<CompiledPackage> {
-    let root_pkg = RootPackage::<F>::load(path, env.clone(), build_config.mode_set()).await?;
+    let root_pkg: RootPackage<F> = build_config
+        .package_loader(path, env, flavor)
+        .load()
+        .await?;
     BuildPlan::create(&root_pkg, build_config)?.compile(writer, |compiler| compiler)
 }
 
@@ -179,14 +180,19 @@ pub fn build_all<W: Write + Send, F: MoveFlavor>(
 
     let under_path = shared::get_build_output_path(&project_root, build_config);
 
-    save_to_disk(
-        root_compiled_units.clone(),
-        compiled_package_info.clone(),
-        deps_compiled_units.clone(),
-        compiled_docs.clone(),
-        package_name,
-        under_path,
-    )?;
+    if !root_compiled_units.is_empty() || !deps_compiled_units.is_empty() || compiled_docs.is_some()
+    {
+        // Save to disk only if there are any artfifacts. In particular,
+        // driver compilation may not produce any compiled modules.
+        save_to_disk(
+            root_compiled_units.clone(),
+            compiled_package_info.clone(),
+            deps_compiled_units.clone(),
+            compiled_docs.clone(),
+            package_name,
+            under_path,
+        )?;
+    }
 
     let compiled_package = CompiledPackage {
         compiled_package_info,
@@ -384,7 +390,7 @@ pub fn make_deps_for_compiler<W: Write + Send, F: MoveFlavor>(
                 .or(build_config.default_edition)
                 .unwrap_or(Edition::LEGACY), // TODO require edition
             flavor: Flavor::from_str(pkg.flavor().unwrap_or("rtd"))?,
-            warning_filter: WarningFiltersBuilder::new_for_source(),
+            warning_filter: empty_filter_scope(),
         };
 
         // Assign a unique name for the compiler for each package.

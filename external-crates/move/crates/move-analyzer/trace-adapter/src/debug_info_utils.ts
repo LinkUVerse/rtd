@@ -10,7 +10,9 @@ import { JSON_FILE_EXT } from './utils';
 // Data types corresponding to debug info file JSON schema.
 
 interface JSONSrcDefinitionLocation {
-    file_hash: number[];
+    // in an earlier version of the compiler it's a byte array,
+    // in the latest version it's a hex string
+    file_hash: number[] | string;
     start: number;
     end: number;
 }
@@ -47,6 +49,19 @@ interface JSONSrcRootObject {
     enum_map: Record<string, JSONSrcEnumSourceMapEntry>;
     function_map: Record<string, JSONSrcFunctionMapEntry>;
     constant_map: Record<string, string>;
+}
+
+/**
+ * Converts a file hash from JSON (either a hex string or a byte array)
+ * to the canonical version.
+ */
+function fileHashFromJSON(fileHash: number[] | string): string {
+    if (typeof fileHash === 'string') {
+        // later version: hex string like "d71f1b77..."
+        return Buffer.from(fileHash, 'hex').toString('base64');
+    }
+    // earlier version: byte array like [255, 42, 7, ...]
+    return Buffer.from(fileHash).toString('base64');
 }
 
 // Runtime data types.
@@ -95,11 +110,15 @@ export interface IDebugInfoFunction {
      */
     localsInfo: ILocalInfo[],
     /**
-     * Location of function definition start.
+     * Location of the function name in the definition.
+     */
+    functionNameLoc: ILoc,
+    /**
+     * Location of function range start.
      */
     startLoc: ILoc,
     /**
-     * Location of function definition start.
+     * Location of function range end.
      */
     endLoc: ILoc
 }
@@ -126,6 +145,10 @@ export interface IDebugInfo {
     fileHash: string
     modInfo: ModuleInfo,
     functions: Map<string, IDebugInfoFunction>,
+    /**
+     * Functions skipped because their code map references a missing source file.
+     */
+    functionsWithMissingCodeMapSourceFiles: Set<string>,
     /**
      * Lines that are not present in debug info's source map portion.
      */
@@ -230,10 +253,14 @@ function readDebugInfo(
 ): IDebugInfo | undefined {
     const debugInfoJSON: JSONSrcRootObject = JSON.parse(fs.readFileSync(debugInfoPath, 'utf8'));
 
-    let fileHash = Buffer.from(debugInfoJSON.definition_location.file_hash).toString('base64');
+    let fileHash = fileHashFromJSON(debugInfoJSON.definition_location.file_hash);
     let fileInfo = filesMap.get(fileHash);
     if (!fileInfo) {
         if (failOnNoSourceFile) {
+            // This will never trigger when trace is generated from Move unit tests,
+            // and failOnNoSourceFile is false when processing source code in the
+            // other case of trace generation. We could still add more graceful
+            // handling here but it does come at a cost of additional code complexity.
             throw new Error('Could not find file with hash: '
                 + fileHash
                 + ' when processing debug info at: '
@@ -267,6 +294,7 @@ function readDebugInfo(
         name,
     };
     const functions = new Map<string, IDebugInfoFunction>();
+    const functionsWithMissingCodeMapSourceFiles = new Set<string>();
     const debugInfoLines = debugInfoLinesMap.get(fileHash) ?? new Set<number>;
     prePopulateDebugInfoLines(debugInfoJSON, fileInfo, debugInfoLines);
     debugInfoLinesMap.set(fileHash, debugInfoLines);
@@ -276,6 +304,7 @@ function readDebugInfo(
         let nameEnd = funEntry.definition_location.end;
         const nameBytes = fileInfo.content.slice(nameStart, nameEnd);
         const funName = Buffer.from(nameBytes).toString('utf8');
+        const functionNameLoc = byteOffsetToLineColumn(fileInfo, funEntry.definition_location.start);
         const pcLocs: IFileLoc[] = [];
         let prevPC = 0;
         // we need to initialize `prevFileLoc` to make the compiler happy but it's never
@@ -287,15 +316,14 @@ function readDebugInfo(
         };
         // create a list of locations for each PC, even those not explicitly listed
         // in the source map
+        let missingCodeMapSourceFile = false;
         for (const [pc, defLocation] of Object.entries(funEntry.code_map)) {
             const currentPC = parseInt(pc);
-            const defLocFileHash = Buffer.from(defLocation.file_hash).toString('base64');
+            const defLocFileHash = fileHashFromJSON(defLocation.file_hash);
             const fileInfo = filesMap.get(defLocFileHash);
             if (!fileInfo) {
-                throw new Error('Could not find file with hash: '
-                    + fileHash
-                    + ' when processing debug info at: '
-                    + debugInfoPath);
+                missingCodeMapSourceFile = true;
+                break;
             }
             const currentStartLoc = byteOffsetToLineColumn(fileInfo, defLocation.start);
             const currentFileStartLoc: IFileLoc = {
@@ -315,6 +343,10 @@ function readDebugInfo(
             prevPC = currentPC;
             prevLoc = currentFileStartLoc;
         }
+        if (missingCodeMapSourceFile) {
+            functionsWithMissingCodeMapSourceFiles.add(funName);
+            continue;
+        }
 
         const localsNames: ILocalInfo[] = [];
         for (const param of funEntry.parameters) {
@@ -332,12 +364,19 @@ function readDebugInfo(
             }
             localsNames.push({ name: localsName, internalName: local[0] });
         }
-        // compute start and end of function definition
+        // compute start and end of the full function range
         const startLoc = byteOffsetToLineColumn(fileInfo, funEntry.location.start);
         const endLoc = byteOffsetToLineColumn(fileInfo, funEntry.location.end);
-        functions.set(funName, { pcLocs, localsInfo: localsNames, startLoc, endLoc });
+        functions.set(funName, { pcLocs, localsInfo: localsNames, functionNameLoc, startLoc, endLoc });
     }
-    return { filePath: fileInfo.path, fileHash, modInfo, functions, optimizedLines: [] };
+    return {
+        filePath: fileInfo.path,
+        fileHash,
+        modInfo,
+        functions,
+        functionsWithMissingCodeMapSourceFiles,
+        optimizedLines: []
+    };
 }
 
 /**

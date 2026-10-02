@@ -20,10 +20,6 @@ use move_core_types::identifier::Identifier;
 use rand::Rng;
 use rand::distributions::{Distribution, Standard};
 use regex::Regex;
-use std::str::FromStr;
-use std::sync::Arc;
-use strum::{EnumCount, IntoEnumIterator};
-use strum_macros::{EnumCount as EnumCountMacro, EnumIter};
 use rtd_move_build::{BuildConfig, CompiledPackage};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::{PublishData, TestTransactionBuilder};
@@ -34,6 +30,10 @@ use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
 use rtd_types::{base_types::ObjectID, object::Owner};
 use rtd_types::{base_types::RtdAddress, crypto::get_key_pair, transaction::Transaction};
 use rtd_types::{transaction::TransactionData, utils::to_sender_signed_transaction};
+use std::str::FromStr;
+use std::sync::Arc;
+use strum::{EnumCount, IntoEnumIterator};
+use strum_macros::{EnumCount as EnumCountMacro, EnumIter};
 use tracing::debug;
 
 /// Number of vectors to create in LargeTransientRuntimeVectors workload
@@ -167,7 +167,7 @@ impl Payload for AdversarialTestPayload {
         // Sometimes useful when figuring out why things failed
         let stat = match effects {
             ExecutionEffects::FinalizedTransactionEffects(e, _) => e.data().status(),
-            ExecutionEffects::RtdTransactionBlockEffects(_) => unimplemented!("Not impl"),
+            ExecutionEffects::ExecutedTransaction(txn) => txn.effects.status(),
         };
 
         debug_assert!(
@@ -250,6 +250,7 @@ impl AdversarialTestPayload {
                     .publish_with_data(PublishData::CompiledPackage(
                         self.max_package_published_compiled.clone(),
                     ))
+                    .ensure_unique()
                     .build_and_sign(account.key())
             }
             _ => self.state.move_call_pt(
@@ -460,7 +461,8 @@ pub struct AdversarialWorkload {
 impl Workload<dyn Payload> for AdversarialWorkload {
     async fn init(
         &mut self,
-        proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        execution_proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        _fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
         system_state_observer: Arc<SystemStateObserver>,
     ) {
         let gas = &self.init_gas;
@@ -469,15 +471,17 @@ impl Workload<dyn Payload> for AdversarialWorkload {
         let SystemState {
             reference_gas_price,
             protocol_config,
+            ..
         } = system_state_observer.state.borrow().clone();
         let protocol_config = protocol_config.unwrap();
         let gas_budget = protocol_config.max_tx_gas();
         let transaction = TestTransactionBuilder::new(gas.1, gas.0, reference_gas_price)
             .publish_async(path)
             .await
+            .ensure_unique()
             .build_and_sign(gas.2.as_ref());
 
-        let (_, execution_result) = proxy.execute_transaction_block(transaction).await;
+        let execution_result = execution_proxy.execute_transaction_block(transaction).await;
         let effects = execution_result.unwrap();
         let created = effects.created();
         // should only create the package object, upgrade cap, dynamic field top level obj, and NUM_DYNAMIC_FIELDS df objects. otherwise, there are some object initializers running and we will need to disambiguate
@@ -491,7 +495,7 @@ impl Workload<dyn Payload> for AdversarialWorkload {
             .unwrap();
 
         for o in &created {
-            let obj = proxy.get_object(o.0.0).await.unwrap();
+            let obj = execution_proxy.get_object(o.0.0).await.unwrap();
             if let Some(tag) = obj.data.struct_tag()
                 && tag.to_string().contains("::adversarial::Obj")
             {
@@ -504,7 +508,7 @@ impl Workload<dyn Payload> for AdversarialWorkload {
         );
         self.package_id = package_obj.0.0;
 
-        let gas_ref = proxy
+        let gas_ref = execution_proxy
             .get_object(gas.0.0)
             .await
             .unwrap()
@@ -525,7 +529,7 @@ impl Workload<dyn Payload> for AdversarialWorkload {
             reference_gas_price,
         );
 
-        let (_, execution_result) = proxy.execute_transaction_block(transaction).await;
+        let execution_result = execution_proxy.execute_transaction_block(transaction).await;
         let effects = execution_result.unwrap();
 
         let created = effects.created();
@@ -540,7 +544,8 @@ impl Workload<dyn Payload> for AdversarialWorkload {
 
     async fn make_test_payloads(
         &self,
-        _proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        _execution_proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        _fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
         system_state_observer: Arc<SystemStateObserver>,
     ) -> Vec<Box<dyn Payload>> {
         let mut payloads = Vec::new();

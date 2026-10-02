@@ -2,24 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rtd_core::authority_client::NetworkAuthorityClient;
+use rtd_core::test_utils::wait_for_tx;
 use rtd_core::transaction_driver::SubmitTransactionOptions;
 use rtd_core::transaction_orchestrator::TransactionOrchestrator;
 use rtd_macros::sim_test;
 use rtd_storage::key_value_store::TransactionKeyValueStore;
 use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
 use rtd_test_transaction_builder::{
-    TestTransactionBuilder, batch_make_transfer_transactions, make_staking_transaction,
-    make_transfer_rtd_transaction,
+    batch_make_transfer_transactions, make_staking_transaction, make_transfer_rtd_transaction,
 };
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::ErrorCategory;
 use rtd_types::messages_grpc::SubmitTxRequest;
 use rtd_types::object::PastObjectRead;
-use rtd_types::quorum_driver_types::{
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction_driver_types::{
     ExecuteTransactionRequestType, ExecuteTransactionRequestV3, ExecuteTransactionResponseV3,
-    FinalizedEffects, IsTransactionExecutedLocally, QuorumDriverError,
+    FinalizedEffects, IsTransactionExecutedLocally, TransactionSubmissionError,
 };
-use rtd_types::transaction::{Transaction, TransactionDataAPI};
 use std::sync::Arc;
 use std::time::Duration;
 use test_cluster::TestClusterBuilder;
@@ -143,264 +143,48 @@ async fn test_fullnode_wal_log() -> Result<(), anyhow::Error> {
     // Stop 2 validators and we lose quorum
     test_cluster.stop_node(&validator_addresses[0]);
     test_cluster.stop_node(&validator_addresses[1]);
+    // TODO: stop the fullnode as well, after we fix releasing the DB handles when stopping the fullnode.
 
     let txn = txns.swap_remove(0);
-    // Expect tx to fail
-    execute_with_orchestrator(
-        &orchestrator,
-        txn.clone(),
-        ExecuteTransactionRequestType::WaitForLocalExecution,
+    // Expect tx to timeout.
+    let result = timeout(
+        Duration::from_secs(10),
+        execute_with_orchestrator(
+            &orchestrator,
+            txn.clone(),
+            ExecuteTransactionRequestType::WaitForLocalExecution,
+        ),
     )
-    .await
-    .unwrap_err();
+    .await;
+    assert!(result.is_err());
 
-    // Because the tx did not go through, we expect to see it in the WAL log if it
-    // was submitted via quorum driver. Transaction driver submitted tx would have
-    // been removed from wal on timeout/error.
+    // Because the tx was inflight, we expect to see it in the WAL log.
     let pending_txes: Vec<_> = orchestrator
         .load_all_pending_transactions_in_test()?
         .into_iter()
         .map(|t| t.into_inner())
         .collect();
-    if !pending_txes.is_empty() {
-        assert_eq!(pending_txes, vec![txn.clone()]);
-    }
+    assert_eq!(pending_txes, vec![txn.clone()]);
 
-    // Bring up 1 validator, we obtain quorum again and tx should succeed
+    // Bring back both validators so there's quorum again.
+    // TODO: investigate why only starting one validator can prevent the txn from
+    // being executed for > 120s.
     test_cluster.start_node(&validator_addresses[0]).await;
+    test_cluster.start_node(&validator_addresses[1]).await;
     tokio::task::yield_now().await;
-    execute_with_orchestrator(
-        &orchestrator,
-        txn,
-        ExecuteTransactionRequestType::WaitForLocalExecution,
-    )
-    .await
-    .unwrap();
 
-    // TODO: wal erasing is done in the loop handling effects, so may have some delay.
-    // However, once the refactoring is completed the wal removal will be done before
-    // response is returned and we will not need the sleep.
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    // The tx should be erased in wal log.
+    // The transaction should eventually be retried and succeed now that quorum is restored.
+    // Wait for txn to be executed.
+    wait_for_tx(
+        *txn.digest(),
+        orchestrator.authority_state().clone(),
+        Duration::from_secs(120),
+    )
+    .await;
+
     let pending_txes = orchestrator.load_all_pending_transactions_in_test()?;
     assert!(pending_txes.is_empty());
     assert!(orchestrator.empty_pending_tx_log_in_test());
-
-    Ok(())
-}
-
-#[sim_test]
-async fn test_pending_wal_recovers_same_digest_after_fullnode_crash_with_validator_locks()
--> Result<(), anyhow::Error> {
-    telemetry_subscribers::init_for_testing();
-    let mut test_cluster = TestClusterBuilder::new()
-        .with_epoch_duration_ms(600000)
-        .build()
-        .await;
-    let mut txns = batch_make_transfer_transactions(&test_cluster.wallet, 1).await;
-    let transaction = txns.pop().unwrap();
-    let transaction_digest = *transaction.digest();
-    let transaction_data = &transaction.data().intent_message().value;
-    let gas_object = transaction_data.gas()[0];
-    let conflicting_transaction = test_cluster
-        .wallet
-        .sign_transaction(
-            &TestTransactionBuilder::new(
-                transaction_data.sender(),
-                gas_object,
-                transaction_data.gas_price(),
-            )
-            .transfer_rtd(Some(3), test_cluster.get_address_1())
-            .build(),
-        )
-        .await;
-    assert_ne!(transaction_digest, *conflicting_transaction.digest());
-
-    let validator_names = test_cluster.get_validator_pubkeys();
-    test_cluster.stop_node(&validator_names[0]);
-    test_cluster.stop_node(&validator_names[1]);
-
-    let fullnode_name = test_cluster
-        .fullnode_handle
-        .rtd_node
-        .with(|node| node.state().name);
-    let initial_orchestrator = test_cluster
-        .fullnode_handle
-        .rtd_node
-        .with(|node| node.transaction_orchestrator().unwrap());
-    let initial_submission = test_cluster.fullnode_handle.rtd_node.with(|_| {
-        let orchestrator = initial_orchestrator.clone();
-        let transaction = transaction.clone();
-        tokio::spawn(async move {
-            execute_with_orchestrator(
-                &orchestrator,
-                transaction,
-                ExecuteTransactionRequestType::WaitForLocalExecution,
-            )
-            .await
-        })
-    });
-
-    timeout(Duration::from_secs(10), async {
-        loop {
-            let pending = initial_orchestrator
-                .load_all_pending_transactions_in_test()
-                .unwrap();
-            if pending
-                .iter()
-                .any(|transaction| transaction.digest() == &transaction_digest)
-            {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await?;
-
-    let running_validator_handles = test_cluster
-        .swarm
-        .validator_nodes()
-        .filter(|node| node.is_running())
-        .map(|node| node.get_node_handle().unwrap())
-        .collect::<Vec<_>>();
-    let lock_wait = timeout(Duration::from_secs(30), async {
-        loop {
-            let mut all_locked_to_original = true;
-            for handle in &running_validator_handles {
-                let locked_digest = handle
-                    .with_async(|node| async move {
-                        let state = node.state();
-                        let epoch_store = state.epoch_store_for_testing();
-                        epoch_store
-                            .tables()
-                            .unwrap()
-                            .get_locked_transaction(&gas_object)
-                            .unwrap()
-                    })
-                    .await;
-                all_locked_to_original &= locked_digest == Some(transaction_digest);
-            }
-            if all_locked_to_original {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await;
-    if lock_wait.is_err() {
-        let mut observed_locks = Vec::new();
-        for handle in &running_validator_handles {
-            observed_locks.push(
-                handle
-                    .with_async(|node| async move {
-                        let state = node.state();
-                        let epoch_store = state.epoch_store_for_testing();
-                        epoch_store
-                            .tables()
-                            .unwrap()
-                            .get_locked_transaction(&gas_object)
-                            .unwrap()
-                    })
-                    .await,
-            );
-        }
-        let submission_result = if initial_submission.is_finished() {
-            Some(initial_submission.await.unwrap())
-        } else {
-            None
-        };
-        anyhow::bail!(
-            "validators did not lock the original transaction: locks={observed_locks:?}, submission={submission_result:?}"
-        );
-    }
-
-    drop(initial_orchestrator);
-    test_cluster.stop_node(&fullnode_name);
-    test_cluster.fullnode_handle.rtd_node.release_for_testing();
-    test_cluster.start_node(&fullnode_name).await;
-    test_cluster.fullnode_handle.rtd_node = test_cluster
-        .swarm
-        .node(&fullnode_name)
-        .unwrap()
-        .get_node_handle()
-        .unwrap();
-    let recovered_orchestrator = test_cluster
-        .fullnode_handle
-        .rtd_node
-        .with(|node| node.transaction_orchestrator().unwrap());
-
-    timeout(Duration::from_secs(10), async {
-        loop {
-            let pending = recovered_orchestrator
-                .load_all_pending_transactions_in_test()
-                .unwrap();
-            if pending.len() == 1 && pending[0].digest() == &transaction_digest {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await?;
-
-    let conflict_error = execute_with_orchestrator(
-        &recovered_orchestrator,
-        conflicting_transaction,
-        ExecuteTransactionRequestType::WaitForEffectsCert,
-    )
-    .await
-    .unwrap_err();
-    assert!(
-        matches!(
-            conflict_error,
-            QuorumDriverError::ObjectsDoubleUsed { .. }
-                | QuorumDriverError::TimeoutBeforeFinalityWithErrors { .. }
-                | QuorumDriverError::FailedWithTransientErrorAfterMaximumAttempts { .. }
-                | QuorumDriverError::TransactionFailed {
-                    category: ErrorCategory::LockConflict,
-                    ..
-                }
-        ),
-        "unexpected conflict error: {conflict_error:?}"
-    );
-
-    for handle in &running_validator_handles {
-        let locked_digest = handle
-            .with_async(|node| async move {
-                let state = node.state();
-                let epoch_store = state.epoch_store_for_testing();
-                epoch_store
-                    .tables()
-                    .unwrap()
-                    .get_locked_transaction(&gas_object)
-                    .unwrap()
-            })
-            .await;
-        assert_eq!(locked_digest, Some(transaction_digest));
-    }
-
-    test_cluster.start_node(&validator_names[0]).await;
-    timeout(Duration::from_secs(30), async {
-        test_cluster
-            .fullnode_handle
-            .rtd_node
-            .with_async(|node| {
-                let state = node.state();
-                async move {
-                    state
-                        .get_transaction_cache_reader()
-                        .notify_read_executed_effects("wal crash recovery", &[transaction_digest])
-                        .await;
-                }
-            })
-            .await;
-    })
-    .await?;
-    timeout(Duration::from_secs(10), async {
-        while !recovered_orchestrator.empty_pending_tx_log_in_test() {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await?;
 
     Ok(())
 }
@@ -491,7 +275,7 @@ async fn test_tx_across_epoch_boundaries() {
                 info!(?tx_digest, "tx result: ok");
                 result_tx.send(response.effects).await.unwrap();
             }
-            Err(QuorumDriverError::TimeoutBeforeFinality) => {
+            Err(TransactionSubmissionError::TimeoutBeforeFinality) => {
                 info!(?tx_digest, "tx result: timeout and will retry")
             }
             Err(other) => panic!("unexpected error: {:?}", other),
@@ -529,7 +313,8 @@ async fn execute_with_orchestrator(
     orchestrator: &TransactionOrchestrator<NetworkAuthorityClient>,
     txn: Transaction,
     request_type: ExecuteTransactionRequestType,
-) -> Result<(ExecuteTransactionResponseV3, IsTransactionExecutedLocally), QuorumDriverError> {
+) -> Result<(ExecuteTransactionResponseV3, IsTransactionExecutedLocally), TransactionSubmissionError>
+{
     orchestrator
         .execute_transaction_block(ExecuteTransactionRequestV3::new_v2(txn), request_type, None)
         .await
@@ -601,15 +386,15 @@ async fn execute_transaction_v3_staking_transaction() -> Result<(), anyhow::Erro
     let orchestrator = handle.with(|n| n.transaction_orchestrator().as_ref().unwrap().clone());
 
     let validator_address = context
-        .get_client()
+        .grpc_client()?
+        .get_system_state(None)
         .await?
-        .governance_api()
-        .get_latest_rtd_system_state()
-        .await?
-        .active_validators
+        .validators()
+        .active_validators()
         .first()
         .unwrap()
-        .rtd_address;
+        .address()
+        .parse()?;
     let transaction = make_staking_transaction(context, validator_address).await;
 
     let request = ExecuteTransactionRequestV3 {
@@ -729,7 +514,7 @@ async fn test_early_validation_with_old_object_version() -> Result<(), anyhow::E
 
     let err = result.unwrap_err();
     match err {
-        QuorumDriverError::TransactionFailed { category, details } => {
+        TransactionSubmissionError::TransactionFailed { category, details } => {
             // Should be non-retriable
             assert_eq!(category, ErrorCategory::InvalidTransaction);
             assert!(!category.is_submission_retriable());

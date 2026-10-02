@@ -1,4 +1,3 @@
-
 ```sh
 Rtd keystore tool
 
@@ -63,7 +62,6 @@ Commands:
           keystore. Any signature commits to a [struct IntentMessage] consisting of the Base64
           encoded of the BCS serialized transaction bytes itself and its intent. If intent is
           absent, default will be used
-  sign-kms
           Creates a signature by leveraging AWS KMS. Pass in a key-id to leverage Amazon KMS to sign
           a message and the base64 pubkey. Generate PubKey from pem using LinkUVerse/base64pemkey
           Any signature commits to a [struct IntentMessage] consisting of the Base64 encoded of the
@@ -97,6 +95,7 @@ Commands:
 Options:
       --keystore-path <KEYSTORE_PATH>  
       --json                           Return command outputs in json format
+  -q, --quiet                          Display less output
   -h, --help                           Print help
   -V, --version                        Print version
 ```

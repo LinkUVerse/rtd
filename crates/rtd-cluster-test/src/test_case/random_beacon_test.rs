@@ -3,9 +3,9 @@
 
 use crate::{TestCaseImpl, TestContext};
 use async_trait::async_trait;
-use rtd_json_rpc_types::{RtdExecutionStatus, RtdTransactionBlockEffectsAPI};
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_test_transaction_builder::{emit_new_random_u128, publish_basics_package};
+use rtd_types::effects::TransactionEffectsAPI;
 use tracing::info;
 
 pub struct RandomBeaconTest;
@@ -36,11 +36,10 @@ impl TestCaseImpl for RandomBeaconTest {
         let package_ref = publish_basics_package(wallet_context).await;
 
         let response = emit_new_random_u128(wallet_context, package_ref.0).await;
-        assert_eq!(
-            *response.effects.as_ref().unwrap().status(),
-            RtdExecutionStatus::Success,
+        assert!(
+            response.effects.status().is_ok(),
             "Generate new random value txn failed: {:?}",
-            *response.effects.as_ref().unwrap().status()
+            *response.effects.status()
         );
 
         // Check that only the expected event was emitted.
@@ -57,7 +56,7 @@ impl TestCaseImpl for RandomBeaconTest {
         );
 
         // Verify fullnode observes the txn
-        ctx.let_fullnode_sync(vec![response.digest], 5).await;
+        ctx.wait_for_txns(&[response.transaction.digest()]).await;
 
         Ok(())
     }
@@ -65,8 +64,12 @@ impl TestCaseImpl for RandomBeaconTest {
 
 impl RandomBeaconTest {
     async fn is_beacon_enabled(wallet_context: &WalletContext) -> bool {
-        let client = wallet_context.get_client().await.unwrap();
-        let config = client.read_api().get_protocol_config(None).await.unwrap();
-        *config.feature_flags.get("random_beacon").unwrap()
+        let config = wallet_context
+            .grpc_client()
+            .unwrap()
+            .get_protocol_config(None)
+            .await
+            .unwrap();
+        *config.feature_flags().get("random_beacon").unwrap()
     }
 }

@@ -1,14 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_default_config::DefaultConfig;
-use rtd_indexer_alt_framework::{self as framework, pipeline::CommitterConfig};
+use std::num::NonZeroUsize;
 
-use crate::{DbConfig, rpc::pagination::PaginationConfig};
+use rtd_indexer_alt_framework as framework;
+use rtd_indexer_alt_framework::pipeline::CommitterConfig;
+use serde::Deserialize;
+use serde::Serialize;
+use tracing::warn;
 
-#[DefaultConfig]
-#[derive(Default)]
-#[serde(deny_unknown_fields)]
+use crate::DbConfig;
+use crate::rpc::pagination::PaginationConfig;
+
+#[derive(Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ServiceConfig {
     /// How checkpoints are read by the indexer.
     pub ingestion: IngestionConfig,
@@ -32,21 +37,24 @@ pub struct ServiceConfig {
 
 /// This type is identical to [`framework::ingestion::IngestionConfig`], but is set-up to be
 /// serialized and deserialized by `serde`.
-#[DefaultConfig]
-#[serde(deny_unknown_fields)]
+#[derive(Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IngestionConfig {
-    pub checkpoint_buffer_size: usize,
-    pub ingest_concurrency: usize,
+    pub ingest_concurrency: framework::config::ConcurrencyConfig,
     pub retry_interval_ms: u64,
-    pub streaming_backoff_initial_batch_size: usize,
+    pub streaming_backoff_initial_batch_size: NonZeroUsize,
     pub streaming_backoff_max_batch_size: usize,
     pub streaming_connection_timeout_ms: u64,
     pub streaming_statement_timeout_ms: u64,
+    pub min_cohort_boundary: u64,
+
+    /// Deprecated: accepted (and ignored) so old configs don't fail to parse. Replaced by
+    /// per-pipeline `ingestion.subscriber-channel-size`.
+    pub checkpoint_buffer_size: Option<usize>,
 }
 
-#[DefaultConfig]
-#[derive(Clone)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConsistencyConfig {
     /// The number of snapshots to keep in the buffer.
     pub snapshots: u64,
@@ -58,33 +66,32 @@ pub struct ConsistencyConfig {
     pub buffer_size: usize,
 }
 
-#[DefaultConfig]
-#[derive(Default)]
+#[derive(Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
 pub struct PipelineLayer {
     pub balances: Option<CommitterLayer>,
     pub object_by_owner: Option<CommitterLayer>,
     pub object_by_type: Option<CommitterLayer>,
+    pub address_balances: Option<CommitterLayer>,
 }
 
-#[DefaultConfig]
-#[derive(Default)]
-#[serde(deny_unknown_fields)]
+#[derive(Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CommitterLayer {
     pub write_concurrency: Option<usize>,
     pub collect_interval_ms: Option<u64>,
     pub watermark_interval_ms: Option<u64>,
 }
 
-#[DefaultConfig]
-#[derive(Default)]
-#[serde(deny_unknown_fields)]
+#[derive(Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RpcConfig {
     /// Configuration for paginated endpoints in the RPC service.
     pub pagination: PaginationConfig,
 }
 
 impl ServiceConfig {
-    /// Generate an example configuration, rtdtable for demonstrating the fields available to
+    /// Generate an example configuration, suitable for demonstrating the fields available to
     /// configure.
     pub fn example() -> Self {
         let mut example = Self::default();
@@ -95,14 +102,15 @@ impl ServiceConfig {
         example
     }
 
-    /// Generate a configuration rtdtable for testing. This is the same as the example
+    /// Generate a configuration suitable for testing. This is the same as the example
     /// configuration, but with reduced concurrency and faster polling intervals so tests spend
     /// less time waiting.
     pub fn for_test() -> Self {
         let mut for_test = Self::example();
 
         for_test.ingestion.retry_interval_ms = 10;
-        for_test.ingestion.ingest_concurrency = 1;
+        for_test.ingestion.ingest_concurrency =
+            framework::config::ConcurrencyConfig::Fixed { value: 1 };
 
         for_test.committer.collect_interval_ms = Some(50);
         for_test.committer.watermark_interval_ms = Some(50);
@@ -113,13 +121,14 @@ impl ServiceConfig {
 }
 
 impl PipelineLayer {
-    /// Generate an example configuration, rtdtable for demonstrating the fields available to
+    /// Generate an example configuration, suitable for demonstrating the fields available to
     /// configure.
     pub fn example() -> Self {
         Self {
             balances: Some(CommitterLayer::default()),
             object_by_owner: Some(CommitterLayer::default()),
             object_by_type: Some(CommitterLayer::default()),
+            address_balances: Some(CommitterLayer::default()),
         }
     }
 }
@@ -132,6 +141,7 @@ impl CommitterLayer {
             watermark_interval_ms: self
                 .watermark_interval_ms
                 .unwrap_or(base.watermark_interval_ms),
+            ..Default::default()
         }
     }
 }
@@ -139,27 +149,36 @@ impl CommitterLayer {
 impl From<framework::ingestion::IngestionConfig> for IngestionConfig {
     fn from(config: framework::ingestion::IngestionConfig) -> Self {
         Self {
-            checkpoint_buffer_size: config.checkpoint_buffer_size,
             ingest_concurrency: config.ingest_concurrency,
             retry_interval_ms: config.retry_interval_ms,
             streaming_backoff_initial_batch_size: config.streaming_backoff_initial_batch_size,
             streaming_backoff_max_batch_size: config.streaming_backoff_max_batch_size,
             streaming_connection_timeout_ms: config.streaming_connection_timeout_ms,
             streaming_statement_timeout_ms: config.streaming_statement_timeout_ms,
+            min_cohort_boundary: config.min_cohort_boundary,
+            checkpoint_buffer_size: None,
         }
     }
 }
 
 impl From<IngestionConfig> for framework::ingestion::IngestionConfig {
     fn from(config: IngestionConfig) -> Self {
+        if config.checkpoint_buffer_size.is_some() {
+            warn!(
+                "Config field `checkpoint-buffer-size` is deprecated and ignored. Remove it from \
+                 your config; set `subscriber-channel-size` under each pipeline's `ingestion` \
+                 section if you need to override the default."
+            );
+        }
+
         framework::ingestion::IngestionConfig {
-            checkpoint_buffer_size: config.checkpoint_buffer_size,
             ingest_concurrency: config.ingest_concurrency,
             retry_interval_ms: config.retry_interval_ms,
             streaming_backoff_initial_batch_size: config.streaming_backoff_initial_batch_size,
             streaming_backoff_max_batch_size: config.streaming_backoff_max_batch_size,
             streaming_connection_timeout_ms: config.streaming_connection_timeout_ms,
             streaming_statement_timeout_ms: config.streaming_statement_timeout_ms,
+            min_cohort_boundary: config.min_cohort_boundary,
         }
     }
 }

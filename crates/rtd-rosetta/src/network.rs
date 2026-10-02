@@ -5,10 +5,10 @@ use axum::extract::State;
 use axum::{Extension, Json};
 use axum_extra::extract::WithRejection;
 use prost_types::FieldMask;
-use serde_json::json;
-use strum::IntoEnumIterator;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::{GetCheckpointRequest, GetEpochRequest};
+use serde_json::json;
+use strum::IntoEnumIterator;
 
 use fastcrypto::encoding::Hex;
 use rtd_types::base_types::{ObjectID, RtdAddress};

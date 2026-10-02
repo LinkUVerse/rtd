@@ -1,24 +1,34 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use rtd_futures::service::Service;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{SetOnce, mpsc};
+use serde::Deserialize;
+use serde::Serialize;
+use tokio::sync::SetOnce;
+use tokio::sync::mpsc;
 use tracing::info;
 
-use crate::{
-    Task, metrics::IndexerMetrics, store::Store, types::full_checkpoint_content::Checkpoint,
-};
-
-use super::{CommitterConfig, PIPELINE_BUFFER, Processor, WatermarkPart, processor::processor};
-
-use self::{
-    collector::collector, commit_watermark::commit_watermark, committer::committer,
-    main_reader_lo::track_main_reader_lo, pruner::pruner, reader_watermark::reader_watermark,
-};
+use crate::Task;
+use crate::config::ConcurrencyConfig;
+use crate::ingestion::ingestion_client::CheckpointEnvelope;
+use crate::metrics::IndexerMetrics;
+use crate::pipeline::CommitterConfig;
+use crate::pipeline::IngestionConfig;
+use crate::pipeline::Processor;
+use crate::pipeline::WatermarkPart;
+use crate::pipeline::concurrent::collector::collector;
+use crate::pipeline::concurrent::commit_watermark::commit_watermark;
+use crate::pipeline::concurrent::committer::committer;
+use crate::pipeline::concurrent::main_reader_lo::track_main_reader_lo;
+use crate::pipeline::concurrent::pruner::pruner;
+use crate::pipeline::concurrent::reader_watermark::reader_watermark;
+use crate::pipeline::processor::processor;
+use crate::store::ConcurrentStore;
+use crate::store::Store;
 
 mod collector;
 mod commit_watermark;
@@ -57,7 +67,7 @@ pub enum BatchStatus {
 /// back to the ingestion service.
 #[async_trait]
 pub trait Handler: Processor {
-    type Store: Store;
+    type Store: ConcurrentStore;
     type Batch: Default + Send + Sync + 'static;
 
     /// If at least this many rows are pending, the committer will commit them eagerly.
@@ -110,8 +120,32 @@ pub struct ConcurrentConfig {
     /// Configuration for the writer, that makes forward progress.
     pub committer: CommitterConfig,
 
+    /// Per-pipeline ingestion overrides.
+    pub ingestion: IngestionConfig,
+
     /// Configuration for the pruner, that deletes old data.
     pub pruner: Option<PrunerConfig>,
+
+    /// Processor concurrency. Defaults to adaptive scaling up to the number of CPUs.
+    pub fanout: Option<ConcurrencyConfig>,
+
+    /// Override for `Handler::MIN_EAGER_ROWS` (eager batch threshold).
+    pub min_eager_rows: Option<usize>,
+
+    /// Override for `Handler::MAX_PENDING_ROWS` (backpressure threshold).
+    pub max_pending_rows: Option<usize>,
+
+    /// Override for `Handler::MAX_WATERMARK_UPDATES` (watermarks per batch cap).
+    pub max_watermark_updates: Option<usize>,
+
+    /// Size of the channel between the processor and collector.
+    pub processor_channel_size: Option<usize>,
+
+    /// Size of the channel between the collector and committer.
+    pub collector_channel_size: Option<usize>,
+
+    /// Size of the channel between the committer and the watermark updater.
+    pub committer_channel_size: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -203,14 +237,13 @@ impl Default for PrunerConfig {
 /// channels are created to communicate between its various components. The pipeline will shutdown
 /// if any of its input or output channels close, any of its independent tasks fail, or if it is
 /// signalled to shutdown through the returned service handle.
-pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
+pub(crate) fn pipeline<H: Handler>(
     handler: H,
     next_checkpoint: u64,
     config: ConcurrentConfig,
     store: H::Store,
     task: Option<Task>,
-    checkpoint_rx: mpsc::Receiver<Arc<Checkpoint>>,
-    commit_hi_tx: mpsc::UnboundedSender<(&'static str, u64)>,
+    checkpoint_rx: mpsc::Receiver<Arc<CheckpointEnvelope>>,
     metrics: Arc<IndexerMetrics>,
 ) -> Service {
     info!(
@@ -220,16 +253,40 @@ pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
 
     let ConcurrentConfig {
         committer: committer_config,
+        ingestion: _,
         pruner: pruner_config,
+        fanout,
+        min_eager_rows,
+        max_pending_rows,
+        max_watermark_updates,
+        processor_channel_size,
+        collector_channel_size,
+        committer_channel_size,
     } = config;
 
-    let (processor_tx, collector_rx) = mpsc::channel(H::FANOUT + PIPELINE_BUFFER);
+    let concurrency = fanout.unwrap_or(ConcurrencyConfig::Adaptive {
+        initial: 1,
+        min: 1,
+        max: num_cpus::get().max(1),
+        dead_band: None,
+    });
+    let min_eager_rows = min_eager_rows.unwrap_or(H::MIN_EAGER_ROWS);
+    let max_pending_rows = max_pending_rows.unwrap_or(H::MAX_PENDING_ROWS);
+    let max_watermark_updates = max_watermark_updates.unwrap_or(H::MAX_WATERMARK_UPDATES);
+
+    let processor_channel_size = processor_channel_size
+        .unwrap_or_else(|| num_cpus::get() / 2)
+        .max(1);
+    let (processor_tx, collector_rx) = mpsc::channel(processor_channel_size);
+
+    let collector_channel_size = collector_channel_size
+        .unwrap_or_else(|| num_cpus::get() / 2)
+        .max(1);
     //docs::#buff (see docs/content/guides/developer/advanced/custom-indexer.mdx)
-    let (collector_tx, committer_rx) =
-        mpsc::channel(committer_config.write_concurrency + PIPELINE_BUFFER);
+    let (collector_tx, committer_rx) = mpsc::channel(collector_channel_size);
     //docs::/#buff
-    let (committer_tx, watermark_rx) =
-        mpsc::channel(committer_config.write_concurrency + PIPELINE_BUFFER);
+    let committer_channel_size = committer_channel_size.unwrap_or_else(num_cpus::get).max(1);
+    let (committer_tx, watermark_rx) = mpsc::channel(committer_channel_size);
     let main_reader_lo = Arc::new(SetOnce::new());
 
     let handler = Arc::new(handler);
@@ -239,6 +296,8 @@ pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
         checkpoint_rx,
         processor_tx,
         metrics.clone(),
+        concurrency,
+        store.clone(),
     );
 
     let s_collector = collector::<H>(
@@ -248,6 +307,9 @@ pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
         collector_tx,
         main_reader_lo.clone(),
         metrics.clone(),
+        min_eager_rows,
+        max_pending_rows,
+        max_watermark_updates,
     );
 
     let s_committer = committer::<H>(
@@ -263,7 +325,6 @@ pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
         next_checkpoint,
         committer_config,
         watermark_rx,
-        commit_hi_tx,
         store.clone(),
         task.as_ref().map(|t| t.task.clone()),
         metrics.clone(),
@@ -291,26 +352,26 @@ pub(crate) fn pipeline<H: Handler + Send + Sync + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use prometheus::Registry;
-    use tokio::{sync::mpsc, time::timeout};
+    use rtd_types::digests::CheckpointDigest;
+    use tokio::sync::mpsc;
+    use tokio::time::timeout;
 
-    use crate::{
-        FieldCount,
-        metrics::IndexerMetrics,
-        mocks::store::{MockConnection, MockStore},
-        pipeline::Processor,
-        types::{
-            full_checkpoint_content::Checkpoint,
-            test_checkpoint_data_builder::TestCheckpointBuilder,
-        },
-    };
+    use crate::FieldCount;
+    use crate::metrics::IndexerMetrics;
+    use crate::mocks::store::FallibleMockConnection;
+    use crate::mocks::store::FallibleMockStore;
+    use crate::pipeline::Processor;
+    use crate::types::full_checkpoint_content::Checkpoint;
+    use crate::types::test_checkpoint_data_builder::TestCheckpointBuilder;
 
     use super::*;
 
     const TEST_TIMEOUT: Duration = Duration::from_secs(60);
-    const TEST_CHECKPOINT_BUFFER_SIZE: usize = 3; // Critical for back-pressure testing calculations
+    const TEST_SUBSCRIBER_CHANNEL_SIZE: usize = 3; // Critical for back-pressure testing calculations
 
     #[derive(Clone, Debug, FieldCount)]
     struct TestValue {
@@ -323,7 +384,6 @@ mod tests {
     #[async_trait]
     impl Processor for DataPipeline {
         const NAME: &'static str = "test_handler";
-        const FANOUT: usize = 2;
         type Value = TestValue;
 
         async fn process(&self, checkpoint: &Arc<Checkpoint>) -> anyhow::Result<Vec<Self::Value>> {
@@ -345,7 +405,7 @@ mod tests {
 
     #[async_trait]
     impl Handler for DataPipeline {
-        type Store = MockStore;
+        type Store = FallibleMockStore;
         type Batch = Vec<TestValue>;
 
         const MIN_EAGER_ROWS: usize = 1000; // High value to disable eager batching
@@ -365,7 +425,7 @@ mod tests {
         async fn commit<'a>(
             &self,
             batch: &Self::Batch,
-            conn: &mut MockConnection<'a>,
+            conn: &mut FallibleMockConnection<'a>,
         ) -> anyhow::Result<usize> {
             // Group values by checkpoint
             let mut grouped: std::collections::HashMap<u64, Vec<u64>> =
@@ -385,24 +445,26 @@ mod tests {
             &self,
             from: u64,
             to_exclusive: u64,
-            conn: &mut MockConnection<'a>,
+            conn: &mut FallibleMockConnection<'a>,
         ) -> anyhow::Result<usize> {
             conn.0.prune_data(DataPipeline::NAME, from, to_exclusive)
         }
     }
 
     struct TestSetup {
-        store: MockStore,
-        checkpoint_tx: mpsc::Sender<Arc<Checkpoint>>,
+        store: FallibleMockStore,
+        checkpoint_tx: mpsc::Sender<Arc<CheckpointEnvelope>>,
         #[allow(unused)]
         pipeline: Service,
     }
 
     impl TestSetup {
-        async fn new(config: ConcurrentConfig, store: MockStore, next_checkpoint: u64) -> Self {
-            let (checkpoint_tx, checkpoint_rx) = mpsc::channel(TEST_CHECKPOINT_BUFFER_SIZE);
-            #[allow(clippy::disallowed_methods)]
-            let (commit_hi_tx, _commit_hi_rx) = mpsc::unbounded_channel();
+        async fn new(
+            config: ConcurrentConfig,
+            store: FallibleMockStore,
+            next_checkpoint: u64,
+        ) -> Self {
+            let (checkpoint_tx, checkpoint_rx) = mpsc::channel(TEST_SUBSCRIBER_CHANNEL_SIZE);
             let metrics = IndexerMetrics::new(None, &Registry::default());
 
             let pipeline = pipeline(
@@ -412,7 +474,6 @@ mod tests {
                 store.clone(),
                 None,
                 checkpoint_rx,
-                commit_hi_tx,
                 metrics,
             );
 
@@ -424,14 +485,17 @@ mod tests {
         }
 
         async fn send_checkpoint(&self, checkpoint: u64) -> anyhow::Result<()> {
-            let checkpoint = Arc::new(
-                TestCheckpointBuilder::new(checkpoint)
-                    .with_epoch(1)
-                    .with_network_total_transactions(checkpoint * 2)
-                    .with_timestamp_ms(1000000000 + checkpoint * 1000)
-                    .build_checkpoint(),
-            );
-            self.checkpoint_tx.send(checkpoint).await?;
+            let checkpoint_envelope = Arc::new(CheckpointEnvelope {
+                checkpoint: Arc::new(
+                    TestCheckpointBuilder::new(checkpoint)
+                        .with_epoch(1)
+                        .with_network_total_transactions(checkpoint * 2)
+                        .with_timestamp_ms(1000000000 + checkpoint * 1000)
+                        .build_checkpoint(),
+                ),
+                chain_id: CheckpointDigest::new([1; 32]).into(),
+            });
+            self.checkpoint_tx.send(checkpoint_envelope).await?;
             Ok(())
         }
 
@@ -465,7 +529,7 @@ mod tests {
             }),
             ..Default::default()
         };
-        let store = MockStore::default();
+        let store = FallibleMockStore::default();
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send initial checkpoints
@@ -503,22 +567,32 @@ mod tests {
             assert_eq!(data, vec![i * 10 + 1, i * 10 + 2]);
         }
 
-        // Wait for pruning to occur (5s + delay + processing time)
-        tokio::time::sleep(Duration::from_millis(5_200)).await;
+        // Wait for pruning to occur. The pruner and reader_watermark tasks both run on
+        // the same interval, so poll until the pruner has caught up rather instead of using a
+        // fixed sleep.
+        let pruning_deadline = Duration::from_secs(15);
+        let start = tokio::time::Instant::now();
+        loop {
+            let pruned = {
+                let data = setup.store.data.get(DataPipeline::NAME).unwrap();
+                !data.contains_key(&0) && !data.contains_key(&1) && !data.contains_key(&2)
+            };
+            if pruned {
+                break;
+            }
+            assert!(
+                start.elapsed() < pruning_deadline,
+                "Timed out waiting for pruning to occur"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
 
-        // Verify pruning has occurred
+        // Verify recent checkpoints are still available
         {
             let data = setup.store.data.get(DataPipeline::NAME).unwrap();
-
-            // Verify recent checkpoints are still available
             assert!(data.contains_key(&3));
             assert!(data.contains_key(&4));
             assert!(data.contains_key(&5));
-
-            // Verify old checkpoints are pruned
-            assert!(!data.contains_key(&0));
-            assert!(!data.contains_key(&1));
-            assert!(!data.contains_key(&2));
         };
     }
 
@@ -528,7 +602,7 @@ mod tests {
             pruner: None,
             ..Default::default()
         };
-        let store = MockStore::default();
+        let store = FallibleMockStore::default();
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send several checkpoints
@@ -555,7 +629,7 @@ mod tests {
         }
 
         // Verify watermark progression
-        assert_eq!(watermark.checkpoint_hi_inclusive, 9);
+        assert_eq!(watermark.checkpoint_hi_inclusive, Some(9));
         assert_eq!(watermark.tx_hi, 18); // 9 * 2
         assert_eq!(watermark.timestamp_ms_hi_inclusive, 1000009000); // 1000000000 + 9 * 1000
 
@@ -570,7 +644,7 @@ mod tests {
     #[tokio::test]
     async fn test_out_of_order_processing() {
         let config = ConcurrentConfig::default();
-        let store = MockStore::default();
+        let store = FallibleMockStore::default();
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send checkpoints out of order
@@ -601,7 +675,7 @@ mod tests {
     #[tokio::test]
     async fn test_watermark_progression_with_gaps() {
         let config = ConcurrentConfig::default();
-        let store = MockStore::default();
+        let store = FallibleMockStore::default();
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send checkpoints with a gap (0, 1, 3, 4) - missing checkpoint 2
@@ -617,7 +691,7 @@ mod tests {
 
         // Watermark should only progress to 1 (can't progress past the gap)
         let watermark = setup.store.watermark(DataPipeline::NAME).unwrap();
-        assert_eq!(watermark.checkpoint_hi_inclusive, 1);
+        assert_eq!(watermark.checkpoint_hi_inclusive, Some(1));
 
         // Now send the missing checkpoint 2
         setup
@@ -630,7 +704,7 @@ mod tests {
             .store
             .wait_for_watermark(DataPipeline::NAME, 4, TEST_TIMEOUT)
             .await;
-        assert_eq!(watermark.checkpoint_hi_inclusive, 4);
+        assert_eq!(watermark.checkpoint_hi_inclusive, Some(4));
     }
 
     // ==================== BACK-PRESSURE TESTING ====================
@@ -641,7 +715,7 @@ mod tests {
         //
         // ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
         // │ Checkpoint │ ─► │ Processor  │ ─► │ Collector  │ ─► │ Committer  │
-        // │   Input    │    │ (FANOUT=2) │    │            │    │            │
+        // │   Input    │    │ (fanout=2) │    │            │    │            │
         // └────────────┘    └────────────┘    └[BOTTLENECK]┘    └────────────┘
         //                │                 │                 │
         //              [●●●]           [●●●●●●●]         [●●●●●●]
@@ -655,21 +729,24 @@ mod tests {
                 write_concurrency: 1,
                 ..Default::default()
             },
+            fanout: Some(ConcurrencyConfig::Fixed { value: 2 }),
+            processor_channel_size: Some(7),
+            collector_channel_size: Some(6),
             ..Default::default()
         };
-        let store = MockStore::default();
+        let store = FallibleMockStore::default();
         let setup = TestSetup::new(config, store, 0).await;
 
         // Wait for initial setup
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         // Pipeline capacity analysis with collector back pressure:
-        // Configuration: MAX_PENDING_ROWS=4, FANOUT=2, PIPELINE_BUFFER=5
+        // Configuration: MAX_PENDING_ROWS=4, fanout=2
         //
         // Channel and task breakdown:
-        // - Checkpoint->Processor channel: 3 slots (TEST_CHECKPOINT_BUFFER_SIZE)
-        // - Processor tasks: 2 tasks (FANOUT=2)
-        // - Processor->Collector channel: 7 slots (FANOUT=2 + PIPELINE_BUFFER=5)
+        // - Checkpoint->Processor channel: 3 slots (TEST_SUBSCRIBER_CHANNEL_SIZE)
+        // - Processor tasks: 2 tasks (fanout=2)
+        // - Processor->Collector channel: 7 slots (processor_channel_size=7)
         // - Collector pending: 2 checkpoints × 2 values = 4 values (hits MAX_PENDING_ROWS=4)
         //
         // Total capacity: 3 + 2 + 7 + 2 = 14 checkpoints
@@ -707,32 +784,39 @@ mod tests {
         //
         // ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
         // │ Checkpoint │ ─► │ Processor  │ ─► │ Collector  │ ─► │ Committer  │
-        // │   Input    │    │ (FANOUT=2) │    │            │    │🐌 10s Delay│
+        // │   Input    │    │ (fanout=2) │    │            │    │🐌 10s Delay│
         // └────────────┘    └────────────┘    └────────────┘    └[BOTTLENECK]┘
         //                │                 │                 │
-        //              [●●●]           [●●●●●●●]         [●●●●●●]
-        //            buffer: 3         buffer: 7         buffer: 6
+        //              [●●●]           [●●●●●●●]          [●●●●●●]
+        //            buffer: 3    proc_chan: 7       coll_chan: 6
         //
         // BOTTLENECK: Committer with 10s delay blocks entire pipeline
 
         let config = ConcurrentConfig {
             committer: CommitterConfig {
                 write_concurrency: 1, // Single committer for deterministic blocking
+                // MIN_EAGER_ROWS is 1000 and MAX_PENDING_ROWS is 4, so
+                // this test relies on the collect interval tip to force
+                // batch flushing.
+                collect_interval_ms: 10,
                 ..Default::default()
             },
+            fanout: Some(ConcurrencyConfig::Fixed { value: 2 }),
+            processor_channel_size: Some(7),
+            collector_channel_size: Some(6),
             ..Default::default()
         };
-        let store = MockStore::default().with_commit_delay(10_000); // 10 seconds delay
+        let store = FallibleMockStore::default().with_commit_delay(10_000); // 10 seconds delay
         let setup = TestSetup::new(config, store, 0).await;
 
         // Pipeline capacity analysis with slow commits:
-        // Configuration: FANOUT=2, write_concurrency=1, PIPELINE_BUFFER=5
+        // Configuration: fanout=2, write_concurrency=1
         //
         // Channel and task breakdown:
-        // - Checkpoint->Processor channel: 3 slots (TEST_CHECKPOINT_BUFFER_SIZE)
-        // - Processor tasks: 2 tasks (FANOUT=2)
-        // - Processor->Collector channel: 7 slots (FANOUT=2 + PIPELINE_BUFFER=5)
-        // - Collector->Committer channel: 6 slots (write_concurrency=1 + PIPELINE_BUFFER=5)
+        // - Checkpoint->Processor channel: 3 slots (TEST_SUBSCRIBER_CHANNEL_SIZE)
+        // - Processor tasks: 2 tasks (fanout=2)
+        // - Processor->Collector channel: 7 slots (processor_channel_size=7)
+        // - Collector->Committer channel: 6 slots (collector_channel_size=6)
         // - Committer task: 1 task (blocked by slow commit)
         //
         // Total theoretical capacity: 3 + 2 + 7 + 6 + 1 = 19 checkpoints
@@ -783,7 +867,7 @@ mod tests {
     #[tokio::test]
     async fn test_commit_failure_retry() {
         let config = ConcurrentConfig::default();
-        let store = MockStore::default().with_commit_failures(2); // Fail 2 times, then succeed
+        let store = FallibleMockStore::default().with_commit_failures(2); // Fail 2 times, then succeed
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send a checkpoint
@@ -819,7 +903,7 @@ mod tests {
         };
 
         // Configure prune failures for range [0, 2) - fail twice then succeed
-        let store = MockStore::default().with_prune_failures(0, 2, 1);
+        let store = FallibleMockStore::default().with_prune_failures(0, 2, 1);
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send enough checkpoints to trigger pruning
@@ -882,7 +966,7 @@ mod tests {
         };
 
         // Configure reader watermark failures - fail 2 times then succeed
-        let store = MockStore::default().with_reader_watermark_failures(2);
+        let store = FallibleMockStore::default().with_reader_watermark_failures(2);
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send checkpoints to trigger reader watermark updates
@@ -910,7 +994,7 @@ mod tests {
     #[tokio::test]
     async fn test_database_connection_failure_retry() {
         let config = ConcurrentConfig::default();
-        let store = MockStore::default().with_connection_failures(2); // Fail 2 times, then succeed
+        let store = FallibleMockStore::default().with_connection_failures(2); // Fail 2 times, then succeed
         let setup = TestSetup::new(config, store, 0).await;
 
         // Send a checkpoint

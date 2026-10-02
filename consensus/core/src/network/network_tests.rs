@@ -11,37 +11,30 @@ use parking_lot::Mutex;
 use rstest::rstest;
 
 use super::{
-    ExtendedSerializedBlock, NetworkClient, NetworkManager, test_network::TestService,
+    ExtendedSerializedBlock, NetworkManager, ValidatorNetworkClient, test_network::TestService,
     tonic_network::TonicManager,
 };
 use crate::{
     block::{TestBlock, VerifiedBlock},
     context::Context,
+    network::SerializedBlockForm,
 };
 
 trait ManagerBuilder {
-    fn build(
-        &self,
-        context: Arc<Context>,
-        network_keypair: NetworkKeyPair,
-    ) -> impl NetworkManager<Mutex<TestService>>;
+    fn build(&self, context: Arc<Context>, network_keypair: NetworkKeyPair) -> impl NetworkManager;
 }
 
 struct TonicManagerBuilder {}
 
 impl ManagerBuilder for TonicManagerBuilder {
-    fn build(
-        &self,
-        context: Arc<Context>,
-        network_keypair: NetworkKeyPair,
-    ) -> impl NetworkManager<Mutex<TestService>> {
+    fn build(&self, context: Arc<Context>, network_keypair: NetworkKeyPair) -> impl NetworkManager {
         TonicManager::new(context, network_keypair)
     }
 }
 
 fn block_for_round(round: Round) -> ExtendedSerializedBlock {
     ExtendedSerializedBlock {
-        block: Bytes::from(vec![round as u8; 16]),
+        block: SerializedBlockForm::Full(Bytes::from(vec![round as u8; 16])),
         excluded_ancestors: vec![],
     }
 }
@@ -74,9 +67,9 @@ async fn send_and_receive_blocks_with_auth(
             .with_authority_index(context.committee.to_authority_index(0).unwrap()),
     );
     let mut manager_0 = manager_builder.build(context_0.clone(), keys[0].0.clone());
-    let client_0 = manager_0.client();
+    let client_0 = manager_0.validator_client();
     let service_0 = service_with_own_blocks();
-    manager_0.install_service(service_0.clone()).await;
+    manager_0.start_validator_server(service_0.clone()).await;
 
     let context_1 = Arc::new(
         context
@@ -84,9 +77,9 @@ async fn send_and_receive_blocks_with_auth(
             .with_authority_index(context.committee.to_authority_index(1).unwrap()),
     );
     let mut manager_1 = manager_builder.build(context_1.clone(), keys[1].0.clone());
-    let client_1 = manager_1.client();
+    let client_1 = manager_1.validator_client();
     let service_1 = service_with_own_blocks();
-    manager_1.install_service(service_1.clone()).await;
+    manager_1.start_validator_server(service_1.clone()).await;
 
     // Test that servers can receive client RPCs.
     let test_block_0 = VerifiedBlock::new_for_test(TestBlock::new(9, 0).build());
@@ -113,7 +106,7 @@ async fn send_and_receive_blocks_with_auth(
     assert_eq!(
         service_0.lock().handle_send_block[0].1,
         ExtendedSerializedBlock {
-            block: test_block_1.serialized().clone(),
+            block: SerializedBlockForm::Full(test_block_1.serialized().clone()),
             excluded_ancestors: vec![],
         },
     );
@@ -122,7 +115,7 @@ async fn send_and_receive_blocks_with_auth(
     assert_eq!(
         service_1.lock().handle_send_block[0].1,
         ExtendedSerializedBlock {
-            block: test_block_0.serialized().clone(),
+            block: SerializedBlockForm::Full(test_block_0.serialized().clone()),
             excluded_ancestors: vec![],
         },
     );
@@ -136,9 +129,9 @@ async fn send_and_receive_blocks_with_auth(
             .with_authority_index(context_4.committee.to_authority_index(4).unwrap()),
     );
     let mut manager_4 = manager_builder.build(context_4.clone(), keys_4[4].0.clone());
-    let client_4 = manager_4.client();
+    let client_4 = manager_4.validator_client();
     let service_4 = service_with_own_blocks();
-    manager_4.install_service(service_4.clone()).await;
+    manager_4.start_validator_server(service_4.clone()).await;
 
     // client_4 should not be able to reach service_0 or service_1, because of the
     // AllowedPeers filter.
@@ -180,9 +173,9 @@ async fn subscribe_and_receive_blocks(
             .with_authority_index(context.committee.to_authority_index(0).unwrap()),
     );
     let mut manager_0 = manager_builder.build(context_0.clone(), keys[0].0.clone());
-    let client_0 = manager_0.client();
+    let client_0 = manager_0.validator_client();
     let service_0 = service_with_own_blocks();
-    manager_0.install_service(service_0.clone()).await;
+    manager_0.start_validator_server(service_0.clone()).await;
 
     let context_1 = Arc::new(
         context
@@ -190,9 +183,9 @@ async fn subscribe_and_receive_blocks(
             .with_authority_index(context.committee.to_authority_index(1).unwrap()),
     );
     let mut manager_1 = manager_builder.build(context_1.clone(), keys[1].0.clone());
-    let client_1 = manager_1.client();
+    let client_1 = manager_1.validator_client();
     let service_1 = service_with_own_blocks();
-    manager_1.install_service(service_1.clone()).await;
+    manager_1.start_validator_server(service_1.clone()).await;
 
     let client_0_round = 50;
     let receive_stream_0 = client_0

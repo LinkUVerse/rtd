@@ -1,22 +1,17 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use either::Either;
 use fastcrypto_zkp::bn254::zk_login::JwkId;
 use fastcrypto_zkp::bn254::zk_login::{JWK, OIDCProvider};
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
-use futures::pin_mut;
-use im::hashmap::HashMap as ImHashMap;
-use itertools::{Itertools as _, izip};
+use imbl::hashmap::HashMap as ImHashMap;
+use itertools::Itertools as _;
 use linku_common::debug_fatal;
-use linku_metrics::monitored_scope;
 use nonempty::NonEmpty;
-use parking_lot::{Mutex, MutexGuard, RwLock};
+use parking_lot::RwLock;
 use prometheus::{IntCounter, Registry, register_int_counter_with_registry};
-use shared_crypto::intent::Intent;
-use std::sync::Arc;
 use rtd_types::address_alias;
-use rtd_types::base_types::{SequenceNumber, RtdAddress};
+use rtd_types::base_types::{RtdAddress, SequenceNumber};
 use rtd_types::digests::SenderSignedDataDigest;
 use rtd_types::digests::ZKLoginInputsDigest;
 use rtd_types::signature_verification::{
@@ -27,79 +22,21 @@ use rtd_types::transaction::{SenderSignedData, TransactionDataAPI};
 use rtd_types::{
     committee::Committee,
     crypto::{AuthoritySignInfoTrait, VerificationObligation},
-    digests::CertificateDigest,
     error::{RtdErrorKind, RtdResult},
     message_envelope::Message,
     messages_checkpoint::SignedCheckpointSummary,
     signature::VerifyParams,
-    transaction::{CertifiedTransaction, VerifiedCertificate},
 };
-use tap::TapFallible;
-use tokio::runtime::Handle;
-use tokio::{
-    sync::oneshot,
-    time::{Duration, timeout},
-};
+use shared_crypto::intent::Intent;
+use std::sync::Arc;
 use tracing::debug;
 
-// Maximum amount of time we wait for a batch to fill up before verifying a partial batch.
-const BATCH_TIMEOUT_MS: Duration = Duration::from_millis(10);
-
-// Maximum size of batch to verify. Increasing this value will slightly improve CPU utilization
-// (batching starts to hit steeply diminishing marginal returns around batch sizes of 16), at the
-// cost of slightly increasing latency (BATCH_TIMEOUT_MS will be hit more frequently if system is
-// not heavily loaded).
-const MAX_BATCH_SIZE: usize = 8;
-
-type Sender = oneshot::Sender<RtdResult<VerifiedCertificate>>;
-
-struct CertBuffer {
-    certs: Vec<CertifiedTransaction>,
-    senders: Vec<Sender>,
-    id: u64,
-}
-
-impl CertBuffer {
-    fn new(capacity: usize) -> Self {
-        Self {
-            certs: Vec::with_capacity(capacity),
-            senders: Vec::with_capacity(capacity),
-            id: 0,
-        }
-    }
-
-    // Function consumes MutexGuard, therefore releasing the lock after mem swap is done
-    fn take_and_replace(mut guard: MutexGuard<'_, Self>) -> Self {
-        let this = &mut *guard;
-        let mut new = CertBuffer::new(this.capacity());
-        new.id = this.id + 1;
-        std::mem::swap(&mut new, this);
-        new
-    }
-
-    fn capacity(&self) -> usize {
-        debug_assert_eq!(self.certs.capacity(), self.senders.capacity());
-        self.certs.capacity()
-    }
-
-    fn len(&self) -> usize {
-        debug_assert_eq!(self.certs.len(), self.senders.len());
-        self.certs.len()
-    }
-
-    fn push(&mut self, tx: Sender, cert: CertifiedTransaction) {
-        self.senders.push(tx);
-        self.certs.push(cert);
-    }
-}
-
-/// Verifies signatures in ways that faster than verifying each signature individually.
-/// - BLS signatures - caching and batch verification.
+/// Verifies signatures in ways that are faster than verifying each signature individually.
+/// - BLS signatures (checkpoints) - batch verification.
 /// - User signed data - caching.
 pub struct SignatureVerifier {
     committee: Arc<Committee>,
     object_store: Arc<dyn ObjectStore + Send + Sync>,
-    certificate_cache: VerifiedDigestCache<CertificateDigest>,
     signed_data_cache: VerifiedDigestCache<SenderSignedDataDigest, Vec<u8>>,
     zklogin_inputs_cache: Arc<VerifiedDigestCache<ZKLoginInputsDigest>>,
 
@@ -116,7 +53,6 @@ pub struct SignatureVerifier {
     /// If true, uses address aliases during signature verification.
     enable_address_aliases: bool,
 
-    queue: Mutex<CertBuffer>,
     pub metrics: Arc<SignatureVerifierMetrics>,
 }
 
@@ -127,6 +63,9 @@ struct ZkLoginParams {
     pub supported_providers: Vec<OIDCProvider>,
     /// The environment (prod/test) the code runs in. It decides which verifying key to use in fastcrypto.
     pub env: ZkLoginEnv,
+    /// zkLogin circuit verify mode: 0 = v1 circuit only, 1 = v2 circuit with
+    /// fallback to v1, 2 = v2 circuit only.
+    pub zklogin_circuit_mode: u64,
     /// Flag to determine whether legacy address (derived from padded address seed) should be verified.
     pub verify_legacy_zklogin_address: bool,
     // Flag to determine whether zkLogin inside multisig is accepted.
@@ -137,31 +76,29 @@ struct ZkLoginParams {
     pub zklogin_max_epoch_upper_bound_delta: Option<u64>,
     /// Flag to determine whether additional multisig checks are performed.
     pub additional_multisig_checks: bool,
+    /// Flag to determine whether additional zkLogin public identifier structure is validated.
+    pub validate_zklogin_public_identifier: bool,
 }
 
 impl SignatureVerifier {
-    pub fn new_with_batch_size(
+    pub fn new(
         committee: Arc<Committee>,
         object_store: Arc<dyn ObjectStore + Send + Sync>,
-        batch_size: usize,
         metrics: Arc<SignatureVerifierMetrics>,
         supported_providers: Vec<OIDCProvider>,
-        env: ZkLoginEnv,
+        zklogin_env: ZkLoginEnv,
+        zklogin_circuit_mode: u64,
         verify_legacy_zklogin_address: bool,
         accept_zklogin_in_multisig: bool,
         accept_passkey_in_multisig: bool,
         zklogin_max_epoch_upper_bound_delta: Option<u64>,
         additional_multisig_checks: bool,
+        validate_zklogin_public_identifier: bool,
         enable_address_aliases: bool,
     ) -> Self {
         Self {
             committee,
             object_store,
-            certificate_cache: VerifiedDigestCache::new(
-                metrics.certificate_signatures_cache_hits.clone(),
-                metrics.certificate_signatures_cache_misses.clone(),
-                metrics.certificate_signatures_cache_evictions.clone(),
-            ),
             signed_data_cache: VerifiedDigestCache::new(
                 metrics.signed_data_cache_hits.clone(),
                 metrics.signed_data_cache_misses.clone(),
@@ -174,217 +111,19 @@ impl SignatureVerifier {
             )),
             jwks: Default::default(),
             enable_address_aliases,
-            queue: Mutex::new(CertBuffer::new(batch_size)),
             metrics,
             zk_login_params: ZkLoginParams {
                 supported_providers,
-                env,
+                env: zklogin_env,
+                zklogin_circuit_mode,
                 verify_legacy_zklogin_address,
                 accept_zklogin_in_multisig,
                 accept_passkey_in_multisig,
                 zklogin_max_epoch_upper_bound_delta,
                 additional_multisig_checks,
+                validate_zklogin_public_identifier,
             },
         }
-    }
-
-    pub fn new(
-        committee: Arc<Committee>,
-        object_store: Arc<dyn ObjectStore + Send + Sync>,
-        metrics: Arc<SignatureVerifierMetrics>,
-        supported_providers: Vec<OIDCProvider>,
-        zklogin_env: ZkLoginEnv,
-        verify_legacy_zklogin_address: bool,
-        accept_zklogin_in_multisig: bool,
-        accept_passkey_in_multisig: bool,
-        zklogin_max_epoch_upper_bound_delta: Option<u64>,
-        additional_multisig_checks: bool,
-        enable_address_aliases: bool,
-    ) -> Self {
-        Self::new_with_batch_size(
-            committee,
-            object_store,
-            MAX_BATCH_SIZE,
-            metrics,
-            supported_providers,
-            zklogin_env,
-            verify_legacy_zklogin_address,
-            accept_zklogin_in_multisig,
-            accept_passkey_in_multisig,
-            zklogin_max_epoch_upper_bound_delta,
-            additional_multisig_checks,
-            enable_address_aliases,
-        )
-    }
-
-    /// Verifies all certs, returns Ok only if all are valid.
-    pub fn verify_certs_and_checkpoints(
-        &self,
-        certs: Vec<&CertifiedTransaction>,
-        checkpoints: Vec<&SignedCheckpointSummary>,
-    ) -> RtdResult {
-        let certs: Vec<_> = certs
-            .into_iter()
-            .filter(|cert| !self.certificate_cache.is_cached(&cert.certificate_digest()))
-            .collect();
-
-        // Verify only the user sigs of certificates that were not cached already, since whenever we
-        // insert a certificate into the cache, it is already verified.
-        // Aliases are only allowed via MFP, so CertifiedTransaction must have no aliases.
-        for cert in &certs {
-            self.verify_tx_require_no_aliases(cert.data())?;
-        }
-        batch_verify_all_certificates_and_checkpoints(&self.committee, &certs, &checkpoints)?;
-        self.certificate_cache
-            .cache_digests(certs.into_iter().map(|c| c.certificate_digest()).collect());
-        Ok(())
-    }
-
-    /// Verifies one cert asynchronously, in a batch.
-    pub async fn verify_cert(&self, cert: CertifiedTransaction) -> RtdResult<VerifiedCertificate> {
-        let cert_digest = cert.certificate_digest();
-        if self.certificate_cache.is_cached(&cert_digest) {
-            return Ok(VerifiedCertificate::new_unchecked(cert));
-        }
-        // Aliases are only allowed via MFP, so CertifiedTransaction must have no aliases.
-        self.verify_tx_require_no_aliases(cert.data())?;
-        self.verify_cert_skip_cache(cert)
-            .await
-            .tap_ok(|_| self.certificate_cache.cache_digest(cert_digest))
-    }
-
-    pub async fn multi_verify_certs(
-        &self,
-        certs: Vec<CertifiedTransaction>,
-    ) -> Vec<RtdResult<VerifiedCertificate>> {
-        // TODO: We could do better by pushing the all of `certs` into the verification queue at once,
-        // but that's significantly more complex.
-        let mut futures = Vec::with_capacity(certs.len());
-        for cert in certs {
-            futures.push(self.verify_cert(cert));
-        }
-        futures::future::join_all(futures).await
-    }
-
-    /// exposed as a public method for the benchmarks
-    pub async fn verify_cert_skip_cache(
-        &self,
-        cert: CertifiedTransaction,
-    ) -> RtdResult<VerifiedCertificate> {
-        // this is the only innocent error we are likely to encounter - filter it before we poison
-        // a whole batch.
-        if cert.auth_sig().epoch != self.committee.epoch() {
-            return Err(RtdErrorKind::WrongEpoch {
-                expected_epoch: self.committee.epoch(),
-                actual_epoch: cert.auth_sig().epoch,
-            }
-            .into());
-        }
-
-        self.verify_cert_inner(cert).await
-    }
-
-    async fn verify_cert_inner(
-        &self,
-        cert: CertifiedTransaction,
-    ) -> RtdResult<VerifiedCertificate> {
-        // Cancellation safety: we use parking_lot locks, which cannot be held across awaits.
-        // Therefore once the queue has been taken by a thread, it is guaranteed to process the
-        // queue and send all results before the future can be cancelled by the caller.
-        let (tx, rx) = oneshot::channel();
-        pin_mut!(rx);
-
-        let prev_id_or_buffer = {
-            let mut queue = self.queue.lock();
-            queue.push(tx, cert);
-            if queue.len() == queue.capacity() {
-                Either::Right(CertBuffer::take_and_replace(queue))
-            } else {
-                Either::Left(queue.id)
-            }
-        };
-        let prev_id = match prev_id_or_buffer {
-            Either::Left(prev_id) => prev_id,
-            Either::Right(buffer) => {
-                self.metrics.full_batches.inc();
-                self.process_queue(buffer).await;
-                // unwrap ok - process_queue will have sent the result already
-                return rx.try_recv().unwrap();
-            }
-        };
-
-        if let Ok(res) = timeout(BATCH_TIMEOUT_MS, &mut rx).await {
-            // unwrap ok - tx cannot have been dropped without sending a result.
-            return res.unwrap();
-        }
-        self.metrics.timeouts.inc();
-
-        let buffer = {
-            let queue = self.queue.lock();
-            // check if another thread took the queue while we were re-acquiring lock.
-            if prev_id == queue.id {
-                debug_assert_ne!(queue.len(), queue.capacity());
-                Some(CertBuffer::take_and_replace(queue))
-            } else {
-                None
-            }
-        };
-
-        if let Some(buffer) = buffer {
-            self.metrics.partial_batches.inc();
-            self.process_queue(buffer).await;
-            // unwrap ok - process_queue will have sent the result already
-            return rx.try_recv().unwrap();
-        }
-
-        // unwrap ok - another thread took the queue while we were re-acquiring the lock and is
-        // guaranteed to process the queue immediately.
-        rx.await.unwrap()
-    }
-
-    async fn process_queue(&self, buffer: CertBuffer) {
-        let committee = self.committee.clone();
-        let metrics = self.metrics.clone();
-        let zklogin_inputs_cache = self.zklogin_inputs_cache.clone();
-        Handle::current()
-            .spawn_blocking(move || {
-                Self::process_queue_sync(committee, metrics, buffer, zklogin_inputs_cache)
-            })
-            .await
-            .expect("Spawn blocking should not fail");
-    }
-
-    fn process_queue_sync(
-        committee: Arc<Committee>,
-        metrics: Arc<SignatureVerifierMetrics>,
-        buffer: CertBuffer,
-        zklogin_inputs_cache: Arc<VerifiedDigestCache<ZKLoginInputsDigest>>,
-    ) {
-        let _scope = monitored_scope("BatchCertificateVerifier::process_queue");
-
-        let results = batch_verify_certificates(
-            &committee,
-            &buffer.certs.iter().collect_vec(),
-            zklogin_inputs_cache,
-        );
-        izip!(
-            results.into_iter(),
-            buffer.certs.into_iter(),
-            buffer.senders.into_iter(),
-        )
-        .for_each(|(result, cert, tx)| {
-            tx.send(match result {
-                Ok(()) => {
-                    metrics.total_verified_certs.inc();
-                    Ok(VerifiedCertificate::new_unchecked(cert))
-                }
-                Err(e) => {
-                    metrics.total_failed_certs.inc();
-                    Err(e)
-                }
-            })
-            .ok();
-        });
     }
 
     /// Insert a JWK into the verifier state. Pre-existing entries for a given JwkId will not be
@@ -392,10 +131,10 @@ impl SignatureVerifier {
     pub(crate) fn insert_jwk(&self, jwk_id: &JwkId, jwk: &JWK) {
         let mut jwks = self.jwks.write();
         match jwks.entry(jwk_id.clone()) {
-            im::hashmap::Entry::Occupied(_) => {
+            imbl::hashmap::Entry::Occupied(_) => {
                 debug!("JWK with kid {:?} already exists", jwk_id);
             }
-            im::hashmap::Entry::Vacant(entry) => {
+            imbl::hashmap::Entry::Vacant(entry) => {
                 debug!("inserting JWK with kid: {:?}", jwk_id);
                 entry.insert(jwk.clone());
             }
@@ -411,25 +150,27 @@ impl SignatureVerifier {
         self.jwks.read().clone()
     }
 
+    // For each required signer in the transaction, returns the signature index and
+    // version of the AddressAliases object used to verify it.
     pub fn verify_tx_with_current_aliases(
         &self,
         signed_tx: &SenderSignedData,
-    ) -> RtdResult<NonEmpty<(RtdAddress, Option<SequenceNumber>)>> {
-        let mut versions = Vec::new();
+    ) -> RtdResult<NonEmpty<(u8, Option<SequenceNumber>)>> {
+        let mut alias_versions_by_signer = Vec::new();
         let mut aliases = Vec::new();
 
         // Look up aliases for each address at the current version.
         let signers = signed_tx.intent_message().value.required_signers();
         for signer in signers {
             if !self.enable_address_aliases {
-                versions.push((signer, None));
+                alias_versions_by_signer.push((signer, None));
                 aliases.push((signer, NonEmpty::singleton(signer)));
             } else {
                 // Look up aliases for the signer using the derived object address.
                 let address_aliases =
                     address_alias::get_address_aliases_from_store(&self.object_store, signer)?;
 
-                versions.push((signer, address_aliases.as_ref().map(|(_, v)| *v)));
+                alias_versions_by_signer.push((signer, address_aliases.as_ref().map(|(_, v)| *v)));
                 aliases.push((
                     signer,
                     address_aliases
@@ -449,19 +190,16 @@ impl SignatureVerifier {
             }
         }
 
-        let signature_indices = self.verify_tx(signed_tx, &versions, aliases)?;
-        let mut versions_by_signature = vec![None; signed_tx.tx_signatures().len()];
-        for ((signer, version), signature_index) in
-            versions.into_iter().zip_eq(signature_indices)
-        {
-            versions_by_signature[signature_index as usize] = Some((signer, version));
-        }
-        let versions_by_signature = versions_by_signature
+        // Verify and get the signature indices for each required signer.
+        let sig_indices = self.verify_tx(signed_tx, &alias_versions_by_signer, aliases)?;
+
+        // Combine signature indices with alias versions.
+        let result: Vec<(u8, Option<SequenceNumber>)> = sig_indices
             .into_iter()
-            .map(|entry| entry.expect("each signature must match one required signer"))
+            .zip_eq(alias_versions_by_signer.into_iter().map(|(_, seq)| seq))
             .collect();
-        Ok(NonEmpty::from_vec(versions_by_signature)
-            .expect("must have at least one required_signer"))
+
+        Ok(NonEmpty::from_vec(result).expect("must have at least one required_signer"))
     }
 
     pub fn verify_tx_require_no_aliases(&self, signed_tx: &SenderSignedData) -> RtdResult {
@@ -481,8 +219,9 @@ impl SignatureVerifier {
         aliased_addresses: Vec<(RtdAddress, NonEmpty<RtdAddress>)>,
     ) -> RtdResult<Vec<u8>> {
         let digest = signed_tx.full_message_digest_with_alias_versions(alias_versions);
-        if let Some(signature_indices) = self.signed_data_cache.get_cached(&digest) {
-            return Ok(signature_indices);
+
+        if let Some(indices) = self.signed_data_cache.get_cached(&digest) {
+            return Ok(indices);
         }
 
         let jwks = self.jwks.read().clone();
@@ -490,69 +229,45 @@ impl SignatureVerifier {
             jwks,
             self.zk_login_params.supported_providers.clone(),
             self.zk_login_params.env,
+            self.zk_login_params.zklogin_circuit_mode,
             self.zk_login_params.verify_legacy_zklogin_address,
             self.zk_login_params.accept_zklogin_in_multisig,
             self.zk_login_params.accept_passkey_in_multisig,
             self.zk_login_params.zklogin_max_epoch_upper_bound_delta,
             self.zk_login_params.additional_multisig_checks,
+            self.zk_login_params.validate_zklogin_public_identifier,
         );
-        let signature_indices = verify_sender_signed_data_message_signatures(
+        let indices = verify_sender_signed_data_message_signatures(
             signed_tx,
             self.committee.epoch(),
             &verify_params,
             self.zklogin_inputs_cache.clone(),
             aliased_addresses,
         )?;
+
         self.signed_data_cache
-            .cache_with_value(digest, signature_indices.clone());
-        Ok(signature_indices)
+            .cache_with_value(digest, indices.clone());
+        Ok(indices)
     }
 
     pub fn clear_signature_cache(&self) {
-        self.certificate_cache.clear();
         self.signed_data_cache.clear();
         self.zklogin_inputs_cache.clear();
     }
 }
 
 pub struct SignatureVerifierMetrics {
-    pub certificate_signatures_cache_hits: IntCounter,
-    pub certificate_signatures_cache_misses: IntCounter,
-    pub certificate_signatures_cache_evictions: IntCounter,
     pub signed_data_cache_hits: IntCounter,
     pub signed_data_cache_misses: IntCounter,
     pub signed_data_cache_evictions: IntCounter,
     pub zklogin_inputs_cache_hits: IntCounter,
     pub zklogin_inputs_cache_misses: IntCounter,
     pub zklogin_inputs_cache_evictions: IntCounter,
-    timeouts: IntCounter,
-    full_batches: IntCounter,
-    partial_batches: IntCounter,
-    total_verified_certs: IntCounter,
-    total_failed_certs: IntCounter,
 }
 
 impl SignatureVerifierMetrics {
     pub fn new(registry: &Registry) -> Arc<Self> {
         Arc::new(Self {
-            certificate_signatures_cache_hits: register_int_counter_with_registry!(
-                "certificate_signatures_cache_hits",
-                "Number of certificates which were known to be verified because of signature cache.",
-                registry
-            )
-            .unwrap(),
-            certificate_signatures_cache_misses: register_int_counter_with_registry!(
-                "certificate_signatures_cache_misses",
-                "Number of certificates which missed the signature cache",
-                registry
-            )
-            .unwrap(),
-            certificate_signatures_cache_evictions: register_int_counter_with_registry!(
-                "certificate_signatures_cache_evictions",
-                "Number of times we evict a pre-existing key were known to be verified because of signature cache.",
-                registry
-            )
-            .unwrap(),
             signed_data_cache_hits: register_int_counter_with_registry!(
                 "signed_data_cache_hits",
                 "Number of signed data which were known to be verified because of signature cache.",
@@ -589,92 +304,20 @@ impl SignatureVerifierMetrics {
                     registry
                 )
                 .unwrap(),
-            timeouts: register_int_counter_with_registry!(
-                "async_batch_verifier_timeouts",
-                "Number of times batch verifier times out and verifies a partial batch",
-                registry
-            )
-            .unwrap(),
-            full_batches: register_int_counter_with_registry!(
-                "async_batch_verifier_full_batches",
-                "Number of times batch verifier verifies a full batch",
-                registry
-            )
-            .unwrap(),
-            partial_batches: register_int_counter_with_registry!(
-                "async_batch_verifier_partial_batches",
-                "Number of times batch verifier verifies a partial batch",
-                registry
-            )
-            .unwrap(),
-            total_verified_certs: register_int_counter_with_registry!(
-                "async_batch_verifier_total_verified_certs",
-                "Total number of certs batch verifier has verified",
-                registry
-            )
-            .unwrap(),
-            total_failed_certs: register_int_counter_with_registry!(
-                "async_batch_verifier_total_failed_certs",
-                "Total number of certs batch verifier has rejected",
-                registry
-            )
-            .unwrap(),
         })
     }
 }
 
-/// Verifies all certificates - if any fail return error.
-pub fn batch_verify_all_certificates_and_checkpoints(
+/// Batch-verifies checkpoint signatures - if any fail return error.
+pub(crate) fn batch_verify_checkpoints(
     committee: &Committee,
-    certs: &[&CertifiedTransaction],
     checkpoints: &[&SignedCheckpointSummary],
 ) -> RtdResult {
-    // certs.data() is assumed to be verified already by the caller.
-
     for ckpt in checkpoints {
         ckpt.data().verify_epoch(committee.epoch())?;
     }
 
-    batch_verify(committee, certs, checkpoints)
-}
-
-/// Verifies certificates in batch mode, but returns a separate result for each cert.
-pub fn batch_verify_certificates(
-    committee: &Committee,
-    certs: &[&CertifiedTransaction],
-    zk_login_cache: Arc<VerifiedDigestCache<ZKLoginInputsDigest>>,
-) -> Vec<RtdResult> {
-    // certs.data() is assumed to be verified already by the caller.
-    let verify_params = VerifyParams::default();
-    match batch_verify(committee, certs, &[]) {
-        Ok(_) => vec![Ok(()); certs.len()],
-
-        // Verify one by one to find which certs were invalid.
-        Err(_) if certs.len() > 1 => certs
-            .iter()
-            // TODO: verify_signature currently checks the tx sig as well, which might be cached
-            // already.
-            .map(|c| {
-                c.verify_signatures_authenticated(committee, &verify_params, zk_login_cache.clone())
-            })
-            .collect(),
-
-        Err(e) => vec![Err(e)],
-    }
-}
-
-fn batch_verify(
-    committee: &Committee,
-    certs: &[&CertifiedTransaction],
-    checkpoints: &[&SignedCheckpointSummary],
-) -> RtdResult {
     let mut obligation = VerificationObligation::default();
-
-    for cert in certs {
-        let idx = obligation.add_message(cert.data(), cert.epoch(), Intent::rtd_app(cert.scope()));
-        cert.auth_sig()
-            .add_to_verification_obligation(committee, &mut obligation, idx)?;
-    }
 
     for ckpt in checkpoints {
         let idx = obligation.add_message(ckpt.data(), ckpt.epoch(), Intent::rtd_app(ckpt.scope()));
@@ -683,82 +326,4 @@ fn batch_verify(
     }
 
     obligation.verify_all()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rtd_types::base_types::{FullObjectRef, dbg_addr, random_object_ref};
-    use rtd_types::crypto::{RtdKeyPair, Signature, get_key_pair};
-    use rtd_types::in_memory_storage::InMemoryStorage;
-    use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-    use rtd_types::signature::GenericSignature;
-    use rtd_types::transaction::{GasData, TransactionData, TransactionKind};
-    use shared_crypto::intent::IntentMessage;
-
-    #[test]
-    fn alias_versions_follow_signature_order() {
-        let sender_key = RtdKeyPair::Ed25519(get_key_pair().1);
-        let sender = (&sender_key.public()).into();
-        let sponsor_key = RtdKeyPair::Ed25519(get_key_pair().1);
-        let sponsor = (&sponsor_key.public()).into();
-        let mut builder = ProgrammableTransactionBuilder::new();
-        builder
-            .transfer_object(
-                dbg_addr(1),
-                FullObjectRef::from_fastpath_ref(random_object_ref()),
-            )
-            .unwrap();
-        let gas_data = GasData {
-            payment: vec![random_object_ref()],
-            owner: sponsor,
-            price: 10,
-            budget: 10_000_000,
-        };
-        let tx_data = TransactionData::new_with_gas_data(
-            TransactionKind::programmable(builder.finish()),
-            sender,
-            gas_data,
-        );
-        let intent_message = IntentMessage::new(Intent::rtd_transaction(), tx_data.clone());
-        let sender_sig: GenericSignature =
-            Signature::new_secure(&intent_message, &sender_key).into();
-        let sponsor_sig: GenericSignature =
-            Signature::new_secure(&intent_message, &sponsor_key).into();
-        let signed_tx = SenderSignedData::new(tx_data, vec![sponsor_sig, sender_sig]);
-        let (committee, _) = Committee::new_simple_test_committee();
-        let verifier = SignatureVerifier::new(
-            Arc::new(committee),
-            Arc::new(InMemoryStorage::default()),
-            SignatureVerifierMetrics::new(&Registry::new()),
-            vec![],
-            ZkLoginEnv::Test,
-            true,
-            true,
-            true,
-            Some(30),
-            true,
-            false,
-        );
-
-        let versions = verifier
-            .verify_tx_with_current_aliases(&signed_tx)
-            .unwrap();
-
-        assert_eq!(
-            versions.into_iter().map(|(address, _)| address).collect::<Vec<_>>(),
-            vec![sponsor, sender],
-        );
-        let cached_versions = verifier
-            .verify_tx_with_current_aliases(&signed_tx)
-            .unwrap();
-        assert_eq!(
-            cached_versions
-                .into_iter()
-                .map(|(address, _)| address)
-                .collect::<Vec<_>>(),
-            vec![sponsor, sender],
-        );
-        assert_eq!(verifier.metrics.signed_data_cache_hits.get(), 1);
-    }
 }

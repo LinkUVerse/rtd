@@ -2,24 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use indexmap::IndexSet;
+use linku_common::fatal;
 use move_binary_format::file_format::Visibility;
 use move_binary_format::normalized;
 use move_core_types::identifier::IdentStr;
 use move_core_types::language_storage::StructTag;
-use linku_common::fatal;
 use rand::rngs::StdRng;
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use rtd_json_rpc_types::{RtdTransactionBlockEffects, RtdTransactionBlockEffectsAPI};
 use rtd_move_build::BuildConfig;
 use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_types::base_types::{ConsensusObjectSequenceKey, ObjectID, ObjectRef, RtdAddress};
+use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::object::{Object, Owner};
 use rtd_types::storage::WriteKind;
 use rtd_types::transaction::{CallArg, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TransactionData};
 use rtd_types::{Identifier, RTD_FRAMEWORK_ADDRESS};
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use test_cluster::TestCluster;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -193,7 +193,7 @@ impl SurferState {
             "Successfully executed transaction {:?} with response {:?}",
             tx, response
         );
-        let effects = response.effects.unwrap();
+        let effects = response.effects;
         info!(
             "[{:?}] Calling Move function {:?}::{:?} returned {:?}",
             self.address,
@@ -212,15 +212,15 @@ impl SurferState {
     }
 
     #[tracing::instrument(skip_all, fields(surfer_id = self.id))]
-    async fn process_tx_effects(&mut self, effects: &RtdTransactionBlockEffects) {
-        for (owned_ref, write_kind) in effects.all_changed_objects() {
-            if matches!(owned_ref.owner, Owner::ObjectOwner(_)) {
+    async fn process_tx_effects(&mut self, effects: &TransactionEffects) {
+        for (obj_ref, owner, write_kind) in effects.all_changed_objects() {
+            if matches!(owner, Owner::ObjectOwner(_)) {
                 // For object owned objects, we don't need to do anything.
                 // We also cannot read them because in the case of shared objects, there can be
                 // races and the child object may no longer exist.
                 continue;
             }
-            let obj_ref = owned_ref.reference.to_object_ref();
+            // let obj_ref = owned_ref.reference.to_object_ref();
             let object = self
                 .cluster
                 .get_object_from_fullnode_store(&obj_ref.0)
@@ -231,7 +231,7 @@ impl SurferState {
                 continue;
             }
             let struct_tag = object.struct_tag().unwrap();
-            match owned_ref.owner {
+            match owner {
                 Owner::Immutable => {
                     self.immutable_objects
                         .write()
@@ -249,11 +249,15 @@ impl SurferState {
                     }
                 }
                 Owner::ObjectOwner(_) => (),
+                // TODO(Party WIP) Implement full support for Party objects in rtd-surfer.
                 Owner::Shared {
                     initial_shared_version,
                 }
-                // TODO: Implement full support for ConsensusAddressOwner objects in rtd-surfer.
                 | Owner::ConsensusAddressOwner {
+                    start_version: initial_shared_version,
+                    ..
+                }
+                | Owner::Party {
                     start_version: initial_shared_version,
                     ..
                 } => {
@@ -342,7 +346,12 @@ impl SurferState {
             self.address,
             self.gas_object,
             modules,
-            package.dependency_ids.published.values().cloned().collect(),
+            package
+                .dependency_ids
+                .published
+                .values()
+                .map(|dep| dep.published_at)
+                .collect(),
             TEST_ONLY_GAS_UNIT_FOR_PUBLISH * rgp,
             rgp,
         );
@@ -374,7 +383,7 @@ impl SurferState {
             }
         };
         info!("Successfully published package in {:?}", path);
-        self.process_tx_effects(&response.effects.unwrap()).await;
+        self.process_tx_effects(&response.effects).await;
     }
 
     pub fn matching_owned_objects_count(&self, type_tag: &StructTag) -> usize {

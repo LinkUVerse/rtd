@@ -25,7 +25,6 @@ use move_bytecode_verifier::absint::{
 };
 use move_bytecode_verifier_meter::{Meter, Scope};
 use move_core_types::{ident_str, vm_status::StatusCode};
-use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 use rtd_types::bridge::BRIDGE_MODULE_NAME;
 use rtd_types::deny_list_v1::{DENY_LIST_CREATE_FUNC, DENY_LIST_MODULE};
 use rtd_types::{
@@ -38,6 +37,7 @@ use rtd_types::{
     randomness_state::RANDOMNESS_MODULE_NAME,
     rtd_system_state::RTD_SYSTEM_MODULE_NAME,
 };
+use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 
 use crate::{
     FunctionIdent, TEST_SCENARIO_MODULE_NAME, check_for_verifier_timeout,
@@ -106,9 +106,19 @@ const RTD_COIN_REGISTRY_CREATE: FunctionIdent = (
     ident_str!("coin_registry"),
     ident_str!("create"),
 );
+const RTD_DISPLAY_REGISTRY_CREATE: FunctionIdent = (
+    RTD_FRAMEWORK_ADDRESS,
+    ident_str!("display_registry"),
+    ident_str!("create"),
+);
 const RTD_ALIAS_CREATE: FunctionIdent = (
     RTD_FRAMEWORK_ADDRESS,
     ident_str!("address_alias"),
+    ident_str!("create"),
+);
+const RTD_FORWARDING_ADDRESS_CREATE: FunctionIdent = (
+    RTD_FRAMEWORK_ADDRESS,
+    ident_str!("forwarding_address"),
     ident_str!("create"),
 );
 const FRESH_ID_FUNCTIONS: &[FunctionIdent] = &[
@@ -126,7 +136,9 @@ const FUNCTIONS_TO_SKIP: &[FunctionIdent] = &[
     RTD_BRIDGE_CREATE,
     RTD_ACCUMULATOR_CREATE,
     RTD_COIN_REGISTRY_CREATE,
+    RTD_DISPLAY_REGISTRY_CREATE,
     RTD_ALIAS_CREATE,
+    RTD_FORWARDING_ADDRESS_CREATE,
 ];
 
 impl AbstractValue {

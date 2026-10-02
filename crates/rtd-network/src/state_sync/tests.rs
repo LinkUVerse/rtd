@@ -10,17 +10,24 @@ use crate::{
 };
 use anemo::{PeerId, Request};
 use anyhow::anyhow;
-use std::io::Write;
-use std::num::NonZeroUsize;
-use std::{collections::HashMap, time::Duration};
+use linku_common::ZipDebugEqIteratorExt;
+use prost::Message;
 use rtd_config::node::ArchiveReaderConfig;
 use rtd_config::object_storage_config::ObjectStoreConfig;
-use rtd_storage::blob::{Blob, BlobEncoding};
+use rtd_config::p2p::StateSyncConfig;
+use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::merge::Merge;
+use rtd_rpc::proto::rtd::rpc;
 use rtd_swarm_config::test_utils::{CommitteeFixture, empty_contents};
 use rtd_types::full_checkpoint_content::CheckpointData;
 use rtd_types::{
     messages_checkpoint::CheckpointDigest,
     storage::{ReadStore, SharedInMemoryStore, WriteStore},
+};
+use std::num::NonZeroUsize;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant as StdInstant},
 };
 use tempfile::tempdir;
 use tokio::time::{Instant, timeout};
@@ -45,7 +52,10 @@ async fn server_push_checkpoint() {
             ..
         },
         server,
-    ) = Builder::new().store(store).build_internal();
+    ) = Builder::new()
+        .store(store)
+        .config(StateSyncConfig::randomized_for_testing())
+        .build_internal();
     let peer_id = PeerId([9; 32]); // fake PeerId
 
     peer_heights.write().unwrap().peers.insert(
@@ -85,10 +95,8 @@ async fn server_push_checkpoint() {
         peer_heights
             .read()
             .unwrap()
-            .highest_known_checkpoint()
-            .unwrap()
-            .data(),
-        checkpoint.data(),
+            .highest_known_checkpoint_sequence_number(),
+        Some(*checkpoint.sequence_number()),
     );
     assert!(matches!(
         mailbox.try_recv().unwrap(),
@@ -104,6 +112,7 @@ async fn server_get_checkpoint() {
 
     let (builder, server) = Builder::new()
         .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
         .build_internal();
 
     builder.store.inner_mut().insert_genesis_state(
@@ -187,11 +196,17 @@ async fn isolated_sync_job() {
         committee.make_empty_checkpoints(100, None);
 
     // Build and connect two nodes
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_1 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_1 = build_network(|router| router.merge(state_sync_router));
     let (mut event_loop_1, _handle_1) = builder.build(network_1.clone());
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_2 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_2 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_2, _handle_2) = builder.build(network_2.clone());
     network_1.connect(network_2.local_addr()).await.unwrap();
 
@@ -282,26 +297,40 @@ async fn test_state_sync_using_archive() -> anyhow::Result<()> {
             checkpoint_contents: ordered_contents[idx].clone().into_checkpoint_contents(),
             transactions: vec![],
         };
-        let file_path = temp_dir.join(format!("{}.chk", summary.sequence_number));
-        let mut file = std::fs::File::create(file_path)?;
-        file.write_all(&Blob::encode(&chk, BlobEncoding::Bcs)?.to_bytes())?;
+        let checkpoint: rtd_types::full_checkpoint_content::Checkpoint = chk.into();
+        let mask = FieldMask::from_paths([
+            rpc::v2::Checkpoint::path_builder().sequence_number(),
+            rpc::v2::Checkpoint::path_builder().summary().bcs().value(),
+            rpc::v2::Checkpoint::path_builder().signature().finish(),
+            rpc::v2::Checkpoint::path_builder().contents().bcs().value(),
+        ]);
+        let proto_checkpoint = rpc::v2::Checkpoint::merge_from(&checkpoint, &mask.into());
+        let proto_bytes = proto_checkpoint.encode_to_vec();
+        let compressed = zstd::encode_all(&proto_bytes[..], 3)?;
+        let file_path = temp_dir.join(format!("{}.binpb.zst", summary.sequence_number));
+        std::fs::write(file_path, compressed)?;
     }
     let archive_reader_config = ArchiveReaderConfig {
         remote_store_config: ObjectStoreConfig::default(),
         download_concurrency: NonZeroUsize::new(1).unwrap(),
         ingestion_url: Some(format!("file://{}", temp_dir.display())),
         remote_store_options: vec![],
+        remote_store_headers: vec![],
     };
     // Build and connect two nodes where Node 1 will be given access to an archive store
     // Node 2 will prune older checkpoints, so Node 1 is forced to backfill from the archive
-    let (builder, server) = Builder::new()
+    let (builder, state_sync_router) = Builder::new()
         .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
         .archive_config(Some(archive_reader_config))
         .build();
-    let network_1 = build_network(|router| router.add_rpc_service(server));
+    let network_1 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_1, _handle_1) = builder.build(network_1.clone());
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_2 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_2 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_2, _handle_2) = builder.build(network_2.clone());
     network_1.connect(network_2.local_addr()).await.unwrap();
 
@@ -415,11 +444,17 @@ async fn sync_with_checkpoints_being_inserted() {
         committee.make_empty_checkpoints(4, None);
 
     // Build and connect two nodes
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_1 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_1 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_1, handle_1) = builder.build(network_1.clone());
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_2 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_2 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_2, handle_2) = builder.build(network_2.clone());
     network_1.connect(network_2.local_addr()).await.unwrap();
 
@@ -549,11 +584,17 @@ async fn sync_with_checkpoints_watermark() {
         .unwrap()
         .sequence_number();
     // Build and connect two nodes
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_1 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_1 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_1, handle_1) = builder.build(network_1.clone());
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_2 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_2 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_2, handle_2) = builder.build(network_2.clone());
 
     // Init the root committee in both nodes
@@ -662,7 +703,7 @@ async fn sync_with_checkpoints_watermark() {
     ));
 
     // Inject all the checkpoints to Peer 1
-    for (checkpoint, contents) in checkpoint_iter.zip(contents_iter) {
+    for (checkpoint, contents) in checkpoint_iter.zip_debug_eq(contents_iter) {
         store_1
             .insert_checkpoint_contents(&checkpoint, contents)
             .unwrap();
@@ -674,7 +715,7 @@ async fn sync_with_checkpoints_watermark() {
     timeout(Duration::from_secs(1), async {
         for (checkpoint, contents) in ordered_checkpoints[2..]
             .iter()
-            .zip(contents.clone().into_iter().skip(2))
+            .zip_debug_eq(contents.clone().into_iter().skip(2))
         {
             assert_eq!(subscriber_1.recv().await.unwrap().data(), checkpoint.data());
             let content_digest = contents.into_checkpoint_contents_digest();
@@ -715,8 +756,11 @@ async fn sync_with_checkpoints_watermark() {
     );
 
     // Add Peer 3
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_3 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_3 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_3, handle_3) = builder.build(network_3.clone());
 
     let mut subscriber_3 = handle_3.subscribe_to_synced_checkpoints();
@@ -771,10 +815,10 @@ async fn sync_with_checkpoints_watermark() {
 
     // Peer 2 and Peer 3 will know about this change by `get_checkpoint_availability`
     // Soon we expect them to have all checkpoints's content.
-    timeout(Duration::from_secs(6), async {
+    timeout(Duration::from_secs(10), async {
         for (checkpoint, contents) in ordered_checkpoints[2..]
             .iter()
-            .zip(contents.clone().into_iter().skip(2))
+            .zip_debug_eq(contents.clone().into_iter().skip(2))
         {
             assert_eq!(subscriber_2.recv().await.unwrap().data(), checkpoint.data());
             assert_eq!(subscriber_3.recv().await.unwrap().data(), checkpoint.data());
@@ -828,8 +872,11 @@ async fn sync_with_checkpoints_watermark() {
         .set_lowest_available_checkpoint(a_very_high_checkpoint_seq);
 
     // Start Peer 4
-    let (builder, server) = Builder::new().store(SharedInMemoryStore::default()).build();
-    let network_4 = build_network(|router| router.add_rpc_service(server));
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_4 = build_network(|router| router.merge(state_sync_router));
     let (event_loop_4, handle_4) = builder.build(network_4.clone());
 
     let mut subscriber_4 = handle_4.subscribe_to_synced_checkpoints();
@@ -854,7 +901,7 @@ async fn sync_with_checkpoints_watermark() {
     timeout(Duration::from_secs(3), async {
         for (checkpoint, contents) in ordered_checkpoints[1..]
             .iter()
-            .zip(contents.clone().into_iter().skip(1))
+            .zip_debug_eq(contents.clone().into_iter().skip(1))
         {
             assert_eq!(subscriber_4.recv().await.unwrap().data(), checkpoint.data());
             let content_digest = contents.into_checkpoint_contents_digest();
@@ -872,4 +919,721 @@ async fn sync_with_checkpoints_watermark() {
             .sequence_number(),
         &last_checkpoint_seq
     );
+}
+
+/// Tests that the max_checkpoint_lookahead config correctly limits how far ahead
+/// pushed checkpoints can be stored, and that state sync still works correctly
+/// to eventually sync all checkpoints.
+#[tokio::test]
+async fn sync_with_max_lookahead_rejection() {
+    telemetry_subscribers::init_for_testing();
+    let committee = CommitteeFixture::generate(rand::rngs::OsRng, 0, 4);
+
+    let num_checkpoints: u64 = 20;
+    let (ordered_checkpoints, _contents, _sequence_number_to_digest, _checkpoints) =
+        committee.make_empty_checkpoints(num_checkpoints as usize, None);
+    let small_lookahead: u64 = 5;
+    let config_with_small_lookahead = StateSyncConfig {
+        max_checkpoint_lookahead: Some(small_lookahead),
+        ..StateSyncConfig::randomized_for_testing()
+    };
+
+    // Build Node 1 (the receiving node) with small lookahead.
+    let store_1 = SharedInMemoryStore::default();
+    let (
+        UnstartedStateSync {
+            handle: _handle_1,
+            mailbox: _mailbox_1,
+            peer_heights: peer_heights_1,
+            ..
+        },
+        server_1,
+    ) = Builder::new()
+        .store(store_1.clone())
+        .config(config_with_small_lookahead.clone())
+        .build_internal();
+
+    // Build Node 2 (the source node with all checkpoints)
+    let (builder, state_sync_router) = Builder::new()
+        .store(SharedInMemoryStore::default())
+        .config(StateSyncConfig::randomized_for_testing())
+        .build();
+    let network_2 = build_network(|router| router.merge(state_sync_router));
+    let (event_loop_2, _handle_2) = builder.build(network_2.clone());
+
+    // Init genesis state in both nodes
+    store_1.inner_mut().insert_genesis_state(
+        ordered_checkpoints.first().cloned().unwrap(),
+        empty_contents(),
+        committee.committee().to_owned(),
+    );
+    event_loop_2.store.inner_mut().insert_genesis_state(
+        ordered_checkpoints.first().cloned().unwrap(),
+        empty_contents(),
+        committee.committee().to_owned(),
+    );
+
+    // Populate Node 2's store with all checkpoints and contents
+    {
+        let mut store = event_loop_2.store.inner_mut();
+        for checkpoint in ordered_checkpoints.iter().skip(1) {
+            store.insert_certified_checkpoint(checkpoint);
+            store.insert_checkpoint_contents(checkpoint, empty_contents());
+        }
+        store.update_highest_synced_checkpoint(ordered_checkpoints.last().unwrap());
+    }
+
+    // Set up peer info so the server recognizes the fake peer for initial test
+    let fake_peer_id = PeerId([9; 32]);
+    peer_heights_1.write().unwrap().insert_peer_info(
+        fake_peer_id,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: *ordered_checkpoints[0].digest(),
+            on_same_chain_as_us: true,
+            height: 0,
+            lowest: 0,
+        },
+    );
+
+    // Phase 1: Verify lookahead rejection by manually pushing checkpoints
+    // Push all checkpoints via the server handler - server should reject those beyond lookahead
+    for checkpoint in ordered_checkpoints.iter().skip(1) {
+        let request = Request::new(checkpoint.clone().into_inner()).with_extension(fake_peer_id);
+        server_1.push_checkpoint_summary(request).await.unwrap();
+    }
+
+    // Verify the lookahead logic:
+    // - Checkpoints 1-5 should be stored (within lookahead from genesis at 0)
+    // - Checkpoints 6-19 should NOT be stored (beyond lookahead)
+    {
+        let heights = peer_heights_1.read().unwrap();
+
+        for seq in 1..=small_lookahead {
+            let checkpoint = &ordered_checkpoints[seq as usize];
+            assert!(
+                heights
+                    .unprocessed_checkpoints
+                    .contains_key(checkpoint.digest()),
+                "Checkpoint {seq} should be stored (within lookahead of {small_lookahead})",
+            );
+        }
+
+        for seq in (small_lookahead + 1)..num_checkpoints {
+            let checkpoint = &ordered_checkpoints[seq as usize];
+            assert!(
+                !heights
+                    .unprocessed_checkpoints
+                    .contains_key(checkpoint.digest()),
+                "Checkpoint {seq} should NOT be stored (beyond lookahead of {small_lookahead})",
+            );
+        }
+
+        // Peer height should be updated even for rejected checkpoints
+        let peer_info = heights.peers.get(&fake_peer_id).unwrap();
+        assert_eq!(
+            peer_info.height,
+            *ordered_checkpoints.last().unwrap().sequence_number(),
+            "Peer height should be updated even for rejected checkpoints"
+        );
+    }
+
+    // Phase 2: Now build a proper Node 1 with networking and start the sync loop
+    // to verify that sync works correctly despite the lookahead limit
+    let (builder, state_sync_router) = Builder::new()
+        .store(store_1.clone())
+        .config(config_with_small_lookahead)
+        .build();
+    let network_1 = build_network(|router| router.merge(state_sync_router));
+    let (event_loop_1, _handle_1) = builder.build(network_1.clone());
+
+    let peer_heights_1 = event_loop_1.peer_heights.clone();
+    peer_heights_1
+        .write()
+        .unwrap()
+        .set_wait_interval_when_no_peer_to_sync_content(Duration::from_secs(1));
+
+    let peer_id_2 = network_2.peer_id();
+
+    // Start both event loops
+    tokio::spawn(event_loop_1.start());
+    tokio::spawn(event_loop_2.start());
+
+    // Connect the networks
+    network_1.connect(network_2.local_addr()).await.unwrap();
+
+    // Wait for peer discovery
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if peer_heights_1
+                .read()
+                .unwrap()
+                .peers
+                .contains_key(&peer_id_2)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("Peer discovery timed out");
+
+    // Wait for sync to complete - Node 1 should eventually sync all checkpoints
+    // despite the lookahead limit, because the sync loop handles this correctly
+    let last_checkpoint_seq = *ordered_checkpoints.last().unwrap().sequence_number();
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let highest_synced = store_1
+                .get_highest_synced_checkpoint()
+                .map(|c| *c.sequence_number())
+                .unwrap_or(0);
+            if highest_synced >= last_checkpoint_seq {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("Sync timed out - Node 1 should have synced all checkpoints");
+
+    // Verify final state: all checkpoints should be synced
+    assert_eq!(
+        store_1
+            .get_highest_synced_checkpoint()
+            .unwrap()
+            .sequence_number(),
+        &last_checkpoint_seq,
+        "Node 1 should have synced all checkpoints"
+    );
+    assert_eq!(
+        store_1
+            .get_highest_verified_checkpoint()
+            .unwrap()
+            .sequence_number(),
+        &last_checkpoint_seq,
+        "Node 1 should have verified all checkpoints"
+    );
+
+    // Verify all checkpoint contents are available
+    for checkpoint in ordered_checkpoints.iter().skip(1) {
+        let seq = *checkpoint.sequence_number();
+        let contents_digest = &checkpoint.content_digest;
+        assert!(
+            store_1
+                .get_full_checkpoint_contents(Some(seq), contents_digest)
+                .is_some(),
+            "Checkpoint {} contents should be available",
+            seq
+        );
+    }
+}
+
+#[test]
+fn test_peer_score_throughput_calculation() {
+    use super::PeerScore;
+
+    let window = Duration::from_secs(60);
+    let failure_rate = 0.3;
+    let mut score = PeerScore::new(window, failure_rate);
+
+    // No samples - should return None
+    assert!(score.effective_throughput().is_none());
+    assert!(!score.is_failing());
+
+    // Single sample: 100 units in 1 second = 100 throughput
+    score.record_success(100, Duration::from_secs(1));
+    let throughput = score.effective_throughput().unwrap();
+    assert!((throughput - 100.0).abs() < 0.01);
+
+    // Add another sample: 200 units in 2 seconds = 100 throughput
+    // Combined: 300 units in 3 seconds = 100 throughput
+    score.record_success(200, Duration::from_secs(2));
+    let throughput = score.effective_throughput().unwrap();
+    assert!((throughput - 100.0).abs() < 0.01);
+
+    // Add a faster sample: 500 units in 1 second
+    // Combined: 800 units in 4 seconds = 200 throughput
+    score.record_success(500, Duration::from_secs(1));
+    let throughput = score.effective_throughput().unwrap();
+    assert!((throughput - 200.0).abs() < 0.01);
+}
+
+#[test]
+fn test_peer_score_failure_tracking() {
+    use super::PeerScore;
+
+    let window = Duration::from_secs(60);
+    let failure_rate = 0.3;
+    let mut score = PeerScore::new(window, failure_rate);
+
+    // Initially not failing (no samples)
+    assert!(!score.is_failing());
+
+    // Record 7 successes
+    for _ in 0..7 {
+        score.record_success(100, Duration::from_secs(1));
+    }
+
+    // Record 2 failures: 2/9 = 22% < 30%, and below min samples (10)
+    score.record_failure();
+    score.record_failure();
+    assert!(!score.is_failing());
+
+    // Record 1 more success to reach 10 samples: 2/10 = 20% < 30%, not failing
+    score.record_success(100, Duration::from_secs(1));
+    assert!(!score.is_failing());
+
+    // Record 1 more failure: 3/11 = 27% < 30%, not failing
+    score.record_failure();
+    assert!(!score.is_failing());
+
+    // Record 1 more failure: 4/12 = 33% >= 30%, is_failing
+    score.record_failure();
+    assert!(score.is_failing());
+}
+
+#[test]
+fn test_peer_heights_score_recording() {
+    use super::{PeerHeights, PeerStateSyncInfo};
+    use anemo::PeerId;
+    use rtd_types::digests::CheckpointDigest;
+
+    let peer_id = PeerId([1; 32]);
+
+    let mut peer_heights = PeerHeights {
+        peers: HashMap::from([(
+            peer_id,
+            PeerStateSyncInfo {
+                genesis_checkpoint_digest: CheckpointDigest::default(),
+                on_same_chain_as_us: true,
+                height: 0,
+                lowest: 0,
+            },
+        )]),
+        unprocessed_checkpoints: HashMap::new(),
+        sequence_number_to_digest: HashMap::new(),
+        scores: HashMap::new(),
+        wait_interval_when_no_peer_to_sync_content: Duration::from_secs(1),
+        peer_scoring_window: Duration::from_secs(60),
+        peer_failure_rate: 0.3,
+        checkpoint_content_timeout_min: Duration::from_secs(10),
+        checkpoint_content_timeout_max: Duration::from_secs(30),
+        exploration_probability: 0.1,
+    };
+
+    // Initially no throughput data and not failing
+    assert!(peer_heights.get_throughput(&peer_id).is_none());
+    assert!(!peer_heights.is_failing(&peer_id));
+
+    // Record some successes
+    peer_heights.record_success(peer_id, 100, Duration::from_secs(1));
+    let throughput = peer_heights.get_throughput(&peer_id).unwrap();
+    assert!((throughput - 100.0).abs() < 0.01);
+
+    // Record more successes
+    peer_heights.record_success(peer_id, 200, Duration::from_secs(1));
+    let throughput = peer_heights.get_throughput(&peer_id).unwrap();
+    // 300 bytes / 2 seconds = 150 bytes/sec
+    assert!((throughput - 150.0).abs() < 0.01);
+
+    // Record more successes to reach 8 total
+    for _ in 0..6 {
+        peer_heights.record_success(peer_id, 100, Duration::from_secs(1));
+    }
+
+    // Record 2 failures: 2/10 = 20% < 30%, not failing
+    peer_heights.record_failure(peer_id);
+    peer_heights.record_failure(peer_id);
+    assert!(!peer_heights.is_failing(&peer_id));
+
+    // Record 2 more failures: 4/12 = 33% >= 30%, is_failing
+    peer_heights.record_failure(peer_id);
+    peer_heights.record_failure(peer_id);
+    assert!(peer_heights.is_failing(&peer_id));
+}
+
+#[tokio::test]
+async fn test_peer_balancer_sorts_by_throughput() {
+    use super::{PeerBalancer, PeerCheckpointRequestType, PeerHeights, PeerStateSyncInfo};
+    use std::sync::{Arc, RwLock};
+
+    let committee = CommitteeFixture::generate(rand::rngs::OsRng, 0, 4);
+    let (ordered_checkpoints, _, _, _) = committee.make_empty_checkpoints(2, None);
+
+    let network_1 = build_network(|r| r);
+    let network_2 = build_network(|r| r);
+    let network_3 = build_network(|r| r);
+
+    network_1.connect(network_2.local_addr()).await.unwrap();
+    network_1.connect(network_3.local_addr()).await.unwrap();
+
+    let mut peer_heights = PeerHeights {
+        peers: HashMap::new(),
+        unprocessed_checkpoints: HashMap::new(),
+        sequence_number_to_digest: HashMap::new(),
+        scores: HashMap::new(),
+        wait_interval_when_no_peer_to_sync_content: Duration::from_secs(1),
+        peer_scoring_window: Duration::from_secs(60),
+        peer_failure_rate: 0.3,
+        checkpoint_content_timeout_min: Duration::from_secs(10),
+        checkpoint_content_timeout_max: Duration::from_secs(30),
+        exploration_probability: 0.1,
+    };
+
+    let peer_2_id = network_2.peer_id();
+    let peer_3_id = network_3.peer_id();
+
+    peer_heights.peers.insert(
+        peer_2_id,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: *ordered_checkpoints[0].digest(),
+            on_same_chain_as_us: true,
+            height: 10,
+            lowest: 0,
+        },
+    );
+    peer_heights.peers.insert(
+        peer_3_id,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: *ordered_checkpoints[0].digest(),
+            on_same_chain_as_us: true,
+            height: 10,
+            lowest: 0,
+        },
+    );
+
+    // peer_2: slow (10 bytes/sec)
+    peer_heights.record_success(peer_2_id, 100, Duration::from_secs(10));
+    // peer_3: fast (1000 bytes/sec)
+    peer_heights.record_success(peer_3_id, 1000, Duration::from_secs(1));
+
+    let peer_heights = Arc::new(RwLock::new(peer_heights));
+
+    let balancer = PeerBalancer::new(&network_1, peer_heights, PeerCheckpointRequestType::Summary);
+
+    let peers: Vec<_> = balancer.collect();
+
+    // Both peers should be present, fast peer first
+    assert_eq!(peers.len(), 2);
+    assert_eq!(peers[0].inner().peer_id(), peer_3_id);
+    assert_eq!(peers[1].inner().peer_id(), peer_2_id);
+}
+
+#[test]
+fn test_peer_score_failing_since_tracking() {
+    use super::PeerScore;
+
+    let window = Duration::from_secs(60);
+    let failure_rate = 0.3;
+    let mut score = PeerScore::new(window, failure_rate);
+
+    // Initially, failing_since should be None
+    assert!(score.failing_since.is_none());
+
+    // Not enough samples to be failing, update_failing_state should keep None
+    score.update_failing_state();
+    assert!(score.failing_since.is_none());
+
+    // Make the peer failing: 7 successes + 4 failures = 11 samples, 4/11 = 36% > 30%
+    for _ in 0..7 {
+        score.record_success(100, Duration::from_secs(1));
+    }
+    for _ in 0..4 {
+        score.record_failure();
+    }
+    assert!(score.is_failing());
+
+    // update_failing_state should set failing_since
+    score.update_failing_state();
+    assert!(score.failing_since.is_some());
+    let first_failing_since = score.failing_since.unwrap();
+
+    // Calling again should not change the timestamp
+    std::thread::sleep(Duration::from_millis(10));
+    score.update_failing_state();
+    assert_eq!(score.failing_since.unwrap(), first_failing_since);
+
+    // A single success does NOT clear failing_since while the windowed failure rate is still
+    // above the threshold (8 successes + 4 failures = 33% >= 30%, still failing).
+    score.record_success(100, Duration::from_secs(1));
+    assert!(score.is_failing());
+    score.update_failing_state();
+    assert_eq!(score.failing_since.unwrap(), first_failing_since);
+
+    // failing_since is cleared only once the windowed failure rate drops back below the
+    // threshold (14 successes + 4 failures = ~22% < 30%), which update_failing_state detects.
+    for _ in 0..6 {
+        score.record_success(100, Duration::from_secs(1));
+    }
+    assert!(!score.is_failing());
+    score.update_failing_state();
+    assert!(score.failing_since.is_none());
+}
+
+#[test]
+fn test_peer_score_consistently_failing() {
+    use super::PeerScore;
+
+    let window = Duration::from_secs(60);
+    let failure_rate = 0.3;
+    let mut score = PeerScore::new(window, failure_rate);
+
+    // Not failing yet
+    assert!(!score.consistently_failing(Duration::from_millis(50)));
+
+    // Make the peer failing
+    for _ in 0..7 {
+        score.record_success(100, Duration::from_secs(1));
+    }
+    for _ in 0..4 {
+        score.record_failure();
+    }
+    score.update_failing_state();
+    assert!(score.failing_since.is_some());
+
+    // Just became failing, should not be consistently failing with any positive threshold
+    assert!(!score.consistently_failing(Duration::from_secs(1)));
+
+    // But should be consistently failing with zero threshold
+    assert!(score.consistently_failing(Duration::ZERO));
+
+    // Wait a bit and check with a small threshold
+    std::thread::sleep(Duration::from_millis(60));
+    assert!(score.consistently_failing(Duration::from_millis(50)));
+}
+
+#[test]
+fn test_find_peer_to_report_for_failure() {
+    use super::{PeerHeights, PeerScore, PeerStateSyncInfo};
+    use anemo::PeerId;
+
+    let mut peer_heights = PeerHeights {
+        peers: HashMap::new(),
+        unprocessed_checkpoints: HashMap::new(),
+        sequence_number_to_digest: HashMap::new(),
+        scores: HashMap::new(),
+        wait_interval_when_no_peer_to_sync_content: Duration::from_secs(1),
+        peer_scoring_window: Duration::from_secs(60),
+        peer_failure_rate: 0.3,
+        checkpoint_content_timeout_min: Duration::from_secs(10),
+        checkpoint_content_timeout_max: Duration::from_secs(30),
+        exploration_probability: 0.1,
+    };
+
+    let peer_a = PeerId([1; 32]);
+    let peer_b = PeerId([2; 32]);
+    let genesis_digest = CheckpointDigest::default();
+
+    peer_heights.peers.insert(
+        peer_a,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: genesis_digest,
+            on_same_chain_as_us: true,
+            height: 10,
+            lowest: 0,
+        },
+    );
+    peer_heights.peers.insert(
+        peer_b,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: genesis_digest,
+            on_same_chain_as_us: true,
+            height: 10,
+            lowest: 0,
+        },
+    );
+
+    // No scores yet, should return None
+    assert!(
+        peer_heights
+            .find_peer_to_report_for_failure(Duration::from_secs(1))
+            .is_none()
+    );
+
+    // Create a score for peer_a that has been failing for longer
+    let mut score_a = PeerScore::new(Duration::from_secs(60), 0.3);
+    for _ in 0..7 {
+        score_a.record_success(100, Duration::from_secs(1));
+    }
+    for _ in 0..4 {
+        score_a.record_failure();
+    }
+    // Manually set failing_since to a time in the past
+    score_a.failing_since = Some(StdInstant::now() - Duration::from_secs(120));
+    peer_heights.scores.insert(peer_a, score_a);
+
+    // Create a score for peer_b that has been failing for less time
+    let mut score_b = PeerScore::new(Duration::from_secs(60), 0.3);
+    for _ in 0..7 {
+        score_b.record_success(100, Duration::from_secs(1));
+    }
+    for _ in 0..4 {
+        score_b.record_failure();
+    }
+    score_b.failing_since = Some(StdInstant::now() - Duration::from_secs(30));
+    peer_heights.scores.insert(peer_b, score_b);
+
+    // With a 10-second threshold, both are eligible but peer_a has been failing longer
+    let result = peer_heights.find_peer_to_report_for_failure(Duration::from_secs(10));
+    assert_eq!(result, Some(peer_a));
+
+    // With a 60-second threshold, only peer_a qualifies
+    let result = peer_heights.find_peer_to_report_for_failure(Duration::from_secs(60));
+    assert_eq!(result, Some(peer_a));
+
+    // With a 200-second threshold, neither qualifies
+    let result = peer_heights.find_peer_to_report_for_failure(Duration::from_secs(200));
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_find_peer_to_report_respects_same_chain() {
+    use super::{PeerHeights, PeerScore, PeerStateSyncInfo};
+    use anemo::PeerId;
+
+    let mut peer_heights = PeerHeights {
+        peers: HashMap::new(),
+        unprocessed_checkpoints: HashMap::new(),
+        sequence_number_to_digest: HashMap::new(),
+        scores: HashMap::new(),
+        wait_interval_when_no_peer_to_sync_content: Duration::from_secs(1),
+        peer_scoring_window: Duration::from_secs(60),
+        peer_failure_rate: 0.3,
+        checkpoint_content_timeout_min: Duration::from_secs(10),
+        checkpoint_content_timeout_max: Duration::from_secs(30),
+        exploration_probability: 0.1,
+    };
+
+    let peer_a = PeerId([1; 32]);
+    let genesis_digest = CheckpointDigest::default();
+
+    peer_heights.peers.insert(
+        peer_a,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: genesis_digest,
+            on_same_chain_as_us: true,
+            height: 10,
+            lowest: 0,
+        },
+    );
+
+    // Peer not on same chain should not be selected
+    let peer_b = PeerId([2; 32]);
+    peer_heights.peers.insert(
+        peer_b,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: genesis_digest,
+            on_same_chain_as_us: false,
+            height: 10,
+            lowest: 0,
+        },
+    );
+
+    let mut score_a = PeerScore::new(Duration::from_secs(60), 0.3);
+    for _ in 0..7 {
+        score_a.record_success(100, Duration::from_secs(1));
+    }
+    for _ in 0..4 {
+        score_a.record_failure();
+    }
+    score_a.failing_since = Some(StdInstant::now() - Duration::from_secs(600));
+    peer_heights.scores.insert(peer_a, score_a);
+
+    // peer_b has a failing score too, but is NOT on same chain
+    let mut score_b = PeerScore::new(Duration::from_secs(60), 0.3);
+    for _ in 0..7 {
+        score_b.record_success(100, Duration::from_secs(1));
+    }
+    for _ in 0..4 {
+        score_b.record_failure();
+    }
+    score_b.failing_since = Some(StdInstant::now() - Duration::from_secs(600));
+    peer_heights.scores.insert(peer_b, score_b);
+
+    // find_peer_to_report should only return peer_a (on same chain)
+    let result = peer_heights.find_peer_to_report_for_failure(Duration::from_secs(10));
+    assert_eq!(result, Some(peer_a));
+}
+
+#[test]
+fn test_lost_peer_clears_scores() {
+    use super::{PeerHeights, PeerStateSyncInfo};
+    use anemo::PeerId;
+
+    let mut peer_heights = PeerHeights {
+        peers: HashMap::new(),
+        unprocessed_checkpoints: HashMap::new(),
+        sequence_number_to_digest: HashMap::new(),
+        scores: HashMap::new(),
+        wait_interval_when_no_peer_to_sync_content: Duration::from_secs(1),
+        peer_scoring_window: Duration::from_secs(60),
+        peer_failure_rate: 0.3,
+        checkpoint_content_timeout_min: Duration::from_secs(10),
+        checkpoint_content_timeout_max: Duration::from_secs(30),
+        exploration_probability: 0.1,
+    };
+
+    let peer_id = PeerId([1; 32]);
+    let genesis_digest = CheckpointDigest::default();
+
+    peer_heights.peers.insert(
+        peer_id,
+        PeerStateSyncInfo {
+            genesis_checkpoint_digest: genesis_digest,
+            on_same_chain_as_us: true,
+            height: 10,
+            lowest: 0,
+        },
+    );
+
+    peer_heights.record_success(peer_id, 100, Duration::from_secs(1));
+    assert!(peer_heights.scores.contains_key(&peer_id));
+
+    // Simulate LostPeer: remove both peers and scores
+    peer_heights.peers.remove(&peer_id);
+    peer_heights.scores.remove(&peer_id);
+
+    assert!(!peer_heights.peers.contains_key(&peer_id));
+    assert!(!peer_heights.scores.contains_key(&peer_id));
+    assert!(peer_heights.get_throughput(&peer_id).is_none());
+    assert!(!peer_heights.is_failing(&peer_id));
+}
+
+#[test]
+fn test_adaptive_timeout_calculation() {
+    use super::compute_adaptive_timeout;
+
+    let min_timeout = Duration::from_secs(10);
+    let max_timeout = Duration::from_secs(30);
+
+    // Helper to check timeout is within expected range (base ± 10% jitter)
+    let assert_in_range = |timeout: Duration, expected_base: f64| {
+        let timeout_secs = timeout.as_secs_f64();
+        let jitter_range = expected_base * 0.1;
+        let min_expected = (expected_base - jitter_range).max(min_timeout.as_secs_f64());
+        let max_expected = expected_base + jitter_range;
+        assert!(
+            timeout_secs >= min_expected && timeout_secs <= max_expected,
+            "timeout {} not in range [{}, {}]",
+            timeout_secs,
+            min_expected,
+            max_expected
+        );
+    };
+
+    // Empty checkpoint - base timeout only (10s ± 10%)
+    let timeout = compute_adaptive_timeout(0, min_timeout, max_timeout);
+    assert_in_range(timeout, 10.0);
+
+    // Medium checkpoint with 1000 txns: base 12s ± 10%
+    let timeout = compute_adaptive_timeout(1000, min_timeout, max_timeout);
+    assert_in_range(timeout, 12.0);
+
+    // Half-full checkpoint with 5000 txns: base 20s ± 10%
+    let timeout = compute_adaptive_timeout(5000, min_timeout, max_timeout);
+    assert_in_range(timeout, 20.0);
+
+    // Max checkpoint with 10000 txns: base 30s ± 10%
+    let timeout = compute_adaptive_timeout(10000, min_timeout, max_timeout);
+    assert_in_range(timeout, 30.0);
 }

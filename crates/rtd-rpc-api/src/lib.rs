@@ -1,19 +1,26 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use linku_network::callback::CallbackLayer;
-use reader::StateReader;
-use rtd_types::storage::RpcStateReader;
-use rtd_types::transaction_executor::TransactionExecutor;
+use std::convert::Infallible;
 use std::sync::Arc;
+
+use reader::StateReader;
+use rtd_http::middleware::callback::CallbackLayer;
+use rtd_types::storage::RpcStateReader;
+use rtd_types::transaction_executor::ProposerSelector;
+use rtd_types::transaction_executor::TransactionExecutor;
 use subscription::SubscriptionServiceHandle;
 use tap::Pipe;
+use tonic::server::NamedService;
+use tower::Service;
 
 pub mod client;
 mod config;
 mod error;
 pub mod grpc;
+pub mod ledger_history;
 mod metrics;
+pub mod read_mask_defaults;
 mod reader;
 mod response;
 mod service;
@@ -55,12 +62,17 @@ impl std::fmt::Display for ServerVersion {
 pub struct RpcService {
     reader: StateReader,
     executor: Option<Arc<dyn TransactionExecutor>>,
+    proposer_selector: Option<Arc<dyn ProposerSelector>>,
     subscription_service_handle: Option<SubscriptionServiceHandle>,
     chain_id: rtd_types::digests::ChainIdentifier,
     server_version: Option<ServerVersion>,
     metrics: Option<Arc<RpcMetrics>>,
-    readiness_check: Option<service::health::ReadinessCheck>,
+    pub(crate) list_metrics: Option<Arc<metrics::ListApiMetrics>>,
     config: Config,
+    extra_routes: axum::Router,
+    extra_service_names: Vec<&'static str>,
+    extra_file_descriptor_sets: Vec<&'static [u8]>,
+    readiness_check: Option<service::health::ReadinessCheck>,
 }
 
 impl RpcService {
@@ -69,12 +81,17 @@ impl RpcService {
         Self {
             reader: StateReader::new(reader),
             executor: None,
+            proposer_selector: None,
             subscription_service_handle: None,
             chain_id,
             server_version: None,
             metrics: None,
-            readiness_check: None,
+            list_metrics: None,
             config: Config::default(),
+            extra_routes: axum::Router::new(),
+            extra_service_names: Vec::new(),
+            extra_file_descriptor_sets: Vec::new(),
+            readiness_check: None,
         }
     }
 
@@ -91,6 +108,10 @@ impl RpcService {
         self.executor = Some(executor);
     }
 
+    pub fn with_proposer_selector(&mut self, proposer_selector: Arc<dyn ProposerSelector>) {
+        self.proposer_selector = Some(proposer_selector);
+    }
+
     pub fn with_subscription_service(
         &mut self,
         subscription_service_handle: SubscriptionServiceHandle,
@@ -98,15 +119,39 @@ impl RpcService {
         self.subscription_service_handle = Some(subscription_service_handle);
     }
 
-    pub fn with_metrics(&mut self, metrics: RpcMetrics) {
-        self.metrics = Some(Arc::new(metrics));
-    }
-
     pub fn with_readiness_check(
         &mut self,
         readiness_check: impl Fn() -> anyhow::Result<()> + Send + Sync + 'static,
     ) {
         self.readiness_check = Some(Arc::new(readiness_check));
+    }
+
+    pub fn with_metrics(&mut self, registry: &prometheus::Registry) {
+        self.metrics = Some(Arc::new(RpcMetrics::new(registry)));
+        self.list_metrics = Some(Arc::new(metrics::ListApiMetrics::new(registry)));
+    }
+
+    pub fn with_custom_service<S>(&mut self, svc: S)
+    where
+        S: Service<
+                axum::extract::Request,
+                Response: axum::response::IntoResponse,
+                Error = Infallible,
+            > + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<grpc::BoxError> + Send,
+    {
+        self.extra_service_names.push(S::NAME);
+        self.extra_routes = std::mem::take(&mut self.extra_routes)
+            .route_service(&format!("/{}/{{*rest}}", S::NAME), svc);
+    }
+
+    pub fn with_file_descriptor_set(&mut self, encoded_fds: &'static [u8]) {
+        self.extra_file_descriptor_sets.push(encoded_fds);
     }
 
     pub fn chain_id(&self) -> rtd_types::digests::ChainIdentifier {
@@ -117,22 +162,59 @@ impl RpcService {
         self.server_version.as_ref()
     }
 
-    pub async fn into_router(self) -> axum::Router {
+    pub async fn into_router(mut self) -> axum::Router {
         let metrics = self.metrics.clone();
-        let file_descriptor_sets: &[&[u8]] = &[
-            crate::proto::google::protobuf::FILE_DESCRIPTOR_SET,
-            crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
+        let extra_routes = std::mem::take(&mut self.extra_routes);
+        let extra_service_names = std::mem::take(&mut self.extra_service_names);
+
+        // Single source of truth for every encoded FileDescriptorSet that
+        // backs a gRPC service mounted below. Consumed by the reflection
+        // services, the metrics allowlist, and the request-log layer so they
+        // cannot drift out of sync.
+        let built_in_file_descriptor_sets: [&[u8]; 5] = [
+            rtd_rpc::proto::google::protobuf::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::google::rpc::FILE_DESCRIPTOR_SET,
             rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::rtd::rpc::v2alpha::FILE_DESCRIPTOR_SET,
             tonic_health::pb::FILE_DESCRIPTOR_SET,
         ];
+        let file_descriptor_sets: Vec<&[u8]> = built_in_file_descriptor_sets
+            .into_iter()
+            .chain(std::mem::take(&mut self.extra_file_descriptor_sets))
+            .collect();
+
+        // Allowlist of `/Service/Method` paths used by the metrics middleware
+        // to bound prometheus label cardinality.
         let grpc_method_allowlist = Arc::new(
-            metrics::grpc_method_paths_from_file_descriptor_sets(file_descriptor_sets)
+            metrics::grpc_method_paths_from_file_descriptor_sets(&file_descriptor_sets)
                 .expect("registered FileDescriptorSet bytes must be valid protobuf"),
         );
+
+        let request_log =
+            linku_network::request_log::GrpcRequestLogLayer::from_encoded_file_descriptor_sets(
+                file_descriptor_sets.iter().copied(),
+            )
+            .unwrap_or_else(|e| {
+                // Extra sets registered by embedders may not merge cleanly (e.g. missing
+                // imports). Reflection and metrics tolerate that, so don't fail startup —
+                // capture just won't decode those extra services.
+                tracing::warn!(
+                    "request-log descriptor pool falling back to built-in file descriptor sets: {e}"
+                );
+                linku_network::request_log::GrpcRequestLogLayer::from_encoded_file_descriptor_sets(
+                    built_in_file_descriptor_sets,
+                )
+                .expect("built-in FileDescriptorSet bytes must be valid protobuf")
+            });
 
         let router = {
             let ledger_service =
                 rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let proof_service_v2alpha =
+                rtd_rpc::proto::rtd::rpc::v2alpha::proof_service_server::ProofServiceServer::new(
                     self.clone(),
                 )
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
@@ -153,67 +235,38 @@ impl RpcService {
                 )
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
 
-            let event_service_alpha =
-                crate::grpc::alpha::event_service_proto::event_service_server::EventServiceServer::new(
-                    self.clone(),
-                );
-            let proof_service_alpha =
-                crate::grpc::alpha::proof_service_proto::proof_service_server::ProofServiceServer::new(
-                    crate::grpc::alpha::proof_service::ProofServiceImpl::new(self.clone()),
-                );
-
             let (health_reporter, health_service) = tonic_health::server::health_reporter();
 
-            let reflection_v1 = tonic_reflection::server::Builder::configure()
-                .register_encoded_file_descriptor_set(
-                    crate::proto::google::protobuf::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(
-                    crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(
-                    rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
-                .build_v1()
-                .unwrap();
+            let mut reflection_v1_builder = tonic_reflection::server::Builder::configure();
+            let mut reflection_v1alpha_builder = tonic_reflection::server::Builder::configure();
+            for fds in &file_descriptor_sets {
+                reflection_v1_builder =
+                    reflection_v1_builder.register_encoded_file_descriptor_set(fds);
+                reflection_v1alpha_builder =
+                    reflection_v1alpha_builder.register_encoded_file_descriptor_set(fds);
+            }
 
-            let reflection_v1alpha = tonic_reflection::server::Builder::configure()
-                .register_encoded_file_descriptor_set(
-                    crate::proto::google::protobuf::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(
-                    crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(
-                    rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
-                )
-                .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
-                .build_v1alpha()
-                .unwrap();
+            let reflection_v1 = reflection_v1_builder.build_v1().unwrap();
+            let reflection_v1alpha = reflection_v1alpha_builder.build_v1alpha().unwrap();
 
             fn service_name<S: tonic::server::NamedService>(_service: &S) -> &'static str {
                 S::NAME
             }
 
-            for service_name in [
+            let mut health_service_names = vec![
                 service_name(&ledger_service),
                 service_name(&transaction_execution_service),
                 service_name(&state_service),
                 service_name(&signature_verification_service),
                 service_name(&move_package_service),
                 service_name(&name_service),
-                service_name(&event_service_alpha),
-                service_name(&proof_service_alpha),
+                service_name(&proof_service_v2alpha),
                 service_name(&reflection_v1),
                 service_name(&reflection_v1alpha),
-            ] {
-                health_reporter
-                    .set_service_status(service_name, tonic_health::ServingStatus::Serving)
-                    .await;
-            }
+            ];
 
             let mut services = grpc::Services::new()
+                .timeout(self.config.grpc_timeout())
                 // V2
                 .add_service(ledger_service)
                 .add_service(transaction_execution_service)
@@ -221,9 +274,8 @@ impl RpcService {
                 .add_service(signature_verification_service)
                 .add_service(move_package_service)
                 .add_service(name_service)
-                // alpha
-                .add_service(event_service_alpha)
-                .add_service(proof_service_alpha)
+                // V2alpha
+                .add_service(proof_service_v2alpha)
                 // Reflection
                 .add_service(reflection_v1)
                 .add_service(reflection_v1alpha);
@@ -231,17 +283,48 @@ impl RpcService {
             if self.subscription_service_handle.is_some() {
                 let subscription_service =
 rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone());
-                health_reporter
-                    .set_service_status(
-                        service_name(&subscription_service),
-                        tonic_health::ServingStatus::Serving,
-                    )
-                    .await;
+                health_service_names.push(service_name(&subscription_service));
 
                 services = services.add_service(subscription_service);
             }
 
-            services.add_service(health_service).into_router()
+            health_service_names.extend(extra_service_names);
+            let initial_status = service::health::serving_status(self.readiness_check.as_ref());
+            health_reporter.set_service_status("", initial_status).await;
+            for name in &health_service_names {
+                health_reporter
+                    .set_service_status(*name, initial_status)
+                    .await;
+            }
+
+            if let Some(readiness_check) = self.readiness_check.clone() {
+                let reporter = health_reporter.clone();
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    let mut last_status = initial_status;
+                    loop {
+                        interval.tick().await;
+                        if Arc::strong_count(&readiness_check) == 1 {
+                            break;
+                        }
+                        let current_status =
+                            service::health::serving_status(Some(&readiness_check));
+                        if current_status != last_status {
+                            reporter.set_service_status("", current_status).await;
+                            for name in &health_service_names {
+                                reporter.set_service_status(*name, current_status).await;
+                            }
+                            last_status = current_status;
+                        }
+                    }
+                });
+            }
+
+            services
+                .merge_router(extra_routes)
+                .add_service(health_service)
+                .into_router(request_log)
         };
 
         let health_endpoint = axum::Router::new()
@@ -286,5 +369,22 @@ pub enum Direction {
 impl Direction {
     pub fn is_descending(self) -> bool {
         matches!(self, Self::Descending)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The request-log layer's descriptor pool is built from these sets at server startup with an
+    /// `expect`, so they must always merge into one valid pool.
+    #[test]
+    fn request_log_pool_builds_from_registered_file_descriptor_sets() {
+        linku_network::request_log::GrpcRequestLogLayer::from_encoded_file_descriptor_sets([
+            rtd_rpc::proto::google::protobuf::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::google::rpc::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::rtd::rpc::v2alpha::FILE_DESCRIPTOR_SET,
+            tonic_health::pb::FILE_DESCRIPTOR_SET,
+        ])
+        .unwrap();
     }
 }

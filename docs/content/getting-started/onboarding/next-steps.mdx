@@ -1,0 +1,38 @@
+---
+title: Next Steps
+description: Continue building against a verified RTD network after local onboarding.
+keywords:
+  - next steps
+  - local network
+  - RTD SDK
+questions:
+  - What should I do after running a local RTD network?
+  - Where are the RTD SDK sources?
+answer: >-
+  Verify the chain ID of your local network, build a Move package from this
+  source tree, and connect an RTD SDK to the endpoint operated for that same
+  network. RTD has no public Mainnet or verified public developer services.
+---
+
+After [creating a local network](/getting-started/onboarding/local-network), confirm that the CLI points to the intended chain:
+
+```sh
+rtd client active-env
+rtd client chain-identifier --format hex
+rtd client active-address
+rtd client gas
+```
+
+The output depends on your genesis and wallet. Do not reuse a package ID, chain ID, or gas object from a different RTD network.
+
+## Build and test Move
+
+Use the Move packages in `examples/move` of this repository as local source examples. Define the build environment for your chain ID in the package manifest, then run `rtd move build --build-env <ENV>` and `rtd move test --build-env <ENV>` before publishing. See [Build and Publish](/getting-started/onboarding/hello-world) and [package management](/develop/manage-packages/move-package-management).
+
+## Connect an SDK
+
+The RTD TypeScript SDK and Rust SDK are maintained in the `rtd-ts-sdk` and `rtd-rust-sdk` source repositories. Configure them with an endpoint from the RTD network you operate and verify its chain ID and genesis first. See [SDK comparison](/references/sdk-comparison). The presence of SDK source does not imply an RTD public RPC, explorer, faucet, wallet service, or hosted GraphQL service.
+
+## Network operations
+
+For node and data service deployment, use the [full node guide](/operators/full-node/rtd-full-node) and [data store guidance](/operators/data-management/available-data-stores). Obtain peer, genesis, and archive details from the operator of the same RTD chain. RTD has not launched Mainnet, and its future Mainnet will not offer JSON-RPC.

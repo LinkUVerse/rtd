@@ -1,10 +1,13 @@
 [package]
 name = "linku-service"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 version = "0.0.1"
 edition = "2024"
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true

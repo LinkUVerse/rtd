@@ -1,29 +1,64 @@
 ---
 title: Rtd RPC
-description: RtdJSON is a JSON-based format that enables alignment of JSON inputs with Move call arguments. 
-keywords: [RtdJSON, json, json-based, json format, move call arguments, json inputs, move types, expected move types, move type mapping ]
+description: >-
+  RtdJSON is a JSON-based format with restrictions that enable Rtd to align JSON
+  inputs more closely with Move call arguments, including type coercion rules
+  for Move types.
+keywords:
+  - RtdJSON
+  - json
+  - json-based
+  - json format
+  - move call arguments
+  - json inputs
+  - move types
+  - expected move types
+  - move type mapping
 pagination_prev: null
+goal:
+  description: Reader can look up how RtdJSON aligns JSON inputs with Move call arguments
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - min_words: 100
+      label: Needs more reference content
+    - has_tables: true
+      min: 1
+      label: Has reference table
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Rtd RPC in Rtd?
+  - Where can I find the rtd rpc reference?
+  - How does rtd rpc work on Rtd?
+answer: >-
+  RtdJSON is a JSON-based format with restrictions that allow Rtd to align JSON
+  inputs more closely with Move call arguments.
 ---
 
 :::info
 
-<ImportContent source="json-rpc-deprecation.mdx" mode="snippet" />
+<ImportContent source="json-rpc-deprecation" mode="snippet" />
 
 :::
 
 :::info
 
-<ImportContent source="data-serving-msg.mdx" mode="snippet" />
+<ImportContent source="data-serving-msg" mode="snippet" />
 
 :::
 
-_RtdJSON_ is a JSON-based format with restrictions that allow Rtd to align JSON inputs more closely with Move call arguments.
+RtdJSON is a JSON-based format with restrictions that allow Rtd to align JSON inputs more closely with Move call arguments.
 
 This table shows the restrictions placed on JSON types to make them RtdJSON compatible:
 
 | JSON    | RtdJSON restrictions                         | Move type mapping                                                                        |
 | ------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Number  | Must be unsigned integer                     | u8, u6, u32, u64 (encoded as String), u128 (encoded as String), u256 (encoded as String) |
+| Number  | Must be unsigned integer                     | u8, u16, u32, u64 (encoded as String), u128 (encoded as String), u256 (encoded as String) |
 | String  | No restrictions                              | Vector`<u8>`, Address, ObjectID, TypeTag, Identifier, Unsigned integer (256 bit max)     |
 | Boolean | No restrictions                              | Bool                                                                                     |
 | Array   | Must be homogeneous JSON and of RtdJSON type | Vector                                                                                   |
@@ -34,7 +69,7 @@ This table shows the restrictions placed on JSON types to make them RtdJSON comp
 
 Due to the loosely typed nature of JSON/RtdJSON and the strongly typed nature of Move types, you sometimes need to overload RtdJSON types to represent multiple Move types.
 
-For example `RtdJSON::Number` can represent both _u8_ and _u32_. This means you have to coerce and sometimes convert types.
+For example, `RtdJSON::Number` can represent both `u8` and `u32`. This means you have to coerce and sometimes convert types.
 
 Which type you coerce depends on the expected Move type. For example, if the Move function expects a u8, you must have received a `RtdJSON::Number` with a value less than 256. More importantly, you have no way to easily express Move addresses in JSON, so you encode them as hex strings prefixed by `0x`.
 

@@ -10,9 +10,11 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::schema::{
-    Environment, EnvironmentID, EnvironmentName, LockfileDependencyInfo, PackageName,
+    Environment, EnvironmentID, EnvironmentName, LockfileDependencyInfo, OriginalID, PackageName,
     ParsedManifest, ReplacementDependency,
 };
+
+use async_trait::async_trait;
 
 use super::MoveFlavor;
 use indexmap::IndexMap;
@@ -20,13 +22,10 @@ use indexmap::IndexMap;
 pub const DEFAULT_ENV_NAME: &str = "_test_env";
 pub const DEFAULT_ENV_ID: &str = "_test_env_id";
 
-pub fn default_environment() -> Environment {
-    Environment::new(DEFAULT_ENV_NAME.to_string(), DEFAULT_ENV_ID.to_string())
-}
-
 /// The [Vanilla] implementation of the [MoveFlavor] trait. This implementation supports no
 /// flavor-specific resolvers and stores no additional metadata in the lockfile.
-#[derive(Debug)]
+#[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct Vanilla;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -42,32 +41,52 @@ pub struct SavedBuildConfig {
     flavor: String,
 }
 
+#[async_trait]
 impl MoveFlavor for Vanilla {
     type PublishedMetadata = PublishedMetadata;
     type PackageMetadata = ();
     type AddressInfo = ();
 
-    fn name() -> String {
+    fn name(&self) -> String {
         "vanilla".to_string()
     }
 
-    fn default_environments() -> IndexMap<EnvironmentName, EnvironmentID> {
+    fn default_environments(&self) -> IndexMap<EnvironmentName, EnvironmentID> {
         let mut envs = IndexMap::new();
         envs.insert(DEFAULT_ENV_NAME.to_string(), DEFAULT_ENV_ID.to_string());
         envs
     }
 
-    fn system_deps(_environment: &EnvironmentID) -> BTreeMap<String, LockfileDependencyInfo> {
+    async fn system_deps(
+        &self,
+        _environment: &EnvironmentID,
+    ) -> BTreeMap<String, LockfileDependencyInfo> {
         BTreeMap::new()
     }
 
-    fn implicit_dependencies(
+    async fn implicit_dependencies(
+        &self,
         _environment: &EnvironmentID,
     ) -> BTreeMap<PackageName, ReplacementDependency> {
         BTreeMap::new()
     }
 
-    fn validate_manifest(_: &ParsedManifest) -> Result<(), String> {
+    fn validate_manifest(&self, _: &ParsedManifest) -> Result<(), String> {
         Ok(())
+    }
+
+    fn is_system_address(&self, address: &crate::schema::OriginalID) -> bool {
+        address == &OriginalID::from(0xBEEF)
+    }
+}
+
+impl Vanilla {
+    /// Create a new `Vanilla` flavor.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn default_environment() -> Environment {
+        Environment::new(DEFAULT_ENV_NAME.to_string(), DEFAULT_ENV_ID.to_string())
     }
 }

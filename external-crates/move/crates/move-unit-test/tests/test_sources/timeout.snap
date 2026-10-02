@@ -1,5 +1,5 @@
 ---
-source: crates/move-unit-test/tests/move_unit_test_testrtdte.rs
+source: crates/move-unit-test/tests/move_unit_test_testsuite.rs
 ---
 Running Move unit tests
 [ PASS    ] 0x6::M::no_timeout
@@ -13,7 +13,7 @@ Test failures:
 Failures in 0x6::M:
 
 ┌── no_timeout_fail ──────
-│ error[E11001]: test failure
+│ error[EC11001]: test failure
 │    ┌─ timeout.move:17:29
 │    │
 │ 17 │     fun no_timeout_fail() { abort 0 }

@@ -1,30 +1,108 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    collections::BTreeMap,
-    fmt,
-    fmt::{Debug, Formatter},
-    sync::Arc,
-};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::fmt::Debug;
+use std::fmt::Formatter;
+use std::sync::Arc;
 
 use async_graphql::Context;
 use async_trait::async_trait;
 use move_core_types::account_address::AccountAddress;
+use rtd_indexer_alt_reader::kv_loader::TransactionContents as NativeTransactionContents;
 use rtd_indexer_alt_reader::package_resolver::PackageCache;
-use rtd_package_resolver::{Package, PackageStore, Resolver, error::Error as PackageResolverError};
+use rtd_package_resolver::Package;
+use rtd_package_resolver::PackageStore;
+use rtd_package_resolver::Resolver;
+use rtd_package_resolver::error::Error as PackageResolverError;
 use rtd_rpc::proto::rtd::rpc::v2 as grpc;
 use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
-use rtd_types::{
-    base_types::{ObjectID, SequenceNumber},
-    object::Object as NativeObject,
-};
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::digests::TransactionDigest;
+use rtd_types::object::Object as NativeObject;
 
-use crate::{config::Limits, error::RpcError, task::watermark::Watermarks};
+use crate::config::Limits;
+use crate::error::RpcError;
+use crate::task::streaming::StreamedObjectStore;
+use crate::task::streaming::StreamedTransactionStore;
+use crate::task::watermark::Watermarks;
+
+use crate::task::streaming::ProcessedCheckpoint;
+use crate::task::streaming::StreamedCaches;
 
 /// A map of objects from an executed transaction, keyed by (ObjectID, SequenceNumber).
 /// None values indicate tombstones for deleted/wrapped objects.
-type ExecutionObjectMap = Arc<BTreeMap<(ObjectID, SequenceNumber), Option<NativeObject>>>;
+pub(crate) type ExecutionObjectMap =
+    Arc<BTreeMap<(ObjectID, SequenceNumber), Option<NativeObject>>>;
+
+/// Where in-memory lookups (objects, transaction contents, etc.) in this scope draw their data
+/// from. Encodes the mutually exclusive modes a [`Scope`] can be in. Indexed mode hits the
+/// database/kv_loader (no in-memory payload). Executed mode is the mutation/simulate path, with a
+/// freshly executed transaction's outputs. Streamed mode is the subscription path, with an
+/// in-memory checkpoint payload.
+#[derive(Clone)]
+pub(crate) enum DataSource {
+    /// Reads go through the indexed-checkpoint path (kv_loader / DB). No in-memory payload.
+    Indexed,
+    /// A subscription backfilling a matched item found at `checkpoint` (known to be indexed).
+    /// Reads go through the kv_loader / DB.
+    Backfill { checkpoint: u64 },
+    /// A freshly executed transaction's input/output objects.
+    Executed {
+        execution_objects: ExecutionObjectMap,
+    },
+    /// A streamed checkpoint with all per-tx contents and a checkpoint-wide execution-objects
+    /// map. If the scope is anchored to a particular transaction in the checkpoint, its digest
+    /// is in [`Scope::effects_viewed_at_digest`].
+    Streamed {
+        checkpoint: Arc<ProcessedCheckpoint>,
+        /// The in-memory caches this streamed checkpoint reads ahead of the durable index.
+        caches: Arc<StreamedCaches>,
+    },
+}
+
+/// The checkpoint context a subscription scope resolves in, returned by [`Scope::streamed_checkpoint`].
+pub(crate) enum StreamedCheckpoint {
+    /// Live delivery: the checkpoint is held in memory (the index may not have reached it yet).
+    Live(Arc<ProcessedCheckpoint>),
+    /// Backfill delivery: the item was found at this checkpoint (known to be indexed).
+    Backfill(u64),
+}
+
+/// Identifies the transaction whose effects are currently in view. Descendant resolvers default
+/// fields like `IAddressable.asTransactionObject` to this transaction, and `*Contents::fetch`
+/// consults `contents` as a hit before falling back to streaming/kv_loader.
+///
+/// `contents` is `Some` when the anchoring caller already had them in hand (e.g. when navigating
+/// `Transaction.effects` on a hydrated `Transaction`). `None` for digest-only anchors (e.g.
+/// subscription resolvers, where contents live in the [`DataSource::Streamed`] checkpoint and are
+/// fetched on demand).
+#[derive(Clone)]
+struct ActiveTransaction {
+    digest: TransactionDigest,
+    contents: Option<Arc<NativeTransactionContents>>,
+}
+
+/// Root object bound for consistent dynamic field reads.
+///
+/// This enables consistent dynamic field reads in the case of chained dynamic object fields,
+/// e.g., `Parent -> DOF1 -> DOF2`. In such cases, the object versions may end up like
+/// `Parent >= DOF1, DOF2` but `DOF1 < DOF2`.
+///
+/// Lamport timestamps of objects are updated for all top-level mutable objects provided as
+/// inputs to a transaction as well as any mutated dynamic child objects. However, any dynamic
+/// child objects that were loaded but not actually mutated don't end up having their versions
+/// updated. So, database queries for nested dynamic fields must be bounded by the version of
+/// the root object, and not the immediate parent.
+///
+/// The bound can be expressed either in terms of a specific object version or a checkpoint.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum RootBound {
+    Version(u64),
+    Checkpoint(u64),
+}
 
 /// A way to share information between fields in a request, similar to [Context].
 ///
@@ -39,24 +117,24 @@ pub(crate) struct Scope {
     /// None indicates execution context where we're viewing fresh transaction effects not yet indexed.
     checkpoint_viewed_at: Option<u64>,
 
-    /// Root parent object version for dynamic fields.
+    /// The transaction whose effects descendant resolvers default to (e.g.
+    /// `IAddressable.asTransactionObject` without an explicit `transactionDigest`). Set when a
+    /// resolver brings a single transaction into view: indexed paths that already hold the
+    /// `TransactionContents` anchor with contents (so `*Contents::fetch` can short-circuit via
+    /// `active_transaction_contents_for`); subscription resolvers anchor digest-only and rely on
+    /// the [`DataSource::Streamed`] checkpoint for content lookups.
     ///
-    /// This enables consistent dynamic field reads in the case of chained dynamic object fields,
-    /// e.g., `Parent -> DOF1 -> DOF2`. In such cases, the object versions may end up like
-    /// `Parent >= DOF1, DOF2` but `DOF1 < DOF2`.
-    ///
-    /// Lamport timestamps of objects are updated for all top-level mutable objects provided as
-    /// inputs to a transaction as well as any mutated dynamic child objects. However, any dynamic
-    /// child objects that were loaded but not actually mutated don't end up having their versions
-    /// updated. So, database queries for nested dynamic fields must be bounded by the version of
-    /// the root object, and not the immediate parent.
-    root_version: Option<u64>,
+    /// This is *not* a "view bound" up to and including a transaction; it identifies one
+    /// transaction. Object visibility is end-of-checkpoint regardless of this field.
+    active_transaction: Option<ActiveTransaction>,
 
-    /// Cache of objects available in execution context (freshly executed transaction).
-    /// Maps (ObjectID, SequenceNumber) to optional object data.
-    /// None indicates the object was deleted or wrapped at that version.
-    /// This enables any Object GraphQL type to access fresh data without database queries.
-    execution_objects: ExecutionObjectMap,
+    /// Root object bound for dynamic fields.
+    ///
+    /// This can be expressed either in terms of a specific object version or a checkpoint.
+    root_bound: Option<RootBound>,
+
+    /// Where in-memory lookups in this scope draw their data from. See [`DataSource`].
+    data_source: DataSource,
 
     /// Access to packages for type resolution.
     package_store: Arc<dyn PackageStore>,
@@ -75,43 +153,168 @@ impl Scope {
 
         Ok(Self {
             checkpoint_viewed_at: Some(watermark.high_watermark().checkpoint()),
-            root_version: None,
-            execution_objects: Arc::new(BTreeMap::new()),
+            active_transaction: None,
+            root_bound: None,
+            data_source: DataSource::Indexed,
             package_store: package_store.clone(),
             resolver_limits: limits.package_resolver(),
         })
     }
 
-    /// Create a nested scope pinned to a past checkpoint. Returns `None` if the checkpoint is in
-    /// the future, or if the current scope is in execution context (no checkpoint is set).
-    pub(crate) fn with_checkpoint_viewed_at(&self, checkpoint_viewed_at: u64) -> Option<Self> {
-        let current_cp = self.checkpoint_viewed_at?;
-        (checkpoint_viewed_at <= current_cp).then(|| Self {
-            checkpoint_viewed_at: Some(checkpoint_viewed_at),
-            root_version: self.root_version,
-            execution_objects: Arc::clone(&self.execution_objects),
-            package_store: self.package_store.clone(),
-            resolver_limits: self.resolver_limits.clone(),
+    /// Create a scope for streamed checkpoint data. Sets `checkpoint_viewed_at` to `None`
+    /// because streamed data is resolved from memory, not bounded by an indexed checkpoint.
+    pub(crate) fn for_streamed_checkpoint(
+        caches: Arc<StreamedCaches>,
+        resolver_limits: rtd_package_resolver::Limits,
+        streamed_checkpoint: Arc<ProcessedCheckpoint>,
+    ) -> Self {
+        Self {
+            checkpoint_viewed_at: None,
+            active_transaction: None,
+            root_bound: None,
+            package_store: caches.package_store.clone(),
+            data_source: DataSource::Streamed {
+                checkpoint: streamed_checkpoint,
+                caches,
+            },
+            resolver_limits,
+        }
+    }
+
+    /// Create a scope for an item a subscription is backfilling, found at `checkpoint`. Fields
+    /// resolve lazily through the index (`KvLoader`) with no in-memory payload. `checkpoint_viewed_at`
+    /// is `None`, so checkpoint-anchored fields (balances, latest object versions) stay null.
+    pub(crate) fn for_backfill(
+        caches: Arc<StreamedCaches>,
+        resolver_limits: rtd_package_resolver::Limits,
+        checkpoint: u64,
+    ) -> Self {
+        Self {
+            checkpoint_viewed_at: None,
+            active_transaction: None,
+            root_bound: None,
+            data_source: DataSource::Backfill { checkpoint },
+            package_store: caches.package_store.clone(),
+            resolver_limits,
+        }
+    }
+
+    /// Anchor a nested scope to a transaction by digest only. Used when the caller does not yet
+    /// hold the transaction's contents. If the scope is already anchored to the same digest
+    /// (with or without hydrated contents), the existing anchor is preserved so descendants
+    /// keep access to any cached contents. Does not change object visibility.
+    pub(crate) fn with_active_transaction_digest(&self, digest: TransactionDigest) -> Self {
+        if self.active_transaction_digest() == Some(digest) {
+            return self.clone();
+        }
+        self.with_active_transaction(ActiveTransaction {
+            digest,
+            contents: None,
         })
     }
 
-    /// Create a nested scope with a root version set.
-    pub(crate) fn with_root_version(&self, root_version: u64) -> Self {
+    /// Anchor a nested scope to a transaction whose contents the caller already holds. Lets
+    /// downstream resolvers reuse the contents instead of re-fetching via kv_loader, and lets
+    /// fields like `IAddressable.asTransactionObject` default to this transaction. Does not change
+    /// object visibility.
+    pub(crate) fn with_active_transaction_contents(
+        &self,
+        digest: TransactionDigest,
+        contents: Arc<NativeTransactionContents>,
+    ) -> Self {
+        self.with_active_transaction(ActiveTransaction {
+            digest,
+            contents: Some(contents),
+        })
+    }
+
+    fn with_active_transaction(&self, active: ActiveTransaction) -> Self {
         Self {
             checkpoint_viewed_at: self.checkpoint_viewed_at,
-            root_version: Some(root_version),
-            execution_objects: Arc::clone(&self.execution_objects),
+            active_transaction: Some(active),
+            root_bound: self.root_bound,
+            data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
             resolver_limits: self.resolver_limits.clone(),
         }
     }
 
-    /// Reset the root version.
-    pub(crate) fn without_root_version(&self) -> Self {
+    /// Create a scope instance for tests with no package data.
+    #[cfg(test)]
+    pub(crate) fn for_tests() -> Self {
+        #[derive(Clone)]
+        struct EmptyPackageStore;
+
+        #[async_trait]
+        impl PackageStore for EmptyPackageStore {
+            async fn fetch(
+                &self,
+                id: AccountAddress,
+            ) -> Result<Arc<Package>, PackageResolverError> {
+                Err(PackageResolverError::PackageNotFound(id))
+            }
+        }
+
+        Self {
+            checkpoint_viewed_at: Some(0),
+            active_transaction: None,
+            root_bound: None,
+            data_source: DataSource::Indexed,
+            package_store: Arc::new(EmptyPackageStore),
+            resolver_limits: Limits::default().package_resolver(),
+        }
+    }
+
+    /// Create a nested scope pinned to a checkpoint. Returns `None` if the checkpoint is in
+    /// the future, or if the current scope is in execution context (no checkpoint is set).
+    pub(crate) fn with_checkpoint_viewed_at(
+        &self,
+        ctx: &Context<'_>,
+        checkpoint_viewed_at: u64,
+    ) -> Option<Self> {
+        let watermark: &Arc<Watermarks> = ctx.data().ok()?;
+        let cp_hi_inclusive = watermark.high_watermark().checkpoint();
+        (checkpoint_viewed_at <= cp_hi_inclusive).then(|| Self {
+            checkpoint_viewed_at: Some(checkpoint_viewed_at),
+            active_transaction: self.active_transaction.clone(),
+            root_bound: self.root_bound,
+            data_source: self.data_source.clone(),
+            package_store: self.package_store.clone(),
+            resolver_limits: self.resolver_limits.clone(),
+        })
+    }
+
+    /// Create a nested scope with a root version bound.
+    pub(crate) fn with_root_version(&self, root_version: u64) -> Self {
         Self {
             checkpoint_viewed_at: self.checkpoint_viewed_at,
-            root_version: None,
-            execution_objects: Arc::clone(&self.execution_objects),
+            active_transaction: self.active_transaction.clone(),
+            root_bound: Some(RootBound::Version(root_version)),
+            data_source: self.data_source.clone(),
+            package_store: self.package_store.clone(),
+            resolver_limits: self.resolver_limits.clone(),
+        }
+    }
+
+    /// Create a nested scope with a root checkpoint bound.
+    pub(crate) fn with_root_checkpoint(&self, root_checkpoint: u64) -> Self {
+        Self {
+            checkpoint_viewed_at: self.checkpoint_viewed_at,
+            active_transaction: self.active_transaction.clone(),
+            root_bound: Some(RootBound::Checkpoint(root_checkpoint)),
+            data_source: self.data_source.clone(),
+            package_store: self.package_store.clone(),
+            resolver_limits: self.resolver_limits.clone(),
+        }
+    }
+
+    /// Reset the root bound.
+    pub(crate) fn without_root_bound(&self) -> Self {
+        Self {
+            checkpoint_viewed_at: self.checkpoint_viewed_at,
+            active_transaction: self.active_transaction.clone(),
+            root_bound: None,
+            data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
             resolver_limits: self.resolver_limits.clone(),
         }
@@ -126,9 +329,30 @@ impl Scope {
         self.checkpoint_viewed_at
     }
 
+    /// True in the execution context: a freshly executed or simulated transaction, whose data
+    /// lives only in the in-memory payload rather than the index.
+    pub(crate) fn is_executed(&self) -> bool {
+        matches!(self.data_source, DataSource::Executed { .. })
+    }
+
     /// Root parent object version for dynamic fields.
+    /// Returns `Some(v)` only if the root bound is version-based.
     pub(crate) fn root_version(&self) -> Option<u64> {
-        self.root_version
+        if let Some(RootBound::Version(v)) = self.root_bound {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    /// Root checkpoint bound for dynamic fields.
+    /// Returns the checkpoint bound if set, otherwise falls back to `checkpoint_viewed_at`.
+    pub(crate) fn root_checkpoint(&self) -> Option<u64> {
+        if let Some(RootBound::Checkpoint(cp)) = self.root_bound {
+            Some(cp)
+        } else {
+            self.checkpoint_viewed_at
+        }
     }
 
     /// Get the exclusive checkpoint bound, if any.
@@ -136,6 +360,71 @@ impl Scope {
     /// Returns `None` in execution context (freshly executed transaction).
     pub(crate) fn checkpoint_viewed_at_exclusive_bound(&self) -> Option<u64> {
         self.checkpoint_viewed_at.map(|cp| cp + 1)
+    }
+
+    /// The digest of the transaction this scope is anchored to, if any.
+    pub(crate) fn active_transaction_digest(&self) -> Option<TransactionDigest> {
+        self.active_transaction.as_ref().map(|a| a.digest)
+    }
+
+    /// Already-fetched contents for `digest`, if the scope was anchored to that same transaction
+    /// with hydrated contents. Returns `None` for any other digest, or when the anchor is
+    /// digest-only; callers should fall through to the normal fetch path.
+    pub(crate) fn active_transaction_contents_for(
+        &self,
+        digest: TransactionDigest,
+    ) -> Option<&Arc<NativeTransactionContents>> {
+        self.active_transaction
+            .as_ref()
+            .filter(|a| a.digest == digest)
+            .and_then(|a| a.contents.as_ref())
+    }
+
+    /// The execution objects map active for object lookups in this scope. Resolves through the
+    /// scope's [`DataSource`]: in `Streamed` mode, returns the checkpoint-wide map (object
+    /// visibility is end-of-checkpoint, matching the indexed Query path); in `Executed` mode,
+    /// returns the freshly extracted map; in `Indexed` mode, returns `None` so callers fall
+    /// through to the DB.
+    fn execution_objects_in_view(&self) -> Option<&ExecutionObjectMap> {
+        match &self.data_source {
+            DataSource::Indexed | DataSource::Backfill { .. } => None,
+            DataSource::Executed { execution_objects } => Some(execution_objects),
+            DataSource::Streamed { checkpoint, .. } => Some(&checkpoint.execution_objects),
+        }
+    }
+
+    /// The checkpoint context this scope resolves in, if any: a live subscription holds the streamed
+    /// checkpoint in memory, while a backfill resolves a checkpoint that is known to exist through
+    /// the durable index. A query (bounded by `checkpoint_viewed_at`) or an execution scope has no
+    /// such context and returns `None`, so a caller must not look a checkpoint up by sequence number.
+    pub(crate) fn streamed_checkpoint(&self) -> Option<StreamedCheckpoint> {
+        match &self.data_source {
+            DataSource::Streamed { checkpoint, .. } => {
+                Some(StreamedCheckpoint::Live(checkpoint.clone()))
+            }
+            DataSource::Backfill { checkpoint } => Some(StreamedCheckpoint::Backfill(*checkpoint)),
+            DataSource::Indexed | DataSource::Executed { .. } => None,
+        }
+    }
+
+    /// The streamed transaction store backing this scope, present only in the live streamed mode.
+    /// A just-streamed transaction runs ahead of the durable index, so this serves its contents by
+    /// digest until the index catches up.
+    pub(crate) fn streamed_transaction_store(&self) -> Option<&Arc<StreamedTransactionStore>> {
+        if let DataSource::Streamed { caches, .. } = &self.data_source {
+            return Some(&caches.transaction_store);
+        }
+        None
+    }
+
+    /// The streamed object store, when reading a live streamed checkpoint. An object introduced by an
+    /// earlier streamed checkpoint (e.g. reached via `Object.previousTransaction`) runs ahead of the
+    /// durable index, so this serves its contents by `(id, version)` until the index catches up.
+    pub(crate) fn streamed_object_store(&self) -> Option<&Arc<StreamedObjectStore>> {
+        if let DataSource::Streamed { caches, .. } = &self.data_source {
+            return Some(&caches.object_store);
+        }
+        None
     }
 
     /// Get an object from the execution context cache, if available.
@@ -146,7 +435,7 @@ impl Scope {
         object_id: ObjectID,
         version: SequenceNumber,
     ) -> Option<&NativeObject> {
-        self.execution_objects
+        self.execution_objects_in_view()?
             .get(&(object_id, version))
             .and_then(|opt| opt.as_ref())
     }
@@ -157,7 +446,7 @@ impl Scope {
         &self,
         object_id: ObjectID,
     ) -> Option<&NativeObject> {
-        self.execution_objects
+        self.execution_objects_in_view()?
             .range(..=(object_id, SequenceNumber::MAX))
             .last()
             .and_then(|(_, opt)| opt.as_ref())
@@ -172,8 +461,9 @@ impl Scope {
 
         Ok(Self {
             checkpoint_viewed_at: None,
-            root_version: self.root_version,
-            execution_objects,
+            active_transaction: None,
+            root_bound: self.root_bound,
+            data_source: DataSource::Executed { execution_objects },
             package_store: self.package_store.clone(),
             resolver_limits: self.resolver_limits.clone(),
         })
@@ -236,11 +526,21 @@ fn extract_objects_from_executed_transaction(
     Ok(Arc::new(map))
 }
 
+impl Debug for ActiveTransaction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ActiveTransaction")
+            .field("digest", &self.digest)
+            .field("contents_loaded", &self.contents.is_some())
+            .finish()
+    }
+}
+
 impl Debug for Scope {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Scope")
             .field("checkpoint_viewed_at", &self.checkpoint_viewed_at)
-            .field("root_version", &self.root_version)
+            .field("root_bound", &self.root_bound)
+            .field("active_transaction", &self.active_transaction)
             .field("resolver_limits", &self.resolver_limits)
             .finish()
     }
@@ -254,9 +554,8 @@ impl PackageStore for Scope {
         let object_id = ObjectID::from(id);
 
         // First check execution context objects if we have any
-        if !self.execution_objects.is_empty() {
-            let latest_package = self
-                .execution_objects
+        if let Some(execution_objects) = self.execution_objects_in_view() {
+            let latest_package = execution_objects
                 .range((object_id, SequenceNumber::MIN)..=(object_id, SequenceNumber::MAX))
                 .last()
                 .and_then(|(_, opt_object)| opt_object.as_ref())

@@ -7,8 +7,8 @@
 //! abstract_interpreter.rs. CodeUnitVerifier simply orchestrates calls into these two files.
 use crate::{
     ability_cache::AbilityCache, absint::FunctionContext, acquires_list_verifier::AcquiresVerifier,
-    control_flow, locals_safety, reference_safety, regex_reference_safety,
-    stack_usage_verifier::StackUsageVerifier, type_safety,
+    control_flow, jump_table_usage_verifier, locals_safety, reference_safety,
+    regex_reference_safety, stack_usage_verifier::StackUsageVerifier, type_safety,
 };
 use move_abstract_interpreter::control_flow_graph::ControlFlowGraph;
 use move_binary_format::{
@@ -17,6 +17,7 @@ use move_binary_format::{
     file_format::{
         CompiledModule, FunctionDefinition, FunctionDefinitionIndex, IdentifierIndex, TableIndex,
     },
+    partial_vm_error_with_debug_message,
 };
 use move_bytecode_verifier_meter::{Meter, Scope, bound::BoundMeter};
 use move_core_types::vm_status::StatusCode;
@@ -158,6 +159,7 @@ pub fn verify_function<'env>(
     AcquiresVerifier::verify(verifier_config, module, index, function_definition, meter)?;
 
     meter.transfer(Scope::Function, Scope::Module, 1.0)?;
+    regex_reference_safety_meter.transfer(Scope::Function, Scope::Module, 1.0)?;
 
     Ok(num_back_edges)
 }
@@ -179,6 +181,40 @@ impl<'env> CodeUnitVerifier<'env, '_> {
             meter,
         )?;
         locals_safety::verify(self.module, &self.function_context, ability_cache, meter)?;
+        if verifier_config.disallow_jump_orphans {
+            jump_table_usage_verifier::verify(
+                verifier_config,
+                self.module,
+                &self.function_context,
+                meter,
+            )?;
+        }
+        if verifier_config.switch_to_regex_reference_safety {
+            regex_reference_safety::verify(
+                verifier_config,
+                self.module,
+                &self.function_context,
+                meter,
+            )
+        } else {
+            self.reference_safety_with_optional_regex_sanity_check(
+                verifier_config,
+                meter,
+                regex_reference_safety_meter,
+            )
+        }
+    }
+
+    /// The reference safety check, and then if the flag is enabled (and the graph based approach
+    /// did not "time out"), also runs the regex based approach and checks that the results are
+    /// consistent. Consistent here meaning that the regex based approach should be strictly more
+    /// permissive, so if it fails, the graph based one should also fail.
+    fn reference_safety_with_optional_regex_sanity_check(
+        &self,
+        verifier_config: &'env VerifierConfig,
+        meter: &mut (impl Meter + ?Sized),
+        regex_reference_safety_meter: &mut (impl Meter + ?Sized),
+    ) -> PartialVMResult<()> {
         let reference_safety_res = reference_safety::verify(
             verifier_config,
             self.module,
@@ -209,16 +245,15 @@ impl<'env> CodeUnitVerifier<'env, '_> {
             }) {
                 // If the regex based checker fails due to complexity,
                 // we reject it for being too complex and skip the consistency check.
-                return Err(
-                    PartialVMError::new(StatusCode::PROGRAM_TOO_COMPLEX).with_message(
-                        regex_res
-                            .unwrap_err()
-                            .finish(Location::Undefined)
-                            .message()
-                            .cloned()
-                            .unwrap_or_default(),
-                    ),
-                );
+                return Err(partial_vm_error_with_debug_message!(
+                    PROGRAM_TOO_COMPLEX,
+                    regex_res
+                        .unwrap_err()
+                        .finish(Location::Undefined)
+                        .message()
+                        .unwrap_or_default()
+                        .to_string()
+                ));
             }
             // The regular expression based reference safety check should be strictly more
             // permissive. So if it errors, the current one should also error.
@@ -227,13 +262,12 @@ impl<'env> CodeUnitVerifier<'env, '_> {
             // which is equivalent to: regex_res.is_ok() || reference_safety_res.is_err()
             let is_consistent = regex_res.is_ok() || reference_safety_res.is_err();
             if !is_consistent {
-                return Err(
-                    PartialVMError::new(StatusCode::REFERENCE_SAFETY_INCONSISTENT).with_message(
-                        "regex reference safety should be strictly more permissive \
-                         than the current"
-                            .to_string(),
-                    ),
-                );
+                return Err(partial_vm_error_with_debug_message!(
+                    REFERENCE_SAFETY_INCONSISTENT,
+                    "regex reference safety should be strictly more permissive \
+                     than the current"
+                        .to_string()
+                ));
             }
         }
         reference_safety_res

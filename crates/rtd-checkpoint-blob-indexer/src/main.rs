@@ -1,50 +1,51 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
-use object_store::{
-    ClientOptions,
-    aws::{AmazonS3Builder, S3ConditionalPut},
-    azure::MicrosoftAzureBuilder,
-    gcp::GoogleCloudStorageBuilder,
-    http::HttpBuilder,
-    local::LocalFileSystem,
-};
-use rtd_checkpoint_blob_indexer::{CheckpointBlobPipeline, EpochsPipeline};
+use anyhow::Context as _;
+use anyhow::ensure;
+use clap::Parser;
+use object_store::ClientOptions;
+use object_store::RetryConfig;
+use object_store::aws::{AmazonS3Builder, S3ConditionalPut};
+use object_store::http::HttpBuilder;
+use object_store::local::LocalFileSystem;
+use reqwest::header::HeaderMap;
+use reqwest::header::HeaderName;
+use reqwest::header::HeaderValue;
+use rtd_indexer_alt_framework::Indexer;
+use rtd_indexer_alt_framework::IndexerArgs;
+use rtd_indexer_alt_framework::ingestion::ClientArgs;
+use rtd_indexer_alt_framework::ingestion::s3_tls::with_archive_s3_ca;
 use rtd_indexer_alt_framework::service::Error;
-use rtd_indexer_alt_framework::{Indexer, IndexerArgs, ingestion::ClientArgs};
 use rtd_indexer_alt_metrics::MetricsArgs;
 use rtd_indexer_alt_object_store::ObjectStore;
+use tracing::info;
 use url::Url;
 
-#[derive(Debug, clap::Parser)]
+use rtd_checkpoint_blob_indexer::CheckpointBcsPipeline;
+use rtd_checkpoint_blob_indexer::CheckpointBlobPipeline;
+use rtd_checkpoint_blob_indexer::EpochsPipeline;
+use rtd_checkpoint_blob_indexer::IndexerConfig;
+use rtd_indexer_alt_framework::pipeline::CommitterConfig;
+use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
+
+#[derive(Debug, Parser)]
 #[command(name = "rtd-checkpoint-blob-indexer")]
 #[command(about = "Indexer that writes checkpoints as compressed proto blobs to object storage")]
 #[group(id = "store", required = true, multiple = false)]
 struct Args {
-    /// Number of concurrent checkpoint uploads
-    #[arg(long, default_value = "10")]
-    write_concurrency: usize,
+    /// Path to TOML config file
+    #[arg(long)]
+    config: PathBuf,
 
-    /// Interval between watermark updates
-    #[arg(long, default_value = "1m", value_parser = humantime::parse_duration)]
-    watermark_interval: Duration,
-
-    /// Write to AWS S3. Provide the bucket name or endpoint-and-bucket.
-    /// (env: AWS_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
+    /// Write to a self-hosted S3-compatible store such as MinIO.
+    /// AWS_ENDPOINT and explicit S3 credentials are required; cloud defaults are forbidden.
     #[arg(long, group = "store")]
     s3: Option<String>,
-
-    /// Write to Google Cloud Storage. Provide the bucket name.
-    /// (env: GOOGLE_SERVICE_ACCOUNT_PATH)
-    #[arg(long, group = "store")]
-    gcs: Option<String>,
-
-    /// Write to Azure Blob Storage. Provide the container name.
-    /// (env: AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCESS_KEY)
-    #[arg(long, group = "store")]
-    azure: Option<String>,
 
     /// Write to HTTP endpoint.
     #[arg(long, group = "store")]
@@ -53,6 +54,11 @@ struct Args {
     /// Write to local filesystem. Provide the path to the directory.
     #[arg(long, group = "store")]
     path: Option<PathBuf>,
+
+    /// Default header to include in object store requests, as `<name>:<value>`.
+    /// Can be provided multiple times.
+    #[arg(long = "store-header", value_parser = parse_object_store_header)]
+    store_headers: Vec<(HeaderName, HeaderValue)>,
 
     /// Request timeout
     #[arg(long, default_value = "30s", value_parser = humantime::parse_duration)]
@@ -74,51 +80,62 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    use clap::Parser;
-    use rtd_indexer_alt_framework::{
-        ingestion::IngestionConfig,
-        pipeline::{CommitterConfig, concurrent::ConcurrentConfig},
-    };
-    use tracing::info;
+    let _guard = telemetry_subscribers::TelemetryConfig::new()
+        .with_env()
+        .init();
 
     let args = Args::parse();
 
-    tracing_subscriber::fmt::init();
+    let config_contents = tokio::fs::read_to_string(&args.config).await?;
+    let config: IndexerConfig = toml::from_str(&config_contents)?;
 
     info!("Starting checkpoint object store indexer");
     info!("Args: {:#?}", args);
+    info!("Config: {:#?}", config);
 
     let is_bounded_job = args.indexer_args.last_checkpoint.is_some();
-    let client_options = ClientOptions::default().with_timeout(args.request_timeout);
+
+    let mut client_options = ClientOptions::default().with_timeout(args.request_timeout);
+    if !args.store_headers.is_empty() {
+        let mut headers = HeaderMap::new();
+        for (name, value) in &args.store_headers {
+            headers.append(name.clone(), value.clone());
+        }
+
+        client_options = client_options.with_default_headers(headers)
+    }
+
+    let retry_config = RetryConfig {
+        max_retries: 0,
+        ..Default::default()
+    };
 
     let object_store: Arc<dyn object_store::ObjectStore> = if let Some(bucket) = args.s3 {
-        info!(bucket, "Using S3 storage");
+        let endpoint = std::env::var("AWS_ENDPOINT")
+            .context("AWS_ENDPOINT must point to self-hosted S3-compatible storage")?;
+        let endpoint = Url::parse(&endpoint)?;
+        validate_self_hosted_s3_environment(&endpoint)?;
+        info!(bucket, endpoint = %endpoint, "Using self-hosted S3-compatible storage");
+        // with_client_options replaces from_env's HTTP allowance; restore it only for
+        // an endpoint that passed the explicit development-only URL check above.
+        let options = with_archive_s3_ca(
+            client_options.with_allow_http(endpoint.scheme() == "http"),
+            &endpoint,
+        )?;
         AmazonS3Builder::from_env()
-            .with_client_options(client_options)
-            .with_imdsv1_fallback()
+            .with_client_options(options)
+            .with_retry(retry_config)
             .with_bucket_name(bucket)
             .with_conditional_put(S3ConditionalPut::ETagMatch)
             .build()
             .map(Arc::new)?
-    } else if let Some(bucket) = args.gcs {
-        info!(bucket, "Using GCS storage");
-        GoogleCloudStorageBuilder::from_env()
-            .with_client_options(client_options)
-            .with_bucket_name(bucket)
-            .build()
-            .map(Arc::new)?
-    } else if let Some(container) = args.azure {
-        info!(container, "Using Azure storage");
-        MicrosoftAzureBuilder::from_env()
-            .with_client_options(client_options)
-            .with_container_name(container)
-            .build()
-            .map(Arc::new)?
     } else if let Some(endpoint) = args.http {
+        validate_self_hosted_url(&endpoint)?;
         info!(endpoint = %endpoint, "Using HTTP storage");
         HttpBuilder::new()
             .with_url(endpoint.to_string())
             .with_client_options(client_options)
+            .with_retry(retry_config)
             .build()
             .map(Arc::new)?
     } else if let Some(path) = args.path {
@@ -134,36 +151,41 @@ async fn main() -> anyhow::Result<()> {
     let metrics_service =
         rtd_indexer_alt_metrics::MetricsService::new(args.metrics_args, registry.clone());
 
-    let config = ConcurrentConfig {
-        committer: CommitterConfig {
-            write_concurrency: args.write_concurrency,
-            watermark_interval_ms: args.watermark_interval.as_millis() as u64,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
     let mut indexer = Indexer::new(
         store.clone(),
         args.indexer_args,
         args.client_args,
-        IngestionConfig::default(),
+        config.ingestion.into(),
         None,
         &registry,
     )
     .await?;
+
+    let committer = config.committer.finish(CommitterConfig::default());
+    let base = ConcurrentConfig {
+        committer,
+        pruner: None,
+        ..Default::default()
+    };
 
     indexer
         .concurrent_pipeline(
             CheckpointBlobPipeline {
                 compression_level: args.compression_level,
             },
-            config.clone(),
+            config.pipeline.checkpoint_blob.finish(base.clone()),
         )
         .await?;
 
     indexer
-        .concurrent_pipeline(EpochsPipeline, config.clone())
+        .concurrent_pipeline(EpochsPipeline, config.pipeline.epochs.finish(base.clone()))
+        .await?;
+
+    indexer
+        .concurrent_pipeline(
+            CheckpointBcsPipeline,
+            config.pipeline.checkpoint_bcs.finish(base),
+        )
         .await?;
 
     let s_metrics = metrics_service.run().await?;
@@ -184,5 +206,175 @@ async fn main() -> anyhow::Result<()> {
         Err(Error::Task(_)) => {
             std::process::exit(2);
         }
+    }
+}
+
+fn validate_self_hosted_url(url: &Url) -> anyhow::Result<()> {
+    let host = url
+        .host_str()
+        .context("Storage URL must contain a host")?
+        .trim_end_matches('.');
+    ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "Storage URL must use HTTP(S)"
+    );
+    ensure!(
+        !["amazonaws.com", "googleapis.com", "blob.core.windows.net"]
+            .iter()
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}"))),
+        "Storage URL must point to self-hosted infrastructure"
+    );
+    Ok(())
+}
+
+fn validate_self_hosted_s3_environment(endpoint: &Url) -> anyhow::Result<()> {
+    validate_self_hosted_url(endpoint)?;
+    ensure!(
+        endpoint.scheme() == "https"
+            || std::env::var("RTD_ARCHIVE_ALLOW_INSECURE_S3_DEV").as_deref() == Ok("1"),
+        "Plaintext S3 endpoints are restricted to local development"
+    );
+    for name in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ] {
+        ensure!(
+            std::env::var(name).is_ok_and(|value| !value.is_empty()),
+            "{name} is required for the self-hosted S3 protocol; cloud metadata credentials are disabled"
+        );
+    }
+    Ok(())
+}
+
+fn parse_object_store_header(header: &str) -> Result<(HeaderName, HeaderValue), String> {
+    let (name, value) = header
+        .split_once(':')
+        .ok_or_else(|| "object store header must be in `<name>:<value>` format".to_string())?;
+
+    let name = HeaderName::from_bytes(name.as_bytes())
+        .map_err(|err| format!("invalid object store header name `{name}`: {err}"))?;
+    let value = HeaderValue::from_str(value)
+        .map_err(|err| format!("invalid object store header value for `{name}`: {err}"))?;
+
+    Ok((name, value))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::error::ErrorKind;
+
+    #[test]
+    fn managed_cloud_endpoints_and_backends_are_rejected() {
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://s3.amazonaws.com").unwrap()).is_err()
+        );
+        assert!(
+            validate_self_hosted_url(&Url::parse("https://storage.googleapis.com").unwrap())
+                .is_err()
+        );
+        assert!(validate_self_hosted_url(&Url::parse("https://minio.internal").unwrap()).is_ok());
+        let err = Args::try_parse_from([
+            "cmd",
+            "--config",
+            "config.toml",
+            "--gcs",
+            "bucket",
+            "--local-ingestion-path",
+            "/tmp/checkpoints",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_args_object_store_headers() {
+        let args = Args::try_parse_from([
+            "cmd",
+            "--config",
+            "config.toml",
+            "--s3",
+            "bucket",
+            "--store-header",
+            "x-rtd-project:my-project",
+            "--store-header",
+            "authorization:Bearer abc:def",
+            "--local-ingestion-path",
+            "/tmp/checkpoints",
+        ])
+        .unwrap();
+
+        assert_eq!(args.store_headers.len(), 2);
+        assert_eq!(
+            args.store_headers[0].0,
+            HeaderName::from_static("x-rtd-project")
+        );
+        assert_eq!(
+            args.store_headers[0].1,
+            HeaderValue::from_static("my-project")
+        );
+        assert_eq!(
+            args.store_headers[1].0,
+            HeaderName::from_static("authorization")
+        );
+        assert_eq!(
+            args.store_headers[1].1,
+            HeaderValue::from_static("Bearer abc:def")
+        );
+    }
+
+    #[test]
+    fn test_args_object_store_header_requires_delimiter() {
+        let err = Args::try_parse_from([
+            "cmd",
+            "--config",
+            "config.toml",
+            "--s3",
+            "bucket",
+            "--store-header",
+            "x-rtd-project",
+            "--local-ingestion-path",
+            "/tmp/checkpoints",
+        ])
+        .unwrap_err();
+
+        assert_eq!(err.kind(), ErrorKind::ValueValidation);
+    }
+
+    #[test]
+    fn test_args_object_store_header_rejects_invalid_name() {
+        let err = Args::try_parse_from([
+            "cmd",
+            "--config",
+            "config.toml",
+            "--s3",
+            "bucket",
+            "--store-header",
+            "bad name:value",
+            "--local-ingestion-path",
+            "/tmp/checkpoints",
+        ])
+        .unwrap_err();
+
+        assert_eq!(err.kind(), ErrorKind::ValueValidation);
+    }
+
+    #[test]
+    fn test_args_object_store_header_rejects_invalid_value() {
+        let err = Args::try_parse_from([
+            "cmd",
+            "--config",
+            "config.toml",
+            "--s3",
+            "bucket",
+            "--store-header",
+            "x-test:bad\nvalue",
+            "--local-ingestion-path",
+            "/tmp/checkpoints",
+        ])
+        .unwrap_err();
+
+        assert_eq!(err.kind(), ErrorKind::ValueValidation);
     }
 }

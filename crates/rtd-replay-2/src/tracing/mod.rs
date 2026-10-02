@@ -15,8 +15,8 @@ use move_command_line_common::files::MOVE_BYTECODE_EXTENSION;
 use move_disassembler::disassembler::Disassembler;
 use move_ir_types::location::Spanned;
 use move_trace_format::format::MoveTraceBuilder;
-use std::fs;
 use rtd_types::object::Data;
+use std::fs;
 
 const BCODE_DIR: &str = "bytecode";
 const SOURCE_DIR: &str = "source";

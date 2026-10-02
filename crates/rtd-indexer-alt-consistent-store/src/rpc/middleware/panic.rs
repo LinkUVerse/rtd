@@ -1,35 +1,39 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    future::Future,
-    panic::AssertUnwindSafe,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::future::Future;
+use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
 
 use axum::body::Body;
 use futures::FutureExt;
-use http::{Request, Response};
+use http::Request;
+use http::Response;
 use pin_project::pin_project;
 use tonic::Status;
-use tower::{Layer, Service};
+use tower::Layer;
+use tower::Service;
 
 use crate::rpc::metrics::RpcMetrics;
 
-/// Tower layer that converts request panics to gRPC internal errors.
+/// Tower layer that catches panics during request processing and converts them to gRPC
+/// `Status::internal()` errors.
 #[derive(Clone)]
 pub struct CatchPanicLayer {
     metrics: Arc<RpcMetrics>,
 }
 
+/// Tower service that catches panics and returns gRPC internal errors.
 #[derive(Clone)]
 pub struct CatchPanicService<S> {
     inner: S,
     metrics: Arc<RpcMetrics>,
 }
 
+/// Future that catches panics and converts them to gRPC errors.
 #[pin_project]
 pub struct CatchPanicFuture<F> {
     #[pin]

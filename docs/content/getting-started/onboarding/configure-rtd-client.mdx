@@ -1,0 +1,30 @@
+---
+title: Configure an RTD Client
+sidebar_label: Configure an RTD Client
+description: Point the RTD CLI at a verified RTD network endpoint.
+keywords:
+  - RTD client
+  - client.yaml
+  - local network
+questions:
+  - How do I configure the RTD client for a local network?
+  - How do I verify the active RTD chain?
+answer: >-
+  Add the RPC endpoint from the RTD network you operate, select that environment,
+  and compare its chain identifier with the network's genesis. Public Sui
+  endpoints and inherited network aliases do not identify an RTD chain.
+---
+
+First, [build the RTD CLI](/getting-started/onboarding/rtd-install) and [start a local network](/getting-started/onboarding/local-network). The CLI stores client configuration under `~/.rtd/rtd_config` by default. A different config directory can be selected through the CLI options.
+
+```sh
+rtd --version
+rtd client new-env --alias localnet --rpc http://127.0.0.1:9000
+rtd client switch --env localnet
+rtd client active-env
+rtd client chain-identifier --format hex
+```
+
+Use the actual endpoint shown by your node if it differs from the example. Record the chain ID together with the genesis file and compare it with the chain you intended to connect to. The CLI may inherit `devnet`, `testnet`, or `mainnet` aliases from upstream defaults; these aliases and their public URLs are not RTD services. Do not select them for an RTD transaction.
+
+Run `rtd client active-address` to inspect the current address. The keystore contains signing material; protect it and any recovery phrase. Next, [create or select an address](/getting-started/onboarding/get-address) and [obtain gas on the same network](/getting-started/onboarding/get-coins).

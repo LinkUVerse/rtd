@@ -6,16 +6,18 @@ use std::net::{AddrParseError, IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, io};
 
+use crate::external_signer::ExternalKeysCommand;
 use anyhow::{Context, anyhow, bail, ensure};
 use clap::*;
 use colored::Colorize;
 use fastcrypto::traits::KeyPair;
 use futures::future;
-use linku_common::tempdir;
+use linku_common::{ZipDebugEqIteratorExt, tempdir};
 use move_analyzer::analyzer;
 use move_command_line_common::files::MOVE_COMPILED_EXTENSION;
 use move_compiler::editions::Flavor;
@@ -44,30 +46,31 @@ use rtd_indexer_alt_consistent_store::{
 };
 use rtd_indexer_alt_framework::{
     IndexerArgs,
-    ingestion::{ClientArgs, ingestion_client::IngestionClientArgs},
+    ingestion::{
+        ClientArgs, ingestion_client::IngestionClientArgs, streaming_client::StreamingClientArgs,
+    },
 };
 use rtd_indexer_alt_graphql::{
-    RpcArgs as GraphQlArgs, args::KvArgs as GraphQlKvArgs, config::RpcConfig as GraphQlConfig,
+    RpcArgs as GraphQlArgs, args::SubscriptionArgs, config::RpcConfig as GraphQlConfig,
     start_rpc as start_graphql,
 };
 use rtd_indexer_alt_reader::{
-    consistent_reader::ConsistentReaderArgs, fullnode_client::FullnodeArgs,
+    consistent_reader::ConsistentReaderArgs, fullnode_client::FullnodeArgs, kv_loader::KvArgs,
     system_package_task::SystemPackageTaskArgs,
 };
-use rtd_json_rpc_types::{RtdObjectDataOptions, RtdRawData};
 use rtd_keys::key_derive::generate_new_key;
 use rtd_keys::keypair_file::read_key;
-use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
+use rtd_keys::keystore::{AccountKeystore, External, FileBasedKeystore, Keystore};
 use rtd_move::summary::PackageSummaryMetadata;
 use rtd_move::{self, execute_move_command};
 use rtd_move_build::BuildConfig as RtdBuildConfig;
 use rtd_package_alt::{RtdFlavor, find_environment};
 use rtd_pg_db::DbArgs;
 use rtd_pg_db::temp::{LocalDatabase, get_available_port};
+use rtd_prompt::{self, execute_prompt_command};
 use rtd_protocol_config::Chain;
 use rtd_replay_2 as SR2;
-use rtd_sdk::RtdClient;
-use rtd_sdk::apis::ReadApi;
+use rtd_rpc_api::Client;
 use rtd_sdk::rtd_client_config::{RtdClientConfig, RtdEnv};
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_swarm::memory::Swarm;
@@ -86,7 +89,8 @@ use tracing::{info, warn};
 use url::Url;
 
 use crate::client_commands::{
-    RtdClientCommands, USER_AGENT, check_for_unpublished_deps, load_root_pkg_for_publish_upgrade,
+    RtdClientCommands, USER_AGENT, check_for_unpublished_deps,
+    load_root_pkg_for_ephemeral_publish_or_upgrade, load_root_pkg_for_publish_upgrade,
     pkg_tree_shake,
 };
 use crate::fire_drill::{FireDrill, run_fire_drill};
@@ -102,28 +106,6 @@ const DEFAULT_FAUCET_PORT: u16 = 9123;
 
 const DEFAULT_CONSISTENT_STORE_PORT: u16 = 9124;
 const DEFAULT_GRAPHQL_PORT: u16 = 9125;
-
-#[cfg(not(unix))]
-async fn wait_for_termination_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to listen for Ctrl+C");
-}
-
-#[cfg(unix)]
-async fn wait_for_termination_signal() {
-    use tokio::signal::unix::{SignalKind, signal};
-
-    let mut sigterm = signal(SignalKind::terminate()).expect("Failed to listen for SIGTERM");
-    tokio::select! {
-        result = tokio::signal::ctrl_c() => {
-            result.expect("Failed to listen for Ctrl+C");
-        }
-        signal = sigterm.recv() => {
-            assert!(signal.is_some(), "SIGTERM signal stream closed unexpectedly");
-        }
-    }
-}
 
 #[derive(Args)]
 pub struct RpcArgs {
@@ -322,7 +304,7 @@ pub enum RtdCommand {
             value_name = "ADDR",
             num_args(1..),
             value_delimiter = ',',
-            help = "A list of ip addresses to generate a genesis rtdtable for benchmarks"
+            help = "A list of ip addresses to generate a genesis suitable for benchmarks"
         )]
         benchmark_ips: Option<Vec<String>>,
         #[clap(
@@ -346,6 +328,18 @@ pub enum RtdCommand {
         /// Subcommands.
         #[clap(subcommand)]
         cmd: KeyToolCommand,
+    },
+    /// Manage keys on external signers
+    ExternalKeys {
+        /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
+        #[clap(long)]
+        keystore_path: Option<PathBuf>,
+        /// Return command outputs in json format
+        #[clap(long, global = true)]
+        json: bool,
+        /// Subcommands.
+        #[clap(subcommand)]
+        cmd: ExternalKeysCommand,
     },
     /// Client for interacting with the Rtd network.
     #[clap(name = "client")]
@@ -386,6 +380,10 @@ pub enum RtdCommand {
         #[clap(subcommand)]
         cmd: rtd_move::Command,
     },
+
+    /// Expert Rtd and Move knowledge for AI agents (run `rtd prompt` to start).
+    #[clap(name = "prompt")]
+    Prompt(rtd_prompt::Prompt),
 
     /// Command to initialize the bridge committee, usually used when
     /// running local bridge cluster.
@@ -431,6 +429,20 @@ pub enum RtdCommand {
 
         #[command(flatten)]
         replay_config: SR2::ReplayConfigStable,
+
+        /// Network or GraphQL URL to replay against. Accepts `mainnet`, `testnet`,
+        /// or a full GraphQL URL (e.g. for devnet or a self-hosted endpoint).
+        /// When omitted, the network is derived from the active wallet env.
+        #[arg(long = "node", short = 'n')]
+        node: Option<String>,
+    },
+
+    /// Generate shell completion scripts for CLI
+    #[clap(name = "completion")]
+    Completion {
+        /// If provided, outputs the completion file for given shell
+        #[arg(long = "generate", value_enum)]
+        generator: clap_complete::Shell,
     },
 }
 
@@ -514,22 +526,35 @@ impl RtdCommand {
                 json,
                 cmd,
             } => {
-                let keystore_path =
-                    keystore_path.unwrap_or(rtd_config_dir()?.join(RTD_KEYSTORE_FILENAME));
-                let mut keystore =
-                    Keystore::from(FileBasedKeystore::load_or_create(&keystore_path)?);
-                cmd.execute(&mut keystore).await?.print(!json);
+                let config_path = rtd_config_dir()?.join(RTD_CLIENT_CONFIG);
+                let mut context = WalletContext::new(&config_path)?;
+                if let Some(keystore_path) = keystore_path {
+                    context.config.keystore =
+                        Keystore::from(FileBasedKeystore::load_or_create(&keystore_path)?);
+                }
+
+                cmd.execute(&mut context).await?.print(!json);
+                Ok(())
+            }
+            RtdCommand::ExternalKeys {
+                keystore_path: _,
+                json,
+                cmd,
+            } => {
+                let client_path = rtd_config_dir()?.join(RTD_CLIENT_CONFIG);
+                prompt_if_no_config(&client_path, false).await?;
+                let config: RtdClientConfig = PersistedConfig::read(&client_path)?;
+                let mut config = config.persisted(&client_path);
+                ensure_external_keystore_config(&mut config, &client_path)?;
+
+                cmd.execute(config.external_keys.as_mut())
+                    .await?
+                    .print(!json);
                 Ok(())
             }
             RtdCommand::Client { config, cmd, json } => {
                 if let Some(cmd) = cmd {
                     let mut context = get_wallet_context(&config).await?;
-
-                    if let Ok(client) = context.get_client().await
-                        && let Err(e) = client.check_api_version()
-                    {
-                        eprintln!("{}", format!("[warning] {e}").yellow().bold());
-                    }
                     cmd.execute(&mut context).await?.print(!json);
                 } else {
                     // Print help
@@ -542,11 +567,6 @@ impl RtdCommand {
             RtdCommand::Validator { config, cmd, json } => {
                 let mut context = get_wallet_context(&config).await?;
                 if let Some(cmd) = cmd {
-                    if let Ok(client) = context.get_client().await
-                        && let Err(e) = client.check_api_version()
-                    {
-                        eprintln!("{}", format!("[warning] {e}").yellow().bold());
-                    }
                     cmd.execute(&mut context).await?.print(!json);
                 } else {
                     // Print help
@@ -571,13 +591,11 @@ impl RtdCommand {
                             "rtd move summary --package-id <object_id>",
                         )
                         .await?;
-                        let Some(client) = client else {
+                        let Some(mut client) = client else {
                             bail!(
                                 "`rtd move summary --package-id <object_id>` requires a configured network"
                             );
                         };
-
-                        let read_api = client.read_api();
 
                         // If they didn't run with `--bytecode` correct this for them but warn them
                         // to let them know that we are changing it.
@@ -598,7 +616,7 @@ impl RtdCommand {
                         let package_bytes_location = tempdir()?;
                         let path = package_bytes_location.path();
                         let package_metadata =
-                            download_package_and_deps_under(read_api, path, *root_package_id)
+                            download_package_and_deps_under(&mut client, path, *root_package_id)
                                 .await?;
 
                         // Now produce the summary, pointing at the tempdir containing the package
@@ -614,6 +632,17 @@ impl RtdCommand {
                         Ok(())
                     }
                     rtd_move::Command::Build(ref build) if build.dump_bytecode_as_base64 => {
+                        // Resolve pubfile_path to absolute before reroot_path changes CWD
+                        let pubfile_path = build_config.pubfile_path.as_ref().map(|p| {
+                            if p.is_absolute() {
+                                p.clone()
+                            } else {
+                                std::env::current_dir()
+                                    .expect("failed to get current directory")
+                                    .join(p)
+                            }
+                        });
+
                         let rerooted_path = move_cli::base::reroot_path(package_path.as_deref())?;
 
                         let with_unpublished_deps = build.with_unpublished_dependencies;
@@ -621,15 +650,32 @@ impl RtdCommand {
                             &rerooted_path,
                             build_config.environment.clone(),
                             &context,
+                            false,
                         )
                         .await?;
 
-                        let mut root_pkg = load_root_pkg_for_publish_upgrade(
-                            &context,
-                            &build_config,
-                            &rerooted_path,
-                        )
-                        .await?;
+                        let mut root_pkg = if let Some(pubfile_path) = pubfile_path {
+                            // for ephemeral dumping, we take the chain ID from the real
+                            // environment.
+                            let chain_id = environment.id();
+
+                            let modes = build_config.mode_set();
+                            load_root_pkg_for_ephemeral_publish_or_upgrade(
+                                &rerooted_path,
+                                chain_id,
+                                build_config.environment.clone(),
+                                pubfile_path,
+                                modes,
+                            )
+                            .await?
+                        } else {
+                            load_root_pkg_for_publish_upgrade(
+                                &context,
+                                &build_config,
+                                &rerooted_path,
+                            )
+                            .await?
+                        };
 
                         if !with_unpublished_deps {
                             let _ = check_for_unpublished_deps(&root_pkg, with_unpublished_deps)?;
@@ -639,18 +685,22 @@ impl RtdCommand {
                         // to 0x0
                         let mut config = build_config.clone();
                         config.set_unpublished_deps_to_zero = with_unpublished_deps;
+                        config.root_as_zero = true;
 
                         let mut pkg = RtdBuildConfig {
                             config,
                             run_bytecode_verifier: true,
                             print_diags_to_stderr: true,
                             environment,
+                            flavor: RtdFlavor::with_client(&context),
                         }
                         .build_async_from_root_pkg(&mut root_pkg)
                         .await?;
 
-                        let client = context.get_client().await?;
-                        pkg_tree_shake(client.read_api(), with_unpublished_deps, &mut pkg).await?;
+                        if !build.no_tree_shaking {
+                            let client = context.grpc_client()?;
+                            pkg_tree_shake(client, with_unpublished_deps, &mut pkg).await?;
+                        }
 
                         println!(
                             "{}",
@@ -673,6 +723,10 @@ impl RtdCommand {
                         .await
                     }
                 }
+            }
+            RtdCommand::Prompt(prompt) => {
+                execute_prompt_command(prompt)?;
+                Ok(())
             }
             RtdCommand::BridgeInitialize {
                 network_config,
@@ -701,11 +755,6 @@ impl RtdCommand {
                 let config_path =
                     client_config.unwrap_or(rtd_config_dir()?.join(RTD_CLIENT_CONFIG));
                 let mut context = WalletContext::new(&config_path)?;
-                if let Ok(client) = context.get_client().await
-                    && let Err(e) = client.check_api_version()
-                {
-                    eprintln!("{}", format!("[warning] {e}").yellow().bold());
-                }
                 let rgp = context.get_reference_gas_price().await?;
                 let rpc_url = &context.get_active_env()?.rpc;
                 let bridge_metrics = Arc::new(BridgeMetrics::new_for_testing());
@@ -729,7 +778,7 @@ impl RtdCommand {
                 for (node_config, (port, key_path)) in network_config
                     .validator_configs()
                     .iter()
-                    .zip(bridge_committee_config.bridge_authority_port_and_key_path)
+                    .zip_debug_eq(bridge_committee_config.bridge_authority_port_and_key_path)
                 {
                     let account_kp = node_config.account_key_pair.keypair();
                     let rtd_address = RtdAddress::from(&account_kp.public());
@@ -761,7 +810,7 @@ impl RtdCommand {
             }
             RtdCommand::FireDrill { fire_drill } => run_fire_drill(fire_drill).await,
             RtdCommand::Analyzer => {
-                analyzer::run::<RtdFlavor>(Some(Flavor::Rtd));
+                analyzer::run::<RtdFlavor>(Arc::new(RtdFlavor::new()), Some(Flavor::Rtd));
                 Ok(())
             }
             RtdCommand::AnalyzeTrace {
@@ -772,13 +821,18 @@ impl RtdCommand {
             RtdCommand::ReplayTransaction {
                 config,
                 replay_config,
+                node,
             } => {
                 let mut context = get_wallet_context(&config).await?;
                 if let Some(env_override) = config.env {
                     context = context.with_env_override(env_override);
                 }
 
-                let node = get_replay_node(&context).await?;
+                let node = match node {
+                    Some(s) => rtd_data_store::Node::from_str(&s)
+                        .map_err(|e| anyhow!("invalid --node value: {e}"))?,
+                    None => get_replay_node(&context).await?,
+                };
                 let file_config = SR2::load_config_file()?;
                 let stable_config = SR2::merge_configs(replay_config, file_config);
                 let experimental_config = SR2::ReplayConfigExperimental {
@@ -801,6 +855,12 @@ impl RtdCommand {
 
                 Ok(())
             }
+            RtdCommand::Completion { generator } => {
+                let mut app: Command = RtdCommand::command();
+                let name = app.get_name().to_string();
+                clap_complete::generate(generator, &mut app, name, &mut std::io::stdout());
+                Ok(())
+            }
         }
     }
 }
@@ -813,7 +873,7 @@ async fn start(
     force_regenesis: bool,
     epoch_duration_ms: Option<u64>,
     fullnode_rpc_port: u16,
-    mut data_ingestion_dir: Option<PathBuf>,
+    data_ingestion_dir: Option<PathBuf>,
     no_full_node: bool,
     committee_size: Option<usize>,
 ) -> Result<(), anyhow::Error> {
@@ -977,32 +1037,20 @@ async fn start(
         rtd_config_path
     };
 
-    // the indexer requires to set the fullnode's data ingestion directory
-    // note that this overrides the default configuration that is set when running the genesis
-    // command, which sets data_ingestion_dir to None.
-    if with_indexer.is_some() && data_ingestion_dir.is_none() {
-        data_ingestion_dir = Some(linku_common::tempdir()?.keep())
-    }
-
     if let Some(ref dir) = data_ingestion_dir {
         swarm_builder = swarm_builder.with_data_ingestion_dir(dir.clone());
     }
 
-    let mut fullnode_rpc_address = rtd_config::node::default_json_rpc_address();
-    fullnode_rpc_address.set_port(fullnode_rpc_port);
-
-    if no_full_node {
+    let fullnode_rpc_address = if no_full_node {
         swarm_builder = swarm_builder.with_fullnode_count(0);
+        let mut fullnode_rpc_address = rtd_config::node::default_json_rpc_address();
+        fullnode_rpc_address.set_port(fullnode_rpc_port);
+        fullnode_rpc_address
     } else {
         let rpc_config = rtd_config::RpcConfig {
             enable_indexing: Some(true),
             ..Default::default()
         };
-
-        swarm_builder = swarm_builder
-            .with_fullnode_count(1)
-            .with_fullnode_rpc_addr(fullnode_rpc_address)
-            .with_fullnode_rpc_config(rpc_config.clone());
 
         let fullnode_config_path = config_dir.join(RTD_FULLNODE_CONFIG);
         if fullnode_config_path.exists() {
@@ -1013,27 +1061,36 @@ async fn start(
                         fullnode_config_path
                     ))
                 })?;
-            let expected_chain_identifier =
-                ChainIdentifier::from(*fullnode_config.genesis()?.checkpoint().digest());
-            let resolved_db_path = select_persisted_fullnode_db_path(
-                &config_dir,
-                &fullnode_config.db_path,
-                expected_chain_identifier,
-                |candidate_path| {
-                    let inspection =
-                        rtd_core::checkpoints::inspect_readonly_fullnode_db(candidate_path)?;
+            let resolved_db_path =
+                if rtd_core::checkpoints::READONLY_FULLNODE_DB_INSPECTION_SUPPORTED {
+                    let expected_chain_identifier =
+                        ChainIdentifier::from(*fullnode_config.genesis()?.checkpoint().digest());
+                    select_persisted_fullnode_db_path(
+                        &config_dir,
+                        &fullnode_config.db_path,
+                        expected_chain_identifier,
+                        |candidate_path| {
+                            let inspection = rtd_core::checkpoints::inspect_readonly_fullnode_db(
+                                candidate_path,
+                            )?;
+                            info!(
+                                candidate = ?candidate_path,
+                                chain_identifier = %inspection.chain_identifier,
+                                highest_executed_checkpoint = inspection.highest_executed_checkpoint,
+                                "Inspected legacy fullnode database candidate"
+                            );
+                            Ok((
+                                inspection.chain_identifier,
+                                inspection.highest_executed_checkpoint,
+                            ))
+                        },
+                    )?
+                } else {
                     info!(
-                        candidate = ?candidate_path,
-                        chain_identifier = %inspection.chain_identifier,
-                        highest_executed_checkpoint = inspection.highest_executed_checkpoint,
-                        "Inspected legacy fullnode database candidate"
+                        "Tidehunter storage does not support read-only legacy fullnode database inspection; preserving the configured database selection"
                     );
-                    Ok((
-                        inspection.chain_identifier,
-                        inspection.highest_executed_checkpoint,
-                    ))
-                },
-            )?;
+                    resolve_persisted_fullnode_db_path(&config_dir, &fullnode_config.db_path)
+                };
             if resolved_db_path != fullnode_config.db_path {
                 info!(
                     old_db_path = ?fullnode_config.db_path,
@@ -1043,8 +1100,7 @@ async fn start(
                 fullnode_config.db_path = resolved_db_path;
                 fullnode_config.save(&fullnode_config_path)?;
             }
-
-            fullnode_config.json_rpc_address = fullnode_rpc_address;
+            fullnode_config.json_rpc_address.set_port(fullnode_rpc_port);
             fullnode_config.rpc = Some(rpc_config);
             let localhost = rtd_config::local_ip_utils::localhost_for_testing();
             fullnode_config.metrics_address =
@@ -1062,14 +1118,24 @@ async fn start(
                     .checkpoint_executor_config
                     .data_ingestion_dir = Some(dir.clone());
             }
-            swarm_builder = swarm_builder.with_fullnode_config(fullnode_config);
+            let fullnode_rpc_address = fullnode_config.json_rpc_address;
+            swarm_builder = swarm_builder
+                .with_fullnode_count(1)
+                .with_fullnode_config(fullnode_config);
+            fullnode_rpc_address
+        } else {
+            let mut fullnode_rpc_address = rtd_config::node::default_json_rpc_address();
+            fullnode_rpc_address.set_port(fullnode_rpc_port);
+            swarm_builder = swarm_builder
+                .with_fullnode_count(1)
+                .with_fullnode_rpc_addr(fullnode_rpc_address)
+                .with_fullnode_rpc_config(rpc_config);
+            fullnode_rpc_address
         }
-    }
+    };
 
     let mut swarm = swarm_builder.build();
     swarm.launch().await?;
-    // Let nodes connect to one another
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     info!("Cluster started");
 
     let fullnode_rpc_url = socket_addr_to_url(fullnode_rpc_address)?
@@ -1077,6 +1143,22 @@ async fn start(
         .trim_end_matches("/")
         .to_string();
     info!("Fullnode RPC URL: {fullnode_rpc_url}");
+
+    let fullnode_grpc_url = socket_addr_to_url(fullnode_rpc_address)?;
+    let client_args = ClientArgs {
+        ingestion: IngestionClientArgs {
+            rpc_api_url: Some(fullnode_grpc_url.clone()),
+            ..Default::default()
+        },
+        streaming: StreamingClientArgs {
+            streaming_url: Some(
+                fullnode_grpc_url
+                    .as_str()
+                    .parse()
+                    .context("Failed to parse fullnode gRPC URL into a streaming URI")?,
+            ),
+        },
+    };
 
     let prometheus_registry = Registry::new();
     let mut rpc_services = Service::new();
@@ -1113,19 +1195,11 @@ async fn start(
     };
 
     let pipelines = if let Some(ref db_url) = database_url {
-        let client_args = ClientArgs {
-            ingestion: IngestionClientArgs {
-                local_ingestion_path: data_ingestion_dir.clone(),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
         let indexer = setup_indexer(
             db_url.clone(),
             DbArgs::default(),
             IndexerArgs::default(),
-            client_args,
+            client_args.clone(),
             IndexerConfig::for_test(),
             None,
             &prometheus_registry,
@@ -1146,14 +1220,6 @@ async fn start(
         let address = parse_host_port(input, DEFAULT_CONSISTENT_STORE_PORT)
             .context("Invalid consistent store host and port")?;
 
-        let client_args = ClientArgs {
-            ingestion: IngestionClientArgs {
-                local_ingestion_path: data_ingestion_dir.clone(),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
         let consistent_args = ConsistentArgs {
             rpc_listen_address: address,
             ..Default::default()
@@ -1163,7 +1229,7 @@ async fn start(
             start_consistent_store(
                 config_dir.join("consistent_store"),
                 IndexerArgs::default(),
-                client_args,
+                client_args.clone(),
                 consistent_args,
                 "0.0.0",
                 ConsistentConfig::for_test(),
@@ -1196,22 +1262,33 @@ async fn start(
             ..Default::default()
         };
 
-        let fullnode_args = FullnodeArgs {
-            fullnode_rpc_url: Some(fullnode_rpc_url.clone()),
-        };
+        let fullnode_args = FullnodeArgs::new(socket_addr_to_url(fullnode_rpc_address)?);
 
         let mut graphql_config = GraphQlConfig::default();
         graphql_config.zklogin.env = rtd_indexer_alt_graphql::config::ZkLoginEnv::Test;
+
+        // The local fullnode already serves the `LedgerService` gRPC API that
+        // `--ledger-grpc-url` points at, so KV point-lookups can be served from it directly.
+        let kv_args = KvArgs {
+            ledger_grpc_url: Some(
+                fullnode_grpc_url
+                    .as_str()
+                    .parse()
+                    .context("Failed to parse fullnode gRPC URL into a ledger gRPC URI")?,
+            ),
+            ..Default::default()
+        };
 
         rpc_services = rpc_services.merge(
             start_graphql(
                 database_url.clone(),
                 fullnode_args,
                 DbArgs::default(),
-                GraphQlKvArgs::default(),
+                kv_args,
                 consistent_reader_args,
                 graphql_args,
                 SystemPackageTaskArgs::default(),
+                SubscriptionArgs::default(),
                 "0.0.0",
                 graphql_config,
                 pipelines,
@@ -1293,19 +1370,23 @@ async fn start(
             config,
         });
 
-        start_faucet(app_state).await?;
+        rpc_services = rpc_services.merge(
+            start_faucet(app_state)
+                .await
+                .context("Failed to start faucet")?,
+        );
+
+        info!("Faucet started at {faucet_address}");
     }
 
-    // Keep the owning Swarm alive until termination or a validator health-check failure.
+    // Run health check loop until Ctrl+C or failure
     let mut interval = interval(Duration::from_secs(3));
     let mut unhealthy = 0;
-    let termination_signal = wait_for_termination_signal();
-    tokio::pin!(termination_signal);
 
     loop {
         tokio::select! {
-            _ = &mut termination_signal => {
-                info!("Received termination signal, shutting down...");
+            _ = tokio::signal::ctrl_c() => {
+                info!("Received Ctrl+C, shutting down...");
                 break;
             }
             _ = interval.tick() => {}
@@ -1610,6 +1691,9 @@ async fn prompt_if_no_config(
     let config_dir = wallet_conf_file
         .parent()
         .ok_or_else(|| anyhow!("Error: {wallet_conf_file:?} is an invalid file path"))?;
+    let external_keystore = Keystore::External(External::load_or_create(
+        &default_external_keystore_path(wallet_conf_file),
+    )?);
 
     let (keystore, address) =
         create_default_keystore(&config_dir.join(RTD_KEYSTORE_FILENAME)).await?;
@@ -1625,7 +1709,7 @@ async fn prompt_if_no_config(
             RtdEnv::devnet(),
             RtdEnv::localnet(),
         ],
-        external_keys: None,
+        external_keys: Some(external_keystore),
         active_address: Some(address),
         active_env: Some(default_env_name.clone()),
     }
@@ -1634,6 +1718,23 @@ async fn prompt_if_no_config(
     println!("Created {wallet_conf_file:?}");
     println!("Set active environment to {default_env_name}");
 
+    Ok(())
+}
+
+fn default_external_keystore_path(client_path: &Path) -> PathBuf {
+    client_path.with_file_name("external.keystore")
+}
+
+fn ensure_external_keystore_config(
+    config: &mut PersistedConfig<RtdClientConfig>,
+    client_path: &Path,
+) -> Result<(), anyhow::Error> {
+    if config.external_keys.is_none() {
+        config.external_keys = Some(Keystore::External(External::load_or_create(
+            &default_external_keystore_path(client_path),
+        )?));
+        config.save()?;
+    }
     Ok(())
 }
 
@@ -1686,9 +1787,10 @@ async fn get_wallet_context(client_config: &RtdEnvConfig) -> Result<WalletContex
 async fn get_client(
     client_config: RtdEnvConfig,
     command_err_string: &str,
-) -> Result<RtdClient, anyhow::Error> {
+) -> Result<Client, anyhow::Error> {
     let context = get_wallet_context(&client_config).await?;
-    let Ok(client) = context.get_client().await else {
+    let mut client = context.grpc_client()?;
+    if client.get_latest_checkpoint().await.is_err() {
         bail!(
             "`{command_err_string}` requires a connection to the network. \
              Current active network is {} but failed to connect to it.",
@@ -1703,45 +1805,33 @@ async fn get_client(
 async fn get_chain_id_and_client(
     client_config: RtdEnvConfig,
     command_err_string: &str,
-) -> anyhow::Result<(Option<String>, Option<RtdClient>)> {
+) -> anyhow::Result<(Option<String>, Option<Client>)> {
     let client = get_client(client_config, command_err_string).await?;
 
-    if let Err(e) = client.check_api_version() {
-        eprintln!("{}", format!("[warning] {e}").yellow().bold());
-    }
-
     Ok((
-        client.read_api().get_chain_identifier().await.ok(),
+        client
+            .get_chain_identifier()
+            .await
+            .ok()
+            .map(|chain| chain.to_string()),
         Some(client),
     ))
 }
 
 /// Try to resolve an ObjectID to a MovePackage
-async fn resolve_package(reader: &ReadApi, package_id: ObjectID) -> anyhow::Result<MovePackage> {
-    let object = reader
-        .get_object_with_options(package_id, RtdObjectDataOptions::bcs_lossless())
-        .await?
-        .into_object()?;
+async fn resolve_package(client: &mut Client, package_id: ObjectID) -> anyhow::Result<MovePackage> {
+    let object = client.get_object(package_id).await?;
 
-    let Some(RtdRawData::Package(package)) = object.bcs else {
+    let Some(package) = object.data.try_as_package() else {
         bail!("Object {} is not a package.", package_id);
     };
 
-    Ok(MovePackage::new(
-        package.id,
-        package.version,
-        package.module_map,
-        // This package came from on-chain and the tool runs locally, so don't worry about
-        // trying to enforce the package size limit.
-        u64::MAX,
-        package.type_origin_table,
-        package.linkage_table,
-    )?)
+    Ok(package.to_owned())
 }
 
 /// Download the package's modules and its dependencies to the specified path.
 async fn download_package_and_deps_under(
-    read_api: &ReadApi,
+    client: &mut Client,
     path: &Path,
     package_id: ObjectID,
 ) -> anyhow::Result<PackageSummaryMetadata> {
@@ -1749,9 +1839,9 @@ async fn download_package_and_deps_under(
     let mut linkage = BTreeMap::new();
     let mut type_origins = BTreeMap::new();
 
-    let root_package = resolve_package(read_api, package_id).await?;
+    let root_package = resolve_package(client, package_id).await?;
     for (original_id, pkg_info) in root_package.linkage_table().iter() {
-        let package = resolve_package(read_api, pkg_info.upgraded_id).await?;
+        let package = resolve_package(client, pkg_info.upgraded_id).await?;
         let relative_package_path = package
             .id()
             .deref()
@@ -1772,6 +1862,11 @@ async fn download_package_and_deps_under(
         linkage.insert(*original_id, pkg_info.clone());
         type_origins.insert(*original_id, package.type_origin_table().clone());
     }
+
+    type_origins.insert(
+        root_package.original_package_id(),
+        root_package.type_origin_table().clone(),
+    );
 
     let package_path = path.join(
         root_package
@@ -1835,17 +1930,10 @@ pub fn parse_host_port(
 pub async fn get_replay_node(
     context: &WalletContext,
 ) -> Result<rtd_data_store::Node, anyhow::Error> {
-    let chain_id = context
-        .get_client()
-        .await?
-        .read_api()
-        .get_chain_identifier()
-        .await?;
+    let chain_id = context.grpc_client()?.get_chain_identifier().await?;
     let err_msg = format!(
         "'{chain_id}' chain identifier is not supported for replay -- only testnet and mainnet are supported currently"
     );
-    let chain_id = ChainIdentifier::from_chain_short_id(&chain_id)
-        .ok_or_else(|| anyhow::anyhow!(err_msg.clone()))?;
     Ok(match chain_id.chain() {
         Chain::Mainnet => rtd_data_store::Node::Mainnet,
         Chain::Testnet => rtd_data_store::Node::Testnet,
@@ -1949,6 +2037,8 @@ fn select_persisted_fullnode_db_path(
     inspect: impl FnMut(&Path) -> anyhow::Result<(ChainIdentifier, u64)>,
 ) -> anyhow::Result<PathBuf> {
     let resolved_db_path = resolve_persisted_fullnode_db_path(config_dir, persisted_db_path);
+    // Only generated relative paths participate in legacy candidate discovery. An explicit,
+    // existing absolute path is the operator's chosen database and remains authoritative.
     if persisted_db_path.is_absolute() && resolved_db_path.exists() {
         return Ok(resolved_db_path);
     }

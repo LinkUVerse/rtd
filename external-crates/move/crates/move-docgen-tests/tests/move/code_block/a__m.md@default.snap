@@ -1,5 +1,5 @@
 ---
-source: crates/move-docgen-tests/tests/testrtdte.rs
+source: crates/move-docgen-tests/tests/testsuite.rs
 info:
   section_level_start: 1
   exclude_private_fun: false
@@ -8,7 +8,6 @@ info:
   no_collapsed_sections: false
   include_dep_diagrams: false
   include_call_diagrams: false
-input_file: crates/move-docgen-tests/tests/move/code_block/Move.toml
 ---
 <a name="a_m"></a>
 

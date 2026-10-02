@@ -1,19 +1,16 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use async_graphql::*;
+use async_graphql::SimpleObject;
 
-use crate::{
-    api::{
-        scalars::{rtd_address::RtdAddress, uint53::UInt53},
-        types::object::Object,
-    },
-    scope::Scope,
-};
-use rtd_types::{
-    base_types::{ObjectID, SequenceNumber},
-    digests::ObjectDigest,
-};
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::digests::ObjectDigest;
+
+use crate::api::scalars::rtd_address::RtdAddress;
+use crate::api::scalars::uint53::UInt53;
+use crate::api::types::object::Object;
+use crate::scope::Scope;
 
 /// A Move object, either immutable, or owned mutable.
 #[derive(SimpleObject)]

@@ -25,9 +25,6 @@ pub struct IndexerConfig {
     pub eth_rtd_bridge_contract_address: String,
 
     pub metric_port: u16,
-
-    #[serde(default)]
-    pub eth_only: bool,
 }
 
 impl rtd_config::Config for IndexerConfig {}

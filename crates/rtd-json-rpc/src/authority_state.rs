@@ -4,13 +4,11 @@
 use arc_swap::Guard;
 use async_trait::async_trait;
 use move_core_types::language_storage::TypeTag;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 use rtd_core::accumulators::balances::{get_all_balances_for_owner, get_balance};
 use rtd_core::authority::AuthorityState;
 use rtd_core::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use rtd_core::execution_cache::ObjectCacheRead;
-use rtd_core::jsonrpc_index::TotalBalance;
+use rtd_core::jsonrpc_index::{CoinIndexKey2, CoinInfo, TotalBalance};
 use rtd_core::subscription_handler::SubscriptionHandler;
 use rtd_json_rpc_types::{
     Coin as RtdCoin, DevInspectResults, DryRunTransactionBlockResponse, EventFilter, RtdEvent,
@@ -19,10 +17,13 @@ use rtd_json_rpc_types::{
 use rtd_storage::key_value_store::{
     KVStoreTransactionData, TransactionKeyValueStore, TransactionKeyValueStoreTrait,
 };
+use rtd_types::accumulator_root::AccumulatorKey;
+use rtd_types::balance::Balance;
 use rtd_types::base_types::{
-    MoveObjectType, ObjectID, ObjectInfo, ObjectRef, SequenceNumber, RtdAddress,
+    MoveObjectType, ObjectID, ObjectInfo, ObjectRef, RtdAddress, SequenceNumber,
 };
 use rtd_types::bridge::Bridge;
+use rtd_types::coin_reservation;
 use rtd_types::committee::{Committee, EpochId};
 use rtd_types::digests::{ChainIdentifier, TransactionDigest};
 use rtd_types::dynamic_field::DynamicFieldInfo;
@@ -34,11 +35,13 @@ use rtd_types::messages_checkpoint::{
     CheckpointContents, CheckpointContentsDigest, CheckpointDigest, CheckpointSequenceNumber,
     VerifiedCheckpoint,
 };
-use rtd_types::object::{Object, ObjectRead, PastObjectRead};
-use rtd_types::storage::{BackingPackageStore, ObjectStore, WriteKind};
+use rtd_types::object::{MoveObject, Object, ObjectRead, Owner, PastObjectRead};
 use rtd_types::rtd_serde::BigInt;
 use rtd_types::rtd_system_state::RtdSystemState;
+use rtd_types::storage::{BackingPackageStore, ObjectStore, WriteKind};
 use rtd_types::transaction::{Transaction, TransactionData, TransactionKind};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::task::JoinError;
 
@@ -106,7 +109,6 @@ pub trait StateRead: Send + Sync {
     async fn dry_exec_transaction(
         &self,
         transaction: TransactionData,
-        transaction_digest: TransactionDigest,
     ) -> StateReadResult<(
         DryRunTransactionBlockResponse,
         BTreeMap<ObjectID, (ObjectRef, Object, WriteKind)>,
@@ -246,11 +248,64 @@ impl StateRead for AuthorityState {
     }
 
     fn get_object_read(&self, object_id: &ObjectID) -> StateReadResult<ObjectRead> {
-        Ok(self.get_object_read(object_id)?)
+        let result = self.get_object_read(object_id)?;
+
+        // If object not found and coin reservations are enabled, check if this is a
+        // masked object ID (fake coin request).
+        if let ObjectRead::NotExists(object_id) = result
+            && self
+                .load_epoch_store_one_call_per_task()
+                .protocol_config()
+                .enable_coin_reservation_obj_refs()
+        {
+            let chain_identifier = self.get_chain_identifier();
+            let unmasked_id = coin_reservation::mask_or_unmask_id(object_id, chain_identifier);
+
+            // Try to load the unmasked object (the accumulator)
+            if let ObjectRead::Exists(_, object, _) = self.get_object_read(&unmasked_id)? {
+                let accumulator_version = object.version();
+                let Some(move_object) = object.data.try_as_move() else {
+                    // Not a move object, return original NotExists
+                    return Ok(ObjectRead::NotExists(object_id));
+                };
+                let Some(currency_type) =
+                    move_object.type_().balance_accumulator_field_type_maybe()
+                else {
+                    // Not an accumulator object, return original NotExists
+                    return Ok(ObjectRead::NotExists(object_id));
+                };
+
+                let balance_type = Balance::type_tag(currency_type.clone());
+
+                let (AccumulatorKey { owner }, value) = move_object.try_into()?;
+
+                let Some((object_ref, balance, previous_transaction)) =
+                    self.get_address_balance_coin_info(owner, balance_type)?
+                else {
+                    return Ok(ObjectRead::NotExists(object_id));
+                };
+
+                debug_assert_eq!(balance, value.as_u128().map(|v| v as u64).unwrap_or(0));
+
+                // Create a fake coin object with the masked ID
+                let coin = Object::new_move(
+                    MoveObject::new_coin(currency_type, accumulator_version, object_id, balance),
+                    Owner::AddressOwner(owner),
+                    previous_transaction,
+                );
+
+                let layout = self.get_object_layout(&coin)?;
+                return Ok(ObjectRead::Exists(object_ref, coin, layout));
+            }
+
+            return Ok(ObjectRead::NotExists(object_id));
+        }
+
+        Ok(result)
     }
 
     async fn get_object(&self, object_id: &ObjectID) -> StateReadResult<Option<Object>> {
-        Ok(self.get_object(object_id).await)
+        Ok(self.get_object(object_id))
     }
 
     fn get_past_object_read(
@@ -315,16 +370,13 @@ impl StateRead for AuthorityState {
     async fn dry_exec_transaction(
         &self,
         transaction: TransactionData,
-        transaction_digest: TransactionDigest,
     ) -> StateReadResult<(
         DryRunTransactionBlockResponse,
         BTreeMap<ObjectID, (ObjectRef, Object, WriteKind)>,
         TransactionEffects,
         Option<ObjectID>,
     )> {
-        Ok(self
-            .dry_exec_transaction(transaction, transaction_digest)
-            .await?)
+        Ok(self.dry_exec_transaction(transaction).await?)
     }
 
     async fn dev_inspect_transaction_block(
@@ -390,9 +442,7 @@ impl StateRead for AuthorityState {
     }
 
     async fn get_staked_rtd(&self, owner: RtdAddress) -> StateReadResult<Vec<StakedRtd>> {
-        Ok(self
-            .get_move_objects(owner, MoveObjectType::staked_rtd())
-            .await?)
+        Ok(self.get_move_objects(owner, MoveObjectType::staked_rtd())?)
     }
     fn get_system_state(&self) -> StateReadResult<RtdSystemState> {
         Ok(self
@@ -421,17 +471,170 @@ impl StateRead for AuthorityState {
         limit: usize,
         one_coin_type_only: bool,
     ) -> StateReadResult<Vec<RtdCoin>> {
-        Ok(self
-            .get_owned_coins_iterator_with_cursor(owner, cursor, limit, one_coin_type_only)?
-            .map(|(key, coin)| RtdCoin {
+        // Ordering per coin type: [real[0], fake, real[1], real[2], ...]
+        // The fake coin (address balance) is always at position 1 within its type.
+
+        fn to_rtd_coin(key: CoinIndexKey2, info: CoinInfo) -> RtdCoin {
+            RtdCoin {
                 coin_type: key.coin_type,
                 coin_object_id: key.object_id,
-                version: coin.version,
-                digest: coin.digest,
-                balance: coin.balance,
-                previous_transaction: coin.previous_transaction,
-            })
-            .collect())
+                version: info.version,
+                digest: info.digest,
+                balance: info.balance,
+                previous_transaction: info.previous_transaction,
+            }
+        }
+
+        fn obj_ref_to_rtd_coin(
+            coin_type: String,
+            obj_ref: ObjectRef,
+            balance: u64,
+            previous_transaction: TransactionDigest,
+        ) -> RtdCoin {
+            RtdCoin {
+                coin_type,
+                coin_object_id: obj_ref.0,
+                version: obj_ref.1,
+                digest: obj_ref.2,
+                balance,
+                previous_transaction,
+            }
+        }
+
+        // Build fake coins map (only when coin reservations are enabled).
+        let coin_reservations_enabled = self
+            .load_epoch_store_one_call_per_task()
+            .protocol_config()
+            .enable_coin_reservation_obj_refs();
+
+        let fake_coins: HashMap<String, RtdCoin> = if !coin_reservations_enabled {
+            HashMap::new()
+        } else if one_coin_type_only {
+            let balance_type_tag = rtd_types::parse_rtd_type_tag(&cursor.0)
+                .map_err(|e| anyhow::anyhow!("Invalid coin type: {} - {}", cursor.0, e))?;
+            let balance_type = Balance::type_tag(balance_type_tag);
+            self.get_address_balance_coin_info(owner, balance_type)?
+                .map(|(obj_ref, balance, prev_tx)| {
+                    HashMap::from([(
+                        cursor.0.clone(),
+                        obj_ref_to_rtd_coin(cursor.0.clone(), obj_ref, balance, prev_tx),
+                    )])
+                })
+                .unwrap_or_default()
+        } else {
+            self.get_all_address_balance_coin_infos(owner)?
+                .into_iter()
+                .map(|(coin_type, (obj_ref, balance, prev_tx))| {
+                    (
+                        coin_type.clone(),
+                        obj_ref_to_rtd_coin(coin_type, obj_ref, balance, prev_tx),
+                    )
+                })
+                .collect()
+        };
+
+        // Determine cursor state.
+        let cursor_at_fake = fake_coins.values().any(|c| c.coin_object_id == cursor.2);
+
+        // If cursor is at fake coin, reset to start of that type and skip real[0].
+        let (real_cursor, skip_first_real) = if cursor_at_fake {
+            ((cursor.0.clone(), 0, ObjectID::ZERO), true)
+        } else {
+            (cursor.clone(), false)
+        };
+
+        let real_coins_iter = self.get_owned_coins_iterator_with_cursor(
+            owner,
+            real_cursor.clone(),
+            limit + 1,
+            one_coin_type_only,
+        )?;
+
+        // Track which types have had their fake coin emitted.
+        let mut fake_emitted: HashMap<String, bool> = HashMap::new();
+
+        // If cursor is a real coin, check if we're past the fake coin slot.
+        // The fake coin is at position 1 (after first real). So if cursor is the
+        // first real coin, fake hasn't been emitted. If cursor is any later real
+        // coin, fake was already emitted.
+        let mut emit_fake_before_reals = false;
+        if cursor.2 != ObjectID::ZERO && !cursor_at_fake && fake_coins.contains_key(&cursor.0) {
+            // Check if cursor is the first real coin by querying from the start
+            let first_real_id = self
+                .get_owned_coins_iterator_with_cursor(
+                    owner,
+                    (cursor.0.clone(), 0, ObjectID::ZERO),
+                    1,
+                    one_coin_type_only,
+                )?
+                .next()
+                .map(|(k, _)| k.object_id);
+
+            if first_real_id == Some(cursor.2) {
+                // Cursor is at first real coin, fake should be emitted next
+                emit_fake_before_reals = true;
+            } else {
+                // Cursor is past first real coin, fake was already emitted
+                fake_emitted.insert(cursor.0.clone(), true);
+            }
+        }
+
+        let mut result = Vec::with_capacity(limit);
+
+        // If cursor is at first real coin, emit fake before continuing with more reals
+        if emit_fake_before_reals && let Some(fake) = fake_coins.get(&cursor.0) {
+            result.push(fake.clone());
+            fake_emitted.insert(cursor.0.clone(), true);
+        }
+
+        let mut seen_first_real: HashMap<String, bool> = HashMap::new();
+        let mut skipped_first = false;
+
+        for (key, info) in real_coins_iter {
+            if result.len() >= limit {
+                break;
+            }
+
+            let coin = to_rtd_coin(key, info);
+            let coin_type = &coin.coin_type;
+            let is_first_real = !seen_first_real.get(coin_type).copied().unwrap_or(false);
+
+            // Skip first real coin when resuming from a fake coin cursor.
+            if skip_first_real && !skipped_first && coin_type == &real_cursor.0 {
+                skipped_first = true;
+                seen_first_real.insert(coin_type.clone(), true);
+                continue;
+            }
+
+            // Emit the real coin.
+            result.push(coin.clone());
+            seen_first_real.insert(coin_type.clone(), true);
+
+            // After first real coin of a type, emit its fake coin (if not already emitted).
+            if is_first_real && !fake_emitted.get(coin_type).copied().unwrap_or(false) {
+                if let Some(fake) = fake_coins.get(coin_type)
+                    && result.len() < limit
+                {
+                    result.push(fake.clone());
+                }
+                fake_emitted.insert(coin_type.clone(), true);
+            }
+        }
+
+        // Emit any fake coins for types that had no real coins.
+        // Only do this on the first page (cursor at start) to avoid duplicates.
+        if cursor.2 == ObjectID::ZERO {
+            for (coin_type, fake) in fake_coins {
+                if result.len() >= limit {
+                    break;
+                }
+                if !fake_emitted.get(&coin_type).copied().unwrap_or(false) {
+                    result.push(fake);
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     async fn get_executed_transaction_and_effects(
@@ -450,11 +653,11 @@ impl StateRead for AuthorityState {
         coin_type: TypeTag,
     ) -> StateReadResult<TotalBalance> {
         let indexes = self.indexes.clone();
-        let child_object_resolver = self.get_child_object_resolver().clone();
+        let runtime_object_resolver = self.get_runtime_object_resolver().clone();
         Ok(
             tokio::task::spawn_blocking(move || -> RtdResult<TotalBalance> {
                 let address_balance =
-                    get_balance(owner, child_object_resolver.as_ref(), coin_type.clone())?;
+                    get_balance(owner, runtime_object_resolver.as_ref(), coin_type.clone())?;
                 let coin_balance = indexes
                     .as_ref()
                     .ok_or(RtdErrorKind::IndexStoreNotAvailable)?
@@ -464,6 +667,7 @@ impl StateRead for AuthorityState {
                     total_balance.balance += address_balance as i128;
                     total_balance.num_coins += 1;
                 }
+                total_balance.address_balance = address_balance;
                 Ok(total_balance)
             })
             .await
@@ -478,28 +682,25 @@ impl StateRead for AuthorityState {
         owner: RtdAddress,
     ) -> StateReadResult<Arc<HashMap<TypeTag, TotalBalance>>> {
         let indexes = self.indexes.clone();
-        let child_object_resolver = self.get_child_object_resolver().clone();
+        let runtime_object_resolver = self.get_runtime_object_resolver().clone();
         Ok(tokio::task::spawn_blocking(
             move || -> RtdResult<Arc<HashMap<TypeTag, TotalBalance>>> {
                 let indexes = indexes
                     .as_ref()
                     .ok_or(RtdErrorKind::IndexStoreNotAvailable)?;
-                let address_balances = get_all_balances_for_owner(
-                    owner,
-                    child_object_resolver.as_ref(),
-                    indexes.tables(),
-                    usize::MAX,
-                    None,
-                )?;
+                let address_balances =
+                    get_all_balances_for_owner(owner, runtime_object_resolver.as_ref(), indexes)?;
                 let coin_balances = (*indexes.get_all_coin_object_balances(owner)?).clone();
                 let mut all_balances = coin_balances;
                 for (coin_type, balance) in address_balances {
                     let existing_balance = all_balances.entry(coin_type).or_insert(TotalBalance {
                         balance: 0,
                         num_coins: 0,
+                        address_balance: 0,
                     });
                     existing_balance.balance += balance as i128;
                     existing_balance.num_coins += 1;
+                    existing_balance.address_balance = balance;
                 }
                 Ok(Arc::new(all_balances))
             },

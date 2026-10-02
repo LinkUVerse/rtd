@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Tab } from '@headlesrtd/react';
+import { Tab } from '@headlessui/react';
 import { useCurrentAccount } from '@linku/dapp-kit';
 import { formatAddress } from '@linku/rtd/utils';
 import { useQueryClient } from '@tanstack/react-query';

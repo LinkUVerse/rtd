@@ -1,15 +1,15 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::data_store::PackageStore;
-use std::{
-    collections::{BTreeMap, btree_map::Entry},
-    rc::Rc,
+use crate::{
+    data_store::{PackageMetadata, PackageStore},
+    static_programmable_transactions::linkage::config::ResolutionConfig,
 };
-use rtd_types::{
-    base_types::{ObjectID, SequenceNumber},
-    error::{ExecutionError, ExecutionErrorKind},
-    move_package::MovePackage,
+use rtd_types::base_types::ObjectID;
+use rtd_types::{error::ExecutionErrorTrait, execution_status::ExecutionErrorKind};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, btree_map::Entry},
 };
 
 /// Unifiers. These are used to determine how to unify two packages.
@@ -18,45 +18,93 @@ pub enum VersionConstraint {
     /// An exact constraint unifies as follows:
     /// 1. Exact(a) ~ Exact(b) ==> Exact(a), iff a == b
     /// 2. Exact(a) ~ AtLeast(b) ==> Exact(a), iff a >= b
-    Exact(SequenceNumber, ObjectID),
+    Exact(u64, ObjectID),
     /// An at least constraint unifies as follows:
     /// * AtLeast(a, a_version) ~ AtLeast(b, b_version) ==> AtLeast(x, max(a_version, b_version)),
     ///   where x is the package id of either a or b (the one with the greatest version).
-    AtLeast(SequenceNumber, ObjectID),
+    AtLeast(u64, ObjectID),
+}
+
+/// How a specific version of a package resolves, recorded for every package version the linkage
+/// refinement touched.
+#[derive(Debug, Clone, Copy)]
+pub struct PackageResolution {
+    /// The original id of the package.
+    pub original_id: ObjectID,
+    /// The resolved version of the package. `None` only for the late-bound self entry that
+    /// `ResolvedLinkage::update_for_publication` adds.
+    pub version: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolutionTable {
+    pub(crate) config: ResolutionConfig,
     pub(crate) resolution_table: BTreeMap<ObjectID, VersionConstraint>,
     /// For every version of every package that we have seen, a mapping of the ObjectID for that
     /// package to its runtime ID.
-    pub(crate) all_versions_resolution_table: BTreeMap<ObjectID, ObjectID>,
+    pub(crate) all_versions_resolution_table: BTreeMap<ObjectID, PackageResolution>,
 }
 
 impl ResolutionTable {
-    pub fn empty() -> Self {
+    pub fn empty(config: ResolutionConfig) -> Self {
         Self {
+            config,
             resolution_table: BTreeMap::new(),
             all_versions_resolution_table: BTreeMap::new(),
         }
     }
+
+    /// Given a list of object IDs, generate a `ResolvedLinkage` for them.
+    /// Since this linkage analysis should only be used for types, all packages are resolved
+    /// "upwards" (i.e., later versions of the package are preferred).
+    pub fn add_type_linkages_to_table<I, E, S>(&mut self, ids: I, store: &S) -> Result<(), E>
+    where
+        S: PackageStore + ?Sized,
+        E: ExecutionErrorTrait,
+        I: IntoIterator,
+        I::Item: Borrow<ObjectID>,
+    {
+        for id in ids {
+            let pkg = get_package(id.borrow(), store)?;
+            let transitive_deps = self
+                .config
+                .linkage_table(&pkg)
+                .into_values()
+                .map(ObjectID::from);
+            let package_id = pkg.version_id();
+            add_and_unify(&package_id, store, self, VersionConstraint::at_least)?;
+            for object_id in transitive_deps {
+                add_and_unify(&object_id, store, self, VersionConstraint::at_least)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl VersionConstraint {
-    pub fn exact(pkg: &MovePackage) -> Option<VersionConstraint> {
-        Some(VersionConstraint::Exact(pkg.version(), pkg.id()))
+    pub(crate) fn object_id(&self) -> ObjectID {
+        match self {
+            VersionConstraint::Exact(_, id) | VersionConstraint::AtLeast(_, id) => *id,
+        }
     }
 
-    pub fn at_least(pkg: &MovePackage) -> Option<VersionConstraint> {
-        Some(VersionConstraint::AtLeast(pkg.version(), pkg.id()))
+    pub(crate) fn exact<P: PackageMetadata>(pkg: &P) -> Option<VersionConstraint> {
+        Some(VersionConstraint::Exact(pkg.version(), pkg.version_id()))
     }
 
-    pub fn unify(&self, other: &VersionConstraint) -> Result<VersionConstraint, ExecutionError> {
+    pub(crate) fn at_least<P: PackageMetadata>(pkg: &P) -> Option<VersionConstraint> {
+        Some(VersionConstraint::AtLeast(pkg.version(), pkg.version_id()))
+    }
+
+    pub fn unify<E: ExecutionErrorTrait>(
+        &self,
+        other: &VersionConstraint,
+    ) -> Result<VersionConstraint, E> {
         match (&self, other) {
             // If we have two exact resolutions, they must be the same.
             (VersionConstraint::Exact(sv, self_id), VersionConstraint::Exact(ov, other_id)) => {
                 if self_id != other_id || sv != ov {
-                    Err(ExecutionError::new_with_source(
+                    Err(E::new_with_source(
                         ExecutionErrorKind::InvalidLinkage,
                         format!(
                             "exact/exact conflicting resolutions for package: linkage requires the same package \
@@ -95,7 +143,7 @@ impl VersionConstraint {
                 VersionConstraint::Exact(exact_version, exact_id),
             ) => {
                 if exact_version < at_least_version {
-                    return Err(ExecutionError::new_with_source(
+                    return Err(E::new_with_source(
                         ExecutionErrorKind::InvalidLinkage,
                         format!(
                             "Exact/AtLeast conflicting resolutions for package: linkage requires exactly this \
@@ -114,26 +162,24 @@ impl VersionConstraint {
 
 /// Load a package from the store, and update the type origin map with the types in that
 /// package.
-pub(crate) fn get_package(
+pub(crate) fn get_package<E: ExecutionErrorTrait, S: PackageStore + ?Sized>(
     object_id: &ObjectID,
-    store: &dyn PackageStore,
-) -> Result<Rc<MovePackage>, ExecutionError> {
+    store: &S,
+) -> Result<S::Package, E> {
     store
         .get_package(object_id)
-        .map_err(|e| {
-            ExecutionError::new_with_source(ExecutionErrorKind::PublishUpgradeMissingDependency, e)
-        })?
-        .ok_or_else(|| ExecutionError::from_kind(ExecutionErrorKind::InvalidLinkage))
+        .map_err(|e| E::new_with_source(ExecutionErrorKind::PublishUpgradeMissingDependency, e))?
+        .ok_or_else(|| E::from_kind(ExecutionErrorKind::InvalidLinkage))
 }
 
 // Add a package to the unification table, unifying it with any existing package in the table.
 // Errors if the packages cannot be unified (e.g., if one is exact and the other is not).
-pub(crate) fn add_and_unify(
+pub(crate) fn add_and_unify<E: ExecutionErrorTrait, S: PackageStore + ?Sized>(
     object_id: &ObjectID,
-    store: &dyn PackageStore,
+    store: &S,
     resolution_table: &mut ResolutionTable,
-    resolution_fn: fn(&MovePackage) -> Option<VersionConstraint>,
-) -> Result<(), ExecutionError> {
+    resolution_fn: fn(&S::Package) -> Option<VersionConstraint>,
+) -> Result<(), E> {
     let package = get_package(object_id, store)?;
 
     let Some(resolution) = resolution_fn(&package) else {
@@ -141,7 +187,7 @@ pub(crate) fn add_and_unify(
         // resolution table, and this does not contribute to the linkage analysis.
         return Ok(());
     };
-    let original_pkg_id = package.original_package_id();
+    let original_pkg_id = package.original_id();
 
     if let Entry::Vacant(e) = resolution_table.resolution_table.entry(original_pkg_id) {
         e.insert(resolution);
@@ -157,9 +203,13 @@ pub(crate) fn add_and_unify(
         .all_versions_resolution_table
         .contains_key(object_id)
     {
-        resolution_table
-            .all_versions_resolution_table
-            .insert(*object_id, original_pkg_id);
+        resolution_table.all_versions_resolution_table.insert(
+            *object_id,
+            PackageResolution {
+                original_id: original_pkg_id,
+                version: Some(package.version()),
+            },
+        );
     }
 
     Ok(())

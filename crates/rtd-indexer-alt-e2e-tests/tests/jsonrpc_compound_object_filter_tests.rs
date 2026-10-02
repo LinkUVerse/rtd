@@ -1,24 +1,31 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeSet, str::FromStr};
+use std::collections::BTreeSet;
+use std::str::FromStr;
 
 use move_core_types::ident_str;
 use reqwest::Client;
-use serde::Deserialize;
-use serde_json::{Value, json};
-use simulacrum::Simulacrum;
-use rtd_indexer_alt_e2e_tests::{FullCluster, OffchainClusterConfig, find};
-use rtd_indexer_alt_jsonrpc::config::{ObjectsConfig, RpcConfig as JsonRpcConfig};
+use rtd_indexer_alt_jsonrpc::config::ObjectsConfig;
+use rtd_indexer_alt_jsonrpc::config::RpcConfig as JsonRpcConfig;
 use rtd_json_rpc_types::Page;
-use rtd_types::{
-    RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
-    base_types::{ObjectID, RtdAddress},
-    crypto::get_account_key_pair,
-    effects::TransactionEffectsAPI,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{Transaction, TransactionData},
-};
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::get_account_key_pair;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
+use serde::Deserialize;
+use serde_json::Value;
+use serde_json::json;
+use simulacrum::Simulacrum;
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
+use rtd_indexer_alt_e2e_tests::find;
 
 /// 5 RTD gas budget
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
@@ -136,8 +143,7 @@ async fn test_multi_fetch() {
     assert!(has_next_page);
 }
 
-/// There are too few results in total to return a full page, so we end up fetching all the owned
-/// objects to make sure.
+/// Test correct pagination when there are fewer results than the requested limit.
 #[tokio::test]
 async fn test_too_few_results() {
     let mut cluster = setup_cluster(ObjectsConfig {

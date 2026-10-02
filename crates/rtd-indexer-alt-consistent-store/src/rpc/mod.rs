@@ -1,9 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::{convert::Infallible, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Context;
 use axum::Router;
@@ -12,13 +13,20 @@ use axum::response::IntoResponse;
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
 use futures::future::BoxFuture;
-use linku_network::callback::CallbackLayer;
+use linku_network::request_log::GrpcRequestLogLayer;
 use metrics::RpcMetrics;
 use middleware::metrics::MakeMetricsHandler;
 use middleware::panic::CatchPanicLayer;
 use middleware::version::Version;
 use prometheus::Registry;
 use rtd_futures::service::Service;
+use rtd_http::middleware::callback::CallbackLayer;
+use rustls::RootCertStore;
+use rustls::ServerConfig;
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::PrivateKeyDer;
+use rustls::pki_types::pem::PemObject;
+use rustls::server::WebPkiClientVerifier;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tonic::server::NamedService;
@@ -57,6 +65,10 @@ pub struct TlsArgs {
     /// Path to TLS private key file (PEM format)
     #[clap(long, requires_all = &["rpc_tls_listen_address", "tls_cert"])]
     pub tls_key: Option<PathBuf>,
+
+    /// Client CA for mutual TLS on the HTTPS listener.
+    #[clap(long, requires_all = &["rpc_tls_listen_address", "tls_cert", "tls_key"])]
+    pub tls_client_ca: Option<PathBuf>,
 }
 
 /// Responsible for the set-up of a gRPC service -- adding services, configuring reflection,
@@ -78,6 +90,10 @@ pub(crate) struct RpcService<'d> {
     /// service.
     reflection_v1: tonic_reflection::server::Builder<'d>,
     reflection_v1alpha: tonic_reflection::server::Builder<'d>,
+
+    /// The same file descriptor sets, retained to build the request-log middleware's descriptor
+    /// pool, so it cannot drift from what the reflection service exposes.
+    file_descriptor_sets: Vec<&'d [u8]>,
 
     /// Names of gRPC services and associated readiness futures registered with this instance.
     service_futures: Vec<(&'static str, BoxFuture<'static, ()>)>,
@@ -106,14 +122,18 @@ impl<'d> RpcService<'d> {
             rpc_tls_listen_address,
             tls_cert,
             tls_key,
+            tls_client_ca,
         } = tls;
 
         let tls_config = if let (Some(cert), Some(key)) = (tls_cert, tls_key) {
-            Some(
+            Some(if let Some(client_ca) = tls_client_ca {
+                mutual_tls_config(&cert, &key, &client_ca)
+                    .context("Failed to load mutual TLS configuration")?
+            } else {
                 RustlsConfig::from_pem_file(cert, key)
                     .await
-                    .context("Failed to load TLS configuration")?,
-            )
+                    .context("Failed to load TLS configuration")?
+            })
         } else {
             None
         };
@@ -125,6 +145,7 @@ impl<'d> RpcService<'d> {
             version,
             reflection_v1: tonic_reflection::server::Builder::configure(),
             reflection_v1alpha: tonic_reflection::server::Builder::configure(),
+            file_descriptor_sets: vec![],
             service_futures: vec![],
             router: Router::new(),
             metrics: Arc::new(RpcMetrics::new(registry)),
@@ -137,6 +158,7 @@ impl<'d> RpcService<'d> {
         self.reflection_v1alpha = self
             .reflection_v1alpha
             .register_encoded_file_descriptor_set(fds);
+        self.file_descriptor_sets.push(fds);
         self
     }
 
@@ -164,10 +186,19 @@ impl<'d> RpcService<'d> {
             version,
             reflection_v1,
             reflection_v1alpha,
+            file_descriptor_sets,
             service_futures,
             mut router,
             metrics,
         } = self;
+
+        let request_log = GrpcRequestLogLayer::from_encoded_file_descriptor_sets(
+            file_descriptor_sets
+                .iter()
+                .copied()
+                .chain([tonic_health::pb::FILE_DESCRIPTOR_SET]),
+        )
+        .context("Failed to build request-log descriptor pool")?;
 
         let reflection_v1 = reflection_v1
             .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
@@ -181,7 +212,7 @@ impl<'d> RpcService<'d> {
 
         let (health_reporter, health_service) = tonic_health::server::health_reporter();
 
-        let internal_services = [
+        let internal_services = vec![
             service_name(&reflection_v1),
             service_name(&reflection_v1alpha),
             service_name(&health_service),
@@ -191,6 +222,7 @@ impl<'d> RpcService<'d> {
         router = add_service(router, reflection_v1alpha);
         router = add_service(router, health_service);
         router = router
+            .layer(request_log)
             .layer(CallbackLayer::new(MakeMetricsHandler::new(metrics.clone())))
             .layer(axum::middleware::from_fn_with_state(
                 Version(version),
@@ -204,7 +236,9 @@ impl<'d> RpcService<'d> {
                 .await;
         }
 
+        // Create a Service to be attached as secondary to the main service
         let mut readiness_checks = Service::new();
+
         for (name, ready) in service_futures {
             health_reporter
                 .set_service_status(name, ServingStatus::NotServing)
@@ -271,6 +305,39 @@ impl<'d> RpcService<'d> {
     }
 }
 
+fn mutual_tls_config(
+    cert: &PathBuf,
+    key: &PathBuf,
+    client_ca: &PathBuf,
+) -> anyhow::Result<RustlsConfig> {
+    let certs = CertificateDer::pem_file_iter(cert)
+        .context("failed to open Consistent TLS certificate")?
+        .collect::<Result<Vec<_>, _>>()
+        .context("failed to parse Consistent TLS certificate")?;
+    anyhow::ensure!(!certs.is_empty(), "Consistent TLS certificate is empty");
+    let private_key =
+        PrivateKeyDer::from_pem_file(key).context("failed to read Consistent TLS private key")?;
+    let client_certs = CertificateDer::pem_file_iter(client_ca)
+        .context("failed to open Consistent client CA")?
+        .collect::<Result<Vec<_>, _>>()
+        .context("failed to parse Consistent client CA")?;
+    anyhow::ensure!(!client_certs.is_empty(), "Consistent client CA is empty");
+    let mut roots = RootCertStore::empty();
+    for client_cert in client_certs {
+        roots
+            .add(client_cert)
+            .context("invalid Consistent client CA")?;
+    }
+    let verifier = WebPkiClientVerifier::builder(Arc::new(roots)).build()?;
+    let mut tls =
+        ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_protocol_versions(rustls::DEFAULT_VERSIONS)?
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(certs, private_key)?;
+    tls.alpn_protocols = vec![b"h2".to_vec()];
+    Ok(RustlsConfig::from_config(Arc::new(tls)))
+}
+
 impl Default for RpcArgs {
     fn default() -> Self {
         Self {
@@ -293,4 +360,49 @@ where
     S::Error: Send + Into<BoxError>,
 {
     router.route_service(&format!("/{}/{{*rest}}", S::NAME), s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rcgen::BasicConstraints;
+    use rcgen::CertificateParams;
+    use rcgen::IsCa;
+    use rcgen::KeyPair;
+
+    /// `run` builds the request-log layer's descriptor pool from the registered file descriptor
+    /// sets plus `tonic_health`'s, so they must always merge into one valid pool.
+    #[test]
+    fn request_log_pool_builds_from_registered_file_descriptor_sets() {
+        GrpcRequestLogLayer::from_encoded_file_descriptor_sets([
+            rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::FILE_DESCRIPTOR_SET,
+            tonic_health::pb::FILE_DESCRIPTOR_SET,
+        ])
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn mutual_tls_config_accepts_ca_and_rejects_empty_trust_roots() {
+        let directory = tempfile::tempdir().unwrap();
+        let cert_file = directory.path().join("server.crt");
+        let key_file = directory.path().join("server.key");
+        let ca_file = directory.path().join("clients.ca.crt");
+        let mut ca_params = CertificateParams::new(vec![]).unwrap();
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let ca_key = KeyPair::generate().unwrap();
+        let ca = ca_params.self_signed(&ca_key).unwrap();
+        let server_key = KeyPair::generate().unwrap();
+        let server = CertificateParams::new(vec!["localhost".to_owned()])
+            .unwrap()
+            .signed_by(&server_key, &ca, &ca_key)
+            .unwrap();
+        std::fs::write(&cert_file, server.pem()).unwrap();
+        std::fs::write(&key_file, server_key.serialize_pem()).unwrap();
+        std::fs::write(&ca_file, ca.pem()).unwrap();
+
+        let config = mutual_tls_config(&cert_file, &key_file, &ca_file).unwrap();
+        assert_eq!(config.get_inner().alpn_protocols, vec![b"h2".to_vec()]);
+        std::fs::write(&ca_file, "").unwrap();
+        assert!(mutual_tls_config(&cert_file, &key_file, &ca_file).is_err());
+    }
 }

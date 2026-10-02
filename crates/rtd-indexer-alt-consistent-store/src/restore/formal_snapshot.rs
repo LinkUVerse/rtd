@@ -1,44 +1,38 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Context as _, bail, ensure};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use anyhow::Context as _;
+use anyhow::bail;
+use anyhow::ensure;
 use bytes::Bytes;
-use object_store::{
-    aws::AmazonS3Builder, azure::MicrosoftAzureBuilder, gcp::GoogleCloudStorageBuilder,
-    local::LocalFileSystem,
-};
-use std::{path::PathBuf, sync::Arc};
-use rtd_indexer_alt_framework::{
-    ingestion::remote_client::RemoteIngestionClient, types::full_checkpoint_content::CheckpointData,
-};
-use rtd_storage::blob::Blob;
+use object_store::ClientOptions;
+use object_store::aws::AmazonS3Builder;
+use object_store::http::HttpBuilder;
+use object_store::local::LocalFileSystem;
+use rtd_indexer_alt_framework::ingestion::s3_tls::with_archive_s3_ca;
+use rtd_indexer_alt_framework::ingestion::store_client::StoreIngestionClient;
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
 use tracing::info;
 use url::Url;
 
-use crate::{db::Watermark, restore::storage::HttpStorage};
-
-use super::{
-    format::{FileMetadata, FileType, RootManifest},
-    storage::{Storage, StorageConnectionArgs},
-};
+use crate::db::Watermark;
+use crate::restore::format::FileMetadata;
+use crate::restore::format::FileType;
+use crate::restore::format::RootManifest;
+use crate::restore::storage::HttpStorage;
+use crate::restore::storage::Storage;
+use crate::restore::storage::StorageConnectionArgs;
 
 #[derive(clap::Args, Clone, Debug)]
 #[group(required = true)]
 pub struct FormalSnapshotArgs {
-    /// Fetch formal snapshot from AWS S3. Provide the bucket name or endpoint-and-bucket.
-    /// (env: AWS_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
+    /// Fetch from self-hosted S3-compatible storage such as MinIO.
+    /// AWS_ENDPOINT and explicit S3 credentials are required.
     #[arg(long, group = "source")]
     pub s3: Option<String>,
-
-    /// Fetch formal snapshot from Google Cloud Storage. Provide the bucket name.
-    /// (env: GOOGLE_SERVICE_ACCOUNT_PATH).
-    #[arg(long, group = "source")]
-    pub gcs: Option<String>,
-
-    /// Fetch formal snapshot from Azure Blob Storage. Provide the container name.
-    /// (env: AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCESS_KEY)
-    #[arg(long, group = "source")]
-    pub azure: Option<String>,
 
     /// Fetch formal snapshot from a generic HTTP endpoint.
     #[arg(long, group = "source")]
@@ -46,7 +40,7 @@ pub struct FormalSnapshotArgs {
 
     /// Fetch formal snapshot from local filesystem. Provide the path to the snapshot directory.
     #[arg(long, group = "source")]
-    pub path: Option<PathBuf>,
+    pub local: Option<PathBuf>,
 
     /// URL of the remote checkpoint store. Used to fetch the mapping between epochs and
     /// checkpoints.
@@ -54,8 +48,18 @@ pub struct FormalSnapshotArgs {
     pub remote_store_url: Url,
 
     /// The epoch to restore from. Restores from the latest epoch if not specified.
+    /// Required when `--path` is set, since the per-prefix layout may not include
+    /// a `MANIFEST` to discover the latest epoch.
     #[arg(long)]
     pub epoch: Option<u64>,
+
+    /// Path prefix within the storage source containing per-epoch subdirectories.
+    /// When supplied, the tool looks for `<path>/epoch_<N>/` (with `<N>` from
+    /// `--epoch`) and skips reading the root `MANIFEST` and the per-epoch
+    /// `_SUCCESS` marker — the operator vouches for the snapshot being complete.
+    /// Requires `--epoch`.
+    #[arg(long, requires = "epoch")]
+    pub path: Option<String>,
 }
 
 /// Interface over a formal snapshot at a specific epoch.
@@ -64,14 +68,20 @@ pub(super) struct FormalSnapshot {
     /// The source of files related to the formal snapshot.
     source: Arc<dyn Storage + Send + Sync + 'static>,
 
+    epoch_dir: String,
+
     /// The point in time this snapshot is from.
     watermark: Watermark,
 }
 
 impl FormalSnapshot {
-    /// Establish a connection to a formal snapshot source, and validate that it can serve data for
-    /// a formal snapshot at the specified epoch (or the latest available epoch if none is
-    /// specified).
+    /// Establish a connection to a formal snapshot for a specific epoch.
+    ///
+    /// When `--path` is supplied, the epoch directory is taken to be
+    /// `<path>/epoch_<epoch>` and the root `MANIFEST` / `_SUCCESS` checks are
+    /// skipped. Otherwise the source's root `MANIFEST` is consulted to validate
+    /// the epoch and a `_SUCCESS` marker is checked; if no epoch is supplied,
+    /// the latest in the manifest is used.
     pub(super) async fn new(
         snapshot_args: FormalSnapshotArgs,
         connection_args: StorageConnectionArgs,
@@ -79,114 +89,110 @@ impl FormalSnapshot {
         // Connect to the formal snapshot source.
         let store: Arc<dyn Storage + Send + Sync + 'static> = if let Some(bucket) = snapshot_args.s3
         {
-            info!(bucket, "S3 storage");
+            let endpoint = std::env::var("AWS_ENDPOINT")
+                .context("AWS_ENDPOINT must point to self-hosted S3-compatible storage")?;
+            let endpoint_url = Url::parse(&endpoint)?;
+            validate_self_hosted_s3_environment(&endpoint_url)?;
+            info!(bucket, endpoint, "Self-hosted S3-compatible storage");
             AmazonS3Builder::from_env()
-                .with_client_options(connection_args.into())
-                .with_imdsv1_fallback()
+                .with_client_options(with_archive_s3_ca(connection_args.into(), &endpoint_url)?)
                 .with_bucket_name(bucket)
-                .build()
-                .map(Arc::new)?
-        } else if let Some(bucket) = snapshot_args.gcs {
-            info!(bucket, "GCS storage");
-            GoogleCloudStorageBuilder::from_env()
-                .with_client_options(connection_args.into())
-                .with_bucket_name(bucket)
-                .build()
-                .map(Arc::new)?
-        } else if let Some(container) = snapshot_args.azure {
-            info!(container, "Azure storage");
-            MicrosoftAzureBuilder::from_env()
-                .with_client_options(connection_args.into())
-                .with_container_name(container)
                 .build()
                 .map(Arc::new)?
         } else if let Some(endpoint) = snapshot_args.http {
+            validate_self_hosted_url(&endpoint)?;
             info!(endpoint = %endpoint, "HTTP storage");
             HttpStorage::new(endpoint, connection_args).map(Arc::new)?
-        } else if let Some(path) = snapshot_args.path {
+        } else if let Some(path) = snapshot_args.local {
             info!(path = %path.display(), "Directory storage");
             LocalFileSystem::new_with_prefix(path).map(Arc::new)?
         } else {
             bail!("No formal snapshot source provided");
         };
 
-        // Fetch details about all the epochs it has available, and use that to confirm and
-        // validate the epoch to restore from (it is available and complete at the source).
-        let root_manifest = RootManifest::read(
-            store
-                .get("MANIFEST".into())
+        validate_self_hosted_url(&snapshot_args.remote_store_url)?;
+
+        let (epoch, epoch_dir) = if let Some(path) = snapshot_args.path {
+            let epoch = snapshot_args
+                .epoch
+                .expect("clap requires --epoch when --path is set");
+            (epoch, format!("{path}/epoch_{epoch}"))
+        } else {
+            let root_manifest = RootManifest::read(
+                store
+                    .get("MANIFEST".into())
+                    .await
+                    .context("Failed to fetch root manifest")?
+                    .as_ref(),
+            )?;
+
+            let epoch = snapshot_args
+                .epoch
+                .or_else(|| root_manifest.latest())
+                .context("No epochs available in the snapshot store")?;
+
+            ensure!(
+                root_manifest.contains(epoch),
+                "Requested epoch {epoch} is not available in the snapshot store",
+            );
+
+            let epoch_dir = format!("epoch_{epoch}");
+            let is_complete = store
+                .get(format!("{epoch_dir}/_SUCCESS").into())
                 .await
-                .context("Failed to fetch root manifest")?
-                .as_ref(),
-        )?;
+                .is_ok();
 
-        // If an epoch has not been specified, restore from the latest available epoch.
-        let epoch = snapshot_args
-            .epoch
-            .or_else(|| root_manifest.latest())
-            .context("No epochs available in the snapshot store")?;
+            ensure!(is_complete, "Snapshot for epoch {epoch} is not complete");
 
-        ensure!(
-            root_manifest.contains(epoch),
-            "Requested epoch {epoch} is not available in the snapshot store",
-        );
+            (epoch, epoch_dir)
+        };
 
-        let is_complete = store
-            .get(format!("epoch_{epoch}/_SUCCESS").into())
-            .await
-            .is_ok();
-
-        ensure!(is_complete, "Snapshot for epoch {epoch} is not complete");
-
-        info!(epoch, "Connected to valid formal snapshot");
+        info!(epoch, epoch_dir, "Connected to valid formal snapshot");
 
         // Use the remote store to associate the epoch with a watermark pointing to its last
-        // transaction.
-        let client = RemoteIngestionClient::new(snapshot_args.remote_store_url)
-            .context("Failed to connect to remote checkpoint store")?;
+        // transaction. We only use `end_of_epoch_checkpoints` here, so no byte counter is needed.
+        let client = StoreIngestionClient::new(
+            HttpBuilder::new()
+                .with_url(snapshot_args.remote_store_url.to_string())
+                .with_client_options(ClientOptions::new().with_allow_http(true))
+                .build()
+                .map(Arc::new)
+                .context("Failed to connect to remote checkpoint store")?,
+            None,
+        );
 
         let end_of_epoch_checkpoints: Vec<_> = client
             .end_of_epoch_checkpoints()
             .await
-            .context("Failed to fetch end-of-epoch checkpoints")?
-            .json()
-            .await
-            .context("Failed to parse end-of-epoch checkpoints")?;
+            .context("Failed to fetch end-of-epoch checkpoints")?;
 
         let checkpoint = end_of_epoch_checkpoints
             .get(epoch as usize)
             .cloned()
             .with_context(|| format!("Cannot find end-of-epoch checkpoint for epoch {epoch}"))?;
 
-        let CheckpointData {
-            checkpoint_summary, ..
-        } = Blob::from_bytes(
-            &client
-                .checkpoint(checkpoint)
-                .await
-                .context("Failed to fetch end-of-epoch checkpoint")?
-                .bytes()
-                .await
-                .context("Failed to read end-of-epoch checkpoint bytes")?,
-        )
-        .context("Failed to deserialize end-of-epoch checkpoint")?;
+        let Checkpoint { summary, .. } = client
+            .checkpoint(checkpoint)
+            .await
+            .context("Failed to fetch end-of-epoch checkpoint")?;
 
         ensure!(
-            checkpoint_summary.epoch == epoch,
+            summary.epoch == epoch,
             "End-of-epoch checkpoint {checkpoint} does not belong to epoch {epoch}",
         );
 
         let watermark = Watermark {
             epoch_hi_inclusive: epoch,
-            checkpoint_hi_inclusive: checkpoint_summary.sequence_number,
-            tx_hi: checkpoint_summary.network_total_transactions,
-            timestamp_ms_hi_inclusive: checkpoint_summary.timestamp_ms,
+            checkpoint_hi_inclusive: summary.sequence_number,
+            tx_hi: summary.network_total_transactions,
+            timestamp_ms_hi_inclusive: summary.timestamp_ms,
         };
 
         info!(?watermark, "Anchored formal snapshot");
 
         Ok(Self {
             source: store,
+            epoch_dir,
             watermark,
         })
     }
@@ -198,7 +204,7 @@ impl FormalSnapshot {
 
     /// Load the manifest for this snapshot, detailing all its files.
     pub(super) async fn manifest(&self) -> anyhow::Result<Bytes> {
-        let path = format!("epoch_{}/MANIFEST", self.watermark.epoch_hi_inclusive);
+        let path = format!("{}/MANIFEST", self.epoch_dir);
 
         self.source
             .get(path.into())
@@ -214,8 +220,8 @@ impl FormalSnapshot {
         };
 
         let path = format!(
-            "epoch_{}/{}_{}.{ext}",
-            self.watermark.epoch_hi_inclusive, metadata.bucket, metadata.partition
+            "{}/{}_{}.{ext}",
+            self.epoch_dir, metadata.bucket, metadata.partition
         );
 
         self.source
@@ -223,4 +229,42 @@ impl FormalSnapshot {
             .await
             .context("Failed to fetch object file")
     }
+}
+
+fn validate_self_hosted_url(url: &Url) -> anyhow::Result<()> {
+    let host = url
+        .host_str()
+        .context("Storage URL must contain a host")?
+        .trim_end_matches('.');
+    ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "Storage URL must use HTTP(S)"
+    );
+    ensure!(
+        !["amazonaws.com", "googleapis.com", "blob.core.windows.net"]
+            .iter()
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}"))),
+        "Storage URL must point to self-hosted infrastructure"
+    );
+    Ok(())
+}
+
+fn validate_self_hosted_s3_environment(endpoint: &Url) -> anyhow::Result<()> {
+    validate_self_hosted_url(endpoint)?;
+    ensure!(
+        endpoint.scheme() == "https"
+            || std::env::var("RTD_ARCHIVE_ALLOW_INSECURE_S3_DEV").as_deref() == Ok("1"),
+        "Plaintext S3 endpoints are restricted to local development"
+    );
+    for name in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ] {
+        ensure!(
+            std::env::var(name).is_ok_and(|value| !value.is_empty()),
+            "{name} is required for the self-hosted S3 protocol; cloud metadata credentials are disabled"
+        );
+    }
+    Ok(())
 }

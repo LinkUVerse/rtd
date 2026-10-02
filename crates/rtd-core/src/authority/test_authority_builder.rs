@@ -5,9 +5,9 @@ use super::ExecutionEnv;
 use super::backpressure::BackpressureManager;
 use super::epoch_start_configuration::EpochFlag;
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
-use crate::authority::authority_store_pruner::{ObjectsCompactionFilter, PrunerWatermarks};
+use crate::authority::authority_store_pruner::PrunerWatermarks;
 use crate::authority::authority_store_tables::{
-    AuthorityPerpetualTables, AuthorityPerpetualTablesOptions, AuthorityPrunerTables,
+    AuthorityPerpetualTables, AuthorityPerpetualTablesOptions,
 };
 use crate::authority::epoch_start_configuration::EpochStartConfiguration;
 use crate::authority::submitted_transaction_cache::SubmittedTransactionCacheMetrics;
@@ -17,16 +17,13 @@ use crate::epoch::committee_store::CommitteeStore;
 use crate::epoch::epoch_metrics::EpochMetrics;
 use crate::epoch::randomness::RandomnessManager;
 use crate::execution_cache::build_execution_cache;
-use crate::execution_scheduler::SchedulingSource;
 use crate::jsonrpc_index::IndexStore;
 use crate::mock_consensus::{ConsensusMode, MockConsensusClient};
 use crate::module_cache_metrics::ResolverMetrics;
-use crate::rpc_index::RpcIndexStore;
+use crate::randomness_round_receiver::RandomnessRoundReceiverHandle;
 use crate::signature_verifier::SignatureVerifierMetrics;
 use fastcrypto::traits::KeyPair;
 use prometheus::Registry;
-use std::path::PathBuf;
-use std::sync::Arc;
 use rtd_config::ExecutionCacheConfig;
 use rtd_config::certificate_deny_config::CertificateDenyConfig;
 use rtd_config::genesis::Genesis;
@@ -48,6 +45,8 @@ use rtd_types::object::Object;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
 use rtd_types::transaction::VerifiedTransaction;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Default, Clone)]
 pub struct TestAuthorityBuilder<'a> {
@@ -59,6 +58,8 @@ pub struct TestAuthorityBuilder<'a> {
     reference_gas_price: Option<u64>,
     node_keypair: Option<&'a AuthorityKeyPair>,
     genesis: Option<&'a Genesis>,
+    /// Pre-built network config to avoid rebuilding genesis
+    network_config: Option<&'a NetworkConfig>,
     starting_objects: Option<&'a [Object]>,
     expensive_safety_checks: Option<ExpensiveSafetyCheckConfig>,
     disable_indexer: bool,
@@ -68,6 +69,10 @@ pub struct TestAuthorityBuilder<'a> {
     authority_overload_config: Option<AuthorityOverloadConfig>,
     cache_config: Option<ExecutionCacheConfig>,
     chain_override: Option<Chain>,
+    dev_inspect_disabled: bool,
+    recent_submission_dedup_window_ms: Option<u64>,
+    /// Skip genesis owner/dynamic-field indexing (use for tests that don't query owned objects)
+    skip_genesis_owner_index: bool,
 }
 
 impl<'a> TestAuthorityBuilder<'a> {
@@ -92,6 +97,11 @@ impl<'a> TestAuthorityBuilder<'a> {
 
     pub fn with_transaction_deny_config(mut self, config: TransactionDenyConfig) -> Self {
         assert!(self.transaction_deny_config.replace(config).is_none());
+        self
+    }
+
+    pub fn with_dev_inspect_disabled(mut self) -> Self {
+        self.dev_inspect_disabled = true;
         self
     }
 
@@ -140,8 +150,22 @@ impl<'a> TestAuthorityBuilder<'a> {
         )
     }
 
+    /// Provide a pre-built network config to avoid rebuilding genesis.
+    /// This is useful when creating multiple authorities that should share the same genesis.
+    pub fn with_shared_network_config(mut self, config: &'a NetworkConfig) -> Self {
+        assert!(self.network_config.replace(config).is_none());
+        self
+    }
+
     pub fn disable_indexer(mut self) -> Self {
         self.disable_indexer = true;
+        self
+    }
+
+    /// Skip genesis owner/dynamic-field indexing. This is much faster for tests
+    /// that don't query owned objects via RPC (e.g., get_owned_objects).
+    pub fn skip_genesis_owner_index(mut self) -> Self {
+        self.skip_genesis_owner_index = true;
         self
     }
 
@@ -175,24 +199,43 @@ impl<'a> TestAuthorityBuilder<'a> {
         self
     }
 
+    pub fn with_recent_submission_dedup_window_ms(mut self, window_ms: u64) -> Self {
+        assert!(
+            self.recent_submission_dedup_window_ms
+                .replace(window_ms)
+                .is_none()
+        );
+        self
+    }
+
     pub async fn build(self) -> Arc<AuthorityState> {
         // `_guard` must be declared here so it is not dropped before
         // `AuthorityPerEpochStore::new` is called
-        let protocol_config = self.protocol_config.clone();
-        let _guard = protocol_config
+        //
+        // Only create a guard if an explicit protocol_config was provided.
+        let _guard = self
+            .protocol_config
+            .clone()
             .map(|config| ProtocolConfig::apply_overrides_for_testing(move |_, _| config.clone()));
 
-        let mut local_network_config_builder =
-            rtd_swarm_config::network_config_builder::ConfigBuilder::new_with_temp_dir()
-                .with_accounts(self.accounts)
-                .with_reference_gas_price(self.reference_gas_price.unwrap_or(500));
-        if let Some(protocol_config) = &self.protocol_config {
-            local_network_config_builder =
-                local_network_config_builder.with_protocol_version(protocol_config.version);
-        }
-        let local_network_config = local_network_config_builder.build();
+        // Use pre-built network config if available, otherwise build one
+        let owned_network_config;
+        let local_network_config: &NetworkConfig = if let Some(config) = self.network_config {
+            config
+        } else {
+            let mut local_network_config_builder =
+                rtd_swarm_config::network_config_builder::ConfigBuilder::new_with_temp_dir()
+                    .with_accounts(self.accounts)
+                    .with_reference_gas_price(self.reference_gas_price.unwrap_or(500));
+            if let Some(protocol_config) = &self.protocol_config {
+                local_network_config_builder =
+                    local_network_config_builder.with_protocol_version(protocol_config.version);
+            }
+            owned_network_config = local_network_config_builder.build();
+            &owned_network_config
+        };
         let genesis = &self.genesis.unwrap_or(&local_network_config.genesis);
-        let genesis_committee = genesis.committee().unwrap();
+        let genesis_committee = genesis.committee();
         let path = self.store_base_path.unwrap_or_else(|| {
             let dir = std::env::temp_dir();
             let store_base_path =
@@ -202,24 +245,11 @@ impl<'a> TestAuthorityBuilder<'a> {
         });
         let mut config = local_network_config.validator_configs()[0].clone();
         let registry = Registry::new();
-        let mut pruner_db = None;
-        if config
-            .authority_store_pruning_config
-            .enable_compaction_filter
-        {
-            pruner_db = Some(Arc::new(AuthorityPrunerTables::open(&path.join("store"))));
-        }
-        let compaction_filter = pruner_db
-            .clone()
-            .map(|db| ObjectsCompactionFilter::new(db, &registry));
 
         let authority_store = match self.store {
             Some(store) => store,
             None => {
-                let perpetual_tables_options = AuthorityPerpetualTablesOptions {
-                    compaction_filter,
-                    ..Default::default()
-                };
+                let perpetual_tables_options = AuthorityPerpetualTablesOptions::default();
                 let perpetual_tables = Arc::new(AuthorityPerpetualTables::open(
                     &path.join("store"),
                     Some(perpetual_tables_options),
@@ -235,6 +265,7 @@ impl<'a> TestAuthorityBuilder<'a> {
                 .unwrap()
             }
         };
+
         if let Some(cache_config) = self.cache_config {
             config.execution_cache = cache_config;
         }
@@ -295,9 +326,12 @@ impl<'a> TestAuthorityBuilder<'a> {
                 .get_highest_executed_checkpoint_seq_number()
                 .unwrap()
                 .unwrap_or(0),
+            0,
             Arc::new(SubmittedTransactionCacheMetrics::new(&registry)),
+            None,
         )
         .expect("failed to create authority per epoch store");
+
         let committee_store = Arc::new(CommitteeStore::new(
             path.join("epochs"),
             &genesis_committee,
@@ -323,22 +357,6 @@ impl<'a> TestAuthorityBuilder<'a> {
                 false,
             )))
         };
-        let rpc_index = if self.disable_indexer {
-            None
-        } else {
-            Some(Arc::new(
-                RpcIndexStore::new(
-                    &path,
-                    &authority_store,
-                    &checkpoint_store,
-                    &epoch_store,
-                    &cache_traits.backing_package_store,
-                    pruner_watermarks.checkpoint_id.clone(),
-                    rtd_config::RpcConfig::default(),
-                )
-                .await,
-            ))
-        };
 
         let transaction_deny_config = self.transaction_deny_config.unwrap_or_default();
         let certificate_deny_config = self.certificate_deny_config.unwrap_or_default();
@@ -356,11 +374,20 @@ impl<'a> TestAuthorityBuilder<'a> {
         config.certificate_deny_config = certificate_deny_config;
         config.authority_overload_config = authority_overload_config;
         config.authority_store_pruning_config = pruning_config;
+        config.dev_inspect_disabled = self.dev_inspect_disabled;
+        if let Some(window_ms) = self.recent_submission_dedup_window_ms {
+            config.recent_submission_dedup_window_ms = Some(window_ms);
+        }
 
         let chain_identifier = ChainIdentifier::from(*genesis.checkpoint().digest());
         let policy_config = config.policy_config.clone();
         let firewall_config = config.firewall_config.clone();
 
+        let genesis_objects_for_index = if self.skip_genesis_owner_index {
+            &[][..]
+        } else {
+            genesis.objects()
+        };
         let state = AuthorityState::new(
             name,
             secret,
@@ -370,15 +397,13 @@ impl<'a> TestAuthorityBuilder<'a> {
             epoch_store.clone(),
             committee_store,
             index_store,
-            rpc_index,
+            None,
             checkpoint_store,
             &registry,
-            genesis.objects(),
+            genesis_objects_for_index,
             &DBCheckpointConfig::default(),
             config.clone(),
-            None,
             chain_identifier,
-            pruner_db,
             policy_config,
             firewall_config,
             Arc::new(PrunerWatermarks::default()),
@@ -395,7 +420,8 @@ impl<'a> TestAuthorityBuilder<'a> {
                 Arc::downgrade(&epoch_store),
                 consensus_client,
                 randomness::Handle::new_stub(),
-                config.protocol_key_pair(),
+                Some(config.protocol_key_pair()),
+                RandomnessRoundReceiverHandle::new_for_testing(),
             )
             .await;
             if let Some(randomness_manager) = randomness_manager {
@@ -419,10 +445,9 @@ impl<'a> TestAuthorityBuilder<'a> {
                     genesis.epoch(),
                     genesis.checkpoint().sequence_number,
                 ),
-                ExecutionEnv::new().with_scheduling_source(SchedulingSource::NonFastPath),
+                ExecutionEnv::new(),
                 &state.epoch_store_for_testing(),
             )
-            .await
             .unwrap();
 
         let batch = state
@@ -446,6 +471,7 @@ impl<'a> TestAuthorityBuilder<'a> {
                 .await
                 .unwrap();
         };
+
         state
     }
 }

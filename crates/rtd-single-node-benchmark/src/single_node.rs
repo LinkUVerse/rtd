@@ -3,8 +3,6 @@
 
 use crate::command::Component;
 use crate::mock_storage::InMemoryObjectStore;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 use rtd_core::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use rtd_core::authority::authority_store_tables::LiveObject;
 use rtd_core::authority::shared_object_version_manager::{
@@ -14,10 +12,7 @@ use rtd_core::authority::test_authority_builder::TestAuthorityBuilder;
 use rtd_core::authority::{AuthorityState, ExecutionEnv};
 use rtd_core::authority_server::{ValidatorService, ValidatorServiceMetrics};
 use rtd_core::checkpoints::checkpoint_executor::CheckpointExecutor;
-use rtd_core::consensus_adapter::{
-    ConnectionMonitorStatusForTests, ConsensusAdapter, ConsensusAdapterMetrics,
-};
-use rtd_core::execution_scheduler::SchedulingSource;
+use rtd_core::consensus_adapter::{ConsensusAdapter, ConsensusAdapterMetrics};
 use rtd_core::global_state_hasher::GlobalStateHasher;
 use rtd_core::mock_checkpoint_builder::{MockCheckpointBuilder, ValidatorKeypairProvider};
 use rtd_core::mock_consensus::{ConsensusMode, MockConsensusClient};
@@ -29,12 +24,12 @@ use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::executable_transaction::VerifiedExecutableTransaction;
 use rtd_types::execution_params::ExecutionOrEarlyError;
 use rtd_types::messages_checkpoint::{VerifiedCheckpoint, VerifiedCheckpointContents};
-use rtd_types::messages_grpc::HandleTransactionResponse;
 use rtd_types::object::Object;
 use rtd_types::transaction::{
-    CertifiedTransaction, DEFAULT_VALIDATOR_GAS_PRICE, Transaction, TransactionDataAPI,
-    VerifiedCertificate, VerifiedTransaction,
+    DEFAULT_VALIDATOR_GAS_PRICE, Transaction, TransactionDataAPI, VerifiedTransaction,
 };
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SingleValidator {
@@ -63,13 +58,10 @@ impl SingleValidator {
             )),
             validator.checkpoint_store.clone(),
             validator.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            epoch_store.protocol_config().clone(),
+            Arc::new(tokio::sync::Notify::new()),
         ));
         // TODO: for validator benchmarking purposes, we should allow for traffic control
         // to be configurable and introduce traffic control benchmarks to test
@@ -89,8 +81,8 @@ impl SingleValidator {
         self.validator_service.validator_state()
     }
 
-    pub fn get_epoch_store(&self) -> &Arc<AuthorityPerEpochStore> {
-        &self.epoch_store
+    pub fn get_epoch(&self) -> u64 {
+        self.epoch_store.epoch()
     }
 
     /// Publish a package, returns the package object and the updated gas object.
@@ -112,113 +104,101 @@ impl SingleValidator {
             .filter_map(|(oref, owner, _)| owner.is_immutable().then_some(oref))
             .next()
             .unwrap();
-        let updated_gas = effects.gas_object().0;
+        let updated_gas = effects.gas_object().unwrap().0;
         (package, updated_gas)
     }
 
     pub async fn execute_raw_transaction(&self, transaction: Transaction) -> TransactionEffects {
-        let executable = VerifiedExecutableTransaction::new_from_quorum_execution(
+        let executable = VerifiedExecutableTransaction::new_from_consensus(
             VerifiedTransaction::new_unchecked(transaction),
             0,
         );
         let effects = self
             .get_validator()
-            .try_execute_immediately(
-                &executable,
-                ExecutionEnv::new().with_scheduling_source(SchedulingSource::NonFastPath),
-                &self.epoch_store,
-            )
-            .await
+            .try_execute_immediately(&executable, ExecutionEnv::new(), &self.epoch_store)
             .unwrap()
             .0;
         assert!(effects.status().is_ok());
         effects
     }
 
-    pub async fn execute_dry_run(&self, transaction: Transaction) -> TransactionEffects {
-        let effects = self
-            .get_validator()
-            .dry_exec_transaction_for_benchmark(
-                transaction.data().intent_message().value.clone(),
-                *transaction.digest(),
-            )
-            .unwrap()
-            .2;
-        assert!(effects.status().is_ok());
-        effects
+    /// Creates a VerifiedExecutableTransaction from a Transaction using MFP style certification.
+    fn create_executable(&self, transaction: Transaction) -> VerifiedExecutableTransaction {
+        VerifiedExecutableTransaction::new_from_consensus(
+            VerifiedTransaction::new_unchecked(transaction),
+            self.epoch_store.epoch(),
+        )
     }
 
-    pub async fn execute_certificate(
+    pub async fn execute_transaction(
         &self,
-        cert: CertifiedTransaction,
+        transaction: Transaction,
         assigned_versions: &AssignedVersions,
         component: Component,
-    ) -> TransactionEffects {
+    ) -> (TransactionEffects, std::time::Duration) {
+        let executable = self.create_executable(transaction);
+        let start = std::time::Instant::now();
         let effects = match component {
             Component::Baseline => {
-                let cert = VerifiedExecutableTransaction::new_from_certificate(
-                    VerifiedCertificate::new_unchecked(cert),
-                );
                 self.get_validator()
                     .try_execute_immediately(
-                        &cert,
+                        &executable,
                         ExecutionEnv::new().with_assigned_versions(assigned_versions.clone()),
                         &self.epoch_store,
                     )
-                    .await
                     .unwrap()
                     .0
             }
             Component::WithTxManager => {
-                let cert = VerifiedCertificate::new_unchecked(cert);
-                if cert.is_consensus_tx() {
-                    // For shared objects transactions, `execute_certificate` won't enqueue it because
-                    // it expects consensus to do so. However we don't have consensus, hence the manual enqueue.
-                    self.get_validator().execution_scheduler().enqueue(
-                        vec![(
-                            VerifiedExecutableTransaction::new_from_certificate(cert.clone())
-                                .into(),
-                            ExecutionEnv::new().with_assigned_versions(assigned_versions.clone()),
-                        )],
-                        &self.epoch_store,
-                    );
-                }
+                // Manually enqueue since we don't have consensus.
+                self.get_validator().execution_scheduler().enqueue(
+                    vec![(
+                        executable.clone().into(),
+                        ExecutionEnv::new().with_assigned_versions(assigned_versions.clone()),
+                    )],
+                    &self.epoch_store,
+                );
                 self.get_validator()
-                    .wait_for_certificate_execution(&cert, &self.epoch_store)
+                    .wait_for_transaction_execution_for_testing(&executable)
                     .await
-                    .unwrap()
             }
             Component::ValidatorWithoutConsensus | Component::ValidatorWithFakeConsensus => {
-                let response = self
-                    .validator_service
-                    .execute_certificate_for_testing(cert)
-                    .await
-                    .unwrap()
-                    .into_inner();
-                response.signed_effects.into_data()
+                // Execute the transaction directly using try_execute_executable_for_test
+                let (signed_effects, _) = self
+                    .get_validator()
+                    .try_execute_executable_for_test(
+                        &executable,
+                        ExecutionEnv::new().with_assigned_versions(assigned_versions.clone()),
+                    )
+                    .await;
+                signed_effects.into_inner().into_data()
             }
-            Component::TxnSigning | Component::CheckpointExecutor | Component::ExecutionOnly => {
+            Component::CheckpointExecutor | Component::ExecutionOnly => {
                 unreachable!()
             }
         };
+        let elapsed = start.elapsed();
         assert!(effects.status().is_ok());
-        effects
+        (effects, elapsed)
     }
 
     pub(crate) async fn execute_transaction_in_memory(
         &self,
         store: InMemoryObjectStore,
-        transaction: CertifiedTransaction,
+        transaction: Transaction,
         assigned_versions: &AssignedVersions,
     ) -> TransactionEffects {
-        let input_objects = transaction.transaction_data().input_objects().unwrap();
+        let input_objects = transaction
+            .data()
+            .intent_message()
+            .value
+            .input_objects()
+            .unwrap();
+        let executable = self.create_executable(transaction);
         let objects = store
-            .read_objects_for_execution(&transaction.key(), assigned_versions, &input_objects)
+            .read_objects_for_execution(&executable.key(), assigned_versions, &input_objects)
             .unwrap();
 
-        let executable = VerifiedExecutableTransaction::new_from_certificate(
-            VerifiedCertificate::new_unchecked(transaction),
-        );
         let (gas_status, input_objects) = rtd_transaction_checks::check_certificate_input(
             &executable,
             objects,
@@ -231,15 +211,20 @@ impl SingleValidator {
             self.epoch_store.executor().execute_transaction_to_effects(
                 &store,
                 self.epoch_store.protocol_config(),
-                self.get_validator().metrics.limits_metrics.clone(),
+                self.get_validator().metrics.execution_metrics.clone(),
                 false,
-                ExecutionOrEarlyError::Ok(()),
+                ExecutionOrEarlyError::ok(None),
                 &self.epoch_store.epoch(),
                 0,
                 input_objects,
+                rtd_types::base_types::SystemObjectVersions::empty(),
+                // The benchmark only measures execution throughput and never withdraws object
+                // funds, so there are no unsettled withdrawals to account for.
+                &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
                 gas_data,
                 gas_status,
                 kind,
+                None, // compat_args
                 signer,
                 *executable.digest(),
                 &mut None,
@@ -249,17 +234,9 @@ impl SingleValidator {
         effects
     }
 
-    pub async fn sign_transaction(&self, transaction: Transaction) -> HandleTransactionResponse {
-        self.validator_service
-            .handle_transaction_for_benchmarking(transaction)
-            .await
-            .unwrap()
-            .into_inner()
-    }
-
     pub(crate) async fn build_checkpoints(
         &self,
-        transactions: Vec<CertifiedTransaction>,
+        transactions: Vec<Transaction>,
         mut all_effects: BTreeMap<TransactionDigest, TransactionEffects>,
         checkpoint_size: usize,
     ) -> Vec<(VerifiedCheckpoint, VerifiedCheckpointContents)> {
@@ -273,10 +250,7 @@ impl SingleValidator {
         let mut checkpoints = vec![];
         for transaction in transactions {
             let effects = all_effects.remove(transaction.digest()).unwrap();
-            builder.push_transaction(
-                VerifiedTransaction::new_unchecked(transaction.into_unsigned()),
-                effects,
-            );
+            builder.push_transaction(VerifiedTransaction::new_unchecked(transaction), effects);
             if builder.size() == checkpoint_size {
                 let (checkpoint, _, full_contents) = builder.build(self, 0);
                 checkpoints.push((checkpoint, full_contents));
@@ -316,17 +290,13 @@ impl SingleValidator {
 
     pub(crate) async fn assigned_shared_object_versions(
         &self,
-        transactions: &[CertifiedTransaction],
+        transactions: &[Transaction],
     ) -> AssignedTxAndVersions {
-        let transactions: Vec<_> = transactions
+        let executables: Vec<_> = transactions
             .iter()
-            .map(|tx| {
-                VerifiedExecutableTransaction::new_from_certificate(
-                    VerifiedCertificate::new_unchecked(tx.clone()),
-                )
-            })
+            .map(|tx| self.create_executable(tx.clone()))
             .collect();
-        let assignables: Vec<_> = transactions.iter().map(Schedulable::Transaction).collect();
+        let assignables: Vec<_> = executables.iter().map(Schedulable::Transaction).collect();
         self.epoch_store
             .assign_shared_object_versions_idempotent(
                 self.get_validator().get_object_cache_reader().as_ref(),

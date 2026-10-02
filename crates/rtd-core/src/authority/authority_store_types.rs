@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::{Deserialize, Serialize};
 use rtd_types::base_types::MoveObjectType;
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::coin::Coin;
@@ -9,6 +8,7 @@ use rtd_types::error::{RtdError, RtdErrorKind};
 use rtd_types::move_package::MovePackage;
 use rtd_types::object::{Data, MoveObject, Object, ObjectInner, Owner};
 use rtd_types::storage::ObjectKey;
+use serde::{Deserialize, Serialize};
 
 // Versioning process:
 //

@@ -3,20 +3,22 @@
 
 use insta::assert_debug_snapshot;
 use move_core_types::language_storage::StructTag;
+use rtd_types::Identifier;
+use rtd_types::RTD_COIN_REGISTRY_ADDRESS;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::coin::CoinMetadata;
+use rtd_types::coin::TreasuryCap;
+use rtd_types::deny_list_v2::DenyCapV2;
+use rtd_types::effects::TransactionEffectsAPI;
 use serde::Deserialize;
 use serde_json::json;
-use rtd_indexer_alt_e2e_tests::{
-    FullCluster,
-    coin_registry::{self, LegacyCoinOutputs},
-    find,
-};
-use rtd_types::{
-    Identifier, RTD_COIN_REGISTRY_ADDRESS,
-    base_types::{ObjectRef, SequenceNumber, RtdAddress},
-    coin::{CoinMetadata, TreasuryCap},
-    deny_list_v2::DenyCapV2,
-    effects::TransactionEffectsAPI,
-};
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::coin_registry::LegacyCoinOutputs;
+use rtd_indexer_alt_e2e_tests::coin_registry::{self};
+use rtd_indexer_alt_e2e_tests::find;
 
 #[derive(Deserialize, Clone, Eq, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -52,7 +54,7 @@ async fn test_fixed_supply() {
     let (a, kp, fx) = coin_registry::publish(&mut cluster, "fixed_supply").await;
     let package = find::immutable(&fx).unwrap().0;
     let currency = find::address_owned_by(&fx, RTD_COIN_REGISTRY_ADDRESS.into()).unwrap();
-    let gas = fx.gas_object().0;
+    let gas = fx.gas_object().unwrap().0;
 
     coin_registry::finalize(&mut cluster, a, &kp, package, "fixed", currency, gas).await;
     cluster.create_checkpoint().await;
@@ -76,7 +78,7 @@ async fn test_dynamic() {
     let mut cluster = FullCluster::new().await.unwrap();
     let (sender, kp, fx) = coin_registry::publish(&mut cluster, "dynamic").await;
     let package = find::immutable(&fx).unwrap().0;
-    let gas = fx.gas_object().0;
+    let gas = fx.gas_object().unwrap().0;
 
     // Create a dynamic currency
     let coin_type = StructTag {
@@ -109,7 +111,7 @@ async fn test_burn_only() {
     let (sender, kp, fx) = coin_registry::publish(&mut cluster, "burn_only").await;
     let package = find::immutable(&fx).unwrap().0;
     let currency = find::address_owned_by(&fx, RTD_COIN_REGISTRY_ADDRESS.into()).unwrap();
-    let gas = fx.gas_object().0;
+    let gas = fx.gas_object().unwrap().0;
 
     coin_registry::finalize(&mut cluster, sender, &kp, package, "burn", currency, gas).await;
     cluster.create_checkpoint().await;
@@ -134,7 +136,7 @@ async fn test_unknown() {
     let (sender, kp, fx) = coin_registry::publish(&mut cluster, "unknown").await;
     let package = find::immutable(&fx).unwrap().0;
     let currency = find::address_owned_by(&fx, RTD_COIN_REGISTRY_ADDRESS.into()).unwrap();
-    let gas = fx.gas_object().0;
+    let gas = fx.gas_object().unwrap().0;
 
     coin_registry::finalize(&mut cluster, sender, &kp, package, "unknown", currency, gas).await;
     cluster.create_checkpoint().await;
@@ -160,7 +162,7 @@ async fn test_legacy() {
 
     cluster.create_checkpoint().await;
     let outputs = query_owned_outputs(&cluster, sender).await;
-    let gas = fx.gas_object().0;
+    let gas = fx.gas_object().unwrap().0;
 
     let metadata = query_metadata(&cluster, &outputs.coin_type.to_canonical_string(true)).await;
     assert_debug_snapshot!(metadata, @r###"
@@ -192,7 +194,7 @@ async fn test_regulated() {
     let (a, kp, fx) = coin_registry::publish(&mut cluster, "regulated").await;
     let package = find::immutable(&fx).unwrap().0;
     let currency = find::address_owned_by(&fx, RTD_COIN_REGISTRY_ADDRESS.into()).unwrap();
-    let gas = fx.gas_object().0;
+    let gas = fx.gas_object().unwrap().0;
 
     coin_registry::finalize(&mut cluster, a, &kp, package, "regulated", currency, gas).await;
     cluster.create_checkpoint().await;

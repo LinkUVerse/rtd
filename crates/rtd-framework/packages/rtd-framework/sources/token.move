@@ -17,7 +17,7 @@
 /// ```
 ///
 /// The Token system allows for fine-grained control over the actions performed
-/// on the token. And hence it is highly rtdtable for applications that require
+/// on the token. And hence it is highly suitable for applications that require
 /// control over the currency which a simple open-loop system can't provide.
 module rtd::token;
 
@@ -510,7 +510,7 @@ public fun remove_rule_config<T, Rule, Config: store>(
 /// Check if a config for a `Rule` is set in the `TokenPolicy` without
 /// checking the type of the `Config`.
 public fun has_rule_config<T, Rule>(self: &TokenPolicy<T>): bool {
-    df::exists_<RuleKey<Rule>>(&self.id, key<Rule>())
+    df::exists<RuleKey<Rule>>(&self.id, key<Rule>())
 }
 
 /// Check if a `Config` for a `Rule` is set in the `TokenPolicy` and that

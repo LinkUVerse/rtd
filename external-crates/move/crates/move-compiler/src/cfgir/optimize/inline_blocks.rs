@@ -6,12 +6,12 @@ use move_proc_macros::growing_stack;
 
 use crate::{
     cfgir::{
-        ast::remap_labels,
+        ast::{BasicBlocks, remap_labels},
         cfg::{CFG, MutForwardCFG},
     },
     diagnostics::DiagnosticReporter,
-    expansion::ast::Mutability,
-    hlir::ast::{BasicBlocks, Command_, FunctionSignature, Label, SingleType, Value, Var},
+    expansion::ast::{ModuleIdent, Mutability},
+    hlir::ast::{Command_, FunctionSignature, Label, SingleType, Value, Var},
     parser::ast::ConstantName,
     shared::unique_map::UniqueMap,
 };
@@ -22,7 +22,7 @@ pub fn optimize(
     _reporter: &DiagnosticReporter,
     _signature: &FunctionSignature,
     _locals: &UniqueMap<Var, (Mutability, SingleType)>,
-    _constants: &UniqueMap<ConstantName, Value>,
+    _constants: &BTreeMap<(ModuleIdent, ConstantName), Value>,
     cfg: &mut MutForwardCFG,
 ) -> bool {
     let changed = optimize_(cfg.start_block(), cfg.blocks_mut());

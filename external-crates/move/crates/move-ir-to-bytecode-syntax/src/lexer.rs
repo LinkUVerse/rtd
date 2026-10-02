@@ -20,7 +20,6 @@ pub enum Tok {
     U256Value,
     NameValue,
     NameBeginTyValue,
-    DotNameValue,
     ByteArrayValue,
     Exclaim,
     ExclaimEqual,
@@ -37,6 +36,7 @@ pub enum Tok {
     Period,
     Slash,
     Colon,
+    ColonColon,
     Semicolon,
     Less,
     LessEqual,
@@ -52,6 +52,7 @@ pub enum Tok {
     Abort,
     As,
     Assert,
+    Const,
     Copy,
     False,
     Freeze,
@@ -67,7 +68,10 @@ pub enum Tok {
     JumpIfFalse,
     Label,
     Let,
-    Module,
+    /// IR-side equivalent of Move source's `module` keyword. The distinct
+    /// spelling makes it visually obvious whether a snippet is Move source
+    /// or Move IR.
+    Mvir,
     Move,
     Native,
     Public,
@@ -76,13 +80,11 @@ pub enum Tok {
     Return,
     Struct,
     True,
-    VecPack(u64),
     VecLen,
     VecImmBorrow,
     VecMutBorrow,
     VecPushBack,
     VecPopBack,
-    VecUnpack(u64),
     VecSwap,
     LBrace,
     Pipe,
@@ -226,20 +228,14 @@ impl<'input> Lexer<'input> {
                     match &text[len..].chars().next() {
                         Some('"') => {
                             // Special case for ByteArrayValue: h\"[0-9A-Fa-f]*\"
-                            let mut bvlen = 0;
-                            if name == "h" && {
-                                bvlen = get_byte_array_value_len(&text[(len + 1)..]);
-                                bvlen > 0
-                            } {
-                                (Tok::ByteArrayValue, 2 + bvlen)
+                            let bvlen = if name == "h" {
+                                get_byte_array_value_len(&text[(len + 1)..])
                             } else {
-                                (get_name_token(name), len)
-                            }
-                        }
-                        Some('.') => {
-                            let len2 = get_name_len(&text[(len + 1)..]);
-                            if len2 > 0 {
-                                (Tok::DotNameValue, len + 1 + len2)
+                                0
+                            };
+
+                            if bvlen > 0 {
+                                (Tok::ByteArrayValue, 2 + bvlen)
                             } else {
                                 (get_name_token(name), len)
                             }
@@ -251,21 +247,7 @@ impl<'input> Lexer<'input> {
                             "vec_push_back" => (Tok::VecPushBack, len),
                             "vec_pop_back" => (Tok::VecPopBack, len),
                             "vec_swap" => (Tok::VecSwap, len),
-                            _ => {
-                                if let Some(stripped) = name.strip_prefix("vec_pack_") {
-                                    match stripped.parse::<u64>() {
-                                        Ok(num) => (Tok::VecPack(num), len),
-                                        Err(_) => (Tok::NameBeginTyValue, len + 1),
-                                    }
-                                } else if let Some(stripped) = name.strip_prefix("vec_unpack_") {
-                                    match stripped.parse::<u64>() {
-                                        Ok(num) => (Tok::VecUnpack(num), len),
-                                        Err(_) => (Tok::NameBeginTyValue, len + 1),
-                                    }
-                                } else {
-                                    (Tok::NameBeginTyValue, len + 1)
-                                }
-                            }
+                            _ => (Tok::NameBeginTyValue, len + 1),
                         },
                         Some('(') => match name {
                             "assert" => (Tok::Assert, len + 1),
@@ -339,7 +321,13 @@ impl<'input> Lexer<'input> {
             '-' => (Tok::Minus, 1),
             '.' => (Tok::Period, 1),
             '/' => (Tok::Slash, 1),
-            ':' => (Tok::Colon, 1),
+            ':' => {
+                if text.starts_with("::") {
+                    (Tok::ColonColon, 2)
+                } else {
+                    (Tok::Colon, 1)
+                }
+            }
             ';' => (Tok::Semicolon, 1),
             '^' => (Tok::Caret, 1),
             '{' => (Tok::LBrace, 1),
@@ -418,6 +406,7 @@ fn get_name_token(name: &str) -> Tok {
         "_" => Tok::Underscore,
         "abort" => Tok::Abort,
         "as" => Tok::As,
+        "const" => Tok::Const,
         "copy" => Tok::Copy,
         "false" => Tok::False,
         "freeze" => Tok::Freeze,
@@ -434,7 +423,7 @@ fn get_name_token(name: &str) -> Tok {
         "jump_if_false" => Tok::JumpIfFalse,
         "label" => Tok::Label,
         "let" => Tok::Let,
-        "module" => Tok::Module,
+        "mvir" => Tok::Mvir,
         "native" => Tok::Native,
         "public" => Tok::Public,
         "return" => Tok::Return,

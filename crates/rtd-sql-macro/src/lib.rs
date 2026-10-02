@@ -2,18 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{
-    Error, Expr, LitStr, Result, Token, Type,
-    parse::{Parse, ParseStream},
-    parse_macro_input,
-    punctuated::Punctuated,
-};
 
-use crate::{
-    lexer::Lexer,
-    parser::{Format, Parser},
-};
+use quote::quote;
+use syn::Error;
+use syn::Expr;
+use syn::LitStr;
+use syn::Result;
+use syn::Token;
+use syn::Type;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::parse_macro_input;
+use syn::punctuated::Punctuated;
+
+use crate::lexer::Lexer;
+use crate::parser::Format;
+use crate::parser::Parser;
 
 mod lexer;
 mod parser;
@@ -122,7 +126,9 @@ pub fn sql(input: TokenStream) -> TokenStream {
         ::diesel::dsl::sql::<#return_>(#head)
     };
 
-    for (expr, (ty, suffix)) in binds.iter().zip(tail.into_iter()) {
+    // Intentional zip: proc-macro crate, zip_debug_eq not applicable at compile time
+    #[allow(clippy::disallowed_methods)]
+    for (expr, (ty, suffix)) in binds.iter().zip(tail) {
         tokens.extend(if let Some(ty) = ty {
             quote! {
                 .bind::<::diesel::sql_types::#ty, _>(#expr)
@@ -180,7 +186,9 @@ pub fn query(input: TokenStream) -> TokenStream {
         ::rtd_pg_db::query::Query::new(#head)
     };
 
-    for (expr, (ty, suffix)) in binds.iter().zip(tail.into_iter()) {
+    // Intentional zip: proc-macro crate, zip_debug_eq not applicable at compile time
+    #[allow(clippy::disallowed_methods)]
+    for (expr, (ty, suffix)) in binds.iter().zip(tail) {
         tokens.extend(if let Some(ty) = ty {
             // If there is a type, this interpolation is for a bind.
             quote! {

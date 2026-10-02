@@ -4,7 +4,7 @@
 use clap::Parser;
 use indoc::formatdoc;
 use move_cli::base::new;
-use move_package_alt::package::layout::SourcePackageLayout;
+use move_package_alt::SourcePackageLayout;
 use std::{
     fs::create_dir_all,
     path::{Path, PathBuf},
@@ -29,9 +29,6 @@ impl New {
                 /// Module: {name}
                 module {name}::{name};
                 */
-
-                // For Move coding conventions, see
-                // https://docs.rtd.io/concepts/rtd-move-concepts/conventions
 
                 "#,
             ),

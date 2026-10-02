@@ -9,8 +9,6 @@ use crate::{
         metering::{self, translation_meter::TranslationMeter},
     },
 };
-use rtd_types::error::ExecutionError;
-
 pub mod ast;
 pub mod invariant_checks;
 pub mod translate;
@@ -18,12 +16,12 @@ pub mod verify;
 
 pub fn translate_and_verify<Mode: ExecutionMode>(
     meter: &mut TranslationMeter<'_, '_>,
-    env: &env::Env,
+    env: &env::Env<Mode>,
     lt: L::Transaction,
-) -> Result<ast::Transaction, ExecutionError> {
+) -> Result<ast::Transaction, Mode::Error> {
     let mut ast = translate::transaction::<Mode>(env, lt)?;
-    metering::typing::meter(meter, &ast)?;
+    metering::typing::meter::<Mode>(meter, env.protocol_config, &ast)?;
     verify::transaction::<Mode>(env, &mut ast)?;
-    invariant_checks::transaction::<Mode>(env, &ast)?;
+    invariant_checks::transaction::<Mode>(env, &ast, ast.unified_linkage.as_ref())?;
     Ok(ast)
 }

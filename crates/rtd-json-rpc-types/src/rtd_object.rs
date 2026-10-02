@@ -23,20 +23,19 @@ use serde_with::serde_as;
 
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::{
-    ObjectDigest, ObjectID, ObjectInfo, ObjectRef, ObjectType, SequenceNumber, RtdAddress,
+    ObjectDigest, ObjectID, ObjectInfo, ObjectRef, ObjectType, RtdAddress, SequenceNumber,
     TransactionDigest,
 };
 use rtd_types::error::{
-    ExecutionError, RtdErrorKind, RtdObjectResponseError, RtdResult, UserInputError,
-    UserInputResult,
+    RtdErrorKind, RtdObjectResponseError, RtdResult, UserInputError, UserInputResult,
 };
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::move_package::{MovePackage, TypeOrigin, UpgradeInfo};
 use rtd_types::object::{Data, MoveObject, Object, ObjectInner, ObjectRead, Owner};
 use rtd_types::rtd_serde::BigInt;
-use rtd_types::rtd_serde::SequenceNumber as AsSequenceNumber;
 use rtd_types::rtd_serde::RtdStructTag;
+use rtd_types::rtd_serde::SequenceNumber as AsSequenceNumber;
 
 use crate::{Page, RtdMoveStruct, RtdMoveValue};
 
@@ -166,7 +165,7 @@ impl TryFrom<RtdObjectResponse> for ObjectInfo {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Eq, PartialEq)]
 pub struct DisplayFieldsResponse {
-    pub data: Option<BTreeMap<String, String>>,
+    pub data: Option<BTreeMap<String, Value>>,
     pub error: Option<RtdObjectResponseError>,
 }
 
@@ -203,7 +202,7 @@ pub struct RtdObjectData {
     pub storage_rebate: Option<u64>,
     /// The Display metadata for frontend UI rendering, default to be None unless RtdObjectDataOptions.showContent is set to true
     /// This can also be None if the struct type does not have Display defined
-    /// See more details in <https://forums.rtd.io/t/nft-object-display-proposal/4872>
+    /// Display fields are defined by the object's Move type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display: Option<DisplayFieldsResponse>,
     /// Move object content or package content, default to be None unless RtdObjectDataOptions.showContent is set to true
@@ -253,7 +252,9 @@ impl RtdObjectData {
                 p.id,
                 self.version,
                 p.module_map,
-                protocol_config.max_move_package_size(),
+                // Package is published, so no need to bound (and it may be a system package so may
+                // exceed normal publish limits)
+                u64::MAX,
                 p.type_origin_table,
                 p.linkage_table,
             )?),
@@ -1045,22 +1046,6 @@ impl From<MovePackage> for RtdRawMovePackage {
             type_origin_table: p.type_origin_table().clone(),
             linkage_table: p.linkage_table().clone(),
         }
-    }
-}
-
-impl RtdRawMovePackage {
-    pub fn to_move_package(
-        &self,
-        max_move_package_size: u64,
-    ) -> Result<MovePackage, ExecutionError> {
-        MovePackage::new(
-            self.id,
-            self.version,
-            self.module_map.clone(),
-            max_move_package_size,
-            self.type_origin_table.clone(),
-            self.linkage_table.clone(),
-        )
     }
 }
 

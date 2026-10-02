@@ -1,9 +1,39 @@
 ---
 title: Rtd Trace Analysis
-description: Use the Rtd CLI to analyze transaction traces.
+description: >-
+  Use the Rtd CLI `analyze-trace` command to analyze transaction trace files and
+  produce gas profiles for understanding transaction gas consumption.
+keywords:
+  - rtd cli
+  - trace analysis
+  - gas profiling
+  - transaction traces
+  - debugging
+goal:
+  description: 'Reader can look up trace analysis command syntax, flags, and usage examples'
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - pattern: '```'
+      min: 1
+      label: Has command examples
+    - pattern: 'rtd '
+      min: 2
+      label: Shows CLI command usage
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Rtd Trace Analysis in Rtd?
+  - What are the available rtd trace analysis commands?
+  - What flags does rtd trace analysis support?
+answer: Use the Rtd CLI to analyze transaction traces.
 ---
 
-[Replaying a transaction](./replay.mdx) generates a trace file that contains detailed information about the execution of the transaction, such as gas usage, functions called, instructions executed, and more. Use the Rtd CLI to analyze a trace file and extract useful insights.
+[Replaying a transaction](/references/cli/replay) generates a trace file that contains detailed information about the execution of the transaction, such as gas usage, functions called, instructions executed, and more. Use the Rtd CLI to analyze a trace file and extract useful insights.
 
 :::info
 
@@ -43,4 +73,4 @@ In both views, click the top section and drag to zoom in or out over different s
 
 **Sandwich** view shows a list of discrete values that correspond to gas consumption per function. The **Total** value shows the gas cost incurred in all functions called by the function. **Self** shows the gas cost for only the given function.
 
-Observing a transaction's gas consumption provides insight into the expected gas cost of a package. During package development, you can [run a local network](/guides/developer/rtd-101/local-network.mdx) and publish your package locally. Then, create a transaction that calls your package and run the profiler on that transaction to see a breakdown of the gas cost.
+Observing a transaction's gas consumption provides insight into the expected gas cost of a package. During package development, you can [run a local network](/getting-started/onboarding/local-network) and publish your package locally. Then, create a transaction that calls your package and run the profiler on that transaction to see a breakdown of the gas cost.

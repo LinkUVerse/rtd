@@ -6,6 +6,7 @@ use std::{
     collections::BTreeMap,
     io::{BufRead, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use clap::ArgAction;
@@ -19,12 +20,10 @@ use move_compiler::{
 use move_core_types::{account_address::AccountAddress, identifier::Identifier};
 use move_model_2::source_model;
 use move_package_alt::{
-    graph::NamedAddress,
-    schema::{EnvironmentName, ModeName, OriginalID},
+    MoveFlavor, NamedAddress, PackageLoader, RootPackage,
+    schema::{Environment, EnvironmentName, ModeName, OriginalID},
 };
 use move_symbol_pool::Symbol;
-
-use move_package_alt::{flavor::MoveFlavor, package::RootPackage, schema::Environment};
 
 use crate::{
     build_plan::BuildPlan,
@@ -59,6 +58,10 @@ pub struct BuildConfig {
     #[clap(name = "force-recompilation", long = "force", global = true)]
     pub force_recompilation: bool,
 
+    /// Allow building, even if some cached git dependencies in `~/.move` are modified
+    #[clap(name = "allow-dirty", long = "allow-dirty", global = true)]
+    pub allow_dirty: bool,
+
     /// Default flavor for move compilation, if not specified in the package's config
     #[clap(long = "default-move-flavor", global = true)]
     pub default_flavor: Option<Flavor>,
@@ -66,10 +69,6 @@ pub struct BuildConfig {
     /// Default edition for move compilation, if not specified in the package's config
     #[clap(long = "default-move-edition", global = true)]
     pub default_edition: Option<Edition>,
-
-    /// Optional location to save the lock file to, if package resolution succeeds.
-    #[clap(skip)]
-    pub lock_file: Option<PathBuf>,
 
     /// If set, ignore any compiler warnings
     #[clap(long = move_compiler::command_line::SILENCE_WARNINGS, global = true)]
@@ -103,6 +102,7 @@ pub struct BuildConfig {
 
     /// Forces use of lock file without checking if it needs to be updated
     /// (regenerates it only if it doesn't exist)
+    /// TODO(pkg-alt): Remove this as this is not used (and has no usage, OR rename to ignore-digests)
     #[clap(skip)]
     pub force_lock_file: bool,
 
@@ -112,7 +112,7 @@ pub struct BuildConfig {
     pub root_as_zero: bool,
 
     #[clap(
-        long = "environment",
+        long = "build-env",
         short = 'e',
         global = true,
         help = "Environment to use for building packages"
@@ -122,17 +122,48 @@ pub struct BuildConfig {
     /// If set, any dependencies that are not published will have their address set to 0x0.
     #[clap(skip)]
     pub set_unpublished_deps_to_zero: bool,
+
+    /// Path to ephemeral publication file. When provided, uses ephemeral addresses for
+    /// compilation instead of addresses from the lock file.
+    #[clap(long, global = true)]
+    pub pubfile_path: Option<PathBuf>,
 }
 
 impl BuildConfig {
+    pub async fn check_package<F: MoveFlavor, W: Write + Send>(
+        &self,
+        path: &Path,
+        env: &Environment,
+        flavor: F,
+        writer: &mut W,
+    ) -> anyhow::Result<()> {
+        let root_pkg: RootPackage<F> = self.package_loader(path, env, flavor).load().await?;
+        BuildPlan::create(&root_pkg, self)?.check(writer)
+    }
+
     pub async fn compile_package<F: MoveFlavor, W: Write + Send>(
         &self,
         path: &Path,
         env: &Environment,
+        flavor: F,
         writer: &mut W,
     ) -> anyhow::Result<CompiledPackage> {
-        let root_pkg = RootPackage::<F>::load(path, env.clone(), self.mode_set()).await?;
+        let root_pkg: RootPackage<F> = self.package_loader(path, env, flavor).load().await?;
         BuildPlan::create(&root_pkg, self)?.compile(writer, |compiler| compiler)
+    }
+
+    /// Create a [PackageLoader] for the package at `path` in environment `env` using the
+    /// configuration options from `self`
+    pub fn package_loader<F: MoveFlavor>(
+        &self,
+        path: &Path,
+        env: &Environment,
+        flavor: impl Into<Arc<F>>,
+    ) -> PackageLoader<F> {
+        PackageLoader::new(path, env.clone(), flavor)
+            .modes(self.mode_set())
+            .allow_dirty(self.allow_dirty)
+            .output_path(self.install_dir.clone())
     }
 
     /// Migrate the package at `path`.
@@ -140,12 +171,13 @@ impl BuildConfig {
         mut self,
         path: &Path,
         env: Environment,
+        flavor: F,
         writer: &mut W,
         reader: &mut R,
     ) -> anyhow::Result<()> {
         // we set test to migrate all the code
         self.test_mode = true;
-        let root_pkg = RootPackage::<F>::load(path, env, self.mode_set()).await?;
+        let root_pkg: RootPackage<F> = self.package_loader(path, &env, flavor).load().await?;
         let build_plan = BuildPlan::create(&root_pkg, &self)?;
 
         migrate(build_plan, writer, reader)?;
@@ -156,9 +188,10 @@ impl BuildConfig {
         &self,
         path: &Path,
         env: Environment,
+        flavor: F,
         writer: &mut W,
     ) -> anyhow::Result<source_model::Model> {
-        let root_pkg = RootPackage::<F>::load(path, env, self.mode_set()).await?;
+        let root_pkg: RootPackage<F> = self.package_loader(path, &env, flavor).load().await?;
         self.move_model_from_root_pkg(&root_pkg, writer).await
     }
 

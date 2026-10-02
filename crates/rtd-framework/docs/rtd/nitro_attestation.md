@@ -90,7 +90,7 @@ Nitro Attestation Document defined for AWS.
 <code><a href="../rtd/nitro_attestation.md#rtd_nitro_attestation_module_id">module_id</a>: vector&lt;u8&gt;</code>
 </dt>
 <dd>
- Isrtdng Nitro hypervisor module ID.
+ Issuing Nitro hypervisor module ID.
 </dd>
 <dt>
 <code><a href="../rtd/nitro_attestation.md#rtd_nitro_attestation_timestamp">timestamp</a>: u64</code>
@@ -287,8 +287,7 @@ may abort with errors described above.
 
 Returns a list of mapping PCREntry containg the index and the PCR bytes.
 AWS supports PCR0-31. Required PCRs (index 0-4 & 8) are always included regardless of their
-value. In devnet and testnet, additional custom PCRs (index 5-7, 9-31) are also included if
-they are nonzeros. In mainnet, only required PCRs (index 0-4 & 8) are included.
+value. Additional custom PCRs (index 5-7, 9-31) are also included if they are nonzeros.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/nitro_attestation.md#rtd_nitro_attestation_pcrs">pcrs</a>(attestation: &<a href="../rtd/nitro_attestation.md#rtd_nitro_attestation_NitroAttestationDocument">rtd::nitro_attestation::NitroAttestationDocument</a>): &vector&lt;<a href="../rtd/nitro_attestation.md#rtd_nitro_attestation_PCREntry">rtd::nitro_attestation::PCREntry</a>&gt;

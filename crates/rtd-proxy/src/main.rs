@@ -1,8 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use clap::Parser;
-use std::env;
 use rtd_proxy::config::ProxyConfig;
 use rtd_proxy::{
     admin::{
@@ -13,6 +12,7 @@ use rtd_proxy::{
     histogram_relay, metrics,
 };
 use rtd_tls::TlsAcceptor;
+use std::env;
 use telemetry_subscribers::TelemetryConfig;
 use tracing::info;
 
@@ -49,6 +49,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let config: ProxyConfig = load(args.config)?;
+    ensure!(
+        !config.remote_write.url.trim().is_empty(),
+        "remote-write.url must name an explicitly configured metrics endpoint"
+    );
 
     info!(
         "listen on {:?} send to {:?}",

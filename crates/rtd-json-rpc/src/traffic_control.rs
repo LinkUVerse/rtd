@@ -6,13 +6,13 @@ use futures::FutureExt;
 use jsonrpsee::MethodResponse;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
 use jsonrpsee::types::{ErrorCode, ErrorObject, Id};
-use std::net::IpAddr;
-use std::time::SystemTime;
-use std::{net::SocketAddr, sync::Arc};
 use rtd_core::traffic_controller::{TrafficController, parse_ip, policies::TrafficTally};
 use rtd_json_rpc_api::TRANSACTION_EXECUTION_CLIENT_ERROR_CODE;
 use rtd_types::traffic_control::ClientIdSource;
 use rtd_types::traffic_control::Weight;
+use std::net::IpAddr;
+use std::time::SystemTime;
+use std::{net::SocketAddr, sync::Arc};
 use tracing::error;
 
 const TOO_MANY_REQUESTS_MSG: &str = "Too many requests";
@@ -94,10 +94,11 @@ async fn handle_traffic_resp(
         // such as `rtd_executeTransactionBlock`, as this can enable
         // node operators who wish to rate limit their transcation
         // traffic and incentivize high volume clients to choose a
-        // rtdtable rpc provider (or run their own). Later we may want
+        // suitable rpc provider (or run their own). Later we may want
         // to provide a weight distribution based on the method being called.
         spam_weight: Weight::one(),
         timestamp: SystemTime::now(),
+        method: None,
     });
 }
 

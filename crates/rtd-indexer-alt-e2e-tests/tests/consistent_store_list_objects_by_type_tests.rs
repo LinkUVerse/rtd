@@ -3,19 +3,24 @@
 
 use std::collections::BTreeMap;
 
-use move_core_types::{ident_str, language_storage::StructTag, u256::U256};
-use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::{
-    ListObjectsByTypeRequest, consistent_service_client::ConsistentServiceClient,
-};
-use rtd_indexer_alt_e2e_tests::{FullCluster, find};
-use rtd_types::{
-    RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
-    base_types::{ObjectRef, RtdAddress},
-    crypto::get_account_key_pair,
-    effects::TransactionEffectsAPI,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{Transaction, TransactionData},
-};
+use move_core_types::ident_str;
+use move_core_types::language_storage::StructTag;
+use move_core_types::u256::U256;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::ListObjectsByTypeRequest;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::consistent_service_client::ConsistentServiceClient;
+use rtd_types::RTD_FRAMEWORK_ADDRESS;
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::get_account_key_pair;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::find;
 
 /// 5 RTD gas budget
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;

@@ -1,29 +1,34 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    collections::BTreeMap,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
-};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use anyhow::Context as _;
-use backoff::{Error as BE, ExponentialBackoff};
-use futures::{future::try_join_all, stream};
-use rtd_futures::stream::{Break, TrySpawnStreamExt};
-use rtd_futures::{future::with_slow_future_monitor, service::Service};
+use backoff::Error as BE;
+use backoff::ExponentialBackoff;
+use futures::future::try_join_all;
+use futures::stream;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_futures::future::with_slow_future_monitor;
+use rtd_futures::service::Service;
+use rtd_futures::stream::Break;
+use rtd_futures::stream::TrySpawnStreamExt;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::error;
+use tracing::info;
+use tracing::warn;
 
 use crate::db::Db;
-
-use super::{
-    FormalSnapshot, LiveObjects, RestorerMetrics,
-    format::{EpochManifest, FileMetadata, FileType},
-};
+use crate::restore::FormalSnapshot;
+use crate::restore::LiveObjects;
+use crate::restore::RestorerMetrics;
+use crate::restore::format::EpochManifest;
+use crate::restore::format::FileMetadata;
+use crate::restore::format::FileType;
 
 /// Wait at most this long between retries while fetching files from the snapshot.
 const MAX_RETRY_INTERVAL: Duration = Duration::from_secs(60);
@@ -108,7 +113,7 @@ pub(super) fn broadcaster(
                     // Send it to all subscribers who are not restored yet.
                     let futures = subscribers
                         .iter()
-                        .zip(restored)
+                        .zip_debug_eq(restored)
                         .filter(|(_, restored)| !*restored)
                         .map(|((_, s), _)| s.send(objects.clone()));
 

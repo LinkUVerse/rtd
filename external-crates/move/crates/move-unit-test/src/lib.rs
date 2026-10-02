@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod cargo_runner;
-pub mod extensions;
 pub mod test_reporter;
 pub mod test_runner;
+pub mod vm_test_setup;
 
-use crate::test_runner::TestRunner;
+use crate::{test_runner::TestRunner, vm_test_setup::VMTestSetup};
 use anyhow::{Result, bail};
 use clap::*;
 use move_binary_format::CompiledModule;
@@ -20,8 +20,6 @@ use move_compiler::{
     unit_test::{self, TestPlan},
 };
 use move_core_types::language_storage::ModuleId;
-use move_vm_runtime::native_functions::NativeFunctionTable;
-use move_vm_test_utils::gas_schedule::CostTable;
 use std::{collections::BTreeMap, io::Write, marker::Send, sync::Mutex};
 
 /// The default value bounding the amount of gas consumed in a test.
@@ -33,6 +31,8 @@ const DEFAULT_RAND_ITERS: u64 = 10;
 const RAND_NUM_ITERS_FLAG: &str = "rand-num-iters";
 const SEED_FLAG: &str = "seed";
 const TRACE_FLAG: &str = "trace";
+/// The default directory to output test traces to if `--trace` is enabled.
+pub const TRACE_DIR: &str = "traces";
 
 #[derive(Debug, Parser, Clone)]
 #[clap(author, version, about)]
@@ -40,6 +40,10 @@ pub struct UnitTestingConfig {
     /// Bound the gas limit for any one test. If using custom gas table, this is the max number of instructions.
     #[clap(name = "gas-limit", short = 'i', long = "gas-limit")]
     pub gas_limit: Option<u64>,
+
+    /// Bound the maximum size of a loaded package (in MB).
+    #[clap(name = "package-size", long = "package-size")]
+    pub package_size: Option<u64>,
 
     /// A filter string to determine which unit tests to run
     #[clap(name = "filter", short = 'f', long = "filter")]
@@ -123,8 +127,16 @@ pub struct UnitTestingConfig {
     pub deterministic_generation: bool,
 
     // Enable tracing for tests
-    #[clap(long = TRACE_FLAG)]
-    pub trace: bool,
+    #[clap(long = TRACE_FLAG, default_missing_value = "full", num_args = 0..=1)]
+    pub trace: Option<TraceType>,
+}
+
+#[derive(Debug, Clone, Default, clap::ValueEnum)]
+pub enum TraceType {
+    #[default]
+    Full,
+    InstructionOnly,
+    FunctionOnly,
 }
 
 fn format_module_id(
@@ -143,6 +155,7 @@ impl UnitTestingConfig {
     pub fn default_with_bound(bound: Option<u64>) -> Self {
         Self {
             gas_limit: bound.or(Some(DEFAULT_EXECUTION_BOUND)),
+            package_size: None,
             filter: None,
             num_threads: 8,
             report_statistics: None,
@@ -156,7 +169,7 @@ impl UnitTestingConfig {
             rand_num_iters: Some(DEFAULT_RAND_ITERS),
             seed: None,
             deterministic_generation: false,
-            trace: false,
+            trace: None,
         }
     }
 
@@ -226,11 +239,10 @@ impl UnitTestingConfig {
 
     /// Public entry point to Move unit testing as a library
     /// Returns `true` if all unit tests passed. Otherwise, returns `false`.
-    pub fn run_and_report_unit_tests<W: Write + Send>(
+    pub fn run_and_report_unit_tests<V: VMTestSetup + Sync, W: Write + Send>(
         &self,
         test_plan: TestPlan,
-        native_function_table: Option<NativeFunctionTable>,
-        cost_table: Option<CostTable>,
+        vm_test_setup: V,
         writer: W,
     ) -> Result<(W, bool)> {
         let shared_writer = Mutex::new(writer);
@@ -268,13 +280,14 @@ impl UnitTestingConfig {
         }
 
         writeln!(shared_writer.lock().unwrap(), "Running Move unit tests")?;
-        let trace_location = if self.trace {
-            Some("traces".to_string())
-        } else {
-            None
-        };
+        let trace_location = self
+            .trace
+            .as_ref()
+            .map(|trace_type| (trace_type.clone(), TRACE_DIR.to_string()));
         let mut test_runner = TestRunner::new(
             self.gas_limit.unwrap_or(DEFAULT_EXECUTION_BOUND),
+            // `package_size` is in MB; the VM takes bytes.
+            self.package_size.map(|mb| mb * 1_000_000),
             self.num_threads,
             self.report_stacktrace_on_abort,
             self.seed,
@@ -282,8 +295,7 @@ impl UnitTestingConfig {
             self.deterministic_generation,
             trace_location,
             test_plan,
-            native_function_table,
-            cost_table,
+            vm_test_setup,
         )
         .unwrap();
 

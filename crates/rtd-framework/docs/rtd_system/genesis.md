@@ -14,7 +14,6 @@ title: Module `rtd_system::genesis`
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -43,8 +42,8 @@ title: Module `rtd_system::genesis`
 <b>use</b> <a href="../rtd/vec_map.md#rtd_vec_map">rtd::vec_map</a>;
 <b>use</b> <a href="../rtd/vec_set.md#rtd_vec_set">rtd::vec_set</a>;
 <b>use</b> <a href="../rtd/versioned.md#rtd_versioned">rtd::versioned</a>;
-<b>use</b> <a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system::rtd_system</a>;
-<b>use</b> <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
+<b>use</b> <a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system::rtd_system</a>;
+<b>use</b> <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner">rtd_system::rtd_system_state_inner</a>;
 <b>use</b> <a href="../rtd_system/stake_subsidy.md#rtd_system_stake_subsidy">rtd_system::stake_subsidy</a>;
 <b>use</b> <a href="../rtd_system/staking_pool.md#rtd_system_staking_pool">rtd_system::staking_pool</a>;
 <b>use</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund">rtd_system::storage_fund</a>;
@@ -60,6 +59,7 @@ title: Module `rtd_system::genesis`
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
@@ -338,6 +338,16 @@ The <code><a href="../rtd_system/genesis.md#rtd_system_genesis_create">create</a
 
 
 
+<a name="rtd_system_genesis_ENotAValidator"></a>
+
+The validator address is not in the validator set.
+
+
+<pre><code><b>const</b> <a href="../rtd_system/genesis.md#rtd_system_genesis_ENotAValidator">ENotAValidator</a>: u64 = 2;
+</code></pre>
+
+
+
 <a name="rtd_system_genesis_create"></a>
 
 ## Function `create`
@@ -367,7 +377,7 @@ all the information we need in the system.
     // Ensure this is only called at <a href="../rtd_system/genesis.md#rtd_system_genesis">genesis</a>
     <b>assert</b>!(ctx.epoch() == 0, <a href="../rtd_system/genesis.md#rtd_system_genesis_ENotCalledAtGenesis">ENotCalledAtGenesis</a>);
     // Create all the `Validator` structs
-    <b>let</b> <b>mut</b> validators = vector[];
+    <b>let</b> <b>mut</b> validators = vector&lt;Validator&gt;[];
     genesis_validators.do!(|genesis_validator| {
         <b>let</b> <a href="../rtd_system/genesis.md#rtd_system_genesis_GenesisValidatorMetadata">GenesisValidatorMetadata</a> {
             name,
@@ -406,7 +416,7 @@ all the information we need in the system.
         );
         // Ensure that each <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> is unique
         <b>assert</b>!(
-            !<a href="../rtd_system/validator_set.md#rtd_system_validator_set_is_duplicate_validator">validator_set::is_duplicate_validator</a>(&validators, &<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>),
+            validators.all!(|v| v.rtd_address() != rtd_address && !v.is_duplicate(&<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>)),
             <a href="../rtd_system/genesis.md#rtd_system_genesis_EDuplicateValidator">EDuplicateValidator</a>,
         );
         validators.push_back(<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>);
@@ -421,7 +431,7 @@ all the information we need in the system.
     <a href="../rtd_system/genesis.md#rtd_system_genesis_allocate_tokens">allocate_tokens</a>(rtd_supply, allocations, &<b>mut</b> validators, ctx);
     // Activate all validators
     validators.do_mut!(|<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>| <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.activate(0));
-    <b>let</b> system_parameters = <a href="../rtd_system/sui_system_state_inner.md#rtd_system_rtd_system_state_inner_create_system_parameters">rtd_system_state_inner::create_system_parameters</a>(
+    <b>let</b> system_parameters = <a href="../rtd_system/rtd_system_state_inner.md#rtd_system_rtd_system_state_inner_create_system_parameters">rtd_system_state_inner::create_system_parameters</a>(
         genesis_chain_parameters.epoch_duration_ms,
         genesis_chain_parameters.stake_subsidy_start_epoch,
         // Validator committee parameters
@@ -482,8 +492,10 @@ all the information we need in the system.
             <b>let</b> allocation_balance = rtd_supply.split(amount_mist);
             <b>if</b> (staked_with_validator.is_some()) {
                 <b>let</b> validator_address = staked_with_validator.destroy_some();
-                <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_get_validator_mut">validator_set::get_validator_mut</a>(validators, validator_address);
-                <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.request_add_stake_at_genesis(
+                <b>let</b> validator_idx = validators
+                    .find_index!(|v| v.rtd_address() == validator_address)
+                    .destroy_or!(<b>abort</b> <a href="../rtd_system/genesis.md#rtd_system_genesis_ENotAValidator">ENotAValidator</a>);
+                validators[validator_idx].request_add_stake_at_genesis(
                     allocation_balance,
                     recipient_address,
                     ctx,

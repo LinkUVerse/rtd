@@ -1,15 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::str::FromStr;
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
+use move_core_types::identifier::Identifier;
+use move_core_types::language_storage::TypeTag;
 use prost_types::FieldMask;
-use serde::{Deserialize, Serialize};
 use rtd_rpc::client::Client;
 use rtd_rpc::proto::rtd::rpc::v2::{
     BatchGetObjectsRequest, GetObjectRequest, Object, get_object_result,
 };
+use serde::{Deserialize, Serialize};
 
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::{
@@ -17,20 +21,30 @@ use rtd_rpc::proto::rtd::rpc::v2::{
     SimulateTransactionRequest, Transaction, TransactionKind,
     simulate_transaction_request::TransactionChecks, transaction_kind,
 };
-use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
-use rtd_types::transaction::{ProgrammableTransaction, TransactionData};
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
+use rtd_types::transaction::{
+    Argument, CallArg, Command, FundsWithdrawalArg, ProgrammableTransaction, TransactionData,
+};
 
 use crate::errors::Error;
-use crate::types::ConstructionMetadata;
+use crate::types::{AuxData, ConstructionMetadata};
+pub use consolidate_to_fungible::ConsolidateAllStakedRtdToFungible;
+pub(crate) use consolidate_to_fungible::consolidate_to_fungible_pt;
+pub use merge_and_redeem::MergeAndRedeemFungibleStakedRtd;
+pub(crate) use merge_and_redeem::merge_and_redeem_fss_pt;
 pub use pay_coin::PayCoin;
-use pay_coin::pay_coin_pt;
+pub(crate) use pay_coin::{pay_coin_gasless_pt, pay_coin_pt};
 pub use pay_rtd::PayRtd;
-use pay_rtd::pay_rtd_pt;
+pub(crate) use pay_rtd::{pay_rtd_pt_ab_gas, pay_rtd_pt_coin_gas};
 pub use stake::Stake;
-use stake::stake_pt;
+pub(crate) use stake::{stake_pt_ab_gas, stake_pt_coin_gas};
 pub use withdraw_stake::WithdrawStake;
-use withdraw_stake::withdraw_stake_pt;
+pub(crate) use withdraw_stake::withdraw_stake_pt;
 
+mod consolidate_to_fungible;
+mod merge_and_redeem;
 mod pay_coin;
 mod pay_rtd;
 mod stake;
@@ -50,7 +64,40 @@ pub struct TransactionObjectData {
     /// Refers to the sum of the `Coin<RTD>` balance of the coins participating in the transaction;
     /// either as gas or as objects.
     pub total_rtd_balance: i128,
+    /// Gas budget. The PayCoin free-tier ("gasless") path sets this to `0` (with empty `gas_coins`)
+    /// as the sentinel that the node confirmed free-tier eligibility — no priced path produces a
+    /// zero budget. See [`TransactionObjectData::is_gasless`].
     pub budget: u64,
+    /// Amount to withdraw from address balance for payment
+    pub address_balance_withdrawal: u64,
+    /// Number of FungibleStakedRtd objects in the `objects` array (the rest are StakedRtd).
+    /// Used by ConsolidateAllStakedRtdToFungible to split objects for PTB construction.
+    pub fss_object_count: Option<u64>,
+    /// Pool tokens to redeem. None = redeem all.
+    /// Used by MergeAndRedeemFungibleStakedRtd.
+    ///
+    /// Forward-compat-only field: surfaced in metadata responses for older
+    /// clients, but new code reads `redeem_plan` exclusively when building
+    /// the payload. See `ConstructionMetadata::redeem_token_amount`.
+    pub redeem_token_amount: Option<u64>,
+    /// Mode-aware redeem plan (used by `MergeAndRedeemFungibleStakedRtd`).
+    /// `None` for other operations.
+    pub redeem_plan: Option<crate::types::RedeemPlan>,
+    /// Quote-time epoch to bind the transaction to (used by amount-sensitive
+    /// `MergeAndRedeemFungibleStakedRtd` modes). `None` for other operations.
+    pub bind_epoch: Option<u64>,
+}
+
+impl TransactionObjectData {
+    /// Free-tier ("gasless") sentinel. The PayCoin gasless path sets `budget == 0` with no gas
+    /// coins after the node confirms free-tier eligibility during simulation (see
+    /// `pay_coin::PayCoin::try_fetch_needed_objects`). No priced path ever produces a zero budget,
+    /// so this uniquely identifies a gasless transaction without needing a dedicated field. Callers
+    /// use it to zero the gas price, which is what makes the on-chain tx recognized as gasless
+    /// (`price == 0`).
+    pub fn is_gasless(&self) -> bool {
+        self.gas_coins.is_empty() && self.budget == 0
+    }
 }
 
 #[async_trait]
@@ -65,12 +112,14 @@ pub trait TryConstructTransaction {
 }
 
 #[enum_dispatch(TryConstructTransaction)]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum InternalOperation {
     PayRtd(PayRtd),
     PayCoin(PayCoin),
     Stake(Stake),
     WithdrawStake(WithdrawStake),
+    ConsolidateAllStakedRtdToFungible(ConsolidateAllStakedRtdToFungible),
+    MergeAndRedeemFungibleStakedRtd(MergeAndRedeemFungibleStakedRtd),
 }
 
 impl InternalOperation {
@@ -79,27 +128,80 @@ impl InternalOperation {
             InternalOperation::PayRtd(PayRtd { sender, .. })
             | InternalOperation::PayCoin(PayCoin { sender, .. })
             | InternalOperation::Stake(Stake { sender, .. })
-            | InternalOperation::WithdrawStake(WithdrawStake { sender, .. }) => *sender,
+            | InternalOperation::WithdrawStake(WithdrawStake { sender, .. })
+            | InternalOperation::ConsolidateAllStakedRtdToFungible(
+                ConsolidateAllStakedRtdToFungible { sender, .. },
+            )
+            | InternalOperation::MergeAndRedeemFungibleStakedRtd(
+                MergeAndRedeemFungibleStakedRtd { sender, .. },
+            ) => *sender,
+        }
+    }
+
+    /// Derive the out-of-band `AuxData` for this operation: the
+    /// handful of Rosetta-level labels `/parse` cannot reconstruct from the PTB
+    /// (PayCoin currency, FSS validator, FSS redeem mode + cap). `/metadata`
+    /// calls this to populate the wrapper.
+    pub fn aux(&self) -> AuxData {
+        match self {
+            InternalOperation::PayCoin(p) => AuxData::PayCoin {
+                currency: p.currency.clone(),
+            },
+            InternalOperation::ConsolidateAllStakedRtdToFungible(c) => AuxData::Consolidate {
+                validator: c.validator,
+            },
+            InternalOperation::MergeAndRedeemFungibleStakedRtd(m) => AuxData::MergeAndRedeem {
+                validator: m.validator,
+                redeem_mode: m.redeem_mode.clone(),
+                amount: m.amount,
+            },
+            // Fully reconstructable from the PTB — no aux data needed.
+            InternalOperation::PayRtd(_)
+            | InternalOperation::Stake(_)
+            | InternalOperation::WithdrawStake(_) => AuxData::None,
         }
     }
 
     /// Combine with ConstructionMetadata to form the TransactionData
     pub fn try_into_data(self, metadata: ConstructionMetadata) -> Result<TransactionData, Error> {
+        let use_addr_balance_gas = metadata.gas_coins.is_empty();
+        // Gasless ("free tier"): no gas coins and a zeroed gas price. `metadata` zeroes the gas
+        // price for the gasless case, so this uniquely distinguishes it from priced address-balance
+        // gas (which keeps `gas_price > 0`). Only PayCoin produces this shape.
+        let is_gasless = use_addr_balance_gas && metadata.gas_price == 0;
+        let withdrawal = metadata.address_balance_withdrawal;
         let pt = match self {
             Self::PayRtd(PayRtd {
+                sender,
                 recipients,
                 amounts,
-                ..
             }) => {
-                // For backwards compatibility: prefer objects (new format), fallback to extra_gas_coins (old format)
-                let coins_to_merge = if !metadata.objects.is_empty() {
+                let coins = if !metadata.objects.is_empty() {
                     &metadata.objects
                 } else {
                     &metadata.extra_gas_coins
                 };
-                pay_rtd_pt(recipients, amounts, coins_to_merge, &metadata.party_objects)?
+                if use_addr_balance_gas {
+                    pay_rtd_pt_ab_gas(
+                        sender,
+                        recipients,
+                        amounts,
+                        coins,
+                        &metadata.party_objects,
+                        withdrawal,
+                    )?
+                } else {
+                    pay_rtd_pt_coin_gas(
+                        recipients,
+                        amounts,
+                        coins,
+                        &metadata.party_objects,
+                        withdrawal,
+                    )?
+                }
             }
             Self::PayCoin(PayCoin {
+                sender,
                 recipients,
                 amounts,
                 ..
@@ -107,16 +209,32 @@ impl InternalOperation {
                 let currency = &metadata
                     .currency
                     .ok_or(anyhow!("metadata.coin_type is needed to PayCoin"))?;
-                pay_coin_pt(
-                    recipients,
-                    amounts,
-                    &metadata.objects,
-                    &metadata.party_objects,
-                    currency,
-                )?
+                if is_gasless {
+                    pay_coin_gasless_pt(
+                        sender,
+                        recipients,
+                        amounts,
+                        &metadata.objects,
+                        &metadata.party_objects,
+                        withdrawal,
+                        currency,
+                    )?
+                } else {
+                    pay_coin_pt(
+                        sender,
+                        recipients,
+                        amounts,
+                        &metadata.objects,
+                        &metadata.party_objects,
+                        withdrawal,
+                        currency,
+                    )?
+                }
             }
             InternalOperation::Stake(Stake {
-                validator, amount, ..
+                sender,
+                validator,
+                amount,
             }) => {
                 let (stake_all, amount) = match amount {
                     Some(amount) => (false, amount),
@@ -130,34 +248,160 @@ impl InternalOperation {
                         (true, metadata.total_coin_value as u64 - metadata.budget)
                     }
                 };
-                // For backwards compatibility: prefer objects (new format), fallback to extra_gas_coins (old format)
-                let coins_to_merge = if !metadata.objects.is_empty() {
+                let coins = if !metadata.objects.is_empty() {
                     &metadata.objects
                 } else {
                     &metadata.extra_gas_coins
                 };
-                stake_pt(
-                    validator,
-                    amount,
-                    stake_all,
-                    coins_to_merge,
-                    &metadata.party_objects,
-                )?
+                if use_addr_balance_gas {
+                    stake_pt_ab_gas(
+                        sender,
+                        validator,
+                        amount,
+                        stake_all,
+                        coins,
+                        &metadata.party_objects,
+                        withdrawal,
+                    )?
+                } else {
+                    stake_pt_coin_gas(
+                        validator,
+                        amount,
+                        stake_all,
+                        coins,
+                        &metadata.party_objects,
+                        withdrawal,
+                    )?
+                }
             }
             InternalOperation::WithdrawStake(WithdrawStake { stake_ids, .. }) => {
                 let withdraw_all = stake_ids.is_empty();
                 withdraw_stake_pt(metadata.objects, withdraw_all)?
             }
+            InternalOperation::ConsolidateAllStakedRtdToFungible(
+                ConsolidateAllStakedRtdToFungible { sender, .. },
+            ) => {
+                // objects[0..fss_count] are FungibleStakedRtd, objects[fss_count..] are StakedRtd
+                let fss_count = metadata.fss_object_count.unwrap_or(0) as usize;
+                let (fss_refs, staked_rtd_refs) = metadata
+                    .objects
+                    .split_at(fss_count.min(metadata.objects.len()));
+                consolidate_to_fungible_pt(sender, fss_refs.to_vec(), staked_rtd_refs.to_vec())?
+            }
+            InternalOperation::MergeAndRedeemFungibleStakedRtd(
+                MergeAndRedeemFungibleStakedRtd { sender, .. },
+            ) => {
+                let plan = metadata.redeem_plan.as_ref().ok_or(anyhow!(
+                    "redeem_plan required for MergeAndRedeemFungibleStakedRtd"
+                ))?;
+                merge_and_redeem_fss_pt(sender, metadata.objects, plan)?
+            }
         };
 
-        Ok(TransactionData::new_programmable(
-            metadata.sender,
-            metadata.gas_coins,
-            pt,
-            metadata.budget,
-            metadata.gas_price,
-        ))
+        let bind_epoch = metadata.bind_epoch;
+
+        if metadata.gas_coins.is_empty() {
+            let chain_id_str = metadata
+                .chain_id
+                .ok_or(anyhow!("chain_id required for address-balance gas"))?;
+            let digest = CheckpointDigest::from_str(&chain_id_str)
+                .map_err(|e| anyhow!("invalid chain_id: {e}"))?;
+            let chain_id = ChainIdentifier::from(digest);
+            let epoch = metadata
+                .epoch
+                .ok_or(anyhow!("epoch required for address-balance gas"))?;
+            // Pre-1.79 metadata can omit this; make it required after 1.79 is fully deployed.
+            let nonce = metadata.nonce.unwrap_or_else(rand::random::<u32>);
+
+            // For amount-sensitive plans, verify the metadata epoch matches
+            // the rate-quote epoch — otherwise the rate the off-chain quote
+            // used has rolled over since metadata fetch.
+            if let Some(want) = bind_epoch
+                && want != epoch
+            {
+                return Err(anyhow!(
+                    "redeem plan was quoted for epoch {want} but signing in epoch {epoch}; \
+                     re-fetch /construction/metadata"
+                )
+                .into());
+            }
+
+            let mut data = TransactionData::new_programmable_with_address_balance_gas(
+                metadata.sender,
+                pt,
+                metadata.budget,
+                metadata.gas_price,
+                chain_id,
+                epoch,
+                nonce,
+            );
+
+            // The default `new_programmable_with_address_balance_gas` sets
+            // `ValidDuring { min_epoch: epoch, max_epoch: epoch + 1 }`, so the
+            // tx can still execute in `epoch + 1` against a different exchange
+            // rate. Tighten to `min == max == bind_epoch` for amount-sensitive
+            // plans. This stays replay-protected (a one-epoch range satisfies
+            // `TransactionExpiration::is_replay_protected`, see
+            // `rtd-types/src/transaction.rs::is_replay_protected`).
+            if let Some(want) = bind_epoch {
+                use rtd_types::transaction::{TransactionDataAPI, TransactionExpiration};
+                if let TransactionExpiration::ValidDuring {
+                    chain,
+                    nonce,
+                    min_timestamp,
+                    max_timestamp,
+                    ..
+                } = *data.expiration()
+                {
+                    *data.expiration_mut() = TransactionExpiration::ValidDuring {
+                        min_epoch: Some(want),
+                        max_epoch: Some(want),
+                        min_timestamp,
+                        max_timestamp,
+                        chain,
+                        nonce,
+                    };
+                }
+            }
+
+            Ok(data)
+        } else {
+            let mut data = TransactionData::new_programmable(
+                metadata.sender,
+                metadata.gas_coins,
+                pt,
+                metadata.budget,
+                metadata.gas_price,
+            );
+            if let Some(epoch) = bind_epoch {
+                use rtd_types::transaction::{TransactionDataAPI, TransactionExpiration};
+                *data.expiration_mut() = TransactionExpiration::Epoch(epoch);
+            }
+            Ok(data)
+        }
     }
+}
+
+/// Withdraw from address balance as a Coin<T>.
+/// FundsWithdrawal → coin::redeem_funds → Coin<T>
+pub(crate) fn withdraw_coin_from_address_balance(
+    builder: &mut rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder,
+    amount: u64,
+    type_tag: TypeTag,
+) -> anyhow::Result<Argument> {
+    let withdrawal_arg = builder.input(CallArg::FundsWithdrawal(
+        FundsWithdrawalArg::balance_from_sender(amount, type_tag.clone()),
+    ))?;
+
+    let coin = builder.command(Command::move_call(
+        RTD_FRAMEWORK_PACKAGE_ID,
+        Identifier::new("coin")?,
+        Identifier::new("redeem_funds")?,
+        vec![type_tag],
+        vec![withdrawal_arg],
+    ));
+
+    Ok(coin)
 }
 
 /// RPC auto-selects gas coins if empty, uses reference gas price if None, and estimates budget if None.
@@ -221,6 +465,13 @@ async fn simulate_transaction(
     let resolved_tx = executed_tx.transaction();
     let gas_payment = resolved_tx.gas_payment();
 
+    // When gas_payment has no objects, the transaction uses address-balance gas.
+    // Skip the batch fetch and return empty gas coins to signal this.
+    let gas_objects = gas_payment.objects();
+    if gas_objects.is_empty() {
+        return Ok((gas_payment.budget(), vec![]));
+    }
+
     let mut batch_request =
         BatchGetObjectsRequest::default().with_read_mask(FieldMask::from_paths([
             "object_id",
@@ -229,7 +480,7 @@ async fn simulate_transaction(
             "balance",
         ]));
 
-    for obj_ref in gas_payment.objects() {
+    for obj_ref in gas_objects {
         let get_request = GetObjectRequest::default()
             .with_object_id(obj_ref.object_id().to_string())
             .with_version(obj_ref.version());

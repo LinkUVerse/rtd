@@ -1,9 +1,0 @@
-# Copyright (c) LinkU Labs, Inc.
-# SPDX-License-Identifier: Apache-2.0
-
-chain_id=$(rtd client --client.config $CONFIG chain-identifier)
-echo "[environments]" >> test_pkg/Move.toml
-echo "localnet = \"$chain_id\"" >> test_pkg/Move.toml
-
-rtd client --client.config $CONFIG publish test_pkg --dry-run --json > output.json
-jq -e . output.json >/dev/null

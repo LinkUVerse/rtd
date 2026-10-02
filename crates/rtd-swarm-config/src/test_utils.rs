@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::network_config::NetworkConfig;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
-use std::collections::HashMap;
 use rtd_types::{
     base_types::AuthorityName,
     committee::{Committee, EpochId, StakeUnit},
@@ -17,6 +15,8 @@ use rtd_types::{
         VerifiedCheckpointContents, VersionedFullCheckpointContents,
     },
 };
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
+use std::collections::HashMap;
 
 pub struct CommitteeFixture {
     epoch: EpochId,
@@ -58,7 +58,7 @@ impl CommitteeFixture {
     }
 
     pub fn from_network_config(network_config: &NetworkConfig) -> Self {
-        let committee = network_config.genesis.committee().unwrap();
+        let committee = network_config.genesis.committee();
         Self {
             epoch: committee.epoch,
             validators: committee

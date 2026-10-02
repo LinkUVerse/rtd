@@ -1,0 +1,59 @@
+---
+title: Design
+description: Upstream Sui DeepBook Predict architecture for evaluating a possible RTD port.
+keywords:
+  - deepbook predict design
+  - prediction market
+  - upstream source design
+---
+
+This page describes the architecture of the upstream Sui DeepBook Predict source as a porting reference. It does not establish a deployment or an ABI on RTD. Any exact contract signature, numerical limit, or package version must be checked against the source revision selected for an RTD port.
+
+## Protocol shared objects {#shared-objects}
+
+The design separates four roles. `Registry` maps underlyings and expiries to markets and tracks capability permissions. `ProtocolConfig` holds changeable risk settings and gates. `PoolVault` manages pooled capital and queued liquidity requests. Each `ExpiryMarket` tracks one underlying and expiry, its positions and its payout exposure. This division lets an application discover a market through the registry while each market maintains its own trading and settlement state.
+
+The registry's administrative capabilities are distinct from a trader account. A publisher or administrator configures underlyings and permissions; a market lifecycle capability creates markets; a pool valuation capability starts a pool valuation; pause controls can stop risky flows. The precise capability types and authorization checks depend on the source version chosen for porting.
+
+## Funds and positions {#predict-manager}
+
+In the upstream design, an account wrapper holds a user's quote coin balance and an application data area. Predict stores positions under that account rather than publishing a new shared object for every position. Trading calls use account authorization, while settlement and some maintenance flows can be permissionless. This distinction matters for an RTD port: the account package and its authorization rules must be deployed and tested on the same chain as Predict.
+
+A position is identified by its market and order identity. Partial close may replace the current order identity, so an application must follow onchain events or state rather than assume that an original order ID always names the open remainder.
+
+## Oracle feeds {#oracle-feeds}
+
+The upstream design uses a separate oracle package, with a registry that binds an underlying to its canonical feed objects. The proposed price inputs include spot observations, forward prices, and a volatility surface. Quotes, live closes, pool valuation, and settlement consume different subsets of those inputs. A caller should resolve the binding for the deployment it is using and check source timestamps; an arbitrary object with the same type does not prove it is canonical.
+
+An RTD deployment would require actual oracle packages, authorized or otherwise validated writers, operational feed updates, and freshness checks. None is supplied merely by running an RTD node. Existing upstream Sui feed IDs or network endpoints are not RTD configuration.
+
+## Strikes and positions {#positions-and-ranges}
+
+The source design represents a strike as a tick on an absolute grid. A position uses lower and upper boundaries, with open-ended directional positions represented by sentinel boundaries. The chosen expiry market defines its tick and admission rules. Application code must use the exact grid and boundary convention from the deployed source when turning a displayed price into transaction arguments.
+
+## Pricing and settlement {#pricing-and-risk}
+
+Before minting, a client obtains a quote from the selected market and supplies bounds on total debit and fill price. A quote can become stale before execution as oracle observations or market state change. The contract also applies fee, size, exposure, pause, and time-window checks. A local dry run is useful preflight, but success still has to be established from the transaction result.
+
+At expiry, settlement records a terminal observation and payout liability. A winning position can then claim according to the contract's settled redemption path. The upstream design also allows some maintenance operations to be called without the trader's signature. The exact oracle fallback and settlement timing must be reviewed in the chosen source revision; no RTD oracle or market has yet been verified.
+
+### Fee components {#fee-components}
+
+The source model distinguishes a position premium from trading fees, builder attribution, subsidies, and possible congestion or inventory charges. A client should quote the all-in debit and enforce a maximum debit rather than infer the total from a displayed probability. The rates are deployment configuration, not constants that can be copied from an upstream network.
+
+## Pool liquidity {#vault-and-plp}
+
+Liquidity providers queue supply and withdrawal requests instead of exchanging pool shares synchronously. A valuation cycle snapshots market state, values the pool at that snapshot, and fills eligible requests. This permits valuation to span multiple transactions while trading and settlement follow the contract's own gates. A request receipt is therefore not proof that the queue has been filled; the eventual pool state and events must be checked.
+
+An RTD port would need to prove that the chosen quote coin, market liability accounting, share mint and burn rules, and queue recovery work against RTD framework types. No RTD PLP coin type or pool object ID is established by these pages.
+
+## Data flow {#data-flow}
+
+1. An operator deploys the packages and records a manifest for one RTD chain.
+2. The operator binds live oracle feeds, configures an underlying and market policy, and funds the pool.
+3. A user creates an account, deposits the configured quote coin, and discovers a market through the registry.
+4. The user quotes and mints within explicit cost and price bounds.
+5. Oracle updates and market maintenance allow settlement; users then redeem positions.
+6. Liquidity requests fill through the pool's valuation cycle.
+
+This is a source design sequence, not a working RTD public service. [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) lists what remains unverified.

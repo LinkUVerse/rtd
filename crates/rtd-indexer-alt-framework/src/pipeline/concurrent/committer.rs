@@ -1,24 +1,27 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use backoff::ExponentialBackoff;
-use rtd_futures::{
-    service::Service,
-    stream::{Break, TrySpawnStreamExt},
-};
+use rtd_futures::service::Service;
+use rtd_futures::stream::Break;
+use rtd_futures::stream::TrySpawnStreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
+use tracing::error;
+use tracing::info;
+use tracing::warn;
 
-use crate::{
-    metrics::{CheckpointLagMetricReporter, IndexerMetrics},
-    pipeline::{CommitterConfig, WatermarkPart},
-    store::Store,
-};
-
-use super::{BatchedRows, Handler};
+use crate::metrics::CheckpointLagMetricReporter;
+use crate::metrics::IndexerMetrics;
+use crate::pipeline::CommitterConfig;
+use crate::pipeline::WatermarkPart;
+use crate::pipeline::concurrent::BatchedRows;
+use crate::pipeline::concurrent::Handler;
+use crate::store::Store;
 
 /// If the committer needs to retry a commit, it will wait this long initially.
 const INITIAL_RETRY_INTERVAL: Duration = Duration::from_millis(100);
@@ -35,7 +38,7 @@ const MAX_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 /// watermark task.
 ///
 /// This task will shutdown if its receiver or sender channels are closed.
-pub(super) fn committer<H: Handler + 'static>(
+pub(super) fn committer<H: Handler>(
     handler: Arc<H>,
     config: CommitterConfig,
     rx: mpsc::Receiver<BatchedRows<H>>,
@@ -214,26 +217,27 @@ pub(super) fn committer<H: Handler + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    };
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
 
     use anyhow::ensure;
     use async_trait::async_trait;
     use rtd_types::full_checkpoint_content::Checkpoint;
     use tokio::sync::mpsc;
 
-    use crate::{
-        FieldCount,
-        metrics::IndexerMetrics,
-        mocks::store::*,
-        pipeline::{
-            Processor, WatermarkPart,
-            concurrent::{BatchStatus, BatchedRows, Handler},
-        },
-        store::CommitterWatermark,
-    };
+    use crate::FieldCount;
+    use crate::metrics::IndexerMetrics;
+    use crate::mocks::store::ConnectionFailure;
+    use crate::mocks::store::FallibleMockConnection;
+    use crate::mocks::store::FallibleMockStore;
+    use crate::pipeline::Processor;
+    use crate::pipeline::WatermarkPart;
+    use crate::pipeline::concurrent::BatchStatus;
+    use crate::pipeline::concurrent::BatchedRows;
+    use crate::pipeline::concurrent::Handler;
+    use crate::store::CommitterWatermark;
 
     use super::*;
 
@@ -263,7 +267,7 @@ mod tests {
 
     #[async_trait]
     impl Handler for DataPipeline {
-        type Store = MockStore;
+        type Store = FallibleMockStore;
         type Batch = Vec<Self::Value>;
 
         fn batch(
@@ -278,7 +282,7 @@ mod tests {
         async fn commit<'a>(
             &self,
             batch: &Self::Batch,
-            conn: &mut MockConnection<'a>,
+            conn: &mut FallibleMockConnection<'a>,
         ) -> anyhow::Result<usize> {
             for value in batch {
                 // If there's a delay, sleep for that duration
@@ -311,7 +315,7 @@ mod tests {
     }
 
     struct TestSetup {
-        store: MockStore,
+        store: FallibleMockStore,
         batch_tx: mpsc::Sender<BatchedRows<DataPipeline>>,
         watermark_rx: mpsc::Receiver<Vec<WatermarkPart>>,
         committer: Service,
@@ -323,7 +327,7 @@ mod tests {
     ///
     /// # Arguments
     /// * `store` - The mock store to use for testing
-    async fn setup_test(store: MockStore) -> TestSetup {
+    async fn setup_test(store: FallibleMockStore) -> TestSetup {
         let config = CommitterConfig::default();
         let metrics = IndexerMetrics::new(None, &Default::default());
 
@@ -351,7 +355,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_batch_processing() {
-        let mut setup = setup_test(MockStore::default()).await;
+        let mut setup = setup_test(FallibleMockStore::default()).await;
 
         // Send batches
         let batch1 = BatchedRows::from_vec(
@@ -430,7 +434,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_commit_with_retries_for_commit_failure() {
-        let mut setup = setup_test(MockStore::default()).await;
+        let mut setup = setup_test(FallibleMockStore::default()).await;
 
         // Create a batch with a single item that will fail once before succeeding
         let batch = BatchedRows::from_vec(
@@ -487,7 +491,7 @@ mod tests {
     #[tokio::test]
     async fn test_commit_with_retries_for_connection_failure() {
         // Create a batch with a single item
-        let store = MockStore {
+        let store = FallibleMockStore {
             connection_failure: Arc::new(Mutex::new(ConnectionFailure {
                 connection_failure_attempts: 1,
                 connection_delay_ms: 1_000, // Long connection delay for testing state between retry
@@ -548,7 +552,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_batch_handling() {
-        let mut setup = setup_test(MockStore::default()).await;
+        let mut setup = setup_test(FallibleMockStore::default()).await;
 
         let empty_batch = BatchedRows::from_vec(
             vec![], // Empty batch
@@ -585,7 +589,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_watermark_channel_closed() {
-        let setup = setup_test(MockStore::default()).await;
+        let setup = setup_test(FallibleMockStore::default()).await;
 
         let batch = BatchedRows::from_vec(
             vec![StoredData {

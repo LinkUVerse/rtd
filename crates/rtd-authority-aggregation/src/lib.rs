@@ -5,11 +5,11 @@ use futures::Future;
 use futures::{StreamExt, future::BoxFuture, stream::FuturesUnordered};
 use linku_metrics::monitored_future;
 
+use rtd_types::base_types::ConciseableName;
+use rtd_types::committee::{CommitteeTrait, StakeUnit};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use rtd_types::base_types::ConciseableName;
-use rtd_types::committee::{CommitteeTrait, StakeUnit};
 
 use tokio::time::timeout;
 

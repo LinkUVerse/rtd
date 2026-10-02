@@ -13,7 +13,11 @@ Tested with `ansible [core 2.13.4]` and:
 
 2. Add the target host to the [Ansible Inventory](./inventory.yaml)
 
-3. Update the `rtd_release` var in the [Ansible Inventory](./inventory.yaml)
+3. Set `rtd_node_binary_url` to a trusted HTTPS artifact URL and
+   `rtd_node_binary_sha256` to its independently verified SHA-256 digest in the
+   [Ansible Inventory](./inventory.yaml). RTD does not currently have a public
+   release endpoint. The playbook fails before provisioning if either value is
+   missing.
 
 4. Update [validator.yaml](../config/validator.yaml) and copy it to this directory.
 

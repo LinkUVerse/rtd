@@ -1,10 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::fs::File;
-use std::io::Read;
-use std::path::PathBuf;
-use rtd_config::genesis::Genesis;
+mod common;
+
+use common::test_chain;
 
 use rtd_light_client::{
     base::{Proof, ProofTarget, ProofVerifier},
@@ -20,34 +19,15 @@ use rtd_types::{
     messages_checkpoint::{CheckpointArtifacts, CheckpointCommitment},
 };
 
-// Note: Once checkpoint artifacts are live, we can just read an actual checkpoint file.
-// Until then, we use the artifacts.chk file (generated on a localnet with artifacts enabled).
-const GENESIS_FILE: &str = "test_files/ocs/genesis.blob";
-const CHECKPOINT_FILE: &str = "test_files/ocs/1137.chk";
-
 // Returns a checkpoint & its corresponding committee
 fn load_test_data() -> Result<(CheckpointData, Committee), anyhow::Error> {
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push(CHECKPOINT_FILE);
-
-    let mut file = File::open(d).unwrap();
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).unwrap();
-    let checkpoint: CheckpointData = bcs::from_bytes(&buffer).unwrap();
-
-    // Extract committee from genesis
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push(GENESIS_FILE);
-    let genesis_committee = Genesis::load(&d)
-        .map_err(|e| anyhow!(format!("Cannot load Genesis: {e}")))?
-        .committee()
-        .map_err(|e| anyhow!(format!("Cannot load Genesis: {e}")))?;
-
-    // Sanity check
+    let chain = test_chain();
+    let checkpoint = chain.ocs.clone();
+    let genesis_committee = chain.committee.clone();
     checkpoint
         .checkpoint_summary
         .verify_with_contents(&genesis_committee, Some(&checkpoint.checkpoint_contents))
-        .map_err(|e| anyhow!(format!("Cannot verify checkpoint: {e}")))?;
+        .map_err(|e| anyhow!("Cannot verify RTD checkpoint: {e}"))?;
 
     Ok((checkpoint, genesis_committee))
 }

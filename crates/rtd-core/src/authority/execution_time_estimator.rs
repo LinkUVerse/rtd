@@ -16,13 +16,12 @@ use super::weighted_moving_average::WeightedMovingAverage;
 use crate::consensus_adapter::SubmitToConsensus;
 use governor::{Quota, RateLimiter, clock::MonotonicClock};
 use itertools::Itertools;
-use lru::LruCache;
 #[cfg(not(msim))]
 use linku_common::in_antithesis;
 use linku_common::{assert_reachable, debug_fatal, in_test_configuration};
 use linku_metrics::{monitored_scope, spawn_monitored_task};
+use lru::LruCache;
 use rand::{Rng, SeedableRng, random, rngs, thread_rng};
-use simple_moving_average::{SMA, SingleSumSMA};
 use rtd_config::node::ExecutionTimeObserverConfig;
 use rtd_protocol_config::{ExecutionTimeEstimateParams, PerObjectCongestionControlMode};
 use rtd_types::{
@@ -36,6 +35,7 @@ use rtd_types::{
         TransactionDataAPI, TransactionKind,
     },
 };
+use simple_moving_average::{SMA, SingleSumSMA};
 use tokio::{sync::mpsc, time::Instant};
 use tracing::{debug, info, trace, warn};
 
@@ -79,6 +79,10 @@ pub struct ExecutionTimeObserver {
     // executing transactions. This is used to decide which observations should be shared
     // via consensus.
     object_utilization_tracker: LruCache<ObjectID, ObjectUtilization>,
+
+    // Pre-resolved metric children for objects listed in the config, so that recording
+    // utilization for a tracked object does not allocate.
+    tracked_object_counters: HashMap<ObjectID, prometheus::Counter>,
 
     // Sorted list of recently indebted objects, updated by consensus handler.
     indebted_objects: Vec<ObjectID>,
@@ -173,6 +177,21 @@ impl ObjectUtilization {
     }
 }
 
+fn tracked_object_counters(
+    config: &ExecutionTimeObserverConfig,
+    metrics: &crate::epoch::epoch_metrics::EpochMetrics,
+) -> HashMap<ObjectID, prometheus::Counter> {
+    config
+        .object_utilization_metric_tracked_ids()
+        .map(|(id, name)| {
+            let counter = metrics
+                .epoch_execution_time_observer_tracked_object_utilization
+                .with_label_values(&[id.to_string().as_str(), name]);
+            (*id, counter)
+        })
+        .collect()
+}
+
 // Tracks local execution time observations and shares them via consensus.
 impl ExecutionTimeObserver {
     pub fn spawn(
@@ -202,6 +221,7 @@ impl ExecutionTimeObserver {
             consensus_adapter,
             local_observations: LruCache::new(config.observation_cache_size()),
             object_utilization_tracker: LruCache::new(config.object_utilization_cache_size()),
+            tracked_object_counters: tracked_object_counters(&config, &epoch_store.metrics),
             indebted_objects: Vec::new(),
             sharing_rate_limiter: RateLimiter::direct_with_clock(
                 Quota::per_second(config.observation_sharing_rate_limit())
@@ -263,6 +283,7 @@ impl ExecutionTimeObserver {
             },
             local_observations: LruCache::new(NonZeroUsize::new(10000).unwrap()),
             object_utilization_tracker: LruCache::new(NonZeroUsize::new(50000).unwrap()),
+            tracked_object_counters: HashMap::new(),
             indebted_objects: Vec::new(),
             sharing_rate_limiter: RateLimiter::direct_with_clock(
                 Quota::per_hour(std::num::NonZeroU32::MAX),
@@ -316,11 +337,19 @@ impl ExecutionTimeObserver {
         total_duration: Duration,
         gas_price: u64,
     ) {
-        assert!(tx.commands.len() >= timings.len());
-
         let Some(epoch_store) = self.epoch_store.upgrade() else {
             debug!("epoch is ending, dropping execution time observation");
             return;
+        };
+        let timings = if timings.len() > tx.commands.len() {
+            warn!(
+                executed_commands = timings.len(),
+                original_commands = tx.commands.len(),
+                "execution produced more timings than the original PTB commands; using the trailing timings for local execution-time observations"
+            );
+            &timings[timings.len() - tx.commands.len()..]
+        } else {
+            timings
         };
 
         let mut uses_indebted_object = false;
@@ -397,6 +426,9 @@ impl ExecutionTimeObserver {
                         .epoch_execution_time_observer_object_utilization
                         .with_label_values(&[key.as_str()])
                         .inc_by(total_duration.as_secs_f64());
+                }
+                if let Some(counter) = self.tracked_object_counters.get(&id) {
+                    counter.inc_by(total_duration.as_secs_f64());
                 }
 
                 utilization.excess_execution_time
@@ -501,9 +533,11 @@ impl ExecutionTimeObserver {
         tx: &ProgrammableTransaction,
         timings: &[ExecutionTiming],
     ) -> (Vec<ExecutionTiming>, Duration) {
+        #[allow(clippy::disallowed_methods)]
         let generated_timings: Vec<_> = tx
             .commands
             .iter()
+            // TODO: migrate to zip_debug_eq once PR #26125 fixes the timings/commands length mismatch
             .zip(timings.iter())
             .map(|(command, timing)| {
                 let key = ExecutionTimeObservationKey::from_command(command);
@@ -535,9 +569,7 @@ impl ExecutionTimeObserver {
             panic!("get_test_duration called in non-test configuration");
         }
 
-        thread_local! {
-            static PER_TEST_SEED: u64 = random::<u64>();
-        }
+        static PER_TEST_SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
 
@@ -554,7 +586,7 @@ impl ExecutionTimeObserver {
             .is_some();
 
         if !checkpoint_digest_used {
-            PER_TEST_SEED.with(|seed| seed.hash(&mut hasher));
+            PER_TEST_SEED.get_or_init(random::<u64>).hash(&mut hasher);
         }
 
         key.hash(&mut hasher);
@@ -888,14 +920,14 @@ mod tests {
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
     use crate::checkpoints::CheckpointStore;
     use crate::consensus_adapter::{
-        ConnectionMonitorStatusForTests, ConsensusAdapter, ConsensusAdapterMetrics,
-        MockConsensusClient,
+        ConsensusAdapter, ConsensusAdapterMetrics, MockConsensusClient,
     };
     use rtd_protocol_config::ProtocolConfig;
-    use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+    use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
     use rtd_types::transaction::{
         Argument, CallArg, ObjectArg, ProgrammableMoveCall, SharedObjectMutability,
     };
+    use std::collections::BTreeMap;
     use {
         rand::{Rng, SeedableRng},
         rtd_protocol_config::ProtocolVersion,
@@ -918,7 +950,7 @@ mod tests {
                         stored_observations_limit: u64::MAX,
                         stake_weighted_median_threshold: 0,
                         default_none_duration_for_new_keys: true,
-                        observations_chunk_size: None,
+                        observations_chunk_size: Some(18),
                     },
                 ),
             );
@@ -932,13 +964,10 @@ mod tests {
             Arc::new(mock_consensus_client),
             CheckpointStore::new_for_tests(),
             authority.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            epoch_store.protocol_config().clone(),
+            Arc::new(tokio::sync::Notify::new()),
         ));
         let mut observer = ExecutionTimeObserver::new_for_testing(
             epoch_store.clone(),
@@ -1056,7 +1085,7 @@ mod tests {
                         stored_observations_limit: u64::MAX,
                         stake_weighted_median_threshold: 0,
                         default_none_duration_for_new_keys: true,
-                        observations_chunk_size: None,
+                        observations_chunk_size: Some(18),
                     },
                 ),
             );
@@ -1070,13 +1099,10 @@ mod tests {
             Arc::new(mock_consensus_client),
             CheckpointStore::new_for_tests(),
             authority.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            epoch_store.protocol_config().clone(),
+            Arc::new(tokio::sync::Notify::new()),
         ));
         let mut observer = ExecutionTimeObserver::new_for_testing(
             epoch_store.clone(),
@@ -1152,7 +1178,7 @@ mod tests {
                         stored_observations_limit: u64::MAX,
                         stake_weighted_median_threshold: 0,
                         default_none_duration_for_new_keys: true,
-                        observations_chunk_size: None,
+                        observations_chunk_size: Some(18),
                     },
                 ),
             );
@@ -1166,13 +1192,10 @@ mod tests {
             Arc::new(mock_consensus_client),
             CheckpointStore::new_for_tests(),
             authority.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            epoch_store.protocol_config().clone(),
+            Arc::new(tokio::sync::Notify::new()),
         ));
         let mut observer = ExecutionTimeObserver::new_for_testing(
             epoch_store.clone(),
@@ -1252,7 +1275,7 @@ mod tests {
                         stored_observations_limit: u64::MAX,
                         stake_weighted_median_threshold: 0,
                         default_none_duration_for_new_keys: true,
-                        observations_chunk_size: None,
+                        observations_chunk_size: Some(18),
                     },
                 ),
             );
@@ -1266,13 +1289,10 @@ mod tests {
             Arc::new(mock_consensus_client),
             CheckpointStore::new_for_tests(),
             authority.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            epoch_store.protocol_config().clone(),
+            Arc::new(tokio::sync::Notify::new()),
         ));
         let mut observer = ExecutionTimeObserver::new_for_testing(
             epoch_store.clone(),
@@ -1383,6 +1403,120 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_object_utilization_metric_tracked_ids() {
+        telemetry_subscribers::init_for_testing();
+
+        let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+            config.set_per_object_congestion_control_mode_for_testing(
+                PerObjectCongestionControlMode::ExecutionTimeEstimate(
+                    ExecutionTimeEstimateParams {
+                        target_utilization: 100,
+                        allowed_txn_cost_overage_burst_limit_us: 0,
+                        randomness_scalar: 0,
+                        max_estimate_us: u64::MAX,
+                        stored_observations_num_included_checkpoints: 10,
+                        stored_observations_limit: u64::MAX,
+                        stake_weighted_median_threshold: 0,
+                        default_none_duration_for_new_keys: true,
+                        observations_chunk_size: Some(18),
+                    },
+                ),
+            );
+            config
+        });
+
+        let mock_consensus_client = MockConsensusClient::new();
+        let authority = TestAuthorityBuilder::new().build().await;
+        let epoch_store = authority.epoch_store_for_testing();
+        let consensus_adapter = Arc::new(ConsensusAdapter::new(
+            Arc::new(mock_consensus_client),
+            CheckpointStore::new_for_tests(),
+            authority.name,
+            100_000,
+            100_000,
+            ConsensusAdapterMetrics::new_test(),
+            Arc::new(tokio::sync::Notify::new()),
+        ));
+        let mut observer = ExecutionTimeObserver::new_for_testing(
+            epoch_store.clone(),
+            Box::new(consensus_adapter.clone()),
+            Duration::from_millis(500),
+            false,
+        );
+
+        // Both objects hash to the same bucket of the aggregate metric.
+        let mut bytes = [0u8; ObjectID::LENGTH];
+        bytes[ObjectID::LENGTH - 1] = 0x05;
+        bytes[0] = 1;
+        let tracked_id = ObjectID::new(bytes);
+        bytes[0] = 2;
+        let untracked_id = ObjectID::new(bytes);
+        let bucket_key = "5";
+        let tracked_name = "tracked-object";
+        observer.config.object_utilization_metric_tracked_ids =
+            Some(BTreeMap::from([(tracked_id, tracked_name.to_string())]));
+        observer.tracked_object_counters =
+            tracked_object_counters(&observer.config, &epoch_store.metrics);
+
+        let package = ObjectID::random();
+        let make_ptb = |id: ObjectID| ProgrammableTransaction {
+            inputs: vec![CallArg::Object(ObjectArg::SharedObject {
+                id,
+                initial_shared_version: SequenceNumber::new(),
+                mutability: SharedObjectMutability::Mutable,
+            })],
+            commands: vec![Command::MoveCall(Box::new(ProgrammableMoveCall {
+                package,
+                module: "test_module".to_string(),
+                function: "test_function".to_string(),
+                type_arguments: vec![],
+                arguments: vec![],
+            }))],
+        };
+        let tracked_ptb = make_ptb(tracked_id);
+        let untracked_ptb = make_ptb(untracked_id);
+        let aggregate_metric = &epoch_store
+            .metrics
+            .epoch_execution_time_observer_object_utilization;
+        let tracked_metric = &epoch_store
+            .metrics
+            .epoch_execution_time_observer_tracked_object_utilization;
+        let timings = vec![ExecutionTiming::Success(Duration::from_secs(1))];
+
+        tokio::time::pause();
+
+        // First observation: neither object is overutilized yet, so the aggregate metric is
+        // untouched, but the tracked object is already reported in the tracked metric.
+        observer.record_local_observations(&tracked_ptb, &timings, Duration::from_secs(2), 1);
+        observer.record_local_observations(&untracked_ptb, &timings, Duration::from_secs(2), 1);
+        assert_eq!(
+            tracked_metric
+                .with_label_values(&[tracked_id.to_string().as_str(), tracked_name])
+                .get(),
+            2.0
+        );
+        assert_eq!(aggregate_metric.with_label_values(&[bucket_key]).get(), 0.0);
+
+        // Second observation with no time elapsed: both objects are now overutilized and
+        // both land in the aggregate bucket. Only the tracked object is in the tracked metric.
+        observer.record_local_observations(&tracked_ptb, &timings, Duration::from_secs(2), 1);
+        observer.record_local_observations(&untracked_ptb, &timings, Duration::from_secs(2), 1);
+        assert_eq!(
+            tracked_metric
+                .with_label_values(&[tracked_id.to_string().as_str(), tracked_name])
+                .get(),
+            4.0
+        );
+        assert_eq!(
+            tracked_metric
+                .with_label_values(&[untracked_id.to_string().as_str(), tracked_name])
+                .get(),
+            0.0
+        );
+        assert_eq!(aggregate_metric.with_label_values(&[bucket_key]).get(), 4.0);
+    }
+
+    #[tokio::test]
     async fn test_record_local_observations_with_indebted_objects() {
         telemetry_subscribers::init_for_testing();
 
@@ -1398,7 +1532,7 @@ mod tests {
                         stored_observations_limit: u64::MAX,
                         stake_weighted_median_threshold: 0,
                         default_none_duration_for_new_keys: true,
-                        observations_chunk_size: None,
+                        observations_chunk_size: Some(18),
                     },
                 ),
             );
@@ -1412,13 +1546,10 @@ mod tests {
             Arc::new(mock_consensus_client),
             CheckpointStore::new_for_tests(),
             authority.name,
-            Arc::new(ConnectionMonitorStatusForTests {}),
             100_000,
             100_000,
-            None,
-            None,
             ConsensusAdapterMetrics::new_test(),
-            epoch_store.protocol_config().clone(),
+            Arc::new(tokio::sync::Notify::new()),
         ));
         let mut observer = ExecutionTimeObserver::new_for_testing(
             epoch_store.clone(),
@@ -1680,7 +1811,7 @@ mod tests {
                 stored_observations_limit: u64::MAX,
                 stake_weighted_median_threshold: 0,
                 default_none_duration_for_new_keys: true,
-                observations_chunk_size: None,
+                observations_chunk_size: Some(18),
             },
             std::iter::empty(),
         );
@@ -1885,7 +2016,7 @@ mod tests {
     )> {
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
-        let observation_keys = vec![
+        let observation_keys = [
             ExecutionTimeObservationKey::MoveEntryPoint {
                 package: ObjectID::from_hex_literal("0x1").unwrap(),
                 module: "coin".to_string(),
@@ -2201,7 +2332,7 @@ mod tests {
             }
 
             let mut final_observations = estimator.get_observations();
-            final_observations.sort_by(|a, b| a.0.to_string().cmp(&b.0.to_string()));
+            final_observations.sort_by_key(|a| a.0.to_string());
 
             let test_transactions = generate_test_transactions(version);
             let mut transaction_estimates = Vec::new();

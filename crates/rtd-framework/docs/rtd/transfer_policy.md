@@ -52,7 +52,6 @@ of the type at once.
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -86,6 +85,7 @@ of the type at once.
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -714,7 +714,7 @@ Check whether a custom rule has been added to the <code><a href="../rtd/transfer
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/transfer_policy.md#rtd_transfer_policy_has_rule">has_rule</a>&lt;T, Rule: drop&gt;(policy: &<a href="../rtd/transfer_policy.md#rtd_transfer_policy_TransferPolicy">TransferPolicy</a>&lt;T&gt;): bool {
-    df::exists_(&policy.id, <a href="../rtd/transfer_policy.md#rtd_transfer_policy_RuleKey">RuleKey</a>&lt;Rule&gt; {})
+    df::exists(&policy.id, <a href="../rtd/transfer_policy.md#rtd_transfer_policy_RuleKey">RuleKey</a>&lt;Rule&gt; {})
 }
 </code></pre>
 

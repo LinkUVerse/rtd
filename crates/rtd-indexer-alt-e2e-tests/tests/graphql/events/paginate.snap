@@ -6,31 +6,35 @@ processed 14 tasks
 init:
 A: object(0,0), B: object(0,1)
 
-task 1, lines 6-52:
+task 1, lines 6-50:
 //# publish
 created: object(1,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 7425200,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 7448000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
-task 2, lines 53-55:
+task 2, lines 52-53:
+// Transaction that emits a single event
 //# run P1::M1::emit_event --sender A --args 42
 events: Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [21, 72, 101, 108, 108, 111, 32, 102, 114, 111, 109, 32, 116, 101, 115, 116, 32, 101, 118, 101, 110, 116, 42, 0, 0, 0, 0, 0, 0, 0] }
 mutated: object(0,0)
 gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
-task 3, lines 56-58:
+task 3, lines 55-56:
+// Transaction that emits multiple events
 //# run P1::M1::emit_multiple_events --sender A
 events: Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [11, 70, 105, 114, 115, 116, 32, 101, 118, 101, 110, 116, 1, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventB"), type_params: [] }, contents: [12, 83, 101, 99, 111, 110, 100, 32, 101, 118, 101, 110, 116, 2, 0, 0, 0, 0, 0, 0, 0] }
 mutated: object(0,0)
 gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
-task 4, lines 59-61:
+task 4, lines 58-59:
+// Transaction that emits multiple events
 //# run P1::M1::emit_events_by_count --sender A --args 10
 events: Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 1, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 2, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 3, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 4, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 5, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 6, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 7, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 8, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 9, 0, 0, 0, 0, 0, 0, 0] }, Event { package_id: P1, transaction_module: Identifier("M1"), sender: A, type_: StructTag { address: P1, module: Identifier("M1"), name: Identifier("EventA"), type_params: [] }, contents: [15, 69, 118, 101, 110, 116, 32, 102, 114, 111, 109, 32, 108, 111, 111, 112, 10, 0, 0, 0, 0, 0, 0, 0] }
 mutated: object(0,0)
 gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
-task 5, lines 62-64:
+task 5, lines 61-64:
+// Transaction with no events (transfer)
 //# programmable --sender A --inputs 100 @B
 //> 0: SplitCoins(Gas, [Input(0)]);
 //> 1: TransferObjects([Result(0)], Input(1))
@@ -48,8 +52,8 @@ Response: {
   "data": {
     "allEvents": {
       "pageInfo": {
-        "startCursor": "eyJ0IjoyLCJlIjowfQ==",
-        "endCursor": "eyJ0Ijo0LCJlIjo5fQ==",
+        "startCursor": "KAFCBggAEAIYAA==",
+        "endCursor": "KAFCBggAEAQYCQ==",
         "hasNextPage": false,
         "hasPreviousPage": false
       },
@@ -58,99 +62,99 @@ Response: {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "2yAZipFxBfJP92MoRZohorzEqL8hWs9TmfmBtq22qCg3"
+            "digest": "864ZmGQHyfdHf6N47dprxczg4QzfCYWSbkKzNE5NJNfD"
           }
         },
         {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "Dc7gcDoTP4rH3yMtWWzV4is4F75QWpMVrVmDXT7uBVTa"
+            "digest": "D95FG8iqXPsswRYkj3a6o28wCfxcPr5PiCG4XfsqDSqr"
           }
         },
         {
           "sequenceNumber": 1,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "Dc7gcDoTP4rH3yMtWWzV4is4F75QWpMVrVmDXT7uBVTa"
+            "digest": "D95FG8iqXPsswRYkj3a6o28wCfxcPr5PiCG4XfsqDSqr"
           }
         },
         {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 1,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 2,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 3,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 4,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 5,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 6,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 7,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 8,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 9,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         }
       ]
     },
     "eventsHasNext": {
       "pageInfo": {
-        "startCursor": "eyJ0IjoyLCJlIjowfQ==",
-        "endCursor": "eyJ0IjozLCJlIjowfQ==",
+        "startCursor": "KAFCBggAEAIYAA==",
+        "endCursor": "KAFCBggAEAMYAA==",
         "hasNextPage": true,
         "hasPreviousPage": false
       },
@@ -159,22 +163,22 @@ Response: {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "2yAZipFxBfJP92MoRZohorzEqL8hWs9TmfmBtq22qCg3"
+            "digest": "864ZmGQHyfdHf6N47dprxczg4QzfCYWSbkKzNE5NJNfD"
           }
         },
         {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "Dc7gcDoTP4rH3yMtWWzV4is4F75QWpMVrVmDXT7uBVTa"
+            "digest": "D95FG8iqXPsswRYkj3a6o28wCfxcPr5PiCG4XfsqDSqr"
           }
         }
       ]
     },
     "eventsHasPrevious": {
       "pageInfo": {
-        "startCursor": "eyJ0Ijo0LCJlIjo4fQ==",
-        "endCursor": "eyJ0Ijo0LCJlIjo5fQ==",
+        "startCursor": "KAFCBggAEAQYCA==",
+        "endCursor": "KAFCBggAEAQYCQ==",
         "hasNextPage": false,
         "hasPreviousPage": true
       },
@@ -183,14 +187,14 @@ Response: {
           "sequenceNumber": 8,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         },
         {
           "sequenceNumber": 9,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         }
       ]
@@ -234,7 +238,7 @@ Response: {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "Dc7gcDoTP4rH3yMtWWzV4is4F75QWpMVrVmDXT7uBVTa"
+            "digest": "D95FG8iqXPsswRYkj3a6o28wCfxcPr5PiCG4XfsqDSqr"
           }
         }
       ]
@@ -245,7 +249,7 @@ Response: {
           "sequenceNumber": 8,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "FT2LYHbssk3KVppof4cgeBsKB2n4PLFtvaEdqAuDPeUF"
+            "digest": "GrWTg1AsE7TY3LCJHwa4FYoCCrzLhY7nVyKEfxjQrihZ"
           }
         }
       ]
@@ -262,8 +266,8 @@ Response: {
   "data": {
     "eventsAfterTransaction2AndEvent0": {
       "pageInfo": {
-        "startCursor": "eyJ0IjozLCJlIjowfQ==",
-        "endCursor": "eyJ0IjozLCJlIjowfQ==",
+        "startCursor": "KAFCBggAEAMYAA==",
+        "endCursor": "KAFCBggAEAMYAA==",
         "hasNextPage": true,
         "hasPreviousPage": true
       },
@@ -272,7 +276,7 @@ Response: {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "Dc7gcDoTP4rH3yMtWWzV4is4F75QWpMVrVmDXT7uBVTa"
+            "digest": "D95FG8iqXPsswRYkj3a6o28wCfxcPr5PiCG4XfsqDSqr"
           }
         }
       ]
@@ -286,8 +290,8 @@ Response: {
   "data": {
     "eventsBeforeTransaction3AndEvent0": {
       "pageInfo": {
-        "startCursor": "eyJ0IjoyLCJlIjowfQ==",
-        "endCursor": "eyJ0IjoyLCJlIjowfQ==",
+        "startCursor": "KAFCBggAEAIYAA==",
+        "endCursor": "KAFCBggAEAIYAA==",
         "hasNextPage": true,
         "hasPreviousPage": false
       },
@@ -296,7 +300,7 @@ Response: {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "2yAZipFxBfJP92MoRZohorzEqL8hWs9TmfmBtq22qCg3"
+            "digest": "864ZmGQHyfdHf6N47dprxczg4QzfCYWSbkKzNE5NJNfD"
           }
         }
       ]
@@ -310,8 +314,8 @@ Response: {
   "data": {
     "eventsBeforeTransaction3AndEvent1FromBack": {
       "pageInfo": {
-        "startCursor": "eyJ0IjoyLCJlIjowfQ==",
-        "endCursor": "eyJ0IjozLCJlIjowfQ==",
+        "startCursor": "KAFCBggAEAIYAA==",
+        "endCursor": "KAFCBggAEAMYAA==",
         "hasNextPage": true,
         "hasPreviousPage": false
       },
@@ -320,14 +324,14 @@ Response: {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "2yAZipFxBfJP92MoRZohorzEqL8hWs9TmfmBtq22qCg3"
+            "digest": "864ZmGQHyfdHf6N47dprxczg4QzfCYWSbkKzNE5NJNfD"
           }
         },
         {
           "sequenceNumber": 0,
           "timestamp": "1970-01-01T00:00:00Z",
           "transaction": {
-            "digest": "Dc7gcDoTP4rH3yMtWWzV4is4F75QWpMVrVmDXT7uBVTa"
+            "digest": "D95FG8iqXPsswRYkj3a6o28wCfxcPr5PiCG4XfsqDSqr"
           }
         }
       ]

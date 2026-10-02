@@ -12,11 +12,10 @@ use crate::{
 use once_cell::sync::Lazy;
 use proptest::prelude::*;
 use proptest_derive::Arbitrary;
-use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::ObjectRef;
 use rtd_types::error::RtdErrorKind;
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::{
     base_types::RtdAddress,
     error::{RtdError, UserInputError},
@@ -25,6 +24,7 @@ use rtd_types::{
     transaction::{GasData, Transaction, TransactionData, TransactionKind},
     utils::{to_sender_signed_transaction, to_sender_signed_transaction_with_multi_signers},
 };
+use std::sync::Arc;
 
 const GAS_UNIT_PRICE: u64 = 2;
 const DEFAULT_TRANSFER_AMOUNT: u64 = 1;
@@ -521,20 +521,20 @@ impl AUTransactionGen for P2PTransferGenRandomGasRandomPriceRandomSponsorship {
                 ..
             } => {
                 self.fix_balance_and_gas_coins(payer, false);
-                Ok(ExecutionStatus::Failure {
-                    error: ExecutionFailureStatus::InsufficientCoinBalance,
+                Ok(ExecutionStatus::Failure(ExecutionFailure {
+                    error: ExecutionErrorKind::InsufficientCoinBalance,
                     command: Some(0),
-                })
+                }))
             }
             RunInfo {
                 enough_max_gas: true,
                 ..
             } => {
                 self.fix_balance_and_gas_coins(payer, false);
-                Ok(ExecutionStatus::Failure {
-                    error: ExecutionFailureStatus::InsufficientGas,
+                Ok(ExecutionStatus::Failure(ExecutionFailure {
+                    error: ExecutionErrorKind::InsufficientGas,
                     command: None,
-                })
+                }))
             }
         };
         (signed_txn, status)

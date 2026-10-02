@@ -6,11 +6,14 @@ processed 7 tasks
 init:
 A: object(0,0)
 
+// 1. Look for a dynamic field with a simple key
+// 2. Look for a dynamic field with a struct-based key
+
 task 1, lines 9-19:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 3952000,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 3959600,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 21-23:
 //# programmable --sender A --inputs @A
@@ -40,14 +43,14 @@ Response: {
   "id": 0,
   "result": {
     "data": {
-      "objectId": "0x63a370673b226e7c04b25f3ff9b43ccbdd64fc651433be4e9b9587ca552a9453",
+      "objectId": "0x19111706aeecb39f2feded4d065ac96a15de25822f1d37fdca1824908a28f3c9",
       "version": "3",
-      "digest": "4A6FyhF6AGa5Na4xRFFpHEGzKKbneTQEiaG5KdtCWxke",
+      "digest": "Gp3GPUwa5FRWPJLynkCkW83ckSo1WK5fm87xmceUKC99",
       "type": "0x2::dynamic_field::Field<u64, u64>",
       "owner": {
-        "ObjectOwner": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad"
+        "ObjectOwner": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9"
       },
-      "previousTransaction": "FNqZuA72ZRmAJjGB9RUXedfGPwrZE7rxE4KfQjK6v7sa",
+      "previousTransaction": "CW4wZA8wueanU5MFpzaRq8KckycucsqJ2zC6629sM8Tu",
       "storageRebate": "1466800",
       "content": {
         "dataType": "moveObject",
@@ -55,7 +58,7 @@ Response: {
         "hasPublicTransfer": false,
         "fields": {
           "id": {
-            "id": "0x63a370673b226e7c04b25f3ff9b43ccbdd64fc651433be4e9b9587ca552a9453"
+            "id": "0x19111706aeecb39f2feded4d065ac96a15de25822f1d37fdca1824908a28f3c9"
           },
           "name": "44",
           "value": "45"
@@ -72,25 +75,25 @@ Response: {
   "id": 1,
   "result": {
     "data": {
-      "objectId": "0xf391c82c30fb39e249bbcbf23559eb7b9aeddebb12d305f0d47b6eea74b7da9d",
+      "objectId": "0x52b7ba43aa44336f3d28bc85a4c748370a5ae9c2ff2e6cd26cb699c377fbbe4b",
       "version": "3",
-      "digest": "EtHgUtfKhs7JokgVxayiP1ss1UNUP6GkwJtLkM62GsSy",
-      "type": "0x2::dynamic_field::Field<0x0c1b57d949b2d2e7ec682faefe0cd21dc2738675c1f00e756c0fb7e0eca77259::M::Name, u64>",
+      "digest": "2TedVqhXZfhYiZYH6RW1pESt7ckwSkybjfGKoXrbCk7g",
+      "type": "0x2::dynamic_field::Field<0x20ef6fa3d946336d58ee256e12b4f79c0f0325b09c8bf15d45fb7410c0fe1fcf::M::Name, u64>",
       "owner": {
-        "ObjectOwner": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad"
+        "ObjectOwner": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9"
       },
-      "previousTransaction": "FNqZuA72ZRmAJjGB9RUXedfGPwrZE7rxE4KfQjK6v7sa",
+      "previousTransaction": "CW4wZA8wueanU5MFpzaRq8KckycucsqJ2zC6629sM8Tu",
       "storageRebate": "1801200",
       "content": {
         "dataType": "moveObject",
-        "type": "0x2::dynamic_field::Field<0x0c1b57d949b2d2e7ec682faefe0cd21dc2738675c1f00e756c0fb7e0eca77259::M::Name, u64>",
+        "type": "0x2::dynamic_field::Field<0x20ef6fa3d946336d58ee256e12b4f79c0f0325b09c8bf15d45fb7410c0fe1fcf::M::Name, u64>",
         "hasPublicTransfer": false,
         "fields": {
           "id": {
-            "id": "0xf391c82c30fb39e249bbcbf23559eb7b9aeddebb12d305f0d47b6eea74b7da9d"
+            "id": "0x52b7ba43aa44336f3d28bc85a4c748370a5ae9c2ff2e6cd26cb699c377fbbe4b"
           },
           "name": {
-            "type": "0x0c1b57d949b2d2e7ec682faefe0cd21dc2738675c1f00e756c0fb7e0eca77259::M::Name",
+            "type": "0x20ef6fa3d946336d58ee256e12b4f79c0f0325b09c8bf15d45fb7410c0fe1fcf::M::Name",
             "fields": {
               "x": "42",
               "y": 43

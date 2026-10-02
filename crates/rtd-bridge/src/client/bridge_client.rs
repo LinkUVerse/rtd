@@ -61,13 +61,20 @@ impl BridgeClient {
                 "sign/bridge_tx/rtd/eth/{}/{}",
                 e.rtd_tx_digest, e.rtd_tx_event_index
             ),
-            BridgeAction::RtdToEthTokenTransfer(_action) => format!(
-                "sign/bridge_action/rtd/eth/{source_chain}/{message_type}/{bridge_seq_num}",
-                source_chain = event.chain_id() as u8,
-                message_type = event.action_type() as u8,
-                bridge_seq_num = event.seq_number(),
-            ),
+            BridgeAction::RtdToEthTokenTransfer(_) | BridgeAction::RtdToEthTokenTransferV2(_) => {
+                format!(
+                    "sign/bridge_action/rtd/eth/{source_chain}/{message_type}/{bridge_seq_num}",
+                    source_chain = event.chain_id() as u8,
+                    message_type = event.action_type() as u8,
+                    bridge_seq_num = event.seq_number(),
+                )
+            }
             BridgeAction::EthToRtdBridgeAction(e) => format!(
+                "sign/bridge_tx/eth/rtd/{}/{}",
+                Hex::encode(e.eth_tx_hash.0),
+                e.eth_event_index
+            ),
+            BridgeAction::EthToRtdTokenTransferV2(e) => format!(
                 "sign/bridge_tx/eth/rtd/{}/{}",
                 Hex::encode(e.eth_tx_hash.0),
                 e.eth_event_index
@@ -107,8 +114,8 @@ impl BridgeClient {
             BridgeAction::EvmContractUpgradeAction(a) => {
                 let chain_id = (a.chain_id as u8).to_string();
                 let nonce = a.nonce.to_string();
-                let proxy_address = Hex::encode(a.proxy_address.as_bytes());
-                let new_impl_address = Hex::encode(a.new_impl_address.as_bytes());
+                let proxy_address = Hex::encode(a.proxy_address.as_slice());
+                let new_impl_address = Hex::encode(a.new_impl_address.as_slice());
                 let path = format!(
                     "sign/upgrade_evm_contract/{chain_id}/{nonce}/{proxy_address}/{new_impl_address}"
                 );
@@ -286,8 +293,8 @@ mod tests {
         test_utils::{get_test_authority_and_key, get_test_rtd_to_eth_bridge_action},
         types::SignedBridgeAction,
     };
-    use ethers::types::Address as EthAddress;
-    use ethers::types::TxHash;
+    use alloy::primitives::{Address as EthAddress, TxHash};
+    use alloy::sol_types::SolValue;
     use fastcrypto::hash::{HashFunction, Keccak256};
     use fastcrypto::traits::KeyPair;
     use prometheus::Registry;
@@ -311,7 +318,7 @@ mod tests {
         assert!(client.base_url.is_some());
 
         // Ok
-        authority.base_url = "https://foo.rtdbridge.io".to_string();
+        authority.base_url = "https://bridge.example.invalid".to_string();
         let committee = Arc::new(BridgeCommittee::new(vec![authority.clone()]).unwrap());
         let client = BridgeClient::new(pubkey_bytes.clone(), committee.clone()).unwrap();
         assert!(client.base_url.is_some());
@@ -355,33 +362,6 @@ mod tests {
                 .unwrap_err(),
             BridgeError::InvalidAuthorityUrl(_)
         ));
-    }
-
-    #[tokio::test]
-    async fn test_read_limited_response_bytes_rejects_oversized_response() {
-        let app = axum::Router::new().route(
-            "/large",
-            axum::routing::get(|| async { "a".repeat(MAX_BRIDGE_CLIENT_RESPONSE_SIZE + 1) }),
-        );
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        let response = reqwest::Client::new()
-            .get(format!("http://{addr}/large"))
-            .send()
-            .await
-            .unwrap();
-
-        let err = read_limited_response_bytes(response, MAX_BRIDGE_CLIENT_RESPONSE_SIZE)
-            .await
-            .unwrap_err();
-        assert!(matches!(err, BridgeError::RestAPIError(_)));
-
-        server.abort();
     }
 
     #[tokio::test]
@@ -647,7 +627,7 @@ mod tests {
             "sign/upgrade_evm_contract/12/123/0606060606060606060606060606060606060606/0909090909090909090909090909090909090909/5cd8a76b",
         );
 
-        call_data.extend(ethers::abi::encode(&[ethers::abi::Token::Uint(42.into())]));
+        call_data.extend(alloy::primitives::U256::from(42).abi_encode());
         let action =
             BridgeAction::EvmContractUpgradeAction(crate::types::EvmContractUpgradeAction {
                 nonce: 123,
@@ -695,5 +675,32 @@ mod tests {
             BridgeClient::bridge_action_to_path(&action),
             "sign/add_tokens_on_evm/12/0/1/99,100,101/0x0101010101010101010101010101010101010101,0x0202020202020202020202020202020202020202,0x0303030303030303030303030303030303030303/5,6,7/1000000000,2000000000,3000000000",
         );
+    }
+
+    #[tokio::test]
+    async fn test_read_limited_response_bytes_rejects_oversized_response() {
+        let app = axum::Router::new().route(
+            "/large",
+            axum::routing::get(|| async { "a".repeat(MAX_BRIDGE_CLIENT_RESPONSE_SIZE + 1) }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let response = reqwest::Client::new()
+            .get(format!("http://{addr}/large"))
+            .send()
+            .await
+            .unwrap();
+
+        let err = read_limited_response_bytes(response, MAX_BRIDGE_CLIENT_RESPONSE_SIZE)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, BridgeError::RestAPIError(_)));
+
+        server.abort();
     }
 }

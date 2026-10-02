@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{cmp::Ordering, fmt::Display};
+use std::{collections::BTreeSet, fmt::Display};
 
 use consensus_core::{BlockAPI, CommitRef, VerifiedBlock};
 use consensus_types::block::{BlockRef, TransactionIndex};
@@ -25,7 +25,6 @@ pub(crate) trait ConsensusCommitAPI: Display {
     /// Returns the ref of consensus output.
     fn commit_ref(&self) -> CommitRef;
 
-    fn reputation_score_sorted_desc(&self) -> Option<Vec<(AuthorityIndex, u64)>>;
     fn leader_round(&self) -> u64;
     fn leader_author_index(&self) -> AuthorityIndex;
 
@@ -46,19 +45,6 @@ pub(crate) trait ConsensusCommitAPI: Display {
 impl ConsensusCommitAPI for consensus_core::CommittedSubDag {
     fn commit_ref(&self) -> CommitRef {
         self.commit_ref
-    }
-
-    fn reputation_score_sorted_desc(&self) -> Option<Vec<(AuthorityIndex, u64)>> {
-        if !self.reputation_scores_desc.is_empty() {
-            Some(
-                self.reputation_scores_desc
-                    .iter()
-                    .map(|(id, score)| (id.value() as AuthorityIndex, *score))
-                    .collect(),
-            )
-        } else {
-            None
-        }
     }
 
     fn leader_round(&self) -> u64 {
@@ -96,9 +82,8 @@ impl ConsensusCommitAPI for consensus_core::CommittedSubDag {
     }
 
     fn rejected_transactions_digest(&self) -> Digest {
-        let bytes = bcs::to_bytes(&self.rejected_transactions_by_block).unwrap();
         let mut hasher = rtd_types::crypto::DefaultHash::new();
-        hasher.update(bytes);
+        bcs::serialize_into(&mut hasher, &self.rejected_transactions_by_block).unwrap();
         hasher.finalize().digest.into()
     }
 
@@ -117,7 +102,7 @@ impl ConsensusCommitAPI for consensus_core::CommittedSubDag {
             })
             .join(", ");
         let digest = self.rejected_transactions_digest();
-        format!("digest: {digest}; {str}")
+        format!("({digest}): [{str}]")
     }
 }
 
@@ -128,7 +113,7 @@ pub(crate) fn parse_block_transactions(
     let round = block.round();
     let authority = block.author().value() as AuthorityIndex;
 
-    let mut rejected_idx = 0;
+    let rejected_transaction_indices = BTreeSet::from_iter(rejected_transactions.iter().cloned());
     block
         .transactions()
         .iter().enumerate()
@@ -139,22 +124,8 @@ pub(crate) fn parse_block_transactions(
                     panic!("Failed to deserialize sequenced consensus transaction(this should not happen) {err} from {authority} at {round}");
                 },
             };
-            let rejected = if rejected_idx < rejected_transactions.len() {
-                match (index as TransactionIndex).cmp(&rejected_transactions[rejected_idx]) {
-                    Ordering::Less => {
-                        false
-                    },
-                    Ordering::Equal => {
-                        rejected_idx += 1;
-                        true
-                    },
-                    Ordering::Greater => {
-                        panic!("Rejected transaction indices are not in order. Block {block:?}, rejected transactions: {rejected_transactions:?}");
-                    },
-                }
-            } else {
-                false
-            };
+            // System transactions are always accepted; only user transactions can be rejected.
+            let rejected = transaction.is_user_transaction() && rejected_transaction_indices.contains(&(index as TransactionIndex));
             ParsedTransaction {
                 transaction,
                 rejected,

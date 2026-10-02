@@ -3,6 +3,11 @@ source: external-crates/move/crates/move-transactional-test-runner/src/framework
 ---
 processed 10 tasks
 
+// This test is to verify that deleted coins are not included in the result of rtdx_getCoins.
+// We create two coins, of balances 12 and 34, call the rpc method to see both of them in the results.
+// Then we merge the coins and call the rpc method again to see that only the merged coin with
+// balance 46 is in the results.
+
 init:
 A: object(0,0), B: object(0,1)
 
@@ -65,30 +70,30 @@ Response: {
     "data": [
       {
         "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD",
-        "coinObjectId": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+        "coinObjectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
         "version": "3",
-        "digest": "BGqvhSkz3SYePbLs4rwrKCGSjmZCQi98wj5XmPEZ3KAF",
+        "digest": "ESj6uwdzcJrEkaJNznBK6HA7BFCUtBD2H2g1h4EBrCU4",
         "balance": "299999995026074",
-        "previousTransaction": "AasjzjtKdtrQeZqXEquUBDp3Wb8mbLziGxg6np4mhf56"
+        "previousTransaction": "FuWmoPb33svWFEWdVt1m5J7QiYnnbUkzWYRE6cnkYaNn"
       },
       {
         "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD",
-        "coinObjectId": "0x57f42279a1d36e456374da161a332ad4f4fe7919fdb44dba456447a6f4d25e8e",
+        "coinObjectId": "0xb4d0ee143e2ead7df9e2bd4015407da62d51d5b40957f1c6f17d9b60b25554e0",
         "version": "3",
-        "digest": "5edeWFmMJatCEtNanqj2Qx91HcBGyq9F1EzbCnbZtY69",
+        "digest": "A7oWtwATY9XCRa29TWrW4BTPBQmyebZaVJuu7JxX5Ux9",
         "balance": "34",
-        "previousTransaction": "AasjzjtKdtrQeZqXEquUBDp3Wb8mbLziGxg6np4mhf56"
+        "previousTransaction": "FuWmoPb33svWFEWdVt1m5J7QiYnnbUkzWYRE6cnkYaNn"
       },
       {
         "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD",
-        "coinObjectId": "0x25c9a04c7ccfe4bba96596c73d14363121e0d6a6c979e65893877266f7f82074",
+        "coinObjectId": "0x7269457a115e2c7087bad2d68b397fea3c67e1a3dbc89979a3c2cede686c3fde",
         "version": "2",
-        "digest": "3xXGpcHsghX2BCcmWQ8CspNsWP8sD93LRdzzstTMt1Dx",
+        "digest": "7SdCsTs4M224qM431KM4X7Wfw8c469tz4FqJ6guMXsbs",
         "balance": "12",
-        "previousTransaction": "Cuu9udTB5hRGQd5o37gNxaq4BjCU5qJiQEQzbuD7U6Y6"
+        "previousTransaction": "3i3mgwGD2hQhDncbqajHgjD2v5dGFoutjpUBeXzKa4WN"
       }
     ],
-    "nextCursor": "ICXJoEx8z+S7qWWWxz0UNjEh4NamyXnmWJOHcmb3+CB0AQAAAAAAAAABAAAAAAAAAA==",
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////zcmlFehFeLHCHutLWizl/6jxn4aPbyJl5o8LO3mhsP94=",
     "hasNextPage": false
   }
 }
@@ -113,22 +118,22 @@ Response: {
     "data": [
       {
         "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD",
-        "coinObjectId": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+        "coinObjectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
         "version": "4",
-        "digest": "89vdJGrEidfnSQRpDXBTCzwcfueKzgbS9pvZKwP9zBzW",
+        "digest": "FFzrZocCSHQU7KmV1SzwtUCJbygwnykTTFtbBoUCx82B",
         "balance": "299999994984434",
-        "previousTransaction": "CftuBvsnseqKfCCcxHGX3bXPhzRJvvcLo16QTsgL3xPv"
+        "previousTransaction": "BPL9zRN8B9t7GAcnwPMyY9JAdXXdtFwDuEKKATGksWTB"
       },
       {
         "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD",
-        "coinObjectId": "0x25c9a04c7ccfe4bba96596c73d14363121e0d6a6c979e65893877266f7f82074",
+        "coinObjectId": "0x7269457a115e2c7087bad2d68b397fea3c67e1a3dbc89979a3c2cede686c3fde",
         "version": "4",
-        "digest": "BCyJEa2eY66tdAiJsQi1z2bCkhNrJiUy2bhqzFrhTQnN",
+        "digest": "7mHVTJLNFgQe9uXFe5Y5NnfAkZY6oB1jxwzMkM6kjy7V",
         "balance": "46",
-        "previousTransaction": "CftuBvsnseqKfCCcxHGX3bXPhzRJvvcLo16QTsgL3xPv"
+        "previousTransaction": "BPL9zRN8B9t7GAcnwPMyY9JAdXXdtFwDuEKKATGksWTB"
       }
     ],
-    "nextCursor": "ICXJoEx8z+S7qWWWxz0UNjEh4NamyXnmWJOHcmb3+CB0AQAAAAAAAAABAAAAAAAAAA==",
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////RcmlFehFeLHCHutLWizl/6jxn4aPbyJl5o8LO3mhsP94=",
     "hasNextPage": false
   }
 }

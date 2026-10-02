@@ -1,0 +1,19 @@
+---
+title: RTD Documentation MCP
+description: Deployment status of an RTD documentation MCP service.
+keywords:
+  - MCP
+  - documentation search
+  - IDE
+questions:
+  - Is a public RTD documentation MCP server available?
+  - How can an assistant inspect RTD source today?
+answer: >-
+  No public RTD documentation MCP server has been deployed or verified.
+  Inspect this repository's docs and source directly when developing against
+  RTD.
+---
+
+There is no verified public RTD documentation MCP endpoint. Do not configure an editor to use an inherited Sui or renamed Kapa endpoint as an RTD knowledge source: it could return information about a different chain.
+
+For local development, point your assistant or editor at the checked out `docs/content` directory and the matching RTD source revision. Verify commands and API types against the binaries and SDK source used by your target network. A hosted MCP service requires a separate deployment, source index, access policy, and operational verification before connection instructions can be published.

@@ -3,15 +3,17 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Context;
+use anyhow::Result;
 use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
-use rtd_indexer_alt_framework::{
-    pipeline::Processor,
-    postgres::{Connection, handler::Handler},
-    types::{base_types::RtdAddress, full_checkpoint_content::Checkpoint},
-};
-use rtd_indexer_alt_schema::{packages::StoredPackage, schema::kv_packages};
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::postgres::Connection;
+use rtd_indexer_alt_framework::postgres::handler::Handler;
+use rtd_indexer_alt_framework::types::base_types::RtdAddress;
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_schema::packages::StoredPackage;
+use rtd_indexer_alt_schema::schema::kv_packages;
 use rtd_types::transaction::TransactionDataAPI;
 
 pub(crate) struct KvPackages;

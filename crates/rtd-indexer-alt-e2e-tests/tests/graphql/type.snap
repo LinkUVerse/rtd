@@ -453,7 +453,9 @@ Response: {
 task 6, lines 61-76:
 //# run-graphql
 Response: {
-  "data": null,
+  "data": {
+    "type": null
+  },
   "errors": [
     {
       "message": "Type parameter nesting exceeded limit of 16",
@@ -476,7 +478,9 @@ Response: {
 task 7, lines 78-83:
 //# run-graphql
 Response: {
-  "data": null,
+  "data": {
+    "type": null
+  },
   "errors": [
     {
       "message": "Error resolving type: Expected 1 type parameters, but got 2",
@@ -510,7 +514,9 @@ task 10, lines 106-111:
 //# run-graphql
 Response: {
   "data": {
-    "type": null
+    "type": {
+      "layout": null
+    }
   },
   "errors": [
     {
@@ -547,10 +553,10 @@ task 13, lines 134-143:
 Response: {
   "data": {
     "atP0": {
-      "repr": "0x8b88208d3d8214ef802e9f5167a4d964cf1904d34c66517745e36bcfec7203d2::m::S0<u32>"
+      "repr": "0xe7aa023822a1583a58ea6289ce690b9c20cebd1aaa8a084d349545e18804a723::m::S0<u32>"
     },
     "atP1": {
-      "repr": "0x8b88208d3d8214ef802e9f5167a4d964cf1904d34c66517745e36bcfec7203d2::m::S0<u32>"
+      "repr": "0xe7aa023822a1583a58ea6289ce690b9c20cebd1aaa8a084d349545e18804a723::m::S0<u32>"
     }
   }
 }

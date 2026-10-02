@@ -7,24 +7,24 @@ creates and sends a custom MoveEvent as a part of the effects
 certificate of the transaction.
 
 Every MoveEvent has the following properties:
-- sender
-- type signature (<code>T</code>)
-- event data (the value of <code>T</code>)
-- timestamp (local to a node)
-- transaction digest
+ - sender
+ - type signature (<code>T</code>)
+ - event data (the value of <code>T</code>)
+ - timestamp (local to a node)
+ - transaction digest
 
 Example:
 ```
 module my::marketplace {
-use rtd::event;
-/* ... */
-struct ItemPurchased has copy, drop {
-item_id: ID, buyer: address
-}
-entry fun buy(/* .... */) {
-/* ... */
-event::emit(ItemPurchased { item_id: ..., buyer: .... })
-}
+   use rtd::event;
+   /* ... */
+   struct ItemPurchased has copy, drop {
+     item_id: ID, buyer: address
+   }
+   entry fun buy(/* .... */) {
+      /* ... */
+      event::emit(ItemPurchased { item_id: ..., buyer: .... })
+   }
 }
 ```
 
@@ -35,10 +35,8 @@ event::emit(ItemPurchased { item_id: ..., buyer: .... })
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
-<b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
 <b>use</b> <a href="../rtd/bcs.md#rtd_bcs">rtd::bcs</a>;
 <b>use</b> <a href="../rtd/dynamic_field.md#rtd_dynamic_field">rtd::dynamic_field</a>;
 <b>use</b> <a href="../rtd/hash.md#rtd_hash">rtd::hash</a>;
@@ -66,7 +64,7 @@ event::emit(ItemPurchased { item_id: ..., buyer: .... })
 Emit a custom Move event, sending the data offchain.
 
 Used for creating custom indexes and tracking onchain
-activity in a way that rtdts a specific application the most.
+activity in a way that suits a specific application the most.
 
 The type <code>T</code> is the main way to index the event, and can contain
 phantom parameters, eg <code><a href="../rtd/event.md#rtd_event_emit">emit</a>(MyEvent&lt;<b>phantom</b> T&gt;)</code>.

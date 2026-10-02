@@ -1,28 +1,26 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use fastcrypto::encoding::Base64;
-use futures::StreamExt;
-use futures::stream;
-use futures_core::Stream;
-use jsonrpsee::core::client::Subscription;
 use std::collections::BTreeMap;
 use std::future;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
-use rtd_json_rpc_types::DevInspectArgs;
-use rtd_json_rpc_types::RtdData;
-use rtd_json_rpc_types::ZkLoginIntentScope;
-use rtd_json_rpc_types::ZkLoginVerifyResult;
 
-use crate::RpcClient;
-use crate::error::{Error, RtdRpcResult};
+use fastcrypto::encoding::Base64;
+use futures::StreamExt;
+use futures::stream;
+use futures_core::Stream;
+use jsonrpsee::core::client::Subscription;
 use rtd_json_rpc_api::{
     CoinReadApiClient, GovernanceReadApiClient, IndexerApiClient, MoveUtilsClient, ReadApiClient,
     WriteApiClient,
 };
 use rtd_json_rpc_types::CheckpointPage;
+use rtd_json_rpc_types::DevInspectArgs;
+use rtd_json_rpc_types::RtdData;
+use rtd_json_rpc_types::ZkLoginIntentScope;
+use rtd_json_rpc_types::ZkLoginVerifyResult;
 use rtd_json_rpc_types::{
     Balance, Checkpoint, CheckpointId, Coin, CoinPage, DelegatedStake, DevInspectResults,
     DryRunTransactionBlockResponse, DynamicFieldPage, EventFilter, EventPage, ObjectsPage,
@@ -33,14 +31,18 @@ use rtd_json_rpc_types::{
     TransactionFilter,
 };
 use rtd_types::balance::Supply;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress, TransactionDigest};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber, TransactionDigest};
 use rtd_types::dynamic_field::DynamicFieldName;
 use rtd_types::event::EventID;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
-use rtd_types::quorum_driver_types::ExecuteTransactionRequestType;
 use rtd_types::rtd_serde::BigInt;
 use rtd_types::rtd_system_state::rtd_system_state_summary::RtdSystemStateSummary;
 use rtd_types::transaction::{Transaction, TransactionData, TransactionKind};
+use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
+use tracing::debug;
+
+use crate::RpcClient;
+use crate::error::{Error, RtdRpcResult};
 
 const WAIT_FOR_LOCAL_EXECUTION_MIN_INTERVAL: Duration = Duration::from_millis(100);
 const WAIT_FOR_LOCAL_EXECUTION_MAX_INTERVAL: Duration = Duration::from_secs(2);
@@ -1043,9 +1045,11 @@ impl EventApi {
     /// use rtd_types::base_types::RtdAddress;
     /// #[tokio::main]
     /// async fn main() -> Result<(), anyhow::Error> {
+    ///     let ws_url = std::env::var("RTD_WS_URL")?;
+    ///     let rpc_url = std::env::var("RTD_RPC_URL")?;
     ///     let rtd = RtdClientBuilder::default()
-    ///         .ws_url("wss://rpc.mainnet.rtd.io:443")
-    ///         .build("https://fullnode.mainnet.rtd.io:443")
+    ///         .ws_url(ws_url.as_str())
+    ///         .build(rpc_url.as_str())
     ///         .await?;
     ///     let mut subscribe_all = rtd
     ///         .event_api()
@@ -1150,9 +1154,11 @@ impl QuorumDriverApi {
         options: RtdTransactionBlockResponseOptions,
         request_type: Option<ExecuteTransactionRequestType>,
     ) -> RtdRpcResult<RtdTransactionBlockResponse> {
+        let tx_digest = *tx.digest();
         let (tx_bytes, signatures) = tx.to_tx_bytes_and_signatures();
         let request_type = request_type.unwrap_or_else(|| options.default_execution_request_type());
 
+        debug!(?tx_digest, "Submitting a transaction for execution");
         let start = Instant::now();
         let response = self
             .api
@@ -1166,12 +1172,14 @@ impl QuorumDriverApi {
                 None,
             )
             .await?;
+        debug!(?tx_digest, "Transaction executed");
 
         if let ExecuteTransactionRequestType::WaitForEffectsCert = request_type {
             return Ok(response);
         }
 
         // JSON-RPC ignores WaitForLocalExecution, so simulate it by polling for the transaction.
+        debug!(?tx_digest, "Waiting for local execution on full node");
         let wait_for_local_execution_timeout: Duration = if cfg!(msim) {
             // In simtests, fullnodes can stop receiving checkpoints for > 30s.
             Duration::from_secs(120)
@@ -1195,7 +1203,17 @@ impl QuorumDriverApi {
                     .get_transaction_block(*tx.digest(), Some(options.clone()))
                     .await
                 {
-                    break poll_response;
+                    // Wait until the transaction is included in a checkpoint,
+                    // not just known to the fullnode. Index data is only
+                    // available after the checkpoint has been processed.
+                    if poll_response.checkpoint.is_some() {
+                        break poll_response;
+                    }
+                } else {
+                    debug!(
+                        ?tx_digest,
+                        "Failed to get transaction content from the full node"
+                    );
                 }
             }
         })

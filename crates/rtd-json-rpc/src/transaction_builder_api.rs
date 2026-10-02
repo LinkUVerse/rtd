@@ -14,15 +14,12 @@ use rtd_core::node_readiness::FullnodeReadiness;
 use rtd_json::RtdJsonValue;
 use rtd_json_rpc_api::{TransactionBuilderOpenRpc, TransactionBuilderServer};
 use rtd_json_rpc_types::{RPCTransactionRequestParams, RtdObjectDataFilter};
-use rtd_json_rpc_types::{
-    RtdObjectDataOptions, RtdObjectResponse, RtdTransactionBlockBuilderMode, RtdTypeTag,
-    TransactionBlockBytes,
-};
+use rtd_json_rpc_types::{RtdTransactionBlockBuilderMode, RtdTypeTag, TransactionBlockBytes};
 use rtd_open_rpc::Module;
 use rtd_transaction_builder::{DataReader, TransactionBuilder};
 use rtd_types::base_types::ObjectInfo;
 use rtd_types::base_types::{ObjectID, RtdAddress};
-use rtd_types::quorum_driver_types::QuorumDriverError;
+use rtd_types::object::Object;
 use rtd_types::rtd_serde::BigInt;
 
 use crate::RtdRpcModule;
@@ -57,14 +54,13 @@ impl TransactionBuilderApi {
 
     fn ensure_ready(&self) -> RpcResult<()> {
         if let Some(readiness) = &self.1 {
-            readiness
-                .ensure_ready()
-                .map_err(|error| -> jsonrpsee::types::ErrorObjectOwned {
-                    crate::Error::QuorumDriverError(QuorumDriverError::FullnodeCatchingUp {
-                        details: error.to_string(),
-                    })
-                    .into()
-                })?;
+            readiness.ensure_ready().map_err(|error| {
+                jsonrpsee::types::ErrorObject::owned(
+                    rtd_json_rpc_api::TRANSIENT_ERROR_CODE,
+                    error.to_string(),
+                    None::<()>,
+                )
+            })?;
         }
         Ok(())
     }
@@ -95,13 +91,11 @@ impl DataReader for AuthorityStateDataReader {
             )?)
     }
 
-    async fn get_object_with_options(
-        &self,
-        object_id: ObjectID,
-        options: RtdObjectDataOptions,
-    ) -> Result<RtdObjectResponse, anyhow::Error> {
-        let result = self.0.get_object_read(&object_id)?;
-        Ok((result, options).try_into()?)
+    async fn get_object(&self, object_id: ObjectID) -> Result<Object, anyhow::Error> {
+        self.0
+            .get_object(&object_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("unable to fetch object {object_id}"))
     }
 
     async fn get_reference_gas_price(&self) -> Result<u64, anyhow::Error> {
@@ -389,11 +383,9 @@ impl RtdRpcModule for TransactionBuilderApi {
 }
 
 #[cfg(test)]
-mod tests {
+mod readiness_tests {
     use super::*;
     use rtd_core::checkpoints::CheckpointStore;
-    use rtd_core::node_readiness::FullnodeReadiness;
-    use rtd_json_rpc_api::TRANSIENT_ERROR_CODE;
 
     struct PanicDataReader;
 
@@ -407,11 +399,7 @@ mod tests {
             panic!("data reader must not be called while fullnode is catching up")
         }
 
-        async fn get_object_with_options(
-            &self,
-            _object_id: ObjectID,
-            _options: RtdObjectDataOptions,
-        ) -> Result<RtdObjectResponse, anyhow::Error> {
+        async fn get_object(&self, _object_id: ObjectID) -> Result<Object, anyhow::Error> {
             panic!("data reader must not be called while fullnode is catching up")
         }
 
@@ -435,7 +423,7 @@ mod tests {
             readiness,
         );
 
-        let result = api
+        let error = api
             .transfer_rtd(
                 RtdAddress::ZERO,
                 ObjectID::ZERO,
@@ -443,12 +431,9 @@ mod tests {
                 RtdAddress::ZERO,
                 None,
             )
-            .await;
-        let error = match result {
-            Err(error) => error,
-            Ok(_) => panic!("transaction builder unexpectedly succeeded"),
-        };
+            .await
+            .unwrap_err();
 
-        assert_eq!(error.code(), TRANSIENT_ERROR_CODE);
+        assert_eq!(error.code(), rtd_json_rpc_api::TRANSIENT_ERROR_CODE);
     }
 }

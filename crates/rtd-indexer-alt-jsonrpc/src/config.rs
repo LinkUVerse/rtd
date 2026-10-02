@@ -1,15 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Context as _;
-use jsonrpsee::http_client::{HeaderMap, HeaderValue, HttpClient, HttpClientBuilder};
-use rtd_default_config::DefaultConfig;
 use rtd_protocol_config::ProtocolConfig;
-use rtd_types::base_types::{ObjectID, RtdAddress};
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress;
+use serde::Deserialize;
+use serde::Serialize;
 
 pub use rtd_name_service::NameServiceConfig;
-
-pub const CLIENT_SDK_TYPE_HEADER: &str = "client-sdk-type";
 
 #[derive(Debug)]
 pub struct RpcConfig {
@@ -36,9 +34,8 @@ pub struct RpcConfig {
     pub package_resolver: rtd_package_resolver::Limits,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RpcLayer {
     pub objects: ObjectsLayer,
     pub dynamic_fields: DynamicFieldsLayer,
@@ -64,6 +61,12 @@ pub struct ObjectsConfig {
     /// The maximum depth a Display format string is allowed to nest field accesses.
     pub max_display_field_depth: usize,
 
+    /// The maximum number of components in a Display v2 format string.
+    pub max_display_format_nodes: usize,
+
+    /// The maximum number of objects that can be loaded while evaluating a Display v2 format.
+    pub max_display_object_loads: usize,
+
     /// The maximum number of bytes occupied by Display field names and values in the output.
     pub max_display_output_size: usize,
 
@@ -85,14 +88,15 @@ pub struct ObjectsConfig {
     pub obj_retry_interval_ms: u64,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ObjectsLayer {
     pub max_multi_get_objects: Option<usize>,
     pub default_page_size: Option<usize>,
     pub max_page_size: Option<usize>,
     pub max_display_field_depth: Option<usize>,
+    pub max_display_format_nodes: Option<usize>,
+    pub max_display_object_loads: Option<usize>,
     pub max_display_output_size: Option<usize>,
     pub max_filter_depth: Option<usize>,
     pub max_type_filters: Option<usize>,
@@ -111,9 +115,8 @@ pub struct DynamicFieldsConfig {
     pub max_page_size: usize,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct DynamicFieldsLayer {
     pub default_page_size: Option<usize>,
     pub max_page_size: Option<usize>,
@@ -136,9 +139,8 @@ pub struct TransactionsConfig {
     pub tx_retry_interval_ms: u64,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TransactionsLayer {
     pub default_page_size: Option<usize>,
     pub max_page_size: Option<usize>,
@@ -146,9 +148,8 @@ pub struct TransactionsLayer {
     pub tx_retry_interval_ms: Option<u64>,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct NameServiceLayer {
     pub package_address: Option<RtdAddress>,
     pub registry_id: Option<ObjectID>,
@@ -165,9 +166,8 @@ pub struct CoinsConfig {
     pub max_page_size: usize,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CoinsLayer {
     pub default_page_size: Option<usize>,
     pub max_page_size: Option<usize>,
@@ -181,17 +181,15 @@ pub struct NodeConfig {
     pub max_request_size: u32,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct NodeLayer {
     pub header_value: Option<String>,
     pub max_request_size: Option<u32>,
 }
 
-#[DefaultConfig]
-#[derive(Clone, Debug)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PackageResolverLayer {
     pub max_type_argument_depth: usize,
     pub max_type_argument_width: usize,
@@ -200,7 +198,7 @@ pub struct PackageResolverLayer {
 }
 
 impl RpcLayer {
-    /// Generate an example configuration, rtdtable for demonstrating the fields available to
+    /// Generate an example configuration, suitable for demonstrating the fields available to
     /// configure.
     pub fn example() -> Self {
         Self {
@@ -238,6 +236,12 @@ impl ObjectsLayer {
             max_display_field_depth: self
                 .max_display_field_depth
                 .unwrap_or(base.max_display_field_depth),
+            max_display_format_nodes: self
+                .max_display_format_nodes
+                .unwrap_or(base.max_display_format_nodes),
+            max_display_object_loads: self
+                .max_display_object_loads
+                .unwrap_or(base.max_display_object_loads),
             max_display_output_size: self
                 .max_display_output_size
                 .unwrap_or(base.max_display_output_size),
@@ -293,22 +297,6 @@ impl CoinsLayer {
     }
 }
 
-impl NodeConfig {
-    pub fn client(&self, fullnode_rpc_url: url::Url) -> anyhow::Result<HttpClient> {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            CLIENT_SDK_TYPE_HEADER,
-            HeaderValue::from_str(&self.header_value)?,
-        );
-
-        HttpClientBuilder::default()
-            .max_request_size(self.max_request_size)
-            .set_headers(headers)
-            .build(&fullnode_rpc_url)
-            .context("Failed to initialize fullnode RPC client")
-    }
-}
-
 impl NodeLayer {
     pub fn finish(self, base: NodeConfig) -> NodeConfig {
         NodeConfig {
@@ -345,11 +333,15 @@ impl Default for RpcConfig {
 
 impl Default for ObjectsConfig {
     fn default() -> Self {
+        let display_limits = rtd_display::v2::Limits::default();
+
         Self {
             max_multi_get_objects: 50,
             default_page_size: 50,
             max_page_size: 100,
-            max_display_field_depth: 10,
+            max_display_field_depth: display_limits.max_depth,
+            max_display_format_nodes: display_limits.max_nodes,
+            max_display_object_loads: display_limits.max_loads,
             max_display_output_size: 1024 * 1024,
             max_filter_depth: 3,
             max_type_filters: 10,
@@ -421,12 +413,24 @@ impl From<ObjectsConfig> for ObjectsLayer {
             default_page_size: Some(config.default_page_size),
             max_page_size: Some(config.max_page_size),
             max_display_field_depth: Some(config.max_display_field_depth),
+            max_display_format_nodes: Some(config.max_display_format_nodes),
+            max_display_object_loads: Some(config.max_display_object_loads),
             max_display_output_size: Some(config.max_display_output_size),
             max_filter_depth: Some(config.max_filter_depth),
             max_type_filters: Some(config.max_type_filters),
             filter_scan_size: Some(config.filter_scan_size),
             obj_retry_count: Some(config.obj_retry_count),
             obj_retry_interval_ms: Some(config.obj_retry_interval_ms),
+        }
+    }
+}
+
+impl ObjectsConfig {
+    pub(crate) fn display(&self) -> rtd_display::v2::Limits {
+        rtd_display::v2::Limits {
+            max_depth: self.max_display_field_depth,
+            max_nodes: self.max_display_format_nodes,
+            max_loads: self.max_display_object_loads,
         }
     }
 }

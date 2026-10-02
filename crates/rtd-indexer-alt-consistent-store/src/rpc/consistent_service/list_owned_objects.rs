@@ -7,12 +7,13 @@ use std::str::FromStr;
 use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha as grpc;
 use rtd_indexer_alt_framework::types::base_types::RtdAddress;
 
-use crate::rpc::error::{RpcError, StatusCode};
+use crate::rpc::consistent_service::State;
+use crate::rpc::error::RpcError;
+use crate::rpc::error::StatusCode;
 use crate::rpc::pagination::Page;
-use crate::rpc::type_filter::{self, TypeFilter};
+use crate::rpc::type_filter::TypeFilter;
+use crate::rpc::type_filter::{self};
 use crate::schema;
-
-use super::State;
 
 #[derive(thiserror::Error, Debug)]
 pub(super) enum Error {
@@ -76,13 +77,21 @@ pub(super) fn list_owned_objects(
         }
     };
 
-    // Looking up immutable or shared objects requires some sort of type filter.
-    if matches!(kind, SK::Immutable | SK::Shared) && request.object_type().is_empty() {
+    let object_type = request.object_type();
+    let is_exclusion = object_type.starts_with('!');
+    let type_str = if is_exclusion {
+        &object_type[1..]
+    } else {
+        object_type
+    };
+
+    // Looking up immutable or shared objects requires an inclusive type filter.
+    if matches!(kind, SK::Immutable | SK::Shared) && (type_str.is_empty() || is_exclusion) {
         return Err(Error::MissingType(owner.kind()).into());
     }
 
-    let type_: Option<TypeFilter> = (!request.object_type().is_empty())
-        .then(|| request.object_type().parse())
+    let type_: Option<TypeFilter> = (!type_str.is_empty())
+        .then(|| type_str.parse())
         .transpose()
         .map_err(Error::from)?;
 
@@ -96,7 +105,11 @@ pub(super) fn list_owned_objects(
 
     let index = &state.store.schema().object_by_owner;
     let resp = if let Some(type_) = type_ {
-        page.paginate_prefix(index, checkpoint, &(kind, type_))?
+        if is_exclusion {
+            page.paginate_exclude(index, checkpoint, &kind, &type_)?
+        } else {
+            page.paginate_prefix(index, checkpoint, &(kind, type_))?
+        }
     } else {
         page.paginate_prefix(index, checkpoint, &kind)?
     };

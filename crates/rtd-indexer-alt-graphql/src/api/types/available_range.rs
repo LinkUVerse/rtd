@@ -1,23 +1,25 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
 use anyhow::anyhow;
-use async_graphql::{
-    Context, Object,
-    registry::{MetaType, Registry},
-};
-use std::{collections::BTreeSet, sync::Arc};
+use async_graphql::Context;
+use async_graphql::Object;
+use async_graphql::registry::MetaType;
+use async_graphql::registry::Registry;
 
-use crate::{
-    error::{RpcError, bad_user_input, feature_unavailable, upcast},
-    scope::Scope,
-    task::watermark::Watermarks,
-};
-
-use super::checkpoint::Checkpoint;
+use crate::api::types::checkpoint::Checkpoint;
+use crate::error::RpcError;
+use crate::error::bad_user_input;
+use crate::error::feature_unavailable;
+use crate::error::upcast;
+use crate::scope::Scope;
+use crate::task::watermark::Watermarks;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("'{0}' is not an Object or Interface.")]
     NotAnObjectOrInterface(String),
 
@@ -53,16 +55,19 @@ pub(crate) struct AvailableRange {
 #[Object]
 impl AvailableRange {
     /// Inclusive lower checkpoint for which data is available.
-    async fn first(&self) -> Result<Option<Checkpoint>, RpcError> {
-        Ok(Checkpoint::with_sequence_number(
+    async fn first(&self) -> Option<Result<Checkpoint, RpcError>> {
+        Some(Ok(Checkpoint::with_sequence_number(
             self.scope.clone(),
             Some(self.first),
-        ))
+        )?))
     }
 
     /// Inclusive upper checkpoint for which data is available.
-    async fn last(&self) -> Result<Option<Checkpoint>, RpcError> {
-        Ok(Checkpoint::with_sequence_number(self.scope.clone(), None))
+    async fn last(&self) -> Option<Result<Checkpoint, RpcError>> {
+        Some(Ok(Checkpoint::with_sequence_number(
+            self.scope.clone(),
+            None,
+        )?))
     }
 }
 
@@ -95,9 +100,11 @@ impl AvailableRangeKey {
         collect_pipelines(&self.type_, self.field.as_deref(), filters, &mut pipelines);
 
         pipelines.iter().try_fold(0, |acc, pipeline| {
-            watermarks
-                .pipeline_lo_watermark(pipeline)
-                .map(|wm| acc.max(wm.checkpoint()))
+            let watermark = watermarks
+                .per_pipeline()
+                .get(pipeline)
+                .ok_or_else(|| pipeline_unavailable(pipeline))?;
+            Ok(acc.max(watermark.lo().checkpoint()))
         })
     }
 
@@ -141,7 +148,6 @@ pub(crate) fn pipeline_unavailable(pipeline: &str) -> RpcError {
             feature_unavailable("filtering transactions by affected address")
         }
         "tx_affected_objects" => feature_unavailable("filtering transactions by affected object"),
-        "tx_balance_changes" => feature_unavailable("querying transaction balance changes"),
         "tx_calls" => feature_unavailable("filtering transactions by function calls"),
         "tx_digests" => feature_unavailable("querying transactions"),
         "tx_kinds" => feature_unavailable("filtering transactions by kind"),
@@ -226,19 +232,23 @@ macro_rules! delegate {
 // - `=> OtherType.field(.., "filterName")`: delegate and add filter constraint
 // - `|pipelines, filters| { ... }`: block of statements operating on pipelines and filters to execute
 collect_pipelines! {
-    Address.[address] => IAddressable.*;
+    Address.[address, addressAt, asTransactionObject] => IAddressable.*;
     Address.[asObject] => IObject.objectAt();
     Address.[transactions] => Query.transactions(.., "affectedAddress");
     Address.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    Address.[defaultRtdnsName] => IAddressable.defaultRtdnsName;
+    Address.[defaultNameRecord] => IAddressable.defaultNameRecord;
+    Address.[derivedObject, multiGetDerivedObjects] => IAddressable.*;
     Address.[dynamicField, dynamicFields, dynamicObjectField, multiGetDynamicFields, multiGetDynamicObjectFields] => IMoveObject.*;
+
+    Balance.[coinMetadata] => Query.coinMetadata();
 
     Checkpoint.[transactions] => Query.transactions(.., "atCheckpoint");
 
-    CoinMetadata.[address] => IAddressable.*;
+    CoinMetadata.[address, addressAt, asTransactionObject] => IAddressable.*;
     CoinMetadata.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    CoinMetadata.[defaultRtdnsName] => IAddressable.defaultRtdnsName();
+    CoinMetadata.[defaultNameRecord] => IAddressable.defaultNameRecord();
     CoinMetadata.[contents, hasPublicTransfer, moveObjectBcs] => IMoveObject.*;
+    CoinMetadata.[derivedObject, multiGetDerivedObjects] => IAddressable.*;
     CoinMetadata.[dynamicField, dynamicObjectField, multiGetDynamicFields, multiGetDynamicObjectFields] => IMoveObject.*;
     CoinMetadata.[dynamicFields] => IMoveObject.dynamicFields();
     CoinMetadata.[objectAt, objectVersionsAfter, objectVersionsBefore] => IObject.*;
@@ -248,10 +258,11 @@ collect_pipelines! {
         pipelines.insert("consistent".to_string());
     };
 
-    DynamicField.[address] => IAddressable.*;
+    DynamicField.[address, addressAt, asTransactionObject] => IAddressable.*;
     DynamicField.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    DynamicField.[defaultRtdnsName] => IAddressable.defaultRtdnsName();
+    DynamicField.[defaultNameRecord] => IAddressable.defaultNameRecord();
     DynamicField.[contents, hasPublicTransfer, moveObjectBcs] => IMoveObject.*;
+    DynamicField.[derivedObject, multiGetDerivedObjects] => IAddressable.*;
     DynamicField.[dynamicField, dynamicObjectField, multiGetDynamicFields, multiGetDynamicObjectFields] => IMoveObject.*;
     DynamicField.[dynamicFields] => IMoveObject.dynamicFields();
     DynamicField.[objectAt, objectVersionsAfter, objectVersionsBefore] => IObject.*;
@@ -269,7 +280,10 @@ collect_pipelines! {
     IAddressable.[balance, balances, multiGetBalances, objects] |pipelines, _filters| {
         pipelines.insert("consistent".to_string());
     };
-    IAddressable.[defaultRtdnsName] |pipelines, _filters| {
+    IAddressable.[derivedObject, multiGetDerivedObjects] |pipelines, _filters| {
+        pipelines.insert("obj_versions".to_string());
+    };
+    IAddressable.[defaultNameRecord] |pipelines, _filters| {
         pipelines.insert("obj_versions".to_string());
     };
 
@@ -289,55 +303,69 @@ collect_pipelines! {
         pipelines.insert("obj_versions".to_string());
     };
 
-    MoveDatatype.[module, name] => IMoveDatatype.*;
+    MoveDatatype.[module, name, fullyQualifiedName] => IMoveDatatype.*;
     MoveDatatype.[abilities, typeParameters] => IMoveDatatype.*;
     MoveDatatype.[asMoveEnum, asMoveStruct] |pipelines, _filters| {
         pipelines.insert("obj_versions".to_string());
     };
 
-    MoveEnum.[module, name] => IMoveDatatype.*;
+    MoveEnum.[module, name, fullyQualifiedName] => IMoveDatatype.*;
     MoveEnum.[abilities, typeParameters] => IMoveDatatype.*;
     MoveEnum.[variants] |pipelines, _filters| {
         pipelines.insert("obj_versions".to_string());
     };
 
-    MoveObject.[address] => IAddressable.*;
+    MoveObject.[address, addressAt, asTransactionObject] => IAddressable.*;
     MoveObject.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    MoveObject.[defaultRtdnsName] => IAddressable.defaultRtdnsName();
+    MoveObject.[defaultNameRecord] => IAddressable.defaultNameRecord();
     MoveObject.[contents, hasPublicTransfer, moveObjectBcs] => IMoveObject.*;
+    MoveObject.[derivedObject, multiGetDerivedObjects] => IAddressable.*;
     MoveObject.[dynamicField, dynamicObjectField, multiGetDynamicFields, multiGetDynamicObjectFields] => IMoveObject.*;
     MoveObject.[dynamicFields] => IMoveObject.dynamicFields();
     MoveObject.[objectAt, objectVersionsAfter, objectVersionsBefore] => IObject.*;
     MoveObject.[digest, objectBcs, owner, previousTransaction, storageRebate, version] => IObject.*;
     MoveObject.[receivedTransactions] => IObject.receivedTransactions();
 
-    MovePackage.[address] => IAddressable.*;
+    MovePackage.[address, addressAt, asTransactionObject] => IAddressable.*;
     MovePackage.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    MovePackage.[defaultRtdnsName] => IAddressable.defaultRtdnsName();
+    MovePackage.[defaultNameRecord] => IAddressable.defaultNameRecord();
+    MovePackage.[derivedObject, multiGetDerivedObjects] => IAddressable.*;
     MovePackage.[objectAt, objectVersionsAfter, objectVersionsBefore] => IObject.*;
     MovePackage.[digest, objectBcs, owner, previousTransaction, storageRebate, version] => IObject.*;
     MovePackage.[receivedTransactions] => IObject.receivedTransactions();
 
-    MoveStruct.[module, name] => IMoveDatatype.*;
+    MoveStruct.[module, name, fullyQualifiedName] => IMoveDatatype.*;
     MoveStruct.[abilities, typeParameters] => IMoveDatatype.*;
     MoveStruct.[fields] |pipelines, _filters| {
         pipelines.insert("obj_versions".to_string());
     };
 
-    Object.[address] => IAddressable.*;
+    Object.[address, addressAt, asTransactionObject] => IAddressable.*;
     Object.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    Object.[defaultRtdnsName] => IAddressable.defaultRtdnsName();
+    Object.[defaultNameRecord] => IAddressable.defaultNameRecord();
+    Object.[derivedObject, multiGetDerivedObjects] => IAddressable.*;
     Object.[dynamicField, dynamicObjectField, multiGetDynamicFields, multiGetDynamicObjectFields] => IMoveObject.*;
     Object.[dynamicFields] => IMoveObject.dynamicFields();
     Object.[objectAt, objectVersionsAfter, objectVersionsBefore, version] => IObject.*;
     Object.[digest, objectBcs, owner, previousTransaction, storageRebate, version] => IObject.*;
     Object.[receivedTransactions] => IObject.receivedTransactions();
 
+    Query.[address] |pipelines, filters| {
+        if filters.contains("name") {
+            pipelines.insert("obj_versions".to_string());
+        }
+    };
+    Query.[multiGetBalances] |pipelines, _filters| {
+        pipelines.insert("consistent".to_string());
+    };
     Query.[checkpoints] |pipelines, _filters| {
         pipelines.insert("cp_sequence_numbers".to_string());
     };
     Query.[coinMetadata] |pipelines, _filters| {
         pipelines.insert("consistent".to_string());
+        pipelines.insert("obj_versions".to_string());
+    };
+    Query.[multiGetDerivedObjects, multiGetDynamicFields, multiGetDynamicObjectFields] |pipelines, _filters| {
         pipelines.insert("obj_versions".to_string());
     };
     Query.[events] |pipelines, filters| {
@@ -347,6 +375,9 @@ collect_pipelines! {
         } else {
             pipelines.insert("ev_struct_inst".to_string());
         }
+    };
+    Query.[nameRecord] |pipelines, _filters| {
+        pipelines.insert("obj_versions".to_string());
     };
     Query.[object] |pipelines, filters| {
         if !filters.contains("version") {
@@ -374,30 +405,25 @@ collect_pipelines! {
             pipelines.insert("tx_kinds".to_string());
         }
     };
-
-    TransactionEffects.[balanceChanges] |pipelines, _filters| {
-        pipelines.insert("tx_balance_changes".to_string());
-        pipelines.insert("tx_digests".to_string());
-    };
-
-    Validator.[address] => IAddressable.*;
-    Validator.[balance, balances, multiGetBalances, objects] => IAddressable.*;
-    Validator.[defaultRtdnsName] => IAddressable.defaultRtdnsName();
-    Validator.[operationCap] |pipelines, _filters| {
-        pipelines.insert("obj_versions".to_string());
-    };
 }
 
 #[cfg(test)]
 mod field_piplines_tests {
-    use super::*;
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+
+    use async_graphql::Response;
+    use async_graphql::extensions::Extension;
+    use async_graphql::extensions::ExtensionContext;
+    use async_graphql::extensions::ExtensionFactory;
+    use async_graphql::extensions::NextRequest;
+    use async_graphql::registry::MetaType;
+    use async_graphql::registry::MetaTypeName;
+    use async_graphql::registry::Registry;
+
     use crate::schema;
-    use async_graphql::{
-        Response,
-        extensions::{Extension, ExtensionContext, ExtensionFactory, NextRequest},
-        registry::{MetaType, MetaTypeName, Registry},
-    };
-    use std::{collections::BTreeSet, sync::Arc};
+
+    use super::*;
 
     fn test_collect_pipelines(
         type_: &str,
@@ -475,6 +501,7 @@ mod field_piplines_tests {
 
         for (interface_name, meta_type) in registry.types.iter() {
             let MetaType::Interface {
+                name,
                 possible_types,
                 fields,
                 ..
@@ -482,6 +509,13 @@ mod field_piplines_tests {
             else {
                 continue;
             };
+
+            // Node is part of the GraphQL Global Identification specification, it does not have
+            // any retention requirements, so can be safely skipped.
+            if name == "Node" {
+                continue;
+            }
+
             for type_name in possible_types {
                 for (interface_field_name, _) in fields {
                     let Some((delegate_type, delegate_field)) =
@@ -604,7 +638,12 @@ mod field_piplines_tests {
                 );
             }
         }
-        insta::assert_snapshot!(output);
+        let snapshot_name = if cfg!(feature = "staging") {
+            "registry_collect_pipelines_snapshot_staging"
+        } else {
+            "registry_collect_pipelines_snapshot"
+        };
+        insta::assert_snapshot!(snapshot_name, output);
     }
 
     fn formatted_output_str(

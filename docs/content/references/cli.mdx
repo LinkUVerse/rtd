@@ -1,31 +1,69 @@
 ---
 title: Rtd CLI
-description: Rtd provides command line tools to interact with the network, its features, and the Move programming language. Individual command groups are referred to as Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, and Rtd Validator CLI.
-keywords: [ Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, Rtd Validator CLI, rtd cli, update cli, rtd cli commands, rtd client PTB CLI, rtd PTB CLI ] 
+description: >-
+  Rtd provides command line tools to interact with the network, its features,
+  and the Move programming language. Individual command groups and utilities are
+  referred to as Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, Rtd Completion
+  CLI, and Rtd Validator CLI.
+keywords:
+  - Rtd Client CLI
+  - Rtd Keytool CLI
+  - Rtd Move CLI
+  - Rtd Completion CLI
+  - Rtd Validator CLI
+  - rtd cli
+  - update cli
+  - rtd cli commands
+  - rtd client PTB CLI
+  - rtd PTB CLI
 pagination_prev: null
+goal:
+  description: >-
+    Reader can look up the Rtd CLI command groups for interacting with the
+    network and the Move language
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - min_words: 100
+      label: Needs more reference content
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Rtd CLI in Rtd?
+  - Where can I find the rtd cli reference?
+  - How does rtd cli work on Rtd?
+answer: >-
+  Rtd provides command line tools to interact with the network, its features,
+  and the Move programming language.
 ---
 
-Rtd provides a command line interface (CLI) tool to interact with the Rtd network, its features, and the Move programming language. The complete rtdte of tools is called the Rtd CLI, with commands grouped together by feature. Each group of commands is commonly referred to by its top-level command: Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, and Rtd Validator CLI.
+Rtd provides a command line interface (CLI) tool to interact with the Rtd network, its features, and the Move programming language. The complete suite of tools is called the Rtd CLI, with commands grouped together by feature. Each group of commands is commonly referred to by its top-level command or utility: Rtd Client CLI, Rtd Keytool CLI, Rtd Move CLI, Rtd Completion CLI, and Rtd Validator CLI.
 
-<ImportContent source="cli-check-install.mdx" mode="snippet" />
+<ImportContent source="cli-check-install" mode="snippet" />
 
 ## Update CLI
 
-The recommended way to manage Rtd CLI installations and versions is via `rtdup`: https://github.com/linkuLabs/rtdup.
+Build the RTD CLI from this fork source. No external RTD installer or public network-specific release is verified.
 
 :::info
 
-The `tracing` feature is important as it adds Move test coverage and debugger support in the Rtd CLI. Unless it is enabled you will not be able to use these two features.
+The `tracing` feature is important because it adds Move test coverage and debugger support in the Rtd CLI. Unless you enable it, you cannot use these two features.
 
 :::
 
 ## Rtd CLI commands
 
-There are a number of top-level commands available, but the five most useful to users are the following. Use the `help` flag for the commands that are not documented yet. For example, `rtd validator --help`.
+There are a number of top-level commands available. Use the `help` flag for the commands that are not documented yet. For example, `rtd validator --help`.
 
-- **[Rtd Client CLI](./cli/client.mdx):** Use the `rtd client` commands to interact with the Rtd network.
-- **[Rtd Client PTB CLI](./cli/ptb.mdx):** Use the `rtd client ptb` command to build and execute PTBs.
-- **[Rtd Keytool CLI](./cli/keytool.mdx):** Use the `rtd keytool` commands to access cryptography utilities.
-- **[Rtd Move CLI](./cli/move.mdx):** Use the `rtd move` commands to work with the Move programming language.
-- **[Rtd Replay CLI](./cli/replay.mdx):** Use the `rtd client replay` command to replay a transaction and generate transaction traces for the Move Debugger and trace analysis tools.
-- **[Rtd Validator CLI](./cli/validator.mdx):** Use the `rtd validator` commands to access tools useful for Rtd validators.
+- **[Rtd Client CLI](/references/cli/client):** Use the `rtd client` commands to interact with the Rtd network.
+- **[Rtd Client PTB CLI](/references/cli/ptb):** Use the `rtd client ptb` command to build and execute PTBs.
+- **[Rtd Completion CLI](/references/cli/completion):** Use the `rtd completion` command to generate shell completion scripts.
+- **[Rtd External Keys CLI](/references/cli/external-signers):** Use the `rtd external-keys` commands to manage keys on external hardware signers (Ledger, YubiKey).
+- **[Rtd Keytool CLI](/references/cli/keytool):** Use the `rtd keytool` commands to access cryptography utilities.
+- **[Rtd Move CLI](/references/cli/move):** Use the `rtd move` commands to work with the Move programming language.
+- **[Rtd Replay CLI](/references/cli/replay):** Use the `rtd replay` command to replay a transaction and generate transaction traces for the Move Debugger and trace analysis tools.
+- **[Rtd Validator CLI](/references/cli/validator):** Use the `rtd validator` commands to access tools useful for Rtd validators.

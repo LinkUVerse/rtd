@@ -25,8 +25,5 @@ authority-store-pruning-config:
   max-transactions-in-batch: 1000
   pruning-run-delay-seconds: 60
 
-state-archive-read-config:
-    # Use https://checkpoints.mainnet.rtd.io for mainnet
-    # Use https://checkpoints.testnet.rtd.io for testnet
-    - ingestion-url: "https://checkpoints.<mainnet|testnet>.rtd.io"
-      concurrency: 5
+# Add an ingestion URL for an archive that you operate or trust after deployment.
+state-archive-read-config: []

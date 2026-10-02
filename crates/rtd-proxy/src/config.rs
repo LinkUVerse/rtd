@@ -26,7 +26,6 @@ pub struct ProxyConfig {
 pub struct RemoteWriteConfig {
     // TODO upgrade to https
     /// the remote_write url to post data to
-    #[serde(default = "remote_write_url")]
     pub url: String,
     /// username is used for posting data to the remote_write api
     pub username: String,
@@ -38,14 +37,17 @@ pub struct RemoteWriteConfig {
     pub pool_max_idle_per_host: usize,
 }
 
-/// DynamicPeerValidationConfig controls what rtd-node & rtd-bridge binaries that are functioning as a validator that we'll speak with.
-/// Peer in this case is peers within the consensus committee, for each epoch.  This membership is determined dynamically
-/// for each epoch via json-rpc calls to a full node.
+/// DynamicPeerValidationConfig controls what rtd-node, rtd-bridge, and hashi-server
+/// binaries (each functioning as a node in a Rtd-anchored network) we'll accept
+/// metrics from. Peer membership is determined dynamically via Rtd gRPC calls to
+/// a full node — rtd validator set and bridge committee are always resolved
+/// from on-chain state, and hashi membership is resolved when `hashi_object_id`
+/// is set.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct DynamicPeerValidationConfig {
-    /// url is the json-rpc url we use to obtain valid peers on the blockchain
+    /// url is the Rtd gRPC url we use to obtain valid peers on the blockchain.
     pub url: String,
     #[serde_as(as = "DurationSeconds<u64>")]
     pub interval: Duration,
@@ -60,6 +62,10 @@ pub struct DynamicPeerValidationConfig {
     /// private key for tls
     /// please use an absolute path
     pub private_key: Option<String>,
+
+    /// `hashi::hashi::Hashi` shared object id. When set, the resolver discovers
+    /// hashi committee members from chain and adds them to the allowlist.
+    pub hashi_object_id: Option<String>,
 }
 
 /// StaticPeerValidationConfig, unlike the DynamicPeerValidationConfig, is not determined dynamically from rpc
@@ -91,11 +97,6 @@ fn pool_max_idle_per_host_default() -> usize {
 /// the default hostname we will use if not provided
 fn hostname_default() -> Option<String> {
     Some("localhost".to_string())
-}
-
-/// the default remote write url
-fn remote_write_url() -> String {
-    "http://metrics-gw.testnet.rtd.io/api/v1/push".to_string()
 }
 
 /// load our config file from a path

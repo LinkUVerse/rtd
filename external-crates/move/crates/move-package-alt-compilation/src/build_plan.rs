@@ -23,11 +23,7 @@ use move_compiler::{
     shared::{SaveFlag, SaveHook, files::MappedFiles},
 };
 use move_package_alt::{
-    compatibility::legacy_parser::PACKAGE_NAME,
-    errors::PackageResult,
-    flavor::MoveFlavor,
-    package::{RootPackage, layout::SourcePackageLayout},
-    schema::PackageID,
+    MoveFlavor, PackageResult, RootPackage, SourcePackageLayout, schema::PackageID,
 };
 use move_symbol_pool::Symbol;
 use toml_edit::{DocumentMut, value};
@@ -242,6 +238,29 @@ impl<'a, F: MoveFlavor> BuildPlan<'a, F> {
         Ok(migration)
     }
 
+    /// Check the package without producing compiled artifacts.
+    /// Reports errors and warnings (including lints) to stderr.
+    pub fn check<W: Write + Send>(&self, writer: &mut W) -> anyhow::Result<()> {
+        let dependencies: BTreeSet<PackageID> = self
+            .root_pkg
+            .packages()
+            .into_iter()
+            .filter(|x| !x.is_root())
+            .map(|x| x.id().to_string())
+            .collect();
+        build_for_driver(
+            writer,
+            self.compiler_vfs_root.clone(),
+            &self.build_config,
+            self.root_pkg,
+            dependencies,
+            |compiler| {
+                compiler.check_and_report()?;
+                Ok(())
+            },
+        )
+    }
+
     /// Rewrite the edition field in Move.toml to the given edition.
     pub fn record_package_edition(&self, edition: Edition) -> anyhow::Result<()> {
         let move_toml_path = self
@@ -251,7 +270,8 @@ impl<'a, F: MoveFlavor> BuildPlan<'a, F> {
         let mut toml = std::fs::read_to_string(move_toml_path.clone())?
             .parse::<DocumentMut>()
             .expect("Failed to read TOML file to update edition");
-        toml[PACKAGE_NAME][EDITION_NAME] = value(edition.to_string());
+        // TODO DVX-910: this should go through the package system
+        toml["package"][EDITION_NAME] = value(edition.to_string());
         std::fs::write(move_toml_path, toml.to_string())?;
         Ok(())
     }

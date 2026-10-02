@@ -14,18 +14,18 @@ use crate::{
 };
 use anyhow::{Error, Result};
 use lru::LruCache;
+use rtd_types::{
+    base_types::ObjectID,
+    committee::ProtocolVersion,
+    object::Object,
+    supported_protocol_versions::{Chain, ProtocolConfig},
+};
 use std::{
     num::NonZeroUsize,
     sync::{
         RwLock,
         atomic::{AtomicU64, Ordering},
     },
-};
-use rtd_types::{
-    base_types::ObjectID,
-    committee::ProtocolVersion,
-    object::Object,
-    supported_protocol_versions::{Chain, ProtocolConfig},
 };
 
 /// Default cache capacities

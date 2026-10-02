@@ -6,9 +6,9 @@ use crate::crypto::DefaultHash;
 use crate::error::{RtdError, RtdErrorKind, RtdResult};
 use crate::id::UID;
 use crate::object::{MoveObject, Object};
-use crate::storage::{ChildObjectResolver, ObjectStore};
 use crate::rtd_serde::Readable;
 use crate::rtd_serde::RtdTypeTag;
+use crate::storage::{ObjectStore, RuntimeObjectResolver};
 use crate::{MoveTypeTagTrait, ObjectID, RTD_FRAMEWORK_ADDRESS, SequenceNumber};
 use fastcrypto::encoding::Base64;
 use fastcrypto::hash::HashFunction;
@@ -61,7 +61,7 @@ where
 }
 
 #[serde_as]
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DynamicFieldInfo {
     pub name: DynamicFieldName,
@@ -75,7 +75,7 @@ pub struct DynamicFieldInfo {
 }
 
 #[serde_as]
-#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DynamicFieldName {
     #[schemars(with = "String")]
@@ -275,7 +275,6 @@ where
     T: Into<RtdAddress>,
 {
     let parent: RtdAddress = parent.into();
-    let k_tag_bytes = bcs::to_bytes(key_type_tag)?;
     tracing::trace!(
         "Deriving dynamic field ID for parent={:?}, key={:?}, key_type_tag={}",
         parent,
@@ -289,7 +288,7 @@ where
     hasher.update(parent);
     hasher.update(key_bytes.len().to_le_bytes());
     hasher.update(key_bytes);
-    hasher.update(k_tag_bytes);
+    bcs::serialize_into(&mut hasher, key_type_tag)?;
     let hash = hasher.finalize();
 
     // truncate into an ObjectID and return
@@ -571,16 +570,20 @@ where
     /// If the field does not exist, return None.
     pub fn load_object(
         self,
-        child_object_resolver: &dyn ChildObjectResolver,
+        runtime_object_resolver: &dyn RuntimeObjectResolver,
     ) -> Result<Option<DynamicFieldObject<K>>, RtdError> {
-        child_object_resolver
+        runtime_object_resolver
             .read_child_object(&self.0, &self.1, self.2)
             .map(|r| r.map(DynamicFieldObject::<K>::new))
     }
 
     /// Check if the field object exists in the store.
-    pub fn exists(self, child_object_resolver: &dyn ChildObjectResolver) -> Result<bool, RtdError> {
-        self.load_object(child_object_resolver).map(|r| r.is_some())
+    pub fn exists(
+        self,
+        runtime_object_resolver: &dyn RuntimeObjectResolver,
+    ) -> Result<bool, RtdError> {
+        self.load_object(runtime_object_resolver)
+            .map(|r| r.is_some())
     }
 }
 

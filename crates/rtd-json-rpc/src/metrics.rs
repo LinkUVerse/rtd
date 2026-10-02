@@ -8,11 +8,11 @@ use prometheus::{
     HistogramVec, IntCounterVec, IntGaugeVec, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
 };
+use rtd_json_rpc_api::TRANSIENT_ERROR_CODE;
+use rtd_json_rpc_api::{CLIENT_SDK_TYPE_HEADER, CLIENT_TARGET_API_VERSION_HEADER};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use rtd_json_rpc_api::TRANSIENT_ERROR_CODE;
-use rtd_json_rpc_api::{CLIENT_SDK_TYPE_HEADER, CLIENT_TARGET_API_VERSION_HEADER};
 use tokio::time::Instant;
 
 const SPAM_LABEL: &str = "SPAM";

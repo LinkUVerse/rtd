@@ -5,37 +5,42 @@ use std::{collections::BTreeMap, path::Path};
 
 use anyhow::bail;
 use indexmap::IndexMap;
+use move_compiler::format_oxford_list;
 use move_package_alt::{
-    package::RootPackage,
+    RootPackage,
     schema::{Environment, EnvironmentID, EnvironmentName},
 };
-use rtd_sdk::{RtdClient, wallet_context::WalletContext};
+use rtd_sdk::digests::chain_ids_match;
+use rtd_sdk::wallet_context::WalletContext;
 
 use crate::RtdFlavor;
 
 /// Binds together the context for `find_environment` for helper functions
 struct EnvFinder<'a> {
-    package_path: &'a Path,
     explicit_env: Option<EnvironmentName>,
     wallet: &'a WalletContext,
     manifest_envs: IndexMap<EnvironmentName, EnvironmentID>,
+    for_publication: bool,
 }
 
 /// Determine the correct environment to use for the package system based on
 ///  - the path to a directory containing a Move.toml file
 ///  - the `-e <env>` argument that was passed, if any
 ///  - the CLI's active environment (`wallet`)
+///  - whether the error messages should be (true) publication- or (false) build-oriented.
 pub async fn find_environment(
     package_path: &Path,
     explicit_env: Option<EnvironmentName>,
     wallet: &WalletContext,
+    for_publication: bool,
 ) -> anyhow::Result<Environment> {
-    let mut manifest_envs = RootPackage::<RtdFlavor>::environments(package_path)?;
+    let flavor = RtdFlavor::with_client(wallet);
+    let manifest_envs = RootPackage::<RtdFlavor>::environments(package_path, &flavor)?;
     let finder = EnvFinder {
-        package_path,
         explicit_env,
         wallet,
         manifest_envs,
+        for_publication,
     };
 
     // use explicit environment if provided
@@ -73,13 +78,11 @@ impl EnvFinder<'_> {
     /// Find the active environment. Checks the cache first and fails if the chain ID cannot be
     /// determined (either from the cache or from the network or the manifest)
     async fn active_environment(&self) -> anyhow::Result<Environment> {
-        let mut active_env = self.wallet.get_active_env()?.clone();
+        let active_env = self.wallet.get_active_env()?.clone();
         let chain_id = if let Some(chain_id) = active_env.chain_id {
             // cached
             chain_id
-        } else if let Ok(client) = self.wallet.get_client().await
-            && let Ok(chain_id) = self.wallet.cache_chain_id(&client).await
-        {
+        } else if let Ok(chain_id) = self.wallet.cache_chain_id().await {
             // fetched
             chain_id
         } else if let Some(chain_id) = self.manifest_envs.get(&active_env.alias) {
@@ -101,13 +104,16 @@ impl EnvFinder<'_> {
     }
 
     /// Check that the exact environment `active_env` is present in the manifest; returns an error
-    /// if the name is present but the chain ID differs; returns `None` if it's not present
+    /// if the name is present but the chain ID differs; returns `None` if it's not present.
+    ///
+    /// On success, the returned environment carries the manifest's chain ID, which may be a
+    /// different (but equivalent) encoding than the one in the CLI environment.
     fn check_exact(&self, active_env: &Environment) -> anyhow::Result<Option<Environment>> {
         let Some(manifest_id) = self.manifest_envs.get(active_env.name()) else {
             return Ok(None);
         };
 
-        if manifest_id != active_env.id() {
+        if !chain_ids_match(manifest_id, active_env.id()) {
             bail!(
                 "Error: Environment `{active_env}` has chain ID `{chain_id}` in your CLI \
                 environment, but `Move.toml` expects `{active_env}` to have chain ID \
@@ -119,7 +125,10 @@ impl EnvFinder<'_> {
             );
         }
 
-        Ok(Some(active_env.clone()))
+        Ok(Some(Environment::new(
+            active_env.name().clone(),
+            manifest_id.clone(),
+        )))
     }
 
     /// Check that there is exactly one entry of the manifest that matches the provided `chain_id`;
@@ -132,26 +141,25 @@ impl EnvFinder<'_> {
         let candidates: BTreeMap<&EnvironmentName, &EnvironmentID> = self
             .manifest_envs
             .iter()
-            .filter(|(k, v)| v == &&chain_id)
+            .filter(|(_, v)| chain_ids_match(v, &chain_id))
             .collect();
 
         if candidates.is_empty() {
             // ephemeral case, no environment found with that name, we error
-            bail!(
-                "Your active environment `{active_env}` is not present in `Move.toml`, so you cannot \
-                publish to `{active_env}`.
-
-            - If you want to create a temporary publication on `{active_env}` and record the addresses \
-               in an ephemeral file, use the `test-publish` command instead.
-
-                rtd client test-publish --help
-
-            - If you want to publish to `{active_env}` and record the addresses in the shared \
-            `Publications.toml` file, you will need to add the following to `Move.toml`:
-
-                [environments]
-                {active_env} = \"{chain_id}\""
-            );
+            if self.for_publication {
+                bail!(
+                    "Your current environment is `{active_env}`, but the package does not define an `{active_env}` environment.\n\n\
+                    To publish on a different environment, you can use `rtd client switch --env <env>` before publishing.\n\n\
+                    To make a temporary publication on `{active_env}`, use the `rtd client test-publish` command instead.\n\n\
+                    It is also possible to add a new environment to `Move.toml` if you want to maintain a persistent publication on `{active_env}`."
+                );
+            } else {
+                let options =
+                    format_oxford_list!(ITER, "or", "`--build-env {}`", self.manifest_envs.keys());
+                bail!(
+                    "Could not determine the correct dependencies to use for `{active_env}`; pass one of {options}."
+                );
+            }
         }
 
         if candidates.len() > 1 {

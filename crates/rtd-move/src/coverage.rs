@@ -4,8 +4,8 @@
 use clap::Parser;
 use move_cli::base::coverage;
 use move_package_alt_compilation::build_config::BuildConfig;
-use std::path::Path;
 use rtd_package_alt::RtdFlavor;
+use std::path::Path;
 
 #[derive(Parser)]
 #[group(id = "rtd-move-coverage")]
@@ -19,10 +19,9 @@ impl Coverage {
         self,
         path: Option<&Path>,
         build_config: BuildConfig,
+        flavor: RtdFlavor,
     ) -> anyhow::Result<()> {
-        self.coverage
-            .execute::<RtdFlavor>(path, build_config)
-            .await?;
+        self.coverage.execute(path, build_config, flavor).await?;
         Ok(())
     }
 }

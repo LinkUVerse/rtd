@@ -11,9 +11,8 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     diag,
     diagnostics::{
-        Diagnostic, DiagnosticReporter, Diagnostics,
-        codes::Category,
-        warning_filters::{WarningFiltersBuilder, WarningFiltersTable},
+        Diagnostic, DiagnosticReporter, Diagnostics, codes::Category,
+        filter::dependency_drop_filter_scope,
     },
     editions::{Edition, FeatureGate, UPGRADE_NOTE},
     parser::{ast::*, attributes::to_known_attributes, format_one_of, lexer::*, token_set::*},
@@ -2501,6 +2500,7 @@ fn at_start_of_exp(context: &mut Context) -> bool {
             | Tok::StringValue
             | Tok::Identifier
             | Tok::RestrictedIdentifier
+            | Tok::SyntaxIdentifier
             | Tok::AtSign
             | Tok::Copy
             | Tok::Move
@@ -2694,9 +2694,15 @@ fn parse_binop_exp(context: &mut Context, lhs: Exp, min_prec: u32) -> Result<Exp
             Tok::Star => BinOp_::Mul,
             Tok::Slash => BinOp_::Div,
             Tok::Percent => BinOp_::Mod,
-            Tok::PeriodPeriod => BinOp_::Range,
-            Tok::EqualEqualGreater => BinOp_::Implies,
-            Tok::LessEqualEqualGreater => BinOp_::Iff,
+            Tok::PeriodPeriod | Tok::EqualEqualGreater | Tok::LessEqualEqualGreater => {
+                let loc = make_loc(context.tokens.file_hash(), op_start_loc, op_end_loc);
+                context.add_diag(crate::shared::spec_deprecated_diag(
+                    loc, /* is_error */ true,
+                ));
+                // Skip the RHS and keep the LHS as the result.
+                next_tok_prec = get_precedence(context.tokens.peek());
+                continue;
+            }
             _ => panic!("Unexpected token that is not a binary operator"),
         };
         let sp_op = spanned(context.tokens.file_hash(), op_start_loc, op_end_loc, op);
@@ -4043,11 +4049,8 @@ fn parse_constant_decl(
         native,
         macro_,
     } = modifiers;
-    if let Some(vis) = visibility {
-        let msg = "Invalid constant declaration. Constants cannot have visibility modifiers as \
-                   they are always internal";
-        context.add_diag(diag!(Syntax::InvalidModifier, (vis.loc().unwrap(), msg)));
-    }
+    // invalid visibilities are rejected during expansion
+    let visibility = visibility.unwrap_or(Visibility::Internal);
     check_no_modifier(context, NATIVE_MODIFIER, native, "constant");
     check_no_modifier(context, ENTRY_MODIFIER, entry, "constant");
     check_no_modifier(context, MACRO_MODIFIER, macro_, "constant");
@@ -4076,6 +4079,7 @@ fn parse_constant_decl(
         doc,
         attributes,
         loc,
+        visibility,
         signature,
         name,
         value,
@@ -4845,10 +4849,10 @@ fn consume_spec_string(context: &mut Context) -> Result<Spanned<String>, Box<Dia
 fn parse_file(context: &mut Context) -> Vec<Definition> {
     // If this is a dependency, do not report warnings in it.
     let config = context.env.package_config(context.current_package);
-    let mut table = WarningFiltersTable::new();
     if config.is_dependency {
-        let all_filters_all = table.add(WarningFiltersBuilder::new_all_filter_alls(context.env));
-        context.reporter.push_warning_filter_scope(all_filters_all);
+        context
+            .reporter
+            .push_warning_filter_scope(dependency_drop_filter_scope());
     }
 
     let mut defs = vec![];

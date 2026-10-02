@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --addresses Test=0x0 --accounts A B C --simulator
+//# init --protocol-version 108 --addresses Test=0x0 --accounts A B C --simulator
 
 //# publish
 module Test::M1 {
@@ -37,6 +37,17 @@ module Test::M1 {
 //# advance-epoch
 
 //# run Test::M1::create --sender C --args 2 @A
+
+//# create-checkpoint
+
+// Send 1000 address balance from A to B and A to C
+//# programmable --sender A --inputs 1000 @B @C
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: rtd::coin::into_balance<rtd::rtd::RTD>(Result(0));
+//> 2: rtd::balance::send_funds<rtd::rtd::RTD>(Result(1), Input(1));
+//> 3: SplitCoins(Gas, [Input(0)]);
+//> 4: rtd::coin::into_balance<rtd::rtd::RTD>(Result(3));
+//> 5: rtd::balance::send_funds<rtd::rtd::RTD>(Result(4), Input(2));
 
 //# create-checkpoint
 

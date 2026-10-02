@@ -1,0 +1,11 @@
+---
+title: Choose a Payment Model
+description: Current RTD support and deployment requirements.
+keywords:
+  - RTD
+  - choose payments model
+---
+
+# Choose a Payment Model
+
+For a direct RTD payment, construct a transaction that transfers a `Coin<T>` or sends funds to an address balance. Verify the target network, recipient, coin type, amount, gas budget, and confirmed effects. A sponsor may pay gas after it checks the exact transaction it signs. The source protocol contains gasless transaction logic, but this fork has an **empty gasless token allowlist** and no verified RTD stablecoin deployment; do not promise zero-fee stablecoin transfers. The upstream Payment Kit contract is not included. Applications requiring receipts, retries, duplicate prevention, and refunds must implement and test those functions for the target chain.

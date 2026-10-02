@@ -6,15 +6,17 @@
 
 use std::{fmt::Debug, path::PathBuf, sync::Arc};
 
+use rtd_core::authority::AuthorityState;
+use rtd_core::authority::authority_test_utils::submit_and_execute;
 use rtd_core::authority::test_authority_builder::TestAuthorityBuilder;
-use rtd_core::{authority::AuthorityState, test_utils::send_and_confirm_transaction};
 use rtd_move_build::BuildConfig;
-use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
+use rtd_types::crypto::get_authority_key_pair;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::error::RtdError;
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::object::Object;
-use rtd_types::transaction::{Transaction, TransactionData};
+use rtd_types::transaction::{Transaction, TransactionData, TransactionKind};
 use rtd_types::utils::to_sender_signed_transaction;
 use tokio::runtime::Runtime;
 
@@ -38,10 +40,10 @@ fn build_test_modules(test_dir: &str) -> (Vec<u8>, Vec<Vec<u8>>) {
 // which case we want to panic.
 pub fn assert_is_acceptable_result(result: &ExecutionResult) {
     if let Ok(
-        e @ ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::InvariantViolation,
-            command: _,
-        },
+        e @ ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::InvariantViolation,
+            ..
+        }),
     ) = result
     {
         panic!("Invariant violation: {e:#?}")
@@ -76,6 +78,20 @@ impl Executor {
         }
     }
 
+    pub fn new_fullnode() -> Self {
+        let rt = Runtime::new().unwrap();
+        let fullnode_key_pair = get_authority_key_pair().1;
+        let state = rt.block_on(
+            TestAuthorityBuilder::new()
+                .with_keypair(&fullnode_key_pair)
+                .build(),
+        );
+        Self {
+            state,
+            rt: Arc::new(rt),
+        }
+    }
+
     pub fn new_with_rgp(rgp: u64) -> Self {
         let rt = Runtime::new().unwrap();
         let state = rt.block_on(
@@ -94,16 +110,16 @@ impl Executor {
     }
 
     pub fn add_object(&mut self, object: Object) {
-        self.rt.block_on(self.state.insert_genesis_object(object));
+        self.state.insert_genesis_object(object);
     }
 
     pub fn add_objects(&mut self, objects: &[Object]) {
-        self.rt.block_on(self.state.insert_genesis_objects(objects));
+        self.state.insert_genesis_objects(objects);
     }
 
     pub fn execute_transaction(&mut self, txn: Transaction) -> ExecutionResult {
         self.rt
-            .block_on(send_and_confirm_transaction(&self.state, None, txn))
+            .block_on(submit_and_execute(&self.state, txn))
             .map(|(_, effects)| effects.into_data().status().clone())
     }
 
@@ -127,7 +143,7 @@ impl Executor {
         let txn = to_sender_signed_transaction(data, &account.initial_data.account.key);
         let effects = self
             .rt
-            .block_on(send_and_confirm_transaction(&self.state, None, txn))
+            .block_on(submit_and_execute(&self.state, txn))
             .unwrap()
             .1
             .into_data();
@@ -147,5 +163,35 @@ impl Executor {
         txn.into_iter()
             .map(|txn| self.execute_transaction(txn))
             .collect()
+    }
+
+    pub fn dry_run_transaction(&self, tx_data: TransactionData) -> Result<(), RtdError> {
+        self.rt
+            .block_on(self.state.dry_exec_transaction(tx_data))
+            .map(|_| ())
+    }
+
+    pub fn dev_inspect_transaction(
+        &self,
+        sender: RtdAddress,
+        kind: TransactionKind,
+        gas_price: Option<u64>,
+        gas_budget: Option<u64>,
+        gas_sponsor: Option<RtdAddress>,
+        gas_objects: Option<Vec<ObjectRef>>,
+        skip_checks: Option<bool>,
+    ) -> Result<(), RtdError> {
+        self.rt
+            .block_on(self.state.dev_inspect_transaction_block(
+                sender,
+                kind,
+                gas_price,
+                gas_budget,
+                gas_sponsor,
+                gas_objects,
+                None,
+                skip_checks,
+            ))
+            .map(|_| ())
     }
 }

@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rand::distributions::Distribution;
-use std::net::SocketAddr;
-use std::time::Duration;
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
 use rtd_macros::sim_test;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_test_transaction_builder::publish_basics_package_and_make_party_object;
@@ -12,16 +9,14 @@ use rtd_types::base_types::{FullObjectRef, RtdAddress};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::object::Owner;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
+use std::net::SocketAddr;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tracing::info;
 
 /// Delete a party object as the object owner.
 #[sim_test]
 async fn party_object_deletion() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
     let test_cluster = TestClusterBuilder::new().build().await;
 
@@ -47,23 +42,18 @@ async fn party_object_deletion() {
     let effects = test_cluster
         .sign_and_execute_transaction(&transaction)
         .await
-        .effects
-        .unwrap();
+        .effects;
 
     assert_eq!(effects.deleted().len(), 1);
-    assert_eq!(effects.shared_objects().len(), 1);
+    assert_eq!(effects.accessed_consensus_objects().len(), 1);
 
     // assert the shared object was deleted
-    let deleted_obj_id = effects.deleted()[0].object_id;
+    let deleted_obj_id = effects.deleted()[0].0;
     assert_eq!(deleted_obj_id, object_id);
 }
 
 #[sim_test]
 async fn party_object_deletion_multiple_times() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
 
     let num_deletions = 20;
@@ -106,18 +96,13 @@ async fn party_object_deletion_multiple_times() {
             .build();
         let signed = test_cluster.sign_transaction(&transaction).await;
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
-        txs.push(signed);
+        txs.push((signed, client_ip));
     }
 
     // Submit all the deletion transactions to the validators.
-    let validators = test_cluster.get_validator_pubkeys();
-    let submissions = txs.iter().map(|tx| async {
+    let submissions = txs.iter().map(|(tx, client_ip)| async {
         test_cluster
-            .submit_transaction_to_validators(tx.clone(), &validators)
+            .submit_and_execute(tx.clone(), Some(*client_ip))
             .await
             .unwrap();
         *tx.digest()
@@ -136,10 +121,6 @@ async fn party_object_deletion_multiple_times() {
 
 #[sim_test]
 async fn party_object_deletion_multiple_times_cert_racing() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
 
     let num_deletions = 10;
@@ -166,7 +147,6 @@ async fn party_object_deletion_multiple_times_cert_racing() {
     let gas_coins = accounts_and_gas[0].1.clone();
 
     // Make a bunch of transactions that all want to delete the party object.
-    let validators = test_cluster.get_validator_pubkeys();
     let mut digests = vec![];
     for coin_ref in gas_coins.into_iter() {
         let transaction = test_cluster
@@ -184,17 +164,13 @@ async fn party_object_deletion_multiple_times_cert_racing() {
         let signed = test_cluster.sign_transaction(&transaction).await;
 
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
         info!(
             "Submitting transaction with digest: {:?}\n{:#?}",
             signed.digest(),
             signed.data().inner().intent_message().value
         );
         test_cluster
-            .submit_transaction_to_validators(signed.clone(), &validators)
+            .submit_and_execute(signed.clone(), Some(client_ip))
             .await
             .unwrap();
         digests.push(*signed.digest());
@@ -213,10 +189,6 @@ async fn party_object_deletion_multiple_times_cert_racing() {
 /// Transfer a party object as the object owner.
 #[sim_test]
 async fn party_object_transfer() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
     let test_cluster = TestClusterBuilder::new().build().await;
 
@@ -243,19 +215,18 @@ async fn party_object_transfer() {
     let effects = test_cluster
         .sign_and_execute_transaction(&transaction)
         .await
-        .effects
-        .unwrap();
+        .effects;
 
-    assert_eq!(effects.shared_objects().len(), 1);
+    assert_eq!(effects.accessed_consensus_objects().len(), 1);
     let mutated_party = effects
         .mutated()
-        .iter()
-        .filter(|obj| matches!(obj.owner, Owner::ConsensusAddressOwner { .. }))
+        .into_iter()
+        .filter(|obj| matches!(obj.1, Owner::ConsensusAddressOwner { .. }))
         .collect::<Vec<_>>();
     assert_eq!(mutated_party.len(), 1);
-    let mutated_party = mutated_party[0];
+    let mutated_party = &mutated_party[0];
     assert_eq!(
-        mutated_party.owner,
+        mutated_party.1,
         Owner::ConsensusAddressOwner {
             start_version: object_initial_shared_version.next(),
             owner: RtdAddress::ZERO,
@@ -265,10 +236,6 @@ async fn party_object_transfer() {
 
 #[sim_test]
 async fn party_object_transfer_multiple_times() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
 
     let num_transfers = 20;
@@ -312,18 +279,13 @@ async fn party_object_transfer_multiple_times() {
             .build();
         let signed = test_cluster.sign_transaction(&transaction).await;
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
-        txs.push(signed);
+        txs.push((signed, client_ip));
     }
 
     // Submit all the transfer transactions to the validators.
-    let validators = test_cluster.get_validator_pubkeys();
-    let submissions = txs.iter().map(|tx| async {
+    let submissions = txs.iter().map(|(tx, client_ip)| async {
         test_cluster
-            .submit_transaction_to_validators(tx.clone(), &validators)
+            .submit_and_execute(tx.clone(), Some(*client_ip))
             .await
             .unwrap();
         *tx.digest()
@@ -349,10 +311,6 @@ async fn party_object_transfer_multiple_times() {
 /// 4. Execute the remaining two.
 #[sim_test]
 async fn party_object_transfer_multi_certs() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
 
     // cause random delay just before tx is executed (to explore all orders)
@@ -432,24 +390,9 @@ async fn party_object_transfer_multi_certs() {
     let repeat_tx_b_digest = *repeat_tx_b.digest();
     let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
 
-    let _ = test_cluster
-        .create_certificate(xfer_tx.clone(), Some(client_ip))
-        .await
-        .unwrap();
-    let _ = test_cluster
-        .create_certificate(repeat_tx_a.clone(), Some(client_ip))
-        .await
-        .unwrap();
-    let _ = test_cluster
-        .create_certificate(repeat_tx_b.clone(), Some(client_ip))
-        .await
-        .unwrap();
-
-    let validators = test_cluster.get_validator_pubkeys();
-
     // transfer obj on all validators, await effects
     test_cluster
-        .submit_transaction_to_validators(xfer_tx, &validators)
+        .submit_and_execute(xfer_tx, Some(client_ip))
         .await
         .unwrap();
 
@@ -457,13 +400,13 @@ async fn party_object_transfer_multi_certs() {
     futures::join!(
         async {
             test_cluster
-                .submit_transaction_to_validators(repeat_tx_a, &validators)
+                .submit_and_execute(repeat_tx_a, Some(client_ip))
                 .await
                 .unwrap()
         },
         async {
             test_cluster
-                .submit_transaction_to_validators(repeat_tx_b, &validators)
+                .submit_and_execute(repeat_tx_b, Some(client_ip))
                 .await
                 .unwrap()
         }
@@ -481,10 +424,6 @@ async fn party_object_transfer_multi_certs() {
 /// Use a party object immutably.
 #[sim_test]
 async fn party_object_read() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     telemetry_subscribers::init_for_testing();
 
     // Create a test cluster with enough gas coins for the below.
@@ -539,13 +478,7 @@ async fn party_object_read() {
         let signed = test_cluster.sign_transaction(&transaction).await;
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
         test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
-
-        let validators = test_cluster.get_validator_pubkeys();
-        test_cluster
-            .submit_transaction_to_validators(signed.clone(), &validators)
+            .submit_and_execute(signed.clone(), Some(client_ip))
             .await
             .unwrap();
         all_digests.push(*signed.digest());
@@ -568,14 +501,8 @@ async fn party_object_read() {
         .build();
     let signed_transfer = test_cluster.sign_transaction(&transfer_transaction).await;
     let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
-    test_cluster
-        .create_certificate(signed_transfer.clone(), Some(client_ip))
-        .await
-        .unwrap();
-
-    let validators = test_cluster.get_validator_pubkeys();
     let (transfer_effects, _) = test_cluster
-        .submit_transaction_to_validators(signed_transfer.clone(), &validators)
+        .submit_and_execute(signed_transfer.clone(), Some(client_ip))
         .await
         .unwrap();
     all_digests.push(*signed_transfer.digest());
@@ -587,6 +514,13 @@ async fn party_object_read() {
         .find(|obj| matches!(obj.1, Owner::ConsensusAddressOwner { .. }))
         .expect("Party object should be mutated");
     object_initial_shared_version = mutated_party.1.start_version().unwrap();
+
+    // Wait for the transfer to settle across the cluster before issuing reads with the
+    // new initial_shared_version. Without this, submit_and_execute may route the next
+    // read to a validator that hasn't executed the transfer yet, causing ObjectNotFound.
+    test_cluster
+        .wait_for_tx_settlement(&[*signed_transfer.digest()])
+        .await;
 
     // Make some more transactions that read the party object from the new owner.
     for gas_coin in gas_coins_account2.iter().take(num_reads / 2) {
@@ -607,13 +541,7 @@ async fn party_object_read() {
         let signed = test_cluster.sign_transaction(&transaction).await;
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
         test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
-
-        let validators = test_cluster.get_validator_pubkeys();
-        test_cluster
-            .submit_transaction_to_validators(signed.clone(), &validators)
+            .submit_and_execute(signed.clone(), Some(client_ip))
             .await
             .unwrap();
         all_digests.push(*signed.digest());
@@ -644,10 +572,6 @@ async fn party_object_grpc() {
     use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
     use rtd_rpc::proto::rtd::rpc::v2::owner::OwnerKind;
     use rtd_rpc::proto::rtd::rpc::v2::state_service_client::StateServiceClient;
-
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
 
     let test_cluster = TestClusterBuilder::new().build().await;
 
@@ -721,9 +645,7 @@ async fn party_object_grpc() {
         .build();
     test_cluster
         .sign_and_execute_transaction(&transaction)
-        .await
-        .effects
-        .unwrap();
+        .await;
 
     // Once we've transferred the object to another address we need to make sure that its owner is
     // properly updated and that the owner index correctly updated
@@ -801,10 +723,6 @@ async fn party_coin_grpc() {
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use rtd_types::transaction::{CallArg, ObjectArg, TransactionData};
 
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     let cluster = TestClusterBuilder::new().build().await;
     let channel = tonic::transport::Channel::from_shared(cluster.rpc_url().to_owned())
         .unwrap()
@@ -860,11 +778,7 @@ async fn party_coin_grpc() {
     let kind = rtd_types::transaction::TransactionKind::ProgrammableTransaction(ptb);
     let tx_data = TransactionData::new_with_gas_data(kind, sender, gas_data);
 
-    cluster
-        .sign_and_execute_transaction(&tx_data)
-        .await
-        .effects
-        .unwrap();
+    cluster.sign_and_execute_transaction(&tx_data).await;
 
     // run a list operation to make sure the party and non-party coins show up
     let resp = ledger_service_client
@@ -979,10 +893,6 @@ async fn party_coin_grpc() {
 /// indexes
 #[sim_test]
 async fn party_object_jsonrpc() {
-    if rtd_simulator::has_mainnet_protocol_config_override() {
-        return;
-    }
-
     let test_cluster = TestClusterBuilder::new().build().await;
 
     let (package, object) =
@@ -992,6 +902,7 @@ async fn party_object_jsonrpc() {
     let object_id = object.0;
     let object_initial_shared_version = object.1;
 
+    #[allow(deprecated)]
     let client = test_cluster.rtd_client();
 
     let object = client
@@ -1040,9 +951,7 @@ async fn party_object_jsonrpc() {
         .build();
     test_cluster
         .sign_and_execute_transaction(&transaction)
-        .await
-        .effects
-        .unwrap();
+        .await;
 
     // Once we've transferred the object to another address we need to make sure that its owner is
     // properly updated and that the owner index correctly updated

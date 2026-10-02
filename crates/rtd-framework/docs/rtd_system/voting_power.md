@@ -19,7 +19,6 @@ title: Module `rtd_system::voting_power`
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -55,6 +54,7 @@ title: Module `rtd_system::voting_power`
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/u64.md#std_u64">std::u64</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
@@ -226,7 +226,7 @@ at <code><a href="../rtd_system/voting_power.md#rtd_system_voting_power_MAX_VOTI
     // If threshold_pct is too small, it's possible that even when all validators reach the threshold we still don't
     // have 100%. So we bound the threshold_pct to be always enough to find a solution.
     <b>let</b> <a href="../rtd_system/voting_power.md#rtd_system_voting_power_total_voting_power">total_voting_power</a> = <a href="../rtd_system/voting_power.md#rtd_system_voting_power_TOTAL_VOTING_POWER">TOTAL_VOTING_POWER</a>;
-    <b>let</b> average_voting_power = <a href="../rtd_system/voting_power.md#rtd_system_voting_power_total_voting_power">total_voting_power</a>.divide_and_round_up(validators.length());
+    <b>let</b> average_voting_power = <a href="../rtd_system/voting_power.md#rtd_system_voting_power_total_voting_power">total_voting_power</a>.div_ceil(validators.length());
     <b>let</b> threshold = <a href="../rtd_system/voting_power.md#rtd_system_voting_power_total_voting_power">total_voting_power</a>.min(<a href="../rtd_system/voting_power.md#rtd_system_voting_power_MAX_VOTING_POWER">MAX_VOTING_POWER</a>.max(average_voting_power));
     <b>let</b> (<b>mut</b> info_list, remaining_power) = <a href="../rtd_system/voting_power.md#rtd_system_voting_power_init_voting_power_info">init_voting_power_info</a>(
         validators,
@@ -361,7 +361,7 @@ Distribute remaining_power to validators that are not capped at threshold.
     <b>while</b> (i &lt; len && remaining_power &gt; 0) {
         <b>let</b> v = &<b>mut</b> info_list[i];
         // planned is the amount of extra power we want to distribute to this <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.
-        <b>let</b> planned = remaining_power.divide_and_round_up(len - i);
+        <b>let</b> planned = remaining_power.div_ceil(len - i);
         // target is the targeting power this <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> will reach, capped by threshold.
         <b>let</b> target = threshold.min(v.<a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a> + planned);
         // actual is the actual amount of power we will be distributing to this <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::FaucetError;
-use serde::{Deserialize, Serialize};
 use rtd_sdk::types::{
     base_types::{ObjectID, RtdAddress},
     digests::TransactionDigest,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum FaucetRequest {

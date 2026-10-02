@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prometheus::Registry;
-use rtd_core::authority_aggregator::AuthAggMetrics;
-use rtd_core::quorum_driver::reconfig_observer::OnsiteReconfigObserver;
-use rtd_core::quorum_driver::reconfig_observer::ReconfigObserver;
 use rtd_core::safe_client::SafeClientMetricsBase;
+use rtd_core::transaction_driver::{OnsiteReconfigObserver, ReconfigObserver};
 use test_cluster::TestClusterBuilder;
 use tracing::info;
 
@@ -35,7 +33,6 @@ async fn test_onsite_reconfig_observer_basic() {
         fullnode.with(|node| node.state().get_object_cache_reader().clone()),
         fullnode.with(|node| node.clone_committee_store()),
         SafeClientMetricsBase::new(&registry),
-        AuthAggMetrics::new(&registry),
     );
     let observer_handle = tokio::task::spawn(async move { observer.run(td.clone()).await });
 

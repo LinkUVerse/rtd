@@ -1,31 +1,47 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeMap, fmt::Write};
+use std::collections::BTreeMap;
+use std::fmt::Write;
 
-use anyhow::{Context as _, bail};
+use anyhow::Context as _;
+use anyhow::bail;
+use async_trait::async_trait;
 use futures::future::OptionFuture;
-use move_core_types::{annotated_value::MoveTypeLayout, language_storage::StructTag};
+use move_core_types::annotated_value::MoveTypeLayout;
+use move_core_types::language_storage::StructTag;
 use rtd_display::v1::Format;
 use rtd_indexer_alt_reader::displays::DisplayKey;
-use rtd_json_rpc_types::{
-    DisplayFieldsResponse, RtdData, RtdObjectData, RtdObjectDataOptions, RtdObjectResponse,
-    RtdParsedData, RtdPastObjectResponse, RtdRawData,
-};
-use rtd_types::{
-    TypeTag,
-    base_types::{ObjectID, ObjectType, SequenceNumber},
-    display::DisplayVersionUpdatedEvent,
-    error::RtdObjectResponseError,
-    object::{Data, Object},
-};
+use rtd_json_rpc_types::DisplayFieldsResponse;
+use rtd_json_rpc_types::RtdData;
+use rtd_json_rpc_types::RtdObjectData;
+use rtd_json_rpc_types::RtdObjectDataOptions;
+use rtd_json_rpc_types::RtdObjectResponse;
+use rtd_json_rpc_types::RtdParsedData;
+use rtd_json_rpc_types::RtdPastObjectResponse;
+use rtd_json_rpc_types::RtdRawData;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::ObjectType;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::display::DisplayVersionUpdatedEvent;
+use rtd_types::display_registry;
+use rtd_types::error::RtdObjectResponseError;
+use rtd_types::object::Data;
+use rtd_types::object::Object;
+use serde_json::Value as Json;
 use tokio::join;
 
-use crate::{
-    context::Context,
-    data::load_live,
-    error::{InternalContext, RpcError, rpc_bail},
-};
+use crate::context::Context;
+use crate::data::AddressBalanceCoin;
+use crate::data::load_live;
+use crate::error::InternalContext;
+use crate::error::RpcError;
+use crate::error::rpc_bail;
+
+struct DisplayStore<'c> {
+    ctx: &'c Context,
+}
 
 /// Fetch the necessary data from the stores in `ctx` and transform it to build a response for a
 /// the latest version of an object, identified by its ID, according to the response `options`.
@@ -34,18 +50,25 @@ pub(super) async fn live_object(
     object_id: ObjectID,
     options: &RtdObjectDataOptions,
 ) -> Result<RtdObjectResponse, RpcError> {
-    let Some(object) = load_live(ctx, object_id)
+    if let Some(object) = load_live(ctx, object_id)
         .await
         .context("Failed to load latest object")?
-    else {
-        return Ok(RtdObjectResponse::new_with_error(
+    {
+        Ok(RtdObjectResponse::new_with_data(
+            object_data_with_options(ctx, object, options).await?,
+        ))
+    } else if let Some(coin) = AddressBalanceCoin::by_object_id(ctx, object_id)
+        .await
+        .context("Failed to resolve address balance object")?
+    {
+        Ok(RtdObjectResponse::new_with_data(
+            coin.into_rtd_object_data(ctx, options).await?,
+        ))
+    } else {
+        Ok(RtdObjectResponse::new_with_error(
             RtdObjectResponseError::NotExists { object_id },
-        ));
-    };
-
-    Ok(RtdObjectResponse::new_with_data(
-        object_data_with_options(ctx, object, options).await?,
-    ))
+        ))
+    }
 }
 
 /// Fetch the necessary data from the stores in `ctx` and transform it to build a response for a
@@ -203,7 +226,7 @@ async fn display(ctx: &Context, object: &Object) -> DisplayFieldsResponse {
 async fn display_fields(
     ctx: &Context,
     object: &Object,
-) -> anyhow::Result<BTreeMap<String, anyhow::Result<String>>> {
+) -> anyhow::Result<BTreeMap<String, anyhow::Result<Json>>> {
     let Some(object) = object.data.try_as_move() else {
         bail!("Display is only supported for Move objects");
     };
@@ -212,21 +235,119 @@ async fn display_fields(
     let type_: StructTag = object.type_().clone().into();
 
     let layout = ctx.package_resolver().type_layout(type_.clone().into());
-    let display = ctx.pg_loader().load_one(DisplayKey(type_.clone()));
+    let display_v1 = display_v1(ctx, &type_);
+    let display_v2 = display_v2(ctx, &type_);
 
-    let (layout, display) = join!(layout, display);
+    let (layout, display_v1, display_v2) = join!(layout, display_v1, display_v2);
 
     let layout = layout.context("Failed to resolve type layout")?;
-    let Some(stored) = display.context("Failed to load Display format")? else {
+
+    if let Some(display_v2) = display_v2? {
+        let store = DisplayStore::new(ctx);
+        let root = rtd_display::v2::OwnedSlice::new(layout, object.contents().to_owned());
+        let interpreter = rtd_display::v2::Interpreter::new(root, store);
+        let fields = rtd_display::v2::Display::parse(config.display(), display_v2.fields())?
+            .display(
+                ctx.config().package_resolver.max_move_value_depth,
+                config.max_display_output_size,
+                &interpreter,
+            )
+            .await?;
+
+        Ok(fields
+            .into_iter()
+            .map(|(field, value)| (field, value.map_err(Into::into)))
+            .collect())
+    } else if let Some(display_v1) = display_v1? {
+        let format = Format::parse(config.max_display_field_depth, &display_v1.fields)?;
+        Ok(format
+            .display(config.max_display_output_size, object.contents(), &layout)?
+            .into_iter()
+            .map(|(field, value)| (field, value.map(Json::String)))
+            .collect())
+    } else {
         bail!(
             "Display format not found for {}",
             type_.to_canonical_display(/*with_prefix */ true)
         );
+    }
+}
+
+/// Try to load the V1 Display format for this type.
+async fn display_v1(
+    ctx: &Context,
+    type_: &StructTag,
+) -> anyhow::Result<Option<DisplayVersionUpdatedEvent>> {
+    let Some(stored) = ctx
+        .pg_loader()
+        .load_one(DisplayKey(type_.clone()))
+        .await
+        .context("Failed to load Display v1")?
+    else {
+        return Ok(None);
     };
 
     let event: DisplayVersionUpdatedEvent =
-        bcs::from_bytes(&stored.display).context("Failed to deserialize Display format")?;
+        bcs::from_bytes(&stored.display).context("Failed to deserialize Display v1")?;
 
-    let format = Format::parse(config.max_display_field_depth, &event.fields)?;
-    format.display(config.max_display_output_size, object.contents(), &layout)
+    Ok(Some(event))
+}
+
+/// Try to load the V2 Display format for this type.
+async fn display_v2(
+    ctx: &Context,
+    type_: &StructTag,
+) -> anyhow::Result<Option<display_registry::Display>> {
+    let object_id = display_registry::display_object_id(type_.clone().into())
+        .context("Failed to derive Display v2 object ID")?;
+
+    let Some(object) = load_live(ctx, object_id)
+        .await
+        .context("Failed to fetch Display v2 object")?
+    else {
+        return Ok(None);
+    };
+
+    let Some(move_object) = object.data.try_as_move() else {
+        return Ok(None);
+    };
+
+    let display = bcs::from_bytes(move_object.contents())
+        .context("Failed to deserialize Display v2 object")?;
+    Ok(Some(display))
+}
+
+impl<'c> DisplayStore<'c> {
+    fn new(ctx: &'c Context) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl rtd_display::v2::Store for DisplayStore<'_> {
+    async fn latest(
+        &self,
+        id: move_core_types::account_address::AccountAddress,
+    ) -> anyhow::Result<Option<(move_core_types::annotated_value::MoveTypeLayout, Vec<u8>)>> {
+        let Some(object) = load_live(self.ctx, id.into())
+            .await
+            .context("Failed to fetch object")?
+        else {
+            return Ok(None);
+        };
+
+        let Some(move_object) = object.data.try_as_move() else {
+            return Ok(None);
+        };
+
+        let type_: TypeTag = move_object.type_().clone().into();
+        let layout = self
+            .ctx
+            .package_resolver()
+            .type_layout(type_)
+            .await
+            .context("Failed to resolve type layout")?;
+
+        Ok(Some((layout, move_object.contents().to_owned())))
+    }
 }

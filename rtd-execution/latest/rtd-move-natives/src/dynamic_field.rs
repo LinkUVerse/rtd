@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
-use move_binary_format::{safe_assert, safe_assert_eq, safe_unwrap, safe_unwrap_err};
+use move_binary_format::{partial_vm_error, safe_assert, safe_assert_eq, safe_unwrap};
 use move_core_types::{
     account_address::AccountAddress,
     gas_algebra::InternalGas,
@@ -18,13 +18,15 @@ use move_core_types::{
     vm_status::StatusCode,
 };
 use move_vm_runtime::native_charge_gas_early_exit;
-use move_vm_runtime::native_functions::NativeContext;
-use move_vm_types::{
-    loaded_data::runtime_types::Type,
-    natives::function::NativeResult,
+use move_vm_runtime::natives::functions::NativeContext;
+use move_vm_runtime::{
+    execution::{
+        Type,
+        values::{StructRef, Value},
+    },
+    natives::functions::NativeResult,
     pop_arg,
-    values::{StructRef, Value},
-    views::{SizeConfig, ValueView},
+    shared::views::{SizeConfig, ValueView},
 };
 use rtd_types::{base_types::MoveObjectType, dynamic_field::derive_dynamic_field_id};
 use smallvec::smallvec;
@@ -45,7 +47,7 @@ macro_rules! get_or_fetch_object {
         let child_ty = safe_unwrap!($ty_args.pop());
         native_charge_gas_early_exit!(
             $context,
-            $ty_cost_per_byte * u64::from(child_ty.size()).into()
+            $ty_cost_per_byte * u64::from(child_ty.size()?).into()
         );
 
         safe_assert!($ty_args.is_empty());
@@ -111,11 +113,11 @@ pub fn hash_type_and_key(
     let parent = pop_arg!(args, AccountAddress);
 
     // Get size info for costing for derivations, serializations, etc
-    let k_ty_size = u64::from(k_ty.size());
+    let k_ty_size = u64::from(k_ty.size()?);
     let k_value_size = u64::from(abstract_size(
         get_extension!(context, ObjectRuntime)?.protocol_config,
         &k,
-    ));
+    )?);
     native_charge_gas_early_exit!(
         context,
         dynamic_field_hash_type_and_key_cost_params
@@ -192,13 +194,8 @@ pub fn add_child_object(
     let parent = pop_arg!(args, AccountAddress).into();
     safe_assert!(args.is_empty());
 
-    let protocol_config = get_extension!(context, ObjectRuntime)?.protocol_config;
-    let child_value_size = if protocol_config.abstract_size_in_object_runtime() {
-        // The value already exists, the size of the value is irrelevant
-        PRE_EXISTING_ABSTRACT_SIZE
-    } else {
-        child.legacy_size().into()
-    };
+    // The value already exists, the size of the value is irrelevant
+    let child_value_size = PRE_EXISTING_ABSTRACT_SIZE;
     // ID extraction step
     native_charge_gas_early_exit!(
         context,
@@ -208,12 +205,12 @@ pub fn add_child_object(
     );
 
     // TODO remove this copy_value, which will require VM changes
-    let child_id = safe_unwrap_err!(
-        get_object_id(child.copy_value()?).and_then(|v| v.value_as::<AccountAddress>())
+    let child_id = safe_unwrap!(
+        get_object_id(child.copy_value()).and_then(|v| v.value_as::<AccountAddress>())
     )
     .into();
     let child_ty = safe_unwrap!(ty_args.pop());
-    let child_type_size = u64::from(child_ty.size());
+    let child_type_size = u64::from(child_ty.size()?);
 
     native_charge_gas_early_exit!(
         context,
@@ -288,9 +285,9 @@ pub fn borrow_child_object(
 
     let child_id = pop_arg!(args, AccountAddress).into();
 
-    let parent_uid = safe_unwrap_err!(pop_arg!(args, StructRef).read_ref());
+    let parent_uid = safe_unwrap!(pop_arg!(args, StructRef).read_ref());
     // UID { id: ID { bytes: address } }
-    let parent = safe_unwrap_err!(
+    let parent = safe_unwrap!(
         get_nested_struct_field(parent_uid, &[0, 0]).and_then(|v| v.value_as::<AccountAddress>())
     )
     .into();
@@ -316,8 +313,9 @@ pub fn borrow_child_object(
     let child_ref = global_value.borrow_global().map_err(|err| {
         if err.major_status() == StatusCode::MISSING_DATA {
             debug_assert!(false);
-            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
-                "borrow_global returned MISSING_DATA after exists() was true".to_owned(),
+            partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "borrow_global returned MISSING_DATA after exists() was true"
             )
         } else {
             err
@@ -325,9 +323,7 @@ pub fn borrow_child_object(
     })?;
 
     charge_cache_or_load_gas!(context, cache_info);
-    let protocol_config = get_extension!(context, ObjectRuntime)?.protocol_config;
     let child_ref_size = match cache_info {
-        _ if !protocol_config.abstract_size_in_object_runtime() => child_ref.legacy_size(),
         CacheInfo::CachedValue => {
             // The value already existed
             BORROW_ABSTRACT_SIZE.into()
@@ -338,8 +334,7 @@ pub fn borrow_child_object(
             child_ref.abstract_memory_size(&SizeConfig {
                 include_vector_size: true,
                 traverse_references: true,
-                fine_grained_value_size: true,
-            })
+            })?
         }
     };
 
@@ -409,8 +404,10 @@ pub fn remove_child_object(
     let child = global_value.move_from().map_err(|err| {
         if err.major_status() == StatusCode::MISSING_DATA {
             debug_assert!(false);
-            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                .with_message("move_from returned MISSING_DATA after exists() was true".to_owned())
+            partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "move_from returned MISSING_DATA after exists() was true"
+            )
         } else {
             err
         }
@@ -418,20 +415,19 @@ pub fn remove_child_object(
 
     charge_cache_or_load_gas!(context, cache_info);
 
-    let protocol_config = get_extension!(context, ObjectRuntime)?.protocol_config;
     let child_size = match cache_info {
-        _ if !protocol_config.abstract_size_in_object_runtime() => child.legacy_size(),
         CacheInfo::CachedValue => {
             // The value already existed
             PRE_EXISTING_ABSTRACT_SIZE.into()
         }
         // The Move value had to be created. The value isn't a reference so traverse_references
         // doesn't matter
-        CacheInfo::CachedObject | CacheInfo::Loaded(_) => child.abstract_memory_size(&SizeConfig {
-            include_vector_size: true,
-            traverse_references: false,
-            fine_grained_value_size: true,
-        }),
+        CacheInfo::CachedObject | CacheInfo::Loaded(_) => {
+            child.abstract_memory_size(&SizeConfig {
+                include_vector_size: true,
+                traverse_references: false,
+            })?
+        }
     };
     native_charge_gas_early_exit!(
         context,
@@ -522,7 +518,7 @@ pub fn has_child_object_with_ty(
         context,
         dynamic_field_has_child_object_with_ty_cost_params
             .dynamic_field_has_child_object_with_ty_type_cost_per_byte
-            * u64::from(ty.size()).into()
+            * u64::from(ty.size()?).into()
     );
 
     let tag: StructTag = match context.type_to_type_tag(&ty)? {

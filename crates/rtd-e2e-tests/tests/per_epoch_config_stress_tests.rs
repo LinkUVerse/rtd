@@ -2,18 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::ident_str;
-use move_core_types::language_storage::TypeTag;
+use move_core_types::language_storage::{StructTag, TypeTag};
 use rand::random;
+use rtd_macros::sim_test;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::base_types::{EpochId, ObjectID, ObjectRef, RtdAddress};
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::execution_status::ExecutionErrorKind;
+use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability, TransactionData};
+use rtd_types::{RTD_DENY_LIST_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID};
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
-use rtd_macros::sim_test;
-use rtd_types::base_types::SequenceNumber;
-use rtd_types::base_types::{EpochId, ObjectID, ObjectRef, RtdAddress};
-use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability, TransactionData};
-use rtd_types::{RTD_DENY_LIST_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID};
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
 
@@ -51,6 +52,136 @@ async fn per_epoch_config_stress_test() {
     .unwrap();
 }
 
+/// Verify that the coin deny list is enforced for coins transferred via party_transfer.
+#[sim_test]
+async fn coin_deny_list_v2_party_owner_test() {
+    let test_env = create_test_env().await;
+
+    // Step 1: Add DENY_ADDRESS to the coin deny list.
+    let gas_objects = test_env
+        .test_cluster
+        .wallet
+        .get_all_gas_objects_owned_by_address(test_env.regulated_coin_owner)
+        .await
+        .unwrap();
+    let deny_tx_data = test_env
+        .test_cluster
+        .test_transaction_builder_with_gas_object(test_env.regulated_coin_owner, gas_objects[0])
+        .await
+        .move_call_with_type_args(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            "coin",
+            "deny_list_v2_add",
+            vec![test_env.regulated_coin_type.clone()],
+            vec![
+                CallArg::Object(ObjectArg::SharedObject {
+                    id: RTD_DENY_LIST_OBJECT_ID,
+                    initial_shared_version: test_env.deny_list_object_init_version,
+                    mutability: SharedObjectMutability::Mutable,
+                }),
+                CallArg::Object(ObjectArg::ImmOrOwnedObject(
+                    test_env.get_latest_object_ref(&test_env.deny_cap_id).await,
+                )),
+                CallArg::Pure(bcs::to_bytes(&DENY_ADDRESS).unwrap()),
+            ],
+        )
+        .build();
+    let deny_effects = test_env
+        .test_cluster
+        .sign_and_execute_transaction(&deny_tx_data)
+        .await
+        .effects;
+    assert!(
+        deny_effects.status().is_ok(),
+        "Deny list add should succeed"
+    );
+
+    // Step 2: Advance epoch so the deny list change takes effect.
+    test_env.test_cluster.trigger_reconfiguration().await;
+
+    // Step 3: Build a PTB that splits a regulated coin and does public_party_transfer
+    // to the denied address (creating a ConsensusAddressOwner coin).
+    let gas_objects = test_env
+        .test_cluster
+        .wallet
+        .get_all_gas_objects_owned_by_address(test_env.regulated_coin_owner)
+        .await
+        .unwrap();
+    let mut tx_builder = test_env
+        .test_cluster
+        .test_transaction_builder_with_gas_object(test_env.regulated_coin_owner, gas_objects[0])
+        .await;
+    {
+        let pt_builder = tx_builder.ptb_builder_mut();
+
+        let coin_input = pt_builder
+            .obj(ObjectArg::ImmOrOwnedObject(
+                test_env
+                    .get_latest_object_ref(&test_env.regulated_coin_id)
+                    .await,
+            ))
+            .unwrap();
+        let amount_input = pt_builder.pure(1u64).unwrap();
+        let split_coin = pt_builder.programmable_move_call(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            ident_str!("coin").to_owned(),
+            ident_str!("split").to_owned(),
+            vec![test_env.regulated_coin_type.clone()],
+            vec![coin_input, amount_input],
+        );
+
+        let addr_input = pt_builder.pure(DENY_ADDRESS).unwrap();
+        let party = pt_builder.programmable_move_call(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            ident_str!("party").to_owned(),
+            ident_str!("single_owner").to_owned(),
+            vec![],
+            vec![addr_input],
+        );
+
+        let coin_type_tag = TypeTag::Struct(Box::new(StructTag {
+            address: RTD_FRAMEWORK_ADDRESS,
+            module: ident_str!("coin").to_owned(),
+            name: ident_str!("Coin").to_owned(),
+            type_params: vec![test_env.regulated_coin_type.clone()],
+        }));
+        pt_builder.programmable_move_call(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            ident_str!("transfer").to_owned(),
+            ident_str!("public_party_transfer").to_owned(),
+            vec![coin_type_tag],
+            vec![split_coin, party],
+        );
+    }
+    let transfer_tx_data = tx_builder.build();
+
+    // Step 4: Execute and verify it fails with AddressDeniedForCoin.
+    let tx = test_env
+        .test_cluster
+        .sign_transaction(&transfer_tx_data)
+        .await;
+    let response = test_env
+        .test_cluster
+        .wallet
+        .execute_transaction_may_fail(tx)
+        .await
+        .unwrap();
+    let effects = response.effects;
+    assert!(
+        effects.status().is_err(),
+        "Transaction should fail due to coin deny list for party owner"
+    );
+    let (error_kind, _command) = effects.into_status().unwrap_err();
+    assert!(
+        matches!(
+            &error_kind,
+            ExecutionErrorKind::AddressDeniedForCoin { address, .. }
+            if *address == DENY_ADDRESS
+        ),
+        "Expected AddressDeniedForCoin for {DENY_ADDRESS}, got: {error_kind:?}"
+    );
+}
+
 async fn run_thread<F, Fut>(
     thread_id: u64,
     test_env: Arc<TestEnv>,
@@ -76,7 +207,7 @@ async fn run_thread<F, Fut>(
             .wallet
             .execute_transaction_may_fail(tx)
             .await
-            .map(|r| r.effects.unwrap())
+            .map(|r| r.effects)
         else {
             // When epochs are short, it is possible that some transactions
             // keep getting sent at epoch boundaries and timeout eventually.
@@ -221,7 +352,7 @@ impl TestEnv {
 
 async fn create_test_env() -> TestEnv {
     let test_cluster = TestClusterBuilder::new()
-        .with_epoch_duration_ms(1000)
+        .with_epoch_duration_ms(10000)
         .with_num_validators(5)
         .build()
         .await;
@@ -241,14 +372,13 @@ async fn create_test_env() -> TestEnv {
     let effects = test_cluster
         .sign_and_execute_transaction(&tx_data)
         .await
-        .effects
-        .unwrap();
+        .effects;
     let mut coin_id = None;
     let mut coin_type = None;
     let mut coin_owner = None;
     let mut deny_cap = None;
-    for created in effects.created() {
-        let object_id = created.reference.object_id;
+    for (reference, owner) in effects.created() {
+        let object_id = reference.0;
         let object = test_cluster
             .get_object_from_fullnode_store(&object_id)
             .await
@@ -258,7 +388,7 @@ async fn create_test_env() -> TestEnv {
         } else if object.is_coin() {
             coin_id = Some(object_id);
             coin_type = object.coin_type_maybe();
-            coin_owner = Some(created.owner.get_address_owner_address().unwrap());
+            coin_owner = Some(owner.get_address_owner_address().unwrap());
         } else if object.type_().unwrap().is_coin_deny_cap_v2() {
             deny_cap = Some(object_id);
         }

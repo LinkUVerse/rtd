@@ -1,0 +1,59 @@
+---
+title: Updating a Full Node
+sidebar_label: Updating
+description: >-
+  Update your Rtd full node to the latest version to remain in sync with the
+  network.
+keywords:
+  - update a full node
+  - update full node
+  - update node
+  - rtd release schedule
+  - release schedule
+  - release process
+  - how to update node
+  - when should nodes be updated
+  - when are updates released
+goal:
+  description: >-
+    Node operator understands update your Rtd full node to the latest version to
+    remain in sync with the network
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - min_words: 300
+      label: Needs more operational depth
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - How do I update a Rtd full node to a new version?
+  - When should I update my Rtd full node?
+  - How do I handle database migrations during a node update?
+answer: >-
+  RTD has no published public network release schedule. Update a node to the
+  version approved by the operator of the network it actually serves.
+---
+
+## Rtd release process
+
+RTD has not launched a public Mainnet and has no verified public network release schedule. Operators of local or private RTD networks decide when to deploy a new version. Record the source commit, protocol version, chain ID, and approved rollout time for your network before changing a node.
+
+When the operator of your network deploys a new version, update your full node to a compatible build. Apply protocol-changing versions before the network activates the new protocol.
+
+Any release that contains a protocol change needs to be applied before the protocol upgrade takes place (when enough stake within the validator set upgrades, the new protocol version is enacted in the next epoch).
+If you do not update your full node, it cannot connect to the network after the protocol upgrade takes place.
+
+## Communication
+
+RTD has no verified public release announcement channel. Get the target commit and rollout time from the operator of the specific RTD network you run. Treat repository tags as source identifiers only; a tag alone does not prove that a network has deployed that build.
+
+## Update your full node 
+
+Confirm the target source commit and protocol version with your network operator. Build or obtain a binary from a distribution channel that operator has approved, and verify its provenance before installation. Keep the previous binary and configuration available for rollback if the protocol has not advanced.
+
+It is reasonable to have to shut down your full node to perform an update, whether that be a rolling restart in Kubernetes, or a systemctl stop on a Linux machine to replace the rtd-node binary.

@@ -7,7 +7,6 @@ use prost_types::FieldMask;
 use crate::test_utils::{
     execute_transaction, extract_object_ref_from_changed_objects, get_all_coins, get_coin_value,
 };
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::{AccountKeystore, Keystore};
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
@@ -20,6 +19,7 @@ use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{
     Argument, Command, ObjectArg, Transaction, TransactionData, TransactionDataAPI,
 };
+use shared_crypto::intent::Intent;
 use test_cluster::TestClusterBuilder;
 
 pub const DEFAULT_GAS_BUDGET: u64 = 900_000_000;
@@ -142,7 +142,9 @@ async fn test_make_change_exact_div() -> Result<()> {
     const RTD_10: u64 = 10_000_000_000;
 
     let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
         .with_epoch_duration_ms(36000000)
+        .disable_fullnode_pruning()
         .build()
         .await;
     let sender = test_cluster.get_address_0();
@@ -268,7 +270,9 @@ async fn test_make_change_remainder_div() -> Result<()> {
     const RTD_12: u64 = 12_000_000_000;
 
     let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
         .with_epoch_duration_ms(36000000)
+        .disable_fullnode_pruning()
         .build()
         .await;
     let sender = test_cluster.get_address_0();

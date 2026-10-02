@@ -4,14 +4,14 @@
 use clap::Parser;
 use move_cli::base::summary;
 use move_package_alt_compilation::build_config::BuildConfig;
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
 use rtd_package_alt::RtdFlavor;
 use rtd_types::{
     base_types::ObjectID,
     move_package::{TypeOrigin, UpgradeInfo},
+};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
 };
 
 #[derive(Parser)]
@@ -49,10 +49,11 @@ impl Summary {
         self,
         path: Option<&Path>,
         build_config: BuildConfig,
+        flavor: RtdFlavor,
         rtd_package_metadata: PackageSummaryMetadata,
     ) -> anyhow::Result<()> {
         self.summary
-            .execute::<RtdFlavor, _>(path, build_config, Some(&rtd_package_metadata))
+            .execute(path, build_config, flavor, Some(&rtd_package_metadata))
             .await
     }
 }

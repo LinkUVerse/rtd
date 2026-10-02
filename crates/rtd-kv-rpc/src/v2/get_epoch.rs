@@ -1,7 +1,8 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_kvstore::{BigTableClient, KeyValueStoreReader};
+use rtd_kvstore::BigTableClient;
+use rtd_kvstore::tables::epochs::col;
 use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_rpc::field::{FieldMask, FieldMaskTree, FieldMaskUtil};
 use rtd_rpc::merge::Merge;
@@ -13,10 +14,9 @@ use rtd_rpc_api::{
     grpc::v2::protocol_config_to_proto,
     proto::{google::rpc::bad_request::FieldViolation, timestamp_ms_to_proto},
 };
-use rtd_sdk_types::ValidatorCommittee;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 
-pub const READ_MASK_DEFAULT: &str = "epoch,first_checkpoint,last_checkpoint,start,end,reference_gas_price,protocol_config.protocol_version";
+pub const READ_MASK_DEFAULT: &str = rtd_rpc_api::read_mask_defaults::EPOCH;
 
 pub async fn get_epoch(
     mut client: BigTableClient,
@@ -37,10 +37,14 @@ pub async fn get_epoch(
 
     let mut message = Epoch::default();
 
+    let columns = epoch_columns(&read_mask);
     let maybe_epoch_info = if let Some(epoch) = request.epoch {
-        client.get_epoch(epoch).await?
+        client
+            .get_epochs_filtered(&[epoch], Some(&columns))
+            .await?
+            .pop()
     } else {
-        client.get_latest_epoch().await?
+        client.get_latest_epoch_filtered(Some(&columns)).await?
     };
 
     let Some(epoch_info) = maybe_epoch_info else {
@@ -48,7 +52,7 @@ pub async fn get_epoch(
     };
 
     if read_mask.contains(Epoch::EPOCH_FIELD.name) {
-        message.epoch = Some(epoch_info.epoch);
+        message.epoch = epoch_info.epoch;
     }
     if read_mask.contains(Epoch::FIRST_CHECKPOINT_FIELD.name) {
         message.first_checkpoint = epoch_info.start_checkpoint;
@@ -75,14 +79,48 @@ pub async fn get_epoch(
         });
     }
     if read_mask.contains(Epoch::COMMITTEE_FIELD.name) {
-        message.committee = epoch_info.system_state.map(|system_state| {
-            let committee: ValidatorCommittee = system_state
+        message.committee = epoch_info.system_state.as_ref().map(|system_state| {
+            system_state
                 .get_current_epoch_committee()
                 .committee()
                 .clone()
-                .into();
-            committee.into()
+                .into()
         });
     }
+    if read_mask.contains(Epoch::SYSTEM_STATE_FIELD.name) {
+        message.system_state = epoch_info
+            .system_state
+            .map(|system_state| Box::new(system_state.into()));
+    }
     Ok(GetEpochResponse::new(message))
+}
+
+/// Compute the set of BigTable columns needed for the given read mask.
+/// Always includes `ep` (epoch number, small).
+fn epoch_columns(mask: &FieldMaskTree) -> Vec<&'static str> {
+    let mut columns = vec![col::EPOCH];
+
+    if mask.contains(Epoch::FIRST_CHECKPOINT_FIELD.name) {
+        columns.push(col::START_CHECKPOINT);
+    }
+    if mask.contains(Epoch::LAST_CHECKPOINT_FIELD.name) {
+        columns.push(col::END_CHECKPOINT);
+    }
+    if mask.contains(Epoch::START_FIELD.name) {
+        columns.push(col::START_TIMESTAMP);
+    }
+    if mask.contains(Epoch::END_FIELD.name) {
+        columns.push(col::END_TIMESTAMP);
+    }
+    if mask.contains(Epoch::REFERENCE_GAS_PRICE_FIELD.name) {
+        columns.push(col::REFERENCE_GAS_PRICE);
+    }
+    if mask.subtree(Epoch::PROTOCOL_CONFIG_FIELD.name).is_some() {
+        columns.push(col::PROTOCOL_VERSION);
+    }
+    if mask.contains(Epoch::COMMITTEE_FIELD.name) || mask.contains(Epoch::SYSTEM_STATE_FIELD.name) {
+        columns.push(col::SYSTEM_STATE);
+    }
+
+    columns
 }

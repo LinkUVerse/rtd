@@ -10,18 +10,18 @@ mod tests;
 
 pub use metrics::ValidatorClientMetrics;
 pub use monitor::ValidatorClientMonitor;
+use rtd_types::{base_types::AuthorityName, messages_grpc::PingType};
 use std::time::Duration;
 use strum::EnumIter;
-use rtd_types::{base_types::AuthorityName, messages_grpc::PingType};
 
 /// Operation types for validator performance tracking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumIter)]
 pub enum OperationType {
     Submit,
     Effects,
-    FastPath,
     HealthCheck,
-    Consensus,
+    SingleWriterFinality,
+    SharedObjectFinality,
 }
 
 impl OperationType {
@@ -30,8 +30,8 @@ impl OperationType {
             OperationType::Submit => "submit",
             OperationType::Effects => "effects",
             OperationType::HealthCheck => "health_check",
-            OperationType::FastPath => "fast_path",
-            OperationType::Consensus => "consensus",
+            OperationType::SingleWriterFinality => "single_writer_finality",
+            OperationType::SharedObjectFinality => "shared_object_finality",
         }
     }
 }

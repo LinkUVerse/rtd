@@ -22,22 +22,18 @@ use crate::{
         },
     },
     diag,
-    diagnostics::{
-        Diagnostic, Diagnostics,
-        codes::{DiagnosticInfo, Severity, custom},
-    },
+    diagnostics::{Diagnostic, Diagnostics},
     hlir::ast::{
         BaseType_, Label, ModuleCall, SingleType, SingleType_, Type, Type_, TypeName_, Var,
     },
     parser::ast::Ability_,
-    shared::Identifier,
     rtd_mode::RTD_ADDR_VALUE,
+    shared::Identifier,
 };
 use std::collections::BTreeMap;
 
 use super::{
-    FREEZE_FUN, INVALID_LOC, LINT_WARNING_PREFIX, LinterDiagnosticCategory, LinterDiagnosticCode,
-    RECEIVE_FUN, SHARE_FUN, TRANSFER_FUN, TRANSFER_MOD_NAME,
+    FREEZE_FUN, INVALID_LOC, RECEIVE_FUN, RtdLintCode, SHARE_FUN, TRANSFER_FUN, TRANSFER_MOD_NAME,
 };
 
 const PRIVATE_OBJ_FUNCTIONS: &[(AccountAddress, &str, &str)] = &[
@@ -46,14 +42,6 @@ const PRIVATE_OBJ_FUNCTIONS: &[(AccountAddress, &str, &str)] = &[
     (RTD_ADDR_VALUE, TRANSFER_MOD_NAME, FREEZE_FUN),
     (RTD_ADDR_VALUE, TRANSFER_MOD_NAME, RECEIVE_FUN),
 ];
-
-const CUSTOM_STATE_CHANGE_DIAG: DiagnosticInfo = custom(
-    LINT_WARNING_PREFIX,
-    Severity::Warning,
-    LinterDiagnosticCategory::Rtd as u8,
-    LinterDiagnosticCode::CustomStateChange as u8,
-    "potentially unenforceable custom transfer/share/freeze policy",
-);
 
 //**************************************************************************************************
 // types
@@ -122,17 +110,27 @@ impl SimpleAbsInt for CustomStateChangeVerifierAI {
     type State = State;
     type ExecutionContext = ExecutionContext;
 
-    fn finish(&mut self, _final_states: BTreeMap<Label, State>, diags: Diagnostics) -> Diagnostics {
+    fn finish(
+        &mut self,
+        _final_states: BTreeMap<Label, crate::cfgir::absint::BlockStates<State>>,
+        diags: Diagnostics,
+    ) -> Diagnostics {
         diags
     }
 
-    fn start_command(&self, _: &mut State) -> ExecutionContext {
+    fn start_command(&self, _label: Label, _idx: usize, _: &mut State) -> ExecutionContext {
         ExecutionContext {
             diags: Diagnostics::new(),
         }
     }
 
-    fn finish_command(&self, context: ExecutionContext, _state: &mut State) -> Diagnostics {
+    fn finish_command(
+        &self,
+        _label: Label,
+        _idx: usize,
+        context: ExecutionContext,
+        _state: &mut State,
+    ) -> Diagnostics {
         let ExecutionContext { diags } = context;
         diags
     }
@@ -169,7 +167,7 @@ impl SimpleAbsInt for CustomStateChangeVerifierAI {
                  calling the private '{fname}' function variant in the module defining this type"
             );
             let mut d = diag!(
-                CUSTOM_STATE_CHANGE_DIAG,
+                RtdLintCode::CustomStateChange.diag_info(),
                 (self.fn_name_loc, msg),
                 (f.name.loc(), uid_msg)
             );

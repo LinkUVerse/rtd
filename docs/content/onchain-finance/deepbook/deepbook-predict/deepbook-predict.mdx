@@ -1,0 +1,31 @@
+---
+title: DeepBook Predict
+description: Upstream Sui protocol design reference; DeepBook Predict is not deployed on RTD.
+keywords:
+  - deepbook predict
+  - prediction market
+  - upstream design
+---
+
+DeepBook Predict is an upstream Sui prediction market design with one market per underlying asset and expiry. A position specifies a price range and a fixed payout if the settlement price lands in that range. Its design separates market state, account custody, oracle data, and pooled liquidity.
+
+:::caution RTD deployment status
+
+DeepBook Predict is **not deployed on an RTD public network**. RTD has no public Mainnet, and no RTD Testnet Predict deployment, SDK configuration, faucet, USDC coin, oracle feed, live market, or public Predict service has been verified. The Sui package and object IDs that appeared in earlier versions of these pages must not be used as RTD IDs.
+
+:::
+
+## What the upstream design contains
+
+- A registry records underlyings, market cadence and capability permissions.
+- A protocol configuration controls global gates and adjustable risk parameters.
+- Each expiry market tracks positions, payout exposure and settlement state.
+- An account package holds balances and positions through account authorization.
+- A separate oracle package supplies observations used for quotes and settlement.
+- A pool vault backs the market and queues liquidity requests for valuation.
+
+The [Design](/onchain-finance/deepbook/deepbook-predict/design) page explains how those pieces interact. The [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) page records the current RTD deployment status. These pages are a source design reference for a possible RTD port, not a trading guide.
+
+## What an RTD port would need
+
+The Move packages, dependent libraries, oracle writers, quote coin, SDK, and deployment manifest would need to be ported and tested against one RTD chain. Even after code compiles, the application cannot quote or mint until a valid oracle feed, funded pool, and active market exist. No public network or service address should be assumed from the upstream example.

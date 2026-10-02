@@ -19,13 +19,17 @@ fn main() {
         .unwrap()
         .include_source_info(false)
         .include_imports(true)
-        .open_files(&[proto_dir.join("google/bigtable/v2/bigtable.proto")])
+        .open_files(&[
+            proto_dir.join("google/bigtable/v2/bigtable.proto"),
+            proto_dir.join("google/bigtable/v2/feature_flags.proto"),
+        ])
         .unwrap()
         .file_descriptor_set();
 
     tonic_prost_build::configure()
         .build_client(true)
-        .build_server(false)
+        .build_server(true)
+        .bytes(".")
         .out_dir(&out_dir)
         .compile_fds(fds)
         .unwrap();

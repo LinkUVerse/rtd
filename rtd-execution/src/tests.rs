@@ -14,9 +14,9 @@ type PackageGraph<'p> = DiGraphMap<&'p str, ()>;
 struct Packages(HashMap<String, Package>);
 
 #[test]
-/// Make sure that all accesses to execution layer crates in the `rtd-node` and `rtd-replay` crates
-/// go via the `rtd-execution` crate (in other words, the `rtd-execution` crate dominates execution
-/// layer crates in the dependency graphs of `rtd-node` and `rtd-replay`).
+/// Make sure that all accesses to execution layer crates in the `rtd-node` and `rtd-replay-2`
+/// crates go via the `rtd-execution` crate (in other words, the `rtd-execution` crate dominates
+/// execution layer crates in the dependency graphs of `rtd-node` and `rtd-replay-2`).
 ///
 /// This helps ensures that execution that may be committed on-chain respects the execution version
 /// that is stated in the protocol config.
@@ -38,11 +38,16 @@ fn test_encapsulation() {
     // tracing is only enabled in client builds (built with `--features tracing` flag)
     // and it does not have to be accessed via `rtd-execution` as it can never cause a fork
     exec_crates.remove("move-trace-format");
+    // Shared logging/utility crates used by the execution multiplexer are not versioned execution
+    // implementations and do not need to be dominated by `rtd-execution`.
+    exec_crates.remove("linku-common");
+    exec_crates.remove("linku-metrics");
+    exec_crates.remove("tracing");
 
     // Capture problematic paths from roots to execution crates
     let mut examples = vec![];
 
-    for root in ["rtd-node", "rtd-replay"] {
+    for root in ["rtd-node", "rtd-replay-2"] {
         let mut graph = packages.graph(root);
 
         // If we can still create a path from `root` to an execution crate after removing these

@@ -2,26 +2,31 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::RtdNode;
+use crate::db_shell::{handle_delete, handle_ls, handle_read};
 use axum::{
     Router,
     extract::{Query, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use base64::Engine;
+use fastcrypto::encoding::{Encoding, Hex};
+use fastcrypto::traits::ToFromBytes;
 use humantime::parse_duration;
+use linku_network::Multiaddr;
+use rtd_network::endpoint_manager::{AddressSource, EndpointId};
+use rtd_types::{
+    base_types::{AuthorityName, ConciseableName},
+    crypto::{NetworkPublicKey, RandomnessPartialSignature, RandomnessRound, RandomnessSignature},
+    digests::TransactionDigest,
+    error::RtdErrorKind,
+    traffic_control::TrafficControlReconfigParams,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str::FromStr,
-};
-use rtd_types::{
-    base_types::AuthorityName,
-    crypto::{RandomnessPartialSignature, RandomnessRound, RandomnessSignature},
-    digests::TransactionDigest,
-    error::RtdErrorKind,
-    traffic_control::TrafficControlReconfigParams,
 };
 use telemetry_subscribers::TracingHandle;
 use tokio::sync::oneshot;
@@ -77,7 +82,17 @@ use tracing::info;
 // Reconfigure traffic control policy
 //
 //  $ curl 'http://127.0.0.1:1337/traffic-control?error_threshold=100&spam_threshold=100&dry_run=true'
+//
+// Update endpoint address(es) for a peer
+//
+//  $ curl -X POST 'http://127.0.0.1:1337/update-endpoint?endpoint_type=p2p&id=<hex_encoded_peer_id>&addresses=<multiaddr1>,<multiaddr2>'
+//  $ curl -X POST 'http://127.0.0.1:1337/update-endpoint?endpoint_type=consensus&id=<hex_encoded_network_pubkey>&addresses=<multiaddr1>,<multiaddr2>'
+//
+// Dump the address prober's latest results (full addresses + per-address outcomes) as JSON.
+//
+//  $ curl 'http://127.0.0.1:1337/address-prober-report'
 
+const NO_TRACING_HANDLE: &str = "tracing handle not available";
 const LOGGING_ROUTE: &str = "/logging";
 const TRACING_ROUTE: &str = "/enable-tracing";
 const TRACING_RESET_ROUTE: &str = "/reset-tracing";
@@ -92,14 +107,29 @@ const RANDOMNESS_INJECT_FULL_SIG_ROUTE: &str = "/randomness-inject-full-sig";
 const GET_TX_COST_ROUTE: &str = "/get-tx-cost";
 const DUMP_CONSENSUS_TX_COST_ESTIMATES_ROUTE: &str = "/dump-consensus-tx-cost-estimates";
 const TRAFFIC_CONTROL: &str = "/traffic-control";
+const UPDATE_ENDPOINT: &str = "/update-endpoint";
+const ADDRESS_PROBER_REPORT: &str = "/address-prober-report";
+const DB_SHELL_LS: &str = "/db-shell/ls";
+const DB_SHELL_READ: &str = "/db-shell/read";
+const DB_SHELL_DELETE: &str = "/db-shell/delete";
+const BROADCAST_TX_DENY_CONFIG: &str = "/broadcast-transaction-deny-config";
+const WITHDRAW_TX_DENY_CONFIG: &str = "/withdraw-transaction-deny-config";
+const TX_DENY_CONFIG: &str = "/transaction-deny-config";
 
-struct AppState {
-    node: Arc<RtdNode>,
-    tracing_handle: TracingHandle,
+pub(crate) struct AppState {
+    pub(crate) node: Arc<RtdNode>,
+    pub(crate) tracing_handle: Option<TracingHandle>,
 }
 
-pub async fn run_admin_server(node: Arc<RtdNode>, port: u16, tracing_handle: TracingHandle) {
-    let filter = tracing_handle.get_log().unwrap();
+pub async fn run_admin_server(
+    node: Arc<RtdNode>,
+    port: u16,
+    tracing_handle: Option<TracingHandle>,
+) {
+    let filter = tracing_handle
+        .as_ref()
+        .and_then(|h| h.get_log().ok())
+        .unwrap_or_else(|| NO_TRACING_HANDLE.to_string());
 
     let app_state = AppState {
         node,
@@ -137,6 +167,20 @@ pub async fn run_admin_server(node: Arc<RtdNode>, port: u16, tracing_handle: Tra
             get(dump_consensus_tx_cost_estimates),
         )
         .route(TRAFFIC_CONTROL, post(traffic_control))
+        .route(UPDATE_ENDPOINT, post(update_endpoint))
+        .route(ADDRESS_PROBER_REPORT, get(address_prober_report))
+        .route(DB_SHELL_LS, get(handle_ls))
+        .route(DB_SHELL_READ, get(handle_read))
+        .route(DB_SHELL_DELETE, delete(handle_delete))
+        .route(
+            BROADCAST_TX_DENY_CONFIG,
+            post(broadcast_transaction_deny_config),
+        )
+        .route(
+            WITHDRAW_TX_DENY_CONFIG,
+            post(withdraw_transaction_deny_config),
+        )
+        .route(TX_DENY_CONFIG, get(transaction_deny_config_dump))
         .with_state(Arc::new(app_state));
 
     let socket_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
@@ -174,6 +218,10 @@ async fn enable_tracing(
     State(state): State<Arc<AppState>>,
     query: Query<EnableTracing>,
 ) -> (StatusCode, String) {
+    let Some(tracing_handle) = &state.tracing_handle else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, NO_TRACING_HANDLE.into());
+    };
+
     let Query(EnableTracing {
         filter,
         duration,
@@ -184,12 +232,12 @@ async fn enable_tracing(
     let mut response = Vec::new();
 
     if let Some(sample_rate) = sample_rate {
-        state.tracing_handle.update_sampling_rate(sample_rate);
+        tracing_handle.update_sampling_rate(sample_rate);
         response.push(format!("sample rate set to {:?}", sample_rate));
     }
 
     if let Some(trace_file) = trace_file {
-        if let Err(err) = state.tracing_handle.update_trace_file(&trace_file) {
+        if let Err(err) = tracing_handle.update_trace_file(&trace_file) {
             response.push(format!("can't update trace file: {:?}", err));
             return (StatusCode::BAD_REQUEST, response.join("\n"));
         } else {
@@ -212,7 +260,7 @@ async fn enable_tracing(
         return (StatusCode::BAD_REQUEST, response.join("\n"));
     };
 
-    match state.tracing_handle.update_trace_filter(&filter, duration) {
+    match tracing_handle.update_trace_filter(&filter, duration) {
         Ok(()) => {
             response.push(format!("filter set to {:?}", filter));
             response.push(format!("filter will be reset after {:?}", duration));
@@ -226,7 +274,10 @@ async fn enable_tracing(
 }
 
 async fn reset_tracing(State(state): State<Arc<AppState>>) -> (StatusCode, String) {
-    state.tracing_handle.reset_trace();
+    let Some(tracing_handle) = &state.tracing_handle else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, NO_TRACING_HANDLE.into());
+    };
+    tracing_handle.reset_trace();
     (
         StatusCode::OK,
         "tracing filter reset to TRACE_FILTER env var".into(),
@@ -234,7 +285,10 @@ async fn reset_tracing(State(state): State<Arc<AppState>>) -> (StatusCode, Strin
 }
 
 async fn get_filter(State(state): State<Arc<AppState>>) -> (StatusCode, String) {
-    match state.tracing_handle.get_log() {
+    let Some(tracing_handle) = &state.tracing_handle else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, NO_TRACING_HANDLE.into());
+    };
+    match tracing_handle.get_log() {
         Ok(filter) => (StatusCode::OK, filter),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }
@@ -244,7 +298,10 @@ async fn set_filter(
     State(state): State<Arc<AppState>>,
     new_filter: String,
 ) -> (StatusCode, String) {
-    match state.tracing_handle.update_log(&new_filter) {
+    let Some(tracing_handle) = &state.tracing_handle else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, NO_TRACING_HANDLE.into());
+    };
+    match tracing_handle.update_log(&new_filter) {
         Ok(()) => {
             info!(filter =% new_filter, "Log filter updated");
             (StatusCode::OK, "".into())
@@ -256,14 +313,8 @@ async fn set_filter(
 async fn capabilities(State(state): State<Arc<AppState>>) -> (StatusCode, String) {
     let epoch_store = state.node.state().load_epoch_store_one_call_per_task();
 
-    // Only one of v1 or v2 will be populated at a time
-    let capabilities = epoch_store.get_capabilities_v1();
-    let mut output = String::new();
-    for capability in capabilities.unwrap_or_default() {
-        output.push_str(&format!("{:?}\n", capability));
-    }
-
     let capabilities = epoch_store.get_capabilities_v2();
+    let mut output = String::new();
     for capability in capabilities.unwrap_or_default() {
         output.push_str(&format!("{:?}\n", capability));
     }
@@ -520,6 +571,259 @@ async fn traffic_control(
                 updated_state.error_threshold, updated_state.spam_threshold, updated_state.dry_run
             ),
         ),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateEndpointArgs {
+    endpoint_type: String,
+    id: String,
+    addresses: String,
+}
+
+async fn update_endpoint(
+    State(state): State<Arc<AppState>>,
+    args: Query<UpdateEndpointArgs>,
+) -> (StatusCode, String) {
+    let Query(UpdateEndpointArgs {
+        endpoint_type,
+        id,
+        addresses,
+    }) = args;
+
+    let endpoint_id = match endpoint_type.as_str() {
+        "p2p" => {
+            let peer_id_bytes = match Hex::decode(&id) {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("Invalid id hex encoding: {err}"),
+                    );
+                }
+            };
+
+            let peer_id_bytes: [u8; 32] = match peer_id_bytes.try_into() {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        "p2p id must be 32 bytes".to_string(),
+                    );
+                }
+            };
+
+            EndpointId::P2p(anemo::PeerId(peer_id_bytes))
+        }
+        "consensus" => {
+            let network_pubkey_bytes = match Hex::decode(&id) {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("Invalid id hex encoding: {err}"),
+                    );
+                }
+            };
+
+            let network_pubkey = match NetworkPublicKey::from_bytes(&network_pubkey_bytes) {
+                Ok(key) => key,
+                Err(err) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("Invalid network public key: {err:?}"),
+                    );
+                }
+            };
+
+            EndpointId::Consensus(network_pubkey)
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Unknown endpoint_type: {endpoint_type}"),
+            );
+        }
+    };
+
+    let mut parsed_addresses = Vec::new();
+    for addr_str in addresses.split(',') {
+        let addr_str = addr_str.trim();
+        if addr_str.is_empty() {
+            continue;
+        }
+        match addr_str.parse::<Multiaddr>() {
+            Ok(addr) => parsed_addresses.push(addr),
+            Err(err) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid address '{addr_str}': {err}"),
+                );
+            }
+        }
+    }
+
+    if let Err(e) = state.node.endpoint_manager().update_endpoint(
+        endpoint_id,
+        AddressSource::Admin,
+        parsed_addresses.clone(),
+    ) {
+        return (StatusCode::BAD_REQUEST, e.to_string());
+    }
+
+    (
+        StatusCode::OK,
+        format!(
+            "Endpoint updated for {endpoint_type} endpoint {id} with {} address(es)\n",
+            parsed_addresses.len(),
+        ),
+    )
+}
+
+async fn submit_transaction_deny_config_update(
+    state: &Arc<AppState>,
+    rules: Option<rtd_types::transaction_deny_rules::TransactionDenyRules>,
+) -> (StatusCode, String) {
+    let authority_state = state.node.state();
+    let epoch_store = authority_state.load_epoch_store_one_call_per_task();
+    if !epoch_store
+        .protocol_config()
+        .share_transaction_deny_config_in_consensus()
+    {
+        return (
+            StatusCode::PRECONDITION_FAILED,
+            "share_transaction_deny_config_in_consensus protocol flag is not enabled\n".to_string(),
+        );
+    }
+
+    let consensus_adapter = match state.node.consensus_adapter().await {
+        Some(adapter) => adapter,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "validator components not running; consensus adapter unavailable\n".to_string(),
+            );
+        }
+    };
+
+    match authority_state
+        .transaction_deny_config_manager()
+        .submit_broadcast(rules, &consensus_adapter, &epoch_store)
+    {
+        Ok(generation) => (
+            StatusCode::OK,
+            format!("UpdateTransactionDenyConfig submitted at generation {generation}\n"),
+        ),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{e}\n")),
+    }
+}
+
+async fn broadcast_transaction_deny_config(
+    State(state): State<Arc<AppState>>,
+) -> (StatusCode, String) {
+    let local_rules = state
+        .node
+        .state()
+        .local_transaction_deny_config()
+        .rules()
+        .clone();
+    submit_transaction_deny_config_update(&state, Some(local_rules)).await
+}
+
+async fn withdraw_transaction_deny_config(
+    State(state): State<Arc<AppState>>,
+) -> (StatusCode, String) {
+    submit_transaction_deny_config_update(&state, None).await
+}
+
+async fn transaction_deny_config_dump(State(state): State<Arc<AppState>>) -> (StatusCode, String) {
+    use serde_json::json;
+
+    let authority_state = state.node.state();
+    let manager = authority_state.transaction_deny_config_manager();
+    let local = manager.local();
+    let effective = manager.effective_config().load();
+    let peers = manager.peer_configs_snapshot();
+    let evaluation = manager.evaluate_status();
+
+    let peer_dump: serde_json::Map<String, serde_json::Value> = peers
+        .iter()
+        .map(|(authority, msg)| {
+            let key = format!("{}", authority.concise());
+            let value = json!({
+                "generation": msg.generation(),
+                "rules": msg.rules(),
+            });
+            (key, value)
+        })
+        .collect();
+
+    let prelisted_dump: Vec<serde_json::Value> = evaluation
+        .prelisted
+        .iter()
+        .map(|status| {
+            json!({
+                "name": status.name,
+                "stake_threshold_percent": status.stake_threshold_percent,
+                "eligible_stake": status.eligible_stake,
+                "voted_stake": status.voted_stake,
+                "voters": status
+                    .voters
+                    .iter()
+                    .map(|v| format!("{}", v.concise()))
+                    .collect::<Vec<_>>(),
+                "active": status.active,
+            })
+        })
+        .collect();
+
+    let defaults_dump: Vec<serde_json::Value> = evaluation
+        .defaults
+        .iter()
+        .map(|d| {
+            json!({
+                "name": d.name,
+                "element_kinds": d.element_kinds,
+                "stake_threshold_percent": d.stake_threshold_percent,
+                "eligible_stake": d.eligible_stake,
+                "applied_elements": d.applied_elements,
+            })
+        })
+        .collect();
+
+    let body = json!({
+        "local": {
+            "rules": local.rules(),
+            "has_dynamic_transaction_checks": local.has_dynamic_transaction_checks(),
+        },
+        "peers": peer_dump,
+        "effective": {
+            "rules": effective.rules(),
+            "has_dynamic_transaction_checks": effective.has_dynamic_transaction_checks(),
+        },
+        "voting": {
+            "prelisted": prelisted_dump,
+            "defaults": defaults_dump,
+        },
+    });
+
+    match serde_json::to_string_pretty(&body) {
+        Ok(s) => (StatusCode::OK, format!("{s}\n")),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{e}\n")),
+    }
+}
+
+async fn address_prober_report(State(state): State<Arc<AppState>>) -> (StatusCode, String) {
+    let Some(report) = state.node.address_prober_report().await else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "address prober is not running (node is not a validator, or the prober is disabled)\n"
+                .to_string(),
+        );
+    };
+    match serde_json::to_string_pretty(&report) {
+        Ok(json) => (StatusCode::OK, format!("{json}\n")),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }
 }

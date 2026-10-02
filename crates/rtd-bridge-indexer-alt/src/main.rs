@@ -3,18 +3,20 @@
 use anyhow::Context;
 use clap::Parser;
 use prometheus::Registry;
-use std::net::SocketAddr;
 use rtd_bridge_indexer_alt::handlers::error_handler::ErrorTransactionHandler;
 use rtd_bridge_indexer_alt::handlers::governance_action_handler::GovernanceActionHandler;
 use rtd_bridge_indexer_alt::handlers::token_transfer_data_handler::TokenTransferDataHandler;
 use rtd_bridge_indexer_alt::handlers::token_transfer_handler::TokenTransferHandler;
 use rtd_bridge_indexer_alt::metrics::BridgeIndexerMetrics;
 use rtd_bridge_schema::MIGRATIONS;
-use rtd_indexer_alt_framework::ingestion::{ClientArgs, ingestion_client::IngestionClientArgs};
+use rtd_indexer_alt_framework::ingestion::{
+    ClientArgs, ingestion_client::IngestionClientArgs, streaming_client::StreamingClientArgs,
+};
 use rtd_indexer_alt_framework::postgres::DbArgs;
 use rtd_indexer_alt_framework::service::Error;
 use rtd_indexer_alt_framework::{Indexer, IndexerArgs};
 use rtd_indexer_alt_metrics::{MetricsArgs, MetricsService};
+use std::net::SocketAddr;
 use url::Url;
 
 #[derive(Parser)]
@@ -32,8 +34,10 @@ struct Args {
         default_value = "postgres://postgres:postgrespw@localhost:5432/bridge"
     )]
     database_url: Url,
-    #[clap(env, long, default_value = "https://checkpoints.mainnet.rtd.io")]
-    remote_store_url: Url,
+    #[command(flatten)]
+    ingestion: IngestionClientArgs,
+    #[command(flatten)]
+    streaming: StreamingClientArgs,
 }
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -46,7 +50,8 @@ async fn main() -> Result<(), anyhow::Error> {
         indexer_args,
         metrics_address,
         database_url,
-        remote_store_url,
+        ingestion,
+        streaming,
     } = Args::parse();
 
     let is_bounded_job = indexer_args.last_checkpoint.is_some();
@@ -64,11 +69,8 @@ async fn main() -> Result<(), anyhow::Error> {
         db_args,
         indexer_args,
         ClientArgs {
-            ingestion: IngestionClientArgs {
-                remote_store_url: Some(remote_store_url),
-                ..Default::default()
-            },
-            ..Default::default()
+            ingestion,
+            streaming,
         },
         Default::default(),
         Some(&MIGRATIONS),

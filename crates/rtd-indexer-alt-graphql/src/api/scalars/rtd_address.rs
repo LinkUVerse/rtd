@@ -1,12 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{fmt, str::FromStr};
+use std::fmt;
+use std::str::FromStr;
 
-use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
+use async_graphql::InputValueError;
+use async_graphql::InputValueResult;
+use async_graphql::Scalar;
+use async_graphql::ScalarType;
+use async_graphql::Value;
 use move_core_types::account_address::AccountAddress;
-use serde::{Deserialize, Serialize};
-use rtd_types::base_types::{ObjectID, RtdAddress as NativeRtdAddress};
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress as NativeRtdAddress;
+use serde::Deserialize;
+use serde::Serialize;
 
 const RTD_ADDRESS_LENGTH: usize = 32;
 
@@ -46,8 +53,10 @@ impl ScalarType for RtdAddress {
 }
 
 impl RtdAddress {
-    pub fn into_vec(self) -> Vec<u8> {
-        self.0.to_vec()
+    pub(crate) const ZERO: Self = Self([0u8; RTD_ADDRESS_LENGTH]);
+
+    pub(crate) fn to_inner(self) -> [u8; RTD_ADDRESS_LENGTH] {
+        self.0
     }
 }
 
@@ -65,8 +74,15 @@ impl FromStr for RtdAddress {
 
         // Parse a single hexadecimal character from the string, or return an error pointing to the
         // bad character in the source string.
+        let bytes = s.as_bytes();
         let hex = |i: usize| -> Result<u8, Error> {
-            u8::from_str_radix(&s[i..=i], 16).map_err(|_| Error::BadHex(i + 2))
+            let b = bytes[i];
+            match b {
+                b'0'..=b'9' => Ok(b - b'0'),
+                b'a'..=b'f' => Ok(b - b'a' + 10),
+                b'A'..=b'F' => Ok(b - b'A' + 10),
+                _ => Err(Error::BadHex(i + 2)),
+            }
         };
 
         let mut arr = [0u8; RTD_ADDRESS_LENGTH];
@@ -140,8 +156,9 @@ impl From<ObjectID> for RtdAddress {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use async_graphql::Value;
+
+    use super::*;
 
     const FULL_ADDRESS_STR: &str =
         "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -235,6 +252,12 @@ mod tests {
     #[test]
     fn test_unicode_gibberish() {
         let parsed = RtdAddress::from_str("aAௗ0㌀0");
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn test_unicode_char_boundary() {
+        let parsed = RtdAddress::from_str("0x…0123");
         assert!(parsed.is_err());
     }
 

@@ -1,7 +1,7 @@
 [package]
 name = "rtd-adapter-latest"
 version = "0.1.0"
-authors = ["LinkU Labs <eng@linkulabs.com>"]
+authors = ["LinkU Labs"]
 description = "Adapter and accompanying CLI for local rtd development"
 license = "Apache-2.0"
 publish = false
@@ -18,6 +18,7 @@ tracing.workspace = true
 serde.workspace = true
 indexmap.workspace = true
 serde_json.workspace = true
+quick_cache.workspace = true
 
 move-binary-format.workspace = true
 move-bytecode-utils.workspace = true
@@ -34,13 +35,13 @@ move-vm-runtime = { path = "../../../external-crates/move/crates/move-vm-runtime
 move-vm-profiler = { path = "../../../external-crates/move/crates/move-vm-profiler" }
 rtd-move-natives = { path = "../rtd-move-natives", package = "rtd-move-natives-latest" }
 rtd-verifier = { path = "../rtd-verifier", package = "rtd-verifier-latest" }
-move-vm-types = { path = "../../../external-crates/move/crates/move-vm-types" }
 move-regex-borrow-graph = { path = "../../../external-crates/move/crates/move-regex-borrow-graph" }
 
 rtd-macros.workspace = true
 rtd-protocol-config.workspace = true
 rtd-types.workspace = true
 parking_lot.workspace = true
+either.workspace = true
 
 [features]
 tracing = [

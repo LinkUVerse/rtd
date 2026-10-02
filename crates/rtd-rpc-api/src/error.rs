@@ -50,6 +50,17 @@ impl RpcError {
     }
 }
 
+impl std::fmt::Display for RpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.message {
+            Some(m) => write!(f, "{}: {}", self.code, m),
+            None => write!(f, "{}", self.code),
+        }
+    }
+}
+
+impl std::error::Error for RpcError {}
+
 impl From<RpcError> for tonic::Status {
     fn from(value: RpcError) -> Self {
         use prost::Message;
@@ -110,11 +121,11 @@ impl From<bcs::Error> for RpcError {
     }
 }
 
-impl From<rtd_types::quorum_driver_types::QuorumDriverError> for RpcError {
-    fn from(error: rtd_types::quorum_driver_types::QuorumDriverError) -> Self {
+impl From<rtd_types::transaction_driver_types::TransactionSubmissionError> for RpcError {
+    fn from(error: rtd_types::transaction_driver_types::TransactionSubmissionError) -> Self {
         use itertools::Itertools;
         use rtd_types::error::RtdErrorKind;
-        use rtd_types::quorum_driver_types::QuorumDriverError::*;
+        use rtd_types::transaction_driver_types::TransactionSubmissionError::*;
 
         match error {
             InvalidUserSignature(err) => {
@@ -128,7 +139,7 @@ impl From<rtd_types::quorum_driver_types::QuorumDriverError> for RpcError {
 
                 RpcError::new(Code::InvalidArgument, message)
             }
-            QuorumDriverInternalError(err) => RpcError::new(Code::Internal, err.to_string()),
+            TransactionDriverInternalError(err) => RpcError::new(Code::Internal, err.to_string()),
             ObjectsDoubleUsed { conflicting_txes } => {
                 let new_map = conflicting_txes
                     .into_iter()
@@ -153,10 +164,6 @@ impl From<rtd_types::quorum_driver_types::QuorumDriverError> for RpcError {
                     "timed-out before finality could be reached",
                 )
             }
-            FullnodeCatchingUp { details } => RpcError::new(
-                Code::Unavailable,
-                format!("Fullnode is catching up: {details}"),
-            ),
             TimeoutBeforeFinalityWithErrors {
                 last_error,
                 attempts,
@@ -239,23 +246,6 @@ impl From<rtd_types::quorum_driver_types::QuorumDriverError> for RpcError {
 impl From<crate::proto::google::rpc::bad_request::FieldViolation> for RpcError {
     fn from(value: crate::proto::google::rpc::bad_request::FieldViolation) -> Self {
         BadRequest::from(value).into()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::RpcError;
-    use rtd_types::quorum_driver_types::QuorumDriverError;
-
-    #[test]
-    fn fullnode_catching_up_maps_to_unavailable() {
-        let status: tonic::Status = RpcError::from(QuorumDriverError::FullnodeCatchingUp {
-            details: "startup target 42, executed 41".to_string(),
-        })
-        .into();
-
-        assert_eq!(status.code(), tonic::Code::Unavailable);
-        assert!(status.message().contains("Fullnode is catching up"));
     }
 }
 
@@ -420,6 +410,31 @@ impl std::error::Error for CheckpointNotFoundError {}
 
 impl From<CheckpointNotFoundError> for crate::RpcError {
     fn from(value: CheckpointNotFoundError) -> Self {
+        Self::new(tonic::Code::NotFound, value.to_string())
+    }
+}
+
+#[derive(Debug)]
+pub struct EpochNotFoundError {
+    epoch: rtd_sdk_types::EpochId,
+}
+
+impl EpochNotFoundError {
+    pub fn new(epoch: rtd_sdk_types::EpochId) -> Self {
+        Self { epoch }
+    }
+}
+
+impl std::fmt::Display for EpochNotFoundError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Epoch {} not found", self.epoch)
+    }
+}
+
+impl std::error::Error for EpochNotFoundError {}
+
+impl From<EpochNotFoundError> for crate::RpcError {
+    fn from(value: EpochNotFoundError) -> Self {
         Self::new(tonic::Code::NotFound, value.to_string())
     }
 }

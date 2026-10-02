@@ -1,0 +1,27 @@
+---
+title: Strikes and Ticks
+sidebar_label: Strikes and Ticks
+description: Upstream Sui DeepBook Predict strike and order identity design; not RTD market configuration.
+keywords:
+  - deepbook predict
+  - strike tick
+  - upstream design
+---
+
+This is a source design reference for upstream Sui DeepBook Predict. **No RTD market or tick configuration has been deployed and verified.** The earlier table of live RTD cadences and dated chain reads has been removed.
+
+## The tick grid {#tick-grid}
+
+The source represents strikes as integer ticks on an absolute price grid. A market's tick size determines how a tick maps to a price, while an admission grid may restrict which ticks a new position can use. These rules belong to the market's deployed configuration and should be read from that market. Display prices need explicit rounding before they become transaction arguments.
+
+## A position is a tick pair {#range-key}
+
+A range position has lower and upper boundaries. The upstream design uses special boundaries for open-ended up or down positions. Its payout convention and allowed sentinel values must be checked against the selected Move source and SDK; do not derive them from a network label or an old example.
+
+## The packed order ID {#order-id}
+
+An order identity is meaningful within its market. A partial close can retire a current order identity and create a new one for the remainder. Applications should key a position by both market and order identity and follow the transaction result or events to track changes.
+
+## Find a market {#market-key}
+
+Resolve the market through the registry of the actual deployment. A market ID from an upstream Sui chain or a previous local RTD genesis is not valid on a new RTD chain. See [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information).

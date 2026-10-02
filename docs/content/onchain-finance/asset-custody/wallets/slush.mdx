@@ -1,0 +1,12 @@
+---
+title: Slush wallet status
+sidebar_label: Slush
+description: Upstream Sui wallet compatibility status for RTD.
+keywords:
+  - RTD
+  - slush
+---
+
+Slush is an upstream Sui wallet. Its public applications and `slush.app` service are not verified RTD wallets. The presence of a `slush-wallet` package in the forked TypeScript source does not establish a running RTD wallet service or support for the RTD chain ID.
+
+Do not ask users to fund a Slush account with RTD or treat Slush deep links, browser extension, mobile app, staking, swap, and social-login flows as available on RTD. Before enabling this integration, verify a wallet build against the actual RTD chain ID, transaction signatures, gas coin type, wallet discovery, and user-visible network identity. See [wallets](/onchain-finance/asset-custody/wallets) and [RTD networks](/develop/rtd-architecture/networks).

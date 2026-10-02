@@ -1,0 +1,28 @@
+---
+title: RTD External Signers CLI
+sidebar_label: External Signers
+description: CLI hooks for operator supplied external signer programs.
+keywords:
+  - RTD CLI
+  - external signer
+  - signing
+questions:
+  - Does RTD support an external signer command?
+  - Are Ledger or YubiKey RTD signer binaries available?
+answer: >-
+  The RTD CLI exposes external-keys commands, but no Ledger, YubiKey, or cloud
+  signer executable has been verified for this fork. Review an implementation
+  before connecting it to an RTD key or transaction.
+---
+
+The `rtd` CLI includes external signer integration commands. Inspect the interface supported by your built binary:
+
+```sh
+rtd external-keys --help
+rtd external-keys list-keys --help
+rtd external-keys add-existing --help
+```
+
+An external signer is a separate program that handles private keys and signatures. This repository does not verify a published RTD Ledger, YubiKey, or AWS signer binary, nor a `LinkUVerse/rust-signers` source repository. An upstream Sui signer can use different transaction intents or network assumptions and must not be installed under a renamed URL without a full RTD signing test.
+
+Before use, review the signer's source and executable hash, confirm RTD address derivation and intent signing, test with a disposable account on your own RTD network, and verify the resulting transaction against that chain's ID. Do not import production keys during compatibility testing. See [keytool CLI](/references/cli/keytool) for local key operations.

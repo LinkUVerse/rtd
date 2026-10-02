@@ -5,7 +5,6 @@
 
 module prettier::misc;
 
-use std::{string::String, type_name::{Self, TypeName}};
 use rtd::{
     clock::Clock,
     coin::Coin,
@@ -13,6 +12,7 @@ use rtd::{
     rtd::RTD,
     table::{Self, Table}
 };
+use std::{string::String, type_name::{Self, TypeName}};
 
 fun calculate_pending_rewards<StakeCoin, RewardCoin>(
     acc: &Account<StakeCoin, RewardCoin>,
@@ -213,8 +213,8 @@ public fun withdraw<T>(
 
 fun staking() {
     let unadjusted_staking_reward_amount = unadjusted_staking_reward_amounts[i];
-    let adjusted_staking_reward_amount // If the validator is one of the slashed ones, then subtract the adjustment.
-     = if (individual_staking_reward_adjustments.contains(&i)) {
+    let adjusted_staking_reward_amount = // If the validator is one of the slashed ones, then subtract the adjustment.
+    if (individual_staking_reward_adjustments.contains(&i)) {
         let adjustment = individual_staking_reward_adjustments[&i];
         unadjusted_staking_reward_amount - adjustment
     } else {

@@ -8,13 +8,16 @@ use crate::{
     upgrade_compatibility::check_compatibility,
     verifier_meter::{AccumulatingMeter, Accumulator},
 };
+use futures::{StreamExt, TryStreamExt};
+use rtd_rpc::proto::rtd::rpc::v2::{self as proto};
 use std::{
-    collections::{BTreeMap, BTreeSet, btree_map::Entry},
+    collections::{BTreeMap, BTreeSet},
     fmt::{Debug, Display, Formatter, Write},
     fs,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{Context, anyhow, bail, ensure};
@@ -28,59 +31,69 @@ use fastcrypto::{
 use reqwest::StatusCode;
 
 use move_binary_format::CompiledModule;
+use move_bytecode_utils::module_cache::GetModule;
 use move_bytecode_verifier_meter::Scope;
 use move_core_types::{
-    account_address::AccountAddress, identifier::Identifier, language_storage::TypeTag,
+    account_address::AccountAddress,
+    identifier::Identifier,
+    language_storage::{ModuleId, StructTag, TypeTag},
 };
-use move_package_alt::schema::ModeName;
+use move_package_alt::{PackageLoader, read_publication, schema::ModeName};
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
 use prometheus::Registry;
-use serde::Serialize;
-use serde_json::{Value, json};
 use rtd_config::verifier_signing_config::VerifierSigningConfig;
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+use serde::Serialize;
+use serde_json::{Value, json};
 
-use shared_crypto::intent::Intent;
 use rtd_json::RtdJsonValue;
 use rtd_json_rpc_types::{
-    Coin, DevInspectArgs, DevInspectResults, DryRunTransactionBlockResponse, DynamicFieldInfo,
-    DynamicFieldPage, RtdCoinMetadata, RtdData, RtdExecutionStatus, RtdObjectData,
-    RtdObjectDataOptions, RtdObjectResponse, RtdObjectResponseQuery, RtdParsedData,
-    RtdProtocolConfigValue, RtdRawData, RtdTransactionBlockEffects, RtdTransactionBlockEffectsAPI,
-    RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
+    BalanceChange as RpcBalanceChange, BcsEvent, Coin as RpcCoin, DryRunTransactionBlockResponse,
+    ObjectChange as RpcObjectChange, RtdEvent, RtdTransactionBlock, RtdTransactionBlockEffects,
+    RtdTransactionBlockEvents, RtdTransactionBlockResponse,
 };
 use rtd_keys::key_identity::KeyIdentity;
 use rtd_keys::keystore::AccountKeystore;
-use rtd_move_build::{BuildConfig, CompiledPackage, PackageDependencies};
+use rtd_move_build::{CompiledPackage, PackageDependencies};
 use rtd_package_management::LockCommand;
+use rtd_rpc_api::{
+    Client,
+    client::{ExecutedTransaction, SimulateTransactionResponse},
+};
 use rtd_sdk::{
-    RTD_COIN_TYPE, RTD_DEVNET_URL, RTD_LOCAL_NETWORK_URL, RTD_LOCAL_NETWORK_URL_0, RTD_TESTNET_URL,
-    RtdClient,
-    apis::ReadApi,
+    RTD_LOCAL_NETWORK_URL, RTD_LOCAL_NETWORK_URL_0,
+    digests::chain_id_base58,
     rtd_client_config::{RtdClientConfig, RtdEnv},
+    rtd_sdk_types::bcs::ToBcs,
     wallet_context::WalletContext,
 };
 use rtd_types::{
-    RTD_FRAMEWORK_PACKAGE_ID,
-    base_types::{FullObjectID, ObjectID, ObjectRef, ObjectType, SequenceNumber, RtdAddress},
+    RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID,
+    base_types::{FullObjectID, ObjectID, ObjectRef, ObjectType, RtdAddress, SequenceNumber},
+    coin::{COIN_MODULE_NAME, COIN_STRUCT_NAME, Coin},
     crypto::{EmptySignInfo, SignatureScheme},
     digests::TransactionDigest,
+    effects::TransactionEffectsAPI,
     error::RtdErrorKind,
+    event::EventID,
+    execution_status::{ExecutionFailure, ExecutionStatus},
     gas::GasCostSummary,
-    gas_coin::GasCoin,
+    gas_coin::{GAS, GasCoin},
     message_envelope::Envelope,
     metrics::BytecodeVerifierMetrics,
     move_package::{MovePackage, UpgradeCap},
-    object::Owner,
+    object::{Object, Owner},
     parse_rtd_type_tag,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
+    rtd_sdk_types_conversions::type_tag_sdk_to_core,
     signature::GenericSignature,
-    rtd_serde,
     transaction::{
-        InputObjectKind, ObjectArg, SenderSignedData, SharedObjectMutability, Transaction,
-        TransactionData, TransactionDataAPI, TransactionKind,
+        Argument, Command, FundsWithdrawalArg, GasData, ObjectArg, SenderSignedData,
+        SharedObjectMutability, Transaction, TransactionData, TransactionDataAPI,
+        TransactionExpiration, TransactionKind,
     },
 };
+use shared_crypto::intent::Intent;
 
 use json_to_table::json_to_table;
 use tabled::{
@@ -95,15 +108,21 @@ use tabled::{
 };
 
 use move_package_alt::{
-    package::RootPackage,
+    RootPackage,
     schema::{OriginalID, Publication, PublishAddresses, PublishedID},
 };
 use move_symbol_pool::Symbol;
 use rtd_keys::key_derive;
 use rtd_package_alt::{BuildParams, RtdFlavor, find_environment};
-use rtd_source_validation::{BytecodeSourceVerifier, ValidationMode};
-use rtd_types::digests::ChainIdentifier;
+use rtd_source_verification::{ToolchainSource, VerifiedMetadata, verify_built, verify_source};
 use tracing::{debug, info};
+
+/// Concurrency level for fetching coin metadata for balances.
+const NUM_CONCURRENCY_REQS: usize = 8;
+/// Rate limit for RPC calls to avoid being throttled by the server. This is equivalent to 20rps.
+const RATE_LIMIT_MILLIS: u64 = 50;
+/// Handed to users whose CLI has fallen behind the network's protocol version.
+const CLI_UPDATE_HINT: &str = "build and install a newer CLI from the current RTD source";
 
 pub(crate) static USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
@@ -176,9 +195,18 @@ pub enum RtdClientCommands {
         processing: TxProcessingArgs,
     },
 
-    /// Query the chain identifier from the rpc endpoint.
+    /// Query the chain identifier from the rpc endpoint. Prints it in both encodings: the full
+    /// Base58-encoded genesis checkpoint digest (as returned by the gRPC and GraphQL APIs) and
+    /// the legacy hex short form. Either can be used as a chain ID in the `[environments]`
+    /// section of `Move.toml`.
+    ///
+    /// Use --format=[base58|hex] to print only the specified format.
     #[clap(name = "chain-identifier")]
-    ChainIdentifier,
+    ChainIdentifier {
+        /// The format for chain identifier output, either base58 or hex.
+        #[clap(long, required = false)]
+        format: Option<ChainIdentifierFormat>,
+    },
 
     /// Query a dynamic field by its address.
     #[clap(name = "dynamic-field")]
@@ -188,10 +216,10 @@ pub enum RtdClientCommands {
         id: ObjectID,
         /// Optional paging cursor
         #[clap(long)]
-        cursor: Option<ObjectID>,
+        cursor: Option<String>,
         /// Maximum item returned per page
         #[clap(long, default_value = "50")]
-        limit: usize,
+        limit: u32,
     },
 
     /// List all Rtd environments
@@ -367,6 +395,45 @@ pub enum RtdClientCommands {
         processing: TxProcessingArgs,
     },
 
+    /// Send funds to an address balance using the `rtd::coin::send_funds` API.
+    /// This sends funds to the recipient's address balance (not as a coin object).
+    #[clap(name = "send-funds")]
+    SendFunds {
+        /// The recipient address (or its alias if it's an address in the keystore).
+        #[clap(long)]
+        to: KeyIdentity,
+
+        /// The amount to send (in MIST). Required unless --all-coins is specified.
+        #[clap(
+            long,
+            conflicts_with = "all_coins",
+            required_unless_present = "all_coins"
+        )]
+        amount: Option<u64>,
+
+        /// Send all coins of the specified type to the recipient's address balance.
+        /// Conflicts with --amount and --from-address-balance.
+        #[clap(long, conflicts_with_all = ["amount", "from_address_balance"])]
+        all_coins: bool,
+
+        /// The coin type to send (e.g., "0x2::rtd::RTD"). Defaults to RTD.
+        #[clap(long, value_parser = parse_rtd_type_tag)]
+        coin_type: Option<TypeTag>,
+
+        /// Draw the funds from the sender's address balance rather than from their coins. Without
+        /// this, coins are preferred and the address balance is only used if they cannot cover the
+        /// amount. Either way the recipient is paid into their address balance.
+        /// Conflicts with --all-coins.
+        #[clap(long, conflicts_with = "all_coins")]
+        from_address_balance: bool,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
     /// Pay RTD coins to recipients following specified amounts, with input coins.
     /// Length of recipients must be the same as that of amounts.
     /// The input coins also include the coin for gas payment, so no extra gas coin is required.
@@ -398,6 +465,27 @@ pub enum RtdClientCommands {
     /// Publish Move modules
     #[clap(name = "publish")]
     Publish(PublishArgs),
+
+    /// Publish a package using ephemeral addresses for dependencies.
+    #[clap(
+        name = "test-publish",
+        after_long_help = "The `test-publish` command is used to publish packages ephemerally, i.e. without recording the published addresses in the main `Published.toml` file. Running `rtd client test-publish --pubfile-path <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
+                \n\
+                See `rtd move --help` and the package's Move.toml and Published.toml for build environment and publication settings."
+    )]
+    TestPublish(TestPublishArgs),
+
+    /// Upgrade Move modules
+    #[clap(name = "upgrade")]
+    Upgrade(UpgradeArgs),
+
+    #[clap(
+        name = "test-upgrade",
+        after_long_help = "The `test-upgrade` command is used to upgrade ephemeral packages, for packages published using `test-publish` command. This does not write publication info to `Published.toml` file. Running `rtd client test-upgrade --pubfile-path <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
+            \n\
+            See `rtd move --help` and the package's Move.toml and Published.toml for build environment and publication settings."
+    )]
+    TestUpgrade(TestUpgradeArgs),
 
     /// Execute, dry-run, dev-inspect or otherwise inspect an already serialized transaction.
     SerializedTx {
@@ -459,15 +547,6 @@ pub enum RtdClientCommands {
         env: Option<String>,
     },
 
-    /// Publish a package using ephemeral addresses for dependencies.
-    #[clap(
-        name = "test-publish",
-        after_long_help = "The `test-publish` command is used to publish packages ephemerally, i.e. without recording the published addresses in the main `Published.toml` file. Running `rtd client test-publish <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
-        \n\
-        See https://docs.rtd.io/guides/developer/rtd-101/move-package-management for more information."
-    )]
-    TestPublish(TestPublishArgs),
-
     /// Get the effects of executing the given transaction block
     #[clap(name = "tx-block")]
     TransactionBlock {
@@ -521,49 +600,6 @@ pub enum RtdClientCommands {
         processing: TxProcessingArgs,
     },
 
-    /// Upgrade Move modules
-    #[clap(name = "upgrade")]
-    Upgrade {
-        /// Path to directory containing a Move package
-        #[clap(name = "package_path", global = true, default_value = ".")]
-        package_path: PathBuf,
-
-        /// ID of the upgrade capability for the package being upgraded.
-        #[clap(long, short = 'c')]
-        upgrade_capability: Option<ObjectID>,
-
-        /// Package build options
-        #[clap(flatten)]
-        build_config: MoveBuildConfig,
-
-        /// Skip verifying package compatibility locally before publishing.
-        #[clap(long)]
-        skip_verify_compatibility: bool,
-
-        /// Upgrade the package without checking whether dependency source code compiles to the on-chain
-        /// bytecode
-        #[clap(long)]
-        skip_dependency_verification: bool,
-
-        /// Check that the dependency source code compiles to the on-chain bytecode before
-        /// upgrading the package (currently the default behavior)
-        #[clap(long, conflicts_with = "skip_dependency_verification")]
-        verify_deps: bool,
-
-        /// Also publish transitive dependencies that have not already been published.
-        #[clap(long)]
-        with_unpublished_dependencies: bool,
-
-        #[clap(flatten)]
-        payment: PaymentArgs,
-
-        #[clap(flatten)]
-        gas_data: GasDataArgs,
-
-        #[clap(flatten)]
-        processing: TxProcessingArgs,
-    },
-
     /// Run the bytecode verifier on the package
     #[clap(name = "verify-bytecode-meter")]
     VerifyBytecodeMeter {
@@ -587,29 +623,34 @@ pub enum RtdClientCommands {
         build_config: MoveBuildConfig,
     },
 
-    /// Verify local Move packages against on-chain packages, and optionally their dependencies.
+    /// Verify that a local Move source package compiles to an on-chain package's bytecode and
+    /// linkage, rebuilding it with the toolchain version it was published with.
     #[clap(name = "verify-source")]
     VerifySource {
         /// Path to directory containing a Move package
-        #[clap(name = "package_path", global = true, default_value = ".")]
+        #[clap(name = "package_path", default_value = ".")]
         package_path: PathBuf,
 
         /// Package build options
         #[clap(flatten)]
         build_config: MoveBuildConfig,
 
-        /// Verify on-chain dependencies.
+        /// Override the toolchain (compiler) version used to rebuild the package, instead of
+        /// reading it from the package's publish metadata.
         #[clap(long)]
-        verify_deps: bool,
+        toolchain_version: Option<String>,
 
-        /// Don't verify source (only valid if --verify-deps is enabled).
-        #[clap(long)]
-        skip_source: bool,
+        /// Rebuild with the `rtd` binary at this path instead of downloading a release. Skips
+        /// toolchain-version resolution and the download; cannot be combined with
+        /// `--toolchain-version`.
+        #[clap(long, value_name = "PATH", conflicts_with = "toolchain_version")]
+        toolchain: Option<PathBuf>,
 
-        /// If specified, override the addresses for the package's own modules with this address.
-        /// Only works for unpublished modules (whose addresses are currently 0x0).
-        #[clap(long)]
-        address_override: Option<ObjectID>,
+        /// Compare the modules already compiled under `<package_path>/build` against the on-chain
+        /// package with this id, without rebuilding. Only module bytecode is compared, not linkage.
+        /// Intended for tooling such as the debugger.
+        #[clap(long, hide = true, value_name = "ON_CHAIN_ID")]
+        verify_only: Option<ObjectID>,
     },
 
     /// Remove an existing address by its alias or hexadecimal string.
@@ -639,7 +680,7 @@ pub struct PaymentArgs {
 }
 
 /// Arguments related to setting gas data, apart from payment coins.
-#[derive(Args, Debug, Default)]
+#[derive(Args, Debug, Default, Clone)]
 pub struct GasDataArgs {
     /// An optional gas budget for this transaction (in MIST). If gas budget is not provided, the
     /// tool will first perform a dry run to estimate the gas cost, and then it will execute the
@@ -666,7 +707,7 @@ pub struct GasDataArgs {
 }
 
 /// Arguments related to what to do to a transaction after it has been built.
-#[derive(Args, Debug, Default)]
+#[derive(Args, Debug, Default, Clone)]
 pub struct TxProcessingArgs {
     /// Compute the transaction digest and print it out, but do not execute the transaction.
     #[arg(long)]
@@ -695,6 +736,10 @@ pub struct TxProcessingArgs {
     /// private key corresponding to this address is not in keystore.
     #[arg(long, required = false, value_parser)]
     pub sender: Option<RtdAddress>,
+    /// Do not sign the transaction. This is only intended for local forked networks that
+    /// support sender impersonation.
+    #[arg(long)]
+    pub skip_signing: bool,
 }
 
 #[derive(Args, Debug, Default)]
@@ -732,20 +777,91 @@ pub struct PublishArgs {
 }
 
 #[derive(Args, Debug, Default)]
+pub struct UpgradeArgs {
+    /// Path to directory containing a Move package
+    #[clap(name = "package_path", global = true, default_value = ".")]
+    pub package_path: PathBuf,
+
+    /// ID of the upgrade capability for the package being upgraded.
+    #[clap(long, short = 'c')]
+    pub upgrade_capability: Option<ObjectID>,
+
+    /// Package build options
+    #[clap(flatten)]
+    pub build_config: MoveBuildConfig,
+
+    /// Skip verifying package compatibility locally before publishing.
+    #[clap(long)]
+    pub skip_verify_compatibility: bool,
+
+    /// Upgrade the package without checking whether dependency source code compiles to the on-chain
+    /// bytecode
+    #[clap(long)]
+    pub skip_dependency_verification: bool,
+
+    /// Check that the dependency source code compiles to the on-chain bytecode before
+    /// upgrading the package (currently the default behavior)
+    #[clap(long, conflicts_with = "skip_dependency_verification")]
+    pub verify_deps: bool,
+
+    /// Also publish transitive dependencies that have not already been published.
+    #[clap(long)]
+    pub with_unpublished_dependencies: bool,
+
+    #[clap(flatten)]
+    pub payment: PaymentArgs,
+
+    #[clap(flatten)]
+    pub gas_data: GasDataArgs,
+
+    #[clap(flatten)]
+    pub processing: TxProcessingArgs,
+}
+
+/// The format for chain identifier output, either base58 or hex.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChainIdentifierFormat {
+    Base58,
+    Hex,
+}
+
+/// Returns the pubfile path, or a default based on the environment alias if not specified
+fn get_pubfile_path_or_default(pubfile_path: Option<&PathBuf>, alias: &str) -> PathBuf {
+    pubfile_path
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from(format!("Pub.{alias}.toml")))
+}
+
+#[derive(Args, Debug, Default)]
 pub struct TestPublishArgs {
     #[clap(flatten)]
     pub publish_args: PublishArgs,
-    /// The build environment
-    #[clap(long)]
-    pub build_env: Option<String>,
-    /// Path to publication file
-    #[clap(long)]
-    pub pubfile_path: Option<PathBuf>,
+    #[clap(long, default_value = "false")]
+    /// Publishes transitive dependencies that have not already been published.
+    pub publish_unpublished_deps: bool,
 }
 
+#[derive(Args, Debug, Default)]
+pub struct TestUpgradeArgs {
+    #[clap(flatten)]
+    pub upgrade_args: UpgradeArgs,
+}
 #[derive(serde::Deserialize, Debug)]
 struct FaucetResponse {
     error: Option<String>,
+}
+
+/// The protocol limits that bound how many coins a single transaction can drain.
+struct CoinLimits {
+    /// Maximum number of objects a gas payment may contain.
+    max_gas_payment_objects: usize,
+    /// Maximum number of arguments a single command may take. A command's target does not count
+    /// towards this, and the limit is exclusive.
+    max_arguments: usize,
+    /// Maximum number of object inputs a transaction may have. The gas payment does not count
+    /// towards this.
+    max_input_objects: usize,
 }
 
 impl RtdClientCommands {
@@ -769,12 +885,11 @@ impl RtdClientCommands {
             RtdClientCommands::Addresses { sort_by_alias } => {
                 let active_address = context.active_address()?;
                 let mut addresses: Vec<(String, RtdAddress)> = context
-                    .config
-                    .keystore
                     .addresses_with_alias()
                     .into_iter()
                     .map(|(address, alias)| (alias.alias.to_string(), *address))
                     .collect();
+
                 if sort_by_alias {
                     addresses.sort();
                 }
@@ -791,248 +906,53 @@ impl RtdClientCommands {
                 with_coins,
             } => {
                 let address = context.get_identity_address(address)?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let _ = context.cache_chain_id().await?;
 
-                let mut objects: Vec<Coin> = Vec::new();
-                let mut cursor = None;
-                loop {
-                    let response = match coin_type {
-                        Some(ref coin_type) => {
-                            client
-                                .coin_read_api()
-                                .get_coins(address, Some(coin_type.clone()), cursor, None)
-                                .await?
-                        }
-                        None => {
-                            client
-                                .coin_read_api()
-                                .get_all_coins(address, cursor, None)
-                                .await?
-                        }
-                    };
+                let client = context.grpc_client()?;
+                let coin_type = coin_type
+                    .map(|coin_type| coin_type.parse::<StructTag>())
+                    .transpose()?;
+                let mut balances =
+                    balance_outputs_for_address(&client, address, coin_type.as_ref()).await?;
 
-                    objects.extend(response.data);
-
-                    if response.has_next_page {
-                        cursor = response.next_cursor;
-                    } else {
-                        break;
-                    }
+                if with_coins {
+                    attach_owned_coin_objects(&client, address, coin_type.as_ref(), &mut balances)
+                        .await?;
                 }
 
-                fn canonicalize_type(type_: &str) -> Result<String, anyhow::Error> {
-                    Ok(TypeTag::from_str(type_)
-                        .context("Cannot parse coin type")?
-                        .to_canonical_string(/* with_prefix */ true))
-                }
-
-                let mut coins_by_type = BTreeMap::new();
-                for c in objects {
-                    let coins = match coins_by_type.entry(canonicalize_type(&c.coin_type)?) {
-                        Entry::Vacant(entry) => {
-                            let metadata = client
-                                .coin_read_api()
-                                .get_coin_metadata(c.coin_type.clone())
-                                .await
-                                .with_context(|| {
-                                    format!(
-                                        "Cannot fetch the coin metadata for coin {}",
-                                        c.coin_type
-                                    )
-                                })?;
-
-                            &mut entry.insert((metadata, vec![])).1
-                        }
-                        Entry::Occupied(entry) => &mut entry.into_mut().1,
-                    };
-
-                    coins.push(c);
-                }
-                let rtd_type_tag = canonicalize_type(RTD_COIN_TYPE)?;
-
-                // show RTD first
-                let ordered_coins_rtd_first = coins_by_type
-                    .remove(&rtd_type_tag)
-                    .into_iter()
-                    .chain(coins_by_type.into_values())
-                    .collect();
-
-                RtdClientCommandResult::Balance(ordered_coins_rtd_first, with_coins)
+                order_balance_outputs_rtd_first(&mut balances);
+                RtdClientCommandResult::Balance(balances, with_coins)
             }
 
             RtdClientCommands::DynamicFieldQuery { id, cursor, limit } => {
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let page_token = cursor
+                    .map(|c| Base64::decode(&c))
+                    .transpose()?
+                    .map(Into::into);
                 let df_read = client
-                    .read_api()
-                    .get_dynamic_fields(id, cursor, Some(limit))
+                    .get_dynamic_fields(id, Some(limit), page_token)
                     .await?;
                 RtdClientCommandResult::DynamicFieldQuery(df_read)
             }
 
-            RtdClientCommands::Upgrade {
-                package_path,
-                upgrade_capability,
-                mut build_config,
-                skip_dependency_verification,
-                verify_deps,
-                skip_verify_compatibility,
-                with_unpublished_dependencies,
-                payment,
-                gas_data,
-                processing,
-            } => {
-                let sender = processing
-                    .sender
-                    .unwrap_or(context.infer_sender(&payment.gas).await?);
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
-                let read_api = client.read_api();
-                let chain_id = read_api.get_chain_identifier().await?;
-
-                // For upgrade, we want to force the root package to have `0x0` as its address
-                build_config.root_as_zero = true;
-
-                check_protocol_version_and_warn(read_api).await?;
-                let package_path = package_path.canonicalize().map_err(|e| {
-                    RtdErrorKind::ModulePublishFailure {
-                        error: format!("Failed to canonicalize package path: {}", e),
-                    }
-                })?;
-
-                let mut root_pkg =
-                    load_root_pkg_for_publish_upgrade(context, &build_config, &package_path)
-                        .await?;
-
-                let verify =
-                    check_dep_verification_flags(skip_dependency_verification, verify_deps)?;
-
-                let upgrade_cap = if let Some(ref upgrade_cap) = upgrade_capability {
-                    upgrade_cap
-                } else {
-                    &root_pkg.publication().as_ref().ok_or_else(|| {
-                        anyhow!("Cannot determine the publication information. Please pass the upgrade cap with `-c <UPGRADE_CAP>`.")
-                    })?
-                    .metadata.upgrade_capability.ok_or_else(|| {
-                        anyhow!("No upgrade capability found in the published data. Please pass the upgrade cap with `-c <UPGRADE_CAP>`.")
-                    })?
-                };
-
-                // TODO: pkg-alt we should read upgrade cap from published file, but the question
-                // is how do we migrate? During migration we might want to try to find the upgrade
-                // cap?
-                let upgrade_result = upgrade_package(
-                    read_api,
-                    &root_pkg,
-                    build_config.clone(),
-                    &package_path,
-                    *upgrade_cap,
-                    with_unpublished_dependencies,
-                    !verify,
-                )
-                .await;
-
-                let (upgrade_policy, compiled_package) =
-                    upgrade_result.map_err(|e| anyhow!("{e}"))?;
-
-                let compiled_modules =
-                    compiled_package.get_package_bytes(with_unpublished_dependencies);
-                let package_id = compiled_package.published_at.ok_or_else(|| {
-                    anyhow::anyhow!("Cannot upgrade package without having a published id ")
-                })?;
-                let package_digest =
-                    compiled_package.get_package_digest(with_unpublished_dependencies);
-                let dep_ids = compiled_package.get_published_dependencies_ids();
-
-                if !skip_verify_compatibility {
-                    let protocol_version =
-                        read_api.get_protocol_config(None).await?.protocol_version;
-
-                    let chain_id = read_api.get_chain_identifier().await.ok();
-                    let protocol_config = ProtocolConfig::get_for_version(
-                        protocol_version,
-                        match chain_id
-                            .as_ref()
-                            .and_then(ChainIdentifier::from_chain_short_id)
-                        {
-                            Some(chain_id) => chain_id.chain(),
-                            None => Chain::Unknown,
-                        },
-                    );
-                    check_compatibility(
-                        read_api,
-                        package_id,
-                        compiled_package,
-                        package_path.clone(),
-                        upgrade_policy,
-                        protocol_config,
-                    )
-                    .await?;
-                }
-
-                let tx_kind = client
-                    .transaction_builder()
-                    .upgrade_tx_kind(
-                        package_id,
-                        compiled_modules,
-                        dep_ids,
-                        *upgrade_cap,
-                        upgrade_policy,
-                        package_digest.to_vec(),
-                    )
-                    .await?;
-
-                let gas_payment = client
-                    .transaction_builder()
-                    .input_refs(&payment.gas)
-                    .await?;
-
-                let result = dry_run_or_execute_or_serialize(
-                    sender,
-                    tx_kind,
-                    context,
-                    gas_payment,
-                    gas_data,
-                    processing,
-                )
-                .await?;
-
-                let response = if let RtdClientCommandResult::TransactionBlock(ref tx) = result {
-                    tx
-                } else {
-                    return Ok(result);
-                };
-
-                let publish_data = update_publication(
-                    &chain_id,
-                    LockCommand::Upgrade,
-                    response,
-                    &build_config,
-                    root_pkg.publication().cloned().as_mut(),
-                )?;
-                root_pkg.write_publish_data(publish_data)?;
-
-                result
+            RtdClientCommands::Upgrade(args) => {
+                verify_no_test_mode(&args.build_config)?;
+                verify_no_pubfile_path(&args.build_config, "upgrade")?;
+                verify_no_build_env(&args.build_config, "upgrade")?;
+                upgrade_command(args, context, false).await?
             }
-            RtdClientCommands::Publish(args) => {
-                if args.build_config.test_mode {
-                    return Err(RtdErrorKind::ModulePublishFailure {
-                        error:
-                            "The `publish` subcommand should not be used with the `--test` flag\n\
-                            \n\
-                            Code in published packages must not depend on test code.\n\
-                            In order to fix this and publish the package without `--test`, \
-                            remove any non-test dependencies on test-only code.\n\
-                            You can ensure all test-only dependencies have been removed by \
-                            compiling the package normally with `rtd move build`."
-                                .to_string(),
-                    }
-                    .into());
-                }
 
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+            RtdClientCommands::TestUpgrade(args) => {
+                verify_no_test_mode(&args.upgrade_args.build_config)?;
+                upgrade_command(args.upgrade_args, context, true).await?
+            }
+
+            RtdClientCommands::Publish(args) => {
+                verify_no_test_mode(&args.build_config)?;
+                verify_no_pubfile_path(&args.build_config, "publish")?;
+                verify_no_build_env(&args.build_config, "publish")?;
                 let mut root_package = load_root_pkg_for_publish_upgrade(
                     context,
                     &args.build_config,
@@ -1044,32 +964,41 @@ impl RtdClientCommands {
             }
 
             RtdClientCommands::TestPublish(args) => {
-                if args.publish_args.build_config.test_mode {
-                    return Err(RtdErrorKind::ModulePublishFailure {
-                        error:
-                            "The `publish` subcommand should not be used with the `--test` flag\n\
-                            \n\
-                            Code in published packages must not depend on test code.\n\
-                            In order to fix this and publish the package without `--test`, \
-                            remove any non-test dependencies on test-only code.\n\
-                            You can ensure all test-only dependencies have been removed by \
-                            compiling the package normally with `rtd move build`."
-                                .to_string(),
-                    }
-                    .into());
+                verify_no_test_mode(&args.publish_args.build_config)?;
+
+                let client = context.grpc_client()?;
+                let chain_id = client.get_chain_identifier().await?.to_string();
+                let active_env = context.get_active_env()?;
+                let alias = active_env.alias.clone();
+
+                let modes = args.publish_args.build_config.mode_set();
+                let build_env = args.publish_args.build_config.environment.clone();
+                // We produce a pub file path only once, even for transitive deps.
+                let pubfile_path = get_pubfile_path_or_default(
+                    args.publish_args.build_config.pubfile_path.as_ref(),
+                    &alias,
+                );
+
+                // Do a transitive publication for each dependency that is not yet published
+                if args.publish_unpublished_deps {
+                    publish_ephemeral_unpublished_dependencies(
+                        &args,
+                        &chain_id,
+                        build_env.clone(),
+                        pubfile_path.clone(),
+                        modes.clone(),
+                        context,
+                    )
+                    .await?;
                 }
 
-                let client = context.get_client().await?;
-                let read_api = client.read_api();
-                let chain_id = read_api.get_chain_identifier().await?;
-                let active_env = context.get_active_env()?;
-                let mut root_package = load_root_pkg_for_test_publish(
+                // Load root package from scratch, as everything needs to be recomputed
+                let mut root_package = load_root_pkg_for_ephemeral_publish_or_upgrade(
                     args.publish_args.package_path.as_path(),
-                    active_env.alias.clone(),
-                    chain_id,
-                    args.build_env,
-                    args.pubfile_path,
-                    args.publish_args.build_config.mode_set(),
+                    &chain_id,
+                    build_env.clone(),
+                    pubfile_path.clone(),
+                    modes.clone(),
                 )
                 .await?;
 
@@ -1082,13 +1011,17 @@ impl RtdClientCommands {
                 package_path,
                 build_config,
             } => {
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
-                let read_api = client.read_api();
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
                 let protocol_version =
                     protocol_version.map_or(ProtocolVersion::MAX, ProtocolVersion::new);
-                let protocol_config =
-                    ProtocolConfig::get_for_version(protocol_version, Chain::Unknown);
+                let protocol_config = protocol_config_for_version(protocol_version, Chain::Unknown)
+                    .map_err(|e| {
+                        anyhow!(
+                            "Cannot meter bytecode: {e}. Either pass a supported \
+                             --protocol-version, or {CLI_UPDATE_HINT}"
+                        )
+                    })?;
 
                 let registry = &Registry::new();
                 let bytecode_verifier_metrics = Arc::new(BytecodeVerifierMetrics::new(registry));
@@ -1112,8 +1045,16 @@ impl RtdClientCommands {
 
                     (_, package_path) => {
                         let package_path = package_path.unwrap_or_else(|| PathBuf::from("."));
+                        // Meter what `rtd client publish` would actually send, so build the
+                        // package the same way that command does.
+                        let root_pkg = load_root_pkg_for_publish_upgrade(
+                            context,
+                            &build_config,
+                            &package_path,
+                        )
+                        .await?;
                         let package =
-                            compile_package_simple(read_api, build_config, &package_path, None)
+                            compile_package(client, &root_pkg, build_config, &package_path, false)
                                 .await?;
                         let name = package
                             .package
@@ -1168,41 +1109,20 @@ impl RtdClientCommands {
 
             RtdClientCommands::Object { id, bcs } => {
                 // Fetch the object ref
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let _ = context.cache_chain_id().await?;
                 if !bcs {
-                    let object_read = client
-                        .read_api()
-                        .get_object_with_options(id, RtdObjectDataOptions::full_content())
-                        .await?;
-                    RtdClientCommandResult::Object(object_read)
+                    let (object, json_content) =
+                        context.grpc_client()?.get_object_with_json(id).await?;
+                    RtdClientCommandResult::Object(object, json_content)
                 } else {
-                    let raw_object_read = client
-                        .read_api()
-                        .get_object_with_options(id, RtdObjectDataOptions::bcs_lossless())
-                        .await?;
-                    RtdClientCommandResult::RawObject(raw_object_read)
+                    let object = context.grpc_client()?.get_object(id).await?;
+                    RtdClientCommandResult::RawObject(object)
                 }
             }
 
             RtdClientCommands::TransactionBlock { digest } => {
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
-                let tx_read = client
-                    .read_api()
-                    .get_transaction_with_options(
-                        digest,
-                        RtdTransactionBlockResponseOptions {
-                            show_input: true,
-                            show_raw_input: false,
-                            show_effects: true,
-                            show_events: true,
-                            show_object_changes: true,
-                            show_balance_changes: false,
-                            show_raw_effects: false,
-                        },
-                    )
-                    .await?;
+                let _ = context.cache_chain_id().await?;
+                let tx_read = context.grpc_client()?.get_transaction(&digest).await?;
                 RtdClientCommandResult::TransactionBlock(tx_read)
             }
 
@@ -1228,15 +1148,17 @@ impl RtdClientCommands {
                     .map(|arg| arg.into())
                     .collect::<Vec<_>>();
 
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
 
                 let tx_kind = client
                     .transaction_builder()
                     .move_call_tx_kind(package, &module, &function, type_args, args)
                     .await?;
 
-                let sender = context.infer_sender(&payment.gas).await?;
+                let sender = processing
+                    .sender
+                    .unwrap_or(context.infer_sender(&payment.gas).await?);
                 let gas_payment = client
                     .transaction_builder()
                     .input_refs(&payment.gas)
@@ -1262,8 +1184,8 @@ impl RtdClientCommands {
             } => {
                 let signer = context.get_object_owner(&object_id).await?;
                 let to = context.get_identity_address(Some(to))?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
 
                 let tx_kind = client
                     .transaction_builder()
@@ -1295,8 +1217,8 @@ impl RtdClientCommands {
             } => {
                 let signer = context.get_object_owner(&object_id).await?;
                 let to = context.get_identity_address(Some(to))?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
 
                 let tx_kind = client
                     .transaction_builder()
@@ -1348,8 +1270,8 @@ impl RtdClientCommands {
                     .collect::<Result<Vec<RtdAddress>, anyhow::Error>>()
                     .map_err(|e| anyhow!("{e}"))?;
                 let signer = context.get_object_owner(&input_coins[0]).await?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
                 let tx_kind = client
                     .transaction_builder()
                     .pay_tx_kind(input_coins.clone(), recipients.clone(), amounts.clone())
@@ -1405,8 +1327,8 @@ impl RtdClientCommands {
                     .collect::<Result<Vec<RtdAddress>, anyhow::Error>>()
                     .map_err(|e| anyhow!("{e}"))?;
                 let signer = context.get_object_owner(&input_coins[0]).await?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
 
                 let tx_kind = client
                     .transaction_builder()
@@ -1440,8 +1362,8 @@ impl RtdClientCommands {
                 );
                 let recipient = context.get_identity_address(Some(recipient))?;
                 let signer = context.get_object_owner(&input_coins[0]).await?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
 
                 let tx_kind = client.transaction_builder().pay_all_rtd_tx_kind(recipient);
                 let gas_payment = client
@@ -1460,32 +1382,144 @@ impl RtdClientCommands {
                 .await?
             }
 
+            RtdClientCommands::SendFunds {
+                to,
+                amount,
+                all_coins,
+                coin_type,
+                from_address_balance,
+                gas_data,
+                processing,
+            } => {
+                let recipient = context.get_identity_address(Some(to))?;
+                let signer = context.active_address()?;
+                let _ = context.cache_chain_id().await?;
+                let client = context.grpc_client()?;
+
+                let coin_type_tag = coin_type.unwrap_or_else(GAS::type_tag);
+
+                let is_rtd = coin_type_tag == GAS::type_tag();
+
+                if all_coins {
+                    return send_all_coins(
+                        context,
+                        signer,
+                        recipient,
+                        coin_type_tag,
+                        gas_data,
+                        processing,
+                    )
+                    .await;
+                }
+
+                let TypeTag::Struct(coin_struct_tag) = &coin_type_tag else {
+                    bail!("coin type must be a struct type, got {coin_type_tag}");
+                };
+                let balance_info = client.get_balance(signer, coin_struct_tag).await?;
+                let coin_balance = balance_info.coin_balance();
+                let address_balance = balance_info.address_balance();
+
+                let (amount, use_address_balance) = if let Some(amount) = amount {
+                    let use_address_balance = if from_address_balance {
+                        ensure!(
+                            address_balance >= amount,
+                            "Insufficient address balance to send {amount} MIST. \
+                            Address balance: {address_balance}, Coin balance: {coin_balance}"
+                        );
+                        true
+                    } else if coin_balance >= amount {
+                        false
+                    } else if address_balance >= amount {
+                        true
+                    } else {
+                        bail!(
+                            "Insufficient balance to send {amount} MIST. \
+                            Coin balance: {coin_balance}, Address balance: {address_balance}"
+                        );
+                    };
+                    (amount, use_address_balance)
+                } else {
+                    bail!("Either --amount or --all-coins must be specified");
+                };
+
+                let mut builder = ProgrammableTransactionBuilder::new();
+
+                if use_address_balance {
+                    let withdrawal_arg =
+                        FundsWithdrawalArg::balance_from_sender(amount, coin_type_tag.clone());
+                    let withdrawal_input = builder.funds_withdrawal(withdrawal_arg)?;
+
+                    let balance_result = builder.programmable_move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        Identifier::from_str("balance")?,
+                        Identifier::from_str("redeem_funds")?,
+                        vec![coin_type_tag.clone()],
+                        vec![withdrawal_input],
+                    );
+
+                    let recipient_arg = builder.pure(recipient)?;
+                    builder.programmable_move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        Identifier::from_str("balance")?,
+                        Identifier::from_str("send_funds")?,
+                        vec![coin_type_tag],
+                        vec![balance_result, recipient_arg],
+                    );
+
+                    let tx_kind = TransactionKind::programmable(builder.finish());
+
+                    // Gas is a separate concern from where the funds come from: the withdrawal
+                    // never touches the gas coin, so ordinary selection pays from the sender's
+                    // address balance whenever it can cover the budget, and their coins otherwise.
+                    dry_run_or_execute_or_serialize(
+                        signer,
+                        tx_kind,
+                        context,
+                        vec![],
+                        gas_data,
+                        processing,
+                    )
+                    .await?
+                } else {
+                    ensure!(
+                        is_rtd,
+                        "Non-RTD coin transfers using coins require explicit coin selection. \
+                        Use --from-address-balance to transfer from your address balance instead."
+                    );
+                    let amount_arg = builder.pure(amount)?;
+                    let coin_arg =
+                        builder.command(Command::SplitCoins(Argument::GasCoin, vec![amount_arg]));
+                    let recipient_arg = builder.pure(recipient)?;
+                    builder.programmable_move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        Identifier::from_str("coin")?,
+                        Identifier::from_str("send_funds")?,
+                        vec![coin_type_tag],
+                        vec![coin_arg, recipient_arg],
+                    );
+
+                    let tx_kind = TransactionKind::programmable(builder.finish());
+
+                    dry_run_or_execute_or_serialize(
+                        signer,
+                        tx_kind,
+                        context,
+                        vec![],
+                        gas_data,
+                        processing,
+                    )
+                    .await?
+                }
+            }
+
             RtdClientCommands::Objects { address } => {
                 let address = context.get_identity_address(address)?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
-                let mut objects: Vec<RtdObjectResponse> = Vec::new();
-                let mut cursor = None;
-                loop {
-                    let response = client
-                        .read_api()
-                        .get_owned_objects(
-                            address,
-                            Some(RtdObjectResponseQuery::new_with_options(
-                                RtdObjectDataOptions::full_content(),
-                            )),
-                            cursor,
-                            None,
-                        )
-                        .await?;
-                    objects.extend(response.data);
-
-                    if response.has_next_page {
-                        cursor = response.next_cursor;
-                    } else {
-                        break;
-                    }
-                }
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let objects = client
+                    .list_owned_objects(address, None)
+                    .try_collect()
+                    .await?;
                 RtdClientCommandResult::Objects(objects)
             }
 
@@ -1529,40 +1563,69 @@ impl RtdClientCommands {
 
             RtdClientCommands::Gas { address } => {
                 let address = context.get_identity_address(address)?;
-                let coins = context
+                let coins: Vec<GasCoin> = context
                     .gas_objects(address)
                     .await?
                     .iter()
                     // Ok to unwrap() since `get_gas_objects` guarantees gas
                     .map(|(_val, object)| GasCoin::try_from(object).unwrap())
                     .collect();
-                let _ = context.cache_chain_id(&context.get_client().await?).await?;
-                RtdClientCommandResult::Gas(coins)
+                let _ = context.cache_chain_id().await?;
+
+                // RTD the address holds directly. No gas object accounts for it, so it is
+                // invisible in the coin list even though it is spendable. The balance API is
+                // keyed by the coin type (`0x2::rtd::RTD`), not the object type `Coin<RTD>`.
+                let address_balance = context
+                    .grpc_client()?
+                    .get_balance(address, &GAS::type_())
+                    .await?
+                    .address_balance();
+
+                RtdClientCommandResult::Gas(GasOutput::new(&coins, address_balance))
             }
             RtdClientCommands::Faucet { address, url } => {
                 let address = context.get_identity_address(address)?;
                 let url = if let Some(url) = url {
-                    ensure!(
-                        !url.starts_with("https://faucet.testnet.rtd.io"),
-                        "For testnet tokens, please use the Web UI: https://faucet.rtd.io/?address={address}"
-                    );
                     url
                 } else {
                     let active_env = context.get_active_env();
                     if let Ok(env) = active_env {
-                        find_faucet_url(address, &env.rpc)?
+                        find_faucet_url(&env.rpc)?
                     } else {
                         bail!("No URL for faucet was provided and there is no active network.")
                     }
                 };
                 request_tokens_from_faucet(address, url).await?;
-                let _ = context.cache_chain_id(&context.get_client().await?).await?;
+                let _ = context.cache_chain_id().await?;
                 RtdClientCommandResult::NoOutput
             }
-            RtdClientCommands::ChainIdentifier => {
-                let client = context.get_client().await?;
-                let ci = context.cache_chain_id(&client).await?;
-                RtdClientCommandResult::ChainIdentifier(ci)
+            RtdClientCommands::ChainIdentifier { format } => {
+                // Keep populating the client.yaml chain-id cache, as other commands rely on it.
+                let hex = context.cache_chain_id().await?;
+                let base58 = chain_id_base58(&context.get_chain_identifier().await?);
+
+                match format {
+                    Some(ChainIdentifierFormat::Hex) => {
+                        return Ok(RtdClientCommandResult::ChainIdentifier(
+                            ChainIdentifierOutput {
+                                base58: "".to_string(),
+                                hex,
+                            },
+                        ));
+                    }
+                    Some(ChainIdentifierFormat::Base58) => {
+                        return Ok(RtdClientCommandResult::ChainIdentifier(
+                            ChainIdentifierOutput {
+                                base58,
+                                hex: "".to_string(),
+                            },
+                        ));
+                    }
+                    None => RtdClientCommandResult::ChainIdentifier(ChainIdentifierOutput {
+                        base58,
+                        hex,
+                    }),
+                }
             }
             RtdClientCommands::SplitCoin {
                 coin_id,
@@ -1579,8 +1642,8 @@ impl RtdClientCommands {
                     _ => { /*no_op*/ }
                 }
 
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
                 let signer = context.get_object_owner(&coin_id).await?;
 
                 let tx_kind = client
@@ -1610,8 +1673,8 @@ impl RtdClientCommands {
                 gas_data,
                 processing,
             } => {
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
                 let signer = context.get_object_owner(&primary_coin).await?;
 
                 let tx_kind = client
@@ -1679,8 +1742,10 @@ impl RtdClientCommands {
                     bail!("Failed to parse --tx-bytes as TransactionKind");
                 };
 
-                let client = context.get_client().await?;
-                let sender = context.infer_sender(&payment.gas).await?;
+                let client = context.grpc_client()?;
+                let sender = processing
+                    .sender
+                    .unwrap_or(context.infer_sender(&payment.gas).await?);
                 let gas_payment = client
                     .transaction_builder()
                     .input_refs(&payment.gas)
@@ -1707,7 +1772,7 @@ impl RtdClientCommands {
 
                 if let Some(address) = address {
                     let address = context.get_identity_address(Some(address))?;
-                    if !context.config.keystore.addresses().contains(&address) {
+                    if !context.get_addresses().contains(&address) {
                         return Err(anyhow!("Address {} not managed by wallet", address));
                     }
                     context.config.active_address = Some(address);
@@ -1783,10 +1848,10 @@ impl RtdClientCommands {
                 };
 
                 // Check urls are valid and server is reachable
-                env.create_rpc_client(None, None).await?;
+                let _ = env.create_grpc_client()?.get_latest_checkpoint().await?;
                 context.config.envs.push(env.clone());
                 context.config.save()?;
-                let chain_id = context.cache_chain_id(&context.get_client().await?).await?;
+                let chain_id = context.cache_chain_id().await?;
                 env.chain_id = Some(chain_id);
                 RtdClientCommandResult::NewEnv(env)
             }
@@ -1800,45 +1865,58 @@ impl RtdClientCommands {
             RtdClientCommands::VerifySource {
                 package_path,
                 build_config,
-                verify_deps,
-                skip_source,
-                address_override,
+                toolchain_version,
+                toolchain,
+                verify_only,
             } => {
-                let mode = match (!skip_source, verify_deps, address_override) {
-                    (false, false, _) => {
-                        bail!("Source skipped and not verifying deps: Nothing to verify.")
-                    }
-
-                    (false, true, _) => ValidationMode::deps(),
-                    (true, false, None) => ValidationMode::root(),
-                    (true, true, None) => ValidationMode::root_and_deps(),
-                    (true, false, Some(at)) => ValidationMode::root_at(*at),
-                    (true, true, Some(at)) => ValidationMode::root_and_deps_at(*at),
-                };
-
-                let environment =
-                    find_environment(&package_path, build_config.environment.clone(), context)
-                        .await?;
-
-                let mut root_pkg =
-                    load_root_pkg_for_publish_upgrade(context, &build_config, &package_path)
-                        .await?;
-                let build_config = BuildConfig {
-                    config: build_config,
-                    run_bytecode_verifier: true,
-                    print_diags_to_stderr: true,
-                    environment: environment.clone(),
-                };
-                let compiled_package = build_config
-                    .build_async_from_root_pkg(&mut root_pkg)
+                if let Some(on_chain_id) = verify_only {
+                    // Compare the existing build against a caller-supplied on-chain id, without
+                    // rebuilding. This path resolves no publication and no toolchain, so it has no
+                    // metadata to report.
+                    let client = context.grpc_client()?;
+                    verify_built(&package_path, on_chain_id, &client).await?;
+                    RtdClientCommandResult::VerifySource(None)
+                } else {
+                    // Resolve the environment the way the rest of the CLI does, and read the address
+                    // and toolchain from the package's own publication, so they are exactly what the
+                    // package system would resolve when linking against this package.
+                    let environment = find_environment(
+                        &package_path,
+                        build_config.environment.clone(),
+                        context,
+                        false,
+                    )
                     .await?;
 
-                let client = context.get_client().await?;
-                BytecodeSourceVerifier::new(client.read_api())
-                    .verify(&compiled_package, mode, &environment)
-                    .await?;
+                    let flavor = RtdFlavor::with_client(context);
+                    let publication =
+                        read_publication::<RtdFlavor>(&package_path, &environment, &flavor)
+                            .await?
+                            .with_context(|| {
+                                format!(
+                                    "package at {} records no publication for environment `{}`; \
+                                     nothing to verify against",
+                                    package_path.display(),
+                                    environment.name(),
+                                )
+                            })?;
 
-                RtdClientCommandResult::VerifySource
+                    let client = context.grpc_client()?;
+                    let toolchain = match toolchain {
+                        Some(path) => ToolchainSource::Binary(path),
+                        None => ToolchainSource::Version(toolchain_version),
+                    };
+                    let metadata = verify_source(
+                        &package_path,
+                        &publication,
+                        toolchain,
+                        &environment,
+                        &client,
+                        Some(context.config.path()),
+                    )
+                    .await?;
+                    RtdClientCommandResult::VerifySource(Some(metadata))
+                }
             }
             RtdClientCommands::PartyTransfer {
                 to,
@@ -1849,8 +1927,8 @@ impl RtdClientCommands {
             } => {
                 let signer = context.get_object_owner(&object_id).await?;
                 let to = context.get_identity_address(Some(to))?;
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
                 let transaction_builder = client.transaction_builder();
 
                 let (full_obj_ref, object_type) = transaction_builder
@@ -1907,13 +1985,12 @@ impl RtdClientCommands {
                 .await?
             }
             RtdClientCommands::PTB(ptb) => {
-                let client = context.get_client().await?;
-                let _ = context.cache_chain_id(&client).await?;
+                let _ = context.cache_chain_id().await?;
                 ptb.execute(context).await?;
                 RtdClientCommandResult::NoOutput
             }
         };
-        Ok(ret.prerender_clever_errors(context).await)
+        Ok(ret)
     }
 
     pub fn switch_env(config: &mut RtdClientConfig, env: &str) -> Result<(), anyhow::Error> {
@@ -1961,29 +2038,8 @@ fn check_dep_verification_flags(
     }
 }
 
-async fn compile_package_simple(
-    _read_api: &ReadApi,
-    _build_config: MoveBuildConfig,
-    _package_path: &Path,
-    _chain_id: Option<String>,
-) -> Result<CompiledPackage, anyhow::Error> {
-    // build_config.implicit_dependencies = implicit_deps(latest_system_packages());
-    // let config = BuildConfig {
-    //     config: resolve_lock_file_path(build_config, Some(package_path))?,
-    //     run_bytecode_verifier: false,
-    //     print_diags_to_stderr: false,
-    //     chain_id: chain_id.clone(),
-    // };
-    // let resolution_graph = config.resolution_graph(package_path, chain_id.clone())?;
-    // let mut compiled_package =
-    //     build_from_resolution_graph(resolution_graph, false, false, chain_id)?;
-    // pkg_tree_shake(read_api, false, &mut compiled_package).await?;
-    todo!()
-    // Ok(compiled_package)
-}
-
 pub(crate) async fn upgrade_package(
-    read_api: &ReadApi,
+    mut client: Client,
     root_pkg: &RootPackage<RtdFlavor>,
     build_config: MoveBuildConfig,
     package_path: &Path,
@@ -1992,7 +2048,7 @@ pub(crate) async fn upgrade_package(
     _skip_dependency_verification: bool,
 ) -> Result<(u8, CompiledPackage), anyhow::Error> {
     let compiled_package = compile_package(
-        read_api,
+        client.clone(),
         root_pkg,
         build_config.clone(),
         package_path,
@@ -2000,25 +2056,15 @@ pub(crate) async fn upgrade_package(
     )
     .await?;
 
-    let resp = read_api
-        .get_object_with_options(
-            upgrade_capability,
-            RtdObjectDataOptions::default().with_bcs().with_owner(),
-        )
-        .await?;
+    let object = client.get_object(upgrade_capability).await?;
 
-    let Some(data) = resp.data else {
-        return Err(anyhow!(
-            "Could not find upgrade capability at {upgrade_capability}"
-        ));
-    };
-
-    let upgrade_cap: UpgradeCap = data
-        .bcs
-        .ok_or_else(|| anyhow!("Fetch upgrade capability object but no data was returned"))?
-        .try_as_move()
-        .ok_or_else(|| anyhow!("Upgrade capability is not a Move Object"))?
-        .deserialize()?;
+    let upgrade_cap: UpgradeCap = bcs::from_bytes(
+        object
+            .data
+            .try_as_move()
+            .ok_or_else(|| anyhow!("Upgrade capability is not a Move Object"))?
+            .contents(),
+    )?;
     // We keep the existing policy -- no fancy policies or changing the upgrade
     // policy at the moment. To change the policy you can call a Move function in the
     // `package` module to change this policy.
@@ -2028,7 +2074,7 @@ pub(crate) async fn upgrade_package(
 }
 
 pub(crate) async fn compile_package(
-    read_api: &ReadApi,
+    client: Client,
     root_pkg: &RootPackage<RtdFlavor>,
     mut build_config: MoveBuildConfig,
     package_path: &Path,
@@ -2036,7 +2082,7 @@ pub(crate) async fn compile_package(
 ) -> Result<CompiledPackage, anyhow::Error> {
     let dependency_ids = check_for_unpublished_deps(root_pkg, with_unpublished_deps)?;
 
-    let chain_id = read_api.get_chain_identifier().await?;
+    let chain_id = client.get_chain_identifier().await?.to_string();
     debug!("Current client has {chain_id} as chain identifier");
 
     debug!("Loaded package from {:?}", package_path.display());
@@ -2070,9 +2116,9 @@ pub(crate) async fn compile_package(
         .into());
     }
 
-    compatibility_checks(read_api, &compiled_package).await?;
+    compatibility_checks(client.clone(), &compiled_package).await?;
 
-    pkg_tree_shake(read_api, with_unpublished_deps, &mut compiled_package).await?;
+    pkg_tree_shake(client, with_unpublished_deps, &mut compiled_package).await?;
 
     // TODO: pluck back in
     // if with_unpublished_dependencies {
@@ -2097,8 +2143,8 @@ pub(crate) fn check_for_unpublished_deps(
         ",
             package_dependencies
                 .unpublished
-                .into_iter()
-                .map(|n| n.to_string())
+                .values()
+                .map(|dep| dep.name.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         );
@@ -2108,18 +2154,19 @@ pub(crate) fn check_for_unpublished_deps(
 }
 
 async fn compatibility_checks(
-    read_api: &ReadApi,
+    client: Client,
     compiled_package: &CompiledPackage,
 ) -> Result<(), anyhow::Error> {
-    let protocol_config = read_api.get_protocol_config(None).await?;
+    let protocol_config = client.get_protocol_config(None).await?;
 
     // Check that the package's Move version is compatible with the chain's
-    if let Some(Some(RtdProtocolConfigValue::U32(min_version))) = protocol_config
-        .attributes
+    if let Some(min_version) = protocol_config
+        .attributes()
         .get("min_move_binary_format_version")
+        .and_then(|s| s.parse::<u32>().ok())
     {
         for module in compiled_package.get_modules_and_deps() {
-            if module.version() < *min_version {
+            if module.version() < min_version {
                 return Err(RtdErrorKind::ModulePublishFailure {
                     error: format!(
                         "Module {} has a version {} that is \
@@ -2134,11 +2181,13 @@ async fn compatibility_checks(
     }
 
     // Check that the package's Move version is compatible with the chain's
-    if let Some(Some(RtdProtocolConfigValue::U32(max_version))) =
-        protocol_config.attributes.get("move_binary_format_version")
+    if let Some(max_version) = protocol_config
+        .attributes()
+        .get("move_binary_format_version")
+        .and_then(|s| s.parse::<u32>().ok())
     {
         for module in compiled_package.get_modules_and_deps() {
-            if module.version() > *max_version {
+            if module.version() > max_version {
                 let help_msg = if module.version() == 7 {
                     "This is because you used enums in your Move package but tried to publish it to \
                 a chain that does not yet support enums in Move."
@@ -2191,14 +2240,14 @@ impl Display for RtdClientCommandResult {
                 table.with(style);
                 write!(f, "{}", table)?
             }
-            RtdClientCommandResult::Balance(coins, with_coins) => {
-                if coins.is_empty() {
-                    return write!(f, "No coins found for this address.");
+            RtdClientCommandResult::Balance(balances, with_coins) => {
+                if balances.is_empty() {
+                    return write!(f, "No balances found for this address.");
                 }
                 let mut builder = TableBuilder::default();
-                pretty_print_balance(coins, &mut builder, *with_coins);
+                pretty_print_balance(balances, &mut builder, *with_coins);
                 let mut table = builder.build();
-                table.with(TablePanel::header("Balance of coins owned by this address"));
+                table.with(TablePanel::header("Balances owned by this address"));
                 table.with(TableStyle::rounded().horizontals([HorizontalLine::new(
                     1,
                     TableStyle::modern().get_horizontal(),
@@ -2207,37 +2256,33 @@ impl Display for RtdClientCommandResult {
                 write!(f, "{}", table)?;
             }
             RtdClientCommandResult::DynamicFieldQuery(df_refs) => {
-                let df_refs = DynamicFieldOutput {
-                    has_next_page: df_refs.has_next_page,
-                    next_cursor: df_refs.next_cursor,
-                    data: df_refs.data.clone(),
-                };
-
                 let json_obj = json!(df_refs);
                 let mut table = json_to_table(&json_obj);
                 let style = TableStyle::rounded().horizontals([]);
                 table.with(style);
                 write!(f, "{}", table)?
             }
-            RtdClientCommandResult::Gas(gas_coins) => {
-                let gas_coins = gas_coins
-                    .iter()
-                    .map(GasCoinOutput::from)
-                    .collect::<Vec<_>>();
-                if gas_coins.is_empty() {
+            RtdClientCommandResult::Gas(gas) => {
+                let gas_coins = &gas.gas_coins;
+                if gas_coins.is_empty() && gas.address_mist_balance == 0 {
                     write!(f, "No gas coins are owned by this address")?;
                     return Ok(());
                 }
 
                 let mut builder = TableBuilder::default();
                 builder.set_header(vec!["gasCoinId", "mistBalance (MIST)", "rtdBalance (RTD)"]);
-                for coin in &gas_coins {
+                for coin in gas_coins {
                     builder.push_record(vec![
                         coin.gas_coin_id.to_string(),
                         coin.mist_balance.to_string(),
                         coin.rtd_balance.to_string(),
                     ]);
                 }
+                builder.push_record(vec![
+                    "address balance".to_string(),
+                    gas.address_mist_balance.to_string(),
+                    gas.address_rtd_balance.to_string(),
+                ]);
                 let mut table = builder.build();
                 table.with(TableStyle::rounded());
                 if gas_coins.len() > 10 {
@@ -2252,8 +2297,9 @@ impl Display for RtdClientCommandResult {
                     table.with(TableStyle::rounded().horizontals([
                         HorizontalLine::new(1, TableStyle::modern().get_horizontal()),
                         HorizontalLine::new(2, TableStyle::modern().get_horizontal()),
+                        // +1 for the address balance row appended after the gas coins.
                         HorizontalLine::new(
-                            gas_coins.len() + 2,
+                            gas_coins.len() + 3,
                             TableStyle::modern().get_horizontal(),
                         ),
                     ]));
@@ -2310,56 +2356,31 @@ impl Display for RtdClientCommandResult {
 
                 write!(f, "{}", table)?
             }
-            RtdClientCommandResult::Object(object_read) => match object_read.object() {
-                Ok(obj) => {
-                    let object = ObjectOutput::from(obj);
-                    let json_obj = json!(&object);
+            RtdClientCommandResult::Object(object, json_content) => {
+                let object = ObjectOutput::from_object_with_json(object, json_content.clone());
+                let json_obj = json!(&object);
+                let mut table = json_to_table(&json_obj);
+                table.with(TableStyle::rounded().horizontals([]));
+                writeln!(f, "{}", table)?;
+            }
+            RtdClientCommandResult::Objects(objects) => {
+                if objects.is_empty() {
+                    writeln!(f, "This address has no owned objects.")?
+                } else {
+                    let objects = ObjectsOutput::from_vec(objects);
+                    let json_obj = json!(objects);
                     let mut table = json_to_table(&json_obj);
                     table.with(TableStyle::rounded().horizontals([]));
                     writeln!(f, "{}", table)?
                 }
-                Err(e) => writeln!(f, "Internal error, cannot read the object: {e}")?,
-            },
-            RtdClientCommandResult::Objects(object_refs) => {
-                if object_refs.is_empty() {
-                    writeln!(f, "This address has no owned objects.")?
-                } else {
-                    let objects = ObjectsOutput::from_vec(object_refs.to_vec());
-                    match objects {
-                        Ok(objs) => {
-                            let json_obj = json!(objs);
-                            let mut table = json_to_table(&json_obj);
-                            table.with(TableStyle::rounded().horizontals([]));
-                            writeln!(f, "{}", table)?
-                        }
-                        Err(e) => write!(f, "Internal error: {e}")?,
-                    }
-                }
             }
             RtdClientCommandResult::TransactionBlock(response) => {
-                write!(writer, "{}", response)?;
+                write!(writer, "{}", to_legacy_transaction_block_response(response))?;
             }
-            RtdClientCommandResult::RawObject(raw_object_read) => {
-                let raw_object = match raw_object_read.object() {
-                    Ok(v) => match &v.bcs {
-                        Some(RtdRawData::MoveObject(o)) => {
-                            format!("{:?}\nNumber of bytes: {}", o.bcs_bytes, o.bcs_bytes.len())
-                        }
-                        Some(RtdRawData::Package(p)) => {
-                            let mut temp = String::new();
-                            let mut bcs_bytes = 0usize;
-                            for m in &p.module_map {
-                                temp.push_str(&format!("{:?}\n", m));
-                                bcs_bytes += m.1.len()
-                            }
-                            format!("{}Number of bytes: {}", temp, bcs_bytes)
-                        }
-                        None => "Bcs field is None".to_string().red().to_string(),
-                    },
-                    Err(err) => format!("{err}").red().to_string(),
-                };
-                writeln!(writer, "{}", raw_object)?;
-            }
+            RtdClientCommandResult::RawObject(o) => match o.to_bcs_base64() {
+                Ok(b64) => writeln!(writer, "{b64}")?,
+                Err(e) => writeln!(writer, "{e}")?,
+            },
             RtdClientCommandResult::ComputeTransactionDigest(tx_data) => {
                 writeln!(writer, "{}", tx_data.digest())?;
             }
@@ -2379,9 +2400,6 @@ impl Display for RtdClientCommandResult {
             }
             RtdClientCommandResult::SyncClientState => {
                 writeln!(writer, "Client state sync complete.")?;
-            }
-            RtdClientCommandResult::ChainIdentifier(ci) => {
-                writeln!(writer, "{}", ci)?;
             }
             RtdClientCommandResult::Switch(response) => {
                 write!(writer, "{}", response)?;
@@ -2414,8 +2432,20 @@ impl Display for RtdClientCommandResult {
                 table.with(TableStyle::rounded());
                 write!(f, "{}", table)?
             }
-            RtdClientCommandResult::VerifySource => {
+            RtdClientCommandResult::VerifySource(metadata) => {
                 writeln!(writer, "Source verification succeeded!")?;
+                if let Some(metadata) = metadata {
+                    writeln!(writer, "  original ID:       {}", metadata.original_id)?;
+                    writeln!(writer, "  published at:      {}", metadata.published_at)?;
+                    if let Some(version) = &metadata.toolchain_version {
+                        writeln!(writer, "  toolchain version: {version}")?;
+                    }
+                    writeln!(
+                        writer,
+                        "  binary:            {}",
+                        metadata.binary_path.display()
+                    )?;
+                }
             }
             RtdClientCommandResult::VerifyBytecodeMeter {
                 success,
@@ -2507,14 +2537,239 @@ impl Display for RtdClientCommandResult {
             }
             RtdClientCommandResult::NoOutput => {}
             RtdClientCommandResult::DryRun(response) => {
-                writeln!(f, "{}", Pretty(response))?;
+                if let Some(legacy) = to_legacy_dry_run_transaction_block_response(response) {
+                    writeln!(f, "{}", Pretty(&legacy))?;
+                } else {
+                    writeln!(f, "{}", Pretty(response))?;
+                }
             }
             RtdClientCommandResult::DevInspect(response) => {
                 writeln!(f, "{}", Pretty(response))?;
             }
+            RtdClientCommandResult::ChainIdentifier(ci) => {
+                write!(f, "{}", ci)?;
+            }
         }
         write!(f, "{}", writer.trim_end_matches('\n'))
     }
+}
+
+struct NoopModuleCache;
+
+impl GetModule for NoopModuleCache {
+    type Error = ();
+    type Item = CompiledModule;
+
+    fn get_module_by_id(&self, _id: &ModuleId) -> Result<Option<Self::Item>, Self::Error> {
+        Ok(None)
+    }
+}
+
+fn extract_published_module_names(transaction: &TransactionData) -> Vec<String> {
+    let mut modules = Vec::new();
+    let commands = match transaction.kind() {
+        TransactionKind::ProgrammableTransaction(ptb)
+        | TransactionKind::ProgrammableSystemTransaction(ptb) => &ptb.commands,
+        _ => return modules,
+    };
+
+    for command in commands {
+        let module_bytes = match command {
+            Command::Publish(module_bytes, _) | Command::Upgrade(module_bytes, _, _, _) => {
+                module_bytes
+            }
+            _ => continue,
+        };
+        for bytes in module_bytes {
+            if let Ok(module) = CompiledModule::deserialize_with_defaults(bytes) {
+                modules.push(module.self_id().name().to_string());
+            }
+        }
+    }
+
+    modules.sort();
+    modules.dedup();
+    modules
+}
+
+fn parse_object_type_tag(object_type: &str) -> Option<StructTag> {
+    match parse_rtd_type_tag(object_type).ok()? {
+        TypeTag::Struct(struct_tag) => Some(*struct_tag),
+        _ => None,
+    }
+}
+
+fn to_legacy_object_changes(response: &ExecutedTransaction) -> Vec<RpcObjectChange> {
+    use proto::changed_object::{IdOperation, OutputObjectState};
+
+    let sender = response.transaction.sender();
+    let published_modules = extract_published_module_names(&response.transaction);
+    let wrapped = response
+        .effects
+        .wrapped()
+        .iter()
+        .map(|(object_id, version, _)| (*object_id, *version))
+        .collect::<BTreeSet<_>>();
+
+    response
+        .changed_objects
+        .iter()
+        .filter_map(|changed| {
+            let object_id = changed.object_id().parse().ok()?;
+            match changed.output_state() {
+                OutputObjectState::PackageWrite => Some(RpcObjectChange::Published {
+                    package_id: object_id,
+                    version: changed.output_version().into(),
+                    digest: changed.output_digest().parse().ok()?,
+                    modules: published_modules.clone(),
+                }),
+                OutputObjectState::ObjectWrite => {
+                    let object_type = parse_object_type_tag(changed.object_type())?;
+                    let owner = changed.output_owner_opt().and_then(|owner| {
+                        <rtd_sdk::rtd_sdk_types::Owner as TryFrom<&proto::Owner>>::try_from(owner)
+                            .ok()
+                            .map(Owner::from)
+                    })?;
+                    let version: SequenceNumber = changed.output_version().into();
+                    let digest = changed.output_digest().parse().ok()?;
+                    if changed.id_operation() == IdOperation::Created {
+                        Some(RpcObjectChange::Created {
+                            sender,
+                            owner,
+                            object_type,
+                            object_id,
+                            version,
+                            digest,
+                        })
+                    } else {
+                        Some(RpcObjectChange::Mutated {
+                            sender,
+                            owner,
+                            object_type,
+                            object_id,
+                            version,
+                            previous_version: changed
+                                .input_version_opt()
+                                .unwrap_or_default()
+                                .into(),
+                            digest,
+                        })
+                    }
+                }
+                OutputObjectState::DoesNotExist => {
+                    let object_type = parse_object_type_tag(changed.object_type())?;
+                    let version: SequenceNumber = changed.output_version().into();
+                    if wrapped.contains(&(object_id, version)) {
+                        Some(RpcObjectChange::Wrapped {
+                            sender,
+                            object_type,
+                            object_id,
+                            version,
+                        })
+                    } else {
+                        Some(RpcObjectChange::Deleted {
+                            sender,
+                            object_type,
+                            object_id,
+                            version,
+                        })
+                    }
+                }
+                OutputObjectState::Unknown | OutputObjectState::AccumulatorWrite => None,
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn to_legacy_balance_changes(response: &ExecutedTransaction) -> Vec<RpcBalanceChange> {
+    response
+        .balance_changes
+        .iter()
+        .filter_map(|balance_change| {
+            Some(RpcBalanceChange {
+                owner: Owner::AddressOwner(balance_change.address.into()),
+                coin_type: type_tag_sdk_to_core(balance_change.coin_type.clone()).ok()?,
+                amount: balance_change.amount,
+            })
+        })
+        .collect()
+}
+
+fn to_legacy_events(response: &ExecutedTransaction) -> Option<RtdTransactionBlockEvents> {
+    let events = response.events.as_ref()?;
+    let digest = response.transaction.digest();
+    let timestamp_ms = response.timestamp_ms();
+    Some(RtdTransactionBlockEvents {
+        data: events
+            .data
+            .iter()
+            .enumerate()
+            .map(|(event_seq, event)| RtdEvent {
+                id: EventID {
+                    tx_digest: digest,
+                    event_seq: event_seq as u64,
+                },
+                package_id: event.package_id,
+                transaction_module: event.transaction_module.clone(),
+                sender: event.sender,
+                type_: event.type_.clone(),
+                parsed_json: response
+                    .event_json
+                    .get(event_seq)
+                    .cloned()
+                    .flatten()
+                    .unwrap_or_else(|| json!({})),
+                bcs: BcsEvent::new(event.contents.clone()),
+                timestamp_ms,
+            })
+            .collect(),
+    })
+}
+
+fn to_legacy_transaction(response: &ExecutedTransaction) -> Option<RtdTransactionBlock> {
+    let signed_data =
+        SenderSignedData::new(response.transaction.clone(), response.signatures.clone());
+    RtdTransactionBlock::try_from(signed_data, &NoopModuleCache).ok()
+}
+
+fn to_legacy_transaction_block_response(
+    response: &ExecutedTransaction,
+) -> RtdTransactionBlockResponse {
+    let object_changes = to_legacy_object_changes(response);
+    let balance_changes = to_legacy_balance_changes(response);
+
+    let mut legacy_response = RtdTransactionBlockResponse::new(response.transaction.digest());
+    legacy_response.transaction = to_legacy_transaction(response);
+    legacy_response.effects = RtdTransactionBlockEffects::try_from(response.effects.clone()).ok();
+    legacy_response.events = to_legacy_events(response);
+    legacy_response.object_changes = (!object_changes.is_empty()).then_some(object_changes);
+    legacy_response.balance_changes = (!balance_changes.is_empty()).then_some(balance_changes);
+    legacy_response.timestamp_ms = response.timestamp_ms();
+    legacy_response.checkpoint = response.checkpoint;
+    legacy_response
+}
+
+fn to_legacy_dry_run_transaction_block_response(
+    response: &SimulateTransactionResponse,
+) -> Option<DryRunTransactionBlockResponse> {
+    let effects =
+        RtdTransactionBlockEffects::try_from(response.transaction.effects.clone()).ok()?;
+    let input = to_legacy_transaction(&response.transaction)?.data;
+    let execution_error_source = match response.transaction.effects.status() {
+        ExecutionStatus::Failure(ExecutionFailure { error, .. }) => Some(format!("{error:?}")),
+        ExecutionStatus::Success => None,
+    };
+
+    Some(DryRunTransactionBlockResponse {
+        effects,
+        events: to_legacy_events(&response.transaction).unwrap_or_default(),
+        object_changes: to_legacy_object_changes(&response.transaction),
+        balance_changes: to_legacy_balance_changes(&response.transaction),
+        input,
+        execution_error_source,
+        suggested_gas_price: response.suggested_gas_price,
+    })
 }
 
 fn convert_number_to_string(value: Value) -> Value {
@@ -2533,20 +2788,21 @@ fn convert_number_to_string(value: Value) -> Value {
 impl Debug for RtdClientCommandResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = unwrap_err_to_string(|| match self {
-            RtdClientCommandResult::Gas(gas_coins) => {
-                let gas_coins = gas_coins
-                    .iter()
-                    .map(GasCoinOutput::from)
-                    .collect::<Vec<_>>();
-                Ok(serde_json::to_string_pretty(&gas_coins)?)
-            }
-            RtdClientCommandResult::Object(object_read) => {
-                let object = object_read.object()?;
+            RtdClientCommandResult::Gas(gas) => Ok(serde_json::to_string_pretty(gas)?),
+            RtdClientCommandResult::Object(object, json_content) => {
+                let object = ObjectOutput::from_object_with_json(object, json_content.clone());
                 Ok(serde_json::to_string_pretty(&object)?)
             }
-            RtdClientCommandResult::RawObject(raw_object_read) => {
-                let raw_object = raw_object_read.object()?;
-                Ok(serde_json::to_string_pretty(&raw_object)?)
+            RtdClientCommandResult::RawObject(object) => Ok(serde_json::to_string_pretty(&object)?),
+            RtdClientCommandResult::TransactionBlock(response) => Ok(serde_json::to_string_pretty(
+                &to_legacy_transaction_block_response(response),
+            )?),
+            RtdClientCommandResult::DryRun(response) => {
+                if let Some(legacy) = to_legacy_dry_run_transaction_block_response(response) {
+                    Ok(serde_json::to_string_pretty(&legacy)?)
+                } else {
+                    Ok(serde_json::to_string_pretty(response)?)
+                }
             }
             _ => Ok(serde_json::to_string_pretty(self)?),
         });
@@ -2562,10 +2818,10 @@ fn unwrap_err_to_string<T: Display, F: FnOnce() -> Result<T, anyhow::Error>>(fun
 }
 
 impl RtdClientCommandResult {
-    pub fn objects_response(&self) -> Option<Vec<RtdObjectResponse>> {
+    pub fn objects_response(&self) -> Option<Vec<Object>> {
         use RtdClientCommandResult::*;
         match self {
-            Object(o) | RawObject(o) => Some(vec![o.clone()]),
+            Object(o, _) | RawObject(o) => Some(vec![o.clone()]),
             Objects(o) => Some(o.clone()),
             _ => None,
         }
@@ -2585,54 +2841,12 @@ impl RtdClientCommandResult {
         }
     }
 
-    pub fn tx_block_response(&self) -> Option<&RtdTransactionBlockResponse> {
+    pub fn tx_block_response(&self) -> Option<&ExecutedTransaction> {
         use RtdClientCommandResult::*;
         match self {
             TransactionBlock(b) => Some(b),
             _ => None,
         }
-    }
-
-    pub async fn prerender_clever_errors(mut self, context: &mut WalletContext) -> Self {
-        match &mut self {
-            RtdClientCommandResult::DryRun(DryRunTransactionBlockResponse { effects, .. })
-            | RtdClientCommandResult::TransactionBlock(RtdTransactionBlockResponse {
-                effects: Some(effects),
-                ..
-            }) => {
-                let client = context.get_client().await.expect("Cannot connect to RPC");
-                prerender_clever_errors(effects, client.read_api()).await
-            }
-
-            RtdClientCommandResult::TransactionBlock(RtdTransactionBlockResponse {
-                effects: None,
-                ..
-            }) => (),
-            RtdClientCommandResult::ActiveAddress(_)
-            | RtdClientCommandResult::ActiveEnv(_)
-            | RtdClientCommandResult::Addresses(_)
-            | RtdClientCommandResult::Balance(_, _)
-            | RtdClientCommandResult::ComputeTransactionDigest(_)
-            | RtdClientCommandResult::ChainIdentifier(_)
-            | RtdClientCommandResult::DynamicFieldQuery(_)
-            | RtdClientCommandResult::DevInspect(_)
-            | RtdClientCommandResult::Envs(_, _)
-            | RtdClientCommandResult::Gas(_)
-            | RtdClientCommandResult::NewAddress(_)
-            | RtdClientCommandResult::NewEnv(_)
-            | RtdClientCommandResult::NoOutput
-            | RtdClientCommandResult::Object(_)
-            | RtdClientCommandResult::Objects(_)
-            | RtdClientCommandResult::RemoveAddress(_)
-            | RtdClientCommandResult::RawObject(_)
-            | RtdClientCommandResult::SerializedSignedTransaction(_)
-            | RtdClientCommandResult::SerializedUnsignedTransaction(_)
-            | RtdClientCommandResult::Switch(_)
-            | RtdClientCommandResult::SyncClientState
-            | RtdClientCommandResult::VerifyBytecodeMeter { .. }
-            | RtdClientCommandResult::VerifySource => (),
-        }
-        self
     }
 }
 
@@ -2643,12 +2857,23 @@ pub struct AddressesOutput {
     pub addresses: Vec<(String, RtdAddress)>,
 }
 
+/// The chain identifier in both supported encodings: the full Base58-encoded genesis checkpoint
+/// digest (as returned by the gRPC and GraphQL APIs) and the legacy hex short form (its first
+/// 4 bytes). Either can be used as a chain ID in the `[environments]` section of `Move.toml`.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DynamicFieldOutput {
-    pub has_next_page: bool,
-    pub next_cursor: Option<ObjectID>,
-    pub data: Vec<DynamicFieldInfo>,
+pub struct ChainIdentifierOutput {
+    pub base58: String,
+    pub hex: String,
+}
+
+/// Balance data prepared for both human-readable and JSON CLI output.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BalanceOutput {
+    pub metadata: Option<proto::GetCoinInfoResponse>,
+    pub balance: proto::Balance,
+    pub coins: Vec<RpcCoin>,
 }
 
 #[derive(Serialize)]
@@ -2673,31 +2898,30 @@ pub struct ObjectOutput {
     pub version: SequenceNumber,
     pub digest: String,
     pub obj_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub owner: Option<Owner>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prev_tx: Option<TransactionDigest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub storage_rebate: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<RtdParsedData>,
+    pub owner: Owner,
+    pub prev_tx: TransactionDigest,
+    pub storage_rebate: u64,
+    pub content: serde_json::Value,
 }
 
-impl From<&RtdObjectData> for ObjectOutput {
-    fn from(obj: &RtdObjectData) -> Self {
-        let obj_type = match obj.type_.as_ref() {
-            Some(x) => x.to_string(),
-            None => "unknown".to_string(),
+impl ObjectOutput {
+    pub fn from_object_with_json(obj: &Object, json_content: Option<serde_json::Value>) -> Self {
+        let obj_type = if let Some(struct_tag) = obj.struct_tag() {
+            struct_tag.to_canonical_string(true)
+        } else {
+            "package".to_string()
         };
+        let content = json_content.unwrap_or_else(|| json!(obj.data));
+
         Self {
-            object_id: obj.object_id,
-            version: obj.version,
-            digest: obj.digest.to_string(),
+            object_id: obj.id(),
+            version: obj.version(),
+            digest: obj.digest().base58_encode(),
             obj_type,
-            owner: obj.owner.clone(),
+            owner: obj.owner().clone(),
             prev_tx: obj.previous_transaction,
             storage_rebate: obj.storage_rebate,
-            content: obj.content.clone(),
+            content,
         }
     }
 }
@@ -2720,6 +2944,26 @@ impl From<&GasCoin> for GasCoinOutput {
     }
 }
 
+/// The gas coins owned by an address, together with the RTD the address holds directly rather
+/// than in a coin object. The two are disjoint, so neither on its own is the address' full RTD.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GasOutput {
+    pub gas_coins: Vec<GasCoinOutput>,
+    pub address_mist_balance: u64,
+    pub address_rtd_balance: String,
+}
+
+impl GasOutput {
+    pub fn new(gas_coins: &[GasCoin], address_mist_balance: u64) -> Self {
+        Self {
+            gas_coins: gas_coins.iter().map(GasCoinOutput::from).collect(),
+            address_mist_balance,
+            address_rtd_balance: format_balance(address_mist_balance as u128, 9, 2, None),
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObjectsOutput {
@@ -2730,64 +2974,51 @@ pub struct ObjectsOutput {
 }
 
 impl ObjectsOutput {
-    fn from(obj: RtdObjectResponse) -> Result<Self, anyhow::Error> {
-        let obj = obj.into_object()?;
-        // this replicates the object type display as in the rtd explorer
-        let object_type = match obj.type_ {
-            Some(rtd_types::base_types::ObjectType::Struct(x)) => {
-                let address = x.address().to_string();
-                // check if the address has length of 64 characters
-                // otherwise, keep it as it is
-                let address = if address.len() == 64 {
-                    format!("0x{}..{}", &address[..4], &address[address.len() - 4..])
-                } else {
-                    address
-                };
-                format!("{}::{}::{}", address, x.module(), x.name(),)
-            }
-            Some(rtd_types::base_types::ObjectType::Package) => "Package".to_string(),
-            None => "unknown".to_string(),
-        };
-        Ok(Self {
-            object_id: obj.object_id,
-            version: obj.version,
-            digest: Base64::encode(obj.digest),
-            object_type,
-        })
+    fn from(obj: &Object) -> Self {
+        Self {
+            object_id: obj.id(),
+            version: obj.version(),
+            digest: obj.digest().base58_encode(),
+            object_type: if let Some(struct_tag) = obj.struct_tag() {
+                struct_tag.to_canonical_string(true)
+            } else {
+                "package".to_string()
+            },
+        }
     }
-    fn from_vec(objs: Vec<RtdObjectResponse>) -> Result<Vec<Self>, anyhow::Error> {
-        objs.into_iter()
-            .map(ObjectsOutput::from)
-            .collect::<Result<Vec<_>, _>>()
+
+    fn from_vec(objs: &[Object]) -> Vec<Self> {
+        objs.iter().map(ObjectsOutput::from).collect()
     }
 }
 
 #[derive(Serialize)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
 pub enum RtdClientCommandResult {
     ActiveAddress(Option<RtdAddress>),
     ActiveEnv(Option<String>),
     Addresses(AddressesOutput),
-    Balance(Vec<(Option<RtdCoinMetadata>, Vec<Coin>)>, bool),
-    ChainIdentifier(String),
+    Balance(Vec<BalanceOutput>, bool),
+    ChainIdentifier(ChainIdentifierOutput),
     ComputeTransactionDigest(TransactionData),
-    DynamicFieldQuery(DynamicFieldPage),
-    DryRun(DryRunTransactionBlockResponse),
-    DevInspect(DevInspectResults),
+    DynamicFieldQuery(proto::ListDynamicFieldsResponse),
+    DryRun(SimulateTransactionResponse),
+    DevInspect(SimulateTransactionResponse),
     Envs(Vec<RtdEnv>, Option<String>),
-    Gas(Vec<GasCoin>),
+    Gas(GasOutput),
     NewAddress(NewAddressOutput),
     NewEnv(RtdEnv),
     NoOutput,
-    Object(RtdObjectResponse),
-    Objects(Vec<RtdObjectResponse>),
-    RawObject(RtdObjectResponse),
+    Object(Object, Option<serde_json::Value>),
+    Objects(Vec<Object>),
+    RawObject(Object),
     RemoveAddress(RemoveAddressOutput),
     SerializedSignedTransaction(SenderSignedData),
     SerializedUnsignedTransaction(TransactionData),
     Switch(SwitchResponse),
     SyncClientState,
-    TransactionBlock(RtdTransactionBlockResponse),
+    TransactionBlock(ExecutedTransaction),
     VerifyBytecodeMeter {
         success: bool,
         max_package_ticks: Option<u128>,
@@ -2795,7 +3026,7 @@ pub enum RtdClientCommandResult {
         max_function_ticks: Option<u128>,
         used_ticks: Accumulator,
     },
-    VerifySource,
+    VerifySource(Option<VerifiedMetadata>),
 }
 
 #[derive(Serialize, Clone)]
@@ -2815,6 +3046,23 @@ impl Display for SwitchResponse {
         if let Some(env) = &self.env {
             writeln!(writer, "Active environment switched to [{env}]")?;
         }
+        write!(f, "{}", writer)
+    }
+}
+
+impl Display for ChainIdentifierOutput {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut writer = String::new();
+
+        if self.base58.is_empty() {
+            writeln!(writer, "{}", self.hex)?;
+        } else if self.hex.is_empty() {
+            writeln!(writer, "{}", self.base58)?;
+        } else {
+            writeln!(writer, "Base58: {}", self.base58)?;
+            writeln!(writer, "Hex: {}", self.hex)?;
+        }
+
         write!(f, "{}", writer)
     }
 }
@@ -2874,53 +3122,180 @@ pub async fn request_tokens_from_faucet(
     Ok(())
 }
 
-fn pretty_print_balance(
-    coins_by_type: &Vec<(Option<RtdCoinMetadata>, Vec<Coin>)>,
-    builder: &mut TableBuilder,
-    with_coins: bool,
-) {
-    let format_decmials = 2;
+/// Fetch aggregate balances from gRPC and attach coin metadata for display.
+async fn balance_outputs_for_address(
+    client: &Client,
+    address: RtdAddress,
+    coin_type: Option<&StructTag>,
+) -> Result<Vec<BalanceOutput>, anyhow::Error> {
+    let balances = if let Some(coin_type) = coin_type {
+        vec![client.get_balance(address, coin_type).await?]
+    } else {
+        client.list_balances(address).try_collect().await?
+    };
+
+    tokio_stream::StreamExt::throttle(
+        futures::stream::iter(balances),
+        Duration::from_millis(RATE_LIMIT_MILLIS),
+    )
+    .map(|balance| async move {
+        let metadata = coin_metadata_for_balance(client, &balance).await?;
+        Ok(BalanceOutput {
+            metadata,
+            balance,
+            coins: Vec::new(),
+        })
+    })
+    .buffered(NUM_CONCURRENCY_REQS)
+    .try_collect()
+    .await
+}
+
+/// Best-effort metadata lookup for a balance returned by the balance API.
+async fn coin_metadata_for_balance(
+    client: &Client,
+    balance: &proto::Balance,
+) -> Result<Option<proto::GetCoinInfoResponse>, anyhow::Error> {
+    let ty = StructTag::from_str(balance.coin_type()).with_context(|| {
+        format!(
+            "Cannot parse coin type returned by balance API: {}",
+            balance.coin_type()
+        )
+    })?;
+    Ok(client.get_coin_info(&ty).await.ok())
+}
+
+/// Add owned coin object details without changing aggregate balance totals.
+async fn attach_owned_coin_objects(
+    client: &Client,
+    address: RtdAddress,
+    coin_type: Option<&StructTag>,
+    balances: &mut [BalanceOutput],
+) -> Result<(), anyhow::Error> {
+    let coin_object_type = coin_object_type_filter(coin_type);
+    let coins: Vec<RpcCoin> = client
+        .list_owned_objects(address, Some(coin_object_type))
+        .try_filter_map(|o| async move {
+            let Ok(Some((coin_type, balance))) = Coin::extract_balance_if_coin(&o) else {
+                return Ok(None);
+            };
+            Ok(Some(RpcCoin {
+                coin_type: coin_type.to_canonical_string(true),
+                coin_object_id: o.id(),
+                version: o.version(),
+                digest: o.digest(),
+                balance,
+                previous_transaction: o.previous_transaction,
+            }))
+        })
+        .try_collect()
+        .await?;
+
+    let mut coins_by_type: BTreeMap<String, Vec<RpcCoin>> = BTreeMap::new();
+    for coin in coins {
+        coins_by_type
+            .entry(coin.coin_type.clone())
+            .or_default()
+            .push(coin);
+    }
+
+    for balance in balances.iter_mut() {
+        if let Some(coins) = coins_by_type.remove(balance.balance.coin_type()) {
+            balance.coins = coins;
+        }
+    }
+
+    Ok(())
+}
+
+/// Build the object type filter expected by `list_owned_objects`.
+fn coin_object_type_filter(coin_type: Option<&StructTag>) -> StructTag {
+    if let Some(coin_type) = coin_type {
+        Coin::type_(coin_type.clone().into())
+    } else {
+        StructTag {
+            address: RTD_FRAMEWORK_ADDRESS,
+            name: COIN_STRUCT_NAME.to_owned(),
+            module: COIN_MODULE_NAME.to_owned(),
+            type_params: vec![],
+        }
+    }
+}
+
+/// Keep RTD first while preserving the balance API's order for other coin types.
+fn order_balance_outputs_rtd_first(balances: &mut Vec<BalanceOutput>) {
+    // The balance API reports the coin type (`0x2::rtd::RTD`), not the object type `Coin<RTD>`.
+    let rtd_type_tag = GAS::type_().to_canonical_string(/* with_prefix */ true);
+    if let Some(index) = balances
+        .iter()
+        .position(|balance| balance.balance.coin_type() == rtd_type_tag.as_str())
+    {
+        let rtd_balance = balances.remove(index);
+        balances.insert(0, rtd_balance);
+    }
+}
+
+fn pretty_print_balance(balances: &[BalanceOutput], builder: &mut TableBuilder, with_coins: bool) {
+    let format_decimals = 2;
     let mut table_builder = TableBuilder::default();
     if !with_coins {
-        table_builder.set_header(vec!["coin", "balance (raw)", "balance", ""]);
+        table_builder.set_header(vec!["coin", "balance (raw)", "balance"]);
     }
-    for (metadata, coins) in coins_by_type {
-        let (name, symbol, coin_decimals) = if let Some(metadata) = metadata {
+    for balance_output in balances {
+        let (name, symbol, coin_decimals) = if let Some(metadata) = &balance_output.metadata {
             (
-                metadata.name.as_str(),
-                metadata.symbol.as_str(),
-                metadata.decimals,
+                metadata.metadata().name(),
+                metadata.metadata().symbol(),
+                metadata.metadata().decimals() as u8,
             )
         } else {
             ("unknown", "unknown_symbol", 9)
         };
 
-        let balance = coins.iter().map(|x| x.balance as u128).sum::<u128>();
+        let balance = balance_output.balance.balance() as u128;
+        let address_balance = balance_output.balance.address_balance();
         let mut inner_table = TableBuilder::default();
-        inner_table.set_header(vec!["coinId", "balance (raw)", "balance", ""]);
+        inner_table.set_header(vec!["coinId", "balance (raw)", "balance"]);
 
         if with_coins {
-            let coin_numbers = if coins.len() != 1 { "coins" } else { "coin" };
+            let coin_numbers = if balance_output.coins.len() != 1 {
+                "coins"
+            } else {
+                "coin"
+            };
             let balance_formatted = format!(
                 "({} {})",
-                format_balance(balance, coin_decimals, format_decmials, Some(symbol)),
+                format_balance(balance, coin_decimals, format_decimals, Some(symbol)),
                 symbol
             );
             let summary = format!(
                 "{}: {} {coin_numbers}, Balance: {} {}",
                 name,
-                coins.len(),
+                balance_output.coins.len(),
                 balance,
                 balance_formatted
             );
-            for c in coins {
+            for c in &balance_output.coins {
                 inner_table.push_record(vec![
                     c.coin_object_id.to_string().as_str(),
                     c.balance.to_string().as_str(),
                     format_balance(
                         c.balance as u128,
                         coin_decimals,
-                        format_decmials,
+                        format_decimals,
+                        Some(symbol),
+                    )
+                    .as_str(),
+                ]);
+            }
+            if address_balance != 0 {
+                inner_table.push_record(vec![
+                    "address balance",
+                    address_balance.to_string().as_str(),
+                    format_balance(
+                        address_balance as u128,
+                        coin_decimals,
+                        format_decimals,
                         Some(symbol),
                     )
                     .as_str(),
@@ -2942,7 +3317,7 @@ fn pretty_print_balance(
             table_builder.push_record(vec![
                 name,
                 balance.to_string().as_str(),
-                format_balance(balance, coin_decimals, format_decmials, Some(symbol)).as_str(),
+                format_balance(balance, coin_decimals, format_decimals, Some(symbol)).as_str(),
             ]);
         }
     }
@@ -3016,7 +3391,7 @@ pub async fn execute_dry_run(
     gas_payment: Vec<ObjectRef>,
     sponsor: Option<RtdAddress>,
 ) -> Result<RtdClientCommandResult, anyhow::Error> {
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let gas_budget = match gas_budget {
         Some(gas_budget) => gas_budget,
         None => max_gas_budget(&client).await?,
@@ -3031,15 +3406,11 @@ pub async fn execute_dry_run(
     );
     debug!("Executing dry run");
     let response = client
-        .read_api()
-        .dry_run_transaction_block(tx_data)
+        .simulate_transaction(&tx_data, true, false)
         .await
         .context("Dry run failed")?;
     debug!("Finished executing dry run");
-    let resp = RtdClientCommandResult::DryRun(response)
-        .prerender_clever_errors(context)
-        .await;
-    Ok(resp)
+    Ok(RtdClientCommandResult::DryRun(response))
 }
 
 /// Call a dry run with the transaction data to estimate the gas budget.
@@ -3050,8 +3421,8 @@ pub async fn execute_dry_run(
 /// B = computation cost + storage cost - storage rebate + GAS_SAFE_OVERHEAD * reference gas price
 /// overhead
 ///
-/// This gas estimate is computed exactly as in the TypeScript SDK
-/// <https://github.com/LinkUVerse/rtd/blob/3c4369270605f78a243842098b7029daf8d883d9/sdk/typescript/src/transactions/TransactionBlock.ts#L845-L858>
+/// This gas estimate matches `computeGasBudget` in the sibling
+/// `rtd-ts-sdk/packages/typescript/src/client/core-resolver.ts` checkout.
 pub async fn estimate_gas_budget(
     context: &mut WalletContext,
     signer: RtdAddress,
@@ -3060,13 +3431,12 @@ pub async fn estimate_gas_budget(
     gas_payment: Vec<ObjectRef>,
     sponsor: Option<RtdAddress>,
 ) -> Result<u64, anyhow::Error> {
-    let client = context.get_client().await?;
     let dry_run =
         execute_dry_run(context, signer, kind, None, gas_price, gas_payment, sponsor).await;
     if let Ok(RtdClientCommandResult::DryRun(dry_run)) = dry_run {
-        let rgp = client.read_api().get_reference_gas_price().await?;
+        let rgp = context.get_reference_gas_price().await?;
         Ok(estimate_gas_budget_from_gas_cost(
-            dry_run.effects.gas_cost_summary(),
+            dry_run.transaction.effects.gas_cost_summary(),
             rgp,
         ))
     } else {
@@ -3089,15 +3459,191 @@ pub fn estimate_gas_budget_from_gas_cost(
 }
 
 /// Queries the protocol config for the maximum gas allowed in a transaction.
-pub async fn max_gas_budget(client: &RtdClient) -> Result<u64, anyhow::Error> {
-    let cfg = client.read_api().get_protocol_config(None).await?;
-    Ok(match cfg.attributes.get("max_tx_gas") {
-        Some(Some(rtd_json_rpc_types::RtdProtocolConfigValue::U64(y))) => *y,
-        _ => bail!(
-            "Could not automatically find the maximum gas allowed in a transaction from the \
+pub async fn max_gas_budget(client: &Client) -> Result<u64, anyhow::Error> {
+    let cfg = client.get_protocol_config(None).await?;
+    Ok(
+        match cfg
+            .attributes()
+            .get("max_tx_gas")
+            .and_then(|s| s.parse::<u64>().ok())
+        {
+            Some(y) => y,
+            _ => bail!(
+                "Could not automatically find the maximum gas allowed in a transaction from the \
             protocol config. Please provide a gas budget with the --gas-budget flag."
-        ),
+            ),
+        },
+    )
+}
+
+/// Queries the protocol config for the limits that bound how many coins fit in one transaction.
+async fn coin_limits(client: &Client) -> Result<CoinLimits, anyhow::Error> {
+    let cfg = client.get_protocol_config(None).await?;
+    let attributes = cfg.attributes();
+    let limit = |name: &str| -> Result<usize, anyhow::Error> {
+        attributes
+            .get(name)
+            .and_then(|s| s.parse().ok())
+            .with_context(|| format!("Could not find {name} in the protocol config."))
+    };
+
+    Ok(CoinLimits {
+        max_gas_payment_objects: limit("max_gas_payment_objects")?,
+        max_arguments: limit("max_arguments")?,
+        max_input_objects: limit("max_input_objects")?,
     })
+}
+
+/// Warn about, and drop, any coins past what one transaction can hold.
+fn truncate_to_max_coins(coin_refs: &mut Vec<ObjectRef>, max_coins: usize) {
+    if coin_refs.len() <= max_coins {
+        return;
+    }
+
+    let remaining = coin_refs.len() - max_coins;
+    coin_refs.truncate(max_coins);
+    eprintln!(
+        "Warning: a transaction sends at most {max_coins} coins, so {remaining} of your coins \
+         will not be sent. Run the command again to send the rest."
+    );
+}
+
+/// Send every `Coin<T>` object owned by `signer` to `recipient`'s address balance. The signer's
+/// own address balance is left untouched: only their coin objects are drained.
+///
+/// Every coin is merged into one, which is then sent by value. RTD is what pays for gas, so its
+/// coins go into the gas payment, where gas smashing merges them into the gas coin.
+/// Coins of any other type are ordinary inputs, merged into the last of them.
+async fn send_all_coins(
+    context: &mut WalletContext,
+    signer: RtdAddress,
+    recipient: RtdAddress,
+    coin_type_tag: TypeTag,
+    gas_data: GasDataArgs,
+    processing: TxProcessingArgs,
+) -> Result<RtdClientCommandResult, anyhow::Error> {
+    let client = context.grpc_client()?;
+
+    // For RTD the coins being sent are also what pays for gas, which a sponsor's gas coin cannot do:
+    // it is the sponsor's amount that would end up with the recipient.
+    let is_rtd = coin_type_tag == GAS::type_tag();
+    ensure!(
+        !is_rtd || gas_data.gas_sponsor.is_none(),
+        "--all-coins cannot be used with a gas sponsor for RTD coin type, because the coins being \
+         sent are the ones paying for gas."
+    );
+
+    let coins: Vec<Object> = client
+        .list_owned_objects(signer, Some(Coin::type_(coin_type_tag.clone())))
+        .try_collect()
+        .await?;
+    ensure!(
+        !coins.is_empty(),
+        "No {coin_type_tag} coins available to send"
+    );
+
+    let mut coin_refs: Vec<ObjectRef> =
+        coins.iter().map(|c| c.compute_object_reference()).collect();
+
+    // Coins that do not fit in the gas payment are merged in with `MergeCoins`. Each such coin is a
+    // transaction input, so the merged set is bounded by the input-object limit; the sources are
+    // split across as many `MergeCoins` commands as it takes to stay under the per-command argument
+    // limit. Gas payment coins are validated separately and do not count against the input limit.
+    let limits = coin_limits(&client).await?;
+    let smashed = if is_rtd {
+        limits.max_gas_payment_objects
+    } else {
+        0
+    };
+    truncate_to_max_coins(&mut coin_refs, smashed + limits.max_input_objects);
+
+    // Whatever is left in `coin_refs` is the gas payment, which is empty unless the coin is RTD.
+    let merged_refs = coin_refs.split_off(std::cmp::min(coin_refs.len(), smashed));
+
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let mut merged_args = merged_refs
+        .iter()
+        .map(|r| builder.obj(ObjectArg::ImmOrOwnedObject(*r)))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Gas smashing has already merged the gas payment into the gas coin, so that is what the rest
+    // merge into; without one, the last coin takes the role. `MergeCoins` only borrows its target,
+    // so either way it is still ours to send afterwards.
+    let target = if is_rtd {
+        Argument::GasCoin
+    } else {
+        merged_args
+            .pop()
+            .context("non-RTD path always has at least one coin to merge into")?
+    };
+
+    // `MergeCoins` counts only its source list against `max_arguments` (strict `<`), so at most
+    // `max_arguments - 1` sources fit per command; batch the rest across commands, all merging into
+    // the same target.
+    let max_sources = limits.max_arguments.saturating_sub(1).max(1);
+    for sources in merged_args.chunks(max_sources) {
+        builder.command(Command::MergeCoins(target, sources.to_vec()));
+    }
+
+    // Moving the coin into `coin::send_funds` by value is understood by the execution layer: when
+    // it is the gas coin, that consumes it and refunds the unused gas budget into the recipient's
+    // address balance, so no dust is left behind. Passing the RTD coins as an explicit gas payment
+    // also keeps the fullnode from performing gas selection, which would otherwise pull in the
+    // signer's address balance as well.
+    let recipient_arg = builder.pure(recipient)?;
+    builder.programmable_move_call(
+        RTD_FRAMEWORK_PACKAGE_ID,
+        Identifier::from_str("coin")?,
+        Identifier::from_str("send_funds")?,
+        vec![coin_type_tag],
+        vec![target, recipient_arg],
+    );
+    let tx_kind = TransactionKind::programmable(builder.finish());
+
+    dry_run_or_execute_or_serialize(signer, tx_kind, context, coin_refs, gas_data, processing).await
+}
+
+/// Ask the fullnode to pick the gas payment for a transaction, and return it along with the
+/// budget and expiration it resolved.
+///
+/// The fullnode applies the same rules as the TypeScript SDK: it pays from `gas_owner`'s address
+/// balance when the transaction never touches the gas coin and that balance covers the budget
+/// (empty payment, `ValidDuring` expiration), pays from their RTD coins otherwise, and when the
+/// transaction *does* use the gas coin it prepends an address balance reservation so both sources
+/// are available. Coins already used as inputs are excluded.
+async fn select_gas_with_fullnode(
+    client: &Client,
+    signer: RtdAddress,
+    tx_kind: &TransactionKind,
+    gas_owner: RtdAddress,
+    gas_budget: u64,
+    gas_price: u64,
+) -> Result<(Vec<ObjectRef>, u64, TransactionExpiration), anyhow::Error> {
+    // An empty payment is what asks the fullnode to perform selection.
+    let tx_data = TransactionData::new_with_gas_coins_allow_sponsor(
+        tx_kind.clone(),
+        signer,
+        vec![],
+        gas_budget,
+        gas_price,
+        gas_owner,
+    );
+
+    debug!("Selecting gas payment");
+    let resolved = client
+        .simulate_transaction(&tx_data, true, true)
+        .await
+        .context("Gas selection failed")?
+        .transaction
+        .transaction;
+    debug!("Finished selecting gas payment");
+
+    let gas_data = resolved.gas_data();
+    Ok((
+        gas_data.payment.clone(),
+        gas_data.budget,
+        resolved.expiration().clone(),
+    ))
 }
 
 /// Dry run, execute, or serialize a transaction.
@@ -3125,6 +3671,7 @@ pub(crate) async fn dry_run_or_execute_or_serialize(
         serialize_unsigned_transaction,
         serialize_signed_transaction,
         sender,
+        skip_signing,
     } = processing;
 
     ensure!(
@@ -3138,7 +3685,7 @@ pub(crate) async fn dry_run_or_execute_or_serialize(
         context.get_reference_gas_price().await?
     };
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
 
     let signer = sender.unwrap_or(signer);
 
@@ -3173,12 +3720,15 @@ pub(crate) async fn dry_run_or_execute_or_serialize(
         Some(gas_budget) => gas_budget,
         None => {
             debug!("Estimating gas budget");
+            // Estimate against an empty gas payment so the fullnode simulates with a mock gas
+            // coin. Passing the real payment here would have it checked against the very budget
+            // we are trying to compute.
             let budget = estimate_gas_budget(
                 context,
                 signer,
                 tx_kind.clone(),
                 gas_price,
-                gas_payment.clone(),
+                vec![],
                 gas_sponsor,
             )
             .await?;
@@ -3187,40 +3737,26 @@ pub(crate) async fn dry_run_or_execute_or_serialize(
         }
     };
 
-    let gas_payment = if !gas_payment.is_empty() {
-        gas_payment
+    let gas_owner = gas_sponsor.unwrap_or(signer);
+
+    let (gas_payment, gas_budget, expiration) = if !gas_payment.is_empty() {
+        (gas_payment, gas_budget, TransactionExpiration::None)
     } else {
-        let input_objects: Vec<_> = tx_kind
-            .input_objects()?
-            .iter()
-            .filter_map(|o| match o {
-                InputObjectKind::ImmOrOwnedMoveObject((id, _, _)) => Some(*id),
-                _ => None,
-            })
-            .collect();
-
-        let gas_payment = client
-            .transaction_builder()
-            .select_gas(
-                gas_sponsor.unwrap_or(signer),
-                None,
-                gas_budget,
-                input_objects,
-                gas_price,
-            )
-            .await?;
-
-        vec![gas_payment]
+        select_gas_with_fullnode(&client, signer, &tx_kind, gas_owner, gas_budget, gas_price)
+            .await?
     };
 
     debug!("Preparing transaction data");
-    let tx_data = TransactionData::new_with_gas_coins_allow_sponsor(
+    let tx_data = TransactionData::new_with_gas_data_and_expiration(
         tx_kind,
         signer,
-        gas_payment,
-        gas_budget,
-        gas_price,
-        gas_sponsor.unwrap_or(signer),
+        GasData {
+            payment: gas_payment,
+            owner: gas_owner,
+            price: gas_price,
+            budget: gas_budget,
+        },
+        expiration,
     );
     debug!("Finished preparing transaction data");
 
@@ -3231,27 +3767,36 @@ pub(crate) async fn dry_run_or_execute_or_serialize(
     } else if tx_digest {
         Ok(RtdClientCommandResult::ComputeTransactionDigest(tx_data))
     } else {
-        let mut signatures = vec![
-            context
-                .config
-                .keystore
-                .sign_secure(&signer, &tx_data, Intent::rtd_transaction())
-                .await?
-                .into(),
-        ];
-
-        if let Some(gas_sponsor) = gas_sponsor
-            && gas_sponsor != signer
-        {
-            signatures.push(
+        let signatures = if skip_signing {
+            vec![]
+        } else {
+            let mut signatures = vec![
                 context
-                    .config
-                    .keystore
-                    .sign_secure(&gas_sponsor, &tx_data, Intent::rtd_transaction())
+                    .sign_secure(
+                        &KeyIdentity::Address(signer),
+                        &tx_data,
+                        Intent::rtd_transaction(),
+                    )
                     .await?
                     .into(),
-            );
-        }
+            ];
+
+            if let Some(gas_sponsor) = gas_sponsor
+                && gas_sponsor != signer
+            {
+                signatures.push(
+                    context
+                        .sign_secure(
+                            &KeyIdentity::Address(gas_sponsor),
+                            &tx_data,
+                            Intent::rtd_transaction(),
+                        )
+                        .await?
+                        .into(),
+                );
+            }
+            signatures
+        };
 
         let sender_signed_data = SenderSignedData::new(tx_data, signatures);
         if serialize_signed_transaction {
@@ -3261,20 +3806,26 @@ pub(crate) async fn dry_run_or_execute_or_serialize(
         } else {
             let transaction = Transaction::new(sender_signed_data);
             debug!("Executing transaction: {:?}", transaction);
-            let mut response = context
+            let response = context
                 .execute_transaction_may_fail(transaction.clone())
                 .await?;
             debug!("Transaction executed: {:?}", transaction);
-            if let Some(effects) = response.effects.as_mut() {
-                prerender_clever_errors(effects, client.read_api()).await;
-            }
-            let effects = response.effects.as_ref().ok_or_else(|| {
-                anyhow!("Effects from RtdTransactionBlockResult should not be empty")
-            })?;
-            if let RtdExecutionStatus::Failure { error } = effects.status() {
+            if let ExecutionStatus::Failure(ExecutionFailure { error, command }) =
+                response.effects.status()
+            {
+                let description = if let Some(command) = command {
+                    format!("{error:?} in command {command}")
+                } else {
+                    format!("{error:?}")
+                };
+
+                let error = render_clever_error_opt(&description, &client)
+                    .await
+                    .unwrap_or(description);
+
                 return Err(anyhow!(
                     "Error executing transaction '{}': {error}",
-                    response.digest
+                    response.transaction.digest(),
                 ));
             }
             Ok(RtdClientCommandResult::TransactionBlock(response))
@@ -3292,45 +3843,28 @@ async fn execute_dev_inspect(
     gas_sponsor: Option<RtdAddress>,
     skip_checks: Option<bool>,
 ) -> Result<RtdClientCommandResult, anyhow::Error> {
-    let client = context.get_client().await?;
-    let gas_budget = gas_budget.map(rtd_serde::BigInt::from);
+    let client = context.grpc_client()?;
 
-    let dev_inspect_args = DevInspectArgs {
-        gas_sponsor,
-        gas_budget,
-        gas_objects: (!gas_objects.is_empty()).then_some(gas_objects),
-        skip_checks,
-        show_raw_txn_data_and_effects: None,
-    };
-    let dev_inspect_result = client
-        .read_api()
-        .dev_inspect_transaction_block(
-            signer,
-            tx_kind,
-            Some(rtd_serde::BigInt::from(gas_price)),
-            None,
-            Some(dev_inspect_args),
-        )
+    let max_gas_budget = max_gas_budget(&client).await?;
+    let tx = TransactionData::new_with_gas_coins_allow_sponsor(
+        tx_kind,
+        signer,
+        gas_objects,
+        gas_budget.unwrap_or(max_gas_budget),
+        gas_price,
+        gas_sponsor.unwrap_or(signer),
+    );
+
+    let result = client
+        .simulate_transaction(&tx, !skip_checks.unwrap_or(false), false)
         .await?;
-    Ok(RtdClientCommandResult::DevInspect(dev_inspect_result))
-}
-
-pub(crate) async fn prerender_clever_errors(
-    effects: &mut RtdTransactionBlockEffects,
-    read_api: &ReadApi,
-) {
-    let RtdTransactionBlockEffects::V1(effects) = effects;
-    if let RtdExecutionStatus::Failure { error } = &mut effects.status
-        && let Some(rendered) = render_clever_error_opt(error, read_api).await
-    {
-        *error = rendered;
-    }
+    Ok(RtdClientCommandResult::DevInspect(result))
 }
 
 /// Warn the user if the CLI falls behind more than 2 protocol versions.
-async fn check_protocol_version_and_warn(read_api: &ReadApi) -> Result<(), anyhow::Error> {
-    let protocol_cfg = read_api.get_protocol_config(None).await?;
-    let on_chain_protocol_version = protocol_cfg.protocol_version.as_u64();
+async fn check_protocol_version_and_warn(client: &Client) -> Result<(), anyhow::Error> {
+    let protocol_cfg = client.get_protocol_config(None).await?;
+    let on_chain_protocol_version = protocol_cfg.protocol_version();
     let cli_protocol_version = ProtocolVersion::MAX.as_u64();
     if (cli_protocol_version + 2) < on_chain_protocol_version {
         eprintln!(
@@ -3338,8 +3872,7 @@ async fn check_protocol_version_and_warn(read_api: &ReadApi) -> Result<(), anyho
             format!(
                 "[warning] CLI's protocol version is {cli_protocol_version}, but the active \
                 network's protocol version is {on_chain_protocol_version}. \
-                \n Consider installing the latest version of the CLI - \
-                https://docs.rtd.io/guides/developer/getting-started/rtd-install \n\n \
+                \n Consider {CLI_UPDATE_HINT}. \n\n \
                 If publishing/upgrading returns a dependency verification error, then install the \
                 latest CLI version."
             )
@@ -3351,19 +3884,35 @@ async fn check_protocol_version_and_warn(read_api: &ReadApi) -> Result<(), anyho
     Ok(())
 }
 
-/// Try to convert this object into a package.
-fn to_package(o: RtdObjectResponse) -> anyhow::Result<MovePackage> {
-    let id = o.object_id()?;
-    let Some(RtdRawData::Package(p)) = o.into_object()?.bcs else {
-        bail!("Object {id} not a package");
-    };
+/// `ProtocolConfig::get_for_version` panics on a version this binary does not implement, which is
+/// the routine state of a CLI that has not been updated since the last protocol upgrade. Check the
+/// bounds first so the caller can report a normal CLI error instead.
+fn protocol_config_for_version(
+    version: ProtocolVersion,
+    chain: Chain,
+) -> Result<ProtocolConfig, anyhow::Error> {
+    if version > ProtocolVersion::MAX_ALLOWED {
+        bail!(
+            "protocol version {} is newer than the maximum version {} supported by this CLI",
+            version.as_u64(),
+            ProtocolVersion::MAX_ALLOWED.as_u64(),
+        );
+    }
 
-    Ok(p.to_move_package(u64::MAX /* safe as this pkg comes from the network */)?)
+    if version < ProtocolVersion::MIN {
+        bail!(
+            "protocol version {} is older than the minimum version {} supported by this CLI",
+            version.as_u64(),
+            ProtocolVersion::MIN.as_u64(),
+        );
+    }
+
+    Ok(ProtocolConfig::get_for_version(version, chain))
 }
 
 /// Fetch move packages
 async fn fetch_move_packages(
-    read_api: &ReadApi,
+    mut client: Client,
     immediate_dep_packages: &BTreeMap<Symbol, ObjectID>,
 ) -> Result<Vec<MovePackage>, anyhow::Error> {
     let package_ids: Vec<_> = immediate_dep_packages.values().cloned().collect(); // a map from id to pkg name for finding package names for error reporting.
@@ -3372,21 +3921,29 @@ async fn fetch_move_packages(
         .map(|(name, id)| (id, name))
         .collect();
 
-    let objects = read_api
-        .multi_get_object_with_options(package_ids, RtdObjectDataOptions::bcs_lossless())
-        .await?;
-
-    let mut packages = Vec::with_capacity(objects.len());
-    for o in objects {
-        let id = o.object_id()?;
-        packages.push(to_package(o).with_context(|| {
-            format!(
-                "Failed to fetch package {}",
+    let mut packages = Vec::with_capacity(package_ids.len());
+    for id in package_ids {
+        let o = client
+            .get_object(id)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e.message()))
+            .with_context(|| {
+                format!(
+                    "Failed to fetch package {}",
+                    pkg_id_to_name
+                        .get(&id)
+                        .map_or("of unknown name", |x| x.as_str())
+                )
+            })?;
+        let package = o.data.try_as_package().cloned().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Failed to fetch package {}, found object instead of package",
                 pkg_id_to_name
                     .get(&id)
                     .map_or("of unknown name", |x| x.as_str())
             )
-        })?);
+        })?;
+        packages.push(package);
     }
 
     Ok(packages)
@@ -3394,10 +3951,10 @@ async fn fetch_move_packages(
 
 // Fetch the original ids of all the transitive dependencies of the immediate package dependencies
 async fn trans_deps_original_ids(
-    read_api: &ReadApi,
+    client: Client,
     immediate_dep_packages: &BTreeMap<Symbol, ObjectID>,
 ) -> Result<BTreeSet<ObjectID>, anyhow::Error> {
-    let pkgs = fetch_move_packages(read_api, immediate_dep_packages).await?;
+    let pkgs = fetch_move_packages(client, immediate_dep_packages).await?;
     let linkage_table = pkgs
         .iter()
         .flat_map(|pkg| pkg.linkage_table().keys())
@@ -3412,7 +3969,7 @@ async fn trans_deps_original_ids(
 /// dependencies for all these immediate package dependencies. For packages that are not referenced
 /// in the source code, they will be filtered out from the list of dependencies.
 pub(crate) async fn pkg_tree_shake(
-    read_api: &ReadApi,
+    client: Client,
     with_unpublished_deps: bool,
     compiled_package: &mut CompiledPackage,
 ) -> Result<(), anyhow::Error> {
@@ -3478,6 +4035,7 @@ pub(crate) async fn pkg_tree_shake(
             // println!("{}", pkgs_to_keep.contains(pkg_name));
             pkgs_to_keep.contains(pkg_name)
         })
+        .map(|(pkg_name, dep)| (pkg_name, dep.published_at))
         .collect();
 
     info!("Pkgs to keep {pkgs_to_keep:#?}");
@@ -3492,7 +4050,7 @@ pub(crate) async fn pkg_tree_shake(
 
     info!("Pkg name to orig id {:#?}", pkg_name_to_orig_id);
 
-    let trans_deps_orig_ids = trans_deps_original_ids(read_api, &immediate_dep_packages).await?;
+    let trans_deps_orig_ids = trans_deps_original_ids(client, &immediate_dep_packages).await?;
 
     info!("Trans deps orig ids {:?}", trans_deps_orig_ids);
 
@@ -3519,28 +4077,30 @@ pub async fn load_root_pkg_for_publish_upgrade(
     build_config: &MoveBuildConfig,
     path: &Path,
 ) -> anyhow::Result<RootPackage<RtdFlavor>> {
-    let env = find_environment(path, build_config.environment.clone(), wallet).await?;
-    Ok(RootPackage::<RtdFlavor>::load(path, env, build_config.mode_set()).await?)
+    let env = find_environment(path, build_config.environment.clone(), wallet, true).await?;
+
+    Ok(build_config
+        .package_loader(path, &env, RtdFlavor::with_client(wallet))
+        .load()
+        .await?)
 }
 
-async fn load_root_pkg_for_test_publish(
+pub async fn load_root_pkg_for_ephemeral_publish_or_upgrade(
     package_path: &Path,
-    active_env: String,
-    chain_id: String,
+    chain_id: &str,
     build_env: Option<String>,
-    pubfile_path: Option<PathBuf>,
+    pubfile_path: PathBuf,
     modes: Vec<ModeName>,
 ) -> anyhow::Result<RootPackage<RtdFlavor>> {
-    let pubfile_path =
-        pubfile_path.unwrap_or_else(|| PathBuf::from(format!("Pub.{active_env}.toml")));
-
-    Ok(RootPackage::<RtdFlavor>::load_ephemeral(
+    Ok(PackageLoader::new_ephemeral(
         package_path,
-        build_env,
-        chain_id,
+        build_env.clone(),
+        chain_id.to_string(),
         pubfile_path,
-        modes,
+        RtdFlavor::new(),
     )
+    .modes(modes)
+    .load()
     .await?)
 }
 
@@ -3548,7 +4108,7 @@ async fn load_root_pkg_for_test_publish(
 pub fn update_publication(
     chain_id: &str,
     command: LockCommand,
-    response: &RtdTransactionBlockResponse,
+    response: &ExecutedTransaction,
     _build_config: &MoveBuildConfig,
     publication: Option<&mut Publication<RtdFlavor>>,
 ) -> Result<Publication<RtdFlavor>, anyhow::Error> {
@@ -3613,11 +4173,10 @@ async fn publish_command(
     let sender = processing
         .sender
         .unwrap_or(context.infer_sender(&payment.gas).await?);
-    let client = context.get_client().await?;
-    let read_api = client.read_api();
-    let chain_id = read_api.get_chain_identifier().await?;
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?;
 
-    check_protocol_version_and_warn(read_api).await?;
+    check_protocol_version_and_warn(&client).await?;
     let package_path =
         package_path
             .canonicalize()
@@ -3626,7 +4185,7 @@ async fn publish_command(
             })?;
 
     let compiled_package = compile_package(
-        read_api,
+        client.clone(),
         root_package,
         build_config.clone(),
         &package_path,
@@ -3667,7 +4226,7 @@ async fn publish_command(
     };
 
     let publish_data = update_publication(
-        &chain_id,
+        &chain_id.to_string(),
         LockCommand::Publish,
         response,
         &build_config,
@@ -3678,6 +4237,282 @@ async fn publish_command(
     Ok(result)
 }
 
+async fn upgrade_command(
+    args: UpgradeArgs,
+    context: &mut WalletContext,
+    is_ephemeral: bool,
+) -> Result<RtdClientCommandResult, anyhow::Error> {
+    let UpgradeArgs {
+        package_path,
+        upgrade_capability,
+        mut build_config,
+        skip_dependency_verification,
+        verify_deps,
+        skip_verify_compatibility,
+        with_unpublished_dependencies,
+        payment,
+        gas_data,
+        processing,
+    } = args;
+
+    let sender = processing
+        .sender
+        .unwrap_or(context.infer_sender(&payment.gas).await?);
+    let client = context.grpc_client()?;
+    let chain_identifier = client.get_chain_identifier().await?;
+    let chain_id = chain_identifier.to_string();
+
+    // For upgrade, we want to force the root package to have `0x0` as its address
+    build_config.root_as_zero = true;
+
+    check_protocol_version_and_warn(&client).await?;
+    let package_path =
+        package_path
+            .canonicalize()
+            .map_err(|e| RtdErrorKind::ModulePublishFailure {
+                error: format!("Failed to canonicalize package path: {}", e),
+            })?;
+
+    let mut root_pkg = if is_ephemeral {
+        let alias = context.get_active_env()?.alias.clone();
+        let pubfile_path = get_pubfile_path_or_default(build_config.pubfile_path.as_ref(), &alias);
+        load_root_pkg_for_ephemeral_publish_or_upgrade(
+            &package_path,
+            &chain_id,
+            build_config.environment.clone(),
+            pubfile_path,
+            build_config.mode_set(),
+        )
+        .await?
+    } else {
+        load_root_pkg_for_publish_upgrade(context, &build_config, &package_path).await?
+    };
+
+    let verify = check_dep_verification_flags(skip_dependency_verification, verify_deps)?;
+
+    let upgrade_cap = if let Some(ref upgrade_cap) = upgrade_capability {
+        upgrade_cap
+    } else {
+        &root_pkg.publication().as_ref().ok_or_else(|| {
+                        anyhow!("Cannot determine the publication information. Please pass the upgrade cap with `-c <UPGRADE_CAP>`.")
+                    })?
+                    .metadata.upgrade_capability.ok_or_else(|| {
+                        anyhow!("No upgrade capability found in the published data. Please pass the upgrade cap with `-c <UPGRADE_CAP>`.")
+                    })?
+    };
+
+    // TODO: pkg-alt we should read upgrade cap from published file, but the question
+    // is how do we migrate? During migration we might want to try to find the upgrade
+    // cap?
+    let upgrade_result = upgrade_package(
+        client.clone(),
+        &root_pkg,
+        build_config.clone(),
+        &package_path,
+        *upgrade_cap,
+        with_unpublished_dependencies,
+        !verify,
+    )
+    .await;
+
+    let (upgrade_policy, compiled_package) = upgrade_result.map_err(|e| anyhow!("{e}"))?;
+
+    let compiled_modules = compiled_package.get_package_bytes(with_unpublished_dependencies);
+    let package_id = compiled_package
+        .published_at
+        .ok_or_else(|| anyhow::anyhow!("Cannot upgrade package without having a published id "))?;
+    let package_digest = compiled_package.get_package_digest(with_unpublished_dependencies);
+    let dep_ids = compiled_package.get_published_dependencies_ids();
+
+    if !skip_verify_compatibility {
+        let protocol_version = client.get_protocol_config(None).await?.protocol_version();
+        let protocol_config =
+            protocol_config_for_version(protocol_version.into(), chain_identifier.chain())?;
+
+        check_compatibility(
+            client.clone(),
+            package_id,
+            compiled_package,
+            package_path.clone(),
+            upgrade_policy,
+            protocol_config,
+        )
+        .await?;
+    }
+
+    let tx_kind = client
+        .transaction_builder()
+        .upgrade_tx_kind(
+            package_id,
+            compiled_modules,
+            dep_ids,
+            *upgrade_cap,
+            upgrade_policy,
+            package_digest.to_vec(),
+        )
+        .await?;
+
+    let gas_payment = client
+        .transaction_builder()
+        .input_refs(&payment.gas)
+        .await?;
+
+    let result = dry_run_or_execute_or_serialize(
+        sender,
+        tx_kind,
+        context,
+        gas_payment,
+        gas_data,
+        processing,
+    )
+    .await?;
+
+    let response = if let RtdClientCommandResult::TransactionBlock(ref tx) = result {
+        tx
+    } else {
+        return Ok(result);
+    };
+
+    let publish_data = update_publication(
+        &chain_id,
+        LockCommand::Upgrade,
+        response,
+        &build_config,
+        root_pkg.publication().cloned().as_mut(),
+    )?;
+    root_pkg.write_publish_data(publish_data)?;
+
+    Ok(result)
+}
+
+async fn publish_ephemeral_unpublished_dependencies(
+    args: &TestPublishArgs,
+    chain_id: &str,
+    build_env: Option<String>,
+    pubfile_path: PathBuf,
+    modes: Vec<ModeName>,
+    context: &mut WalletContext,
+) -> Result<(), anyhow::Error> {
+    if !args.publish_unpublished_deps {
+        return Ok(());
+    }
+
+    if args.publish_args.gas_data.gas_sponsor.is_some() {
+        bail!(
+            "Cannot specify gas data when publishing transitively, as it executes multiple transactions."
+        );
+    }
+
+    if !args.publish_args.payment.gas.is_empty() {
+        bail!(
+            "Cannot specify payment when publishing transitively, as it executes multiple transactions."
+        );
+    }
+
+    if args.publish_args.with_unpublished_dependencies {
+        bail!(
+            "You cannot specify both `--publish-unpublished-deps` and `--with-unpublished-dependencies` at the same time."
+        );
+    }
+
+    let root_package = load_root_pkg_for_ephemeral_publish_or_upgrade(
+        args.publish_args.package_path.as_path(),
+        chain_id,
+        build_env.clone(),
+        pubfile_path.clone(),
+        modes.clone(),
+    )
+    .await?;
+
+    if root_package.package_info().published().is_some() {
+        bail!(
+            "The root package is already published in {pubfile_path:?}, consider removing it or using the test-upgrade command"
+        );
+    }
+
+    // Reverse the deps, we want the "deeper" ones first.
+    for dep in root_package.sorted_packages().into_iter().rev() {
+        // skip root package
+        if dep.is_root() {
+            continue;
+        }
+
+        // Skip already ephemerally published packages as well as system packages
+        if dep.published().is_some() {
+            continue;
+        }
+
+        let dep_path = dep.path().path();
+        let mut dep_root_package = load_root_pkg_for_ephemeral_publish_or_upgrade(
+            dep_path,
+            chain_id,
+            build_env.clone(),
+            pubfile_path.clone(),
+            modes.clone(),
+        )
+        .await?;
+
+        let publish_args = PublishArgs {
+            package_path: dep_path.to_path_buf(),
+            build_config: args.publish_args.build_config.clone(),
+            skip_dependency_verification: args.publish_args.skip_dependency_verification,
+            verify_deps: args.publish_args.verify_deps,
+            with_unpublished_dependencies: false,
+            payment: PaymentArgs::default(),
+            gas_data: args.publish_args.gas_data.clone(),
+            processing: args.publish_args.processing.clone(),
+        };
+
+        eprintln!("Publishing transitive dependency: {}", dep.display_name());
+        publish_command(publish_args, &mut dep_root_package, context).await?;
+    }
+
+    Ok(())
+}
+
+/// Make sure we do not have test mode enabled for publish or upgrade
+fn verify_no_test_mode(build_config: &MoveBuildConfig) -> anyhow::Result<()> {
+    if build_config.test_mode {
+        return Err(RtdErrorKind::ModulePublishFailure {
+            error:
+                "The `publish` or `upgrade` subcommand should not be used with the `--test` flag\n\
+                \n\
+                Code in published packages must not depend on test code.\n\
+                In order to fix this and publish or upgrade the package without `--test`, \
+                remove any non-test dependencies on test-only code.\n\
+                You can ensure all test-only dependencies have been removed by \
+                compiling the package normally with `rtd move build`."
+                    .to_string(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+/// Make sure --pubfile-path is not used with publish or upgrade (use test-publish/test-upgrade instead)
+fn verify_no_pubfile_path(build_config: &MoveBuildConfig, command: &str) -> anyhow::Result<()> {
+    if build_config.pubfile_path.is_some() {
+        return Err(RtdErrorKind::ModulePublishFailure {
+            error: format!(
+                "The `{command}` subcommand should not be used with the `--pubfile-path` flag.\n\
+                \n\
+                Use `test-{command}` instead for ephemeral publication."
+            ),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+fn verify_no_build_env(build_config: &MoveBuildConfig, command: &str) -> anyhow::Result<()> {
+    if build_config.environment.is_some() {
+        bail!(
+            "The `--build-env` argument is not allowed for `rtd move {command}`; when publishing you must build for the environment that you are publishing for."
+        );
+    }
+    Ok(())
+}
+
 /// Extract the host from a URL string
 fn url_to_host(url: &str) -> anyhow::Result<String> {
     url::Url::parse(url)?
@@ -3686,28 +4521,160 @@ fn url_to_host(url: &str) -> anyhow::Result<String> {
         .ok_or_else(|| anyhow!("Cannot extract host from url: {}", url))
 }
 
-/// Find the faucet URL based on the RPC URL. It maps the public networks to their faucet URLs, for
-/// devnet and localnet. For testnet, it instructs the user to use the web UI.
-fn find_faucet_url(address: RtdAddress, rpc: &str) -> anyhow::Result<String> {
+/// Only a local network has a built-in faucet URL; remote networks require an explicit one.
+fn find_faucet_url(rpc: &str) -> anyhow::Result<String> {
+    ensure!(
+        !rpc.trim().is_empty(),
+        "The active network RPC URL is not configured"
+    );
     let host = url_to_host(rpc)?;
-    let devnet_host = url_to_host(RTD_DEVNET_URL)?;
-    let testnet_host = url_to_host(RTD_TESTNET_URL)?;
     let localhost = url_to_host(RTD_LOCAL_NETWORK_URL)?;
     let localhost_0 = url_to_host(RTD_LOCAL_NETWORK_URL_0)?;
-
-    if host == devnet_host {
-        return Ok("https://faucet.devnet.rtd.io/v2/gas".to_string());
-    }
-
-    if host == testnet_host {
-        bail!(
-            "For testnet tokens, please use the Web UI: https://faucet.rtd.io/?address={address}"
-        );
-    }
 
     if host == localhost || host == localhost_0 {
         Ok("http://127.0.0.1:9123/v2/gas".to_string())
     } else {
-        bail!("Cannot recognize the active network. Please provide the gas faucet full URL.")
+        bail!("No faucet URL is configured for this network; pass --url with the faucet URL")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn built_in_faucet_is_local_only() {
+        assert_eq!(
+            find_faucet_url(RTD_LOCAL_NETWORK_URL).unwrap(),
+            "http://127.0.0.1:9123/v2/gas"
+        );
+        assert!(
+            find_faucet_url("")
+                .unwrap_err()
+                .to_string()
+                .contains("not configured")
+        );
+        assert!(
+            find_faucet_url("https://rpc.example.com")
+                .unwrap_err()
+                .to_string()
+                .contains("--url")
+        );
+    }
+
+    #[test]
+    fn protocol_config_out_of_range_errors_instead_of_panicking() {
+        let too_new = ProtocolVersion::MAX_ALLOWED + 1;
+        let err = protocol_config_for_version(too_new, Chain::Unknown)
+            .expect_err("a version past MAX_ALLOWED is not supported");
+        assert!(
+            err.to_string().contains("newer than the maximum version"),
+            "unexpected error: {err}"
+        );
+
+        let too_old = ProtocolVersion::MIN - 1;
+        let err = protocol_config_for_version(too_old, Chain::Unknown)
+            .expect_err("a version below MIN is not supported");
+        assert!(
+            err.to_string().contains("older than the minimum version"),
+            "unexpected error: {err}"
+        );
+
+        assert!(protocol_config_for_version(ProtocolVersion::MAX, Chain::Unknown).is_ok());
+        assert!(protocol_config_for_version(ProtocolVersion::MIN, Chain::Unknown).is_ok());
+    }
+
+    fn gas_result(coins: usize, address_mist_balance: u64) -> RtdClientCommandResult {
+        let gas_coins = (0..coins)
+            .map(|i| GasCoinOutput {
+                gas_coin_id: ObjectID::from_single_byte(i as u8),
+                mist_balance: 1_000_000_000,
+                rtd_balance: format_balance(1_000_000_000, 9, 2, None),
+            })
+            .collect();
+        RtdClientCommandResult::Gas(GasOutput {
+            gas_coins,
+            address_mist_balance,
+            address_rtd_balance: format_balance(address_mist_balance as u128, 9, 2, None),
+        })
+    }
+
+    #[test]
+    fn gas_table_reports_address_balance_alongside_coins() {
+        let table = gas_result(2, 5_000_000_000).to_string();
+        assert!(table.contains("rtdBalance (RTD)"), "{table}");
+        assert!(table.contains("address balance"), "{table}");
+        assert!(table.contains("5000000000"), "{table}");
+        assert!(table.contains("5.00"), "{table}");
+    }
+
+    /// Past 10 coins the table grows a header/footer panel, whose separator row index has to
+    /// account for the address balance row appended after the coins.
+    #[test]
+    fn gas_table_with_panel_keeps_address_balance_above_the_footer() {
+        let table = gas_result(11, 7).to_string();
+        let lines: Vec<&str> = table.lines().collect();
+
+        let address_row = lines
+            .iter()
+            .position(|l| l.contains("address balance"))
+            .expect("address balance row is rendered");
+        let footer = lines
+            .iter()
+            .rposition(|l| l.contains("Showing 11 gas coins"))
+            .expect("footer panel is rendered");
+
+        assert!(
+            address_row < footer,
+            "address balance must sit inside the table, above the footer:\n{table}"
+        );
+        // The separator has to fall between the last data row and the footer panel.
+        assert!(
+            lines[address_row + 1].contains('├') || lines[address_row + 1].contains('┼'),
+            "expected a separator under the address balance row:\n{table}"
+        );
+    }
+
+    /// The balance API is keyed by coin type, while object listing is keyed by the `Coin<T>`
+    /// object type. Mixing them up silently yields an empty balance rather than an error.
+    #[test]
+    fn balance_api_is_keyed_by_coin_type_not_object_type() {
+        assert_eq!(
+            GAS::type_().to_canonical_string(true),
+            "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD"
+        );
+        assert_ne!(
+            GAS::type_().to_canonical_string(true),
+            GasCoin::type_().to_canonical_string(true)
+        );
+
+        let rtd_balance = |coin_type: String| BalanceOutput {
+            metadata: None,
+            balance: proto::Balance::default().with_coin_type(coin_type),
+            coins: Vec::new(),
+        };
+
+        let mut balances = vec![
+            rtd_balance("0x2::other::COIN".to_string()),
+            rtd_balance(GAS::type_().to_canonical_string(true)),
+        ];
+        order_balance_outputs_rtd_first(&mut balances);
+        assert_eq!(
+            balances[0].balance.coin_type(),
+            GAS::type_().to_canonical_string(true),
+            "RTD should be ordered first"
+        );
+    }
+
+    /// An address with no coins but a non-zero address balance still has spendable RTD.
+    #[test]
+    fn gas_table_shown_when_only_an_address_balance_exists() {
+        assert_eq!(
+            gas_result(0, 0).to_string(),
+            "No gas coins are owned by this address"
+        );
+
+        let table = gas_result(0, 42).to_string();
+        assert!(table.contains("address balance"), "{table}");
     }
 }

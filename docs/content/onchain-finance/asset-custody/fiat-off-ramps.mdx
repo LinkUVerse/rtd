@@ -1,0 +1,26 @@
+---
+title: Fiat Off-Ramps
+description: Requirements for adding a fiat off-ramp to an RTD application.
+keywords:
+  - fiat
+  - off-ramp
+  - payments
+  - wallet integration
+questions:
+  - Can I sell RTD through a fiat off-ramp?
+answer: >-
+  No fiat off-ramp provider has been verified for RTD. RTD does not yet have a
+  public Mainnet. Confirm chain and asset support with a provider before
+  enabling a sale or withdrawal flow.
+---
+
+No fiat off-ramp provider has been verified for RTD. RTD does not yet have a public Mainnet. Provider lists and supported assets from the upstream Sui ecosystem do not establish RTD support.
+
+Before offering fiat withdrawals in an RTD application, verify all of the following with the provider and in a test deployment:
+
+1. The provider explicitly supports the RTD chain ID, asset type, and withdrawal route.
+2. The provider can receive the asset on RTD and attributes deposits using the actual chain transaction digest.
+3. The user sees the provider's fees, limits, settlement time, KYC requirements, and available countries before committing funds.
+4. Your application handles failed, delayed, and refunded transfers without treating an initiated transfer as settled.
+
+Do not send RTD assets to a Sui deposit address or reuse upstream Sui asset identifiers. See [fiat on-ramps](/onchain-finance/asset-custody/fiat-on-ramps) for the corresponding purchase checks.

@@ -4,17 +4,12 @@
 pub use self::effects_v2::TransactionEffectsV2;
 use crate::accumulator_event::AccumulatorEvent;
 use crate::base_types::{ExecutionDigests, ObjectID, ObjectRef, SequenceNumber};
-use crate::committee::{Committee, EpochId};
-use crate::crypto::{
-    AuthoritySignInfo, AuthoritySignInfoTrait, AuthorityStrongQuorumSignInfo, EmptySignInfo,
-    default_hash,
-};
+use crate::committee::EpochId;
+use crate::crypto::{AuthoritySignInfo, EmptySignInfo, default_hash};
 use crate::digests::{
     ObjectDigest, TransactionDigest, TransactionEffectsDigest, TransactionEventsDigest,
 };
-use crate::error::RtdResult;
 use crate::event::Event;
-use crate::execution::SharedInput;
 use crate::execution_status::{ExecutionStatus, MoveLocation};
 use crate::gas::GasCostSummary;
 use crate::message_envelope::{Envelope, Message, TrustedEnvelope, VerifiedEnvelope};
@@ -28,8 +23,8 @@ pub use object_change::{
     EffectsObjectChange, ObjectIn, ObjectOut,
 };
 use serde::{Deserialize, Serialize};
-use shared_crypto::intent::{Intent, IntentScope};
-use std::collections::{BTreeMap, BTreeSet};
+use shared_crypto::intent::IntentScope;
+use std::collections::BTreeMap;
 pub use test_effects_builder::TestEffectsBuilder;
 
 mod effects_v1;
@@ -129,8 +124,7 @@ impl TransactionEffects {
         status: ExecutionStatus,
         executed_epoch: EpochId,
         gas_used: GasCostSummary,
-        shared_objects: Vec<SharedInput>,
-        loaded_per_epoch_config_objects: BTreeSet<ObjectID>,
+        unchanged_consensus_objects: Vec<(ObjectID, UnchangedConsensusKind)>,
         transaction_digest: TransactionDigest,
         lamport_version: SequenceNumber,
         changed_objects: BTreeMap<ObjectID, EffectsObjectChange>,
@@ -142,8 +136,7 @@ impl TransactionEffects {
             status,
             executed_epoch,
             gas_used,
-            shared_objects,
-            loaded_per_epoch_config_objects,
+            unchanged_consensus_objects,
             transaction_digest,
             lamport_version,
             changed_objects,
@@ -253,9 +246,10 @@ impl TransactionEffects {
 
     /// Return an iterator of mutated objects, but excluding the gas object.
     pub fn mutated_excluding_gas(&self) -> Vec<(ObjectRef, Owner)> {
+        let gas_id = self.gas_object().map(|(oref, _)| oref.0);
         self.mutated()
             .into_iter()
-            .filter(|o| o != &self.gas_object())
+            .filter(|o| Some(o.0.0) != gas_id)
             .collect()
     }
 
@@ -329,12 +323,18 @@ pub trait TransactionEffectsAPI {
     /// It includes objects that are mutated, wrapped and deleted.
     /// This API is only available on effects v2 and above.
     fn old_object_metadata(&self) -> Vec<(ObjectRef, Owner)>;
-    /// Returns the list of sequenced consensus objects used in the input.
-    /// This is needed in effects because in transaction we only have object ID
-    /// for consensus objects. Their version and digest can only be figured out after sequencing.
-    /// Also provides the use kind to indicate whether the object was mutated or read-only.
-    /// It does not include per epoch config objects since they do not require sequencing.
-    fn input_consensus_objects(&self) -> Vec<InputConsensusObject>;
+    /// Returns the consensus objects the transaction read or wrote, with the version and digest
+    /// resolved during execution (the transaction itself only carries the object ID for consensus
+    /// objects; version and digest are known only after sequencing). Each entry's kind indicates
+    /// whether the object was mutated or read-only.
+    ///
+    /// This includes system objects (e.g. the accumulator root) read during execution but not
+    /// declared as sequenced inputs — they are recorded as read-only so nodes executing from
+    /// effects can reproduce the read, and are indistinguishable here from genuinely-sequenced
+    /// read-only inputs. Callers
+    /// that need only the transaction's declared inputs must filter using the transaction's own
+    /// input set. It does not include per epoch config objects, since they do not require sequencing.
+    fn accessed_consensus_objects(&self) -> Vec<InputConsensusObject>;
     fn created(&self) -> Vec<(ObjectRef, Owner)>;
     fn mutated(&self) -> Vec<(ObjectRef, Owner)>;
     fn unwrapped(&self) -> Vec<(ObjectRef, Owner)>;
@@ -354,10 +354,10 @@ pub trait TransactionEffectsAPI {
 
     fn accumulator_events(&self) -> Vec<AccumulatorEvent>;
 
-    // TODO: We should consider having this function to return Option.
-    // When the gas object is not available (i.e. system transaction), we currently return
-    // dummy object ref and owner. This is not ideal.
-    fn gas_object(&self) -> (ObjectRef, Owner);
+    /// Returns the gas object ref and owner. When the gas object was deleted (e.g. send_funds
+    /// consuming the gas coin), the object ID is preserved, the digest is set to
+    /// `ObjectDigest::OBJECT_DIGEST_DELETED` and the owner is set to a dummy address.
+    fn gas_object(&self) -> Option<(ObjectRef, Owner)>;
 
     fn events_digest(&self) -> Option<&TransactionEventsDigest>;
     fn dependencies(&self) -> &[TransactionDigest];
@@ -367,7 +367,7 @@ pub trait TransactionEffectsAPI {
     fn gas_cost_summary(&self) -> &GasCostSummary;
 
     fn stream_ended_mutably_accessed_consensus_objects(&self) -> Vec<ObjectID> {
-        self.input_consensus_objects()
+        self.accessed_consensus_objects()
             .into_iter()
             .filter_map(|kind| match kind {
                 InputConsensusObject::MutateConsensusStreamEnded(id, _) => Some(id),
@@ -447,28 +447,10 @@ pub struct TransactionEffectsDebugSummary {
 pub type TransactionEffectsEnvelope<S> = Envelope<TransactionEffects, S>;
 pub type UnsignedTransactionEffects = TransactionEffectsEnvelope<EmptySignInfo>;
 pub type SignedTransactionEffects = TransactionEffectsEnvelope<AuthoritySignInfo>;
-pub type CertifiedTransactionEffects = TransactionEffectsEnvelope<AuthorityStrongQuorumSignInfo>;
 
 pub type TrustedSignedTransactionEffects = TrustedEnvelope<TransactionEffects, AuthoritySignInfo>;
 pub type VerifiedTransactionEffectsEnvelope<S> = VerifiedEnvelope<TransactionEffects, S>;
 pub type VerifiedSignedTransactionEffects = VerifiedTransactionEffectsEnvelope<AuthoritySignInfo>;
-pub type VerifiedCertifiedTransactionEffects =
-    VerifiedTransactionEffectsEnvelope<AuthorityStrongQuorumSignInfo>;
-
-impl CertifiedTransactionEffects {
-    pub fn verify_authority_signatures(&self, committee: &Committee) -> RtdResult {
-        self.auth_sig().verify_secure(
-            self.data(),
-            Intent::rtd_app(IntentScope::TransactionEffects),
-            committee,
-        )
-    }
-
-    pub fn verify(self, committee: &Committee) -> RtdResult<VerifiedCertifiedTransactionEffects> {
-        self.verify_authority_signatures(committee)?;
-        Ok(VerifiedCertifiedTransactionEffects::new_from_verified(self))
-    }
-}
 
 #[cfg(test)]
 #[path = "../unit_tests/effects_tests.rs"]

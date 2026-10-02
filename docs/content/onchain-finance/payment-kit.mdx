@@ -1,0 +1,11 @@
+---
+title: Payment Kit status
+description: Current RTD support and deployment requirements.
+keywords:
+  - RTD
+  - payment kit
+---
+
+# Payment Kit status
+
+The upstream Payment Kit Move package is not present in this RTD source fork. No RTD PaymentRegistry, PaymentReceipt, package ID, or wallet URI handler has been deployed or verified. Do not treat upstream Sui Payment Kit examples as RTD transactions. For a payment integration today, use a signed RTD transfer against the intended chain and verify its transaction effects, recipient, amount, coin type, and chain identifier before crediting an order. Duplicate prevention and refund handling belong in the application until an RTD payment contract is ported and tested.

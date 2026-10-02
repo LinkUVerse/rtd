@@ -3,17 +3,18 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Context;
+use anyhow::Result;
+use anyhow::bail;
 use async_trait::async_trait;
 use diesel_async::RunQueryDsl;
-use rtd_indexer_alt_framework::{
-    pipeline::Processor,
-    postgres::{Connection, handler::Handler},
-    types::full_checkpoint_content::Checkpoint,
-};
-use rtd_indexer_alt_schema::{
-    checkpoints::StoredGenesis, epochs::StoredProtocolConfig, schema::kv_protocol_configs,
-};
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::postgres::Connection;
+use rtd_indexer_alt_framework::postgres::handler::Handler;
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_schema::checkpoints::StoredGenesis;
+use rtd_indexer_alt_schema::epochs::StoredProtocolConfig;
+use rtd_indexer_alt_schema::schema::kv_protocol_configs;
 use rtd_protocol_config::ProtocolConfig;
 
 pub(crate) struct KvProtocolConfigs(pub(crate) StoredGenesis);
@@ -73,9 +74,8 @@ impl Handler for KvProtocolConfigs {
 
 #[cfg(test)]
 mod tests {
-    use rtd_indexer_alt_framework::types::test_checkpoint_data_builder::{
-        AdvanceEpochConfig, TestCheckpointBuilder,
-    };
+    use rtd_indexer_alt_framework::types::test_checkpoint_data_builder::AdvanceEpochConfig;
+    use rtd_indexer_alt_framework::types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use rtd_protocol_config::ProtocolVersion;
 
     use super::*;

@@ -23,7 +23,7 @@ export async function run(): Promise<void> {
     }
 
     /* eslint-disable */
-    const rtdte = new Mocha({
+    const suite = new Mocha({
         ui: 'tdd',
         color: true,
         // The default timeout of 2000 miliseconds can sometimes be too quick, since the extension
@@ -33,19 +33,19 @@ export async function run(): Promise<void> {
 
     const testsRoot = path.resolve(__dirname, '..');
     return new Promise((resolve, reject) => {
-        // The test rtdte is composed of all files ending with '.test.js'.
+        // The test suite is composed of all files ending with '.test.js'.
         glob('**/**.test.js', { cwd: testsRoot }, (err, files: ReadonlyArray<string>) => {
             if (err) {
                 return reject(err);
             }
 
-            // Add each file to the test rtdte.
-            files.forEach(f => rtdte.addFile(path.resolve(testsRoot, f)));
+            // Add each file to the test suite.
+            files.forEach(f => suite.addFile(path.resolve(testsRoot, f)));
 
-            // Run the test rtdte. Uncaught exceptions or a non-zero number of
-            // test rejectures is considered a test rtdte rejecture.
+            // Run the test suite. Uncaught exceptions or a non-zero number of
+            // test rejectures is considered a test suite rejecture.
             try {
-                return rtdte.run(failures => {
+                return suite.run(failures => {
                     if (failures > 0) {
                         reject(new Error(`${failures} tests failed.`));
                     } else {

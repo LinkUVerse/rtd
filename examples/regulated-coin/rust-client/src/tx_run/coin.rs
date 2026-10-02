@@ -15,7 +15,7 @@ use rtd_sdk::types::base_types::{ObjectID, ObjectRef, RtdAddress};
 use rtd_sdk::types::coin::{COIN_MODULE_NAME, COIN_TREASURE_CAP_NAME};
 use rtd_sdk::types::crypto::{Signature, RtdKeyPair};
 use rtd_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_sdk::types::quorum_driver_types::ExecuteTransactionRequestType;
+use rtd_sdk::types::transaction_driver_types::ExecuteTransactionRequestType;
 use rtd_sdk::types::transaction::{Argument, Command, ObjectArg, Transaction, TransactionData};
 use rtd_sdk::types::{RTD_FRAMEWORK_ADDRESS, RTD_FRAMEWORK_PACKAGE_ID};
 use rtd_sdk::RtdClient;

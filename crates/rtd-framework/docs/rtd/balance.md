@@ -23,6 +23,7 @@ custom coins with <code><a href="../rtd/balance.md#rtd_balance_Supply">Supply</a
 -  [Function `send_funds`](#rtd_balance_send_funds)
 -  [Function `redeem_funds`](#rtd_balance_redeem_funds)
 -  [Function `withdraw_funds_from_object`](#rtd_balance_withdraw_funds_from_object)
+-  [Function `settled_funds_value`](#rtd_balance_settled_funds_value)
 -  [Function `create_supply_internal`](#rtd_balance_create_supply_internal)
 -  [Function `create_staking_rewards`](#rtd_balance_create_staking_rewards)
 -  [Function `destroy_storage_rebates`](#rtd_balance_destroy_storage_rebates)
@@ -47,6 +48,7 @@ custom coins with <code><a href="../rtd/balance.md#rtd_balance_Supply">Supply</a
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -489,6 +491,7 @@ accumulator.
 ## Function `withdraw_funds_from_object`
 
 Create a <code>Withdrawal&lt;<a href="../rtd/balance.md#rtd_balance_Balance">Balance</a>&lt;T&gt;&gt;</code> from an object to withdraw funds from it.
+Aborts if <code><a href="../rtd/balance.md#rtd_balance_value">value</a></code> exceeds the funds currently available to <code>obj</code>.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/balance.md#rtd_balance_withdraw_funds_from_object">withdraw_funds_from_object</a>&lt;T&gt;(obj: &<b>mut</b> <a href="../rtd/object.md#rtd_object_UID">rtd::object::UID</a>, <a href="../rtd/balance.md#rtd_balance_value">value</a>: u64): <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_Withdrawal">rtd::funds_accumulator::Withdrawal</a>&lt;<a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;T&gt;&gt;
@@ -502,6 +505,37 @@ Create a <code>Withdrawal&lt;<a href="../rtd/balance.md#rtd_balance_Balance">Bal
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/balance.md#rtd_balance_withdraw_funds_from_object">withdraw_funds_from_object</a>&lt;T&gt;(obj: &<b>mut</b> UID, <a href="../rtd/balance.md#rtd_balance_value">value</a>: u64): Withdrawal&lt;<a href="../rtd/balance.md#rtd_balance_Balance">Balance</a>&lt;T&gt;&gt; {
     <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_withdraw_from_object">rtd::funds_accumulator::withdraw_from_object</a>(obj, <a href="../rtd/balance.md#rtd_balance_value">value</a> <b>as</b> u256)
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_balance_settled_funds_value"></a>
+
+## Function `settled_funds_value`
+
+Read the value of the funds of type T owned by <code><b>address</b></code> as of the beginning of
+the current consensus commit. Can read either address-owned or object-owned balances.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd/balance.md#rtd_balance_settled_funds_value">settled_funds_value</a>&lt;T&gt;(root: &<a href="../rtd/accumulator.md#rtd_accumulator_AccumulatorRoot">rtd::accumulator::AccumulatorRoot</a>, <b>address</b>: <b>address</b>): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd/balance.md#rtd_balance_settled_funds_value">settled_funds_value</a>&lt;T&gt;(root: &<a href="../rtd/accumulator.md#rtd_accumulator_AccumulatorRoot">rtd::accumulator::AccumulatorRoot</a>, <b>address</b>: <b>address</b>): u64 {
+    <b>if</b> (!root.u128_exists&lt;<a href="../rtd/balance.md#rtd_balance_Balance">Balance</a>&lt;T&gt;&gt;(<b>address</b>)) {
+        <b>return</b> 0
+    };
+    <b>let</b> val: u128 = root.u128_read&lt;<a href="../rtd/balance.md#rtd_balance_Balance">Balance</a>&lt;T&gt;&gt;(<b>address</b>);
+    <b>let</b> val = <a href="../std/u128.md#std_u128_min">std::u128::min</a>(<a href="../std/u64.md#std_u64_max_value">std::u64::max_value</a>!() <b>as</b> u128, val);
+    val <b>as</b> u64
 }
 </code></pre>
 

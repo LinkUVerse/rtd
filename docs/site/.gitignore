@@ -12,6 +12,7 @@ open-spec
 .docusaurus
 .cache-loader
 .generated
+.resolved
 
 # Misc
 .DS_Store
@@ -27,7 +28,20 @@ package-lock.json
 .vercel
 .env*.local
 
-# Generated awesome-sui files
-static/awesome-sui/
-src/static/awesome-sui/
+# Generated awesome-rtd files
+static/awesome-rtd/
+src/static/awesome-rtd/
+static/awesome-rtd-gaming/
+src/static/awesome-rtd-gaming/
+static/awesome-rtd/
+
+scripts/.cache/
+
+## Subtrees
 ../docs/subtree/
+
+## locally cloned display preview - should only exist during build
+static/display-preview/
+
+## shared components pulled in from ml-shared-components repo
+src/shared

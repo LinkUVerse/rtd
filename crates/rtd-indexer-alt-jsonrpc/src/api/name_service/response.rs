@@ -2,20 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context as _;
-use diesel::{ExpressionMethods, QueryDsl};
+use diesel::ExpressionMethods;
+use diesel::QueryDsl;
 use futures::future::OptionFuture;
 use rtd_indexer_alt_schema::schema::watermarks;
-use rtd_name_service::{Domain, NameRecord, NameServiceError};
-use rtd_types::{base_types::RtdAddress, dynamic_field::Field};
+use rtd_name_service::Domain;
+use rtd_name_service::NameRecord;
+use rtd_name_service::NameServiceError;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::dynamic_field::Field;
 use tokio::join;
 
-use crate::{
-    context::Context,
-    data::load_live,
-    error::{InternalContext, RpcError, invalid_params},
-};
-
-use super::Error;
+use crate::api::name_service::Error;
+use crate::context::Context;
+use crate::data::load_live;
+use crate::error::InternalContext;
+use crate::error::RpcError;
+use crate::error::invalid_params;
 
 /// Attempt to translate the given RtdNS `name` to its address, as long as the mapping exists,
 /// and it hasn't expired.
@@ -130,9 +133,9 @@ pub(super) async fn resolved_name(
     }
 }
 
-/// Fetch the latest timestamp from the database, based on the watermark for the `obj_info`
-/// pipeline, because we know that the `obj_info` pipeline is being queried as part of address
-/// resolution.
+/// Fetch the latest timestamp from the database, based on the watermark for the `obj_versions`
+/// pipeline, because the `obj_versions` pipeline is used to load the latest object references as
+/// part of address resolution.
 async fn latest_timestamp_ms(ctx: &Context) -> Result<u64, RpcError<Error>> {
     use watermarks::dsl as w;
 
@@ -144,7 +147,7 @@ async fn latest_timestamp_ms(ctx: &Context) -> Result<u64, RpcError<Error>> {
 
     let query = w::watermarks
         .select(w::timestamp_ms_hi_inclusive)
-        .filter(w::pipeline.eq("obj_info"));
+        .filter(w::pipeline.eq("obj_versions"));
 
     let timestamp_ms: i64 = conn
         .first(query)

@@ -1,0 +1,15 @@
+---
+title: RTD Full Node gRPC Messages
+sidebar_label: Messages
+description: Locate RTD Full Node gRPC request and response message definitions in the proto source.
+keywords:
+  - rtd full node
+  - grpc
+  - messages
+---
+
+# RTD Full Node gRPC messages
+
+Request and response messages are defined in the checked-in `temp/rtd-apis/proto/rtd/rpc/v2` source. Use the [forked RTD API proto files](https://github.com/LinkUVerse/rtd-apis/tree/main/proto/rtd/rpc/v2) together with the [service method overview](fullnode-protocol). This checkout does not include a generated `documentation.json` reference, so a field-level table is not displayed here.
+
+When generating a client, pin the proto revision to the RTD node version you deploy and inspect optional and repeated fields in the source definitions. Do not reuse an upstream chain's generated message documentation as an RTD compatibility guarantee.

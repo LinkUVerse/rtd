@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashSet};
-use std::sync::Arc;
 use rtd_types::accumulator_event::AccumulatorEvent;
-use rtd_types::base_types::{FullObjectID, ObjectRef};
+use rtd_types::base_types::FullObjectID;
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents};
 use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::inner_temporary_store::{InnerTemporaryStore, WrittenObjects};
-use rtd_types::storage::{FullObjectKey, InputKey, MarkerValue, ObjectKey};
+use rtd_types::storage::{FullObjectKey, MarkerValue, ObjectKey};
 use rtd_types::transaction::{TransactionData, TransactionDataAPI, VerifiedTransaction};
+use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 /// TransactionOutputs
 #[derive(Debug)]
@@ -19,18 +19,12 @@ pub struct TransactionOutputs {
     pub effects: TransactionEffects,
     pub events: TransactionEvents,
     pub unchanged_loaded_runtime_objects: Vec<ObjectKey>,
-    pub accumulator_events: Mutex<Vec<AccumulatorEvent>>,
+    pub accumulator_events: Mutex<Option<Vec<AccumulatorEvent>>>,
 
     pub markers: Vec<(FullObjectKey, MarkerValue)>,
     pub wrapped: Vec<ObjectKey>,
     pub deleted: Vec<ObjectKey>,
-    pub locks_to_delete: Vec<ObjectRef>,
-    pub new_locks_to_init: Vec<ObjectRef>,
     pub written: WrittenObjects,
-
-    // Temporarily needed to notify TxManager about the availability of objects.
-    // TODO: Remove this once we ship the new ExecutionScheduler.
-    pub output_keys: Vec<InputKey>,
 }
 
 impl TransactionOutputs {
@@ -41,12 +35,10 @@ impl TransactionOutputs {
         inner_temporary_store: InnerTemporaryStore,
         unchanged_loaded_runtime_objects: Vec<ObjectKey>,
     ) -> TransactionOutputs {
-        let output_keys = inner_temporary_store.get_output_keys(&effects);
-
         let InnerTemporaryStore {
             input_objects,
             stream_ended_consensus_objects,
-            mutable_inputs,
+            mutable_inputs: _,
             written,
             events,
             accumulator_events,
@@ -54,6 +46,7 @@ impl TransactionOutputs {
             binary_config: _,
             runtime_packages_loaded_from_db: _,
             lamport_version,
+            accumulator_running_max_withdraws: _,
         } = inner_temporary_store;
 
         let tx_digest = *transaction.digest();
@@ -70,7 +63,7 @@ impl TransactionOutputs {
         // removals from consensus in the marker table. For deleted entries in the marker table we
         // need to make sure we don't accidentally overwrite entries.
         let markers: Vec<_> = {
-            let received = received_objects.clone().map(|objref| {
+            let received = received_objects.map(|objref| {
                 (
                     // TODO: Add support for receiving consensus objects. For now this assumes fastpath.
                     FullObjectKey::new(FullObjectID::new(objref.0, None), objref.1),
@@ -158,25 +151,6 @@ impl TransactionOutputs {
                 .collect()
         };
 
-        let locks_to_delete: Vec<_> = mutable_inputs
-            .into_iter()
-            .filter_map(|(id, ((version, digest), owner))| {
-                owner.is_address_owned().then_some((id, version, digest))
-            })
-            .chain(received_objects)
-            .collect();
-
-        let new_locks_to_init: Vec<_> = written
-            .values()
-            .filter_map(|new_object| {
-                if new_object.is_address_owned() {
-                    Some(new_object.compute_object_reference())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
         let deleted = effects
             .deleted()
             .into_iter()
@@ -191,19 +165,19 @@ impl TransactionOutputs {
             effects,
             events,
             unchanged_loaded_runtime_objects,
-            accumulator_events: Mutex::new(accumulator_events),
+            accumulator_events: Mutex::new(Some(accumulator_events)),
             markers,
             wrapped,
             deleted,
-            locks_to_delete,
-            new_locks_to_init,
             written,
-            output_keys,
         }
     }
 
     pub fn take_accumulator_events(&self) -> Vec<AccumulatorEvent> {
-        std::mem::take(&mut *self.accumulator_events.lock())
+        self.accumulator_events
+            .lock()
+            .take()
+            .expect("take_accumulator_events called twice")
     }
 
     #[cfg(test)]
@@ -213,14 +187,11 @@ impl TransactionOutputs {
             effects,
             events: TransactionEvents { data: vec![] },
             unchanged_loaded_runtime_objects: vec![],
-            accumulator_events: Default::default(),
+            accumulator_events: Mutex::new(Some(vec![])),
             markers: vec![],
             wrapped: vec![],
             deleted: vec![],
-            locks_to_delete: vec![],
-            new_locks_to_init: vec![],
             written: WrittenObjects::new(),
-            output_keys: vec![],
         }
     }
 }
@@ -238,7 +209,7 @@ pub fn unchanged_loaded_runtime_objects(
         .collect();
 
     // Remove any object that is referenced in the changed objects effects set since it would be
-    // redundent to include it again.
+    // redundant to include it again.
     for change in effects.object_changes() {
         unchanged_loaded_runtime_objects.remove(&change.id);
     }

@@ -6,16 +6,21 @@
 //! tracing is enabled or not to make sure that any errors coming from these functions only manifest itself
 //! when tracing is enabled.
 
-use crate::static_programmable_transactions::{
-    execution::context::{Context, CtxValue},
-    typing::ast::{Command__, Commands, Type},
+use crate::{
+    execution_mode::ExecutionMode,
+    static_programmable_transactions::{
+        execution::context::{Context, CtxValue},
+        loading::ast::DeserializedPackage,
+        typing::ast::{Command__, Commands, Type},
+    },
 };
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::{annotated_value as A, language_storage::TypeTag};
 use move_trace_format::{
     format::{Effect, MoveTraceBuilder, RefType, TraceEvent, TypeTagWithRefs},
     value::{SerializableMoveValue, SimplifiedMoveStruct},
 };
-use move_vm_types::values::Value as VMValue;
+use move_vm_runtime::execution::values::Value as VMValue;
 use rtd_types::{
     error::ExecutionError,
     ptb_trace::{
@@ -24,13 +29,17 @@ use rtd_types::{
 };
 use rtd_verifier::INIT_FN_NAME;
 
+// External trace events are serialized with `serde_json::value::to_raw_value` (the streaming
+// serializer) rather than `serde_json::json!`/`to_value`, so that integer values outside
+// `serde_json::Number`'s range (e.g. `u128`, `u256`) are preserved exactly instead of panicking.
+
 /// Inserts Move call start event into the trace. As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
 pub fn trace_move_call_start(trace_builder_opt: &mut Option<MoveTraceBuilder>) {
     if let Some(trace_builder) = trace_builder_opt {
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::MoveCallStart
-        ))));
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::MoveCallStart).unwrap(),
+        ));
     }
 }
 
@@ -38,23 +47,23 @@ pub fn trace_move_call_start(trace_builder_opt: &mut Option<MoveTraceBuilder>) {
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
 pub fn trace_move_call_end(trace_builder_opt: &mut Option<MoveTraceBuilder>) {
     if let Some(trace_builder) = trace_builder_opt {
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::MoveCallEnd
-        ))));
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::MoveCallEnd).unwrap(),
+        ));
     }
 }
 
 /// Inserts transfer event into the trace. As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
-pub fn trace_transfer(
-    context: &mut Context,
+pub fn trace_transfer<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
     values: &[CtxValue],
     tys: &[Type],
-) -> Result<(), ExecutionError> {
+) -> Result<(), Mode::Error> {
     if let Some(trace_builder) = trace_builder_opt {
         let mut to_transfer = vec![];
-        for (idx, (v, ty)) in values.iter().zip(tys).enumerate() {
+        for (idx, (v, ty)) in values.iter().zip_debug_eq(tys).enumerate() {
             let tag = adapter_type_to_type_tag_with_refs(ty)?;
             let layout = annotated_type_layout_for_adapter_ty(context, ty)?;
             let value = serializable_move_value_from_ctx_value(v, &layout)?;
@@ -63,24 +72,25 @@ pub fn trace_transfer(
                 info: ExtMoveValueInfo { type_: tag, value },
             });
         }
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::ExternalEvent(ExternalEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::ExternalEvent(ExternalEvent {
                 description: "TransferObjects: obj0...objN => ()".to_string(),
                 name: "Transfer".to_string(),
                 values: to_transfer,
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
     Ok(())
 }
 
 /// Inserts PTB summary event into the trace. As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
-pub fn trace_ptb_summary(
-    context: &mut Context,
+pub fn trace_ptb_summary<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
     commands: &Commands,
-) -> Result<(), ExecutionError> {
+) -> Result<(), Mode::Error> {
     if let Some(trace_builder) = trace_builder_opt {
         let events = commands
             .iter()
@@ -88,10 +98,10 @@ pub fn trace_ptb_summary(
                 Command__::MoveCall(move_call) => {
                     let pkg = move_call
                         .function
-                        .storage_id
+                        .version_mid
                         .address()
                         .to_canonical_string(/*with_prefix*/ true);
-                    let module = move_call.function.storage_id.name().to_string();
+                    let module = move_call.function.version_mid.name().to_string();
                     let function = move_call.function.name.to_string();
                     Ok(vec![PTBCommandInfo::MoveCall {
                         pkg,
@@ -108,13 +118,16 @@ pub fn trace_ptb_summary(
                 Command__::MergeCoins(..) => Ok(vec![PTBCommandInfo::ExternalEvent(
                     "MergeCoins".to_string(),
                 )]),
-                Command__::Publish(module_bytes, _, _) => {
+                Command__::Publish(payload, dep_ids, _) => {
                     let mut events = vec![];
                     events.push(PTBCommandInfo::ExternalEvent("Publish".to_string()));
                     // Not ideal but it only runs when tracing is enabled so overhead
                     // should be insignificant
-                    let modules = context.deserialize_modules(module_bytes, false)?;
-                    events.extend(modules.into_iter().find_map(|m| {
+                    let DeserializedPackage {
+                        deserialized_modules,
+                        ..
+                    } = context.deserialize_package(payload.clone(), dep_ids)?;
+                    events.extend(deserialized_modules.into_iter().find_map(|m| {
                         for fdef in &m.function_defs {
                             let fhandle = m.function_handle_at(fdef.function);
                             let fname = m.identifier_at(fhandle.name);
@@ -137,16 +150,17 @@ pub fn trace_ptb_summary(
                     Ok(vec![PTBCommandInfo::ExternalEvent("Upgrade".to_string())])
                 }
             })
-            .collect::<Result<Vec<Vec<PTBCommandInfo>>, ExecutionError>>()?
+            .collect::<Result<Vec<Vec<PTBCommandInfo>>, Mode::Error>>()?
             .into_iter()
             .flatten()
             .collect();
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::Summary(SummaryEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::Summary(SummaryEvent {
                 name: "PTBSummary".to_string(),
                 events,
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
 
     Ok(())
@@ -154,14 +168,14 @@ pub fn trace_ptb_summary(
 
 /// Inserts split coins event into the trace. As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
-pub fn trace_split_coins(
-    context: &mut Context,
+pub fn trace_split_coins<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
     coin_type: &Type,
     input_coin: Vec<ExtMoveValueInfo>,
     split_coin_values: &[CtxValue],
     total_split_value: u64,
-) -> Result<(), ExecutionError> {
+) -> Result<(), Mode::Error> {
     if let Some(trace_builder) = trace_builder_opt {
         let type_tag_with_refs = adapter_type_to_type_tag_with_refs(coin_type)?;
         let layout = annotated_type_layout_for_adapter_ty(context, coin_type)?;
@@ -179,36 +193,37 @@ pub fn trace_split_coins(
             current_balance.saturating_sub(total_split_value)
         })?;
 
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::ExternalEvent(ExternalEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::ExternalEvent(ExternalEvent {
                 description: "SplitCoins: input => result".to_string(),
                 name: "SplitCoins".to_string(),
                 values: vec![
                     ExtMoveValue::Single {
                         name: "input".to_string(),
-                        info: input
+                        info: input,
                     },
                     ExtMoveValue::Vector {
                         name: "result".to_string(),
                         type_: type_tag_with_refs.clone(),
-                        value: split_coin_move_values
+                        value: split_coin_move_values,
                     },
                 ],
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
     Ok(())
 }
 
 /// Inserts merge coins event into the trace. As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
-pub fn trace_merge_coins(
-    _context: &mut Context,
+pub fn trace_merge_coins<Mode: ExecutionMode>(
+    _context: &mut Context<Mode>,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
     _coin_type: &Type,
     mut trace_values: Vec<ExtMoveValueInfo>,
     total_merged_value: u64,
-) -> Result<(), ExecutionError> {
+) -> Result<(), Mode::Error> {
     if let Some(trace_builder) = trace_builder_opt {
         if trace_values.is_empty() {
             invariant_violation!("Missing destination coin for tracing `MergeCoins`");
@@ -234,25 +249,26 @@ pub fn trace_merge_coins(
             name: "merge_result".to_string(),
             info: target_coin_resulting_state,
         });
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::ExternalEvent(ExternalEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::ExternalEvent(ExternalEvent {
                 description: "MergeCoins: merge_target, coin0...coinN => mergeresult".to_string(),
                 name: "MergeCoins".to_string(),
                 values,
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
     Ok(())
 }
 
 /// Inserts make move vec event into the trace. As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
-pub fn trace_make_move_vec(
-    context: &mut Context,
+pub fn trace_make_move_vec<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
     values: &[CtxValue],
     type_: &Type,
-) -> Result<(), ExecutionError> {
+) -> Result<(), Mode::Error> {
     if let Some(trace_builder) = trace_builder_opt {
         let type_tag_with_refs = adapter_type_to_type_tag_with_refs(type_)?;
         let layout = annotated_type_layout_for_adapter_ty(context, type_)?;
@@ -260,8 +276,8 @@ pub fn trace_make_move_vec(
             .iter()
             .map(|ctx_value| serializable_move_value_from_ctx_value(ctx_value, &layout))
             .collect::<Result<_, _>>()?;
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::ExternalEvent(ExternalEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::ExternalEvent(ExternalEvent {
                 description: "MakeMoveVec: vector".to_string(),
                 name: "MakeMoveVec".to_string(),
                 values: vec![ExtMoveValue::Vector {
@@ -269,8 +285,9 @@ pub fn trace_make_move_vec(
                     type_: type_tag_with_refs,
                     value: values,
                 }],
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
     Ok(())
 }
@@ -281,13 +298,14 @@ pub fn trace_publish_event(
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
 ) -> Result<(), ExecutionError> {
     if let Some(trace_builder) = trace_builder_opt {
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::ExternalEvent(ExternalEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::ExternalEvent(ExternalEvent {
                 description: "Publish: ()".to_string(),
                 name: "Publish".to_string(),
                 values: vec![],
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
     Ok(())
 }
@@ -298,13 +316,14 @@ pub fn trace_upgrade_event(
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
 ) -> Result<(), ExecutionError> {
     if let Some(trace_builder) = trace_builder_opt {
-        trace_builder.push_event(TraceEvent::External(Box::new(serde_json::json!(
-            PTBEvent::ExternalEvent(ExternalEvent {
+        trace_builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&PTBEvent::ExternalEvent(ExternalEvent {
                 description: "Upgrade: ()".to_string(),
                 name: "Upgrade".to_string(),
                 values: vec![],
-            })
-        ))));
+            }))
+            .map_err(|e| make_invariant_violation!("Failed to serialize PTB trace event: {}", e))?,
+        ));
     }
     Ok(())
 }
@@ -320,13 +339,13 @@ pub fn trace_execution_error(trace_builder_opt: &mut Option<MoveTraceBuilder>, m
 /// Adds `ExtMoveValueInfo` to the mutable vector passed as an argument.
 /// As is the case for all other public functions in this module,
 /// its body is (and must be) enclosed in an if statement checking if tracing is enabled.
-pub fn add_move_value_info_from_ctx_value(
-    context: &mut Context,
+pub fn add_move_value_info_from_ctx_value<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
     move_values: &mut Vec<ExtMoveValueInfo>,
     type_: &Type,
     value: &CtxValue,
-) -> Result<(), ExecutionError> {
+) -> Result<(), Mode::Error> {
     if trace_builder_opt.is_some()
         && let Some(move_value_info) = move_value_info_from_ctx_value(context, type_, value)?
     {
@@ -336,35 +355,27 @@ pub fn add_move_value_info_from_ctx_value(
 }
 
 /// Creates `ExtMoveValueInfo` from `Value`.
-fn move_value_info_from_ctx_value(
-    context: &mut Context,
+fn move_value_info_from_ctx_value<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     type_: &Type,
     value: &CtxValue,
-) -> Result<Option<ExtMoveValueInfo>, ExecutionError> {
+) -> Result<Option<ExtMoveValueInfo>, Mode::Error> {
     let layout = annotated_type_layout_for_adapter_ty(context, type_)?;
     let value = serializable_move_value_from_ctx_value(value, &layout)?;
     let type_ = adapter_type_to_type_tag_with_refs(type_)?;
     Ok(Some(ExtMoveValueInfo { type_, value }))
 }
 
-fn annotated_type_layout_for_adapter_ty(
-    context: &mut Context,
+fn annotated_type_layout_for_adapter_ty<Mode: ExecutionMode>(
+    context: &mut Context<Mode>,
     type_: &Type,
-) -> Result<A::MoveTypeLayout, ExecutionError> {
-    let ty = context
-        .env
-        .load_vm_type_argument_from_adapter_type(0, type_)?;
-    context
-        .env
-        .vm
-        .get_runtime()
-        .type_to_fully_annotated_layout(&ty)
-        .map_err(|e| {
-            make_invariant_violation!(
-                "Failed to get annotated type layout for adapter type: {}",
-                e
-            )
-        })
+) -> Result<A::MoveTypeLayout, Mode::Error> {
+    Ok(context.env.fully_annotated_layout(type_).map_err(|e| {
+        make_invariant_violation!(
+            "Failed to get annotated type layout for adapter type: {}",
+            e
+        )
+    })?)
 }
 
 /// Creates a `SerializableMoveValue` (a Move value for the trace format) from a `CtxValue` and a
@@ -373,7 +384,7 @@ fn serializable_move_value_from_ctx_value(
     value: &CtxValue,
     annotated_layout: &A::MoveTypeLayout,
 ) -> Result<SerializableMoveValue, ExecutionError> {
-    VMValue::as_annotated_move_value_for_tracing_only(
+    VMValue::as_annotated_move_value(
         value.inner_for_tracing().inner_for_tracing(),
         annotated_layout,
     )

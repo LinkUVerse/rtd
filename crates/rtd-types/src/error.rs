@@ -6,14 +6,14 @@ use crate::{
     base_types::*,
     committee::{Committee, EpochId, StakeUnit},
     digests::CheckpointContentsDigest,
-    execution_status::CommandArgumentError,
+    execution_status::{CommandArgumentError, CommandIndex, ExecutionErrorKind, ExecutionFailure},
     messages_checkpoint::CheckpointSequenceNumber,
     object::Owner,
 };
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{collections::BTreeMap, fmt::Debug, slice::SliceIndex};
 use strum_macros::{AsRefStr, IntoStaticStr};
 use thiserror::Error;
 use tonic::Status;
@@ -37,8 +37,6 @@ macro_rules! fp_ensure {
         }
     };
 }
-use crate::execution_status::{CommandIndex, ExecutionFailureStatus};
-pub(crate) use fp_ensure;
 
 #[macro_export]
 macro_rules! exit_main {
@@ -80,6 +78,72 @@ macro_rules! assert_invariant {
     }};
 }
 
+/// A helper macro for performing a checked cast from one type to another, returning a
+/// ExecutionError invariant violation if the cast fails.
+#[macro_export]
+macro_rules! checked_as {
+    ($value:expr, $target_type:ty) => {{
+        let v = $value;
+        <$target_type>::try_from(v).map_err(|e| {
+            $crate::make_invariant_violation!(
+                "Value {} cannot be safely cast to {}: {:?}",
+                v,
+                stringify!($target_type),
+                e
+            )
+        })
+    }};
+}
+
+/// A trait for safe indexing into collections that returns a ExecutionError as long as the
+/// collection implements `AsRef<[T]>`.
+/// This is useful for avoiding panics on out-of-bounds access, and instead returning a proper
+/// error.
+pub trait SafeIndex<T> {
+    /// Get a reference to the element at the given `index`, or return invariant violation error
+    /// if the index is out of bounds.
+    fn safe_get<'a, I>(&'a self, index: I) -> Result<&'a I::Output, ExecutionError>
+    where
+        I: SliceIndex<[T]>,
+        T: 'a;
+
+    /// Get a mutable reference to the element at the given `index`, or return invariant violation
+    /// error if the index is out of bounds.
+    fn safe_get_mut<'a, I>(&'a mut self, index: I) -> Result<&'a mut I::Output, ExecutionError>
+    where
+        I: SliceIndex<[T]>,
+        T: 'a;
+}
+
+impl<T, C> SafeIndex<T> for C
+where
+    C: AsRef<[T]> + AsMut<[T]>,
+{
+    fn safe_get<'a, I>(&'a self, index: I) -> Result<&'a I::Output, ExecutionError>
+    where
+        I: SliceIndex<[T]>,
+        T: 'a,
+    {
+        let slice = self.as_ref();
+        let len = slice.len();
+        slice.get(index).ok_or_else(|| {
+            crate::make_invariant_violation!("Index out of bounds for collection of length {}", len)
+        })
+    }
+
+    fn safe_get_mut<'a, I>(&'a mut self, index: I) -> Result<&'a mut I::Output, ExecutionError>
+    where
+        I: SliceIndex<[T]>,
+        T: 'a,
+    {
+        let slice = self.as_mut();
+        let len = slice.len();
+        slice.get_mut(index).ok_or_else(|| {
+            crate::make_invariant_violation!("Index out of bounds for collection of length {}", len)
+        })
+    }
+}
+
 #[derive(
     Eq, PartialEq, Clone, Debug, Serialize, Deserialize, Error, Hash, AsRefStr, IntoStaticStr,
 )]
@@ -98,7 +162,7 @@ pub enum UserInputError {
         version: Option<SequenceNumber>,
     },
     #[error(
-        "Object ID {} Version {} Digest {} is not available for consumption, current version: {current_version}",
+        "Transaction needs to be rebuilt because object {} version {} ({}) is unavailable for consumption, current version: {current_version}",
         .provided_obj_ref.0, .provided_obj_ref.1, .provided_obj_ref.2
     )]
     ObjectVersionUnavailableForConsumption {
@@ -258,6 +322,15 @@ pub enum UserInputError {
     #[error("Commands following a command with Random can only be TransferObjects or MergeCoins")]
     PostRandomCommandRestrictions,
 
+    #[error(
+        "Invalid argument at command {command_idx}, argument {argument_idx}: index {index} is out of bounds"
+    )]
+    InvalidArgumentIndex {
+        command_idx: usize,
+        argument_idx: usize,
+        index: u16,
+    },
+
     // Soft Bundle related errors
     #[error("Number of transactions ({size}) exceeds the maximum allowed ({limit}) in a batch")]
     TooManyTransactionsInBatch { size: usize, limit: u64 },
@@ -305,6 +378,9 @@ pub enum UserInputError {
 
     #[error("Transaction {digest} appears more than once in the request")]
     RepeatedTransactions { digest: TransactionDigest },
+
+    #[error("Validator {proposer} is not an allowed proposer of this transaction")]
+    ProposerNotAllowed { proposer: u32 },
 }
 
 #[derive(
@@ -367,15 +443,6 @@ pub enum RtdErrorKind {
 
     #[error("There are too many transactions pending in consensus")]
     TooManyTransactionsPendingConsensus,
-
-    #[error("Transaction {digest} is being processed: {status}")]
-    TransactionProcessing {
-        digest: TransactionDigest,
-        status: String,
-    },
-
-    #[error("Transaction {digest} has been recently submitted to this validator")]
-    TransactionSubmitted { digest: TransactionDigest },
 
     #[error(
         "Input {object_id} already has {queue_len} transactions pending, above threshold of {threshold}"
@@ -746,6 +813,37 @@ pub enum RtdErrorKind {
         "The current set of aliases for a required signer changed after the transaction was submitted"
     )]
     AliasesChanged,
+
+    // Retriable by client because another validator can create the correct claim.
+    #[error("Object {object_id} not found among input objects.")]
+    ImmutableObjectClaimNotFoundInInput { object_id: ObjectID },
+
+    // Retriable by client because another validator can create the correct claim.
+    #[error("Immutable object {object_id} was not included in immutable claims.")]
+    ImmutableObjectNotClaimed { object_id: ObjectID },
+
+    // Retriable by client because the object can be frozen in the future.
+    #[error(
+        "Claimed object {claimed_object_id} is not immutable. Found object ref: {found_object_ref:?}"
+    )]
+    InvalidImmutableObjectClaim {
+        claimed_object_id: ObjectID,
+        found_object_ref: ObjectRef,
+    },
+
+    #[error(
+        "Transaction was outbid by higher-gas-price transactions in the admission queue (current minimum gas price required: {min_gas_price})"
+    )]
+    TransactionRejectedDueToOutbiddingDuringCongestion { min_gas_price: u64 },
+
+    #[error("Transaction {digest} is being processed post-consensus: {status}")]
+    TransactionProcessing {
+        digest: TransactionDigest,
+        status: String,
+    },
+
+    #[error("Transaction {digest} has been recently submitted to this validator.")]
+    TransactionSubmitted { digest: TransactionDigest },
 }
 
 #[repr(u64)]
@@ -771,6 +869,7 @@ pub enum VMMemoryLimitExceededSubStatusCode {
     OBJECT_RUNTIME_CACHE_LIMIT_EXCEEDED = 5,
     OBJECT_RUNTIME_STORE_LIMIT_EXCEEDED = 6,
     TOTAL_EVENT_SIZE_LIMIT_EXCEEDED = 7,
+    SCRATCH_SIZE_LIMIT_EXCEEDED = 8,
 }
 
 pub type RtdResult<T = ()> = Result<T, RtdError>;
@@ -967,7 +1066,12 @@ impl RtdErrorKind {
             RtdErrorKind::TooManyTransactionsPendingOnObject { .. } => true,
             RtdErrorKind::TooOldTransactionPendingOnObject { .. } => true,
             RtdErrorKind::TooManyTransactionsPendingConsensus => true,
+            RtdErrorKind::TransactionRejectedDueToOutbiddingDuringCongestion { .. } => true,
             RtdErrorKind::ValidatorOverloadedRetryAfter { .. } => true,
+
+            // The transaction is already being processed by consensus, so a fresh
+            // submission is pointless. The client should retry by waiting for effects
+            // rather than resubmitting.
             RtdErrorKind::TransactionProcessing { .. } => true,
             RtdErrorKind::TransactionSubmitted { .. } => true,
 
@@ -1011,6 +1115,7 @@ impl RtdErrorKind {
                 | RtdErrorKind::TooManyTransactionsPendingOnObject { .. }
                 | RtdErrorKind::TooOldTransactionPendingOnObject { .. }
                 | RtdErrorKind::TooManyTransactionsPendingConsensus
+                | RtdErrorKind::TransactionRejectedDueToOutbiddingDuringCongestion { .. }
         )
     }
 
@@ -1060,6 +1165,7 @@ impl RtdErrorKind {
             | RtdErrorKind::TooManyTransactionsPendingOnObject { .. }
             | RtdErrorKind::TooOldTransactionPendingOnObject { .. }
             | RtdErrorKind::TooManyTransactionsPendingConsensus
+            | RtdErrorKind::TransactionRejectedDueToOutbiddingDuringCongestion { .. }
             | RtdErrorKind::ValidatorOverloadedRetryAfter { .. } => {
                 ErrorCategory::ValidatorOverloaded
             }
@@ -1090,9 +1196,46 @@ impl std::fmt::Debug for RtdError {
     }
 }
 
-type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+pub type ExecutionErrorMetadata = BTreeMap<String, String>;
 
-pub type ExecutionErrorKind = ExecutionFailureStatus;
+/// A trait for execution errors that provides common methods for accessing error information and creating new errors.
+pub trait ExecutionErrorTrait:
+    From<ExecutionError> + Debug + std::error::Error + Send + Sync + Sized + 'static
+{
+    fn new(
+        failure: ExecutionFailure,
+        source: Option<BoxError>,
+        metadata: ExecutionErrorMetadata,
+    ) -> Self;
+
+    fn from_execution_failure(failure: ExecutionFailure) -> Self {
+        Self::new(failure, None, ExecutionErrorMetadata::default())
+    }
+
+    fn from_kind(kind: ExecutionErrorKind) -> Self {
+        Self::from_execution_failure(ExecutionFailure::new(kind, None))
+    }
+
+    fn new_with_source<E>(kind: ExecutionErrorKind, source: E) -> Self
+    where
+        E: Into<BoxError>,
+    {
+        Self::new(
+            ExecutionFailure::new(kind, None),
+            Some(source.into()),
+            ExecutionErrorMetadata::default(),
+        )
+    }
+
+    fn with_command_index(self, command: CommandIndex) -> Self;
+    fn kind(&self) -> &ExecutionErrorKind;
+    fn command(&self) -> Option<CommandIndex>;
+
+    fn to_execution_failure(&self) -> ExecutionFailure {
+        ExecutionFailure::new(self.kind().clone(), self.command())
+    }
+}
 
 #[derive(Debug)]
 pub struct ExecutionError {
@@ -1122,7 +1265,7 @@ impl ExecutionError {
     }
 
     pub fn invariant_violation<E: Into<BoxError>>(source: E) -> Self {
-        Self::new_with_source(ExecutionFailureStatus::InvariantViolation, source)
+        Self::new_with_source(ExecutionErrorKind::InvariantViolation, source)
     }
 
     pub fn with_command_index(mut self, command: CommandIndex) -> Self {
@@ -1146,8 +1289,156 @@ impl ExecutionError {
         &self.inner.source
     }
 
-    pub fn to_execution_status(&self) -> (ExecutionFailureStatus, Option<CommandIndex>) {
+    pub fn to_execution_status(&self) -> (ExecutionErrorKind, Option<CommandIndex>) {
         (self.kind().clone(), self.command())
+    }
+}
+
+impl ExecutionErrorTrait for ExecutionError {
+    fn new(
+        failure: ExecutionFailure,
+        source: Option<BoxError>,
+        _metadata: ExecutionErrorMetadata,
+    ) -> Self {
+        let ExecutionFailure { error, command } = failure;
+        let err = ExecutionError::new(error, source);
+        if let Some(command) = command {
+            err.with_command_index(command)
+        } else {
+            err
+        }
+    }
+
+    fn with_command_index(self, command: CommandIndex) -> Self {
+        self.with_command_index(command)
+    }
+
+    fn kind(&self) -> &ExecutionErrorKind {
+        self.kind()
+    }
+
+    fn command(&self) -> Option<CommandIndex> {
+        self.command()
+    }
+}
+
+#[derive(Debug)]
+pub struct ExecutionErrorContext {
+    kind: ExecutionErrorKind,
+    metadata: ExecutionErrorMetadata,
+    source: Option<BoxError>,
+    command: Option<CommandIndex>,
+}
+
+impl ExecutionErrorContext {
+    pub fn kind(&self) -> &ExecutionErrorKind {
+        &self.kind
+    }
+
+    pub fn command(&self) -> Option<CommandIndex> {
+        self.command
+    }
+
+    pub fn metadata_with_source(&self) -> Option<ExecutionErrorMetadata> {
+        let mut metadata = self.metadata.clone();
+        if let Some(source) = self.source.as_ref() {
+            metadata.insert("source".to_string(), source.to_string());
+        }
+
+        (!metadata.is_empty()).then_some(metadata)
+    }
+
+    pub fn to_execution_status(&self) -> (ExecutionErrorKind, Option<CommandIndex>) {
+        (self.kind().clone(), self.command())
+    }
+}
+
+impl ExecutionErrorTrait for ExecutionErrorContext {
+    fn new(
+        failure: ExecutionFailure,
+        source: Option<BoxError>,
+        metadata: ExecutionErrorMetadata,
+    ) -> Self {
+        let ExecutionFailure { error, command } = failure;
+        Self {
+            kind: error,
+            metadata,
+            source,
+            command,
+        }
+    }
+
+    fn with_command_index(self, command: CommandIndex) -> Self {
+        Self {
+            command: Some(command),
+            ..self
+        }
+    }
+
+    fn kind(&self) -> &ExecutionErrorKind {
+        self.kind()
+    }
+
+    fn command(&self) -> Option<CommandIndex> {
+        self.command()
+    }
+}
+
+impl std::fmt::Display for ExecutionErrorContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ExecutionErrorContext: {:?}", self)
+    }
+}
+
+impl std::error::Error for ExecutionErrorContext {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.as_deref().map(|e| e as _)
+    }
+}
+
+impl From<ExecutionErrorKind> for ExecutionErrorContext {
+    fn from(kind: ExecutionErrorKind) -> Self {
+        <Self as ExecutionErrorTrait>::from_kind(kind)
+    }
+}
+
+impl From<ExecutionFailure> for ExecutionErrorContext {
+    fn from(value: ExecutionFailure) -> Self {
+        <Self as ExecutionErrorTrait>::from_execution_failure(value)
+    }
+}
+
+impl From<ExecutionError> for ExecutionErrorContext {
+    fn from(value: ExecutionError) -> Self {
+        let ExecutionError { inner } = value;
+        let ExecutionErrorInner {
+            kind,
+            source,
+            command,
+        } = *inner;
+        Self {
+            kind,
+            metadata: BTreeMap::new(),
+            source,
+            command,
+        }
+    }
+}
+
+impl From<ExecutionErrorContext> for ExecutionError {
+    fn from(value: ExecutionErrorContext) -> Self {
+        let ExecutionErrorContext {
+            kind,
+            metadata: _,
+            source,
+            command,
+        } = value;
+        let err = ExecutionError::new(kind, source);
+        if let Some(command) = command {
+            err.with_command_index(command)
+        } else {
+            err
+        }
     }
 }
 
@@ -1166,6 +1457,12 @@ impl std::error::Error for ExecutionError {
 impl From<ExecutionErrorKind> for ExecutionError {
     fn from(kind: ExecutionErrorKind) -> Self {
         Self::from_kind(kind)
+    }
+}
+
+impl From<ExecutionFailure> for ExecutionError {
+    fn from(value: ExecutionFailure) -> Self {
+        <Self as ExecutionErrorTrait>::from_execution_failure(value)
     }
 }
 

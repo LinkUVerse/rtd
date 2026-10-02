@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::FileCompression;
-use crate::reader::StateSnapshotReaderV1;
+use crate::reader::{StateAccumulatorSender, StateSnapshotReaderV1};
 use crate::uploader::StateSnapshotUploader;
 use crate::writer::StateSnapshotWriterV1;
 use fastcrypto::hash::MultisetHash;
@@ -10,9 +10,6 @@ use futures::StreamExt;
 use futures::future::AbortHandle;
 use indicatif::MultiProgress;
 use prometheus::Registry;
-use std::collections::HashSet;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
 use rtd_core::checkpoints::CheckpointStore;
@@ -23,7 +20,11 @@ use rtd_types::base_types::ObjectID;
 use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::messages_checkpoint::ECMHLiveObjectSetDigest;
 use rtd_types::object::Object;
+use std::collections::HashSet;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
 use tempfile::tempdir;
+use tokio::sync::{mpsc, oneshot};
 
 fn temp_dir() -> std::path::PathBuf {
     tempdir()
@@ -118,13 +119,36 @@ async fn test_snapshot_basic() -> Result<(), anyhow::Error> {
         MultiProgress::new(),
         false, // skip_reset_local_store
         3,     // max_retries
+        8,     // num_parallel_chunks
     )
     .await?;
-    let restored_perpetual_db = AuthorityPerpetualTables::open(&restored_db_path, None, None);
+    let restored_perpetual_db = Arc::new(AuthorityPerpetualTables::open(
+        &restored_db_path,
+        None,
+        None,
+    ));
     let (_abort_handle, abort_registration) = AbortHandle::new_pair();
+    let (partials_sender, mut partials_receiver) = mpsc::channel(1);
+    let (completion_sender, completion_receiver) = oneshot::channel();
+    let accumulator = tokio::spawn(async move {
+        let mut num_objects = 0;
+        while let Some((_, partial_num_objects)) = partials_receiver.recv().await {
+            num_objects += partial_num_objects;
+        }
+        num_objects
+    });
     snapshot_reader
-        .read(&restored_perpetual_db, abort_registration, None)
+        .read(
+            restored_perpetual_db.clone(),
+            abort_registration,
+            Some(StateAccumulatorSender {
+                partials: partials_sender,
+                completion: completion_sender,
+            }),
+        )
         .await?;
+    completion_receiver.await?;
+    assert_eq!(accumulator.await?, 1000);
     compare_live_objects(&perpetual_db, &restored_perpetual_db, true)?;
     Ok(())
 }
@@ -174,12 +198,17 @@ async fn test_snapshot_empty_db() -> Result<(), anyhow::Error> {
         MultiProgress::new(),
         false, // skip_reset_local_store
         3,     // max_retries
+        8,     // num_parallel_chunks
     )
     .await?;
-    let restored_perpetual_db = AuthorityPerpetualTables::open(&restored_db_path, None, None);
+    let restored_perpetual_db = Arc::new(AuthorityPerpetualTables::open(
+        &restored_db_path,
+        None,
+        None,
+    ));
     let (_abort_handle, abort_registration) = AbortHandle::new_pair();
     snapshot_reader
-        .read(&restored_perpetual_db, abort_registration, None)
+        .read(restored_perpetual_db.clone(), abort_registration, None)
         .await?;
     compare_live_objects(
         &perpetual_db,
@@ -203,7 +232,9 @@ async fn test_archive_epoch_if_needed() -> Result<(), anyhow::Error> {
 
     let checkpoint_store = CheckpointStore::new_for_tests();
     let registry = Registry::new();
-    let chain_identifier = rtd_types::digests::get_testnet_chain_identifier();
+    let chain_identifier = rtd_types::digests::ChainIdentifier::from(
+        rtd_types::digests::CheckpointDigest::new([0xA5; 32]),
+    );
 
     let uploader = StateSnapshotUploader::new(
         &db_checkpoint_path,
@@ -301,12 +332,17 @@ async fn test_snapshot_restore_from_archive() -> Result<(), anyhow::Error> {
         MultiProgress::new(),
         false, // skip_reset_local_store
         3,     // max_retries
+        8,     // num_parallel_chunks
     )
     .await?;
-    let restored_perpetual_db = AuthorityPerpetualTables::open(&restored_db_path, None, None);
+    let restored_perpetual_db = Arc::new(AuthorityPerpetualTables::open(
+        &restored_db_path,
+        None,
+        None,
+    ));
     let (_abort_handle, abort_registration) = AbortHandle::new_pair();
     snapshot_reader
-        .read(&restored_perpetual_db, abort_registration, None)
+        .read(restored_perpetual_db.clone(), abort_registration, None)
         .await?;
     compare_live_objects(&perpetual_db, &restored_perpetual_db, true)?;
     Ok(())

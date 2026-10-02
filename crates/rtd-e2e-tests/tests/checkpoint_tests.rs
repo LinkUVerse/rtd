@@ -1,12 +1,8 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use linku_common::ZipDebugEqIteratorExt;
 use linku_common::register_debug_fatal_handler;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
 use rtd_macros::register_fail_point_arg;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
@@ -16,6 +12,11 @@ use rtd_types::address_alias::get_address_alias_state_obj_initial_shared_version
 use rtd_types::base_types::AuthorityName;
 use rtd_types::transaction::{Argument, CallArg, Command, ObjectArg};
 use rtd_types::{RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tokio::time::sleep;
 use tracing::info;
@@ -87,6 +88,7 @@ async fn test_checkpoint_split_brain() {
                 String,
             >::new())),
             1.0f32, // fork_probability
+            false,  // executor_path_only
         ))
     });
 
@@ -213,14 +215,18 @@ async fn test_checkpoint_fork_detection_storage() {
         );
 
         checkpoint_store
-            .record_checkpoint_fork_detected(fork_seq, fork_digest)
+            .record_checkpoint_fork_detected(
+                fork_seq,
+                fork_digest,
+                Some(CheckpointDigest::random()),
+            )
             .expect("Failed to record checkpoint fork");
 
         let retrieved = checkpoint_store.get_checkpoint_fork_detected().unwrap();
         assert!(retrieved.is_some());
-        let (retrieved_seq, retrieved_digest) = retrieved.unwrap();
-        assert_eq!(retrieved_seq, fork_seq);
-        assert_eq!(retrieved_digest, fork_digest);
+        let fork_info = retrieved.unwrap();
+        assert_eq!(fork_info.checkpoint_seq, fork_seq);
+        assert_eq!(fork_info.checkpoint_digest, fork_digest);
 
         checkpoint_store.clear_checkpoint_fork_detected().unwrap();
         let retrieved_after_clear = checkpoint_store.get_checkpoint_fork_detected().unwrap();
@@ -418,7 +424,7 @@ async fn test_checkpoint_contents_v2_alias_versions() {
             "Both transactions should have the same number of signatures"
         );
         for ((_, enable_version), (_, transfer_version)) in
-            enable_signatures.iter().zip(transfer_signatures.iter())
+            enable_signatures.iter().zip_debug_eq(transfer_signatures.iter())
         {
             assert_eq!(
                 enable_version, transfer_version,
@@ -507,7 +513,7 @@ async fn test_checkpoint_contents_v2_alias_versions() {
             "Both transactions should have the same number of signatures"
         );
         for ((_, post_enable_version), original_version) in
-            post_enable_signatures.iter().zip(original_alias_versions.iter())
+            post_enable_signatures.iter().zip_debug_eq(original_alias_versions.iter())
         {
             assert_ne!(
                 post_enable_version, original_version,

@@ -3,23 +3,22 @@
 
 use crate::object_runtime::{fingerprint::ObjectFingerprint, get_all_uids};
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
-use move_core_types::{
-    annotated_value as A, effects::Op, runtime_value as R, vm_status::StatusCode,
-};
-use move_vm_types::values::{GlobalValue, StructRef, Value};
-use std::{
-    collections::{BTreeMap, btree_map},
-    sync::Arc,
-};
+use move_core_types::{annotated_value as A, runtime_value as R, vm_status::StatusCode};
+use move_vm_runtime::execution::values::{GlobalValue, StructRef, Value};
 use rtd_protocol_config::{LimitThresholdCrossed, ProtocolConfig, check_limit_by_meter};
 use rtd_types::{
     base_types::{MoveObjectType, ObjectID, SequenceNumber},
     committee::EpochId,
     error::VMMemoryLimitExceededSubStatusCode,
     execution::DynamicallyLoadedObjectMetadata,
-    metrics::LimitsMetrics,
+    metrics::ExecutionMetrics,
+    move_package::MovePackage,
     object::{Data, MoveObject, Object, Owner},
-    storage::ChildObjectResolver,
+    storage::RuntimeObjectResolver,
+};
+use std::{
+    collections::{BTreeMap, btree_map},
+    sync::Arc,
 };
 
 pub(super) struct ChildObject {
@@ -57,14 +56,7 @@ struct ConfigSetting {
 }
 
 #[derive(Debug)]
-pub(crate) struct ChildObjectEffectV0 {
-    pub(super) owner: ObjectID,
-    pub(super) ty: MoveObjectType,
-    pub(super) effect: Op<Value>,
-}
-
-#[derive(Debug)]
-pub(crate) struct ChildObjectEffectV1 {
+pub(crate) struct ChildObjectEffect {
     pub(super) owner: ObjectID,
     pub(super) ty: MoveObjectType,
     pub(super) final_value: Option<Value>,
@@ -72,18 +64,11 @@ pub(crate) struct ChildObjectEffectV1 {
     pub(super) object_changed: bool,
 }
 
-#[derive(Debug)]
-pub(crate) enum ChildObjectEffects {
-    // In this version, we accurately track mutations via WriteRef to the child object, or
-    // references rooted in the child object.
-    V0(BTreeMap<ObjectID, ChildObjectEffectV0>),
-    // In this version, we instead check always return the value, and report if it changed.
-    V1(BTreeMap<ObjectID, ChildObjectEffectV1>),
-}
+pub(crate) type ChildObjectEffects = BTreeMap<ObjectID, ChildObjectEffect>;
 
 struct Inner<'a> {
     // used for loading child objects
-    resolver: &'a dyn ChildObjectResolver,
+    resolver: &'a dyn RuntimeObjectResolver,
     // The version of the root object in ownership at the beginning of the transaction.
     // If it was a child object, it resolves to the root parent's sequence number.
     // Otherwise, it is just the sequence number at the beginning of the transaction.
@@ -99,13 +84,13 @@ struct Inner<'a> {
     // Protocol config used to enforce limits
     protocol_config: &'a ProtocolConfig,
     // Metrics for reporting exceeded limits
-    metrics: Arc<LimitsMetrics>,
+    metrics: Arc<ExecutionMetrics>,
     // Epoch ID for the current transaction. Used for receiving objects.
     current_epoch_id: EpochId,
 }
 
 // maintains the runtime GlobalValues for child objects and manages the fetching of objects
-// from storage, through the `ChildObjectResolver`
+// from storage, through the `RuntimeObjectResolver`
 pub(super) struct ChildObjectStore<'a> {
     // contains object resolver and object cache
     // kept as a separate struct to deal with lifetime issues where the `store` is accessed
@@ -162,7 +147,8 @@ macro_rules! fetch_child_object_unbounded {
                 Owner::AddressOwner(_)
                 | Owner::Immutable
                 | Owner::Shared { .. }
-                | Owner::ConsensusAddressOwner { .. } => {
+                | Owner::ConsensusAddressOwner { .. }
+                | Owner::Party { .. } => {
                     return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
                         format!(
                             "Bad owner for {}. \
@@ -225,7 +211,7 @@ impl Inner<'_> {
                 previous_transaction: object.previous_transaction,
             };
 
-            // `ChildObjectResolver::receive_object_at_version` should return the object at the
+            // `RuntimeObjectResolver::receive_object_at_version` should return the object at the
             // version or nothing at all. If it returns an object with a different version, we
             // should raise an invariant violation since it should be checked by
             // `receive_object_at_version`.
@@ -285,7 +271,9 @@ impl Inner<'_> {
                 self.protocol_config.object_runtime_max_num_cached_objects(),
                 self.protocol_config
                     .object_runtime_max_num_cached_objects_system_tx(),
-                self.metrics.excessive_object_runtime_cached_objects
+                self.metrics
+                    .limits_metrics
+                    .excessive_object_runtime_cached_objects
             ) {
                 return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
                     .with_message(format!(
@@ -331,8 +319,6 @@ impl Inner<'_> {
     ) -> PartialVMResult<
         ObjectResult<CacheMetadata<(MoveObjectType, GlobalValue, ObjectFingerprint)>>,
     > {
-        // we copy the reference to the protocol config ahead of time for lifetime reasons
-        let protocol_config = self.protocol_config;
         // retrieve the object from storage if it exists
         let (cache_info, obj_opt) = self.get_or_fetch_object_from_store(parent, child)?;
         let Some(obj) = obj_opt else {
@@ -340,8 +326,8 @@ impl Inner<'_> {
                 cache_info,
                 (
                     child_move_type.clone(),
-                    GlobalValue::none(),
-                    ObjectFingerprint::none(protocol_config),
+                    GlobalValue::empty(),
+                    ObjectFingerprint::none(),
                 ),
             )));
         };
@@ -361,16 +347,14 @@ impl Inner<'_> {
         };
         // save a fingerprint
         let fingerprint =
-            ObjectFingerprint::preexisting(protocol_config, &parent, child_move_type, &v).map_err(
-                |e| {
-                    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
-                        format!("Failed to fingerprint value for object {child}. Error: {e}"),
-                    )
-                },
-            )?;
+            ObjectFingerprint::preexisting(&parent, child_move_type, &v).map_err(|e| {
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+                    format!("Failed to fingerprint value for object {child}. Error: {e}"),
+                )
+            })?;
         // generate a global value
         let global_value =
-            match GlobalValue::cached(v) {
+            match GlobalValue::create(v) {
                 Ok(gv) => gv,
                 Err(e) => {
                     return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
@@ -427,12 +411,12 @@ fn deserialize_move_object(
 
 impl<'a> ChildObjectStore<'a> {
     pub(super) fn new(
-        resolver: &'a dyn ChildObjectResolver,
+        resolver: &'a dyn RuntimeObjectResolver,
         root_version: BTreeMap<ObjectID, SequenceNumber>,
         wrapped_object_containers: BTreeMap<ObjectID, ObjectID>,
         is_metered: bool,
         protocol_config: &'a ProtocolConfig,
-        metrics: Arc<LimitsMetrics>,
+        metrics: Arc<ExecutionMetrics>,
         current_epoch_id: EpochId,
     ) -> Self {
         Self {
@@ -450,6 +434,30 @@ impl<'a> ChildObjectStore<'a> {
             config_setting_cache: BTreeMap::new(),
             is_metered,
         }
+    }
+
+    /// When `parent` has a tracked root version, record the same root version for `id`.
+    /// Note that this is not observable at this time, but will be if we either allow for the
+    /// re-creation of derived objects, or if we grant access to the `id: UID` of a dynamic field.
+    pub(super) fn inherit_root_version_from_parent(
+        &mut self,
+        parent: ObjectID,
+        id: ObjectID,
+    ) -> PartialVMResult<()> {
+        if let Some(v) = self.inner.root_version.get(&parent).copied() {
+            let prev_v_opt = self.inner.root_version.insert(id, v);
+            if let Some(prev_v) = prev_v_opt
+                && prev_v != v
+            {
+                return Err(
+                    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                        .with_message(format!(
+                            "Root version for {parent} changed from {prev_v} to {v}"
+                        )),
+                );
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn receive_object(
@@ -561,7 +569,10 @@ impl<'a> ChildObjectStore<'a> {
                     self.inner
                         .protocol_config
                         .object_runtime_max_num_store_entries_system_tx(),
-                    self.inner.metrics.excessive_object_runtime_store_entries
+                    self.inner
+                        .metrics
+                        .limits_metrics
+                        .excessive_object_runtime_store_entries
                 ) {
                     return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
                         .with_message(format!(
@@ -616,7 +627,10 @@ impl<'a> ChildObjectStore<'a> {
             self.inner
                 .protocol_config
                 .object_runtime_max_num_store_entries_system_tx(),
-            self.inner.metrics.excessive_object_runtime_store_entries
+            self.inner
+                .metrics
+                .limits_metrics
+                .excessive_object_runtime_store_entries
         ) {
             return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
                 .with_message(format!(
@@ -646,8 +660,8 @@ impl<'a> ChildObjectStore<'a> {
             }
             (value, fingerprint)
         } else {
-            let fingerprint = ObjectFingerprint::none(self.inner.protocol_config);
-            (GlobalValue::none(), fingerprint)
+            let fingerprint = ObjectFingerprint::none();
+            (GlobalValue::empty(), fingerprint)
         };
         if let Err((e, _)) = value.move_to(child_value) {
             return Err(
@@ -722,11 +736,7 @@ impl<'a> ChildObjectStore<'a> {
                 setting
             }
         };
-        let value = setting.value.copy_value().map_err(|e| {
-            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
-                format!("Failed to copy value for config setting {child}, with error {e}",),
-            )
-        })?;
+        let value = setting.value.copy_value();
         Ok(ObjectResult::Loaded(Some(value)))
     }
 
@@ -755,6 +765,16 @@ impl<'a> ChildObjectStore<'a> {
         }
     }
 
+    pub(super) fn get_package_at_version(
+        &self,
+        package_id: ObjectID,
+        package_version: SequenceNumber,
+    ) -> Option<MovePackage> {
+        self.inner
+            .resolver
+            .get_package_at_version(&package_id, package_version)
+    }
+
     pub(super) fn cached_objects(&self) -> &BTreeMap<ObjectID, Option<Object>> {
         &self.inner.cached_objects
     }
@@ -763,60 +783,29 @@ impl<'a> ChildObjectStore<'a> {
         &self.inner.wrapped_object_containers
     }
 
-    // retrieve the `Op` effects for the child objects
+    // retrieve the effects for the child objects
     pub(super) fn take_effects(&mut self) -> PartialVMResult<ChildObjectEffects> {
-        if self.inner.protocol_config.minimize_child_object_mutations() {
-            let v1_effects = std::mem::take(&mut self.store)
-                .into_iter()
-                .map(|(id, child_object)| {
-                    let ChildObject {
-                        owner,
-                        ty,
-                        value,
-                        fingerprint,
-                    } = child_object;
-                    #[cfg(debug_assertions)]
-                    let dirty_flag_mutated = value.is_mutated();
-                    let final_value = value.into_value();
-                    let object_changed =
-                        fingerprint.object_has_changed(&owner, &ty, &final_value)?;
-                    // The old dirty flag was pessimistic in its tracking of mutations, meaning
-                    // it would mark mutations even if the value remained the same.
-                    // This means that if the object changed, the dirty flag must have been marked.
-                    // However, we can't guarantee the opposite.
-                    // object changed ==> dirty flag mutated
-                    #[cfg(debug_assertions)]
-                    debug_assert!(!object_changed || dirty_flag_mutated);
-                    let child_effect = ChildObjectEffectV1 {
-                        owner,
-                        ty,
-                        final_value,
-                        object_changed,
-                    };
-                    Ok((id, child_effect))
-                })
-                .collect::<PartialVMResult<_>>()?;
-            Ok(ChildObjectEffects::V1(v1_effects))
-        } else {
-            let v0_effects = std::mem::take(&mut self.store)
-                .into_iter()
-                .filter_map(|(id, child_object)| {
-                    let ChildObject {
-                        owner,
-                        ty,
-                        value,
-                        fingerprint: _fingerprint,
-                    } = child_object;
-                    let effect = value.into_effect()?;
-                    // should be disabled if the feature is disabled
-                    #[cfg(debug_assertions)]
-                    debug_assert!(_fingerprint.is_disabled());
-                    let child_effect = ChildObjectEffectV0 { owner, ty, effect };
-                    Some((id, child_effect))
-                })
-                .collect();
-            Ok(ChildObjectEffects::V0(v0_effects))
-        }
+        let effects = std::mem::take(&mut self.store)
+            .into_iter()
+            .map(|(id, child_object)| {
+                let ChildObject {
+                    owner,
+                    ty,
+                    value,
+                    fingerprint,
+                } = child_object;
+                let final_value = value.into_value()?;
+                let object_changed = fingerprint.object_has_changed(&owner, &ty, &final_value)?;
+                let child_effect = ChildObjectEffect {
+                    owner,
+                    ty,
+                    final_value,
+                    object_changed,
+                };
+                Ok((id, child_effect))
+            })
+            .collect::<PartialVMResult<_>>()?;
+        Ok(effects)
     }
 
     pub(super) fn all_active_objects(&self) -> impl Iterator<Item = ActiveChildObject<'_>> {
@@ -842,11 +831,5 @@ impl<'a> ChildObjectStore<'a> {
                 copied_value: copied_child_value,
             }
         })
-    }
-}
-
-impl ChildObjectEffects {
-    pub(crate) fn empty() -> Self {
-        ChildObjectEffects::V0(BTreeMap::new())
     }
 }

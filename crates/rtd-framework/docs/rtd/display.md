@@ -28,15 +28,14 @@ More entry functions might be added in the future depending on the use cases.
 -  [Function `is_authorized`](#rtd_display_is_authorized)
 -  [Function `version`](#rtd_display_version)
 -  [Function `fields`](#rtd_display_fields)
+-  [Function `destroy`](#rtd_display_destroy)
 -  [Function `create_internal`](#rtd_display_create_internal)
 -  [Function `add_internal`](#rtd_display_add_internal)
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
-<b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
 <b>use</b> <a href="../rtd/bcs.md#rtd_bcs">rtd::bcs</a>;
 <b>use</b> <a href="../rtd/dynamic_field.md#rtd_dynamic_field">rtd::dynamic_field</a>;
 <b>use</b> <a href="../rtd/event.md#rtd_event">rtd::event</a>;
@@ -75,11 +74,11 @@ on the property values of an Object.
 ```
 // Example of a display object
 Display<0x...::capy::Capy> {
-fields:
-<name, "Capy { genes }">
-<link, "https://capy.art/capy/{ id }">
-<image, "https://api.capy.art/capy/{ id }/svg">
-<description, "Lovely Capy, one of many">
+ fields:
+   <name, "Capy { genes }">
+   <link, "https://capy.art/capy/{ id }">
+   <image, "https://api.capy.art/capy/{ id }/svg">
+   <description, "Lovely Capy, one of many">
 }
 ```
 
@@ -507,6 +506,32 @@ Read the <code><a href="../rtd/display.md#rtd_display_fields">fields</a></code> 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/display.md#rtd_display_fields">fields</a>&lt;T: key&gt;(d: &<a href="../rtd/display.md#rtd_display_Display">Display</a>&lt;T&gt;): &VecMap&lt;String, String&gt; {
     &d.<a href="../rtd/display.md#rtd_display_fields">fields</a>
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_display_destroy"></a>
+
+## Function `destroy`
+
+Allow destroying legacy display objects.
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/display.md#rtd_display_destroy">destroy</a>&lt;T: key&gt;(<a href="../rtd/display.md#rtd_display">display</a>: <a href="../rtd/display.md#rtd_display_Display">rtd::display::Display</a>&lt;T&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<a href="../rtd/package.md#rtd_package">package</a>) <b>fun</b> <a href="../rtd/display.md#rtd_display_destroy">destroy</a>&lt;T: key&gt;(<a href="../rtd/display.md#rtd_display">display</a>: <a href="../rtd/display.md#rtd_display_Display">Display</a>&lt;T&gt;) {
+    <b>let</b> <a href="../rtd/display.md#rtd_display_Display">Display</a> { id, .. } = <a href="../rtd/display.md#rtd_display">display</a>;
+    id.delete();
 }
 </code></pre>
 

@@ -63,7 +63,6 @@ pub fn program(
 ) -> T::Program {
     let N::Program {
         mut info,
-        warning_filters_table,
         inner: N::Program_ { modules: nmodules },
     } = prog;
 
@@ -83,7 +82,6 @@ pub fn program(
         TypingProgramInfo::new(compilation_env, pre_compiled_lib, &modules, module_use_funs);
     let prog = T::Program {
         modules,
-        warning_filters_table,
         info: Arc::new(program_info),
     };
     compilation_env
@@ -107,7 +105,7 @@ fn extract_macros(
             implicit_candidates,
         } = module_use_funs;
         for (tn, module_methods) in resolved {
-            let macro_methods = macro_use_funs.resolved.entry(*tn).or_default();
+            let macro_methods = macro_use_funs.resolved.entry(tn.clone()).or_default();
             for (name, method) in module_methods.key_cloned_iter() {
                 if !macro_methods.contains_key(&name) {
                     macro_methods.add(name, method.clone()).unwrap();
@@ -250,12 +248,57 @@ fn modules(
     let used_module_members = used_module_members.into_inner().unwrap();
 
     for (mident, friends) in all_new_friends {
-        let mdef = typed_modules.get_mut(&mident).unwrap();
-        // point of interest: if we have any new friends, we know there can't be any
-        // "current" friends becahse all thew new friends are generated off of
-        // `public(package)` usage, which disallows other friends.
-        mdef.friends = UniqueMap::maybe_from_iter(friends.into_iter())
+        let friends = UniqueMap::maybe_from_iter(friends.into_iter())
             .expect("ICE compiler added duplicate friends to public(package) friend list");
+        if let Some(mdef) = typed_modules.get_mut(&mident) {
+            // point of interest: if we have any new friends, we know there can't be any
+            // "current" friends because all the new friends are generated off of
+            // `public(package)` usage, which disallows other friends.
+            mdef.friends = friends;
+        } else if compilation_env.ide_mode() {
+            // if a module is not in the typed modules, it must be in pre-compiled library
+            // (info contains both typed and pre-compiled modules)
+            if !info.modules.contains_key(&mident) {
+                compilation_env
+                    .diagnostic_reporter_at_top_level()
+                    .add_diag(ice!((
+                        mident.loc,
+                        "Compiler added a friend to module but friend is not in typed modules \
+                         nor in pre-compiled library (in IDE mode)"
+                    )));
+            }
+            // This can happen if some (dependency) modules from the same package are in typed
+            // modules and some are in pre-compiled library. Technically this could lead to
+            // incorrect friends list for one of the pre-compiled modules, but in practice
+            // it does not appear to be a problem.
+            // Consider two modules M1 and M2 in the same package pkg:
+
+            // module pkg::M1 {
+            //     public(package) fun foo() {}
+            // }
+            // module pkg::M2 {
+            // }
+            //
+            // Further, consider that M2 gets an extension:
+            //
+            // extension module pkg::M2 {
+            //     public fun bar() { pkg::M1::foo() }
+            // }
+            //
+            // If M1 is in pre-compiled library but M2 is not, M1's friend list will not contain M2.
+            // However, friends list is only really used in two places:
+            // - when checking visibility function for a friend function in a given module,
+            // which is not a problem as M1 cannot have both friend and public(package) functions
+            // - when building dependency info for typed modules, which is not a problem
+            // because M1 is in pre-compiled library and not in typed modules
+        } else {
+            compilation_env
+                .diagnostic_reporter_at_top_level()
+                .add_diag(ice!((
+                    mident.loc,
+                    "Compiler added a friend to module but friend is not in typed modules"
+                )));
+        }
     }
 
     for (_, mident, mdef) in &typed_modules {
@@ -309,7 +352,7 @@ fn module<'env>(
 
     context.current_module = Some(ident);
     context.current_package = package_name;
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     context.add_use_funs_scope(use_funs);
     context.add_stdlib_definitions(stdlib_definitions);
 
@@ -418,7 +461,7 @@ fn function(context: &mut Context, name: FunctionName, f: N::Function) -> T::Fun
         mut signature,
         body: n_body,
     } = f;
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
     assert!(context.constraints.is_empty());
     context.current_function = Some(name);
     context.in_macro_function = macro_.is_some();
@@ -431,7 +474,11 @@ fn function(context: &mut Context, name: FunctionName, f: N::Function) -> T::Fun
     function_signature(context, macro_, &signature);
     expand::function_signature(context, &mut signature);
     let body = if macro_.is_some() {
-        sp(n_body.loc, T::FunctionBody_::Macro)
+        let body_loc = n_body.loc;
+        if context.env().ide_mode() {
+            ide_macro_body(context, name, n_body)
+        }
+        sp(body_loc, T::FunctionBody_::Macro)
     } else {
         function_body(context, n_body)
     };
@@ -479,6 +526,31 @@ fn function_signature(context: &mut Context, macro_: Option<Loc>, sig: &N::Funct
     core::solve_constraints(context);
 }
 
+/// Best-effort typing of a macro function body in IDE mode. Uses declared parameter types
+/// (already in scope from function_signature) to type the body, generating IDE annotations
+/// (DotAutocompleteInfo, etc.). Diagnostics from this best-effort pass are discarded.
+/// Speculatively typed macro function body is added to the current context's IDEInfo.
+fn ide_macro_body(context: &mut Context, function_name: FunctionName, n_body: N::FunctionBody) {
+    let reporter = context.outer.env.ide_diagnostic_reporter();
+    let old_reporter = std::mem::replace(&mut context.reporter, reporter);
+    let old_ide_typing_macro_body = context.ide_typing_macro_body;
+    context.ide_typing_macro_body = true;
+
+    let body = function_body(context, n_body);
+    if let T::FunctionBody_::Defined(seq) = body.value {
+        let module = *context
+            .current_module()
+            .expect("ICE macro function should be typed inside a module");
+        context
+            .ide_info
+            .add_macro_function_body(module, function_name, seq);
+    }
+    finalize_ide_info(context);
+
+    context.ide_typing_macro_body = old_ide_typing_macro_body;
+    context.reporter = old_reporter;
+}
+
 fn function_body(context: &mut Context, sp!(loc, nb_): N::FunctionBody) -> T::FunctionBody {
     assert!(context.constraints.is_empty());
     let mut b_ = match nb_ {
@@ -514,10 +586,11 @@ fn constant(context: &mut Context, _name: ConstantName, nconstant: N::Constant) 
         index,
         attributes,
         loc,
+        visibility,
         signature,
         value: nvalue,
     } = nconstant;
-    context.push_warning_filter_scope(warning_filter);
+    context.push_warning_filter_scope(warning_filter.clone());
 
     process_attributes(context, &attributes);
 
@@ -557,6 +630,7 @@ fn constant(context: &mut Context, _name: ConstantName, nconstant: N::Constant) 
         index,
         attributes,
         loc,
+        visibility,
         signature,
         value: *value,
     }
@@ -823,7 +897,7 @@ mod check_valid_constant {
 
 fn struct_def(context: &mut Context, _sloc: Loc, s: &mut N::StructDefinition) {
     assert!(context.constraints.is_empty());
-    context.push_warning_filter_scope(s.warning_filter);
+    context.push_warning_filter_scope(s.warning_filter.clone());
 
     let field_map = match &mut s.fields {
         N::StructFields::Native(_) => return,
@@ -875,7 +949,7 @@ fn struct_def(context: &mut Context, _sloc: Loc, s: &mut N::StructDefinition) {
 fn enum_def(context: &mut Context, enum_: &mut N::EnumDefinition) {
     assert!(context.constraints.is_empty());
 
-    context.push_warning_filter_scope(enum_.warning_filter);
+    context.push_warning_filter_scope(enum_.warning_filter.clone());
 
     let enum_abilities = &enum_.abilities;
     let enum_type_params = &enum_.type_parameters;
@@ -1693,7 +1767,9 @@ fn exp(context: &mut Context, ne: Box<N::Exp>) -> Box<T::Exp> {
             );
             match ty_call_opt {
                 None => {
-                    assert!(context.env().has_errors());
+                    context.assert_has_errors(
+                        "ICE method call failure should have already resulted in an error",
+                    );
                     (context.error_type(eloc), TE::UnresolvedError)
                 }
                 Some(ty_call) => ty_call,
@@ -1725,7 +1801,9 @@ fn exp(context: &mut Context, ne: Box<N::Exp>) -> Box<T::Exp> {
             );
             match ty_call_opt {
                 None => {
-                    assert!(context.env().has_errors());
+                    context.assert_has_errors(
+                        "ICE macro method call failure should have already resulted in an error",
+                    );
                     (context.error_type(eloc), TE::UnresolvedError)
                 }
                 Some(ty_call) => ty_call,
@@ -1743,13 +1821,22 @@ fn exp(context: &mut Context, ne: Box<N::Exp>) -> Box<T::Exp> {
                 nargs_,
             )
         }
-        NE::VarCall(_, sp!(_, nargs_)) => {
+        NE::VarCall(var, sp!(_, nargs_)) => {
             exp_vec(context, nargs_);
-            assert!(
-                context.env().has_errors(),
-                "ICE unbound var call. Should be expanded"
-            );
-            (context.error_type(eloc), TE::UnresolvedError)
+            if context.ide_typing_macro_body {
+                // Example: in `macro fun m($f: |u64| -> bool) { let x = $f(0); }`, `$f(0)`
+                // is normally typed only after macro expansion. This IDE-only pass types the
+                // macro body before expansion, so recover `bool` from `$f`'s declared type.
+                let var_ty = context.get_local_type(&var);
+                let ret_ty = match var_ty.value.inner() {
+                    N::TypeInner::Fun(_, ret) => ret.clone(),
+                    _ => context.error_type(eloc),
+                };
+                (ret_ty, TE::UnresolvedError)
+            } else {
+                context.assert_has_errors("ICE unbound var call. Should be expanded");
+                (context.error_type(eloc), TE::UnresolvedError)
+            }
         }
         NE::Builtin(b, sp!(argloc, nargs_)) => {
             let args = exp_vec(context, nargs_);
@@ -2086,7 +2173,9 @@ fn exp(context: &mut Context, ne: Box<N::Exp>) -> Box<T::Exp> {
             (rhs, e_)
         }
         NE::UnresolvedError => {
-            assert!(context.env().has_errors());
+            context.assert_has_errors(
+                "ICE unresolved expression should have already resulted in an error",
+            );
             (context.error_type(eloc), TE::UnresolvedError)
         }
 
@@ -2228,11 +2317,6 @@ fn binop(
             context.add_ordered_constraint(er.exp.loc, bop.value.symbol(), el.ty.clone());
             let operand_ty = join(context, bop.loc, msg, &el.ty, &er.ty);
             (Type_::bool(loc), operand_ty)
-        }
-
-        Range | Implies | Iff => {
-            context.add_diag(ice!((loc, "ICE unexpect specification operator")));
-            (context.error_type(loc), context.error_type(loc))
         }
     };
     Box::new(T::exp(
@@ -2814,14 +2898,14 @@ fn lvalue_expected_types(_context: &mut Context, sp!(loc, b_): &T::LValue) -> Op
         L::Ignore => None,
         L::Var { ty, .. } => Some(*ty.clone()),
         L::BorrowUnpack(mut_, m, s, tys, _) => {
-            let tn = sp(loc, N::TypeName_::ModuleType(*m, *s));
+            let tn = sp(loc, N::TypeName_::ModuleType((*m).into(), *s));
             Some(sp(
                 loc,
                 TI::Ref(*mut_, sp(loc, TI::Apply(None, tn, tys.clone()).into())).into(),
             ))
         }
         L::Unpack(m, s, tys, _) => {
-            let tn = sp(loc, N::TypeName_::ModuleType(*m, *s));
+            let tn = sp(loc, N::TypeName_::ModuleType((*m).into(), *s));
             Some(sp(loc, TI::Apply(None, tn, tys.clone()).into()))
         }
         L::BorrowUnpackVariant(..) | L::UnpackVariant(..) => {
@@ -2922,7 +3006,7 @@ fn lvalue(
             TL::Ignore
         }
         NL::Error => {
-            assert!(context.env().has_errors());
+            context.assert_has_errors("ICE error lvalue should have already resulted in an error");
             TL::Ignore
         }
         NL::Var {
@@ -3778,12 +3862,16 @@ fn borrow_exp_dotted(
                 base_type: index_base_type,
             } => {
                 let Some(index_methods) = syntax_methods else {
-                    assert!(context.env().has_errors());
+                    context.assert_has_errors(
+                        "ICE missing index methods should have already resulted in an error",
+                    );
                     exp = make_error_exp(context, loc);
                     break;
                 };
                 if matches!(index_base_type.value.inner(), TI::UnresolvedError) {
-                    assert!(context.env().has_errors());
+                    context.assert_has_errors(
+                        "ICE unresolved index base type should have already resulted in an error",
+                    );
                     exp = make_error_exp(context, loc);
                     break;
                 }
@@ -4090,7 +4178,7 @@ fn type_to_type_name_(
 ) -> Option<TypeName> {
     use TypeName_ as TN;
     match &ty.value.inner() {
-        TI::Apply(_, tn @ sp!(_, TN::ModuleType(_, _) | TN::Builtin(_)), _) => Some(*tn),
+        TI::Apply(_, tn @ sp!(_, TN::ModuleType(_, _) | TN::Builtin(_)), _) => Some(tn.clone()),
         t => {
             let msg = match t {
                 TI::Anything | TI::Void => {
@@ -4113,7 +4201,9 @@ fn type_to_type_name_(
                     )
                 }
                 TI::UnresolvedError => {
-                    assert!(context.env().has_errors());
+                    context.assert_has_errors(
+                        "ICE unresolved type should have already resulted in an error",
+                    );
                     return None;
                 }
                 TI::Ref(_, _) | TI::Var(_) => {
@@ -4222,6 +4312,7 @@ fn annotated_error_const(context: &mut Context, e: &mut T::Exp, abort_or_assert_
             index: _,
             attributes,
             defined_loc,
+            visibility: _,
             signature: _,
             value: _,
         } = context.constant_info(module_ident, constant_name).clone();
@@ -4236,6 +4327,17 @@ fn annotated_error_const(context: &mut Context, e: &mut T::Exp, abort_or_assert_
                 )));
                 return;
             };
+            // A cross-module '#[error]' use is unreachable without a prior error: '#[error]' +
+            // 'public(package)' is rejected during expansion, and any other cross-module access
+            // is a visibility error
+            if !context.is_current_module(module_ident) {
+                ice_assert!(
+                    context.reporter,
+                    context.env().has_errors(),
+                    *const_loc,
+                    "cross-module '#[error]' constant use without a prior error"
+                );
+            }
             let econst = T::UnannotatedExp_::ErrorConstant {
                 line_number_loc: *const_loc,
                 error_constant: Some(*constant_name),
@@ -4757,7 +4859,9 @@ fn expand_macro(
 
     let valid = context.add_macro_expansion(m, f, call_loc);
     if !valid {
-        assert!(context.env().has_errors());
+        context.assert_has_errors(
+            "ICE invalid macro expansion should have already resulted in an error",
+        );
         return (context.error_type(call_loc), TE::UnresolvedError);
     }
     let res = match macro_expand::call(context, call_loc, m, f, type_args.clone(), args, return_ty)
@@ -4802,12 +4906,25 @@ fn expand_macro(
             let use_funs = N::UseFuns::new(context.current_call_color());
             let block = TE::Block((use_funs, seq));
             if context.env().ide_mode() {
+                // The first stack entry is the outermost macro call. Argument
+                // frames can appear inside that call stack, but never as the
+                // root.
+                let root_expansion = context.macro_expansion.first();
+                debug_assert!(
+                    matches!(root_expansion, Some(core::MacroExpansion::Call(_))),
+                    "macro expansion stack root should be a call"
+                );
+                let root_call_loc = match root_expansion {
+                    Some(core::MacroExpansion::Call(c)) => c.invocation,
+                    Some(core::MacroExpansion::Argument { .. }) | None => call_loc,
+                };
                 let macro_call_info = MacroCallInfo {
                     module: m,
                     name: f,
                     method_name,
                     type_arguments: type_args.clone(),
                     by_value_args,
+                    root_call_loc,
                 };
                 let info = IDEAnnotation::MacroCallInfo(Box::new(macro_call_info));
                 context.add_ide_info(call_loc, info);
@@ -5048,10 +5165,10 @@ fn unused_module_members(
 
     let mut reporter = env.diagnostic_reporter_at_top_level();
     let is_rtd_mode = env.package_config(mdef.package_name).flavor == Flavor::Rtd;
-    reporter.push_warning_filter_scope(mdef.warning_filter);
+    reporter.push_warning_filter_scope(mdef.warning_filter.clone());
 
     for (loc, name, c) in &mdef.constants {
-        reporter.push_warning_filter_scope(c.warning_filter);
+        reporter.push_warning_filter_scope(c.warning_filter.clone());
 
         let members = used_module_members.get(mident);
         if members.is_none() || !members.unwrap().contains(name) {
@@ -5073,7 +5190,7 @@ fn unused_module_members(
             // a Rtd-specific filter to avoid signaling that the init function is unused
             continue;
         }
-        reporter.push_warning_filter_scope(fun.warning_filter);
+        reporter.push_warning_filter_scope(fun.warning_filter.clone());
 
         let members = used_module_members.get(mident);
         if fun.entry.is_none()

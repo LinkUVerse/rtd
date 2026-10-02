@@ -38,14 +38,6 @@ import { RtdClient, getFullnodeUrl } from '@linku/rtd/client';
 import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 import { Transaction } from '@linku/rtd/transactions';
 
-/**
- * List of known types for shorthand search in the `search` command.
- */
-const KNOWN_TYPES = {
-  rtdfren:
-    '0x80d7de9c4a56194087e0ba0bf59492aa8e6a5ee881606226930827085ddf2332::rtdfrens::RtdFren<0x80d7de9c4a56194087e0ba0bf59492aa8e6a5ee881606226930827085ddf2332::capy::Capy>',
-};
-
 /** JsonRpcProvider for the Testnet */
 const client = new RtdClient({ url: getFullnodeUrl('testnet') });
 
@@ -139,13 +131,13 @@ program
 program
   .command('search')
   .description('search open listings in Kiosks')
-  .argument('<type>', 'The type of the item to search for. \nAvailable aliases: "rtdfren", "test"')
+  .argument('<type>', 'The fully qualified type of the item to search for')
   .action(searchType);
 
 program
   .command('policy')
   .description('search for a TransferPolicy for the specified type')
-  .argument('<type>', 'The type of the item to search for. \nAvailable aliases: "rtdfren", "test"')
+  .argument('<type>', 'The fully qualified type to find a transfer policy for')
   .action(searchPolicy);
 
 program
@@ -203,7 +195,7 @@ async function showInventory({ address, onlyDisplay, cursor, filter }) {
   };
 
   if (filter) {
-    options.filter = { StructType: KNOWN_TYPES[filter] || filter };
+    options.filter = { StructType: filter };
   }
 
   const { data, nextCursor, hasNextPage } = await client.getOwnedObjects(options);
@@ -591,9 +583,6 @@ async function purchaseItem(itemId, opts) {
  * Description: Searches for items of the specified type
  */
 async function searchType(type) {
-  // use known types if available;
-  type = KNOWN_TYPES[type] || type;
-
   const [{ data: listed }, { data: delisted }, { data: purchased }] = await Promise.all([
     client.queryEvents({
       query: { MoveEventType: `0x2::kiosk::ItemListed<${type}>` },
@@ -634,9 +623,6 @@ async function searchType(type) {
 }
 
 async function searchPolicy(type) {
-  // use known types if available;
-  type = KNOWN_TYPES[type] || type;
-
   const policies = await kioskClient.getTransferPolicies({ type });
 
   if (policies.length === 0) {
@@ -774,11 +760,6 @@ async function sendTx(tx) {
  * Shortens the type (currently, a little messy).
  */
 function formatType(type) {
-  let knownIdx = Object.values(KNOWN_TYPES).indexOf(type);
-  if (knownIdx !== -1) {
-    return Object.keys(KNOWN_TYPES)[knownIdx];
-  }
-
   type = type.replace('0x2', '2');
 
   while (type.includes('0x')) {

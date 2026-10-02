@@ -7,7 +7,7 @@ use crate::{
     error::{RtdError, RtdErrorKind, RtdResult},
     rtd_serde::Readable,
 };
-use fastcrypto::encoding::{Base58, Encoding, Hex};
+use fastcrypto::encoding::{Base58, Encoding};
 use fastcrypto::hash::{Blake2b256, HashFunction};
 use once_cell::sync::{Lazy, OnceCell};
 use rtd_protocol_config::Chain;
@@ -161,11 +161,27 @@ impl fmt::UpperHex for Digest {
 )]
 pub struct ChainIdentifier(CheckpointDigest);
 
-pub const MAINNET_CHAIN_IDENTIFIER_BASE58: &str = "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S";
-pub const TESTNET_CHAIN_IDENTIFIER_BASE58: &str = "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD";
+// Fill these only after the RTD genesis checkpoints have been generated and
+// independently verified. An absent identifier must not inherit an upstream
+// network's digest or be guessed from a network name.
+pub const MAINNET_CHAIN_IDENTIFIER_BASE58: Option<&str> = None;
+pub const TESTNET_CHAIN_IDENTIFIER_BASE58: Option<&str> = None;
 
-pub static MAINNET_CHAIN_IDENTIFIER: OnceCell<ChainIdentifier> = OnceCell::new();
-pub static TESTNET_CHAIN_IDENTIFIER: OnceCell<ChainIdentifier> = OnceCell::new();
+// Foreign genesis digests are rejected even when the protocol-chain override
+// is set for bootstrap testing. They can never identify an RTD network.
+const FOREIGN_MAINNET_CHAIN_IDENTIFIER_BASE58: &str =
+    "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S";
+const FOREIGN_TESTNET_CHAIN_IDENTIFIER_BASE58: &str =
+    "69WiPg3DAQiwdxfncX6wYQ2siKwAe6L9BZthQea3JNMD";
+static FOREIGN_CHAIN_IDENTIFIERS: Lazy<[ChainIdentifier; 2]> = Lazy::new(|| {
+    [
+        parse_chain_identifier(FOREIGN_MAINNET_CHAIN_IDENTIFIER_BASE58, "foreign mainnet"),
+        parse_chain_identifier(FOREIGN_TESTNET_CHAIN_IDENTIFIER_BASE58, "foreign testnet"),
+    ]
+});
+
+static MAINNET_CHAIN_IDENTIFIER: OnceCell<Option<ChainIdentifier>> = OnceCell::new();
+static TESTNET_CHAIN_IDENTIFIER: OnceCell<Option<ChainIdentifier>> = OnceCell::new();
 
 /// For testing purposes or bootstrapping regenesis chain configuration, you can set
 /// this environment variable to force protocol config to use a specific Chain.
@@ -190,28 +206,35 @@ impl ChainIdentifier {
     /// take a short 4 byte identifier and convert it into a ChainIdentifier
     /// short ids come from the JSON RPC getChainIdentifier and are encoded in hex
     pub fn from_chain_short_id(short_id: &String) -> Option<Self> {
-        if Hex::from_bytes(&Base58::decode(MAINNET_CHAIN_IDENTIFIER_BASE58).ok()?)
-            .encoded_with_format()
-            .starts_with(&format!("0x{}", short_id))
-        {
-            Some(get_mainnet_chain_identifier())
-        } else if Hex::from_bytes(&Base58::decode(TESTNET_CHAIN_IDENTIFIER_BASE58).ok()?)
-            .encoded_with_format()
-            .starts_with(&format!("0x{}", short_id))
-        {
-            Some(get_testnet_chain_identifier())
-        } else {
-            None
+        let short_id = short_id.strip_prefix("0x").unwrap_or(short_id);
+        if short_id.len() != 8 {
+            return None;
         }
+        if FOREIGN_CHAIN_IDENTIFIERS
+            .iter()
+            .any(|id| id.to_string().eq_ignore_ascii_case(short_id))
+        {
+            return None;
+        }
+        [
+            get_mainnet_chain_identifier(),
+            get_testnet_chain_identifier(),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|id| id.to_string().eq_ignore_ascii_case(short_id))
     }
 
     pub fn chain(&self) -> Chain {
+        if FOREIGN_CHAIN_IDENTIFIERS.contains(self) {
+            return Chain::Unknown;
+        }
         let mainnet_id = get_mainnet_chain_identifier();
         let testnet_id = get_testnet_chain_identifier();
 
         let chain = match self {
-            id if *id == mainnet_id => Chain::Mainnet,
-            id if *id == testnet_id => Chain::Testnet,
+            id if mainnet_id.is_some_and(|known| *id == known) => Chain::Mainnet,
+            id if testnet_id.is_some_and(|known| *id == known) => Chain::Testnet,
             _ => Chain::Unknown,
         };
         if let Some(override_chain) = *RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE {
@@ -228,40 +251,45 @@ impl ChainIdentifier {
         self.0.inner()
     }
 
-    /// Return the complete genesis checkpoint digest used to identify this chain lifecycle.
-    pub fn full_id(&self) -> String {
-        self.0.to_string()
-    }
-
     pub fn random() -> Self {
         Self(CheckpointDigest::random())
     }
 }
 
-pub fn get_mainnet_chain_identifier() -> ChainIdentifier {
-    let digest = MAINNET_CHAIN_IDENTIFIER.get_or_init(|| {
-        let digest = CheckpointDigest::new(
-            Base58::decode(MAINNET_CHAIN_IDENTIFIER_BASE58)
-                .expect("mainnet genesis checkpoint digest literal is invalid")
-                .try_into()
-                .expect("Mainnet genesis checkpoint digest literal has incorrect length"),
-        );
-        ChainIdentifier::from(digest)
-    });
-    *digest
+fn parse_chain_identifier(literal: &str, network: &str) -> ChainIdentifier {
+    let digest = CheckpointDigest::new(
+        Base58::decode(literal)
+            .unwrap_or_else(|_| panic!("{network} genesis checkpoint digest literal is invalid"))
+            .try_into()
+            .unwrap_or_else(|_| panic!("{network} genesis checkpoint digest has incorrect length")),
+    );
+    ChainIdentifier::from(digest)
 }
 
-pub fn get_testnet_chain_identifier() -> ChainIdentifier {
-    let digest = TESTNET_CHAIN_IDENTIFIER.get_or_init(|| {
-        let digest = CheckpointDigest::new(
-            Base58::decode(TESTNET_CHAIN_IDENTIFIER_BASE58)
-                .expect("testnet genesis checkpoint digest literal is invalid")
-                .try_into()
-                .expect("Testnet genesis checkpoint digest literal has incorrect length"),
-        );
-        ChainIdentifier::from(digest)
-    });
-    *digest
+pub fn get_mainnet_chain_identifier() -> Option<ChainIdentifier> {
+    *MAINNET_CHAIN_IDENTIFIER.get_or_init(|| {
+        MAINNET_CHAIN_IDENTIFIER_BASE58.map(|literal| {
+            let id = parse_chain_identifier(literal, "RTD mainnet");
+            assert!(
+                !FOREIGN_CHAIN_IDENTIFIERS.contains(&id),
+                "RTD mainnet genesis identifier must differ from the upstream network"
+            );
+            id
+        })
+    })
+}
+
+pub fn get_testnet_chain_identifier() -> Option<ChainIdentifier> {
+    *TESTNET_CHAIN_IDENTIFIER.get_or_init(|| {
+        TESTNET_CHAIN_IDENTIFIER_BASE58.map(|literal| {
+            let id = parse_chain_identifier(literal, "RTD testnet");
+            assert!(
+                !FOREIGN_CHAIN_IDENTIFIERS.contains(&id),
+                "RTD testnet genesis identifier must differ from the upstream network"
+            );
+            id
+        })
+    })
 }
 
 impl fmt::Display for ChainIdentifier {
@@ -376,13 +404,7 @@ impl std::str::FromStr for CheckpointDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(CheckpointDigest::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -469,13 +491,7 @@ impl std::str::FromStr for CheckpointContentsDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(CheckpointContentsDigest::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -488,26 +504,6 @@ impl fmt::LowerHex for CheckpointContentsDigest {
 impl fmt::UpperHex for CheckpointContentsDigest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::UpperHex::fmt(&self.0, f)
-    }
-}
-
-/// A digest of a certificate, which commits to the signatures as well as the tx.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CertificateDigest(Digest);
-
-impl CertificateDigest {
-    pub const fn new(digest: [u8; 32]) -> Self {
-        Self(Digest::new(digest))
-    }
-
-    pub fn random() -> Self {
-        Self(Digest::random())
-    }
-}
-
-impl fmt::Debug for CertificateDigest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("CertificateDigest").field(&self.0).finish()
     }
 }
 
@@ -554,7 +550,7 @@ impl TransactionDigest {
     /// ie. for an object there is no parent digest.
     /// Note that this is not the same as the digest of the genesis transaction,
     /// which cannot be known ahead of time.
-    // TODO(https://github.com/LinkUVerse/rtd/issues/65): we can pick anything here
+    // The marker only needs to differ from a real genesis transaction digest.
     pub const fn genesis_marker() -> Self {
         Self::ZERO
     }
@@ -655,13 +651,7 @@ impl std::str::FromStr for TransactionDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(TransactionDigest::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -762,13 +752,7 @@ impl std::str::FromStr for TransactionEffectsDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(TransactionEffectsDigest::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -838,13 +822,7 @@ impl std::str::FromStr for TransactionEventsDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(Self::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -902,13 +880,7 @@ impl std::str::FromStr for EffectsAuxDataDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(Self::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -1034,13 +1006,7 @@ impl std::str::FromStr for ObjectDigest {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut result = [0; 32];
-        let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
-        if buffer.len() != 32 {
-            return Err(anyhow::anyhow!("Invalid digest length. Expected 32 bytes"));
-        }
-        result.copy_from_slice(&buffer);
-        Ok(ObjectDigest::new(result))
+        Ok(Self::new(digest_from_base58(s)?))
     }
 }
 
@@ -1174,54 +1140,87 @@ impl fmt::Display for CheckpointArtifactsDigest {
     }
 }
 
+fn digest_from_base58(s: &str) -> anyhow::Result<[u8; 32]> {
+    let mut result = [0; 32];
+    let buffer = Base58::decode(s).map_err(|e| anyhow::anyhow!(e))?;
+    let len = buffer.len();
+    if len < 32 {
+        return Err(anyhow::anyhow!(
+            "Invalid digest length. Expected base58 string that decodes into 32 bytes, but [{s}] decodes into {len} bytes"
+        ));
+    } else if len > 32 {
+        let s = &s[0..32.min(s.len())];
+        return Err(anyhow::anyhow!(
+            "Invalid digest length. Expected base58 string that decodes into 32 bytes, but [{s}] (truncated) decodes into {len} bytes"
+        ));
+    }
+    result.copy_from_slice(&buffer);
+    Ok(result)
+}
+
 #[cfg(test)]
 mod test {
-    use crate::digests::{ChainIdentifier, CheckpointDigest, RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE};
+    use crate::digests::{
+        ChainIdentifier, FOREIGN_MAINNET_CHAIN_IDENTIFIER_BASE58,
+        FOREIGN_TESTNET_CHAIN_IDENTIFIER_BASE58, MAINNET_CHAIN_IDENTIFIER_BASE58,
+        TESTNET_CHAIN_IDENTIFIER_BASE58, digest_from_base58, get_mainnet_chain_identifier,
+        get_testnet_chain_identifier, parse_chain_identifier,
+    };
 
-    fn has_env_override() -> bool {
-        RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE.is_some()
-    }
-
-    // check that the chain id returns mainnet
     #[test]
-    fn test_chain_id_mainnet() {
-        if has_env_override() {
-            return;
-        }
-        let chain_id = ChainIdentifier::from_chain_short_id(&String::from("35834a8a"));
-        assert_eq!(
-            chain_id.unwrap().chain(),
-            rtd_protocol_config::Chain::Mainnet
-        );
+    fn unconfigured_rtd_network_ids_are_absent() {
+        assert!(MAINNET_CHAIN_IDENTIFIER_BASE58.is_none());
+        assert!(TESTNET_CHAIN_IDENTIFIER_BASE58.is_none());
+        assert!(get_mainnet_chain_identifier().is_none());
+        assert!(get_testnet_chain_identifier().is_none());
     }
 
     #[test]
-    fn test_chain_id_testnet() {
-        if has_env_override() {
-            return;
+    fn foreign_genesis_digests_are_always_unknown() {
+        for (literal, short_id) in [
+            (FOREIGN_MAINNET_CHAIN_IDENTIFIER_BASE58, "35834a8a"),
+            (FOREIGN_TESTNET_CHAIN_IDENTIFIER_BASE58, "4c78adac"),
+        ] {
+            let id = parse_chain_identifier(literal, "foreign network");
+            assert_eq!(id.chain(), rtd_protocol_config::Chain::Unknown);
+            assert_eq!(
+                ChainIdentifier::from_chain_short_id(&short_id.to_owned()),
+                None
+            );
         }
-        let chain_id = ChainIdentifier::from_chain_short_id(&String::from("4c78adac"));
-        assert_eq!(
-            chain_id.unwrap().chain(),
-            rtd_protocol_config::Chain::Testnet
-        );
     }
 
     #[test]
     fn test_chain_id_unknown() {
-        if has_env_override() {
-            return;
-        }
         let chain_id = ChainIdentifier::from_chain_short_id(&String::from("unknown"));
         assert_eq!(chain_id, None);
     }
 
     #[test]
-    fn full_chain_id_preserves_the_complete_genesis_digest() {
-        let digest = CheckpointDigest::new([7; 32]);
-        let chain_id = ChainIdentifier::from(digest);
+    fn test_digest_from_base58_eq_32() {
+        assert_eq!(
+            digest_from_base58("1".repeat(32).as_str()).unwrap(),
+            [0; 32]
+        );
+    }
 
-        assert_eq!(chain_id.full_id(), digest.to_string());
-        assert_ne!(chain_id.full_id(), chain_id.to_string());
+    #[test]
+    fn test_digest_from_base58_lt_32() {
+        assert_eq!(
+            digest_from_base58("1".repeat(31).as_str())
+                .unwrap_err()
+                .to_string(),
+            "Invalid digest length. Expected base58 string that decodes into 32 bytes, but [1111111111111111111111111111111] decodes into 31 bytes"
+        );
+    }
+
+    #[test]
+    fn test_digest_from_base58_gt_32() {
+        assert_eq!(
+            digest_from_base58("1".repeat(33).as_str())
+                .unwrap_err()
+                .to_string(),
+            "Invalid digest length. Expected base58 string that decodes into 32 bytes, but [11111111111111111111111111111111] (truncated) decodes into 33 bytes"
+        );
     }
 }

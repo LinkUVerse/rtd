@@ -17,8 +17,8 @@ type Props = {
 /**
  * Renders an Object ID.
  *
- * The ID is represented in a contracted form and acts as a link to
- * view the object in an explorer. It also has a tooltip to show its
+ * The ID is represented in a contracted form and links to an explorer when
+ * one is configured. It also has a tooltip to show its
  * full value and a button to copy that value to the clipboard.
  *
  * The optional `size` parameter controls how big the ID is, in
@@ -26,6 +26,7 @@ type Props = {
  */
 export function IDLink({ id, size, display }: Props): ReactElement {
     const explorer = useNetworkVariable("explorer");
+    const explorerLink = explorer(id);
     size = size ?? "1";
 
     const [copied, setCopied] = useState(false);
@@ -39,9 +40,13 @@ export function IDLink({ id, size, display }: Props): ReactElement {
     return (
         <Flex align="center" display={display}>
             <Tooltip content={id}>
-                <Link href={explorer(id)} target="_blank" size={size}>
-                    {formatAddress(id)}
-                </Link>
+                {explorerLink ? (
+                    <Link href={explorerLink} target="_blank" rel="noreferrer" size={size}>
+                        {formatAddress(id)}
+                    </Link>
+                ) : (
+                    <span>{formatAddress(id)}</span>
+                )}
             </Tooltip>
             <Tooltip content="Copy Object ID">
                 <Button size={size} ml="2" onClick={onClick} variant={copied ? "outline" : "soft"}>

@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::abi::EthToRtdTokenBridgeV1;
+use crate::abi::{EthToRtdTokenBridgeV1, EthToRtdTokenBridgeV2};
 use crate::crypto::BridgeAuthorityPublicKeyBytes;
 use crate::crypto::{
     BridgeAuthorityPublicKey, BridgeAuthorityRecoverableSignature, BridgeAuthoritySignInfo,
@@ -9,21 +9,14 @@ use crate::crypto::{
 use crate::encoding::BridgeMessageEncoding;
 use crate::error::{BridgeError, BridgeResult};
 use crate::events::EmittedRtdToEthTokenBridgeV1;
+use alloy::primitives::{Address as EthAddress, B256, TxHash as EthTransactionHash};
+use alloy::rpc::types::eth::Log;
 use enum_dispatch::enum_dispatch;
-use ethers::types::Address as EthAddress;
-use ethers::types::H256;
-pub use ethers::types::H256 as EthTransactionHash;
-use ethers::types::Log;
 use fastcrypto::encoding::{Encoding, Hex};
 use fastcrypto::hash::{HashFunction, Keccak256};
 use num_enum::TryFromPrimitive;
 use rand::Rng;
 use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
-use shared_crypto::intent::IntentScope;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
-use strum_macros::Display;
 use rtd_types::TypeTag;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::bridge::{
@@ -42,6 +35,11 @@ use rtd_types::committee::StakeUnit;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::digests::{Digest, TransactionDigest};
 use rtd_types::message_envelope::{Envelope, Message, VerifiedEnvelope};
+use serde::{Deserialize, Serialize};
+use shared_crypto::intent::IntentScope;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
+use strum_macros::Display;
 
 pub const BRIDGE_AUTHORITY_TOTAL_VOTING_POWER: u64 = 10000;
 
@@ -263,12 +261,34 @@ pub struct RtdToEthTokenTransfer {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct RtdToEthTokenTransferV2 {
+    pub nonce: u64,
+    pub rtd_chain_id: BridgeChainId,
+    pub eth_chain_id: BridgeChainId,
+    pub rtd_address: RtdAddress,
+    pub eth_address: EthAddress,
+    pub token_id: u8,
+    // The amount of tokens deposited with decimal points on Rtd side
+    pub amount_adjusted: u64,
+    pub timestamp_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct EthToRtdBridgeAction {
     // Digest of the transaction where the event was emitted
     pub eth_tx_hash: EthTransactionHash,
     // The index of the event in the transaction
     pub eth_event_index: u16,
     pub eth_bridge_event: EthToRtdTokenBridgeV1,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct EthToRtdTokenTransferV2 {
+    // Digest of the transaction where the event was emitted
+    pub eth_tx_hash: EthTransactionHash,
+    // The index of the event in the transaction
+    pub eth_event_index: u16,
+    pub eth_bridge_event: EthToRtdTokenBridgeV2,
 }
 
 #[derive(
@@ -391,6 +411,10 @@ pub enum BridgeAction {
     AddTokensOnEvmAction(AddTokensOnEvmAction),
     /// Rtd to Eth bridge action
     RtdToEthTokenTransfer(RtdToEthTokenTransfer),
+    /// Rtd to Eth bridge action V2
+    RtdToEthTokenTransferV2(RtdToEthTokenTransferV2),
+    // /// Eth to rtd bridge action V2
+    EthToRtdTokenTransferV2(EthToRtdTokenTransferV2),
 }
 
 impl BridgeAction {
@@ -416,7 +440,9 @@ impl BridgeAction {
         match self {
             BridgeAction::RtdToEthBridgeAction(a) => a.rtd_bridge_event.rtd_chain_id,
             BridgeAction::RtdToEthTokenTransfer(a) => a.rtd_chain_id,
+            BridgeAction::RtdToEthTokenTransferV2(a) => a.rtd_chain_id,
             BridgeAction::EthToRtdBridgeAction(a) => a.eth_bridge_event.eth_chain_id,
+            BridgeAction::EthToRtdTokenTransferV2(a) => a.eth_bridge_event.eth_chain_id,
             BridgeAction::BlocklistCommitteeAction(a) => a.chain_id,
             BridgeAction::EmergencyAction(a) => a.chain_id,
             BridgeAction::LimitUpdateAction(a) => a.chain_id,
@@ -427,7 +453,7 @@ impl BridgeAction {
         }
     }
 
-    pub fn is_governace_action(&self) -> bool {
+    pub fn is_governance_action(&self) -> bool {
         match self.action_type() {
             BridgeActionType::TokenTransfer => false,
             BridgeActionType::UpdateCommitteeBlocklist => true,
@@ -445,7 +471,9 @@ impl BridgeAction {
         match self {
             BridgeAction::RtdToEthBridgeAction(_) => BridgeActionType::TokenTransfer,
             BridgeAction::RtdToEthTokenTransfer(_) => BridgeActionType::TokenTransfer,
+            BridgeAction::RtdToEthTokenTransferV2(_) => BridgeActionType::TokenTransfer,
             BridgeAction::EthToRtdBridgeAction(_) => BridgeActionType::TokenTransfer,
+            BridgeAction::EthToRtdTokenTransferV2(_) => BridgeActionType::TokenTransfer,
             BridgeAction::BlocklistCommitteeAction(_) => BridgeActionType::UpdateCommitteeBlocklist,
             BridgeAction::EmergencyAction(_) => BridgeActionType::EmergencyButton,
             BridgeAction::LimitUpdateAction(_) => BridgeActionType::LimitUpdate,
@@ -461,7 +489,9 @@ impl BridgeAction {
         match self {
             BridgeAction::RtdToEthBridgeAction(a) => a.rtd_bridge_event.nonce,
             BridgeAction::RtdToEthTokenTransfer(a) => a.nonce,
+            BridgeAction::RtdToEthTokenTransferV2(a) => a.nonce,
             BridgeAction::EthToRtdBridgeAction(a) => a.eth_bridge_event.nonce,
+            BridgeAction::EthToRtdTokenTransferV2(a) => a.eth_bridge_event.nonce,
             BridgeAction::BlocklistCommitteeAction(a) => a.nonce,
             BridgeAction::EmergencyAction(a) => a.nonce,
             BridgeAction::LimitUpdateAction(a) => a.nonce,
@@ -476,7 +506,9 @@ impl BridgeAction {
         match self {
             BridgeAction::RtdToEthBridgeAction(_) => APPROVAL_THRESHOLD_TOKEN_TRANSFER,
             BridgeAction::RtdToEthTokenTransfer(_) => APPROVAL_THRESHOLD_TOKEN_TRANSFER,
+            BridgeAction::RtdToEthTokenTransferV2(_) => APPROVAL_THRESHOLD_TOKEN_TRANSFER,
             BridgeAction::EthToRtdBridgeAction(_) => APPROVAL_THRESHOLD_TOKEN_TRANSFER,
+            BridgeAction::EthToRtdTokenTransferV2(_) => APPROVAL_THRESHOLD_TOKEN_TRANSFER,
             BridgeAction::BlocklistCommitteeAction(_) => APPROVAL_THRESHOLD_COMMITTEE_BLOCKLIST,
             BridgeAction::EmergencyAction(a) => match a.action_type {
                 EmergencyActionType::Pause => APPROVAL_THRESHOLD_EMERGENCY_PAUSE,
@@ -505,6 +537,7 @@ impl BridgeAction {
                 })
             }
             BridgeAction::EthToRtdBridgeAction(_) => self,
+            BridgeAction::EthToRtdTokenTransferV2(_) => self,
             BridgeAction::BlocklistCommitteeAction(_) => self,
             BridgeAction::EmergencyAction(_) => self,
             BridgeAction::LimitUpdateAction(_) => self,
@@ -513,6 +546,7 @@ impl BridgeAction {
             BridgeAction::AddTokensOnRtdAction(_) => self,
             BridgeAction::AddTokensOnEvmAction(_) => self,
             BridgeAction::RtdToEthTokenTransfer(_) => self,
+            BridgeAction::RtdToEthTokenTransferV2(_) => self,
         }
     }
 
@@ -521,7 +555,7 @@ impl BridgeAction {
 
         let MoveTypeBridgeMessage {
             message_type: _,
-            message_version: _, // Switch on version when we introduce v2
+            message_version,
             seq_num,
             source_chain,
             payload,
@@ -536,17 +570,50 @@ impl BridgeAction {
             amount: [u8; 8], // u64 as Big Endian bytes
         }
 
-        let payload: RtdToEthOnChainBcsPayload = bcs::from_bytes(payload)?;
+        #[derive(Debug, Deserialize)]
+        struct RtdToEthOnChainBcsPayloadV2 {
+            rtd_address: Vec<u8>,
+            target_chain: u8,
+            eth_address: Vec<u8>,
+            token_type: u8,
+            amount: [u8; 8],       // u64 as Big Endian bytes
+            timestamp_ms: [u8; 8], // u64 as Big Endian bytes
+        }
 
-        Ok(BridgeAction::RtdToEthTokenTransfer(RtdToEthTokenTransfer {
-            nonce: *seq_num,
-            rtd_chain_id: BridgeChainId::try_from(*source_chain)?,
-            eth_chain_id: BridgeChainId::try_from(payload.target_chain)?,
-            rtd_address: RtdAddress::from_bytes(payload.rtd_address)?,
-            eth_address: EthAddress::from_str(&Hex::encode(&payload.eth_address))?,
-            token_id: payload.token_type,
-            amount_adjusted: u64::from_be_bytes(payload.amount),
-        }))
+        match *message_version {
+            crate::encoding::TOKEN_TRANSFER_MESSAGE_VERSION_V1 => {
+                let payload: RtdToEthOnChainBcsPayload = bcs::from_bytes(payload)?;
+
+                Ok(BridgeAction::RtdToEthTokenTransfer(RtdToEthTokenTransfer {
+                    nonce: *seq_num,
+                    rtd_chain_id: BridgeChainId::try_from(*source_chain)?,
+                    eth_chain_id: BridgeChainId::try_from(payload.target_chain)?,
+                    rtd_address: RtdAddress::from_bytes(payload.rtd_address)?,
+                    eth_address: EthAddress::from_str(&Hex::encode(&payload.eth_address))?,
+                    token_id: payload.token_type,
+                    amount_adjusted: u64::from_be_bytes(payload.amount),
+                }))
+            }
+            crate::encoding::TOKEN_TRANSFER_MESSAGE_VERSION_V2 => {
+                let payload: RtdToEthOnChainBcsPayloadV2 = bcs::from_bytes(payload)?;
+
+                Ok(BridgeAction::RtdToEthTokenTransferV2(
+                    RtdToEthTokenTransferV2 {
+                        nonce: *seq_num,
+                        rtd_chain_id: BridgeChainId::try_from(*source_chain)?,
+                        eth_chain_id: BridgeChainId::try_from(payload.target_chain)?,
+                        rtd_address: RtdAddress::from_bytes(payload.rtd_address)?,
+                        eth_address: EthAddress::from_str(&Hex::encode(&payload.eth_address))?,
+                        token_id: payload.token_type,
+                        amount_adjusted: u64::from_be_bytes(payload.amount),
+                        timestamp_ms: u64::from_be_bytes(payload.timestamp_ms),
+                    },
+                ))
+            }
+            v => Err(BridgeError::Generic(format!(
+                "unknown message version: {v}"
+            ))),
+        }
     }
 }
 
@@ -594,7 +661,7 @@ impl Message for BridgeAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EthLog {
     pub block_number: u64,
-    pub tx_hash: H256,
+    pub tx_hash: B256,
     pub log_index_in_tx: u16,
     pub log: Log,
 }
@@ -604,13 +671,13 @@ pub struct EthLog {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawEthLog {
     pub block_number: u64,
-    pub tx_hash: H256,
+    pub tx_hash: B256,
     pub log: Log,
 }
 
 pub trait EthEvent {
     fn block_number(&self) -> u64;
-    fn tx_hash(&self) -> H256;
+    fn tx_hash(&self) -> B256;
     fn log(&self) -> &Log;
 }
 
@@ -618,7 +685,7 @@ impl EthEvent for EthLog {
     fn block_number(&self) -> u64 {
         self.block_number
     }
-    fn tx_hash(&self) -> H256 {
+    fn tx_hash(&self) -> B256 {
         self.tx_hash
     }
     fn log(&self) -> &Log {
@@ -630,7 +697,7 @@ impl EthEvent for RawEthLog {
     fn block_number(&self) -> u64 {
         self.block_number
     }
-    fn tx_hash(&self) -> H256 {
+    fn tx_hash(&self) -> B256 {
         self.tx_hash
     }
     fn log(&self) -> &Log {
@@ -704,11 +771,11 @@ mod tests {
     use crate::test_utils::get_test_authority_and_key;
     use crate::test_utils::get_test_eth_to_rtd_bridge_action;
     use crate::test_utils::get_test_rtd_to_eth_bridge_action;
-    use ethers::types::Address as EthAddress;
+    use alloy::primitives::Address as EthAddress;
     use fastcrypto::traits::KeyPair;
-    use std::collections::HashSet;
     use rtd_types::bridge::TOKEN_ID_BTC;
     use rtd_types::crypto::get_key_pair;
+    use std::collections::HashSet;
 
     use super::*;
 

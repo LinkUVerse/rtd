@@ -1,5 +1,27 @@
 # @linku/prettier-plugin-move
 
+## 0.4.0
+
+### Minor Changes
+
+- default to module label in the plugin
+- trailing comma in grouped multiline imports
+- preserve comments in empty bodies
+- match arm guard parens are no longer removed
+- do not group imports with comments
+
+## 0.3.5
+
+### Patch Changes
+
+- adds support for string literals
+
+## 0.3.4
+
+### Patch Changes
+
+- fix issue with `spec` being treated as a keyword in a function body
+
 ## 0.3.3
 
 ### Patch Changes

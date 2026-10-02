@@ -7,16 +7,22 @@ use rtd_sdk::types::{
     supported_protocol_versions::Chain,
 };
 
-pub fn testnet_environment() -> Environment {
-    Environment {
+pub fn testnet_environment() -> Option<Environment> {
+    get_testnet_chain_identifier().map(|id| Environment {
         name: Chain::Testnet.as_str().to_string(),
-        id: get_testnet_chain_identifier().to_string(),
-    }
+        id: id.to_string(),
+    })
 }
 
-pub fn mainnet_environment() -> Environment {
-    Environment {
+pub fn mainnet_environment() -> Option<Environment> {
+    get_mainnet_chain_identifier().map(|id| Environment {
         name: Chain::Mainnet.as_str().to_string(),
-        id: get_mainnet_chain_identifier().to_string(),
-    }
+        id: id.to_string(),
+    })
+}
+
+/// An opaque environment for source-only compilation in tests. It never
+/// identifies a public RTD network or a real genesis checkpoint.
+pub fn local_test_environment() -> Environment {
+    Environment::new("rtd-local-test".into(), "rtd-local-test".into())
 }

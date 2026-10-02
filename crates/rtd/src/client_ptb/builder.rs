@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use linku_common::ZipDebugEqIteratorExt;
 use miette::Severity;
 use move_binary_format::{
     CompiledModule, binary_config::BinaryConfig, file_format::SignatureToken,
@@ -24,23 +25,24 @@ use move_core_types::{
     parsing::{
         address::{NumericalAddress, ParsedAddress},
         parser::NumberFormat,
-        types::{ParsedStructType, ParsedType},
+        types::{ParsedDatatype, ParsedType},
     },
 };
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
-use std::{collections::BTreeMap, path::Path};
 use rtd_json::{is_receiving_argument, primitive_type};
-use rtd_json_rpc_types::{RtdObjectData, RtdObjectDataOptions, RtdRawData};
-use rtd_sdk::{apis::ReadApi, wallet_context::WalletContext};
+use rtd_rpc_api::Client;
+use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::{
     Identifier, RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
     base_types::{ObjectID, TxContext, TxContextKind, is_primitive_type_tag},
+    gas_coin::GAS,
     move_package::MovePackage,
     object::Owner,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     resolve_address,
     transaction::{self as Tx, ObjectArg},
 };
+use std::{collections::BTreeMap, path::Path};
 
 use super::{
     ast::{ModuleAccess as PTBModuleAccess, ParsedPTBCommand, Program},
@@ -84,6 +86,18 @@ trait Resolver<'a>: Send {
     fn re_resolve(&self) -> bool {
         false
     }
+
+    async fn funds_withdrawal(
+        &mut self,
+        builder: &mut PTBBuilder<'a>,
+        loc: Span,
+        arg: Tx::FundsWithdrawalArg,
+    ) -> PTBResult<Tx::Argument> {
+        builder
+            .ptb
+            .funds_withdrawal(arg)
+            .map_err(|e| err!(loc, "{e}"))
+    }
 }
 
 /// A resolver that resolves object IDs to object arguments.
@@ -122,12 +136,13 @@ impl<'a> Resolver<'a> for ToObject {
         obj_id: ObjectID,
     ) -> PTBResult<Tx::Argument> {
         // Get the object from the reader to get metadata about the object.
-        let obj = builder.get_object(obj_id, loc).await?;
-        let owner = obj
-            .owner
-            .clone()
-            .ok_or_else(|| err!(loc, "Unable to get owner info for object {obj_id}"))?;
-        let object_ref = obj.object_ref();
+        let obj = builder
+            .reader
+            .get_object(obj_id)
+            .await
+            .map_err(|e| err!(loc, "Unable to get owner info for object {obj_id}: {e}"))?;
+        let owner = obj.owner().clone();
+        let object_ref = obj.compute_object_reference();
         // Depending on the ownership of the object, we resolve it to different types of object
         // arguments for the transaction.
         let obj_arg = match owner {
@@ -137,6 +152,10 @@ impl<'a> Resolver<'a> for ToObject {
                 initial_shared_version,
             }
             | Owner::ConsensusAddressOwner {
+                start_version: initial_shared_version,
+                ..
+            }
+            | Owner::Party {
                 start_version: initial_shared_version,
                 ..
             } => ObjectArg::SharedObject {
@@ -202,6 +221,15 @@ impl<'a> Resolver<'a> for ToPure {
     ) -> PTBResult<Tx::Argument> {
         builder.ptb.pure(obj_id).map_err(|e| err!(loc, "{e}"))
     }
+
+    async fn funds_withdrawal(
+        &mut self,
+        _builder: &mut PTBBuilder<'a>,
+        loc: Span,
+        _arg: Tx::FundsWithdrawalArg,
+    ) -> PTBResult<Tx::Argument> {
+        error!(loc, "Withdrawal inputs cannot be used as pure values.")
+    }
 }
 
 // ===========================================================================
@@ -233,7 +261,7 @@ pub struct PTBBuilder<'a> {
     /// transaction arguments.
     resolved_arguments: BTreeMap<String, Tx::Argument>,
     /// Read API for reading objects from chain. Needed for object resolution.
-    reader: &'a ReadApi,
+    reader: Client,
     /// Wallet used to find the active environment for the publish command
     wallet: &'a WalletContext,
     /// The last command that we have added. This is used to support assignment commands.
@@ -289,7 +317,7 @@ impl ArgWithHistory {
 impl<'a> PTBBuilder<'a> {
     pub fn new(
         starting_env: BTreeMap<String, AddressData>,
-        reader: &'a ReadApi,
+        reader: Client,
         wallet: &'a WalletContext,
     ) -> Self {
         Self {
@@ -405,7 +433,7 @@ impl<'a> PTBBuilder<'a> {
                     self.addresses.insert(ident, AddressData::AccountAddress(a));
                 }
             }
-            // If we encounter a dotted string e.g., "foo.0" or "rtd.io" or something like that
+            // If we encounter a dotted string e.g., "foo.0" or "example.com" or something like that
             // this see if we can find an address for it in the environment and bind to it.
             PTBArg::VariableAccess(ref head, ref fields) => {
                 let key = format!(
@@ -431,7 +459,7 @@ impl<'a> PTBBuilder<'a> {
         package_id: ObjectID,
         loc: Span,
     ) -> PTBResult<MovePackage> {
-        resolve_package(self.reader, package_id, loc).await
+        resolve_package(&mut self.reader, package_id, loc).await
     }
 
     /// Resolves the argument to the move call based on the type information of the function being
@@ -580,7 +608,7 @@ impl<'a> PTBBuilder<'a> {
         }
 
         let mut call_args = vec![];
-        for (param, arg) in parameters.iter().zip(args.into_iter()) {
+        for (param, arg) in parameters.iter().zip_debug_eq(args) {
             let call_arg = self
                 .resolve_move_call_arg(&module, ty_args, arg, param)
                 .await?;
@@ -634,6 +662,17 @@ impl<'a> PTBBuilder<'a> {
             | PTBArg::Option(_)
             | PTBArg::Vector(_)) => ctx.pure(self, arg_loc, a).await,
             PTBArg::Gas => Ok(Tx::Argument::GasCoin),
+            PTBArg::Withdrawal(withdrawal) => {
+                let type_arg = withdrawal
+                    .type_arg
+                    .map(|type_arg| into_type_tag(&self.addresses, type_arg, &resolve_address))
+                    .transpose()
+                    .map_err(|e| err!(arg_loc, "{e}"))?
+                    .unwrap_or_else(GAS::type_tag);
+                let withdrawal_arg =
+                    Tx::FundsWithdrawalArg::balance_from_sender(withdrawal.amount, type_arg);
+                ctx.funds_withdrawal(self, arg_loc, withdrawal_arg).await
+            }
             // NB: the ordering of these lines is important so that shadowing is properly
             // supported.
             // If we encounter an identifier that we have not already resolved, then we resolve the
@@ -752,21 +791,6 @@ impl<'a> PTBBuilder<'a> {
                 None => error!(arg_loc, "Unresolved identifier: '{}'", i),
             },
         }
-    }
-
-    /// Fetch the `RtdObjectData` for an object ID -- this is used for object resolution.
-    async fn get_object(&self, object_id: ObjectID, obj_loc: Span) -> PTBResult<RtdObjectData> {
-        let res = self
-            .reader
-            .get_object_with_options(
-                object_id,
-                RtdObjectDataOptions::new().with_type().with_owner(),
-            )
-            .await
-            .map_err(|e| err!(obj_loc, "{e}"))?
-            .into_object()
-            .map_err(|e| err!(obj_loc, "{e}"))?;
-        Ok(res)
     }
 
     /// Create a "did you mean" message for an identifier with the context of our different binding
@@ -938,7 +962,7 @@ impl<'a> PTBBuilder<'a> {
                         .map_err(|e| err!(pkg_loc, "Cannot compile package: {e}"))?;
 
                 let compiled_package = compile_package(
-                    self.reader,
+                    self.reader.clone(),
                     &root_pkg,
                     build_config,
                     package_path,
@@ -996,7 +1020,7 @@ impl<'a> PTBBuilder<'a> {
                     .await?;
 
                 let (upgrade_policy, compiled_package) = upgrade_package(
-                    self.reader,
+                    self.reader.clone(),
                     &root_pkg,
                     build_config.clone(),
                     package_path,
@@ -1039,7 +1063,7 @@ impl<'a> PTBBuilder<'a> {
                         .dependency_ids
                         .published
                         .values()
-                        .cloned()
+                        .map(|dep| dep.published_at)
                         .collect::<Vec<_>>(),
                     compiled_modules,
                 );
@@ -1170,11 +1194,11 @@ pub fn is_mvr_name(name: &str) -> bool {
 
 pub fn into_struct_tag(
     addresses: &BTreeMap<String, AddressData>,
-    parsed_struct_type: ParsedStructType,
+    parsed_datatype: ParsedDatatype,
     mapping: &(impl Fn(&str) -> Option<AccountAddress> + std::marker::Sync),
 ) -> anyhow::Result<StructTag> {
-    let fq_name = parsed_struct_type.fq_name;
-    let type_args = parsed_struct_type.type_args;
+    let fq_name = parsed_datatype.fq_name;
+    let type_args = parsed_datatype.type_args;
 
     let address = match fq_name.module.address {
         ParsedAddress::Named(name) if is_mvr_name(&name) => {
@@ -1233,7 +1257,9 @@ pub fn into_type_tag(
         ParsedType::Vector(inner) => {
             TypeTag::Vector(Box::new(into_type_tag(addresses, *inner, mapping)?))
         }
-        ParsedType::Struct(s) => TypeTag::Struct(Box::new(into_struct_tag(addresses, s, mapping)?)),
+        ParsedType::Datatype(s) => {
+            TypeTag::Struct(Box::new(into_struct_tag(addresses, s, mapping)?))
+        }
     })
 }
 
@@ -1260,33 +1286,22 @@ fn try_resolve_parsed_address(
 
 /// Try to resolve an ObjectID to a MovePackage
 pub async fn resolve_package(
-    reader: &ReadApi,
+    reader: &mut Client,
     package_id: ObjectID,
     loc: Span,
 ) -> Result<MovePackage, PTBError> {
     let object = reader
-        .get_object_with_options(package_id, RtdObjectDataOptions::bcs_lossless())
+        .get_object(package_id)
         .await
-        .map_err(|e| err!(loc, "{e}"))?
-        .into_object()
-        .map_err(|e| err!(loc, "{e}"))?;
+        .map_err(|e| err!(loc, "{}", e.message()))?;
 
-    let Some(RtdRawData::Package(package)) = object.bcs else {
-        error!(
+    let package = object.data.try_as_package().ok_or_else(|| {
+        err!(
             loc,
-            "BCS field in object '{}' is missing or not a package.", package_id
-        );
-    };
+            "BCS field in object '{}' is missing or not a package.",
+            package_id
+        )
+    })?;
 
-    MovePackage::new(
-        package.id,
-        package.version,
-        package.module_map,
-        // This package came from on-chain and the tool runs locally, so don't worry about
-        // trying to enforce the package size limit.
-        u64::MAX,
-        package.type_origin_table,
-        package.linkage_table,
-    )
-    .map_err(|e| err!(loc, "{e}"))
+    Ok(package.clone())
 }

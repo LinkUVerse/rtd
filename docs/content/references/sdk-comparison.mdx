@@ -1,0 +1,27 @@
+---
+title: SDK Comparison
+sidebar_label: SDK Comparison
+description: Source availability and API roles of the RTD SDK forks.
+keywords:
+  - RTD SDK
+  - TypeScript SDK
+  - Rust SDK
+  - SDK comparison
+questions:
+  - Which RTD SDK source should I use?
+  - What transport should an RTD client use?
+answer: >-
+  Choose the RTD TypeScript SDK for JavaScript applications or the RTD Rust
+  SDK for Rust services. Build a revision compatible with your chain and
+  verify its gRPC or GraphQL endpoint before use.
+---
+
+| SDK source | Language | Source package | Suitable use |
+| --- | --- | --- | --- |
+| [rtd-ts-sdk](https://github.com/LinkUVerse/rtd-ts-sdk) | TypeScript / JavaScript | `rtd-typescript`; React components in `rtd-dapp-kit-react` | Client applications and browser frontends after wallet integration is verified. |
+| [rtd-rust-sdk](https://github.com/LinkUVerse/rtd-rust-sdk) | Rust | Inspect its workspace manifest for the current crate names | Services and Rust clients. |
+| [rtd](https://github.com/LinkUVerse/rtd) | Rust | `rtd-sdk` legacy crate in the main repository | Source compatibility or migration work requiring its older APIs. |
+
+For new integrations, use an API served by the RTD network you operate. Check that the endpoint's chain ID and genesis match the client configuration. RTD has no public Mainnet, and its future Mainnet will not expose JSON-RPC. An SDK's support for an API protocol is separate from the existence of a hosted RTD API service.
+
+The upstream Sui zkSend, DeepBook, Slush, and community SDK projects have not been established as RTD integrations. Do not label them stable RTD SDKs or copy their public package IDs and endpoints into an RTD application. See [RTD SDKs](/references/rtd-sdks) for source links.

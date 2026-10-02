@@ -1,11 +1,17 @@
 ---
-title: Rtd Full Node gRPC
-description: The Rtd full node gRPC protocol is available on all Rtd Full nodes.
-keywords: [ rtd full node, grpc, g rpc, rpc, rpc api, json-rpc, json rpc api, grpc api ]
+title: RTD Full Node gRPC Methods
+sidebar_label: Methods
+description: Find the current RTD Full Node gRPC method definitions in the forked proto source.
+keywords:
+  - rtd full node
+  - grpc
+  - protocol
 ---
 
-import Protocol from "../../site/src/components/Protocol";
+# RTD Full Node gRPC methods
 
-Rtd full node gRPC API replaces JSON-RPC on full nodes. JSON-RPC is `deprecated`.
+The checked-in `temp/rtd-apis/proto/rtd/rpc/v2` tree is the source of truth for the RTD gRPC API. It defines the Ledger, State, Transaction Execution, Subscription, Move Package, and Signature Verification services. Review the `.proto` files and their comments before generating a client; see the [forked RTD API repository](https://github.com/LinkUVerse/rtd-apis/tree/main/proto/rtd/rpc/v2).
 
-<Protocol />
+The previous generated reference required a `documentation.json` file fetched by an inherited build step. That file is absent from this checkout, so this page does not claim a generated method table. A future local generator must use this fork's proto revision and be checked against the server before its output is published.
+
+For an operator-owned node, verify the gRPC listener and chain ID before using the service. See [What is gRPC](/develop/accessing-data/grpc/what-is-grpc) and [Querying Data with gRPC](/develop/accessing-data/grpc/using-grpc).

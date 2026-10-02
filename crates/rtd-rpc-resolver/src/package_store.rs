@@ -6,10 +6,14 @@
 //! This provides a convenient way to resolve package types
 //! by fetching package data directly from the network.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use move_core_types::account_address::AccountAddress;
-use std::sync::Arc;
-use rtd_package_resolver::{Package, PackageStore, PackageStoreWithLruCache, error::Error};
+use rtd_package_resolver::Package;
+use rtd_package_resolver::PackageStore;
+use rtd_package_resolver::PackageStoreWithLruCache;
+use rtd_package_resolver::error::Error;
 use rtd_rpc_api::Client;
 use rtd_types::base_types::ObjectID;
 
@@ -24,7 +28,7 @@ impl RpcPackageStore {
     ///
     /// # Example
     /// ```ignore
-    /// let store = RpcPackageStore::new("https://fullnode.testnet.rtd.io:443");
+    /// let store = RpcPackageStore::new("http://127.0.0.1:9000");
     /// ```
     pub fn new(rpc_url: &str) -> Self {
         let client = Client::new(rpc_url).expect("Failed to create RPC client - invalid URL");
@@ -41,7 +45,7 @@ impl RpcPackageStore {
     /// use rtd_rpc_resolver::package_store::RpcPackageStore;
     /// use rtd_package_resolver::Resolver;
     ///
-    /// let store = RpcPackageStore::new("https://fullnode.testnet.rtd.io:443");
+    /// let store = RpcPackageStore::new("http://127.0.0.1:9000");
     /// let cached_store = store.with_cache();
     /// let resolver = Resolver::new(cached_store);
     /// ```

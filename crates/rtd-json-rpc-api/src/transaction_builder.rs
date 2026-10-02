@@ -78,7 +78,7 @@ pub trait TransactionBuilder {
     /// 2. accumulate all residual RTD from input coins left and deposit all RTD to the first
     /// input coin, then use the first input coin as the gas coin object.
     /// 3. the balance of the first input coin after tx is sum(input_coins) - sum(amounts) - actual_gas_cost
-    /// 4. all other input coints other than the first one are deleted.
+    /// 4. all other input coins other than the first one are deleted.
     #[method(name = "payRtd")]
     async fn pay_rtd(
         &self,
@@ -128,7 +128,7 @@ pub trait TransactionBuilder {
         function: String,
         /// the type arguments of the Move function
         type_arguments: Vec<RtdTypeTag>,
-        /// the arguments to be passed into the Move function, in [RtdJson](https://docs.rtd.io/build/rtd-json) format
+        /// the arguments to be passed into the Move function, in `RtdJson` format
         arguments: Vec<RtdJsonValue>,
         /// gas object to be used in this transaction, node will pick one from the signer's possession if not provided
         gas: Option<ObjectID>,
@@ -160,7 +160,7 @@ pub trait TransactionBuilder {
         &self,
         /// the transaction signer's Rtd address
         signer: RtdAddress,
-        /// the coin object to be spilt
+        /// the coin object to be split
         coin_object_id: ObjectID,
         /// the amounts to split out from the coin
         split_amounts: Vec<BigInt<u64>>,
@@ -176,7 +176,7 @@ pub trait TransactionBuilder {
         &self,
         /// the transaction signer's Rtd address
         signer: RtdAddress,
-        /// the coin object to be spilt
+        /// the coin object to be split
         coin_object_id: ObjectID,
         /// the number of coins to split into
         split_count: BigInt<u64>,

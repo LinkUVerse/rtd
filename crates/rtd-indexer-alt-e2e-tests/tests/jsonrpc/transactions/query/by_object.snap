@@ -6,6 +6,23 @@ processed 13 tasks
 init:
 A: object(0,0)
 
+// Transactions:
+//
+// 1. Create a new gas coin and transfer it.
+// 2. Split off some more funds from that coin and transfer that too.
+// 3. Merge the split coin back into the gas coin.
+// 4. Merge the original coin back into the gas coin.
+//
+// RPC queries:
+//
+// 1. All Transactions
+// 2. Transactions affecting coin 1 (there should be 3).
+// 3. Transactions affecting coin 2 (there should be 2).
+// 4. The first transaction affecting coin 2, iterating forwards.
+// 5. The last transaction affecting coin 2, iterating backwards.
+// 6. The last transaction affecting coin 1, iterating forwards.
+// 7. The middle transaction affecting coin 1, iterating forwards.
+
 task 1, lines 23-25:
 //# programmable --sender A --inputs 42 @A
 //> SplitCoins(Gas, [Input(0)]);
@@ -48,32 +65,37 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "3FJ4fSrf7toVCANccxAbeJ5A1iSzwKLghCYcaz9atbCD",
+        "digest": "85r5mfnut7T1NNBmbL7RpGMf9caJe5VEnpiCJxkz7eDE",
         "timestampMs": "0",
         "checkpoint": "0"
       },
       {
-        "digest": "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa",
+        "digest": "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "Cs81ueNvP7Y63qibhhJXvEKhqXqVXsWRRuZKvxDJgd37",
+        "digest": "SNvgtn4fdGttz9sDSgTz8hAQ8DzudjtjY3WNCzdpM1p",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "21AuR8T8joUdTFAM8rBUqMiqQG57CEvW9PBTWoUxZCEW",
+        "digest": "EuDHEiLBorU2LAqhyno1KhpXzVgxN3aJ481Ssi8PXSai",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "FNmBXaFzxKExTXCparbWdGXfFrj6cchG9Rx1uEeGw4vP",
+        "digest": "CfcWEm3sRi5Pz8cTMaozqkfHNjkjtN4cwrEkz2J1yrn5",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
         "timestampMs": "0",
         "checkpoint": "1"
       }
     ],
-    "nextCursor": "NA==",
+    "nextCursor": "NQ==",
     "hasNextPage": false
   }
 }
@@ -86,17 +108,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "ARwAbZ2EETkMxUDTEwx2BoL95cbqnLVmiRDVH53h6UHa",
+        "digest": "66AZSNZxfPXuoPJ2XLMnSxPqqcSN1y1NZx9G69AEKnDs",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "Cs81ueNvP7Y63qibhhJXvEKhqXqVXsWRRuZKvxDJgd37",
+        "digest": "SNvgtn4fdGttz9sDSgTz8hAQ8DzudjtjY3WNCzdpM1p",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "FNmBXaFzxKExTXCparbWdGXfFrj6cchG9Rx1uEeGw4vP",
+        "digest": "CfcWEm3sRi5Pz8cTMaozqkfHNjkjtN4cwrEkz2J1yrn5",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -114,12 +136,12 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "Cs81ueNvP7Y63qibhhJXvEKhqXqVXsWRRuZKvxDJgd37",
+        "digest": "SNvgtn4fdGttz9sDSgTz8hAQ8DzudjtjY3WNCzdpM1p",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "21AuR8T8joUdTFAM8rBUqMiqQG57CEvW9PBTWoUxZCEW",
+        "digest": "EuDHEiLBorU2LAqhyno1KhpXzVgxN3aJ481Ssi8PXSai",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -137,7 +159,7 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "Cs81ueNvP7Y63qibhhJXvEKhqXqVXsWRRuZKvxDJgd37",
+        "digest": "SNvgtn4fdGttz9sDSgTz8hAQ8DzudjtjY3WNCzdpM1p",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -155,7 +177,7 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "21AuR8T8joUdTFAM8rBUqMiqQG57CEvW9PBTWoUxZCEW",
+        "digest": "EuDHEiLBorU2LAqhyno1KhpXzVgxN3aJ481Ssi8PXSai",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -173,7 +195,7 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "FNmBXaFzxKExTXCparbWdGXfFrj6cchG9Rx1uEeGw4vP",
+        "digest": "CfcWEm3sRi5Pz8cTMaozqkfHNjkjtN4cwrEkz2J1yrn5",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -191,7 +213,7 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "Cs81ueNvP7Y63qibhhJXvEKhqXqVXsWRRuZKvxDJgd37",
+        "digest": "SNvgtn4fdGttz9sDSgTz8hAQ8DzudjtjY3WNCzdpM1p",
         "timestampMs": "0",
         "checkpoint": "1"
       }

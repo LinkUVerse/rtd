@@ -6,8 +6,7 @@
 
 use crate::key_value_store_metrics::KeyValueStoreMetrics;
 use async_trait::async_trait;
-use std::sync::Arc;
-use std::time::Instant;
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_types::base_types::{ObjectID, SequenceNumber, VersionNumber};
 use rtd_types::digests::{CheckpointDigest, TransactionDigest};
 use rtd_types::effects::{TransactionEffects, TransactionEvents};
@@ -18,6 +17,8 @@ use rtd_types::messages_checkpoint::{
 use rtd_types::object::Object;
 use rtd_types::storage::ObjectKey;
 use rtd_types::transaction::Transaction;
+use std::sync::Arc;
+use std::time::Instant;
 use tracing::instrument;
 
 pub type KVStoreTransactionData = (Vec<Option<Transaction>>, Vec<Option<TransactionEffects>>);
@@ -607,7 +608,7 @@ fn find_fallback<T, K: Clone>(values: &[Option<T>], keys: &[K]) -> (Vec<K>, Vec<
 }
 
 fn merge_res<T>(values: &mut [Option<T>], fallback_values: Vec<Option<T>>, indices: &[usize]) {
-    for (&index, fallback_value) in indices.iter().zip(fallback_values) {
+    for (&index, fallback_value) in indices.iter().zip_debug_eq(fallback_values) {
         values[index] = fallback_value;
     }
 }

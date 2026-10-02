@@ -134,6 +134,11 @@ fn check_disabled_features(
         "Transaction signing is temporarily disabled"
     );
 
+    deny_if_true!(
+        filter_config.gasless_disabled() && tx_data.is_gasless_transaction(),
+        "Gasless transactions are temporarily disabled"
+    );
+
     tx_signatures.iter().try_for_each(|s| {
         if let GenericSignature::ZkLoginAuthenticator(z) = s {
             deny_if_true!(
@@ -178,6 +183,7 @@ fn check_signers(
     if deny_map.is_empty() {
         return Ok(());
     }
+    // Check declared sender and sponsor addresses.
     for signer in tx_data.required_signers() {
         deny_if_true!(
             deny_map.contains(&signer),
@@ -187,13 +193,15 @@ fn check_signers(
             )
         );
     }
-    for signature in tx_signatures {
-        if let Ok(address) = RtdAddress::try_from(signature) {
+    // Also check the actual signing addresses derived from the transaction signatures.
+    // With address aliases, the actual signer may differ from the declared sender/sponsor.
+    for sig in tx_signatures {
+        if let Ok(addr) = RtdAddress::try_from(sig) {
             deny_if_true!(
-                deny_map.contains(&address),
+                deny_map.contains(&addr),
                 format!(
                     "Access to account address {:?} is temporarily disabled",
-                    address
+                    addr
                 )
             );
         }

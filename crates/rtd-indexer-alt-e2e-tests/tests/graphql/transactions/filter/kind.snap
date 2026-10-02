@@ -10,7 +10,7 @@ task 1, lines 6-19:
 //# publish
 created: object(1,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 5175600,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 5183200,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 21:
 //# create-checkpoint
@@ -32,50 +32,59 @@ task 5, line 27:
 //# create-checkpoint
 Checkpoint created: 2
 
-task 6, lines 29-57:
+task 6, lines 29-58:
 //# run-graphql
 Response: {
   "data": {
     "programmable": {
       "pageInfo": {
-        "startCursor": "MQ==",
-        "endCursor": "Mw==",
+        "startCursor": "KAE6BAgAEAE=",
+        "endCursor": "KAE6BAgAEAQ=",
         "hasPreviousPage": false,
         "hasNextPage": false
       },
       "edges": [
         {
-          "cursor": "MQ==",
+          "cursor": "KAE6BAgAEAE=",
           "node": {
-            "digest": "J1pYPDrTgsKgzB8XWtW8jLJ8RPsbJcC1SQ4Mv2T1hAWt",
+            "digest": "9TEV41SwA1BmtU39j7kvP2UtGmkUNVmau9hkvHA6UaNr",
+            "kind": {
+              "__typename": "ProgrammableTransaction"
+            },
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 1,
-                "digest": "FDWfFh8q43Ai6jWp3oCf8FsnFfwXSwuN9xQRwmSbEwWM"
+                "digest": "2oo2uRdoiUXByJ4CtPBUFKwLh2QLFb4QJufMHWb7RGTg"
               }
             }
           }
         },
         {
-          "cursor": "Mg==",
+          "cursor": "KAE6BAgAEAM=",
           "node": {
-            "digest": "Cwqr9jTgQjajoYaqcjzAaQGcQEyCg8XxoN7smGCLiBrs",
+            "digest": "8VgXmZjNCVbKPgofJbWPBo9VcKKW7zhDVeoaWyvZSedZ",
+            "kind": {
+              "__typename": "ProgrammableTransaction"
+            },
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 2,
-                "digest": "CP7NxT2A5bwi4tbNyNsopKE5a2K3DG9sfXUZ22UthLZj"
+                "digest": "3BtpDTJQ7VdmedrChbe4phCiN3iZgMVngxTUXHgyGWc4"
               }
             }
           }
         },
         {
-          "cursor": "Mw==",
+          "cursor": "KAE6BAgAEAQ=",
           "node": {
-            "digest": "AMLqWw6Gf3R138AgMPsF3myw2nQUJuig44284UFuhgEv",
+            "digest": "6kKARDwDrTYfW7GSuitycDTSrScADQ6emTbQcCkgJS4t",
+            "kind": {
+              "__typename": "ProgrammableTransaction"
+            },
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 2,
-                "digest": "CP7NxT2A5bwi4tbNyNsopKE5a2K3DG9sfXUZ22UthLZj"
+                "digest": "3BtpDTJQ7VdmedrChbe4phCiN3iZgMVngxTUXHgyGWc4"
               }
             }
           }
@@ -84,32 +93,38 @@ Response: {
     },
     "programmableA": {
       "pageInfo": {
-        "startCursor": "Mg==",
-        "endCursor": "Mw==",
+        "startCursor": "KAE6BAgAEAM=",
+        "endCursor": "KAE6BAgAEAQ=",
         "hasPreviousPage": false,
         "hasNextPage": false
       },
       "edges": [
         {
-          "cursor": "Mg==",
+          "cursor": "KAE6BAgAEAM=",
           "node": {
-            "digest": "Cwqr9jTgQjajoYaqcjzAaQGcQEyCg8XxoN7smGCLiBrs",
+            "digest": "8VgXmZjNCVbKPgofJbWPBo9VcKKW7zhDVeoaWyvZSedZ",
+            "kind": {
+              "__typename": "ProgrammableTransaction"
+            },
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 2,
-                "digest": "CP7NxT2A5bwi4tbNyNsopKE5a2K3DG9sfXUZ22UthLZj"
+                "digest": "3BtpDTJQ7VdmedrChbe4phCiN3iZgMVngxTUXHgyGWc4"
               }
             }
           }
         },
         {
-          "cursor": "Mw==",
+          "cursor": "KAE6BAgAEAQ=",
           "node": {
-            "digest": "AMLqWw6Gf3R138AgMPsF3myw2nQUJuig44284UFuhgEv",
+            "digest": "6kKARDwDrTYfW7GSuitycDTSrScADQ6emTbQcCkgJS4t",
+            "kind": {
+              "__typename": "ProgrammableTransaction"
+            },
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 2,
-                "digest": "CP7NxT2A5bwi4tbNyNsopKE5a2K3DG9sfXUZ22UthLZj"
+                "digest": "3BtpDTJQ7VdmedrChbe4phCiN3iZgMVngxTUXHgyGWc4"
               }
             }
           }
@@ -127,20 +142,53 @@ Response: {
     },
     "system": {
       "pageInfo": {
-        "startCursor": "MA==",
-        "endCursor": "MA==",
+        "startCursor": "KAE6BAgAEAA=",
+        "endCursor": "KAE6BAgAEAU=",
         "hasPreviousPage": false,
         "hasNextPage": false
       },
       "edges": [
         {
-          "cursor": "MA==",
+          "cursor": "KAE6BAgAEAA=",
           "node": {
-            "digest": "J7mHXcoa7LXwyjzZUWsk8zvYZjek359TM4d2hQK4LGHo",
+            "digest": "GKpM9uNhR96ZtkZk6QRLW8teqPb5JYcE5icGcJVBMNtV",
+            "kind": {
+              "__typename": "GenesisTransaction"
+            },
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 0,
-                "digest": "DjT9VqMzydXsapbkRkyTwHk8SDDJNfBjZdNYik1RRXP2"
+                "digest": "AjtRex7uYg6od8T4Zzoyqy3d2nB8jiWEgnt6KCSpFq7r"
+              }
+            }
+          }
+        },
+        {
+          "cursor": "KAE6BAgAEAI=",
+          "node": {
+            "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
+            "kind": {
+              "__typename": "ProgrammableSystemTransaction"
+            },
+            "effects": {
+              "checkpoint": {
+                "sequenceNumber": 1,
+                "digest": "2oo2uRdoiUXByJ4CtPBUFKwLh2QLFb4QJufMHWb7RGTg"
+              }
+            }
+          }
+        },
+        {
+          "cursor": "KAE6BAgAEAU=",
+          "node": {
+            "digest": "2iEZQGAgJYgzmcNC2eLrbNejeTJHJxY4Xy4yKj7R3D8g",
+            "kind": {
+              "__typename": "ProgrammableSystemTransaction"
+            },
+            "effects": {
+              "checkpoint": {
+                "sequenceNumber": 2,
+                "digest": "3BtpDTJQ7VdmedrChbe4phCiN3iZgMVngxTUXHgyGWc4"
               }
             }
           }

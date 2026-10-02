@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod ast;
+mod needs_mut;
 mod refinement;
 mod structuring;
 
@@ -97,7 +98,7 @@ pub fn generate_from_model<S: SourceKind>(
         let name = pkg
             .name
             .map(|name| name.as_str().to_owned())
-            .unwrap_or_else(|| format!("{}", pkg.address));
+            .unwrap_or_else(|| format!("0x{}", pkg.address));
 
         // Ensure the package directory exists and is empty: output/pkg_name
         let pkg_dir = output.join(&name);

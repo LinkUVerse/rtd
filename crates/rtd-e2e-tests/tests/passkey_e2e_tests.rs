@@ -15,14 +15,13 @@ use passkey_types::{
         PublicKeyCredentialUserEntity, UserVerificationRequirement,
     },
 };
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::net::SocketAddr;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::sim_test;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::crypto::Signature;
 use rtd_types::error::UserInputError;
 use rtd_types::error::{RtdErrorKind, RtdResult};
+use rtd_types::messages_grpc::SubmitTxRequest;
 use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::Transaction;
 use rtd_types::{
@@ -31,6 +30,8 @@ use rtd_types::{
     passkey_authenticator::{PasskeyAuthenticator, to_signing_message},
     transaction::TransactionData,
 };
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::net::SocketAddr;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 use url::Url;
@@ -78,7 +79,10 @@ async fn execute_tx(tx: Transaction, test_cluster: &TestCluster) -> RtdResult {
         .next()
         .unwrap()
         .authority_client()
-        .handle_transaction(tx, Some(SocketAddr::new([127, 0, 0, 1].into(), 0)))
+        .submit_transaction(
+            SubmitTxRequest::new_transaction(tx),
+            Some(SocketAddr::new([127, 0, 0, 1].into(), 0)),
+        )
         .await
         .map(|_| ())
 }
@@ -97,7 +101,7 @@ async fn create_credential_and_sign_test_tx(
     let store: Option<Passkey> = None;
     let my_authenticator = Authenticator::new(my_aaguid, store, user_validation_method);
     let mut my_client = Client::new(my_authenticator);
-    let origin = Url::parse("https://www.rtd.io").unwrap();
+    let origin = Url::parse("https://example.com").unwrap();
 
     // Create credential.
     let challenge_bytes_from_rp: Bytes = random_vec(32).into();

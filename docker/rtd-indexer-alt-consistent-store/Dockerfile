@@ -3,10 +3,8 @@
 # Copy in all crates, Cargo.toml and Cargo.lock unmodified,
 # and build the application.
 ARG PROFILE=release-unwind
-FROM rust:1.90-bullseye AS builder
+FROM rust:1.96.1-bookworm AS builder
 ARG PROFILE
-ARG GIT_REVISION
-ENV GIT_REVISION=$GIT_REVISION
 WORKDIR "$WORKDIR/rtd"
 
 # rtd-indexer need ca-certificates
@@ -14,16 +12,22 @@ RUN apt update && apt install -y ca-certificates
 
 RUN apt-get update && apt-get install -y cmake clang
 
+# COPYs ordered least- to most-frequently-changing for deeper layer cache hits.
+COPY rust-toolchain.toml ./
+COPY .cargo .cargo
 COPY Cargo.toml Cargo.lock ./
+COPY external-crates external-crates
+COPY rtd-execution rtd-execution
 COPY consensus consensus
 COPY crates crates
-COPY rtd-execution rtd-execution
-COPY external-crates external-crates
 
-RUN cargo build --profile ${PROFILE} --bin rtd-indexer-alt-consistent-store
+# GIT_REVISION declared late so SHA changes don't invalidate the COPYs above.
+ARG GIT_REVISION
+ENV GIT_REVISION=$GIT_REVISION
+RUN cargo build --locked --profile ${PROFILE} --bin rtd-indexer-alt-consistent-store
 
 # Production Image
-FROM debian:bullseye-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 ARG PROFILE
 # Use jemalloc as memory allocator
 RUN apt-get update && apt-get install -y libjemalloc-dev ca-certificates curl

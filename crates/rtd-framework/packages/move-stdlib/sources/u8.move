@@ -27,9 +27,24 @@ public fun diff(x: u8, y: u8): u8 {
     std::macros::num_diff!(x, y)
 }
 
+/// Calculate `x * y / z`, upcasting intermediate values to avoid overflow when possible.
+/// Aborts if `z` is `0`.
+/// Aborts if the result is larger than `MAX`.
+public fun mul_div(x: u8, y: u8, z: u8): u8 {
+    std::macros::num_mul_div!<_, u16>(x, y, z)
+}
+
+/// Calculate `x * y / z`, upcasting intermediate values to avoid overflow when possible.
+/// Rounds up the result if there is a remainder.
+/// Aborts if `z` is `0`.
+/// Aborts if the result is larger than `MAX`.
+public fun mul_div_ceil(x: u8, y: u8, z: u8): u8 {
+    std::macros::num_mul_div_ceil!<_, u16>(x, y, z)
+}
+
 /// Calculate x / y, but round up the result.
-public fun divide_and_round_up(x: u8, y: u8): u8 {
-    std::macros::num_divide_and_round_up!(x, y)
+public fun div_ceil(x: u8, y: u8): u8 {
+    std::macros::num_div_ceil!(x, y)
 }
 
 /// Return the value of a base raised to a power
@@ -70,6 +85,78 @@ public fun to_string(x: u8): String {
     std::macros::num_to_string!(x)
 }
 
+/// Try to add `x` and `y`.
+/// Returns `None` if the addition would overflow.
+public fun checked_add(x: u8, y: u8): Option<u8> {
+    std::macros::num_checked_add!(x, y, max_value!())
+}
+
+/// Try to subtract `y` from `x`.
+/// Returns `None` if `y > x`.
+public fun checked_sub(x: u8, y: u8): Option<u8> {
+    std::macros::num_checked_sub!(x, y)
+}
+
+/// Try to multiply `x` and `y`.
+/// Returns `None` if the multiplication would overflow.
+public fun checked_mul(x: u8, y: u8): Option<u8> {
+    std::macros::num_checked_mul!(x, y, max_value!())
+}
+
+/// Try to divide `x` by `y`.
+/// Returns `None` if `y` is zero.
+public fun checked_div(x: u8, y: u8): Option<u8> {
+    std::macros::num_checked_div!(x, y)
+}
+
+/// Add `x` and `y`, saturating at the maximum value instead of overflowing.
+public fun saturating_add(x: u8, y: u8): u8 {
+    std::macros::num_saturating_add!(x, y, max_value!())
+}
+
+/// Subtract `y` from `x`, saturating at `0` instead of underflowing.
+public fun saturating_sub(x: u8, y: u8): u8 {
+    std::macros::num_saturating_sub!(x, y)
+}
+
+/// Multiply `x` and `y`, saturating at the maximum value instead of overflowing.
+public fun saturating_mul(x: u8, y: u8): u8 {
+    std::macros::num_saturating_mul!(x, y, max_value!())
+}
+
+/// Shifts `x` left by `shift` bits.
+/// Returns `None` if the shift is greater than or equal to the bit size of 8.
+public fun checked_shl(x: u8, shift: u8): Option<u8> {
+    std::macros::num_checked_shl!(x, shift, 8)
+}
+
+/// Shifts `x` right by `shift` bits.
+/// Returns `None` if the shift is greater than or equal to the bit size of 8.
+public fun checked_shr(x: u8, shift: u8): Option<u8> {
+    std::macros::num_checked_shr!(x, shift, 8)
+}
+
+/// Shifts `x` left by `shift` bits.
+/// Returns `None` if the shift is larger than or equal to the bit size of 8, or if the shift would
+/// lose any bits (if the operation is not reversible).
+public fun lossless_shl(x: u8, shift: u8): Option<u8> {
+    std::macros::num_lossless_shl!(x, shift, 8)
+}
+
+/// Shifts `x` right by `shift` bits.
+/// Returns `None` if the shift is larger than or equal to the bit size of 8, or if the shift would
+/// lose any bits (if the operation is not reversible).
+public fun lossless_shr(x: u8, shift: u8): Option<u8> {
+    std::macros::num_lossless_shr!(x, shift, 8)
+}
+
+/// Divides `x` by `y`.
+/// Returns `None` if `y` is zero or if there is a non-zero remainder (if `x % y != 0`). In other
+/// words, it returns `None` if the operation is not reversible.
+public fun lossless_div(x: u8, y: u8): Option<u8> {
+    std::macros::num_lossless_div!(x, y)
+}
+
 /// Maximum value for a `u8`
 public macro fun max_value(): u8 {
     0xFF
@@ -93,4 +180,11 @@ public macro fun do<$R: drop>($stop: u8, $f: |u8| -> $R) {
 /// Loops applying `$f` to each number from `0` to `$stop` (inclusive)
 public macro fun do_eq<$R: drop>($stop: u8, $f: |u8| -> $R) {
     std::macros::do_eq!($stop, $f)
+}
+
+// === Deprecated ===
+
+#[deprecated(note = b"Renamed to `div_ceil` for consistency")]
+public fun divide_and_round_up(x: u8, y: u8): u8 {
+    x.div_ceil(y)
 }

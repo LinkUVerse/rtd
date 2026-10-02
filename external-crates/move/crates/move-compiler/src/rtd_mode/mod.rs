@@ -5,7 +5,7 @@ use move_core_types::account_address::AccountAddress;
 use move_symbol_pool::Symbol;
 
 use crate::{
-    diagnostics::codes::{DiagnosticInfo, Severity, custom},
+    diagnostics::codes::{DiagnosticInfo, DiagnosticOrigin, Severity, custom},
     shared::stdlib_definitions,
 };
 
@@ -84,6 +84,9 @@ pub const DISPLAY_REGISTRY_MODULE_NAME: Symbol = symbol!("display_registry");
 pub const ADDRESS_ALIAS_MODULE_NAME: Symbol = symbol!("address_alias");
 pub const ADDRESS_ALIAS_CREATE: Symbol = symbol!("create");
 
+pub const FORWARDING_ADDRESS_MODULE_NAME: Symbol = symbol!("forwarding_address");
+pub const FORWARDING_ADDRESS_CREATE: Symbol = symbol!("create");
+
 pub const TRANSFER_MODULE_NAME: Symbol = symbol!("transfer");
 pub const TRANSFER_FUNCTION_NAME: Symbol = symbol!("transfer");
 pub const FREEZE_FUNCTION_NAME: Symbol = symbol!("freeze_object");
@@ -104,85 +107,78 @@ pub const PRIVATE_TRANSFER_FUNCTIONS: &[Symbol] = &[
 // Diagnostics
 //**************************************************************************************************
 
-pub const RTD_DIAG_PREFIX: &str = "Rtd ";
+pub const RTD_DIAG_ORIGIN: DiagnosticOrigin = DiagnosticOrigin::RtdCompiler;
 
 // Categories
 pub const ID_LEAK_CATEGORY: u8 = 1;
 pub const TYPING: u8 = 2;
 
 pub const ID_LEAK_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ ID_LEAK_CATEGORY,
     /* code */ 1,
     "invalid object construction",
 );
 
-pub const ENTRY_FUN_SIGNATURE_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
-    Severity::NonblockingError,
-    /* category */ TYPING,
-    /* code */ 2,
-    "invalid 'entry' function signature",
-);
 pub const INIT_FUN_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 3,
     "invalid 'init' function",
 );
 pub const OTW_DECL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 4,
     "invalid one-time witness declaration",
 );
 pub const OTW_USAGE_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 5,
     "invalid one-time witness usage",
 );
 pub const INIT_CALL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 6,
     "invalid 'init' call",
 );
 pub const OBJECT_DECL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 7,
     "invalid object declaration",
 );
 pub const EVENT_EMIT_CALL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 8,
     "invalid event",
 );
 pub const PRIVATE_TRANSFER_CALL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 9,
     "invalid private transfer call",
 );
 pub const DYNAMIC_COIN_CREATION_CALL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 10,
     "invalid coin creation call",
 );
 pub const INTERNAL_PERMIT_CALL_DIAG: DiagnosticInfo = custom(
-    RTD_DIAG_PREFIX,
+    RTD_DIAG_ORIGIN,
     Severity::NonblockingError,
     /* category */ TYPING,
     /* code */ 11,

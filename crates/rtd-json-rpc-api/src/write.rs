@@ -11,8 +11,8 @@ use rtd_json_rpc_types::{
 };
 use rtd_open_rpc_macros::open_rpc;
 use rtd_types::base_types::RtdAddress;
-use rtd_types::quorum_driver_types::ExecuteTransactionRequestType;
 use rtd_types::rtd_serde::BigInt;
+use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
 
 #[open_rpc(namespace = "rtd", tag = "Write API")]
 #[rpc(server, client, namespace = "rtd")]

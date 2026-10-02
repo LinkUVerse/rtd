@@ -1,0 +1,168 @@
+---
+title: Validator Deployment and Configuration
+description: 'Learn how to set up, configure, and manage a Rtd validator node.'
+keywords:
+  - rtd validator node
+  - validator nodes
+  - validator node configuration
+  - configure validator node
+  - set up validator node
+  - manage validator
+sidebar_label: Deployment and Configuration
+goal:
+  description: 'Validator operator can set up, configure, and manage a Rtd validator node'
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - min_words: 300
+      label: Needs more operational depth
+    - pattern: '```'
+      min: 1
+      label: Has configuration or command examples
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - How do I configure a Rtd validator node?
+  - What are the required validator configuration parameters?
+  - How do I set up validator keys and networking?
+answer: >-
+  Validators on Rtd run specialized validator nodes that can execute more tasks
+  than full nodes. Validators handle staking, gas price reference, and tallying
+  rules.
+---
+
+Validators on an RTD network run specialized nodes that can execute more tasks than full nodes. Validators handle staking, gas price reference, and tallying rules. RTD has no launched public Mainnet or verified public validator release channel; obtain network-specific configuration from the operator of the chain you will join.
+
+## Validator requirements
+
+To run a Rtd validator, you must set up and configure a Rtd validator node. Specific steps you must take include:
+
+1. Install and configure Rtd.
+2. Configure port and protocol settings.
+3. Configure key management.
+4. Configure storage.
+5. Update software.
+6. Execute onchain commands to interact with the network.
+7. Update the gas price survey.
+8. Report to other validators.
+
+### Hardware requirements
+
+Suggested minimum hardware specifications to run a Rtd validator node:
+
+- CPU: 24 physical cores (or 48 virtual cores)
+- Memory: 128 GB
+- Storage: 4 TB NVME
+- Network: 1 Gbps
+
+<ImportContent source="staking-pool-reqs" mode="snippet" />
+
+To set up staking on your validator node:
+
+1. Call `request_add_validator_candidate` to become a candidate. This creates the onchain validator information and initializes a staking pool for delegators to contribute to.
+
+2. Acquire 30M RTD by staking to the validator staking pool you created in the previous step. Call `request_add_stake` with the address of the validator (this is not the same as the staking pool ID).
+
+3. Call `request_add_validator` to have the validator become a pending validator. At the next epoch, it joins the validator set. Before the next epoch, you should stand up the validator so that when the epoch changes, it can participate.
+
+[Learn more about validator staking rewards](/operators/validator/validator-rewards).
+
+## Deployment
+
+You can deploy a Rtd node in a number of ways.
+
+Build from the source commit approved by your RTD network operator. There is no verified RTD Docker Hub image or public binary bucket for validators:
+
+```sh
+$ git clone https://github.com/LinkUVerse/rtd.git && cd rtd
+$ git checkout [SHA|BRANCH|TAG]
+$ cargo build --release --bin rtd-node
+```
+
+For more information on deploying a validator, refer to the [Rtd for Node Operators](https://github.com/LinkUVerse/rtd/blob/main/nre/rtd_for_node_operators.md) guide.
+
+## Configuration
+
+Use one of the following configuration guides for your deployment option:
+
+- [Systemd](https://github.com/LinkUVerse/rtd/blob/main/nre/systemd/README.md)
+- [Ansible](https://github.com/LinkUVerse/rtd/blob/main/nre/ansible/README.md)
+- [Docker Compose](https://github.com/LinkUVerse/rtd/blob/main/nre/docker/README.md)
+
+`rtd-node` runs with a single configuration file provided as an argument, for example:
+
+```sh 
+$ ./rtd-node --config-path /opt/rtd/config/validator.yaml
+```
+
+For more information on configuring a validator, refer to the [Rtd for Node Operators](https://github.com/LinkUVerse/rtd/blob/main/nre/rtd_for_node_operators.md) guide.
+
+See [Validator](https://github.com/LinkUVerse/rtd/blob/main/nre/config/validator.yaml) for configuration templates.
+
+## Connectivity
+
+`rtd-node` uses the following ports by default:
+
+| protocol/port | reachability     | purpose                           |
+| ------------- | ---------------- | --------------------------------- |
+| TCP/8080      | Inbound          | Validator/transaction interface   |
+| TCP/8081      | Inbound/outbound | Consensus interface               |
+| UDP/8084      | Inbound/outbound | Peer-to-peer state sync interface |
+| TCP/8443      | Outbound         | Metrics pushing, if configured by your network operator |
+| TCP/9184      | Localhost        | Metrics scraping                  |
+
+To run a validator successfully, you must open ports 8080-8084 as outlined, including the specific protocol (TCP/UDP).
+
+## Network buffer
+
+The following Linux network buffer values are an operator tuning example inherited from upstream. Benchmark them against the traffic of your actual RTD network before applying them.
+Increase them using one of the following two methods:
+
+### Option 1: With `/etc/sysctl.d/`
+
+Add these settings to a new `sysctl` file specifically for `rtd-node` or append them to an existing file. Modifications made in this way persist across system restarts.
+
+Create a new `sysctl` file for the `rtd-node`:
+
+```sh
+$ sudo nano /etc/sysctl.d/100-rtd-node.conf
+```
+
+Add these lines to the file, overwriting existing settings if necessary:
+
+```sh 
+net.core.rmem_max = 104857600
+net.core.wmem_max = 104857600
+net.ipv4.tcp_rmem = 8192 262144 104857600
+net.ipv4.tcp_wmem = 8192 262144 104857600
+```
+
+Apply the settings immediately, before the next restart:
+
+```sh
+$ sudo sysctl --system
+```
+
+### Option 2: With `sysctl` command
+
+These modifications do not persist across system restarts, so run the commands each time the host restarts.
+
+```sh
+$ sudo sysctl -w net.core.wmem_max=104857600
+$ sudo sysctl -w net.core.rmem_max=104857600
+$ sudo sysctl -w net.ipv4.tcp_rmem="8192 262144 104857600"
+$ sudo sysctl -w net.ipv4.tcp_wmem="8192 262144 104857600"
+```
+
+### Verification
+
+To verify that the system settings are updated successfully, check the output of the following command:
+
+```sh
+$ sudo sysctl -a | egrep [rw]mem
+```

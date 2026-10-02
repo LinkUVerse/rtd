@@ -2,15 +2,17 @@
 name = "rtd-faucet"
 version.workspace = true
 edition = "2024"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
-async-trait.workspace = true
 axum.workspace = true
-axum-extra.workspace = true
+backoff.workspace = true
 bin-version.workspace = true
 clap.workspace = true
 http.workspace = true
@@ -19,13 +21,13 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
-tonic.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
-uuid.workspace = true
 rtd-sdk.workspace = true
+rtd-rpc-api.workspace = true
 rtd-config.workspace = true
+rtd-futures.workspace = true
 rtd-keys.workspace = true
 shared-crypto.workspace = true
 

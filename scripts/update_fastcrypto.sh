@@ -37,7 +37,7 @@ function check_gnu_grep() {
 function latest_fc_revision() {
 	FC_CHECKOUT=$(mktemp -d)
 	cd "$FC_CHECKOUT"
-	git clone --depth 1 https://github.com/linkulabs/fastcrypto
+	git clone --depth 1 https://github.com/linkuverse/fastcrypto
 	cd fastcrypto
 	git rev-parse HEAD
 }

@@ -3,10 +3,12 @@
 
 use std::str::FromStr;
 
-use fastcrypto::encoding::{Base58, Encoding};
+use fastcrypto::encoding::Base58;
+use fastcrypto::encoding::Encoding;
+use rtd_types::digests::CheckpointDigest;
 use rtd_types::digests::TransactionDigest;
 
-use super::impl_string_input;
+use crate::api::scalars::impl_string_input;
 
 const DIGEST_LENGTH: usize = 32;
 
@@ -25,6 +27,12 @@ pub(crate) enum Error {
 impl_string_input!(Digest);
 
 impl From<Digest> for TransactionDigest {
+    fn from(digest: Digest) -> Self {
+        digest.0.into()
+    }
+}
+
+impl From<Digest> for CheckpointDigest {
     fn from(digest: Digest) -> Self {
         digest.0.into()
     }
@@ -56,7 +64,6 @@ impl TryFrom<&[u8]> for Digest {
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
     use super::*;
 
     #[test]

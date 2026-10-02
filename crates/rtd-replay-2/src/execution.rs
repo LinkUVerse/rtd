@@ -9,21 +9,16 @@
 //! as in transaction data and effects, and from the `ObjectStore` for dynamic loads
 //! (e.g. dynamic fields).
 //! This module also contains the traits used by execution to talk to
-//! the store (BackingPackageStore, ObjectStore, ChildObjectResolver)
+//! the store (BackingPackageStore, ObjectStore, RuntimeObjectResolver)
 
 use crate::replay_txn::ReplayTransaction;
 use anyhow::{Context, Error, anyhow};
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
 use move_trace_format::format::MoveTraceBuilder;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
 use rtd_data_store::{EpochStore, ObjectKey, ObjectStore, VersionQuery};
 use rtd_execution::Executor;
 use rtd_types::{
-    base_types::{ObjectID, ObjectRef, SequenceNumber, VersionNumber},
+    base_types::{ObjectID, ObjectRef, SequenceNumber, SystemObjectVersions, VersionNumber},
     committee::EpochId,
     digests::TransactionDigest,
     effects::{TransactionEffects, TransactionEffectsAPI},
@@ -31,11 +26,16 @@ use rtd_types::{
     execution_params::{ExecutionOrEarlyError, FundsWithdrawStatus, get_early_execution_error},
     gas::RtdGasStatus,
     inner_temporary_store::InnerTemporaryStore,
-    metrics::LimitsMetrics,
+    metrics::ExecutionMetrics,
     object::Object,
-    storage::{BackingPackageStore, ChildObjectResolver, PackageObject, ParentSync},
+    storage::{BackingPackageStore, PackageObject, ParentSync, RuntimeObjectResolver},
     supported_protocol_versions::ProtocolConfig,
     transaction::{CheckedInputObjects, TransactionData, TransactionDataAPI},
+};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
 };
 use tracing::{debug, debug_span, trace};
 
@@ -44,7 +44,7 @@ use tracing::{debug, debug_span, trace};
 pub struct ReplayExecutor {
     protocol_config: ProtocolConfig,
     executor: Arc<dyn Executor + Send + Sync>,
-    metrics: Arc<LimitsMetrics>,
+    execution_metrics: Arc<ExecutionMetrics>,
 }
 
 // Returned struct from execution. Contains all the data related to a transaction.
@@ -101,7 +101,7 @@ pub fn execute_transaction_to_effects(
         .ok_or_else(|| anyhow!(format!("Epoch {} not found", epoch)))?;
     let epoch_start_timestamp = epoch_data.start_timestamp;
     let gas_status = if txn_data.kind().is_system_tx() {
-        RtdGasStatus::new_unmetered()
+        RtdGasStatus::new_unmetered(protocol_config)
     } else {
         RtdGasStatus::new(
             txn_data.gas_data().budget,
@@ -126,22 +126,32 @@ pub fn execute_transaction_to_effects(
         &FundsWithdrawStatus::MaybeSufficient,
     );
     let execution_params = match early_execution_error {
-        Some(error) => ExecutionOrEarlyError::Err(error),
-        None => ExecutionOrEarlyError::Ok(()),
+        None => ExecutionOrEarlyError::ok(None),
+        Some(errors) => ExecutionOrEarlyError::failed(errors, None),
     };
-    let (inner_store, gas_status, effects, _execution_timing, result) =
-        executor.executor.execute_transaction_to_effects(
+    let system_object_versions = SystemObjectVersions::from_effects(&expected_effects, &store);
+    let (inner_store, gas_status, effects, _execution_timing, result) = executor
+        .executor
+        .execute_transaction_to_effects_and_execution_error(
             &store,
             protocol_config,
-            executor.metrics.clone(),
+            executor.execution_metrics.clone(),
             false, // expensive checks
             execution_params,
             &epoch,
             epoch_start_timestamp,
             input_objects,
+            system_object_versions,
+            // TODO: Replaying a transaction that withdrew object funds needs the unsettled
+            // withdrawals that earlier transactions in the same consensus commit had accumulated
+            // at execution time. Reconstruct them by walking the containing checkpoint and folding
+            // the object-funds withdrawals of the transactions that precede this one at the same
+            // accumulator version, then pass that here instead of the empty reader.
+            &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
             txn_data.gas_data().clone(),
             gas_status,
             txn_data.kind().clone(),
+            None, // compat_args
             txn_data.sender(),
             digest,
             trace_builder_opt,
@@ -194,12 +204,12 @@ impl ReplayExecutor {
             .context("Filed to create executor. ProtocolConfig inconsistency?")?;
 
         let registry = prometheus::Registry::new();
-        let metrics = Arc::new(LimitsMetrics::new(&registry));
+        let execution_metrics = Arc::new(ExecutionMetrics::new(&registry));
 
         Ok(Self {
             protocol_config,
             executor,
-            metrics,
+            execution_metrics,
         })
     }
 }
@@ -343,7 +353,7 @@ impl rtd_types::storage::ObjectStore for ReplayStore<'_> {
     }
 }
 
-impl ChildObjectResolver for ReplayStore<'_> {
+impl RuntimeObjectResolver for ReplayStore<'_> {
     // Load an `Object` at a root version. That is the version that is
     // less than or equal to the given `child_version_upper_bound`.
     fn read_child_object(
@@ -417,5 +427,22 @@ impl ModuleResolver for ReplayStore<'_> {
 
     fn get_module(&self, id: &ModuleId) -> Result<Option<Vec<u8>>, Self::Error> {
         unreachable!("unexpected ModuleResolver::get_module({})", id)
+    }
+
+    fn get_packages_static<const N: usize>(
+        &self,
+        ids: [move_core_types::account_address::AccountAddress; N],
+    ) -> Result<[Option<move_core_types::resolver::SerializedPackage>; N], Self::Error> {
+        unreachable!("unexpected ModuleResolver::get_packages_static({:?})", ids)
+    }
+
+    fn get_packages<'a>(
+        &self,
+        ids: impl ExactSizeIterator<Item = &'a move_core_types::account_address::AccountAddress>,
+    ) -> Result<Vec<Option<move_core_types::resolver::SerializedPackage>>, Self::Error> {
+        unreachable!(
+            "unexpected ModuleResolver::get_packages({:?})",
+            ids.collect::<Vec<_>>()
+        )
     }
 }

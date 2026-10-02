@@ -3,9 +3,9 @@
 
 use async_trait::async_trait;
 use prost_types::FieldMask;
+use rtd_rpc::client::Client;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use rtd_rpc::client::Client;
 
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::rtd::rpc::v2::{GetObjectRequest, ListOwnedObjectsRequest};
@@ -21,7 +21,7 @@ use crate::errors::Error;
 
 use super::{TransactionObjectData, TryConstructTransaction, simulate_transaction};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct WithdrawStake {
     pub sender: RtdAddress,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -122,6 +122,11 @@ impl TryConstructTransaction for WithdrawStake {
             party_objects: vec![],
             total_rtd_balance,
             budget,
+            address_balance_withdrawal: 0,
+            fss_object_count: None,
+            redeem_token_amount: None,
+            redeem_plan: None,
+            bind_epoch: None,
         })
     }
 }

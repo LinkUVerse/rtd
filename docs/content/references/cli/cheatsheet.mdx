@@ -1,18 +1,40 @@
 ---
 title: Rtd CLI Cheat Sheet
 description: Use this cheat sheet to learn common Rtd CLI commands.
-keywords: [ rtd cli, common rtd cli commands, cli cheat sheet, quick reference ]
+keywords:
+  - rtd cli
+  - common rtd cli commands
+  - cli cheat sheet
+  - quick reference
+goal:
+  description: Reader can quickly look up common Rtd CLI commands grouped by task.
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_tables: true
+      min: 1
+      label: Has command reference table
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What common Rtd CLI commands does the cheat sheet cover?
+  - How do I manage Rtd addresses and aliases with the CLI?
+  - 'How do I create, build, and test a Move project with the Rtd CLI?'
+answer: The cheat sheet highlights common Rtd CLI commands.
 ---
 
 The cheat sheet highlights common Rtd CLI commands.
 
-:::tip
+This page is the RTD CLI reference. The PDF inherited from upstream contains
+`sui` commands and is retained separately under its original Sui name; it is
+not an RTD CLI cheat sheet.
 
-<a href="/doc/rtd-cli-cheatsheet.pdf" target="_blank" rel="noreferrer">Download sheet as PDF</a>
-
-:::
-
-## Addresses & aliases
+## Addresses and aliases
 
 <table class="w-100">
 	<thead>
@@ -61,7 +83,13 @@ The cheat sheet highlights common Rtd CLI commands.
 	</tbody>
 </table>
 
-## Faucet & gas
+## Faucet and gas
+
+:::info Faucet availability
+
+Use `rtd client faucet` only with a verified faucet for your configured RTD network. A local deployment can provide one. Public RTD faucets and Mainnet economics are not established by this repository.
+
+:::
 
 <table class="w-100">
 	<thead>
@@ -73,7 +101,7 @@ The cheat sheet highlights common Rtd CLI commands.
 	<tbody>
 		<tr>
 			<td class="w-2/3">`rtd client faucet`</td>
-			<td class="w-1/3">Get a RTD coin from the faucet associated with the active network</td>
+			<td class="w-1/3">Get a RTD coin from the faucet (Devnet and Localnet only)</td>
 		</tr>
 		<tr>
 			<td class="w-2/3">`rtd client faucet --address ADDRESS`</td>
@@ -85,11 +113,15 @@ The cheat sheet highlights common Rtd CLI commands.
 		</tr>
 		<tr>
 			<td class="w-2/3">`rtd client gas`</td>
-			<td class="w-1/3">List the gas coins for the active address</td>
+			<td class="w-1/3">List the gas coins and total RTD balance for the active address</td>
 		</tr>
 		<tr>
 			<td class="w-2/3">`rtd client gas ADDRESS`</td>
-			<td class="w-1/3">List the gas coins for the given address (accepts also an alias)</td>
+			<td class="w-1/3">List the gas coins and total RTD balance for the given address (accepts also an alias)</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client balance`</td>
+			<td class="w-1/3">List all coin balances for the active address</td>
 		</tr>
 	</tbody>
 </table>
@@ -130,7 +162,7 @@ The cheat sheet highlights common Rtd CLI commands.
 		</tr>
 		<tr>
 			<td class="w-2/3">`rtd-faucet`</td>
-			<td class="w-1/3">Start a local faucet. Note this is a different binary</td>
+			<td class="w-1/3">Start a local faucet (this is a different binary)</td>
 		</tr>
 	</tbody>
 </table>
@@ -167,7 +199,102 @@ The cheat sheet highlights common Rtd CLI commands.
 		</tr>
 		<tr>
 			<td class="w-2/3">`rtd move test --trace`</td>
-			<td class="w-1/3">Create an execution trace for the Move tests in the current directory. Use with the [Move Trace Debugger](https://marketplace.visualstudio.com/items?itemName=linku.move-trace-debug) extension.</td>
+			<td class="w-1/3">Create an execution trace for Move tests in the current directory. Inspect it with a debugger validated against the RTD source revision.</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd move lint`</td>
+			<td class="w-1/3">Run the Move linter on the package in the current directory</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd move lint --path PATH`</td>
+			<td class="w-1/3">Run the Move linter on the package at the given path</td>
+		</tr>
+	</tbody>
+</table>
+
+## Publishing and upgrading packages
+
+<table class="w-100">
+	<thead>
+		<tr>
+			<td>Command</td>
+			<td>Description</td>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td class="w-2/3">`rtd client publish`</td>
+			<td class="w-1/3">Publish the Move package in the current directory</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client publish --dry-run`</td>
+			<td class="w-1/3">Simulate publish to estimate gas cost without executing</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client publish --serialize-unsigned-transaction`</td>
+			<td class="w-1/3">Output unsigned base64 transaction bytes for external or multisig signing</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client test-publish`</td>
+			<td class="w-1/3">Publish for testing with temporary address handling (transaction still lands on-chain)</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client upgrade \`<br/>&nbsp;&nbsp;`--upgrade-capability CAP_ID`</td>
+			<td class="w-1/3">Upgrade a previously published package</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client verify-source`</td>
+			<td class="w-1/3">Verify onchain bytecode matches local source code by rebuilding with the original publishing toolchain</td>
+		</tr>
+	</tbody>
+</table>
+
+## Objects and dynamic fields
+
+<table class="w-100">
+	<thead>
+		<tr>
+			<td>Command</td>
+			<td>Description</td>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td class="w-2/3">`rtd client objects`</td>
+			<td class="w-1/3">List all objects owned by the active address</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client object OBJECT_ID`</td>
+			<td class="w-1/3">Show details for a specific object (type, owner, content)</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client object OBJECT_ID --json`</td>
+			<td class="w-1/3">Show object details in JSON format</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client dynamic-field OBJECT_ID`</td>
+			<td class="w-1/3">List dynamic fields attached to an object</td>
+		</tr>
+	</tbody>
+</table>
+
+## Transaction inspection
+
+<table class="w-100">
+	<thead>
+		<tr>
+			<td>Command</td>
+			<td>Description</td>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td class="w-2/3">`rtd client tx-block DIGEST`</td>
+			<td class="w-1/3">Show details of an executed transaction by its digest</td>
+		</tr>
+		<tr>
+			<td class="w-2/3">`rtd client tx-block DIGEST --json`</td>
+			<td class="w-1/3">Show transaction details in JSON format</td>
 		</tr>
 	</tbody>
 </table>
@@ -187,22 +314,22 @@ The cheat sheet highlights common Rtd CLI commands.
 			<td class="w-1/3">Call a Move package</td>
 		</tr>
 		<tr>
-			<td class="w-2/3">`rtd client merge-coin \`<br/>&nbsp;&nbsp;`--primary-coin COIN_ID \`<br/>&nbsp;&nbsp;`--coin-to-merge COIN_ID`</td>
-			<td class="w-1/3">Merge two coins</td>
+			<td class="w-2/3">`rtd client ptb \`<br/>&nbsp;&nbsp;`--merge-coins @PRIMARY_COIN_ID \`<br/>&nbsp;&nbsp;`"[@COIN_ID]"`</td>
+			<td class="w-1/3">Merge one or more coins into a primary coin</td>
 		</tr>
 		<tr>
-			<td class="w-2/3">`rtd client split-coin \`<br/>&nbsp;&nbsp;`--coin-id COIN_ID \`<br/>&nbsp;&nbsp;`--amounts 1000`</td>
+			<td class="w-2/3">`rtd client ptb \`<br/>&nbsp;&nbsp;`--split-coins @COIN_ID \`<br/>&nbsp;&nbsp;`"[1000]"`</td>
 			<td class="w-1/3">Split a coin into two coins: one with 1000 MIST and the rest</td>
 		</tr>
 		<tr>
 			<td class="w-2/3">
-				`rtd client pay-rtd \`<br/>&nbsp;&nbsp;`--input-coins COIN_ID \`<br/>&nbsp;&nbsp;`--recipients ADDRESS \`<br/>&nbsp;&nbsp;`--amounts 100000000`
+				`rtd client ptb \`<br/>&nbsp;&nbsp;`--split-coins gas "[100000000]" \`<br/>&nbsp;&nbsp;`--assign coin \`<br/>&nbsp;&nbsp;`--transfer-objects "[coin]" ADDRESS`
 			</td>
-			<td class="w-1/3">Transfer 0.1 RTD to an address and use the same coin for gas</td>
+			<td class="w-1/3">Transfer 0.1 RTD to an address using the gas coin</td>
 		</tr>
 		<tr>
-			<td class="w-2/3">`rtd client transfer-rtd \`<br/>&nbsp;&nbsp;`--rtd-coin-object-id COIN_ID \`<br/>&nbsp;&nbsp;`--to ADDRESS`</td>
-			<td class="w-1/3">Transfer RTD object to an address and use the same coin for gas</td>
+			<td class="w-2/3">`rtd client ptb \`<br/>&nbsp;&nbsp;`--transfer-objects "[gas]" ADDRESS`</td>
+			<td class="w-1/3">Transfer the full gas coin balance to an address</td>
 		</tr>
 	</tbody>
 </table>
@@ -235,7 +362,7 @@ The cheat sheet highlights common Rtd CLI commands.
 		<tr>
 			<td class="w-2/3">`rtd client ptb --transfer-objects "[object_id]" ADDRESS`</td>
 			<td class="w-1/3">
-				Transfer an object to an address. Note that you can pass multiple objects in the array
+				Transfer an object to an address. You can pass multiple objects in the array
 			</td>
 		</tr>
 		<tr>
@@ -262,6 +389,55 @@ The cheat sheet highlights common Rtd CLI commands.
 				`rtd client ptb \`<br/>&nbsp;&nbsp;`--move-call p::m::f "<type>" args \`<br/>&nbsp;&nbsp;`--serialize-unsigned-transaction`
 			</td>
 			<td class="w-1/3">Serialize the unsigned PTB as base64 instead of executing it</td>
+		</tr>
+	</tbody>
+</table>
+
+## Troubleshooting
+
+<table class="w-100">
+	<thead>
+		<tr>
+			<td>Error or symptom</td>
+			<td>Cause</td>
+			<td>Fix</td>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>`Cannot find gas coin for signer address`</td>
+			<td>Active address has no RTD tokens</td>
+			<td>Fund the address with the faucet (Devnet/Localnet) or web faucet (Testnet)</td>
+		</tr>
+		<tr>
+			<td>`Client/server API version mismatch`</td>
+			<td>CLI version doesn't match the network's protocol version</td>
+			<td>Rebuild the CLI from the reviewed RTD source revision</td>
+		</tr>
+		<tr>
+			<td>`Your package is already published`</td>
+			<td>`Published.toml` already has an entry for this environment</td>
+			<td>Use `rtd client upgrade` to upgrade, or switch to a different network with `rtd client switch --env`</td>
+		</tr>
+		<tr>
+			<td>Transaction fails with `InsufficientGas`</td>
+			<td>Gas budget too low or insufficient balance</td>
+			<td>Increase `--gas-budget` or fund the address. Use `--dry-run` to estimate cost first</td>
+		</tr>
+		<tr>
+			<td>`ObjectVersionUnavailableForConsumption`</td>
+			<td>Object was modified by another transaction since you last read it</td>
+			<td>Re-fetch the object with `rtd client object OBJECT_ID` and retry</td>
+		</tr>
+		<tr>
+			<td>`Package dependency cannot be found`</td>
+			<td>Active network doesn't have the required dependency published</td>
+			<td>Verify your environment with `rtd client active-env` and that dependencies are published on that network</td>
+		</tr>
+		<tr>
+			<td>`rtd client faucet` fails on Testnet</td>
+			<td>`rtd client faucet` only supports Devnet and Localnet</td>
+			<td>Ask the operator of the configured RTD network how test gas is distributed; no public RTD faucet is verified</td>
 		</tr>
 	</tbody>
 </table>

@@ -1,28 +1,31 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    borrow::Cow,
-    collections::HashSet,
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
+use std::time::Duration;
 
-use jsonrpsee::{
-    MethodResponse,
-    server::middleware::rpc::RpcServiceT,
-    types::{Request, error::INTERNAL_ERROR_CODE},
-};
-use pin_project::{pin_project, pinned_drop};
-use prometheus::{HistogramTimer, IntCounterVec};
+use jsonrpsee::MethodResponse;
+use jsonrpsee::server::middleware::rpc::RpcServiceT;
+use jsonrpsee::types::Request;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use pin_project::pin_project;
+use pin_project::pinned_drop;
+use prometheus::HistogramTimer;
+use prometheus::IntCounterVec;
 use serde_json::value::RawValue;
 use tower_layer::Layer;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
+use tracing::error;
+use tracing::info;
+use tracing::warn;
 
-use super::RpcMetrics;
+use crate::metrics::RpcMetrics;
 
 /// Tower Layer that adds middleware to record statistics about RPC requests (how long they took to
 /// serve, how many we have served, how many succeeded or failed, etc).
@@ -91,9 +94,11 @@ where
     type Future = MetricsFuture<'a, S::Future>;
 
     fn call(&self, request: Request<'a>) -> Self::Future {
-        let method = if self.layer.methods.contains(request.method_name()) {
+        let name = request.method_name();
+        let method = if self.layer.methods.contains(name) {
             request.method.clone()
         } else {
+            debug!(method = name, "Unknown RPC method");
             "<UNKNOWN>".into()
         };
 

@@ -174,13 +174,13 @@ mod tests {
                 version = 1
 
                 [env.mainnet]
-                chain-id = "35834a8a"
+                chain-id = "01020304"
                 original-published-id = "0x2"
                 latest-published-id = "0x3"
                 published-version = "3"
 
                 [env.testnet]
-                chain-id = "4c78adac"
+                chain-id = "05060708"
                 original-published-id = "0x5"
                 latest-published-id = "0x6"
                 published-version = "2"
@@ -198,13 +198,13 @@ mod tests {
         # This file SHOULD be committed to source control
 
         [published.mainnet]
-        chain-id = "35834a8a"
+        chain-id = "01020304"
         published-at = "0x0000000000000000000000000000000000000000000000000000000000000003"
         original-id = "0x0000000000000000000000000000000000000000000000000000000000000002"
         version = 3
 
         [published.testnet]
-        chain-id = "4c78adac"
+        chain-id = "05060708"
         published-at = "0x0000000000000000000000000000000000000000000000000000000000000006"
         original-id = "0x0000000000000000000000000000000000000000000000000000000000000005"
         version = 2

@@ -1,26 +1,26 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(not(tidehunter))]
 use crate::db_tool::{DbToolCommand, execute_db_tool_command, print_db_all_tables};
 use crate::{
     ConciseObjectOutput, GroupedObjectOutput, SnapshotVerifyMode, VerboseObjectOutput,
-    check_completed_snapshot, download_db_snapshot, download_formal_snapshot,
-    get_latest_available_epoch, get_object, get_transaction_block, make_clients,
-    restore_from_db_checkpoint,
+    check_completed_snapshot, download_formal_snapshot, get_latest_available_epoch, get_object,
+    get_transaction_block, make_clients, restore_from_db_checkpoint,
 };
 use anyhow::Result;
 use consensus_core::storage::{Store, rocksdb_store::RocksDBStore};
 use consensus_core::{BlockAPI, CommitAPI, CommitRange};
-use futures::{StreamExt, future::join_all};
-use std::path::PathBuf;
-use std::{collections::BTreeMap, env, sync::Arc};
+use futures::TryStreamExt;
+use futures::future::join_all;
 use rtd_config::genesis::Genesis;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_protocol_config::Chain;
-use rtd_replay::{ReplayToolCommand, execute_replay_command};
-use rtd_sdk::{RtdClient, RtdClientBuilder, rpc_types::RtdTransactionBlockResponseOptions};
+use rtd_rpc_api::Client;
+use rtd_types::gas_coin::GasCoin;
 use rtd_types::messages_consensus::ConsensusTransaction;
+use rtd_types::transaction::Transaction;
+use std::path::PathBuf;
+use std::{collections::BTreeMap, env, sync::Arc};
 use telemetry_subscribers::TracingHandle;
 
 use rtd_types::{
@@ -28,14 +28,11 @@ use rtd_types::{
 };
 
 use clap::*;
-use fastcrypto::encoding::Encoding;
 use rtd_config::Config;
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
-use rtd_core::authority_aggregator::AuthorityAggregatorBuilder;
 use rtd_types::messages_checkpoint::{
     CheckpointRequest, CheckpointResponse, CheckpointSequenceNumber,
 };
-use rtd_types::transaction::{SenderSignedData, Transaction};
 
 #[derive(Parser, Clone, ValueEnum)]
 pub enum Verbosity {
@@ -95,7 +92,7 @@ pub enum ToolCommand {
         fullnode_rpc_url: String,
 
         /// Concise mode groups responses by results.
-        /// prints tabular output rtdtable for processing with unix tools. For
+        /// prints tabular output suitable for processing with unix tools. For
         /// instance, to quickly check that all validators agree on the history of an object:
         /// ```text
         /// $ rtd-tool fetch-object --id 0x260efde76ebccf57f4c5e951157f5c361cde822c \
@@ -133,7 +130,6 @@ pub enum ToolCommand {
     },
 
     /// Tool to read validator & node db.
-    #[cfg(not(tidehunter))]
     #[command(name = "db-tool")]
     DbTool {
         /// Path of the DB to read
@@ -146,7 +142,7 @@ pub enum ToolCommand {
     /// own sub-directory, named for its ID on chain and version containing two metadata files
     /// (linkage.json and origins.json), a file containing the overall object and a file for every
     /// module it contains. Each module file is named for its module name, with a .mv suffix, and
-    /// contains Move bytecode (rtdtable for passing into a disassembler).
+    /// contains Move bytecode (suitable for passing into a disassembler).
     #[command(name = "dump-packages")]
     DumpPackages {
         /// Connection information for a GraphQL service.
@@ -212,72 +208,6 @@ pub enum ToolCommand {
         db_checkpoint_path: PathBuf,
     },
 
-    #[clap(
-        name = "download-db-snapshot",
-        about = "Downloads the legacy database snapshot via cloud object store, outputs to local disk"
-    )]
-    DownloadDBSnapshot {
-        #[clap(long = "epoch", conflicts_with = "latest")]
-        epoch: Option<u64>,
-        #[clap(
-            long = "path",
-            help = "the path to write the downloaded snapshot files"
-        )]
-        path: PathBuf,
-        /// skip downloading indexes dir
-        #[clap(long = "skip-indexes")]
-        skip_indexes: bool,
-        /// Number of parallel downloads to perform. Defaults to 50, max 200.
-        #[clap(long = "num-parallel-downloads")]
-        num_parallel_downloads: Option<usize>,
-        /// Network to download snapshot for. Defaults to "mainnet".
-        /// If `--snapshot-bucket` or `--archive-bucket` is not specified,
-        /// the value of this flag is used to construct default bucket names.
-        #[clap(long = "network", default_value = "mainnet")]
-        network: Chain,
-        /// Snapshot bucket name. If not specified, defaults are
-        /// based on value of `--network` flag.
-        #[clap(long = "snapshot-bucket", conflicts_with = "no_sign_request")]
-        snapshot_bucket: Option<String>,
-        /// Snapshot bucket type
-        #[clap(
-            long = "snapshot-bucket-type",
-            conflicts_with = "no_sign_request",
-            help = "Required if --no-sign-request is not set"
-        )]
-        snapshot_bucket_type: Option<ObjectStoreType>,
-        /// Path to snapshot directory on local filesystem.
-        /// Only applicable if `--snapshot-bucket-type` is "file".
-        #[clap(
-            long = "snapshot-path",
-            help = "only used for testing, when --snapshot-bucket-type=FILE"
-        )]
-        snapshot_path: Option<PathBuf>,
-        /// If true, no authentication is needed for snapshot restores
-        #[clap(
-            long = "no-sign-request",
-            conflicts_with_all = &["snapshot_bucket", "snapshot_bucket_type"],
-            help = "if set, no authentication is needed for snapshot restore"
-        )]
-        no_sign_request: bool,
-        /// Download snapshot of the latest available epoch.
-        /// If `--epoch` is specified, then this flag gets ignored.
-        #[clap(
-            long = "latest",
-            conflicts_with = "epoch",
-            help = "defaults to latest available snapshot in chosen bucket"
-        )]
-        latest: bool,
-        /// If false (default), log level will be overridden to "off",
-        /// and output will be reduced to necessary status information.
-        #[clap(long = "verbose")]
-        verbose: bool,
-        /// Number of retries for failed HTTP requests when downloading snapshot files.
-        /// Defaults to 3 retries. Set to 0 to disable retries.
-        #[clap(long = "max-retries", default_value = "3")]
-        max_retries: usize,
-    },
-
     // Restore from formal (slim, DB agnostic) snapshot. Note that this is only supported
     /// for protocol versions supporting `commit_root_state_digest`. For mainnet, this is
     /// epoch 20+, and for testnet this is epoch 12+
@@ -295,6 +225,9 @@ pub enum ToolCommand {
         /// Number of parallel downloads to perform. Defaults to 50, max 200.
         #[clap(long = "num-parallel-downloads")]
         num_parallel_downloads: Option<usize>,
+        /// Number of parallel chunks for object insertion. Defaults to 8.
+        #[clap(long = "num-parallel-chunks", default_value = "8")]
+        num_parallel_chunks: usize,
         /// Verification mode to employ.
         #[clap(long = "verify", default_value = "normal")]
         verify: Option<SnapshotVerifyMode>,
@@ -307,7 +240,7 @@ pub enum ToolCommand {
         /// based on value of `--network` flag.
         #[clap(long = "snapshot-bucket", conflicts_with = "no_sign_request")]
         snapshot_bucket: Option<String>,
-        /// Snapshot bucket type
+        /// Snapshot backend: local file or RTD-operated MinIO through the S3 API.
         #[clap(
             long = "snapshot-bucket-type",
             conflicts_with = "no_sign_request",
@@ -339,53 +272,36 @@ pub enum ToolCommand {
         verbose: bool,
 
         /// Number of retries for failed HTTP requests when downloading snapshot files.
-        /// Defaults to 3 retries. Set to 0 to disable retries.
-        #[clap(long = "max-retries", default_value = "3")]
+        /// Set to 0 to disable retries.
+        #[clap(long = "max-retries", default_value = "10")]
         max_retries: usize,
+        /// Port for the Prometheus metrics server. Defaults to 9185.
+        #[clap(long = "metrics-port", default_value = "9185")]
+        metrics_port: u16,
     },
 
-    #[clap(name = "replay")]
-    Replay {
-        #[arg(long = "rpc")]
-        rpc_url: Option<String>,
-        #[arg(long = "safety-checks")]
-        safety_checks: bool,
-        #[arg(long = "authority")]
-        use_authority: bool,
-        #[arg(
-            long = "cfg-path",
-            short,
-            help = "Path to the network config file. This should be specified when rpc_url is not present. \
-            If not specified we will use the default network config file at ~/.rtd-replay/network-config.yaml"
-        )]
-        cfg_path: Option<PathBuf>,
-        #[arg(
-            long,
-            help = "The name of the chain to replay from, could be one of: mainnet, testnet, devnet.\
-            When rpc_url is not specified, this is used to load the corresponding config from the network config file.\
-            If not specified, mainnet will be used by default"
-        )]
-        chain: Option<String>,
-        #[command(subcommand)]
-        cmd: ReplayToolCommand,
-    },
+    /// Interactive shell for navigating the validator database.
+    #[command(name = "db-shell")]
+    DbShell(crate::db_shell::DbShellArgs),
 
-    /// Ask all validators to sign a transaction through AuthorityAggregator.
-    #[command(name = "sign-transaction")]
-    SignTransaction {
-        #[arg(long = "genesis")]
-        genesis: PathBuf,
-
-        #[arg(
-            long,
-            help = "The Base64-encoding of the bcs bytes of SenderSignedData"
-        )]
-        sender_signed_data: String,
+    /// Interactive Rhai shell for inspecting a TideHunter database.
+    #[cfg(all(feature = "tideconsole", not(windows)))]
+    #[command(name = "tideconsole")]
+    TideConsole {
+        /// Path to a TideHunter database directory to open on startup (bound to variable 'db').
+        #[arg(short, long)]
+        db: Option<PathBuf>,
+        /// Rhai snippet to evaluate non-interactively, then exit.
+        #[arg(short, long)]
+        exec: Option<String>,
+        /// Path to a Rhai script file to evaluate non-interactively, then exit.
+        #[arg(short, long)]
+        script: Option<PathBuf>,
     },
 }
 
 async fn check_locked_object(
-    rtd_client: &Arc<RtdClient>,
+    rtd_client: &Client,
     committee: Arc<BTreeMap<AuthorityPublicKeyBytes, u64>>,
     id: ObjectID,
     rescue: bool,
@@ -427,14 +343,8 @@ async fn check_locked_object(
         })
         .await?
         .transaction;
-    let res = rtd_client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            Transaction::new(tx),
-            RtdTransactionBlockResponseOptions::full_content(),
-            None,
-        )
-        .await;
+    let tx = Transaction::new(tx);
+    let res = rtd_client.clone().execute_transaction(&tx).await;
     match res {
         Ok(_) => {
             println!("Transaction executed successfully ({:?})", tx_digest);
@@ -492,14 +402,12 @@ impl ToolCommand {
                 rescue,
                 address,
             } => {
-                let rtd_client =
-                    Arc::new(RtdClientBuilder::default().build(fullnode_rpc_url).await?);
+                let rtd_client = Client::new(fullnode_rpc_url)?;
                 let committee = Arc::new(
                     rtd_client
-                        .governance_api()
-                        .get_committee_info(None)
+                        .get_committee(None)
                         .await?
-                        .validators
+                        .voting_rights
                         .into_iter()
                         .collect::<BTreeMap<_, _>>(),
                 );
@@ -508,11 +416,10 @@ impl ToolCommand {
                     None => {
                         let address = address.expect("Either id or address must be provided");
                         rtd_client
-                            .coin_read_api()
-                            .get_coins_stream(address, None)
-                            .map(|c| c.coin_object_id)
-                            .collect()
-                            .await
+                            .list_owned_objects(address, Some(GasCoin::type_()))
+                            .map_ok(|o| o.id())
+                            .try_collect()
+                            .await?
                     }
                 };
                 for ids in object_ids.chunks(30) {
@@ -539,8 +446,7 @@ impl ToolCommand {
                 verbosity,
                 concise_no_header,
             } => {
-                let rtd_client =
-                    Arc::new(RtdClientBuilder::default().build(fullnode_rpc_url).await?);
+                let rtd_client = Client::new(fullnode_rpc_url)?;
                 let clients = Arc::new(make_clients(&rtd_client).await?);
                 let output = get_object(id, version, validator, clients).await?;
 
@@ -548,10 +454,9 @@ impl ToolCommand {
                     Verbosity::Grouped => {
                         let committee = Arc::new(
                             rtd_client
-                                .governance_api()
-                                .get_committee_info(None)
+                                .get_committee(None)
                                 .await?
-                                .validators
+                                .voting_rights
                                 .into_iter()
                                 .collect::<BTreeMap<_, _>>(),
                         );
@@ -578,7 +483,6 @@ impl ToolCommand {
                     get_transaction_block(digest, show_input_tx, fullnode_rpc_url).await?
                 );
             }
-            #[cfg(not(tidehunter))]
             ToolCommand::DbTool { db_path, cmd } => {
                 let path = PathBuf::from(db_path);
                 match cmd {
@@ -626,8 +530,7 @@ impl ToolCommand {
                 sequence_number,
                 fullnode_rpc_url,
             } => {
-                let rtd_client =
-                    Arc::new(RtdClientBuilder::default().build(fullnode_rpc_url).await?);
+                let rtd_client = Client::new(fullnode_rpc_url)?;
                 let clients = make_clients(&rtd_client).await?;
 
                 for (name, (_, client)) in clients {
@@ -674,6 +577,7 @@ impl ToolCommand {
                 genesis,
                 path,
                 num_parallel_downloads,
+                num_parallel_chunks,
                 verify,
                 network,
                 snapshot_bucket,
@@ -683,6 +587,7 @@ impl ToolCommand {
                 latest,
                 verbose,
                 max_retries,
+                metrics_port,
             } => {
                 if !verbose {
                     tracing_handle
@@ -692,34 +597,16 @@ impl ToolCommand {
                 let num_parallel_downloads = num_parallel_downloads.unwrap_or(50).min(200);
                 let snapshot_bucket =
                     snapshot_bucket.or_else(|| match (network, no_sign_request) {
-                        (Chain::Mainnet, false) => Some(
-                            env::var("MAINNET_FORMAL_SIGNED_BUCKET")
-                                .unwrap_or("linku-mainnet-formal".to_string()),
-                        ),
+                        (Chain::Mainnet, false) => env::var("MAINNET_FORMAL_SIGNED_BUCKET").ok(),
                         (Chain::Mainnet, true) => env::var("MAINNET_FORMAL_UNSIGNED_BUCKET").ok(),
                         (Chain::Testnet, true) => env::var("TESTNET_FORMAL_UNSIGNED_BUCKET").ok(),
-                        (Chain::Testnet, _) => Some(
-                            env::var("TESTNET_FORMAL_SIGNED_BUCKET")
-                                .unwrap_or("linku-testnet-formal".to_string()),
-                        ),
+                        (Chain::Testnet, _) => env::var("TESTNET_FORMAL_SIGNED_BUCKET").ok(),
                         (Chain::Unknown, _) => {
                             panic!("Cannot generate default snapshot bucket for unknown network");
                         }
                     });
 
-                let aws_endpoint = env::var("AWS_SNAPSHOT_ENDPOINT").ok().or_else(|| {
-                    if no_sign_request {
-                        if network == Chain::Mainnet {
-                            Some("https://formal-snapshot.mainnet.rtd.io".to_string())
-                        } else if network == Chain::Testnet {
-                            Some("https://formal-snapshot.testnet.rtd.io".to_string())
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                });
+                let aws_endpoint = env::var("AWS_SNAPSHOT_ENDPOINT").ok();
 
                 let snapshot_bucket_type = if no_sign_request {
                     ObjectStoreType::S3
@@ -727,6 +614,15 @@ impl ToolCommand {
                     snapshot_bucket_type
                         .expect("You must set either --snapshot-bucket-type or --no-sign-request")
                 };
+                if !matches!(&snapshot_bucket_type, ObjectStoreType::File)
+                    && snapshot_bucket
+                        .as_ref()
+                        .is_none_or(|bucket| bucket.is_empty())
+                {
+                    anyhow::bail!(
+                        "Set --snapshot-bucket or the formal snapshot bucket environment variable for this RTD network"
+                    );
+                }
                 let snapshot_store_config = match snapshot_bucket_type {
                     ObjectStoreType::S3 => ObjectStoreConfig {
                         object_store: Some(ObjectStoreType::S3),
@@ -741,25 +637,6 @@ impl ToolCommand {
                         .ok()
                         .and_then(|b| b.parse().ok())
                         .unwrap_or(no_sign_request),
-                        object_store_connection_limit: 200,
-                        no_sign_request,
-                        ..Default::default()
-                    },
-                    ObjectStoreType::GCS => ObjectStoreConfig {
-                        object_store: Some(ObjectStoreType::GCS),
-                        bucket: snapshot_bucket,
-                        google_service_account: env::var("GCS_SNAPSHOT_SERVICE_ACCOUNT_FILE_PATH")
-                            .ok(),
-                        object_store_connection_limit: 200,
-                        no_sign_request,
-                        ..Default::default()
-                    },
-                    ObjectStoreType::Azure => ObjectStoreConfig {
-                        object_store: Some(ObjectStoreType::Azure),
-                        bucket: snapshot_bucket,
-                        azure_storage_account: env::var("AZURE_SNAPSHOT_STORAGE_ACCOUNT").ok(),
-                        azure_storage_access_key: env::var("AZURE_SNAPSHOT_STORAGE_ACCESS_KEY")
-                            .ok(),
                         object_store_connection_limit: 200,
                         no_sign_request,
                         ..Default::default()
@@ -779,11 +656,11 @@ impl ToolCommand {
                     }
                 };
 
-                let ingestion_url = match network {
-                    Chain::Mainnet => "https://checkpoints.mainnet.rtd.io",
-                    Chain::Testnet => "https://checkpoints.testnet.rtd.io",
-                    _ => panic!("Cannot generate default ingestion url for unknown network"),
-                };
+                let ingestion_url = env::var("RTD_CHECKPOINT_INGESTION_URL").map_err(|_| {
+                    anyhow::anyhow!(
+                        "Set RTD_CHECKPOINT_INGESTION_URL to the verified RTD checkpoint archive"
+                    )
+                })?;
 
                 let latest_available_epoch =
                     latest.then_some(get_latest_available_epoch(&snapshot_store_config).await?);
@@ -806,195 +683,23 @@ impl ToolCommand {
                     epoch_to_download,
                     &genesis,
                     snapshot_store_config,
-                    ingestion_url,
+                    &ingestion_url,
                     num_parallel_downloads,
+                    num_parallel_chunks,
                     network,
                     verify,
                     max_retries,
+                    metrics_port,
                 )
                 .await?;
             }
-            ToolCommand::DownloadDBSnapshot {
-                epoch,
-                path,
-                skip_indexes,
-                num_parallel_downloads,
-                network,
-                snapshot_bucket,
-                snapshot_bucket_type,
-                snapshot_path,
-                no_sign_request,
-                latest,
-                verbose,
-                max_retries,
-            } => {
-                if no_sign_request {
-                    anyhow::bail!(
-                        "The --no-sign-request flag is no longer supported. \
-                        Please use S3 or GCS buckets with --snapshot-bucket-type and --snapshot-bucket instead. \
-                        For more information, see: https://docs.rtd.io/guides/operator/snapshots#linku-labs-managed-snapshots"
-                    );
-                }
-                if !verbose {
-                    tracing_handle
-                        .update_log("off")
-                        .expect("Failed to update log level");
-                }
-                let num_parallel_downloads = num_parallel_downloads.unwrap_or(50).min(200);
-                let snapshot_bucket =
-                    snapshot_bucket.or_else(|| match (network, no_sign_request) {
-                        (Chain::Mainnet, false) => Some(
-                            env::var("MAINNET_DB_SIGNED_BUCKET")
-                                .unwrap_or("linku-mainnet-snapshots".to_string()),
-                        ),
-                        (Chain::Mainnet, true) => env::var("MAINNET_DB_UNSIGNED_BUCKET").ok(),
-                        (Chain::Testnet, true) => env::var("TESTNET_DB_UNSIGNED_BUCKET").ok(),
-                        (Chain::Testnet, _) => Some(
-                            env::var("TESTNET_DB_SIGNED_BUCKET")
-                                .unwrap_or("linku-testnet-snapshots".to_string()),
-                        ),
-                        (Chain::Unknown, _) => {
-                            panic!("Cannot generate default snapshot bucket for unknown network");
-                        }
-                    });
-
-                let aws_endpoint = env::var("AWS_SNAPSHOT_ENDPOINT").ok();
-                let snapshot_bucket_type = if no_sign_request {
-                    ObjectStoreType::S3
-                } else {
-                    snapshot_bucket_type
-                        .expect("You must set either --snapshot-bucket-type or --no-sign-request")
-                };
-                let snapshot_store_config = if no_sign_request {
-                    let aws_endpoint = env::var("AWS_SNAPSHOT_ENDPOINT").ok().or_else(|| {
-                        if network == Chain::Mainnet {
-                            Some("https://db-snapshot.mainnet.rtd.io".to_string())
-                        } else if network == Chain::Testnet {
-                            Some("https://db-snapshot.testnet.rtd.io".to_string())
-                        } else {
-                            None
-                        }
-                    });
-                    ObjectStoreConfig {
-                        object_store: Some(ObjectStoreType::S3),
-                        aws_endpoint: aws_endpoint.filter(|s| !s.is_empty()),
-                        aws_virtual_hosted_style_request: env::var(
-                            "AWS_SNAPSHOT_VIRTUAL_HOSTED_REQUESTS",
-                        )
-                        .ok()
-                        .and_then(|b| b.parse().ok())
-                        .unwrap_or(no_sign_request),
-                        object_store_connection_limit: 200,
-                        no_sign_request,
-                        ..Default::default()
-                    }
-                } else {
-                    match snapshot_bucket_type {
-                        ObjectStoreType::S3 => ObjectStoreConfig {
-                            object_store: Some(ObjectStoreType::S3),
-                            bucket: snapshot_bucket.filter(|s| !s.is_empty()),
-                            aws_access_key_id: env::var("AWS_SNAPSHOT_ACCESS_KEY_ID").ok(),
-                            aws_secret_access_key: env::var("AWS_SNAPSHOT_SECRET_ACCESS_KEY").ok(),
-                            aws_region: env::var("AWS_SNAPSHOT_REGION").ok(),
-                            aws_endpoint: aws_endpoint.filter(|s| !s.is_empty()),
-                            aws_virtual_hosted_style_request: env::var(
-                                "AWS_SNAPSHOT_VIRTUAL_HOSTED_REQUESTS",
-                            )
-                            .ok()
-                            .and_then(|b| b.parse().ok())
-                            .unwrap_or(no_sign_request),
-                            object_store_connection_limit: 200,
-                            no_sign_request,
-                            ..Default::default()
-                        },
-                        ObjectStoreType::GCS => ObjectStoreConfig {
-                            object_store: Some(ObjectStoreType::GCS),
-                            bucket: snapshot_bucket,
-                            google_service_account: env::var(
-                                "GCS_SNAPSHOT_SERVICE_ACCOUNT_FILE_PATH",
-                            )
-                            .ok(),
-                            google_project_id: env::var("GCS_SNAPSHOT_SERVICE_ACCOUNT_PROJECT_ID")
-                                .ok(),
-                            object_store_connection_limit: 200,
-                            no_sign_request,
-                            ..Default::default()
-                        },
-                        ObjectStoreType::Azure => ObjectStoreConfig {
-                            object_store: Some(ObjectStoreType::Azure),
-                            bucket: snapshot_bucket,
-                            azure_storage_account: env::var("AZURE_SNAPSHOT_STORAGE_ACCOUNT").ok(),
-                            azure_storage_access_key: env::var("AZURE_SNAPSHOT_STORAGE_ACCESS_KEY")
-                                .ok(),
-                            object_store_connection_limit: 200,
-                            no_sign_request,
-                            ..Default::default()
-                        },
-                        ObjectStoreType::File => {
-                            if snapshot_path.is_some() {
-                                ObjectStoreConfig {
-                                    object_store: Some(ObjectStoreType::File),
-                                    directory: snapshot_path,
-                                    ..Default::default()
-                                }
-                            } else {
-                                panic!(
-                                    "--snapshot-path must be specified for --snapshot-bucket-type=file"
-                                );
-                            }
-                        }
-                    }
-                };
-
-                let latest_available_epoch =
-                    latest.then_some(get_latest_available_epoch(&snapshot_store_config).await?);
-                let epoch_to_download = epoch.or(latest_available_epoch).expect(
-                    "Either pass epoch with --epoch <epoch_num> or use latest with --latest",
-                );
-
-                if let Err(e) =
-                    check_completed_snapshot(&snapshot_store_config, epoch_to_download).await
-                {
-                    panic!(
-                        "Aborting snapshot restore: {}, snapshot may not be uploaded yet",
-                        e
-                    );
-                }
-                download_db_snapshot(
-                    &path,
-                    epoch_to_download,
-                    snapshot_store_config,
-                    skip_indexes,
-                    num_parallel_downloads,
-                    max_retries,
-                )
-                .await?;
+            ToolCommand::DbShell(args) => {
+                tokio::task::spawn_blocking(move || crate::db_shell::run(args)).await??;
             }
-            ToolCommand::Replay {
-                rpc_url,
-                safety_checks,
-                cmd,
-                use_authority,
-                cfg_path,
-                chain,
-            } => {
-                execute_replay_command(rpc_url, safety_checks, use_authority, cfg_path, chain, cmd)
-                    .await?;
-            }
-            ToolCommand::SignTransaction {
-                genesis,
-                sender_signed_data,
-            } => {
-                let genesis = Genesis::load(genesis)?;
-                let sender_signed_data = bcs::from_bytes::<SenderSignedData>(
-                    &fastcrypto::encoding::Base64::decode(sender_signed_data.as_str()).unwrap(),
-                )
-                .unwrap();
-                let transaction = Transaction::new(sender_signed_data);
-                let (agg, _) =
-                    AuthorityAggregatorBuilder::from_genesis(&genesis).build_network_clients();
-                let result = agg.process_transaction(transaction, None).await;
-                println!("{:?}", result);
+            #[cfg(all(feature = "tideconsole", not(windows)))]
+            ToolCommand::TideConsole { db, exec, script } => {
+                tokio::task::spawn_blocking(move || crate::tideconsole_cmd::run(db, exec, script))
+                    .await??;
             }
         };
         Ok(())

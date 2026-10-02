@@ -12,7 +12,6 @@ title: Module `rtd_system::storage_fund`
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -45,6 +44,7 @@ title: Module `rtd_system::storage_fund`
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -56,12 +56,12 @@ title: Module `rtd_system::storage_fund`
 
 Struct representing the storage fund, containing two <code>Balance</code>s:
 - <code><a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_total_object_storage_rebates">total_object_storage_rebates</a></code> has the invariant that it's the sum of <code>storage_rebate</code> of
-all objects currently stored on-chain. To maintain this invariant, the only inflow of this
-balance is storage charges collected from transactions, and the only outflow is storage rebates
-of transactions, including both the portion refunded to the transaction senders as well as
-the non-refundable portion taken out and put into <code>non_refundable_balance</code>.
+   all objects currently stored on-chain. To maintain this invariant, the only inflow of this
+   balance is storage charges collected from transactions, and the only outflow is storage rebates
+   of transactions, including both the portion refunded to the transaction senders as well as
+   the non-refundable portion taken out and put into <code>non_refundable_balance</code>.
 - <code>non_refundable_balance</code> contains any remaining inflow of the storage fund that should not
-be taken out of the fund.
+   be taken out of the fund.
 
 
 <pre><code><b>public</b> <b>struct</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_StorageFund">StorageFund</a> <b>has</b> store
@@ -93,7 +93,7 @@ be taken out of the fund.
 
 ## Function `new`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> at genesis time.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> at genesis time.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_new">new</a>(initial_fund: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;): <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_StorageFund">rtd_system::storage_fund::StorageFund</a>
@@ -122,7 +122,7 @@ Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_
 
 ## Function `advance_epoch`
 
-Called by <code><a href="../rtd_system/sui_system.md#rtd_system_rtd_system">rtd_system</a></code> at epoch change times to process the inflows and outflows of storage fund.
+Called by <code><a href="../rtd_system/rtd_system.md#rtd_system_rtd_system">rtd_system</a></code> at epoch change times to process the inflows and outflows of storage fund.
 
 
 <pre><code><b>public</b>(package) <b>fun</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_advance_epoch">advance_epoch</a>(self: &<b>mut</b> <a href="../rtd_system/storage_fund.md#rtd_system_storage_fund_StorageFund">rtd_system::storage_fund::StorageFund</a>, storage_charges: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, storage_fund_reinvestment: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, leftover_staking_rewards: <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;, storage_rebate_amount: u64, non_refundable_storage_fee_amount: u64): <a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;<a href="../rtd/rtd.md#rtd_rtd_RTD">rtd::rtd::RTD</a>&gt;

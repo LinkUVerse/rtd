@@ -5,19 +5,18 @@ use crate::authority::AuthorityState;
 use crate::checkpoints::CheckpointStore;
 use crate::epoch::committee_store::CommitteeStore;
 use crate::execution_cache::ExecutionCacheTraitPointers;
-use crate::rpc_index::CoinIndexInfo;
-use crate::rpc_index::OwnerIndexInfo;
-use crate::rpc_index::OwnerIndexKey;
-use crate::rpc_index::RpcIndexStore;
 use move_core_types::language_storage::StructTag;
 use parking_lot::Mutex;
-use std::sync::Arc;
+use rtd_rpc_store::RpcStoreReader;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::committee::Committee;
 use rtd_types::committee::EpochId;
 use rtd_types::effects::{TransactionEffects, TransactionEvents};
+use rtd_types::error::{RtdErrorKind, RtdResult};
+use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::messages_checkpoint::CheckpointContentsDigest;
 use rtd_types::messages_checkpoint::CheckpointDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
@@ -26,21 +25,26 @@ use rtd_types::messages_checkpoint::VerifiedCheckpoint;
 use rtd_types::messages_checkpoint::VerifiedCheckpointContents;
 use rtd_types::messages_checkpoint::VersionedFullCheckpointContents;
 use rtd_types::object::Object;
+use rtd_types::object::Owner;
 use rtd_types::storage::BalanceInfo;
 use rtd_types::storage::BalanceIterator;
 use rtd_types::storage::CoinInfo;
 use rtd_types::storage::DynamicFieldKey;
+use rtd_types::storage::LedgerBitmapBucketIterator;
+use rtd_types::storage::LedgerTxSeqDigest;
+use rtd_types::storage::LedgerTxSeqDigestIterator;
 use rtd_types::storage::ObjectStore;
 use rtd_types::storage::OwnedObjectInfo;
 use rtd_types::storage::RpcIndexes;
 use rtd_types::storage::RpcStateReader;
-use rtd_types::storage::TransactionInfo;
+use rtd_types::storage::RuntimeObjectResolver;
 use rtd_types::storage::WriteStore;
 use rtd_types::storage::error::Error as StorageError;
 use rtd_types::storage::error::Result;
-use rtd_types::storage::{ObjectKey, ReadStore};
+use rtd_types::storage::{BackingPackageStore, PackageObject};
+use rtd_types::storage::{ObjectKey, OverlayBackingPackageStore, ReadStore};
 use rtd_types::transaction::VerifiedTransaction;
-use tap::Pipe;
+use std::sync::Arc;
 use tap::TapFallible;
 use tracing::error;
 use typed_store::TypedStoreError;
@@ -97,6 +101,15 @@ impl ReadStore for RocksDbStore {
     ) -> Option<VerifiedCheckpoint> {
         self.checkpoint_store
             .get_checkpoint_by_sequence_number(sequence_number)
+            .expect("db error")
+    }
+
+    fn multi_get_checkpoint_by_sequence_number(
+        &self,
+        sequence_numbers: &[CheckpointSequenceNumber],
+    ) -> Vec<Option<VerifiedCheckpoint>> {
+        self.checkpoint_store
+            .multi_get_checkpoint_by_sequence_number(sequence_numbers)
             .expect("db error")
     }
 
@@ -220,16 +233,40 @@ impl ReadStore for RocksDbStore {
             .get_transaction_block(digest)
     }
 
+    fn multi_get_transactions(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Arc<VerifiedTransaction>>> {
+        self.cache_traits
+            .transaction_cache_reader
+            .multi_get_transaction_blocks(digests)
+    }
+
     fn get_transaction_effects(&self, digest: &TransactionDigest) -> Option<TransactionEffects> {
         self.cache_traits
             .transaction_cache_reader
             .get_executed_effects(digest)
     }
 
+    fn multi_get_transaction_effects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<TransactionEffects>> {
+        self.cache_traits
+            .transaction_cache_reader
+            .multi_get_executed_effects(digests)
+    }
+
     fn get_events(&self, digest: &TransactionDigest) -> Option<TransactionEvents> {
         self.cache_traits
             .transaction_cache_reader
             .get_events(digest)
+    }
+
+    fn multi_get_events(&self, digests: &[TransactionDigest]) -> Vec<Option<TransactionEvents>> {
+        self.cache_traits
+            .transaction_cache_reader
+            .multi_get_events(digests)
     }
 
     fn get_unchanged_loaded_runtime_objects(
@@ -239,6 +276,15 @@ impl ReadStore for RocksDbStore {
         self.cache_traits
             .transaction_cache_reader
             .get_unchanged_loaded_runtime_objects(digest)
+    }
+
+    fn multi_get_unchanged_loaded_runtime_objects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Vec<ObjectKey>>> {
+        self.cache_traits
+            .transaction_cache_reader
+            .multi_get_unchanged_loaded_runtime_objects(digests)
     }
 
     fn get_transaction_checkpoint(
@@ -293,6 +339,12 @@ impl ObjectStore for RocksDbStore {
         self.cache_traits
             .object_store
             .get_object_by_key(object_id, version)
+    }
+
+    fn multi_get_objects_by_key(&self, object_keys: &[ObjectKey]) -> Vec<Option<Object>> {
+        self.cache_traits
+            .object_cache_reader
+            .multi_get_objects_by_key(object_keys)
     }
 }
 
@@ -380,13 +432,6 @@ impl RestReadStore {
     pub fn new(state: Arc<AuthorityState>, rocks: RocksDbStore) -> Self {
         Self { state, rocks }
     }
-
-    fn index(&self) -> rtd_types::storage::error::Result<&RpcIndexStore> {
-        self.state
-            .rpc_index
-            .as_deref()
-            .ok_or_else(|| rtd_types::storage::error::Error::custom("rest index store is disabled"))
-    }
 }
 
 impl ObjectStore for RestReadStore {
@@ -400,6 +445,10 @@ impl ObjectStore for RestReadStore {
         version: rtd_types::base_types::VersionNumber,
     ) -> Option<Object> {
         self.rocks.get_object_by_key(object_id, version)
+    }
+
+    fn multi_get_objects_by_key(&self, object_keys: &[ObjectKey]) -> Vec<Option<Object>> {
+        self.rocks.multi_get_objects_by_key(object_keys)
     }
 }
 
@@ -442,6 +491,14 @@ impl ReadStore for RestReadStore {
             .get_checkpoint_by_sequence_number(sequence_number)
     }
 
+    fn multi_get_checkpoint_by_sequence_number(
+        &self,
+        sequence_numbers: &[CheckpointSequenceNumber],
+    ) -> Vec<Option<VerifiedCheckpoint>> {
+        self.rocks
+            .multi_get_checkpoint_by_sequence_number(sequence_numbers)
+    }
+
     fn get_checkpoint_contents_by_digest(
         &self,
         digest: &CheckpointContentsDigest,
@@ -461,12 +518,30 @@ impl ReadStore for RestReadStore {
         self.rocks.get_transaction(digest)
     }
 
+    fn multi_get_transactions(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Arc<VerifiedTransaction>>> {
+        self.rocks.multi_get_transactions(digests)
+    }
+
     fn get_transaction_effects(&self, digest: &TransactionDigest) -> Option<TransactionEffects> {
         self.rocks.get_transaction_effects(digest)
     }
 
+    fn multi_get_transaction_effects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<TransactionEffects>> {
+        self.rocks.multi_get_transaction_effects(digests)
+    }
+
     fn get_events(&self, digest: &TransactionDigest) -> Option<TransactionEvents> {
         self.rocks.get_events(digest)
+    }
+
+    fn multi_get_events(&self, digests: &[TransactionDigest]) -> Vec<Option<TransactionEvents>> {
+        self.rocks.multi_get_events(digests)
     }
 
     fn get_full_checkpoint_contents(
@@ -485,11 +560,60 @@ impl ReadStore for RestReadStore {
         self.rocks.get_unchanged_loaded_runtime_objects(digest)
     }
 
+    fn multi_get_unchanged_loaded_runtime_objects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Vec<ObjectKey>>> {
+        self.rocks
+            .multi_get_unchanged_loaded_runtime_objects(digests)
+    }
+
     fn get_transaction_checkpoint(
         &self,
         digest: &TransactionDigest,
     ) -> Option<CheckpointSequenceNumber> {
         self.rocks.get_transaction_checkpoint(digest)
+    }
+}
+
+impl BackingPackageStore for RestReadStore {
+    fn get_package_object(&self, _package_id: &ObjectID) -> RtdResult<Option<PackageObject>> {
+        Err(RtdErrorKind::UnsupportedFeatureError {
+            error: "RestReadStore does not support loading package objects".to_string(),
+        }
+        .into())
+    }
+}
+
+impl RuntimeObjectResolver for RestReadStore {
+    fn read_child_object(
+        &self,
+        parent: &ObjectID,
+        child: &ObjectID,
+        child_version_upper_bound: SequenceNumber,
+    ) -> RtdResult<Option<Object>> {
+        Ok(self.get_object(child).and_then(|o| {
+            if o.version() <= child_version_upper_bound
+                && o.owner == Owner::ObjectOwner((*parent).into())
+            {
+                Some(o)
+            } else {
+                None
+            }
+        }))
+    }
+
+    fn get_object_received_at_version(
+        &self,
+        _owner: &ObjectID,
+        _receiving_object_id: &ObjectID,
+        _receive_object_at_version: SequenceNumber,
+        _epoch_id: EpochId,
+    ) -> RtdResult<Option<Object>> {
+        Err(RtdErrorKind::UnsupportedFeatureError {
+            error: "RestReadStore does not support receiving objects".to_string(),
+        }
+        .into())
     }
 }
 
@@ -510,18 +634,24 @@ impl RpcStateReader for RestReadStore {
     }
 
     fn indexes(&self) -> Option<&dyn RpcIndexes> {
-        Some(self)
+        // The legacy `rpc-index` backend has been removed; a node serving
+        // reads through `RestReadStore` exposes no index surface. Index
+        // reads are served by the embedded rpc-store via `RpcStoreReadStore`.
+        None
     }
 
-    fn get_struct_layout(
+    fn get_struct_layout_with_overlay(
         &self,
         struct_tag: &move_core_types::language_storage::StructTag,
+        overlay: &ObjectSet,
     ) -> Result<Option<move_core_types::annotated_value::MoveTypeLayout>> {
-        self.state
-            .load_epoch_store_one_call_per_task()
+        let backing_store = self.state.get_backing_package_store();
+        let overlay_store = OverlayBackingPackageStore::new(overlay, backing_store.as_ref());
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
+        epoch_store
             .executor()
             // TODO(cache) - must read through cache
-            .type_layout_resolver(Box::new(self.state.get_backing_package_store().as_ref()))
+            .type_layout_resolver(epoch_store.protocol_config(), Box::new(overlay_store))
             .get_annotated_layout(struct_tag)
             .map(|layout| layout.into_layout())
             .map(Some)
@@ -529,78 +659,303 @@ impl RpcStateReader for RestReadStore {
     }
 }
 
-struct BatchedEventIterator<'a, I>
-where
-    I: Iterator<Item = Result<crate::rpc_index::EventIndexKey, TypedStoreError>>,
-{
-    key_iter: I,
-    rocks: &'a RocksDbStore,
-    current_checkpoint: Option<u64>,
-    current_checkpoint_contents: Option<rtd_types::messages_checkpoint::CheckpointContents>,
-    cached_tx_events: Option<TransactionEvents>,
-    cached_tx_digest: Option<TransactionDigest>,
+/// Read store backed by the embedded [`rtd_rpc_store`] indexer.
+///
+/// Like [`RestReadStore`] it serves the `rtd-rpc-api` trait stack, but it
+/// additionally exposes the index surface (which [`RestReadStore`] no
+/// longer does). This wrapper composes two backends:
+///
+/// - **Raw chain data** — objects, transactions, effects, events,
+///   checkpoints, committees, and child-object resolution — is served
+///   from the validator's perpetual / checkpoint stores
+///   ([`RocksDbStore`]), exactly like [`RestReadStore`]. The embedded
+///   rpc-store does not duplicate this data.
+/// - **The index surface** ([`RpcIndexes`]) — owner / type / balance /
+///   coin / package-version listings, epoch info, and the
+///   ledger-history bitmaps — is served from the
+///   [`RpcStoreReader`].
+///
+/// The object/state available range is the intersection of the two
+/// backends' ranges (`max` of their lower bounds): a consistent read
+/// at checkpoint `C` needs both the object bytes (perpetual store) and
+/// the index rows (rpc-store) at `C`. Ledger-history-specific
+/// availability (bounded by the history backfill watermark) is exposed
+/// separately.
+pub struct RpcStoreReadStore {
+    state: Arc<AuthorityState>,
+    rocks: RocksDbStore,
+    reader: RpcStoreReader,
 }
 
-impl<I> Iterator for BatchedEventIterator<'_, I>
-where
-    I: Iterator<Item = Result<crate::rpc_index::EventIndexKey, TypedStoreError>>,
-{
-    type Item = Result<(u64, u64, u32, u32, rtd_types::event::Event), TypedStoreError>;
+impl RpcStoreReadStore {
+    pub fn new(state: Arc<AuthorityState>, rocks: RocksDbStore, reader: RpcStoreReader) -> Self {
+        Self {
+            state,
+            rocks,
+            reader,
+        }
+    }
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let key = match self.key_iter.next()? {
-            Ok(k) => k,
-            Err(e) => return Some(Err(e)),
-        };
+impl ObjectStore for RpcStoreReadStore {
+    fn get_object(&self, object_id: &ObjectID) -> Option<Object> {
+        self.rocks.get_object(object_id)
+    }
 
-        if self.current_checkpoint != Some(key.checkpoint_seq) {
-            self.current_checkpoint = Some(key.checkpoint_seq);
-            self.current_checkpoint_contents = self
+    fn get_object_by_key(&self, object_id: &ObjectID, version: SequenceNumber) -> Option<Object> {
+        self.rocks.get_object_by_key(object_id, version)
+    }
+
+    fn multi_get_objects_by_key(&self, object_keys: &[ObjectKey]) -> Vec<Option<Object>> {
+        self.rocks.multi_get_objects_by_key(object_keys)
+    }
+}
+
+impl ReadStore for RpcStoreReadStore {
+    fn get_committee(&self, epoch: EpochId) -> Option<Arc<Committee>> {
+        self.rocks.get_committee(epoch)
+    }
+
+    fn get_latest_checkpoint(&self) -> Result<VerifiedCheckpoint> {
+        let latest = self.rocks.get_latest_checkpoint()?;
+        // Bound the reported tip to what the live-object index has committed.
+        // The embedded indexer follows the tip asynchronously, so without this
+        // the rpc-api could surface a checkpoint -- and the transactions in it
+        // -- whose indexed state (owned objects, balances, coins) is not yet
+        // readable, breaking read-after-write consistency. The history cohort
+        // backfills independently and bounds the ledger-history APIs
+        // separately, so it does not constrain this tip.
+        match self.reader.highest_live_committed_checkpoint()? {
+            Some(indexed) if indexed < latest.sequence_number => self
                 .rocks
-                .get_checkpoint_contents_by_sequence_number(key.checkpoint_seq);
-            self.cached_tx_events = None;
-            self.cached_tx_digest = None;
+                .get_checkpoint_by_sequence_number(indexed)
+                .ok_or_else(|| {
+                    StorageError::missing(format!(
+                        "live-indexed checkpoint {indexed} missing from the checkpoint store"
+                    ))
+                }),
+            Some(_) => Ok(latest),
+            // Fail closed: no live watermark means the index surface is
+            // empty -- a fresh node whose indexer has not committed its
+            // first checkpoint yet. Reporting the executed tip here would
+            // advertise checkpoints whose indexed state is not readable,
+            // the exact inconsistency the bound above exists to prevent.
+            // The window closes with the live cohort's first commit,
+            // moments after startup.
+            None => Err(StorageError::missing(
+                "the embedded rpc-store's live index has no committed checkpoint yet",
+            )),
         }
-
-        let checkpoint_contents = self.current_checkpoint_contents.as_ref()?;
-
-        let exec_digest = checkpoint_contents
-            .iter()
-            .nth(key.transaction_idx as usize)?;
-        let tx_digest = exec_digest.transaction;
-
-        if self.cached_tx_digest != Some(tx_digest) {
-            self.cached_tx_digest = Some(tx_digest);
-            self.cached_tx_events = self.rocks.get_events(&tx_digest);
-        }
-
-        let tx_events = self.cached_tx_events.as_ref()?;
-        let event = tx_events.data.get(key.event_index as usize)?.clone();
-
-        Some(Ok((
-            key.checkpoint_seq,
-            key.accumulator_version,
-            key.transaction_idx,
-            key.event_index,
-            event,
-        )))
-    }
-}
-
-impl RpcIndexes for RestReadStore {
-    fn get_epoch_info(&self, epoch: EpochId) -> Result<Option<rtd_types::storage::EpochInfo>> {
-        self.index()?
-            .get_epoch_info(epoch)
-            .map_err(StorageError::custom)
     }
 
-    fn get_transaction_info(
+    fn get_highest_verified_checkpoint(&self) -> Result<VerifiedCheckpoint> {
+        self.rocks.get_highest_verified_checkpoint()
+    }
+
+    fn get_highest_synced_checkpoint(&self) -> Result<VerifiedCheckpoint> {
+        self.rocks.get_highest_synced_checkpoint()
+    }
+
+    fn get_lowest_available_checkpoint(&self) -> Result<CheckpointSequenceNumber> {
+        // A consistent read needs both the raw chain data (perpetual
+        // store) and the index rows (rpc-store), so the available range
+        // starts at the higher of the two lower bounds.
+        let perpetual = self.rocks.get_lowest_available_checkpoint()?;
+        let rpc_store = self.reader.get_lowest_available_checkpoint()?;
+        Ok(perpetual.max(rpc_store))
+    }
+
+    fn get_checkpoint_by_digest(&self, digest: &CheckpointDigest) -> Option<VerifiedCheckpoint> {
+        self.rocks.get_checkpoint_by_digest(digest)
+    }
+
+    fn get_checkpoint_by_sequence_number(
+        &self,
+        sequence_number: CheckpointSequenceNumber,
+    ) -> Option<VerifiedCheckpoint> {
+        self.rocks
+            .get_checkpoint_by_sequence_number(sequence_number)
+    }
+
+    fn multi_get_checkpoint_by_sequence_number(
+        &self,
+        sequence_numbers: &[CheckpointSequenceNumber],
+    ) -> Vec<Option<VerifiedCheckpoint>> {
+        self.rocks
+            .multi_get_checkpoint_by_sequence_number(sequence_numbers)
+    }
+
+    fn get_checkpoint_contents_by_digest(
+        &self,
+        digest: &CheckpointContentsDigest,
+    ) -> Option<rtd_types::messages_checkpoint::CheckpointContents> {
+        self.rocks.get_checkpoint_contents_by_digest(digest)
+    }
+
+    fn get_checkpoint_contents_by_sequence_number(
+        &self,
+        sequence_number: CheckpointSequenceNumber,
+    ) -> Option<rtd_types::messages_checkpoint::CheckpointContents> {
+        self.rocks
+            .get_checkpoint_contents_by_sequence_number(sequence_number)
+    }
+
+    fn get_transaction(&self, digest: &TransactionDigest) -> Option<Arc<VerifiedTransaction>> {
+        self.rocks.get_transaction(digest)
+    }
+
+    fn multi_get_transactions(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Arc<VerifiedTransaction>>> {
+        self.rocks.multi_get_transactions(digests)
+    }
+
+    fn get_transaction_effects(&self, digest: &TransactionDigest) -> Option<TransactionEffects> {
+        self.rocks.get_transaction_effects(digest)
+    }
+
+    fn multi_get_transaction_effects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<TransactionEffects>> {
+        self.rocks.multi_get_transaction_effects(digests)
+    }
+
+    fn get_events(&self, digest: &TransactionDigest) -> Option<TransactionEvents> {
+        self.rocks.get_events(digest)
+    }
+
+    fn multi_get_events(&self, digests: &[TransactionDigest]) -> Vec<Option<TransactionEvents>> {
+        self.rocks.multi_get_events(digests)
+    }
+
+    fn get_full_checkpoint_contents(
+        &self,
+        sequence_number: Option<CheckpointSequenceNumber>,
+        digest: &CheckpointContentsDigest,
+    ) -> Option<VersionedFullCheckpointContents> {
+        self.rocks
+            .get_full_checkpoint_contents(sequence_number, digest)
+    }
+
+    fn get_unchanged_loaded_runtime_objects(
         &self,
         digest: &TransactionDigest,
-    ) -> rtd_types::storage::error::Result<Option<TransactionInfo>> {
-        self.index()?
-            .get_transaction_info(digest)
+    ) -> Option<Vec<ObjectKey>> {
+        self.rocks.get_unchanged_loaded_runtime_objects(digest)
+    }
+
+    fn multi_get_unchanged_loaded_runtime_objects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Vec<ObjectKey>>> {
+        self.rocks
+            .multi_get_unchanged_loaded_runtime_objects(digests)
+    }
+
+    fn get_transaction_checkpoint(
+        &self,
+        digest: &TransactionDigest,
+    ) -> Option<CheckpointSequenceNumber> {
+        self.rocks.get_transaction_checkpoint(digest)
+    }
+}
+
+impl BackingPackageStore for RpcStoreReadStore {
+    fn get_package_object(&self, _package_id: &ObjectID) -> RtdResult<Option<PackageObject>> {
+        Err(RtdErrorKind::UnsupportedFeatureError {
+            error: "RpcStoreReadStore does not support loading package objects".to_string(),
+        }
+        .into())
+    }
+}
+
+impl RuntimeObjectResolver for RpcStoreReadStore {
+    fn read_child_object(
+        &self,
+        parent: &ObjectID,
+        child: &ObjectID,
+        child_version_upper_bound: SequenceNumber,
+    ) -> RtdResult<Option<Object>> {
+        Ok(self.get_object(child).and_then(|o| {
+            if o.version() <= child_version_upper_bound
+                && o.owner == Owner::ObjectOwner((*parent).into())
+            {
+                Some(o)
+            } else {
+                None
+            }
+        }))
+    }
+
+    fn get_object_received_at_version(
+        &self,
+        _owner: &ObjectID,
+        _receiving_object_id: &ObjectID,
+        _receive_object_at_version: SequenceNumber,
+        _epoch_id: EpochId,
+    ) -> RtdResult<Option<Object>> {
+        Err(RtdErrorKind::UnsupportedFeatureError {
+            error: "RpcStoreReadStore does not support receiving objects".to_string(),
+        }
+        .into())
+    }
+}
+
+impl RpcStateReader for RpcStoreReadStore {
+    fn get_lowest_available_checkpoint_objects(&self) -> Result<CheckpointSequenceNumber> {
+        let perpetual = self
+            .state
+            .get_object_cache_reader()
+            .get_highest_pruned_checkpoint()
+            .map(|cp| cp + 1)
+            .unwrap_or(0);
+        let rpc_store = self.reader.get_lowest_available_checkpoint_objects()?;
+        Ok(perpetual.max(rpc_store))
+    }
+
+    fn get_chain_identifier(&self) -> Result<rtd_types::digests::ChainIdentifier> {
+        Ok(self.state.get_chain_identifier())
+    }
+
+    fn indexes(&self) -> Option<&dyn RpcIndexes> {
+        Some(self)
+    }
+
+    fn get_highest_executed_checkpoint_seq_number(&self) -> Result<CheckpointSequenceNumber> {
+        // The raw executed tip, read straight from the checkpoint store. Unlike
+        // `get_latest_checkpoint`, this is not bounded to the live-object index
+        // frontier -- the health check measures how far that frontier trails
+        // the executed tip, so it must see the unbounded value.
+        Ok(*self.rocks.get_latest_checkpoint()?.sequence_number())
+    }
+
+    fn get_struct_layout_with_overlay(
+        &self,
+        struct_tag: &move_core_types::language_storage::StructTag,
+        overlay: &ObjectSet,
+    ) -> Result<Option<move_core_types::annotated_value::MoveTypeLayout>> {
+        // Resolve through the authority's live executor and backing
+        // package store, matching `RestReadStore`: the perpetual store
+        // backs the package reads and the loaded epoch store carries
+        // the current protocol config.
+        let backing_store = self.state.get_backing_package_store();
+        let overlay_store = OverlayBackingPackageStore::new(overlay, backing_store.as_ref());
+        let epoch_store = self.state.load_epoch_store_one_call_per_task();
+        epoch_store
+            .executor()
+            .type_layout_resolver(epoch_store.protocol_config(), Box::new(overlay_store))
+            .get_annotated_layout(struct_tag)
+            .map(|layout| layout.into_layout())
+            .map(Some)
             .map_err(StorageError::custom)
+    }
+}
+
+impl RpcIndexes for RpcStoreReadStore {
+    fn get_epoch_info(&self, epoch: EpochId) -> Result<Option<rtd_types::storage::EpochInfo>> {
+        self.reader.get_epoch_info(epoch)
     }
 
     fn owned_objects_iter(
@@ -609,161 +964,105 @@ impl RpcIndexes for RestReadStore {
         object_type: Option<StructTag>,
         cursor: Option<OwnedObjectInfo>,
     ) -> Result<Box<dyn Iterator<Item = Result<OwnedObjectInfo, TypedStoreError>> + '_>> {
-        let cursor = cursor.map(|cursor| OwnerIndexKey {
-            owner: cursor.owner,
-            object_type: cursor.object_type,
-            inverted_balance: cursor.balance.map(std::ops::Not::not),
-            object_id: cursor.object_id,
-        });
-
-        let iter = self
-            .index()?
-            .owner_iter(owner, object_type, cursor)?
-            .map(|result| {
-                result.map(
-                    |(
-                        OwnerIndexKey {
-                            owner,
-                            object_id,
-                            object_type,
-                            inverted_balance,
-                        },
-                        OwnerIndexInfo { version },
-                    )| {
-                        OwnedObjectInfo {
-                            owner,
-                            object_type,
-                            balance: inverted_balance.map(std::ops::Not::not),
-                            object_id,
-                            version,
-                        }
-                    },
-                )
-            });
-
-        Ok(Box::new(iter) as _)
+        self.reader.owned_objects_iter(owner, object_type, cursor)
     }
 
     fn dynamic_field_iter(
         &self,
         parent: ObjectID,
-        cursor: Option<ObjectID>,
-    ) -> rtd_types::storage::error::Result<
-        Box<dyn Iterator<Item = Result<DynamicFieldKey, TypedStoreError>> + '_>,
-    > {
-        let iter = self.index()?.dynamic_field_iter(parent, cursor)?;
-        Ok(Box::new(iter) as _)
+        cursor: Option<DynamicFieldKey>,
+    ) -> Result<Box<dyn Iterator<Item = Result<DynamicFieldKey, TypedStoreError>> + '_>> {
+        self.reader.dynamic_field_iter(parent, cursor)
     }
 
-    fn get_coin_info(
-        &self,
-        coin_type: &StructTag,
-    ) -> rtd_types::storage::error::Result<Option<CoinInfo>> {
-        self.index()?
-            .get_coin_info(coin_type)?
-            .map(
-                |CoinIndexInfo {
-                     coin_metadata_object_id,
-                     treasury_object_id,
-                     regulated_coin_metadata_object_id,
-                 }| CoinInfo {
-                    coin_metadata_object_id,
-                    treasury_object_id,
-                    regulated_coin_metadata_object_id,
-                },
-            )
-            .pipe(Ok)
+    fn get_coin_info(&self, coin_type: &StructTag) -> Result<Option<CoinInfo>> {
+        self.reader.get_coin_info(coin_type)
     }
 
     fn get_balance(
         &self,
         owner: &RtdAddress,
         coin_type: &StructTag,
-    ) -> rtd_types::storage::error::Result<Option<BalanceInfo>> {
-        self.index()?
-            .get_balance(owner, coin_type)?
-            .map(|info| info.into())
-            .pipe(Ok)
+    ) -> Result<Option<BalanceInfo>> {
+        self.reader.get_balance(owner, coin_type)
     }
 
     fn balance_iter(
         &self,
         owner: &RtdAddress,
         cursor: Option<(RtdAddress, StructTag)>,
-    ) -> rtd_types::storage::error::Result<BalanceIterator<'_>> {
-        let cursor_key =
-            cursor.map(|(owner, coin_type)| crate::rpc_index::BalanceKey { owner, coin_type });
-
-        Ok(Box::new(
-            self.index()?
-                .balance_iter(*owner, cursor_key)?
-                .map(|result| {
-                    result
-                        .map(|(key, info)| (key.coin_type, info.into()))
-                        .map_err(Into::into)
-                }),
-        ))
+    ) -> Result<BalanceIterator<'_>> {
+        self.reader.balance_iter(owner, cursor)
     }
 
     fn package_versions_iter(
         &self,
         original_id: ObjectID,
         cursor: Option<u64>,
-    ) -> rtd_types::storage::error::Result<
-        Box<dyn Iterator<Item = Result<(u64, ObjectID), TypedStoreError>> + '_>,
-    > {
-        let iter = self.index()?.package_versions_iter(original_id, cursor)?;
-        Ok(
-            Box::new(iter.map(|result| result.map(|(key, info)| (key.version, info.storage_id))))
-                as _,
-        )
+    ) -> Result<Box<dyn Iterator<Item = Result<(u64, ObjectID), TypedStoreError>> + '_>> {
+        self.reader.package_versions_iter(original_id, cursor)
     }
 
     fn get_highest_indexed_checkpoint_seq_number(
         &self,
-    ) -> rtd_types::storage::error::Result<Option<CheckpointSequenceNumber>> {
-        self.index()?
-            .get_highest_indexed_checkpoint_seq_number()
-            .map_err(Into::into)
+    ) -> Result<Option<CheckpointSequenceNumber>> {
+        self.reader.get_highest_indexed_checkpoint_seq_number()
     }
 
-    fn authenticated_event_iter(
+    fn get_highest_live_indexed_checkpoint_seq_number(
         &self,
-        stream_id: RtdAddress,
-        start_checkpoint: u64,
-        start_accumulator_version: Option<u64>,
-        start_transaction_idx: Option<u32>,
-        start_event_idx: Option<u32>,
-        end_checkpoint: u64,
-        limit: u32,
-    ) -> rtd_types::storage::error::Result<
-        Box<
-            dyn Iterator<
-                    Item = Result<(u64, u64, u32, u32, rtd_types::event::Event), TypedStoreError>,
-                > + '_,
-        >,
-    > {
-        let index = self.index()?;
-        let key_iter = index.event_iter(
-            stream_id,
-            start_checkpoint,
-            start_accumulator_version.unwrap_or(0),
-            start_transaction_idx.unwrap_or(0),
-            start_event_idx.unwrap_or(0),
-            end_checkpoint,
-            limit,
-        )?;
+    ) -> Result<Option<CheckpointSequenceNumber>> {
+        self.reader.get_highest_live_indexed_checkpoint_seq_number()
+    }
 
-        let rocks = &self.rocks;
-        let iter = BatchedEventIterator {
-            key_iter,
-            rocks,
-            current_checkpoint: None,
-            current_checkpoint_contents: None,
-            cached_tx_events: None,
-            cached_tx_digest: None,
-        };
+    fn ledger_tx_seq_digest(&self, tx_seq: u64) -> Result<Option<LedgerTxSeqDigest>> {
+        self.reader.ledger_tx_seq_digest(tx_seq)
+    }
 
-        Ok(Box::new(iter))
+    fn ledger_tx_seq_digest_multi_get(
+        &self,
+        tx_seqs: &[u64],
+    ) -> Result<Vec<Option<LedgerTxSeqDigest>>> {
+        self.reader.ledger_tx_seq_digest_multi_get(tx_seqs)
+    }
+
+    fn ledger_tx_seq_digest_iter(
+        &self,
+        start: u64,
+        end_exclusive: u64,
+        descending: bool,
+    ) -> Result<LedgerTxSeqDigestIterator<'_>> {
+        self.reader
+            .ledger_tx_seq_digest_iter(start, end_exclusive, descending)
+    }
+
+    fn transaction_bitmap_bucket_iter(
+        &self,
+        dimension_key: Vec<u8>,
+        start_bucket: u64,
+        end_bucket_exclusive: u64,
+        descending: bool,
+    ) -> Result<LedgerBitmapBucketIterator<'_>> {
+        self.reader.transaction_bitmap_bucket_iter(
+            dimension_key,
+            start_bucket,
+            end_bucket_exclusive,
+            descending,
+        )
+    }
+
+    fn event_bitmap_bucket_iter(
+        &self,
+        dimension_key: Vec<u8>,
+        start_bucket: u64,
+        end_bucket_exclusive: u64,
+        descending: bool,
+    ) -> Result<LedgerBitmapBucketIterator<'_>> {
+        self.reader.event_bitmap_bucket_iter(
+            dimension_key,
+            start_bucket,
+            end_bucket_exclusive,
+            descending,
+        )
     }
 }

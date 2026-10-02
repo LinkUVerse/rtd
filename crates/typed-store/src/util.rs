@@ -19,6 +19,22 @@ where
         .expect("failed to serialize via be_fix_int_ser method")
 }
 
+/// Serialize `t` in big-endian fixed-int encoding directly into `buf`,
+/// returning the number of bytes written.
+#[inline]
+pub fn be_fix_int_ser_into<S>(buf: &mut Vec<u8>, t: &S) -> usize
+where
+    S: ?Sized + serde::Serialize,
+{
+    let before = buf.len();
+    bincode::DefaultOptions::new()
+        .with_big_endian()
+        .with_fixint_encoding()
+        .serialize_into(&mut *buf, t)
+        .expect("failed to serialize via be_fix_int_ser_into method");
+    buf.len() - before
+}
+
 pub(crate) fn iterator_bounds<K>(
     lower_bound: Option<K>,
     upper_bound: Option<K>,
@@ -48,12 +64,13 @@ where
             let mut key_buf = be_fix_int_ser(&lower_bound);
 
             if is_max(&key_buf) {
-                // No representable key is strictly greater than the maximum at this byte
-                // length. Appending a zero byte moves the lower bound past every same-length
-                // key, so the iterator yields nothing as requested.
+                // No representable key strictly greater than the maximum at this byte
+                // length. Append a zero byte so the lower bound is lexicographically
+                // greater than any same-length key, ensuring the iterator yields nothing
+                // -- matching the user's intent of excluding the max key.
                 key_buf.push(0);
             } else {
-                // Since we want exclusive, increment the key to exclude the previous.
+                // Since we want exclusive, we need to increment the key to exclude the previous
                 big_endian_saturating_add_one(&mut key_buf);
             }
             Some(key_buf)
@@ -127,7 +144,7 @@ pub(crate) fn ensure_database_type<P: AsRef<Path>>(
         }
         if filepath
             .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with("wal_"))
+            .is_some_and(|n| n.to_string_lossy().starts_with("wal_"))
             && storage_type != StorageType::TideHunter
         {
             panic!(
@@ -139,7 +156,11 @@ pub(crate) fn ensure_database_type<P: AsRef<Path>>(
     Ok(())
 }
 
-#[allow(clippy::assign_op_pattern, clippy::manual_div_ceil)]
+#[allow(
+    clippy::assign_op_pattern,
+    clippy::manual_div_ceil,
+    clippy::disallowed_methods
+)] // Intentional zip: external construct_uint! macro uses .zip() internally
 #[test]
 fn test_helpers() {
     let v = vec![];

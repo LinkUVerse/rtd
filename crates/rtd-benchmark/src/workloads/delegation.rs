@@ -12,14 +12,14 @@ use crate::workloads::{Gas, GasCoinConfig, WorkloadBuilderInfo, WorkloadParams};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_core::test_utils::make_transfer_rtd_transaction;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
 use rtd_types::gas_coin::MIST_PER_RTD;
 use rtd_types::transaction::Transaction;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, warn};
 
 #[derive(Debug)]
@@ -67,6 +67,7 @@ impl Payload for DelegationTestPayload {
                     .reference_gas_price,
             )
             .call_staking(coin, self.validator)
+            .ensure_unique()
             .build_and_sign(self.keypair.as_ref()),
             None => make_transfer_rtd_transaction(
                 self.gas,
@@ -162,18 +163,20 @@ pub struct DelegationWorkload {
 impl Workload<dyn Payload> for DelegationWorkload {
     async fn init(
         &mut self,
-        _: Arc<dyn ValidatorProxy + Sync + Send>,
+        _execution_proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        _fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
         _system_state_observer: Arc<SystemStateObserver>,
     ) {
     }
 
     async fn make_test_payloads(
         &self,
-        proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        execution_proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        _fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
         system_state_observer: Arc<SystemStateObserver>,
     ) -> Vec<Box<dyn Payload>> {
         let validators = loop {
-            match proxy.get_validators().await {
+            match execution_proxy.get_validators().await {
                 Ok(validators) => break validators,
                 Err(e) => {
                     warn!("failed to fetch validators: {:?}", e);

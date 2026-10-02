@@ -1,0 +1,9 @@
+*~
+*.swp
+**/.terraform/
+.git/
+target/
+**/target/
+build/
+storage/
+docker/

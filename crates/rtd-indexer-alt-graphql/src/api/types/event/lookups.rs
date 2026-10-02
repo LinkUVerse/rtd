@@ -1,20 +1,29 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{iter::Rev, ops::Range};
+use std::iter::Rev;
+use std::ops::Range;
+use std::sync::Arc;
 
 use anyhow::Context as _;
 use async_graphql::Context;
 use itertools::Either;
-use rtd_indexer_alt_reader::kv_loader::{KvLoader, TransactionEventsContents};
+use rtd_indexer_alt_reader::kv_loader::KvLoader;
+use rtd_rpc::proto::proto_to_timestamp_ms;
+use rtd_rpc::proto::rtd::rpc::v2;
 use rtd_types::digests::TransactionDigest;
+use rtd_types::effects::TransactionEvents;
+use tokio::sync::OnceCell;
 
-use crate::{api::types::transaction::tx_digests, error::RpcError, pagination::Page, scope::Scope};
-
-use super::{
-    CEvent, Event, EventCursor,
-    filter::{EventFilter, tx_ev_bounds},
-};
+use crate::api::types::event::CEvent;
+use crate::api::types::event::Event;
+use crate::api::types::event::EventCursor;
+use crate::api::types::event::filter::EventFilter;
+use crate::api::types::event::filter::tx_ev_bounds;
+use crate::api::types::transaction::tx_digests;
+use crate::error::RpcError;
+use crate::pagination::Page;
+use crate::scope::Scope;
 
 /// The page of Event cursors and Events emitted from transactions with cursors and limits with
 /// overhead applied.
@@ -55,7 +64,7 @@ fn tx_events_paginated<'e>(
     scope: &Scope,
     page: &Page<CEvent>,
     contents: impl Iterator<
-        Item = anyhow::Result<(u64, TransactionDigest, &'e TransactionEventsContents)>,
+        Item = anyhow::Result<(u64, TransactionDigest, &'e v2::ExecutedTransaction)>,
     >,
     filter: &EventFilter,
 ) -> Result<Vec<(EventCursor, Event)>, RpcError> {
@@ -64,7 +73,25 @@ fn tx_events_paginated<'e>(
 
     'outer: for events in contents {
         let (tx_sequence_number, transaction_digest, contents) = events?;
-        let events = contents.events()?;
+
+        let tx_events: TransactionEvents = contents
+            .events
+            .as_ref()
+            .and_then(|e| e.bcs.as_ref())
+            .map(|bcs| {
+                bcs.deserialize()
+                    .context("Failed to deserialize transaction events")
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let events = &tx_events.data;
+
+        let timestamp_ms = contents
+            .timestamp
+            .map(proto_to_timestamp_ms)
+            .transpose()
+            .context("Failed to parse timestamp")?
+            .unwrap_or(0);
 
         let bounds: Either<Range<usize>, Rev<Range<usize>>> = if page.is_from_front() {
             Either::Left(tx_ev_bounds(page, tx_sequence_number, events.len()))
@@ -73,9 +100,11 @@ fn tx_events_paginated<'e>(
         };
 
         for ev_sequence_number in bounds {
+            // Loop index into this transaction's events: bounded by `max_num_event_emit`
+            // (protocol config, VM-enforced), far below u32::MAX.
             let event_cursor = EventCursor {
                 tx_sequence_number,
-                ev_sequence_number: ev_sequence_number as u64,
+                ev_sequence_number: ev_sequence_number as u32,
             };
 
             let native = &events[ev_sequence_number];
@@ -85,10 +114,10 @@ fn tx_events_paginated<'e>(
 
             let event = Event {
                 scope: scope.clone(),
-                native: native.clone(),
+                native: Arc::new(native.clone()),
                 transaction_digest,
                 sequence_number: ev_sequence_number as u64,
-                timestamp_ms: contents.timestamp_ms(),
+                timestamp_ms: OnceCell::from(Some(timestamp_ms)),
             };
 
             results.push((event_cursor, event));

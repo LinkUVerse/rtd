@@ -1,16 +1,21 @@
 ---
 source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
 ---
-processed 13 tasks
+processed 12 tasks
 
 init:
 A: object(0,0), B: object(0,1)
+
+// 1. All the objects of a certain type, for a particular owner
+// 2. All the objects of another type, for that same owner
+// 3. ...limited
+// 4. ...limited, with a cursor
 
 task 1, lines 11-38:
 //# publish
 created: object(1,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 6961600,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 6984400,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 40-42:
 //# programmable --sender B --inputs @B
@@ -71,38 +76,38 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0xddde710d6f6bd5860dcb8abd5aef61d18c4490428a48ef82460f66918f0558e7",
+          "objectId": "0x34e1ea69facb171993ecacda1bb235bb2903736db26346ca2853e43fe5e71582",
           "version": "4",
-          "digest": "E5Ve86CRPTDR9Un8kcmC9WPWGnNXfwYuWCEdqLJUTHCC",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::M::O1"
+          "digest": "GpPsoCfto7tJvrwt3ta6bKzxkm6hcMepZhSV3ypPggUR",
+          "type": "0x7c559e496390f86c8f3034619838a3f87282ba990177d7dbcbf2ecc2d7fceb28::M::O1"
         }
       },
       {
         "data": {
-          "objectId": "0xbd6943dd9a32bed6693ec36ae6526c4f195738bcb3c08484b035731b1dfc7fb9",
+          "objectId": "0xb881c32d7605b2f62873678ddbb674b7a439726a75f1816d0038f55a520f5400",
           "version": "2",
-          "digest": "An1LvXhmnEHn2gJMSSkdGyun4u38i9oHDmAwXXb9AJJh",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::N::O1"
+          "digest": "2QCcyxo9CD29tRynvM8ELfBfkcwE7PDeuzDtYEvcoyWo",
+          "type": "0x7c559e496390f86c8f3034619838a3f87282ba990177d7dbcbf2ecc2d7fceb28::M::O1"
         }
       },
       {
         "data": {
-          "objectId": "0x7d1dd38797c8b44409ce173982e23be378dd849b77265513b89409b1ebb58f8a",
+          "objectId": "0xf77b07d70e8e10d8f90806770a2810410671248a27fb0832638fb9c5484c0a7e",
           "version": "2",
-          "digest": "CvF9yM9tXXtYcLBdwBqBNXHGN9wtTHPogfsp2SqnzwJH",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::M::O2"
+          "digest": "ByyNCcVP7P4vAxkLMx92ZfgCzbBmamcoTcPBeZMEVTQL",
+          "type": "0x7c559e496390f86c8f3034619838a3f87282ba990177d7dbcbf2ecc2d7fceb28::M::O2"
         }
       },
       {
         "data": {
-          "objectId": "0x641bb5c9fe8c5c55141dc24b63197f610be62cbdf5de690d299ac04621cee5c6",
+          "objectId": "0x726c6109ec54889d9fe0ad71aacd98d8db54872f5e45ee34847224fd29e255fc",
           "version": "2",
-          "digest": "HXsWXDM5xFmP9HfPnyzXA7EinHANUwvAJZz8hwkyPR1A",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::M::O1"
+          "digest": "2fNZf4Pf7A7R2tL2fkpHg9XYctrJH6bKSGfZvMW5UVmr",
+          "type": "0x7c559e496390f86c8f3034619838a3f87282ba990177d7dbcbf2ecc2d7fceb28::N::O1"
         }
       }
     ],
-    "nextCursor": "IGQbtcn+jFxVFB3CS2MZf2EL5iy99d5pDSmawEYhzuXGAQAAAAAAAAA=",
+    "nextCursor": "fQD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHnxVnkljkPhsjzA0YZg4o/hygrqZAXfX28vy7MLX/OsoAAAAAAAAAAFOAAAAAAAAAAJPMQAAAAAAAAAAAHJsYQnsVIidn+CtcarNmNjbVIcvXkXuNIRyJP0p4lX8",
     "hasNextPage": false
   }
 }
@@ -116,46 +121,46 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0xaa1f5c0190afe3d847aa2077a7802b7a1b49ee0f92d0f09fb9f5b721d4ba2372",
+          "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
           "version": "5",
-          "digest": "DXH2NGnZFPJxPbbu6z84EHZwDQX7JQ5CLja8ogjsQKgo",
+          "digest": "6tiWKw5nFdXzXHej1P3SXgnrTvuhQ6VsmuZv8jpw4VmA",
           "type": "0x2::coin::Coin<0x2::rtd::RTD>"
         }
       },
       {
         "data": {
-          "objectId": "0xc5737f0f5cf7ccef056f1b658e7c60bdd1deab8a61130b441971051519f999af",
-          "version": "3",
-          "digest": "6AZB47gG7PBkLiJYEf5E5B2MibwqvVjmUTuUoJZsLam3",
-          "type": "0x2::coin::Coin<0x2::rtd::RTD>"
-        }
-      },
-      {
-        "data": {
-          "objectId": "0x80d40d685b717262b28552e3c46a961db3c7cfec8bc92a6566ca1e9e42e8eb0d",
-          "version": "3",
-          "digest": "6PWfMKpHkwJd4YbQob4hgx7mtn6aJcNXSE6CnQ3bsVEW",
-          "type": "0x2::coin::Coin<0x2::rtd::RTD>"
-        }
-      },
-      {
-        "data": {
-          "objectId": "0x384f5e9509f6e067de9646a84464620bfabeba8379d1fad5cd3e315c1c0a3809",
-          "version": "3",
-          "digest": "7KREW2AzGWrzc44gfkQywFz338Pk9JnKVdvMbJXu6scP",
-          "type": "0x2::coin::Coin<0x2::rtd::RTD>"
-        }
-      },
-      {
-        "data": {
-          "objectId": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+          "objectId": "0x2d33289167edecd8ebc03f9a54e0c39a2d7d267394f4817ffbe262f3fa054e6c",
           "version": "5",
-          "digest": "Dgc8CWgN79ooHHMa3V4PhW8Xz5DsA6QTxr6gPG1WbnxH",
+          "digest": "ozMtmXYpYLudpp6fHLZnfjM3PEhXcYGn1u4qkAaZivJ",
+          "type": "0x2::coin::Coin<0x2::rtd::RTD>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0x7686a7695f7d81f8d9a32967e2c179632ebff4326469cf585db02dfbe6a5be9f",
+          "version": "3",
+          "digest": "4anwpvjnFD3SwBkZvCyfHr2R9KidCKg9x813BGNbEMzZ",
+          "type": "0x2::coin::Coin<0x2::rtd::RTD>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0xa317f25c0c51127ce9b0d5fba1daeabc87cfea88c07955de0e445e94cf37c9f8",
+          "version": "3",
+          "digest": "5wChSdF4aYRZT2HXPdPFaako2uV9XVvRccuxQtUybZyp",
+          "type": "0x2::coin::Coin<0x2::rtd::RTD>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0xbcf0f87bd5750bdc9fde0017bd68d47f386f11d3f87403571310f1e77adaba18",
+          "version": "3",
+          "digest": "AzvBboiSn9FV77DDHTZK3pRajkVjRdBsL1pFbkH79Q6q",
           "type": "0x2::coin::Coin<0x2::rtd::RTD>"
         }
       }
     ],
-    "nextCursor": "ICg02F2/79zWbwSBEjG6gYiTeT6DqJXVNAL9meEy42ViAAAAAAAAAAA=",
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////VvPD4e9V1C9yf3gAXvWjUfzhvEdP4dANXExDx53rauhg=",
     "hasNextPage": false
   }
 }
@@ -169,51 +174,22 @@ Response: {
     "data": [
       {
         "data": {
-          "objectId": "0xddde710d6f6bd5860dcb8abd5aef61d18c4490428a48ef82460f66918f0558e7",
+          "objectId": "0x34e1ea69facb171993ecacda1bb235bb2903736db26346ca2853e43fe5e71582",
           "version": "4",
-          "digest": "E5Ve86CRPTDR9Un8kcmC9WPWGnNXfwYuWCEdqLJUTHCC",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::M::O1"
+          "digest": "GpPsoCfto7tJvrwt3ta6bKzxkm6hcMepZhSV3ypPggUR",
+          "type": "0x7c559e496390f86c8f3034619838a3f87282ba990177d7dbcbf2ecc2d7fceb28::M::O1"
         }
       },
       {
         "data": {
-          "objectId": "0xbd6943dd9a32bed6693ec36ae6526c4f195738bcb3c08484b035731b1dfc7fb9",
+          "objectId": "0xb881c32d7605b2f62873678ddbb674b7a439726a75f1816d0038f55a520f5400",
           "version": "2",
-          "digest": "An1LvXhmnEHn2gJMSSkdGyun4u38i9oHDmAwXXb9AJJh",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::N::O1"
+          "digest": "2QCcyxo9CD29tRynvM8ELfBfkcwE7PDeuzDtYEvcoyWo",
+          "type": "0x7c559e496390f86c8f3034619838a3f87282ba990177d7dbcbf2ecc2d7fceb28::M::O1"
         }
       }
     ],
-    "nextCursor": "IL1pQ92aMr7WaT7DauZSbE8ZVzi8s8CEhLA1cxsd/H+5AQAAAAAAAAA=",
+    "nextCursor": "fQD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHnxVnkljkPhsjzA0YZg4o/hygrqZAXfX28vy7MLX/OsoAAAAAAAAAAFNAAAAAAAAAAJPMQAAAAAAAAAAALiBwy12BbL2KHNnjdu2dLekOXJqdfGBbQA49VpSD1QA",
     "hasNextPage": true
-  }
-}
-
-task 12, lines 104-116:
-//# run-jsonrpc --cursors bcs(bcs(@{obj_3_2}),1)
-Response: {
-  "jsonrpc": "2.0",
-  "id": 3,
-  "result": {
-    "data": [
-      {
-        "data": {
-          "objectId": "0x7d1dd38797c8b44409ce173982e23be378dd849b77265513b89409b1ebb58f8a",
-          "version": "2",
-          "digest": "CvF9yM9tXXtYcLBdwBqBNXHGN9wtTHPogfsp2SqnzwJH",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::M::O2"
-        }
-      },
-      {
-        "data": {
-          "objectId": "0x641bb5c9fe8c5c55141dc24b63197f610be62cbdf5de690d299ac04621cee5c6",
-          "version": "2",
-          "digest": "HXsWXDM5xFmP9HfPnyzXA7EinHANUwvAJZz8hwkyPR1A",
-          "type": "0xe1c6660ef31048dad1e41047f6fb9b7ed23973bfd4d5c2381c328eaf059b137d::M::O1"
-        }
-      }
-    ],
-    "nextCursor": "IGQbtcn+jFxVFB3CS2MZf2EL5iy99d5pDSmawEYhzuXGAQAAAAAAAAA=",
-    "hasNextPage": false
   }
 }

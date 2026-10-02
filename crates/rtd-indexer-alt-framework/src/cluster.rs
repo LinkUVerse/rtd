@@ -1,24 +1,26 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::ops::Deref;
+use std::ops::DerefMut;
+use std::sync::Arc;
 
 use anyhow::Context;
 use diesel_migrations::EmbeddedMigrations;
 use prometheus::Registry;
 use rtd_futures::service::Service;
-use rtd_indexer_alt_metrics::{MetricsArgs, MetricsService};
+use rtd_indexer_alt_metrics::MetricsArgs;
+use rtd_indexer_alt_metrics::MetricsService;
 use url::Url;
 
-use crate::{
-    Indexer, IndexerArgs, Result,
-    ingestion::{ClientArgs, IngestionConfig},
-    metrics::{IndexerMetrics, IngestionMetrics},
-    postgres::{Db, DbArgs},
-};
+use crate::Indexer;
+use crate::IndexerArgs;
+use crate::ingestion::ClientArgs;
+use crate::ingestion::IngestionConfig;
+use crate::metrics::IndexerMetrics;
+use crate::metrics::IngestionMetrics;
+use crate::postgres::Db;
+use crate::postgres::DbArgs;
 
 /// Bundle of arguments for setting up an indexer cluster (an Indexer and its associated Metrics
 /// service). This struct is offered as a convenience for the common case of parsing command-line
@@ -142,7 +144,7 @@ impl IndexerClusterBuilder {
     /// - Required fields are missing
     /// - Database connection cannot be established
     /// - Metrics registry creation fails
-    pub async fn build(self) -> Result<IndexerCluster> {
+    pub async fn build(self) -> anyhow::Result<IndexerCluster> {
         let database_url = self.database_url.context("database_url is required")?;
 
         tracing_subscriber::fmt::init();
@@ -188,7 +190,7 @@ impl IndexerCluster {
     /// Starts the indexer and metrics service, returning a handle over the service's tasks.
     /// The service will exit when the indexer has finished processing all the checkpoints it was
     /// configured to process, or when it is instructed to shut down.
-    pub async fn run(self) -> Result<Service> {
+    pub async fn run(self) -> anyhow::Result<Service> {
         let s_indexer = self.indexer.run().await?;
         let s_metrics = self.metrics.run().await?;
 
@@ -212,11 +214,14 @@ impl DerefMut for IndexerCluster {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::net::IpAddr;
+    use std::net::Ipv4Addr;
+    use std::net::SocketAddr;
 
     use async_trait::async_trait;
-    use clap::Parser;
-    use diesel::{Insertable, QueryDsl, Queryable};
+    use diesel::Insertable;
+    use diesel::QueryDsl;
+    use diesel::Queryable;
     use diesel_async::RunQueryDsl;
     use rtd_synthetic_ingestion::synthetic_ingestion;
     use tempfile::tempdir;
@@ -226,10 +231,11 @@ mod tests {
     use crate::ingestion::ingestion_client::IngestionClientArgs;
     use crate::pipeline::Processor;
     use crate::pipeline::concurrent::ConcurrentConfig;
-    use crate::postgres::{
-        Connection, Db, DbArgs,
-        temp::{TempDb, get_available_port},
-    };
+    use crate::postgres::Connection;
+    use crate::postgres::Db;
+    use crate::postgres::DbArgs;
+    use crate::postgres::temp::TempDb;
+    use crate::postgres::temp::get_available_port;
     use crate::types::full_checkpoint_content::Checkpoint;
 
     use super::*;
@@ -251,25 +257,6 @@ mod tests {
 
     /// Test concurrent pipeline for populating [tx_counts].
     struct TxCounts;
-
-    #[test]
-    fn test_client_args_are_parsed_from_cli() {
-        let args = Args::try_parse_from([
-            "indexer",
-            "--remote-store-url",
-            "https://checkpoints.testnet.rtd.io",
-        ])
-        .unwrap();
-
-        assert_eq!(
-            args.client_args
-                .ingestion
-                .remote_store_url
-                .unwrap()
-                .as_str(),
-            "https://checkpoints.testnet.rtd.io/"
-        );
-    }
 
     #[async_trait]
     impl Processor for TxCounts {
@@ -388,10 +375,28 @@ mod tests {
         }
 
         // Check that ingestion metrics were updated.
-        assert_eq!(ingestion_metrics.total_ingested_checkpoints.get(), 10);
+        assert_eq!(
+            ingestion_metrics
+                .total_ingested_checkpoints
+                .with_label_values(&["0"])
+                .get(),
+            10
+        );
         // 10 checkpoints, 2 user transactions + 1 settlement transaction per checkpoint
-        assert_eq!(ingestion_metrics.total_ingested_transactions.get(), 30);
-        assert_eq!(ingestion_metrics.latest_ingested_checkpoint.get(), 9);
+        assert_eq!(
+            ingestion_metrics
+                .total_ingested_transactions
+                .with_label_values(&["0"])
+                .get(),
+            30
+        );
+        assert_eq!(
+            ingestion_metrics
+                .latest_ingested_checkpoint
+                .with_label_values(&["0"])
+                .get(),
+            9
+        );
 
         macro_rules! assert_pipeline_metric {
             ($name:ident, $value:expr) => {

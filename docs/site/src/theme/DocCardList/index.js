@@ -1,22 +1,24 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+
 import React from 'react';
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme-original/DocCardList';
 import { useCurrentSidebarCategory } from '@docusaurus/theme-common';
 
-// Renders the current sidebar category *if* we're inside DocsSidebarProvider,
-// otherwise falls back to a plain DocCardList using passed props (items/hideDescriptions/etc).
 export default function DocCardListForCurrentSidebarCategory(props) {
   try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const category = useCurrentSidebarCategory(); // throws outside provider
-    return <DocCardList items={category.items} />;
+    const category = useCurrentSidebarCategory();
+    return (
+      <div className="docCardListScopeExclude">
+        <DocCardList items={category.items} />
+      </div>
+    );
   } catch {
-    // Outside docs provider (e.g., homepage or custom MDX): use explicit props
-    // Example MDX usage: <DocCardList items={[{type:'link', label:'Intro', href:'/docs/intro'}]} />
-    return <DocCardList {...props} />;
+    return (
+      <div className="docCardListScopeExclude">
+        <DocCardList {...props} />
+      </div>
+    );
   }
 }
-
-

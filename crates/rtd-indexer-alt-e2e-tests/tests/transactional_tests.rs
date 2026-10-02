@@ -1,37 +1,39 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    error::Error,
-    path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
-};
+use std::error::Error;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use anyhow::Context;
-use reqwest::{Client, header::HeaderName};
-use serde_json::{Value, json};
-use rtd_indexer_alt::config::{ConcurrentLayer, IndexerConfig, Merge, PipelineLayer, PrunerLayer};
-use rtd_indexer_alt_e2e_tests::{OffchainCluster, OffchainClusterConfig};
-use rtd_indexer_alt_framework::ingestion::{ClientArgs, ingestion_client::IngestionClientArgs};
-use rtd_transactional_test_runner::{
-    create_adapter,
-    offchain_state::{OffchainStateReader, TestResponse},
-    run_tasks_with_adapter,
-    test_adapter::{OffChainConfig, PRE_COMPILED, RtdTestAdapter},
-};
+use reqwest::Client;
+use reqwest::header::HeaderName;
+use rtd_indexer_alt::config::IndexerConfig;
+use rtd_indexer_alt_framework::ingestion::ClientArgs;
+use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientArgs;
+use rtd_indexer_alt_jsonrpc::NodeArgs;
+use rtd_transactional_test_runner::create_adapter_and_taskify;
+use rtd_transactional_test_runner::offchain_state::OffchainStateReader;
+use rtd_transactional_test_runner::offchain_state::TestResponse;
+use rtd_transactional_test_runner::run_tasks_with_adapter;
+use rtd_transactional_test_runner::test_adapter::OffChainConfig;
+use rtd_transactional_test_runner::test_adapter::PRE_COMPILED;
+use rtd_transactional_test_runner::test_adapter::RtdTestAdapter;
+use serde_json::Value;
+use serde_json::json;
 use tokio::join;
+
+use rtd_indexer_alt_e2e_tests::OffchainCluster;
+use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
 
 struct OffchainReader {
     cluster: Arc<OffchainCluster>,
     client: Client,
     queries: AtomicUsize,
 }
-
-datatest_stable::harness!(run_test, "tests", r".*\.move$");
 
 impl OffchainReader {
     fn new(cluster: Arc<OffchainCluster>) -> Self {
@@ -139,35 +141,17 @@ async fn cluster(config: &OffChainConfig) -> Arc<OffchainCluster> {
         ..Default::default()
     };
 
-    // The test config includes every pipeline, we configure its consistent range using the
-    // off-chain config that was passed in.
-    let pruner = PrunerLayer {
-        retention: Some(config.snapshot_config.snapshot_min_lag as u64),
-        ..Default::default()
-    };
-
-    let indexer_config = IndexerConfig::for_test()
-        .merge(IndexerConfig {
-            pipeline: PipelineLayer {
-                coin_balance_buckets: Some(ConcurrentLayer {
-                    pruner: Some(pruner.clone()),
-                    ..Default::default()
-                }),
-                obj_info: Some(ConcurrentLayer {
-                    pruner: Some(pruner),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .expect("Failed to create indexer config");
+    let indexer_config = IndexerConfig::for_test();
 
     Arc::new(
         OffchainCluster::new(
             client_args,
             OffchainClusterConfig {
                 indexer_config,
+                // TODO: dummy value until simulacrum exposes grpc
+                jsonrpc_node_args: NodeArgs {
+                    fullnode_grpc_url: Some("http://127.0.0.1:1".into()),
+                },
                 ..Default::default()
             },
             &prometheus::Registry::new(),
@@ -180,21 +164,30 @@ async fn cluster(config: &OffChainConfig) -> Arc<OffchainCluster> {
 #[cfg_attr(not(msim), tokio::main)]
 #[cfg_attr(msim, msim::main)]
 async fn run_test(path: &Path) -> Result<(), Box<dyn Error>> {
-    if cfg!(msim) {
-        return Ok(());
-    }
-
     telemetry_subscribers::init_for_testing();
 
     // start the adapter first to start the executor (simulacrum)
-    let (output, mut adapter) =
-        create_adapter::<RtdTestAdapter>(path, Some(Arc::new(PRE_COMPILED.clone()))).await?;
+    let (output, mut adapter, tasks) =
+        create_adapter_and_taskify::<RtdTestAdapter>(path, Some(&PRE_COMPILED)).await?;
 
     // configure access to the off-chain reader
     let c = cluster(adapter.offchain_config.as_ref().unwrap()).await;
     adapter.with_offchain_reader(Box::new(OffchainReader::new(c.clone())));
 
     // run the tasks in the test
-    run_tasks_with_adapter(path, adapter, output, None).await?;
+    run_tasks_with_adapter(path, adapter, output, tasks, None).await?;
     Ok(())
+}
+
+#[cfg(not(msim))]
+datatest_stable::harness!(run_test, "tests", r".*\.move$");
+
+// The off-chain cluster these tests stand up is not exercised by the simulator,
+// so running them under msim only costs time. Expose an empty harness so nextest
+// still sees a well-formed binary.
+#[cfg(msim)]
+fn main() {
+    // Referenced so the otherwise-unused test fn does not trip dead-code warnings.
+    let _ = run_test;
+    datatest_stable::runner(&[]);
 }

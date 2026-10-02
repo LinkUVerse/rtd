@@ -1,0 +1,29 @@
+---
+title: Gaming on RTD
+description: Move primitives available for game experiments on an RTD network.
+keywords:
+  - gaming
+  - dynamic objects
+  - kiosk
+  - randomness
+questions:
+  - Which RTD source primitives can a game use?
+  - Are Sui game services already integrated with RTD?
+answer: >-
+  The RTD framework source includes objects, transfers, Kiosk, and randomness
+  primitives that can support games. Third-party wallets, Enoki, Walrus, game
+  studios, and hosted services require separate RTD integration checks.
+---
+
+The RTD framework source includes object ownership and transfer, dynamic fields, Kiosk, and randomness modules. These are building blocks for games, not a promise that a game platform, wallet, sponsored transaction service, storage network, marketplace, or public player network has been deployed on RTD.
+
+| Source capability | Check before use |
+| --- | --- |
+| Objects and transfers | Inspect the `rtd::object` and `rtd::transfer` modules in this repository's framework source. Test ownership transitions on the intended chain. |
+| Dynamic fields | Inspect `rtd::dynamic_field` and related modules; confirm storage and access patterns in Move tests. |
+| Kiosk and transfer policy | Inspect `rtd::kiosk` and transfer policy modules; publish your own package and test every rule. |
+| Randomness | Inspect `rtd::random` and its tests; validate the protocol version and transaction pattern for your network. |
+
+Build a local example from `examples/move`, run `rtd move test`, and publish to a verified RTD genesis only after reviewing transaction and gas behavior. See [local onboarding](/getting-started/onboarding) and [framework reference](/references/framework).
+
+An upstream Sui example or third-party service, including zkLogin providers, Enoki, Walrus, Slush, and game projects, is not automatically compatible with RTD. Any such integration needs explicit provider support, correct RTD chain identification, SDK configuration, signing tests, and deployed service endpoints. RTD has no public Mainnet at this time.

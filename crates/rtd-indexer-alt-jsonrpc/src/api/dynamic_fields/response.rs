@@ -1,29 +1,33 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Context as _, anyhow};
-use rtd_json::{MoveTypeLayout, RtdJsonValue};
-use rtd_json_rpc_types::{
-    BcsName, DynamicFieldInfo as DynamicFieldInfoResponse, RtdMoveValue, RtdObjectDataOptions,
-    RtdObjectResponse,
-};
-use rtd_types::{
-    TypeTag,
-    base_types::ObjectID,
-    dynamic_field::{DynamicFieldInfo, DynamicFieldName, derive_dynamic_field_id, visitor as DFV},
-    error::RtdObjectResponseError,
-    object::{Object, bounded_visitor::BoundedVisitor},
-};
+use anyhow::Context as _;
+use anyhow::anyhow;
+use rtd_json::MoveTypeLayout;
+use rtd_json::RtdJsonValue;
+use rtd_json_rpc_types::BcsName;
+use rtd_json_rpc_types::DynamicFieldInfo as DynamicFieldInfoResponse;
+use rtd_json_rpc_types::RtdMoveValue;
+use rtd_json_rpc_types::RtdObjectDataOptions;
+use rtd_json_rpc_types::RtdObjectResponse;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::dynamic_field::DynamicFieldInfo;
+use rtd_types::dynamic_field::DynamicFieldName;
+use rtd_types::dynamic_field::derive_dynamic_field_id;
+use rtd_types::dynamic_field::visitor as DFV;
+use rtd_types::error::RtdObjectResponseError;
+use rtd_types::object::Object;
+use rtd_types::object::bounded_visitor::BoundedVisitor;
 use tokio::try_join;
 
-use crate::{
-    api::objects,
-    context::Context,
-    data::load_live,
-    error::{RpcError, invalid_params, rpc_bail},
-};
-
-use super::error::Error;
+use crate::api::dynamic_fields::error::Error;
+use crate::api::objects;
+use crate::context::Context;
+use crate::data::load_live;
+use crate::error::RpcError;
+use crate::error::invalid_params;
+use crate::error::rpc_bail;
 
 /// Fetch the latest version of a dynamic field object, identified by its parent ID and name.
 pub(super) async fn dynamic_field_object(

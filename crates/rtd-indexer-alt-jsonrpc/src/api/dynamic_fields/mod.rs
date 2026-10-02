@@ -2,15 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::future;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use rtd_json_rpc_types::{DynamicFieldInfo as DynamicFieldInfoResponse, Page, RtdObjectResponse};
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_json_rpc_types::DynamicFieldInfo as DynamicFieldInfoResponse;
+use rtd_json_rpc_types::Page;
+use rtd_json_rpc_types::RtdObjectResponse;
 use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
-use rtd_types::{base_types::ObjectID, dynamic_field::DynamicFieldName};
+use rtd_types::base_types::ObjectID;
+use rtd_types::dynamic_field::DynamicFieldName;
 
-use crate::{api::objects, context::Context, error::InternalContext};
-
-use super::rpc_module::RpcModule;
+use crate::api::objects;
+use crate::api::rpc_module::RpcModule;
+use crate::context::Context;
+use crate::error::InternalContext;
 
 mod error;
 mod response;
@@ -81,7 +87,7 @@ impl DynamicFieldsApiServer for DynamicFields {
         let data = future::join_all(df_futures)
             .await
             .into_iter()
-            .zip(object_ids)
+            .zip_debug_eq(object_ids)
             .map(|(r, id)| {
                 r.with_internal_context(|| format!("Failed to get object {id} at latest version"))
             })

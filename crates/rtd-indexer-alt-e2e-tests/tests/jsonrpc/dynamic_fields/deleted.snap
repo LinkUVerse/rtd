@@ -6,6 +6,11 @@ processed 19 tasks
 init:
 A: object(0,0)
 
+// 1. Look for a dynamic field that doesn't exist yet (should return nothing).
+// 2. Add the dynamic field and then look for it again (should return the dynamic field).
+// 3. Delete the dynamic field and look for it once again (should not return anything).
+// 4, 5, 6. The same again, but for dynamic object fields.
+
 task 1, lines 11-13:
 //# programmable --sender A --inputs @A
 //> 0: rtd::bag::new();
@@ -26,7 +31,7 @@ Response: {
   "result": {
     "error": {
       "code": "dynamicFieldNotFound",
-      "parent_object_id": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad"
+      "parent_object_id": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9"
     }
   }
 }
@@ -49,14 +54,14 @@ Response: {
   "id": 1,
   "result": {
     "data": {
-      "objectId": "0xd75efa771017d6658b663e6a9e6636f1667a9c599b3a21e7c6c8cd82e12d13c7",
+      "objectId": "0xf2602255829324a28802b2378fa1fd87b0ed8c0d2c7217406c61b20b44aac935",
       "version": "3",
-      "digest": "624wRp2tvzaqSZdxGqSbns87FAuATEGA6KGdvg2ncvgv",
+      "digest": "257XNVW5DhRoVUDpdv5kPaQ2K1r1g4W1WwjC2QmgA8FS",
       "type": "0x2::dynamic_field::Field<u64, u64>",
       "owner": {
-        "ObjectOwner": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad"
+        "ObjectOwner": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9"
       },
-      "previousTransaction": "ERcxEuSHy68ZKVaJNTMqcTgC5fwXrrFvvz6Gyg4x4YkB",
+      "previousTransaction": "3k5jfYeQyxqZXmkJSeE6NZaymLhBSLTDFZAnjBuumD5L",
       "storageRebate": "1466800",
       "content": {
         "dataType": "moveObject",
@@ -64,7 +69,7 @@ Response: {
         "hasPublicTransfer": false,
         "fields": {
           "id": {
-            "id": "0xd75efa771017d6658b663e6a9e6636f1667a9c599b3a21e7c6c8cd82e12d13c7"
+            "id": "0xf2602255829324a28802b2378fa1fd87b0ed8c0d2c7217406c61b20b44aac935"
           },
           "name": "42",
           "value": "42"
@@ -93,7 +98,7 @@ Response: {
   "result": {
     "error": {
       "code": "dynamicFieldNotFound",
-      "parent_object_id": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad"
+      "parent_object_id": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9"
     }
   }
 }
@@ -118,7 +123,7 @@ Response: {
   "result": {
     "error": {
       "code": "dynamicFieldNotFound",
-      "parent_object_id": "0x5b6646bd3bd05c8879a35680bebf1e98b500577ebb5df1264e05982cd3c1cfe1"
+      "parent_object_id": "0xb7c776edc4001fae83e281c146c95ad3f43d6cb3af4d8223e2be20141f92685c"
     }
   }
 }
@@ -142,14 +147,14 @@ Response: {
   "id": 4,
   "result": {
     "data": {
-      "objectId": "0x3ea375e25bbb343aff51cc660831991fa8439ba13b7f8f3c66f03d753e4781f7",
+      "objectId": "0x5e116cda374de65eb933f1c039ae1af1dceeaffa040f1da498fffb1c4996070e",
       "version": "6",
-      "digest": "9umLoT7xLRAdnVEepn7UEfnu749rHtdg1M5sfAVUG4gZ",
+      "digest": "7FLLuU61NSaKyQa1zdpwA6yHnDhLdrHMrSdDPW4qvwPR",
       "type": "0x2::coin::Coin<0x2::rtd::RTD>",
       "owner": {
-        "ObjectOwner": "0xc80cc03828dd161e38345cc2d379e8ed93fb0c01833ab546735549e61a71efed"
+        "ObjectOwner": "0x78360cc61d227e7576eb5a2cbd3bdf98cb66c54b4ac6a95c3188eda4ebf7a173"
       },
-      "previousTransaction": "3U83Emhm1vzUDaR62FyDvq8WwS6G7pbRhtwGhySAvnMe",
+      "previousTransaction": "AjBpB6ZaGpuvpMfbJghqbysxUxChJPs5D6KUDar8dLYy",
       "storageRebate": "988000",
       "content": {
         "dataType": "moveObject",
@@ -158,7 +163,7 @@ Response: {
         "fields": {
           "balance": "43",
           "id": {
-            "id": "0x3ea375e25bbb343aff51cc660831991fa8439ba13b7f8f3c66f03d753e4781f7"
+            "id": "0x5e116cda374de65eb933f1c039ae1af1dceeaffa040f1da498fffb1c4996070e"
           }
         }
       }
@@ -186,7 +191,7 @@ Response: {
   "result": {
     "error": {
       "code": "dynamicFieldNotFound",
-      "parent_object_id": "0x5b6646bd3bd05c8879a35680bebf1e98b500577ebb5df1264e05982cd3c1cfe1"
+      "parent_object_id": "0xb7c776edc4001fae83e281c146c95ad3f43d6cb3af4d8223e2be20141f92685c"
     }
   }
 }

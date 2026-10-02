@@ -370,7 +370,7 @@ fn exp(context: &mut Context, parent_e: &Exp) {
     match &parent_e.exp.value {
         E::Unit { .. }
         | E::Value(_)
-        | E::Constant(_)
+        | E::Constant(_, _)
         | E::UnresolvedError
         | E::ErrorConstant { .. } => (),
 
@@ -616,6 +616,6 @@ fn type_name_to_naming_type_name_(tn_: TypeName_) -> N::TypeName_ {
     use TypeName_ as TN;
     match tn_ {
         TN::Builtin(b) => NTN::Builtin(b),
-        TN::ModuleType(m, n) => NTN::ModuleType(m, n),
+        TN::ModuleType(m, n) => NTN::ModuleType(m.into(), n),
     }
 }

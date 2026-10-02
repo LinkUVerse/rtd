@@ -1,5 +1,5 @@
 ---
-source: crates/move-unit-test/tests/move_unit_test_testrtdte.rs
+source: crates/move-unit-test/tests/move_unit_test_testsuite.rs
 ---
 Running Move unit tests
 [ PASS    ] 0x6::M::dummy_test
@@ -10,7 +10,7 @@ Test failures:
 Failures in 0x7::B:
 
 ┌── failing_test ──────
-│ error[E11001]: test failure
+│ error[EC11001]: test failure
 │   ┌─ cross_module_aborts.move:4:9
 │   │
 │ 3 │     public fun this_aborts() {

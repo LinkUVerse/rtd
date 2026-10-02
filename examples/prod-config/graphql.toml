@@ -23,10 +23,7 @@ max-disassembled-module-size = 1048576
 [health]
 max-checkpoint-lag-ms = 300000
 
-[name-service]
-package-address = "0xd22b24490e0bae52676651b4f56660a5ff8022a2576e0089f79b3c88d44e08f0"
-registry-id = "0xe64cd9db9f829c6cc405d9790bd71567ae07259855f4fba6f02c84f52298c106"
-reverse-registry-id = "0x2fd099e17a292d2bc541df474f9fafa595653848cbabb2d7a4656ec786a1969f"
+# Add [name-service] only after an RTD name service has been deployed.
 
 [watermark]
 watermark-polling-interval-ms = 500

@@ -3,7 +3,8 @@ source: crates/move-transactional-test-runner/src/framework.rs
 ---
 processed 4 tasks
 
-task 3, line 27:
+task 3, lines 26-27:
+// should abort
 //# run 42::m::t --args false
 Error: Function execution failed with VMError: {
     major_status: ABORTED,
@@ -11,4 +12,5 @@ Error: Function execution failed with VMError: {
     location: 0x2a::m,
     indices: [],
     offsets: [(FunctionDefinitionIndex(0), 24)],
+    message: "0x000000000000000000000000000000000000000000000000000000000000002a::m::t at offset 24",
 }

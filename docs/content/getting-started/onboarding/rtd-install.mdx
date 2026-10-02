@@ -1,0 +1,48 @@
+---
+title: Build the RTD CLI
+sidebar_label: Install RTD
+description: Build and verify the RTD CLI from the fork source.
+keywords: [install rtd, build rtd cli, rtd source]
+goal:
+  description: Reader can build and verify the RTD CLI from source
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Has reader questions
+    - has_answer: true
+      label: Has a direct answer
+questions:
+  - How do I build the RTD CLI from source?
+  - How do I verify the RTD binary?
+answer: >-
+  Build the `rtd` package from this repository with Cargo and verify the
+  resulting binary with `rtd --version`.
+---
+
+This fork does not have a verified public binary release, Homebrew formula,
+Chocolatey package, or network-specific installer. Build the CLI from the
+RTD source checkout that matches the network you intend to use.
+
+Install the Rust toolchain and native build prerequisites for your platform,
+then run at the repository root:
+
+```sh
+cargo build -p rtd
+./target/debug/rtd --version
+```
+
+For a release-profile binary, build with `cargo build --release -p rtd` and
+use `target/release/rtd`. The first build can take considerable time because
+this repository includes many Rust and Move crates.
+
+The binary alone does not select a trustworthy network. Configure the client
+with the RPC endpoint produced by your own RTD deployment and verify that
+network's genesis digest and chain ID. See [Configure a Rtd Client](/getting-started/onboarding/configure-rtd-client)
+and [RTD Networks](/develop/rtd-architecture/networks). The inherited Sui
+network names and `suiup` tool do not establish an RTD release or public
+faucet. Build and test Move packages only after you have selected the intended
+RTD network.

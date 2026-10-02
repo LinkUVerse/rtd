@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: legacy
   lint: false
 ---
-error[Rtd E02009]: invalid private transfer call
+error[ESC02009]: invalid private transfer call
    ┌─ tests/rtd_mode/private_generics/no_public_transfer_store.move:10:9
    │
  9 │     public fun t1(s: other::S) {
@@ -16,7 +16,7 @@ error[Rtd E02009]: invalid private transfer call
 31 │     struct S has key, store {
    │                       ----- The object has 'store' so 'rtd::transfer::public_transfer' can be called instead
 
-error[Rtd E02009]: invalid private transfer call
+error[ESC02009]: invalid private transfer call
    ┌─ tests/rtd_mode/private_generics/no_public_transfer_store.move:14:9
    │
 13 │     public fun t2(s: other::S) {
@@ -27,7 +27,7 @@ error[Rtd E02009]: invalid private transfer call
 31 │     struct S has key, store {
    │                       ----- The object has 'store' so 'rtd::transfer::public_freeze_object' can be called instead
 
-error[Rtd E02009]: invalid private transfer call
+error[ESC02009]: invalid private transfer call
    ┌─ tests/rtd_mode/private_generics/no_public_transfer_store.move:18:9
    │
 17 │     public fun t3(s: other::S) {
@@ -38,7 +38,7 @@ error[Rtd E02009]: invalid private transfer call
 31 │     struct S has key, store {
    │                       ----- The object has 'store' so 'rtd::transfer::public_share_object' can be called instead
 
-error[Rtd E02009]: invalid private transfer call
+error[ESC02009]: invalid private transfer call
    ┌─ tests/rtd_mode/private_generics/no_public_transfer_store.move:22:9
    │
 21 │     public fun t4(p: &mut UID, s: Receiving<other::S>): other::S {
@@ -49,7 +49,7 @@ error[Rtd E02009]: invalid private transfer call
 31 │     struct S has key, store {
    │                       ----- The object has 'store' so 'rtd::transfer::public_receive' can be called instead
 
-error[Rtd E02009]: invalid private transfer call
+error[ESC02009]: invalid private transfer call
    ┌─ tests/rtd_mode/private_generics/no_public_transfer_store.move:26:9
    │
 25 │     public fun t6(s: other::S, p: rtd::party::Party) {

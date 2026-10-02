@@ -1,35 +1,28 @@
-This crate provides the Rtd Rust SDK, containing APIs to interact with the Rtd network. Auto-generated documentation for this crate is [here](https://linkulabs.github.io/rtd/rtd_sdk/index.html).
+This crate provides the Rtd Rust SDK, containing APIs to interact with the Rtd network. Build API documentation locally with `cargo doc -p rtd-sdk`.
+
+**Network status:** RTD has no public Mainnet, Testnet, Devnet, or faucet yet. Use a locally running RTD node or provide an endpoint for a network you operate. The named network builders require explicit RPC URLs in the corresponding environment variables.
 
 ## Getting started
 
 Add the `rtd-sdk` dependency as following:
 
 ```toml
-rtd_sdk = { git = "https://github.com/linkulabs/rtd", package = "rtd-sdk"}
+rtd_sdk = { git = "https://github.com/linkuverse/rtd", package = "rtd-sdk"}
 tokio = { version = "1.2", features = ["full"] }
 anyhow = "1.0"
 ```
 
 The main building block for the Rtd Rust SDK is the `RtdClientBuilder`, which provides a simple and straightforward way of connecting to a Rtd network and having access to the different available APIs.
 
-In the following example, the application connects to the Rtd `testnet` and `devnet` networks and prints out their respective RPC API versions.
+In the following example, the application connects to a local RTD node and prints its RPC API version.
 
 ```rust
 use rtd_sdk::RtdClientBuilder;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // Rtd testnet -- https://fullnode.testnet.rtd.io:443
-    let rtd_testnet = RtdClientBuilder::default().build_testnet().await?;
-    println!("Rtd testnet version: {}", rtd_testnet.api_version());
-
-     // Rtd devnet -- https://fullnode.devnet.rtd.io:443
-    let rtd_devnet = RtdClientBuilder::default().build_devnet().await?;
-    println!("Rtd devnet version: {}", rtd_devnet.api_version());
-
-    // Rtd mainnet -- https://fullnode.mainnet.rtd.io:443
-    let rtd_mainnet = RtdClientBuilder::default().build_mainnet().await?;
-    println!("Rtd mainnet version: {}", rtd_mainnet.api_version());
+    let rtd_local = RtdClientBuilder::default().build_localnet().await?;
+    println!("Rtd local version: {}", rtd_local.api_version());
 
     Ok(())
 }
@@ -38,7 +31,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
 ## Documentation for rtd-sdk crate
 
-[GitHub Pages](https://linkulabs.github.io/rtd/rtd_sdk/index.html) hosts the generated documentation for all Rust crates in the Rtd repository.
+The generated documentation can be opened from the local `target/doc/rtd_sdk/index.html` file.
 
 ### Building documentation locally
 
@@ -54,11 +47,11 @@ You can also build the documentation locally. To do so,
 
 The [examples](https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk/examples) folder provides both basic and advanced examples.
 
-There are serveral files ending in `_api.rs` which provide code examples of the corresponding APIs and their methods. These showcase how to use the Rtd Rust SDK, and can be run against the Rtd testnet. Below are instructions on the prerequisites and how to run these examples.
+Several files ending in `_api.rs` show the corresponding APIs and methods. These examples were inherited from upstream and require adaptation to a local or explicitly configured RTD network before they can be run.
 
 ### Prerequisites
 
-Unless otherwise specified, most of these examples assume `Rust` and `cargo` are installed, and that there is an available internet connection. The examples connect to the Rtd testnet (`https://fullnode.testnet.rtd.io:443`) and execute different APIs using the active address from the local wallet. If there is no local wallet, it will create one, generate two addresses, set one of them to be active, and it will request 1 RTD from the testnet faucet for the active address.
+Unless otherwise specified, these examples assume `Rust` and `cargo` are installed, and that a funded local wallet and RTD node are available. Any example that requests tokens from a public faucet must be changed to use a faucet that you operate.
 
 ### Running the existing examples
 
@@ -75,16 +68,12 @@ In the root folder of the `rtd` repository (or in the `rtd-sdk` crate folder), y
 ### Basic Examples
 
 #### Connecting to Rtd Network
-The `RtdClientBuilder` struct provides a connection to the JSON-RPC server that you use for all read-only operations. The default URLs to connect to the Rtd network are:
+The `RtdClientBuilder` struct connects to an RTD RPC server. The local development URL is:
 
 - Local: http://127.0.0.1:9000
-- Devnet: https://fullnode.devnet.rtd.io:443
-- Testnet: https://fullnode.testnet.rtd.io:443
-- Mainnet: https://fullnode.mainnet.rtd.io:443
+- Other networks: explicitly configure the RPC URL for a network you operate.
 
-For all available servers, see [here](https://rtd.io/networkinfo).
-
-For running a local Rtd network, please follow [this guide](https://docs.rtd.io/build/rtd-local-network) for installing Rtd and [this guide](https://docs.rtd.io/build/rtd-local-network#start-the-local-network) for starting the local Rtd network.
+For a local network, build the `rtd` binary from this repository and run `rtd start`.
 
 
 ```rust
@@ -100,14 +89,6 @@ async fn main() -> Result<(), anyhow::Error> {
     // local Rtd network, like the above one but using the dedicated function
     let rtd_local = RtdClientBuilder::default().build_localnet().await?;
     println!("Rtd local network version: {}", rtd_local.api_version());
-
-    // Rtd devnet -- https://fullnode.devnet.rtd.io:443
-    let rtd_devnet = RtdClientBuilder::default().build_devnet().await?;
-    println!("Rtd devnet version: {}", rtd_devnet.api_version());
-
-    // Rtd testnet -- https://fullnode.testnet.rtd.io:443
-    let rtd_testnet = RtdClientBuilder::default().build_testnet().await?;
-    println!("Rtd testnet version: {}", rtd_testnet.api_version());
 
     Ok(())
 }
@@ -145,14 +126,14 @@ See the programmable transactions [example](https://github.com/LinkUVerse/rtd/bl
 
 1. Prepare the environment
    1. Install `rtd` binary following the [Rtd installation](https://github.com/LinkUVerse/rtd/blob/main/docs/content/guides/developer/getting-started/rtd-install.mdx) docs.
-   1. [Connect to Rtd Devnet](https://github.com/LinkUVerse/rtd/blob/main/docs/content/guides/developer/getting-started/connect.mdx).
+   1. Start a local RTD node and connect the CLI to its local RPC endpoint.
    1. [Make sure you have two addresses with gas](https://github.com/LinkUVerse/rtd/blob/main/docs/content/guides/developer/getting-started/get-address.mdx) by using the `new-address` command to create new addresses:
       ```shell
       rtd client new-address ed25519
       ```
       You must specify the key scheme, one of `ed25519` or `secp256k1` or `secp256r1`.
       You can skip this step if you are going to play with a friend. :)
-   1. [Request Rtd tokens](https://github.com/LinkUVerse/rtd/blob/main/docs/content/guides/developer/getting-started/get-coins.mdx) for all addresses that will be used to join the game.
+   1. Fund the local addresses using the faucet attached to your local RTD network.
 
 2. Publish the move contract
    1. [Download the Rtd source code](https://github.com/LinkUVerse/rtd/blob/main/docs/content/guides/developer/getting-started/rtd-install.mdx).

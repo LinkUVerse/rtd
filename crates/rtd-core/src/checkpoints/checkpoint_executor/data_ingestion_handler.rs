@@ -1,24 +1,28 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use linku_common::ZipDebugEqIteratorExt;
+
 use crate::checkpoints::checkpoint_executor::{CheckpointExecutionData, CheckpointTransactionData};
 use crate::execution_cache::TransactionCacheRead;
-use std::collections::{BTreeSet, HashMap};
-use std::path::Path;
-use rtd_storage::blob::{Blob, BlobEncoding};
+use prost::Message;
+use rtd_rpc::field::FieldMask;
+use rtd_rpc::field::FieldMaskUtil;
+use rtd_rpc::merge::Merge;
+use rtd_rpc::proto::rtd::rpc;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::{RtdErrorKind, RtdResult};
-use rtd_types::full_checkpoint_content::{
-    Checkpoint, CheckpointData, ExecutedTransaction, ObjectSet,
-};
+use rtd_types::full_checkpoint_content::{Checkpoint, ExecutedTransaction, ObjectSet};
 use rtd_types::storage::ObjectStore;
+use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
 
 pub(crate) fn store_checkpoint_locally(
     path: impl AsRef<Path>,
-    checkpoint_data: &CheckpointData,
+    checkpoint: &Checkpoint,
 ) -> RtdResult {
     let path = path.as_ref();
-    let file_name = format!("{}.chk", checkpoint_data.checkpoint_summary.sequence_number);
+    let sequence_number = checkpoint.summary.sequence_number;
 
     std::fs::create_dir_all(path).map_err(|err| {
         RtdErrorKind::FileIOError(format!(
@@ -27,17 +31,50 @@ pub(crate) fn store_checkpoint_locally(
         ))
     })?;
 
-    Blob::encode(&checkpoint_data, BlobEncoding::Bcs)
-        .map_err(|_| RtdErrorKind::TransactionSerializationError {
-            error: "failed to serialize full checkpoint content".to_string(),
-        }) // Map the first error
-        .and_then(|blob| {
-            std::fs::write(path.join(file_name), blob.to_bytes()).map_err(|_| {
-                RtdErrorKind::FileIOError(
-                    "failed to save full checkpoint content locally".to_string(),
-                )
-            })
-        })?;
+    let mask = FieldMask::from_paths([
+        rpc::v2::Checkpoint::path_builder().sequence_number(),
+        rpc::v2::Checkpoint::path_builder().summary().bcs().value(),
+        rpc::v2::Checkpoint::path_builder().signature().finish(),
+        rpc::v2::Checkpoint::path_builder().contents().bcs().value(),
+        rpc::v2::Checkpoint::path_builder()
+            .transactions()
+            .transaction()
+            .bcs()
+            .value(),
+        rpc::v2::Checkpoint::path_builder()
+            .transactions()
+            .effects()
+            .bcs()
+            .value(),
+        rpc::v2::Checkpoint::path_builder()
+            .transactions()
+            .effects()
+            .unchanged_loaded_runtime_objects()
+            .finish(),
+        rpc::v2::Checkpoint::path_builder()
+            .transactions()
+            .events()
+            .bcs()
+            .value(),
+        rpc::v2::Checkpoint::path_builder()
+            .objects()
+            .objects()
+            .bcs()
+            .value(),
+    ]);
+
+    let proto_checkpoint = rpc::v2::Checkpoint::merge_from(checkpoint, &mask.into());
+    let proto_bytes = proto_checkpoint.encode_to_vec();
+    let compressed = zstd::encode_all(&proto_bytes[..], 3).map_err(|_| {
+        RtdErrorKind::TransactionSerializationError {
+            error: "failed to compress checkpoint content".to_string(),
+        }
+    })?;
+
+    let file_name = format!("{}.binpb.zst", sequence_number);
+    std::fs::write(path.join(file_name), compressed).map_err(|_| {
+        RtdErrorKind::FileIOError("failed to save full checkpoint content locally".to_string())
+    })?;
 
     Ok(())
 }
@@ -57,7 +94,7 @@ pub(crate) fn load_checkpoint(
     let mut events = transaction_cache_reader
         .multi_get_events(&event_tx_digests)
         .into_iter()
-        .zip(event_tx_digests)
+        .zip_debug_eq(event_tx_digests)
         .map(|(maybe_event, tx_digest)| {
             maybe_event
                 .ok_or(RtdErrorKind::TransactionEventsNotFound { digest: tx_digest }.into())
@@ -69,7 +106,7 @@ pub(crate) fn load_checkpoint(
     for (tx, fx) in ckpt_tx_data
         .transactions
         .iter()
-        .zip(ckpt_tx_data.effects.iter())
+        .zip_debug_eq(ckpt_tx_data.effects.iter())
     {
         let events = fx.events_digest().map(|_event_digest| {
             events

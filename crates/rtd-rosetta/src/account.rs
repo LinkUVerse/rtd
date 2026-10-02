@@ -9,11 +9,10 @@ use futures::{TryStreamExt, future::join_all};
 use prost_types::FieldMask;
 use rtd_rpc::client::Client;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{
-    GetBalanceRequest, GetCheckpointRequest, GetEpochRequest, ListOwnedObjectsRequest,
-};
+use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, GetEpochRequest, ListOwnedObjectsRequest};
 use rtd_sdk_types::{Address, StructTag};
 use rtd_types::base_types::RtdAddress;
+use std::str::FromStr;
 
 use crate::errors::Error;
 use crate::types::{
@@ -22,7 +21,16 @@ use crate::types::{
 };
 use crate::{OnlineServerContext, RtdEnv};
 use rtd_types::base_types::{ObjectID, SequenceNumber};
-use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+
+/// BCS layout for `0x3::staking_pool::FungibleStakedRtd`.
+/// Field order must match the Move struct definition exactly (BCS is positional).
+/// See: crates/rtd-framework/packages/rtd-system/sources/staking_pool.move
+#[derive(serde::Deserialize)]
+pub(crate) struct FungibleStakedRtdBcs {
+    pub _id: Address,
+    pub pool_id: Address,
+    pub value: u64,
+}
 
 /// Get an array of all AccountBalances for an AccountIdentifier and the BlockIdentifier
 /// at which the balance lookup was performed.
@@ -36,27 +44,13 @@ pub async fn balance(
     let address = request.account_identifier.address;
     let currencies = &request.currencies;
 
-    let checkpoint = get_checkpoint(&mut ctx).await?;
+    let block_identifier = ctx.blocks().current_block_identifier().await?;
     let balances = get_balances(&mut ctx, &request, address, currencies.clone()).await?;
 
     Ok(AccountBalanceResponse {
-        block_identifier: ctx.blocks().create_block_identifier(checkpoint).await?,
+        block_identifier,
         balances,
     })
-}
-
-async fn get_checkpoint(ctx: &mut OnlineServerContext) -> Result<CheckpointSequenceNumber, Error> {
-    let request =
-        GetCheckpointRequest::latest().with_read_mask(FieldMask::from_paths(["sequence_number"]));
-
-    Ok(ctx
-        .client
-        .ledger_client()
-        .get_checkpoint(request)
-        .await?
-        .into_inner()
-        .checkpoint()
-        .sequence_number())
 }
 
 async fn get_balances(
@@ -112,13 +106,145 @@ async fn get_account_balances(
     Ok(response.into_inner().balance().balance() as i128)
 }
 
+struct EpochTimingInfo {
+    epoch: u64,
+    epoch_start_timestamp_ms: u64,
+    epoch_duration_ms: u64,
+}
+
+async fn get_epoch_timing(client: &mut Client) -> Result<EpochTimingInfo, Error> {
+    let request = GetEpochRequest::latest().with_read_mask(FieldMask::from_paths([
+        "epoch",
+        "system_state.epoch_start_timestamp_ms",
+        "system_state.parameters.epoch_duration_ms",
+    ]));
+    let response = client
+        .ledger_client()
+        .get_epoch(request)
+        .await?
+        .into_inner();
+    let epoch_info = response.epoch();
+    let system_state = epoch_info.system_state();
+    Ok(EpochTimingInfo {
+        epoch: epoch_info.epoch(),
+        epoch_start_timestamp_ms: system_state.epoch_start_timestamp_ms(),
+        epoch_duration_ms: system_state.parameters().epoch_duration_ms(),
+    })
+}
+
+/// Exchange rate info for a staking pool.
+pub(crate) struct PoolRateInfo {
+    pub rtd_balance: u64,
+    pub pool_token_balance: u64,
+    pub validator_address: Address,
+    /// `pool.extra_fields.id` — the Bag's UID, needed by callers that want to
+    /// derive dynamic field ids inside the pool (e.g.,
+    /// `FungibleStakedRtdData`). `None` if the proto omitted the field.
+    pub pool_extra_fields_id: Option<String>,
+}
+
+/// Reads exchange rates for all active validator staking pools.
+pub(crate) async fn get_pool_exchange_rates(
+    client: &mut Client,
+) -> Result<std::collections::HashMap<String, PoolRateInfo>, Error> {
+    Ok(get_pool_exchange_rates_with_epoch(client).await?.0)
+}
+
+/// Atomic snapshot of validator-set state from a single `GetEpochRequest::latest()`.
+///
+/// Splitting these reads across multiple RPCs allows an epoch transition to
+/// land between them: the caller could observe rate from epoch N, then read
+/// epoch N+1, and bind the transaction to N+1 with a stale N rate, silently
+/// violating AtMost caps and aborting AtLeast guards. Bundling rate, epoch,
+/// and the inactive-table id into one response eliminates that race.
+pub(crate) struct ValidatorSetSnapshot {
+    /// Active pool rates keyed by `pool.id` (canonical 0x-prefixed hex string).
+    pub active_rates: std::collections::HashMap<String, PoolRateInfo>,
+    /// Current epoch the snapshot was taken in.
+    pub epoch: u64,
+    /// `validators.inactive_validators.id` — UID of the
+    /// `Table<ID, ValidatorWrapper>` storing deactivated pools. `None` only if
+    /// the proto omitted the field.
+    pub inactive_validators_table_id: Option<String>,
+}
+
+/// Reads exchange rates and the epoch they're snapshotted in from a single
+/// `GetEpochRequest::latest()` response. Used by amount-sensitive operations
+/// (e.g. `MergeAndRedeemFungibleStakedRtd::AtLeast`/`AtMost`) that must pin
+/// the rate quote to the same epoch the resulting transaction will be bound to.
+pub(crate) async fn get_pool_exchange_rates_with_epoch(
+    client: &mut Client,
+) -> Result<(std::collections::HashMap<String, PoolRateInfo>, u64), Error> {
+    let snap = get_validator_set_snapshot(client).await?;
+    Ok((snap.active_rates, snap.epoch))
+}
+
+/// Read the full validator-set snapshot atomically.
+pub(crate) async fn get_validator_set_snapshot(
+    client: &mut Client,
+) -> Result<ValidatorSetSnapshot, Error> {
+    let request = GetEpochRequest::latest().with_read_mask(FieldMask::from_paths([
+        "epoch",
+        "system_state.validators.active_validators",
+        "system_state.validators.inactive_validators",
+    ]));
+    let response = client
+        .ledger_client()
+        .get_epoch(request)
+        .await?
+        .into_inner();
+    let epoch_obj = response.epoch();
+    let epoch = epoch_obj.epoch();
+    let system_state = epoch_obj.system_state();
+    let validators_proto = system_state.validators();
+    let validators = validators_proto.active_validators();
+
+    let inactive_validators_table_id = validators_proto
+        .inactive_validators
+        .as_ref()
+        .and_then(|t| t.id.as_ref())
+        .cloned();
+
+    let mut rates = std::collections::HashMap::new();
+    for validator in validators {
+        let pool = validator.staking_pool();
+        let pool_id = pool.id().to_string();
+        let validator_address = Address::from_str(validator.address())
+            .map_err(|e| Error::DataError(format!("Invalid validator address: {}", e)))?;
+        let pool_extra_fields_id = pool
+            .extra_fields_opt()
+            .and_then(|t| t.id_opt())
+            .map(|s| s.to_string());
+        rates.insert(
+            pool_id,
+            PoolRateInfo {
+                rtd_balance: pool.rtd_balance(),
+                pool_token_balance: pool.pool_token_balance(),
+                validator_address,
+                pool_extra_fields_id,
+            },
+        );
+    }
+    Ok(ValidatorSetSnapshot {
+        active_rates: rates,
+        epoch,
+        inactive_validators_table_id,
+    })
+}
+
 async fn get_sub_account_balances(
     account_type: SubAccountType,
     client: &mut Client,
     address: RtdAddress,
 ) -> Result<Vec<Amount>, Error> {
-    let current_epoch = get_current_epoch(client).await?;
+    let epoch_timing = get_epoch_timing(client).await?;
+    let current_epoch = epoch_timing.epoch;
     let address = Address::from(address);
+
+    if matches!(account_type, SubAccountType::FungibleStakedRtdValue) {
+        return get_fungible_staked_rtd_value(client, address, &epoch_timing).await;
+    }
+
     let delegated_stakes = client.list_delegated_stake(&address).await?;
 
     let amounts: Vec<SubBalance> = match account_type {
@@ -129,6 +255,7 @@ async fn get_sub_account_balances(
                 stake_id: stake.staked_rtd_id,
                 validator: stake.validator_address,
                 value: stake.principal as i128,
+                activation_epoch: Some(stake.activation_epoch),
             })
             .collect(),
         SubAccountType::PendingStake => delegated_stakes
@@ -138,9 +265,9 @@ async fn get_sub_account_balances(
                 stake_id: stake.staked_rtd_id,
                 validator: stake.validator_address,
                 value: stake.principal as i128,
+                activation_epoch: Some(stake.activation_epoch),
             })
             .collect(),
-
         SubAccountType::EstimatedReward => delegated_stakes
             .into_iter()
             .filter(|stake| current_epoch >= stake.activation_epoch)
@@ -148,15 +275,95 @@ async fn get_sub_account_balances(
                 stake_id: stake.staked_rtd_id,
                 validator: stake.validator_address,
                 value: stake.rewards as i128,
+                activation_epoch: None,
             })
             .collect(),
+        SubAccountType::FungibleStakedRtdValue => unreachable!(),
     };
 
-    Ok(if amounts.is_empty() {
-        vec![Amount::new(0, None)]
+    let amount = if amounts.is_empty() {
+        Amount::new(0, None)
     } else {
-        vec![Amount::new_from_sub_balances(amounts)]
-    })
+        Amount::new_from_sub_balances(amounts)
+    };
+
+    Ok(vec![amount.with_epoch_timing(
+        epoch_timing.epoch,
+        epoch_timing.epoch_start_timestamp_ms,
+        epoch_timing.epoch_duration_ms,
+    )])
+}
+
+async fn get_fungible_staked_rtd_value(
+    client: &mut Client,
+    address: Address,
+    epoch_timing: &EpochTimingInfo,
+) -> Result<Vec<Amount>, Error> {
+    use futures::TryStreamExt;
+
+    let list_request = ListOwnedObjectsRequest::default()
+        .with_owner(address.to_string())
+        .with_object_type("0x3::staking_pool::FungibleStakedRtd".to_string())
+        .with_page_size(1000u32)
+        .with_read_mask(FieldMask::from_paths(["object_id", "contents"]));
+
+    let fss_objects: Vec<_> = client
+        .list_owned_objects(list_request)
+        .map_err(Error::from)
+        .try_collect()
+        .await?;
+
+    if fss_objects.is_empty() {
+        return Ok(vec![Amount::new(0, None).with_epoch_timing(
+            epoch_timing.epoch,
+            epoch_timing.epoch_start_timestamp_ms,
+            epoch_timing.epoch_duration_ms,
+        )]);
+    }
+
+    let pool_rates = get_pool_exchange_rates(client).await?;
+
+    let mut sub_balances = Vec::new();
+    for obj in &fss_objects {
+        let contents = obj
+            .contents
+            .as_ref()
+            .ok_or_else(|| Error::DataError("FungibleStakedRtd missing contents".to_string()))?;
+        let fss: FungibleStakedRtdBcs = contents.deserialize().map_err(|e| {
+            Error::DataError(format!("Failed to deserialize FungibleStakedRtd: {}", e))
+        })?;
+
+        let pool_id_str = fss.pool_id.to_string();
+        let rate = pool_rates.get(&pool_id_str).ok_or_else(|| {
+            Error::DataError(format!("No exchange rate found for pool {}", pool_id_str))
+        })?;
+
+        let rtd_equivalent = if rate.pool_token_balance > 0 {
+            (fss.value as u128 * rate.rtd_balance as u128 / rate.pool_token_balance as u128) as u64
+        } else {
+            fss.value
+        };
+
+        sub_balances.push(SubBalance {
+            stake_id: Address::from_str(obj.object_id())
+                .map_err(|e| Error::DataError(format!("Invalid FSS object_id: {}", e)))?,
+            validator: rate.validator_address,
+            value: rtd_equivalent as i128,
+            activation_epoch: None,
+        });
+    }
+
+    let amount = if sub_balances.is_empty() {
+        Amount::new(0, None)
+    } else {
+        Amount::new_from_sub_balances(sub_balances)
+    };
+
+    Ok(vec![amount.with_epoch_timing(
+        epoch_timing.epoch,
+        epoch_timing.epoch_start_timestamp_ms,
+        epoch_timing.epoch_duration_ms,
+    )])
 }
 
 /// Get an array of all unspent coins for an AccountIdentifier and the BlockIdentifier at which the lookup was performed. .
@@ -199,16 +406,4 @@ pub async fn coins(
         block_identifier: context.blocks().current_block_identifier().await?,
         coins,
     })
-}
-
-pub async fn get_current_epoch(client: &mut Client) -> Result<u64, Error> {
-    let request = GetEpochRequest::latest().with_read_mask(FieldMask::from_paths(["epoch"]));
-
-    Ok(client
-        .ledger_client()
-        .get_epoch(request)
-        .await?
-        .into_inner()
-        .epoch()
-        .epoch())
 }

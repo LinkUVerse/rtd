@@ -11,7 +11,7 @@ task 1, lines 6-14:
 Response: {
   "data": {
     "epoch0BeforeCp0NotTx": {
-      "totalTransactions": null,
+      "totalTransactions": 1,
       "transactions": {
         "edges": []
       }
@@ -60,9 +60,9 @@ Response: {
       "transactions": {
         "edges": [
           {
-            "cursor": "MA==",
+            "cursor": "KAE6BAgAEAA=",
             "node": {
-              "digest": "3FJ4fSrf7toVCANccxAbeJ5A1iSzwKLghCYcaz9atbCD",
+              "digest": "85r5mfnut7T1NNBmbL7RpGMf9caJe5VEnpiCJxkz7eDE",
               "effects": {
                 "checkpoint": {
                   "sequenceNumber": 0,
@@ -106,13 +106,13 @@ task 12, lines 54-62:
 Response: {
   "data": {
     "epoch1BeforeCp5": {
-      "totalTransactions": 3,
+      "totalTransactions": 4,
       "transactions": {
         "edges": [
           {
-            "cursor": "Mw==",
+            "cursor": "KAE6BAgAEAM=",
             "node": {
-              "digest": "5dzKSJiXbyVT2wXBn6hTxNdb3PpQ78EPcmBkPXCNrTWd",
+              "digest": "FJDWwamR3EwoamNYsUgGBy9jSQY29WZR9fN8E8u2e7DC",
               "effects": {
                 "checkpoint": {
                   "sequenceNumber": 2,
@@ -124,9 +124,9 @@ Response: {
             }
           },
           {
-            "cursor": "NA==",
+            "cursor": "KAE6BAgAEAQ=",
             "node": {
-              "digest": "EG5ReporyZ16CiFhvEa8z1fLiQX5SW2uMyvMYkqsEBzf",
+              "digest": "HffXXSawkYwf8vkrjHiVwsWLUey2oKmw8q2nSqV7rAbG",
               "effects": {
                 "checkpoint": {
                   "sequenceNumber": 2,
@@ -138,12 +138,12 @@ Response: {
             }
           },
           {
-            "cursor": "NQ==",
+            "cursor": "KAE6BAgAEAU=",
             "node": {
-              "digest": "CqmfRKnUfFSzQd5GC66nAe87HSvKpo2wjuKJNW1WX8EE",
+              "digest": "5QdTEu1h7fuRih364SecoELKZ8BQvetNyZHhrGV8YF2i",
               "effects": {
                 "checkpoint": {
-                  "sequenceNumber": 3,
+                  "sequenceNumber": 2,
                   "epoch": {
                     "epochId": 1
                   }
@@ -162,7 +162,7 @@ task 13, lines 64-72:
 Response: {
   "data": {
     "epoch1BeforeCp0": {
-      "totalTransactions": 3,
+      "totalTransactions": 4,
       "transactions": {
         "edges": []
       }

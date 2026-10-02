@@ -1,34 +1,40 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use move_core_types::{ident_str, language_storage::StructTag};
+use move_binary_format::{
+    CompiledModule,
+    file_format::{
+        AddressIdentifierIndex, IdentifierIndex, ModuleHandle, TableIndex, empty_module,
+    },
+    file_format_common::VERSION_MAX,
+};
+use move_core_types::{account_address::AccountAddress, ident_str, language_storage::StructTag};
 use rtd_move_build::BuildConfig;
-use rtd_protocol_config::ProtocolConfig;
+use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_types::{
-    MOVE_STDLIB_PACKAGE_ID, RTD_FRAMEWORK_PACKAGE_ID,
+    Identifier, MOVE_STDLIB_PACKAGE_ID, RTD_FRAMEWORK_PACKAGE_ID,
     base_types::{ObjectID, ObjectRef, RtdAddress},
     crypto::{AccountKeyPair, get_key_pair},
     error::RtdErrorKind,
-    move_package::UpgradePolicy,
+    move_package::{MovePackage, UpgradePolicy},
     object::{Object, Owner},
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     storage::ObjectStore,
     transaction::{Argument, ObjectArg, ProgrammableTransaction, TEST_ONLY_GAS_UNIT_FOR_PUBLISH},
 };
 
+use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
+use rtd_types::error::UserInputError;
+use rtd_types::execution_status::{
+    CommandArgumentError, ExecutionErrorKind, ExecutionStatus, PackageUpgradeError,
+};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
-use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
-use rtd_types::error::UserInputError;
-use rtd_types::execution_status::{
-    CommandArgumentError, ExecutionFailureStatus, ExecutionStatus, PackageUpgradeError,
-};
 
-use crate::authority::authority_tests::init_state_with_ids;
 use crate::authority::move_integration_tests::{
     UpgradeData, build_multi_publish_txns, build_multi_upgrade_txns, build_package,
     collect_packages_and_upgrade_caps, run_multi_txns,
@@ -38,6 +44,10 @@ use crate::authority::{
     AuthorityState, auth_unit_test_utils::build_test_modules_with_dep_addr,
     authority_tests::execute_programmable_transaction,
     move_integration_tests::build_and_publish_test_package_with_upgrade_cap,
+};
+use crate::authority::{
+    authority_tests::init_state_with_ids,
+    move_integration_tests::build_and_publish_package_with_upgrade_cap,
 };
 
 #[macro_export]
@@ -129,7 +139,12 @@ pub fn build_upgrade_test_modules_with_dep_addr(
     (
         package.get_package_digest(with_unpublished_deps).to_vec(),
         package.get_package_bytes(with_unpublished_deps),
-        package.dependency_ids.published.values().cloned().collect(),
+        package
+            .dependency_ids
+            .published
+            .values()
+            .map(|dep| dep.published_at)
+            .collect(),
     )
 }
 
@@ -174,12 +189,23 @@ struct UpgradeStateRunner {
 
 impl UpgradeStateRunner {
     pub async fn new(base_package_name: &str) -> Self {
+        Self::new_with_protocol_config(base_package_name, None).await
+    }
+
+    pub async fn new_with_protocol_config(
+        base_package_name: &str,
+        protocol_config: Option<ProtocolConfig>,
+    ) -> Self {
         telemetry_subscribers::init_for_testing();
         let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
         let gas_object_id = ObjectID::random();
         let gas_object = Object::with_id_owner_for_testing(gas_object_id, sender);
-        let authority_state = TestAuthorityBuilder::new().build().await;
-        authority_state.insert_genesis_object(gas_object).await;
+        let mut builder = TestAuthorityBuilder::new();
+        if let Some(protocol_config) = protocol_config {
+            builder = builder.with_protocol_config(protocol_config);
+        }
+        let authority_state = builder.build().await;
+        authority_state.insert_genesis_object(gas_object);
         let rgp = authority_state.reference_gas_price_for_testing().unwrap();
 
         let (package, upgrade_cap) = build_and_publish_test_package_with_upgrade_cap(
@@ -203,18 +229,49 @@ impl UpgradeStateRunner {
         }
     }
 
+    pub async fn new_with_package(modules: Vec<CompiledModule>, deps: Vec<ObjectID>) -> Self {
+        telemetry_subscribers::init_for_testing();
+        let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
+        let gas_object_id = ObjectID::random();
+        let gas_object = Object::with_id_owner_for_testing(gas_object_id, sender);
+        let authority_state = TestAuthorityBuilder::new().build().await;
+        authority_state.insert_genesis_object(gas_object);
+        let rgp = authority_state.reference_gas_price_for_testing().unwrap();
+
+        let (package, upgrade_cap) = build_and_publish_package_with_upgrade_cap(
+            &authority_state,
+            &sender,
+            &sender_key,
+            &gas_object_id,
+            modules
+                .into_iter()
+                .map(|m| {
+                    let mut b = vec![];
+                    m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+                    b
+                })
+                .collect(),
+            deps,
+        )
+        .await;
+
+        Self {
+            sender,
+            sender_key,
+            gas_object_id,
+            authority_state,
+            package,
+            upgrade_cap,
+            rgp,
+        }
+    }
+
     pub async fn publish(
         &mut self,
         modules: Vec<Vec<u8>>,
         dep_ids: Vec<ObjectID>,
     ) -> (ObjectRef, ObjectRef) {
-        let pt = {
-            let mut builder = ProgrammableTransactionBuilder::new();
-            let cap = builder.publish_upgradeable(modules, dep_ids);
-            builder.transfer_arg(self.sender, cap);
-            builder.finish()
-        };
-        let effects = self.run(pt).await;
+        let effects = self.publish_tx(modules, dep_ids).await;
         assert!(effects.status().is_ok(), "{:#?}", effects.status());
 
         let package = effects
@@ -232,6 +289,20 @@ impl UpgradeStateRunner {
         (package.0, cap.0)
     }
 
+    pub async fn publish_tx(
+        &mut self,
+        modules: Vec<Vec<u8>>,
+        dep_ids: Vec<ObjectID>,
+    ) -> TransactionEffects {
+        let pt = {
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let cap = builder.publish_upgradeable(modules, dep_ids);
+            builder.transfer_arg(self.sender, cap);
+            builder.finish()
+        };
+        self.run(pt).await
+    }
+
     pub async fn upgrade(
         &mut self,
         policy: u8,
@@ -239,12 +310,31 @@ impl UpgradeStateRunner {
         modules: Vec<Vec<u8>>,
         dep_ids: Vec<ObjectID>,
     ) -> TransactionEffects {
+        self.upgrade_with(
+            self.package.0,
+            self.upgrade_cap,
+            policy,
+            digest,
+            modules,
+            dep_ids,
+        )
+        .await
+    }
+
+    pub async fn upgrade_with(
+        &mut self,
+        package_id: ObjectID,
+        upgrade_cap: ObjectRef,
+        policy: u8,
+        digest: Vec<u8>,
+        modules: Vec<Vec<u8>>,
+        dep_ids: Vec<ObjectID>,
+    ) -> TransactionEffects {
         let pt = {
-            let package_id = self.package.0;
             let mut builder = ProgrammableTransactionBuilder::new();
 
             let cap = builder
-                .obj(ObjectArg::ImmOrOwnedObject(self.upgrade_cap))
+                .obj(ObjectArg::ImmOrOwnedObject(upgrade_cap))
                 .unwrap();
             let policy = builder.pure(policy).unwrap();
             let digest = builder.pure(digest).unwrap();
@@ -295,6 +385,560 @@ impl UpgradeStateRunner {
     }
 }
 
+fn empty_module_with_dependencies(
+    (addr, name): (AccountAddress, String),
+    deps: Vec<(AccountAddress, String)>,
+) -> CompiledModule {
+    let mut module = empty_module();
+    module.address_identifiers[0] = addr;
+    module.identifiers[0] = Identifier::new(name).unwrap();
+    for (dep_addr, dep) in deps {
+        module.identifiers.push(Identifier::new(dep).unwrap());
+        let address_id = if let Some(id) = module
+            .address_identifiers
+            .iter()
+            .enumerate()
+            .find(|(_, a)| **a == dep_addr)
+            .map(|(i, _)| i)
+        {
+            id
+        } else {
+            module.address_identifiers.push(dep_addr);
+            module.address_identifiers.len() - 1
+        };
+        module.module_handles.push(ModuleHandle {
+            address: AddressIdentifierIndex(address_id as TableIndex),
+            name: IdentifierIndex((module.identifiers.len() - 1) as TableIndex),
+        });
+    }
+    let s = module.address_identifiers.iter().collect::<BTreeSet<_>>();
+    assert_eq!(s.len(), module.address_identifiers.len());
+    module
+}
+
+// A  => []  | {}
+// B  => [A] | {A}
+// C  => [B] | {B, A}
+// A' => [C] | {C, B, A}
+// Test 1: Upgrade A to A' which depends on C. But only include `C` in the transitive deps.
+// Failure: `PublishUpgradeMissingDependency`
+#[tokio::test]
+async fn publish_package_cyclic_indirect_cross_package1() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let m = empty_module_with_dependencies((addr("0x0"), "A".to_string()), vec![]);
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![])
+    };
+    let (a_pkg, a_cap) = runner.publish(a_mods, a_deps).await;
+
+    let a_oid = a_pkg.0;
+
+    let (b_mods, b_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(*a_oid, "A".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![a_oid])
+    };
+    let (b_pkg, _b_cap) = runner.publish(b_mods, b_deps).await;
+
+    let b_oid = b_pkg.0;
+
+    let (c_mods, c_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "C".to_string()),
+            vec![(*b_oid, "B".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![b_oid, a_oid])
+    };
+    let (c_pkg, _c_cap) = runner.publish(c_mods, c_deps).await;
+    let c_oid = c_pkg.0;
+
+    {
+        let (a_u_mods, a_u_deps, digest) = {
+            let m = empty_module_with_dependencies(
+                (addr("0x0"), "A".to_string()),
+                vec![(*c_oid, "C".to_string())],
+            );
+
+            let mut b = vec![];
+            m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+            let modules = vec![b];
+            // only include C in the deps
+            let deps = vec![c_oid];
+            let digest = MovePackage::compute_digest_for_modules_and_deps(&modules, &deps, true);
+            (modules, deps, digest)
+        };
+
+        let effects = runner
+            .upgrade_with(
+                a_oid,
+                a_cap,
+                UpgradePolicy::COMPATIBLE,
+                digest.to_vec(),
+                a_u_mods,
+                a_u_deps,
+            )
+            .await;
+        assert!(effects.status().is_err());
+        assert_eq!(
+            effects.status().clone().unwrap_err().0,
+            ExecutionErrorKind::PublishUpgradeMissingDependency,
+        );
+    };
+}
+
+// A  => []  | {}
+// B  => [A] | {A}
+// C  => [B] | {B, A}
+// A' => [C] | {C, B, A}
+// Test 2: Upgrade A to A' which depends on C. But only include `C` and `B` in the transitive deps.
+// Failure: `PublishUpgradeMissingDependency`
+#[tokio::test]
+async fn publish_package_cyclic_indirect_cross_package2() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    // A  => []  | {}
+    // B  => [A] | {A}
+    // C  => [B] | {B, A}
+    // A' => [C] | {C, B, A}
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let m = empty_module_with_dependencies((addr("0x0"), "A".to_string()), vec![]);
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![])
+    };
+    let (a_pkg, a_cap) = runner.publish(a_mods, a_deps).await;
+
+    let a_oid = a_pkg.0;
+
+    let (b_mods, b_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(*a_oid, "A".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![a_oid])
+    };
+    let (b_pkg, _b_cap) = runner.publish(b_mods, b_deps).await;
+
+    let b_oid = b_pkg.0;
+
+    let (c_mods, c_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "C".to_string()),
+            vec![(*b_oid, "B".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![b_oid, a_oid])
+    };
+    let (c_pkg, _c_cap) = runner.publish(c_mods, c_deps).await;
+    let c_oid = c_pkg.0;
+
+    {
+        let (a_u_mods, a_u_deps, digest) = {
+            let m = empty_module_with_dependencies(
+                (addr("0x0"), "A".to_string()),
+                vec![(*c_oid, "C".to_string())],
+            );
+
+            let mut b = vec![];
+            m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+            let modules = vec![b];
+            // only include C and B in the deps
+            let deps = vec![c_oid, b_oid];
+            let digest = MovePackage::compute_digest_for_modules_and_deps(&modules, &deps, true);
+            (modules, deps, digest)
+        };
+
+        let effects = runner
+            .upgrade_with(
+                a_oid,
+                a_cap,
+                UpgradePolicy::COMPATIBLE,
+                digest.to_vec(),
+                a_u_mods,
+                a_u_deps,
+            )
+            .await;
+        assert!(effects.status().is_err());
+        assert_eq!(
+            effects.status().clone().unwrap_err().0,
+            ExecutionErrorKind::PublishUpgradeMissingDependency,
+        );
+    };
+}
+
+// A  => []  | {}
+// B  => [A] | {A}
+// C  => [B] | {B, A}
+// A' => [C] | {C, B, A}
+// Test 3: Upgrade A to A' which depends on C. But include `C`, `B`, and `A` in the transitive deps.
+// Failure: `VerificationOrDeserializationError` due to cyclic dependency (it will look for `A` at
+// `A'`s version ID but that will not be present yet).
+#[tokio::test]
+async fn publish_package_cyclic_indirect_cross_package3() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let m = empty_module_with_dependencies((addr("0x0"), "A".to_string()), vec![]);
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![])
+    };
+    let (a_pkg, a_cap) = runner.publish(a_mods, a_deps).await;
+
+    let a_oid = a_pkg.0;
+
+    let (b_mods, b_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(*a_oid, "A".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![a_oid])
+    };
+    let (b_pkg, _b_cap) = runner.publish(b_mods, b_deps).await;
+
+    let b_oid = b_pkg.0;
+
+    let (c_mods, c_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "C".to_string()),
+            vec![(*b_oid, "B".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![b_oid, a_oid])
+    };
+    let (c_pkg, _c_cap) = runner.publish(c_mods, c_deps).await;
+    let c_oid = c_pkg.0;
+
+    {
+        let (a_u_mods, a_u_deps, digest) = {
+            let m = empty_module_with_dependencies(
+                (addr("0x0"), "A".to_string()),
+                vec![(*c_oid, "C".to_string())],
+            );
+
+            let mut b = vec![];
+            m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+            let modules = vec![b];
+            // include C, B, and the original ID of `A` in the deps
+            let deps = vec![c_oid, b_oid, a_oid];
+            let digest = MovePackage::compute_digest_for_modules_and_deps(&modules, &deps, true);
+            (modules, deps, digest)
+        };
+
+        let effects = runner
+            .upgrade_with(
+                a_oid,
+                a_cap,
+                UpgradePolicy::COMPATIBLE,
+                digest.to_vec(),
+                a_u_mods,
+                a_u_deps,
+            )
+            .await;
+        assert!(effects.status().is_err());
+        assert_eq!(
+            effects.status().clone().unwrap_err().0,
+            ExecutionErrorKind::VMVerificationOrDeserializationError
+        );
+    };
+}
+
+// A  => []  | {}
+// B  => [A] | {A}
+// A' => [B] | {B, A}
+// Test 4: Upgrade A to A' which depends on B. Include `B` and `A` in the transitive deps.
+// Failure: `VerificationOrDeserializationError` due to cyclic dependency (it will look for `A` at
+// `A'`s version ID but that will not be present yet).
+#[tokio::test]
+async fn publish_package_cyclic_direct_cross_package1() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let m = empty_module_with_dependencies((addr("0x0"), "A".to_string()), vec![]);
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![])
+    };
+    let (a_pkg, a_cap) = runner.publish(a_mods, a_deps).await;
+
+    let a_oid = a_pkg.0;
+
+    let (b_mods, b_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(*a_oid, "A".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![a_oid])
+    };
+    let (b_pkg, _b_cap) = runner.publish(b_mods, b_deps).await;
+
+    let b_oid = b_pkg.0;
+
+    {
+        let (a_u_mods, a_u_deps, digest) = {
+            let m = empty_module_with_dependencies(
+                (addr("0x0"), "A".to_string()),
+                vec![(*b_oid, "B".to_string())],
+            );
+
+            let mut b = vec![];
+            m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+            let modules = vec![b];
+            // include B, but don't inlude the original ID of `A` in the deps
+            let deps = vec![b_oid];
+            let digest = MovePackage::compute_digest_for_modules_and_deps(&modules, &deps, true);
+            (modules, deps, digest)
+        };
+
+        let effects = runner
+            .upgrade_with(
+                a_oid,
+                a_cap,
+                UpgradePolicy::COMPATIBLE,
+                digest.to_vec(),
+                a_u_mods,
+                a_u_deps,
+            )
+            .await;
+        assert!(effects.status().is_err());
+        assert_eq!(
+            effects.status().clone().unwrap_err().0,
+            ExecutionErrorKind::PublishUpgradeMissingDependency,
+        );
+    };
+}
+
+// A  => []  | {}
+// B  => [A] | {A}
+// A' => [B] | {B, A}
+// Test 4: Upgrade A to A' which depends on B. Include `B` and `A` in the transitive deps.
+// Failure: `VerificationOrDeserializationError` due to cyclic dependency (it will look for `A` at
+// `A'`s version ID but that will not be present yet).
+#[tokio::test]
+async fn publish_package_cyclic_direct_cross_package2() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let m = empty_module_with_dependencies((addr("0x0"), "A".to_string()), vec![]);
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![])
+    };
+    let (a_pkg, a_cap) = runner.publish(a_mods, a_deps).await;
+
+    let a_oid = a_pkg.0;
+
+    let (b_mods, b_deps) = {
+        let m = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(*a_oid, "A".to_string())],
+        );
+
+        let mut b = vec![];
+        m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+        (vec![b], vec![a_oid])
+    };
+    let (b_pkg, _b_cap) = runner.publish(b_mods, b_deps).await;
+
+    let b_oid = b_pkg.0;
+
+    {
+        let (a_u_mods, a_u_deps, digest) = {
+            let m = empty_module_with_dependencies(
+                (addr("0x0"), "A".to_string()),
+                vec![(*b_oid, "B".to_string())],
+            );
+
+            let mut b = vec![];
+            m.serialize_with_version(VERSION_MAX, &mut b).unwrap();
+            let modules = vec![b];
+            // include B, and the original ID of `A` in the deps
+            let deps = vec![b_oid, a_oid];
+            let digest = MovePackage::compute_digest_for_modules_and_deps(&modules, &deps, true);
+            (modules, deps, digest)
+        };
+
+        let effects = runner
+            .upgrade_with(
+                a_oid,
+                a_cap,
+                UpgradePolicy::COMPATIBLE,
+                digest.to_vec(),
+                a_u_mods,
+                a_u_deps,
+            )
+            .await;
+        assert!(effects.status().is_err());
+        assert_eq!(
+            effects.status().clone().unwrap_err().0,
+            ExecutionErrorKind::VMVerificationOrDeserializationError
+        );
+    };
+}
+
+// Within the same package: A <=> B
+#[tokio::test]
+async fn publish_package_cyclic_direct_within_package() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let a = empty_module_with_dependencies(
+            (addr("0x0"), "A".to_string()),
+            vec![(addr("0x0"), "B".to_string())],
+        );
+        let b = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(addr("0x0"), "A".to_string())],
+        );
+        let modules = [a, b]
+            .into_iter()
+            .map(|m| {
+                let mut bytes = vec![];
+                m.serialize_with_version(VERSION_MAX, &mut bytes).unwrap();
+                bytes
+            })
+            .collect();
+
+        (modules, vec![])
+    };
+    let effects = runner.publish_tx(a_mods, a_deps).await;
+    assert!(effects.status().is_err());
+    assert_eq!(
+        effects.status().clone().unwrap_err().0,
+        ExecutionErrorKind::VMVerificationOrDeserializationError
+    );
+}
+
+// Within the same package: A -> B -> C -> A
+#[tokio::test]
+async fn publish_package_cyclic_indirect_within_package() {
+    let addr = |s| AccountAddress::from_str(s).unwrap();
+
+    let mut runner = UpgradeStateRunner::new_with_package(
+        vec![empty_module_with_dependencies(
+            (addr("0x0"), "F".to_string()),
+            vec![],
+        )],
+        vec![],
+    )
+    .await;
+
+    let (a_mods, a_deps) = {
+        let a = empty_module_with_dependencies(
+            (addr("0x0"), "A".to_string()),
+            vec![(addr("0x0"), "B".to_string())],
+        );
+        let b = empty_module_with_dependencies(
+            (addr("0x0"), "B".to_string()),
+            vec![(addr("0x0"), "C".to_string())],
+        );
+        let c = empty_module_with_dependencies(
+            (addr("0x0"), "C".to_string()),
+            vec![(addr("0x0"), "A".to_string())],
+        );
+        let modules = [a, b, c]
+            .into_iter()
+            .map(|m| {
+                let mut bytes = vec![];
+                m.serialize_with_version(VERSION_MAX, &mut bytes).unwrap();
+                bytes
+            })
+            .collect();
+
+        (modules, vec![])
+    };
+    let effects = runner.publish_tx(a_mods, a_deps).await;
+    assert!(effects.status().is_err());
+    assert_eq!(
+        effects.status().clone().unwrap_err().0,
+        ExecutionErrorKind::VMVerificationOrDeserializationError
+    );
+}
+
 #[tokio::test]
 async fn test_upgrade_package_happy_path() {
     let mut runner = UpgradeStateRunner::new("move_upgrade/base").await;
@@ -312,7 +956,7 @@ async fn test_upgrade_package_happy_path() {
         .await;
 
     match effects.into_status().unwrap_err().0 {
-        ExecutionFailureStatus::MoveAbort(_, 42) => { /* nop */ }
+        ExecutionErrorKind::MoveAbort(_, 42) => { /* nop */ }
         err => panic!("Unexpected error: {:#?}", err),
     };
 
@@ -452,7 +1096,7 @@ async fn test_upgrade_incompatible() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade,
         },
     )
@@ -470,7 +1114,7 @@ async fn test_upgrade_package_incorrect_digest() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::DigestDoesNotMatch { digest }
         }
     );
@@ -501,7 +1145,7 @@ async fn test_upgrade_package_compatibility_too_permissive() {
     // ETooPermissive abort when we try to authorize the upgrade.
     assert!(matches!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::MoveAbort(_, 1)
+        ExecutionErrorKind::MoveAbort(_, 1)
     ));
 }
 
@@ -516,7 +1160,7 @@ async fn test_upgrade_package_compatible_in_dep_only_mode() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade
         },
     );
@@ -525,12 +1169,11 @@ async fn test_upgrade_package_compatible_in_dep_only_mode() {
 #[tokio::test]
 async fn test_upgrade_package_add_new_module_in_dep_only_mode_pre_v68() {
     // Allow new modules in deps-only mode for this test.
-    let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
-        config.set_disallow_new_modules_in_deps_only_packages_for_testing(false);
-        config
-    });
+    let mut config = ProtocolConfig::get_for_version(118.into(), Chain::Unknown);
+    config.set_disallow_new_modules_in_deps_only_packages_for_testing(false);
 
-    let mut runner = UpgradeStateRunner::new("move_upgrade/base").await;
+    let mut runner =
+        UpgradeStateRunner::new_with_protocol_config("move_upgrade/base", Some(config)).await;
     let base_pkg = "dep_only_upgrade";
     assert_valid_dep_only_upgrade(&mut runner, base_pkg).await;
     let (digest, modules, dep_ids) = build_upgrade_test_modules_with_overlay(
@@ -575,7 +1218,7 @@ public fun friend_call(): u64 { base_addr::base::friend_fun(1) }
 
         assert_eq!(
             effects.into_status().unwrap_err().0,
-            ExecutionFailureStatus::PackageUpgradeError {
+            ExecutionErrorKind::PackageUpgradeError {
                 upgrade_error: PackageUpgradeError::IncompatibleUpgrade
             },
         );
@@ -610,7 +1253,7 @@ public fun friend_call(): u64 { base_addr::base::friend_fun(1) }
 
         assert_eq!(
             effects.into_status().unwrap_err().0,
-            ExecutionFailureStatus::PackageUpgradeError {
+            ExecutionErrorKind::PackageUpgradeError {
                 upgrade_error: PackageUpgradeError::IncompatibleUpgrade
             },
         );
@@ -628,7 +1271,7 @@ async fn test_upgrade_package_compatible_in_additive_mode() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade
         },
     );
@@ -643,7 +1286,7 @@ async fn test_upgrade_package_invalid_compatibility() {
 
     assert!(matches!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::UnknownUpgradePolicy { policy: 255 }
         }
     ));
@@ -660,7 +1303,7 @@ async fn test_upgrade_package_missing_type() {
 
     assert!(matches!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade
         }
     ));
@@ -677,7 +1320,7 @@ async fn test_upgrade_package_missing_type_module_removal() {
 
     assert!(matches!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade
         }
     ));
@@ -706,7 +1349,7 @@ async fn test_upgrade_package_invalid_additive_mode() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade
         },
     );
@@ -723,7 +1366,7 @@ async fn test_upgrade_package_additive_dep_only_mode() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::IncompatibleUpgrade
         },
     );
@@ -754,7 +1397,7 @@ async fn test_upgrade_package_not_a_ticket() {
 
     assert_eq!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::CommandArgumentError {
+        ExecutionErrorKind::CommandArgumentError {
             arg_idx: 0,
             kind: CommandArgumentError::TypeMismatch
         }
@@ -795,7 +1438,7 @@ async fn test_upgrade_ticket_doesnt_match() {
     assert!(
         matches!(
             err,
-            ExecutionFailureStatus::PackageUpgradeError {
+            ExecutionErrorKind::PackageUpgradeError {
                 upgrade_error: PackageUpgradeError::PackageIDDoesNotMatch {
                     package_id: _,
                     ticket_id: _
@@ -812,7 +1455,7 @@ async fn upgrade_missing_deps() {
     let (_, effects) = test_multiple_upgrades(&mut runner, true).await;
     assert!(matches!(
         effects.into_status().unwrap_err().0,
-        ExecutionFailureStatus::PackageUpgradeError {
+        ExecutionErrorKind::PackageUpgradeError {
             upgrade_error: PackageUpgradeError::DigestDoesNotMatch { digest: _ }
         }
     ));
@@ -1078,7 +1721,7 @@ async fn test_publish_transitive_happy_path() {
         .await;
 
     match call_effects.into_status().unwrap_err().0 {
-        ExecutionFailureStatus::MoveAbort(_, 42) => { /* nop */ }
+        ExecutionErrorKind::MoveAbort(_, 42) => { /* nop */ }
         err => panic!("Unexpected error: {:#?}", err),
     };
 }
@@ -1268,138 +1911,6 @@ async fn test_upgraded_types_in_one_txn() {
     assert!(events.len() == 2);
     assert_eq!(events[0].type_, e1_type);
     assert_eq!(events[1].type_, e2_type);
-}
-
-#[tokio::test]
-async fn test_different_versions_across_calls() {
-    // create 3 versions of the same package, all containing the return_0 function
-    let mut runner = UpgradeStateRunner::new("move_upgrade/base").await;
-    let (package_v2, effects) = test_multiple_upgrades(&mut runner, false).await;
-    assert!(effects.status().is_ok(), "{:#?}", effects.status());
-
-    let package_v3 = effects
-        .created()
-        .into_iter()
-        .find(|(_, owner)| matches!(owner, Owner::Immutable))
-        .unwrap()
-        .0
-        .0;
-
-    // call the same function twice within the same block but from two different module versions
-    let effects = runner
-        .run({
-            let mut builder = ProgrammableTransactionBuilder::new();
-            move_call! { builder, (package_v2)::base::return_0() };
-            move_call! { builder, (package_v3)::base::return_0() };
-            builder.finish()
-        })
-        .await;
-
-    assert!(effects.status().is_ok(), "{:#?}", effects.status());
-}
-
-#[tokio::test]
-async fn test_conflicting_versions_across_calls() {
-    // publishes base package at version 1
-    let mut runner = UpgradeStateRunner::new("move_upgrade/base").await;
-
-    // publish a dependent package at version 1 that depends on the base package at version 1
-    let (_, module_bytes, dep_ids) = build_upgrade_test_modules_with_dep_addr(
-        "dep_on_upgrading_package_upgradeable",
-        [
-            ("base_addr", runner.package.0),
-            ("dep_on_upgrading_package", ObjectID::ZERO),
-        ],
-        [("package_upgrade_base", runner.package.0)],
-    );
-    let (depender_package, depender_cap) = runner.publish(module_bytes, dep_ids).await;
-
-    // publish base package at version 2
-    let pt1 = build_upgrade_txn(
-        runner.package.0,
-        "stage1_basic_compatibility_valid",
-        runner.upgrade_cap,
-    );
-
-    let effects = runner.run(pt1).await;
-    assert!(effects.status().is_ok(), "{:#?}", effects.status());
-
-    let base_v2_package = effects
-        .created()
-        .into_iter()
-        .find(|(_, owner)| matches!(owner, Owner::Immutable))
-        .unwrap()
-        .0;
-
-    // publish a dependent package at version 2 that depends on the base package at version 2
-    let pt2 = {
-        let mut builder = ProgrammableTransactionBuilder::new();
-        let current_package_id = depender_package.0;
-        // Now recompile the depending package with the upgraded dependency
-        let (digest, modules, dep_ids) = build_upgrade_test_modules_with_dep_addr(
-            "dep_on_upgrading_package_upgradeable",
-            [
-                ("base_addr", runner.package.0),
-                ("dep_on_upgrading_package", ObjectID::ZERO),
-            ],
-            [("package_upgrade_base", base_v2_package.0)],
-        );
-
-        // We take as input the upgrade cap
-        builder
-            .obj(ObjectArg::ImmOrOwnedObject(depender_cap))
-            .unwrap();
-
-        // Create the upgrade ticket
-        let upgrade_arg = builder.pure(UpgradePolicy::COMPATIBLE).unwrap();
-        let digest_arg = builder.pure(digest).unwrap();
-        let upgrade_ticket = move_call! {
-            builder,
-            (RTD_FRAMEWORK_PACKAGE_ID)::package::authorize_upgrade(Argument::Input(0), upgrade_arg, digest_arg)
-        };
-        let upgrade_receipt = builder.upgrade(current_package_id, upgrade_ticket, dep_ids, modules);
-        move_call! {
-            builder,
-            (RTD_FRAMEWORK_PACKAGE_ID)::package::commit_upgrade(Argument::Input(0), upgrade_receipt)
-        };
-
-        builder.finish()
-    };
-
-    let effects = runner.run(pt2).await;
-    assert!(effects.status().is_ok(), "{:#?}", effects.status());
-
-    let dependent_v2_package = effects
-        .created()
-        .into_iter()
-        .find(|(_, owner)| matches!(owner, Owner::Immutable))
-        .unwrap()
-        .0;
-
-    // call the same function twice within the same block but from two different module versions
-    // that differ only by having different dependencies
-    let effects = runner
-        .run({
-            let mut builder = ProgrammableTransactionBuilder::new();
-            // call from upgraded package - should succeed
-            move_call! { builder, (dependent_v2_package.0)::my_module::call_return_0() };
-            // call from original package - should abort (check later that the second command
-            // aborts)
-            move_call! { builder, (depender_package.0)::my_module::call_return_0() };
-            builder.finish()
-        })
-        .await;
-
-    let call_error = effects.into_status().unwrap_err();
-
-    // verify that execution aborts
-    match call_error.0 {
-        ExecutionFailureStatus::MoveAbort(_, 42) => { /* nop */ }
-        err => panic!("Unexpected error: {:#?}", err),
-    };
-
-    // verify that execution aborts in the second (counting from 0) command
-    assert_eq!(call_error.1, Some(1));
 }
 
 #[tokio::test]

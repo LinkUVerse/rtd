@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, iter::Peekable};
 use move_core_types::parsing::{
     address::{NumericalAddress, ParsedAddress},
     parser::{parse_u8, parse_u16, parse_u32, parse_u64, parse_u128, parse_u256},
-    types::{ParsedFqName, ParsedModuleId, ParsedStructType, ParsedType},
+    types::{ParsedDatatype, ParsedFqName, ParsedModuleId, ParsedType},
 };
 use rtd_types::{Identifier, base_types::ObjectID};
 
@@ -491,6 +491,8 @@ impl<'a, I: Iterator<Item = &'a str>> ProgramParser<'a, I> {
                 self.parse_array()?.map(V::Vector).widen_span(sp)
             }
 
+            L(T::Ident, A::WITHDRAWAL) => self.parse_withdrawal_or_variable()?.widen_span(sp),
+
             L(T::Ident, _) => self.parse_variable()?,
 
             L(T::String, contents) => {
@@ -555,7 +557,7 @@ impl<'a, I: Iterator<Item = &'a str>> ProgramParser<'a, I> {
 
                 let sp!(_, L(T::LAngle, _)) = self.peek() else {
                     let sp = sp.widen(fun_sp);
-                    break 'fq sp.wrap(ParsedType::Struct(ParsedStructType {
+                    break 'fq sp.wrap(ParsedType::Datatype(ParsedDatatype {
                         fq_name,
                         type_args: vec![],
                     }));
@@ -564,7 +566,7 @@ impl<'a, I: Iterator<Item = &'a str>> ProgramParser<'a, I> {
                 let sp!(tys_sp, type_args) = self.parse_type_args()?;
 
                 let sp = sp.widen(tys_sp);
-                sp.wrap(ParsedType::Struct(ParsedStructType { fq_name, type_args }))
+                sp.wrap(ParsedType::Datatype(ParsedDatatype { fq_name, type_args }))
             }
 
             unexpected => error!(
@@ -633,6 +635,19 @@ impl<'a, I: Iterator<Item = &'a str>> ProgramParser<'a, I> {
         let sp!(start_sp, L(_, ident)) = self.expect(T::Ident)?;
         let ident = start_sp.wrap(ident.to_owned());
 
+        self.parse_variable_after_ident(ident)
+    }
+
+    /// Continue parsing a variable access after its first identifier has already been consumed.
+    fn parse_variable_after_ident(
+        &mut self,
+        ident: Spanned<String>,
+    ) -> PTBResult<Spanned<Argument>> {
+        use Lexeme as L;
+        use Token as T;
+
+        let start_sp = ident.span;
+
         let sp!(_, L(T::Dot, _)) = self.peek() else {
             return Ok(start_sp.wrap(Argument::Identifier(ident.value)));
         };
@@ -694,6 +709,37 @@ impl<'a, I: Iterator<Item = &'a str>> ProgramParser<'a, I> {
                 Err(_) => error!(contents.span, "Invalid integer literal"),
             },
         })
+    }
+
+    /// Parse an address balance withdrawal input, or a normal variable if the next token is not
+    /// `<` or `(`. The withdrawal formats are: `withdrawal(amount)` for RTD, and
+    /// `withdrawal<coin_type>(amount)` for an explicit coin type.
+    fn parse_withdrawal_or_variable(&mut self) -> PTBResult<Spanned<Argument>> {
+        use Lexeme as L;
+        use Token as T;
+
+        let sp!(start_sp, L(_, ident)) = self.expect(T::Ident)?;
+        let ident = start_sp.wrap(ident.to_owned());
+        let type_arg = if matches!(self.peek(), sp!(_, L(T::LAngle, _))) {
+            self.expect(T::LAngle)?;
+            let sp!(_, type_arg) = self.parse_type()?;
+            self.expect(T::RAngle)?;
+            Some(type_arg)
+        } else if matches!(self.peek(), sp!(_, L(T::LParen, _))) {
+            None
+        } else {
+            return self.parse_variable_after_ident(ident);
+        };
+        self.expect(T::LParen)?;
+        let amount = self.parse_gas_denomination()?;
+        let sp!(end_sp, _) = self.expect(T::RParen)?;
+
+        Ok(start_sp
+            .widen(end_sp)
+            .wrap(Argument::Withdrawal(A::WithdrawalArg {
+                amount: amount.value,
+                type_arg,
+            })))
     }
 
     fn parse_mvr_address(

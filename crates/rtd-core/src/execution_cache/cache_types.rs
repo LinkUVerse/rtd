@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::{cmp::Ordering, hash::DefaultHasher};
 
-use moka::sync::SegmentedCache as MokaCache;
 use linku_common::{debug_fatal, fatal};
+use moka::sync::SegmentedCache as MokaCache;
 use parking_lot::Mutex;
 use rtd_types::base_types::SequenceNumber;
 

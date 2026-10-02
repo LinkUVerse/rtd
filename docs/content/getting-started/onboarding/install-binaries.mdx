@@ -1,0 +1,27 @@
+---
+title: Install from Binaries
+sidebar_label: Install Binaries
+description: Requirements for using prebuilt RTD binaries.
+keywords:
+  - RTD binary
+  - install RTD
+  - release verification
+questions:
+  - Are prebuilt RTD binaries available?
+  - How should I verify an RTD binary?
+answer: >-
+  No public RTD binary release or AWS download is verified by this fork. Build
+  from the reviewed source revision, or use a binary supplied and authenticated
+  by the operator of your RTD network.
+---
+
+No public RTD release asset, S3 binary distribution, Homebrew package, or Chocolatey package is verified here. Do not download a renamed upstream Sui binary and treat it as RTD: its protocol and network identity differ.
+
+For local development, [build from source](/getting-started/onboarding/install-source). If an RTD network operator supplies a prebuilt binary, confirm its source revision, signature or digest, platform, and protocol compatibility through that operator before installing it.
+
+```sh
+rtd --version
+rtd client chain-identifier --format hex
+```
+
+Run the chain identifier command only after configuring an endpoint for the intended RTD network. Compare the result with its verified genesis. See [client configuration](/getting-started/onboarding/configure-rtd-client).

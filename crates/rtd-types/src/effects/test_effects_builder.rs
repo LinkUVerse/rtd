@@ -1,9 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::accumulator_event::AccumulatorEvent;
 use crate::base_types::{ObjectID, SequenceNumber};
 use crate::digests::{ObjectDigest, TransactionEventsDigest};
-use crate::effects::{EffectsObjectChange, IDOperation, ObjectIn, ObjectOut, TransactionEffects};
+use crate::effects::{
+    EffectsObjectChange, IDOperation, ObjectIn, ObjectOut, TransactionEffects, TransactionEffectsV2,
+};
 use crate::execution::SharedInput;
 use crate::execution_status::ExecutionStatus;
 use crate::gas::GasCostSummary;
@@ -14,6 +17,7 @@ use crate::transaction::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone)]
 pub struct TestEffectsBuilder {
     transaction: SenderSignedData,
     /// Override the execution status if provided.
@@ -32,6 +36,10 @@ pub struct TestEffectsBuilder {
     unwrapped_objects: Vec<(ObjectID, Owner)>,
     /// Immutable objects that are read.
     frozen_objects: BTreeSet<ObjectID>,
+    /// Accumulator events.
+    accumulator_events: Vec<AccumulatorEvent>,
+    /// Move package writes that create a new on-chain id
+    package_writes: Vec<(ObjectID, SequenceNumber)>,
 }
 
 impl TestEffectsBuilder {
@@ -47,6 +55,8 @@ impl TestEffectsBuilder {
             wrapped_objects: vec![],
             unwrapped_objects: vec![],
             frozen_objects: BTreeSet::new(),
+            accumulator_events: vec![],
+            package_writes: vec![],
         }
     }
 
@@ -112,6 +122,24 @@ impl TestEffectsBuilder {
 
     pub fn with_frozen_objects(mut self, objects: impl IntoIterator<Item = ObjectID>) -> Self {
         self.frozen_objects.extend(objects);
+        self
+    }
+
+    pub fn with_accumulator_events(
+        mut self,
+        events: impl IntoIterator<Item = AccumulatorEvent>,
+    ) -> Self {
+        self.accumulator_events.extend(events);
+        self
+    }
+
+    /// Add Move package writes that create a new on-chain id (a publish, or a
+    /// user upgrade that mints a new id). Each entry is `(id, version)`.
+    pub fn with_package_writes(
+        mut self,
+        packages: impl IntoIterator<Item = (ObjectID, SequenceNumber)>,
+    ) -> Self {
+        self.package_writes.extend(packages);
         self
     }
 
@@ -258,16 +286,41 @@ impl TestEffectsBuilder {
                     },
                 )
             }))
+            .chain(self.accumulator_events.into_iter().map(|event| {
+                (
+                    *event.accumulator_obj.inner(),
+                    EffectsObjectChange {
+                        input_state: ObjectIn::NotExist,
+                        output_state: ObjectOut::AccumulatorWriteV1(event.write),
+                        id_operation: IDOperation::None,
+                    },
+                )
+            }))
+            .chain(self.package_writes.into_iter().map(|(id, version)| {
+                (
+                    id,
+                    EffectsObjectChange {
+                        input_state: ObjectIn::NotExist,
+                        output_state: ObjectOut::PackageWrite((version, ObjectDigest::random())),
+                        id_operation: IDOperation::Created,
+                    },
+                )
+            }))
             .collect();
         let gas_object_id = self.transaction.transaction_data().gas()[0].0;
         let event_digest = self.events_digest;
         let dependencies = vec![];
+        let unchanged_consensus_objects = TransactionEffectsV2::compute_unchanged_consensus_objects(
+            shared_objects,
+            BTreeSet::new(),
+            &changed_objects,
+            BTreeMap::new(),
+        );
         TransactionEffects::new_from_execution_v2(
             status,
             executed_epoch,
             GasCostSummary::default(),
-            shared_objects,
-            BTreeSet::new(),
+            unchanged_consensus_objects,
             self.transaction.digest(),
             lamport_version,
             changed_objects,

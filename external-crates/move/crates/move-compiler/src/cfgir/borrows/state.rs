@@ -384,10 +384,14 @@ impl BorrowState {
         (full_borrows, local_borrows)
     }
 
-    /// Returns specific borrows on the `local`, including full borrows on the root created by the
-    /// borrow graph's overflow optimization.
+    /// Returns specific borrows on the `local`,
+    /// Also includes any full borrows on the root that might have occurred via the "overflow"
+    /// optimization in the borrow graph
     fn local_borrowed_by(&self, local: &Var) -> BTreeMap<RefID, Loc> {
-        let (mut full_borrows, local_borrows) = self.root_borrowed_by(local);
+        let (mut full_borrows, mut field_borrows) = self.borrows.borrowed_by(Self::LOCAL_ROOT);
+        let local_borrows = field_borrows
+            .remove(&Self::local_label(local))
+            .unwrap_or_default();
         full_borrows.extend(local_borrows);
         full_borrows
     }

@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::authority::AuthorityState;
-use crate::authority::authority_tests::send_and_confirm_transaction_;
+use crate::authority::authority_tests::submit_and_execute_with_options;
 use crate::authority::move_integration_tests::build_and_try_publish_test_package;
 use crate::authority::test_authority_builder::TestAuthorityBuilder;
 use move_core_types::ident_str;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use std::sync::Arc;
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_test_transaction_builder::{FundSource, TestTransactionBuilder};
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, dbg_addr};
@@ -25,8 +24,8 @@ use rtd_types::transaction::{
     CallArg, FundsWithdrawalArg, ObjectArg, SharedObjectMutability, TEST_ONLY_GAS_UNIT_FOR_PUBLISH,
     Transaction, TransactionData,
 };
-use rtd_types::type_input::TypeInput;
 use rtd_types::{RTD_DENY_LIST_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID};
+use std::sync::Arc;
 
 // Test that a regulated coin can be created and all the necessary objects are created with the right types.
 // Make sure that these types can be converted to Rust types.
@@ -38,7 +37,7 @@ async fn test_regulated_coin_v1_creation() {
     let mut metadata_object = None;
     let mut regulated_metadata_object = None;
     for (oref, _owner) in env.publish_effects.created() {
-        let object = env.authority.get_object(&oref.0).await.unwrap();
+        let object = env.authority.get_object(&oref.0).unwrap();
         if object.is_package() {
             continue;
         }
@@ -114,7 +113,7 @@ async fn test_regulated_coin_v2_types() {
         ],
     )
     .build_and_sign(&env.keypair);
-    let (_, effects) = send_and_confirm_transaction_(&env.authority, None, tx, true)
+    let (_, effects) = submit_and_execute_with_options(&env.authority, None, tx)
         .await
         .unwrap();
     if effects.status().is_err() {
@@ -187,7 +186,7 @@ async fn test_regulated_coin_v2_types() {
         ],
     )
     .build_and_sign(&env.keypair);
-    let (_, effects) = send_and_confirm_transaction_(&env.authority, None, tx, true)
+    let (_, effects) = submit_and_execute_with_options(&env.authority, None, tx)
         .await
         .unwrap();
     if effects.status().is_err() {
@@ -228,7 +227,7 @@ async fn test_regulated_coin_v2_funds_withdraw_deny() {
     let (denied_address, denied_keypair) = get_account_key_pair();
 
     env.authority
-        .settle_accumulator_for_testing(std::slice::from_ref(&env.publish_effects))
+        .settle_accumulator_for_testing(std::slice::from_ref(&env.publish_effects), None)
         .await;
 
     {
@@ -244,15 +243,15 @@ async fn test_regulated_coin_v2_funds_withdraw_deny() {
             regulated_coin_type.clone(),
         )
         .build_and_sign(&env.keypair);
-        let effects = send_and_confirm_transaction_(&env.authority, None, tx, true)
+        let effects = submit_and_execute_with_options(&env.authority, None, tx)
             .await
             .unwrap()
             .1;
         assert!(effects.status().is_ok(), "Funding should succeed");
-        env_gas_ref = effects.gas_object().0;
+        env_gas_ref = effects.gas_object().unwrap().0;
 
         env.authority
-            .settle_accumulator_for_testing(std::slice::from_ref(&effects))
+            .settle_accumulator_for_testing(std::slice::from_ref(&effects), None)
             .await;
     }
 
@@ -278,14 +277,13 @@ async fn test_regulated_coin_v2_funds_withdraw_deny() {
         ],
     )
     .build_and_sign(&env.keypair);
-    send_and_confirm_transaction_(&env.authority, None, add_tx, true)
+    submit_and_execute_with_options(&env.authority, None, add_tx)
         .await
         .unwrap();
 
     // Build the programmable transaction with a funds withdrawal argument for the denied coin.
     let mut builder = ProgrammableTransactionBuilder::new();
-    let withdraw_arg =
-        FundsWithdrawalArg::balance_from_sender(1, TypeInput::from(regulated_coin_type.clone()));
+    let withdraw_arg = FundsWithdrawalArg::balance_from_sender(1, regulated_coin_type.clone());
     builder.funds_withdrawal(withdraw_arg).unwrap();
     let amount = builder.pure(1u64).unwrap();
     builder.programmable_move_call(
@@ -315,9 +313,8 @@ async fn test_regulated_coin_v2_funds_withdraw_deny() {
 
     let err = env
         .authority
-        .handle_sign_transaction(&epoch_store, verified)
-        .await
-        .expect_err("signing should fail for denied address");
+        .handle_vote_transaction(&epoch_store, verified)
+        .expect_err("validation should fail for denied address");
 
     match err.into_inner() {
         RtdErrorKind::UserInputError {
@@ -347,7 +344,6 @@ impl TestEnv {
     async fn get_latest_object_ref(&self, id: &ObjectID) -> ObjectRef {
         self.authority
             .get_object(id)
-            .await
             .unwrap()
             .compute_object_reference()
     }
@@ -358,7 +354,7 @@ impl TestEnv {
         let mut regulated_metadata_object = None;
         let mut package_id = None;
         for (oref, _owner) in self.publish_effects.created() {
-            let object = self.authority.get_object(&oref.0).await.unwrap();
+            let object = self.authority.get_object(&oref.0).unwrap();
             if object.is_package() {
                 package_id = Some(object.id());
                 continue;
@@ -425,7 +421,7 @@ async fn new_authority_and_publish(path: &str) -> TestEnv {
 
     let mut protocol_config =
         ProtocolConfig::get_for_version(ProtocolVersion::max(), Chain::Unknown);
-    protocol_config.enable_accumulators_for_testing();
+    protocol_config.set_enable_accumulators_for_testing(true);
 
     let authority = TestAuthorityBuilder::new()
         .with_starting_objects(&[gas_object])

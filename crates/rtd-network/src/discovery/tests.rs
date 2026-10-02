@@ -2,21 +2,40 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use crate::utils::{build_network_and_key, build_network_with_anemo_config};
+use crate::endpoint_manager::ConsensusAddressUpdater;
+use crate::{
+    endpoint_manager::{AddressSource, EndpointId},
+    utils::{build_network_and_key, build_network_with_anemo_config},
+};
 use anemo::Result;
-use anemo::types::PeerAffinity;
 use fastcrypto::ed25519::Ed25519PublicKey;
 use futures::stream::FuturesUnordered;
-use rtd_config::p2p::AllowlistedPeer;
+use rtd_config::p2p::{AllowlistedPeer, DiscoveryConfig, SeedPeer};
+use rtd_types::error::RtdResult;
 use std::collections::HashSet;
 use tokio::time::timeout;
+
+/// Test `ConsensusAddressUpdater` that records every forwarded consensus update,
+/// for asserting which (source, address) reached the consensus endpoint.
+struct RecordingUpdater(std::sync::Mutex<Vec<(NetworkPublicKey, AddressSource, Vec<Multiaddr>)>>);
+
+impl ConsensusAddressUpdater for RecordingUpdater {
+    fn update_address(
+        &self,
+        pubkey: NetworkPublicKey,
+        source: AddressSource,
+        addrs: Vec<Multiaddr>,
+    ) -> RtdResult<()> {
+        self.0.lock().unwrap().push((pubkey, source, addrs));
+        Ok(())
+    }
+}
 
 #[tokio::test]
 async fn get_known_peers() -> Result<()> {
     let config = P2pConfig::default();
-    let (UnstartedDiscovery { state, .. }, server) = Builder::new(create_test_channel().1)
-        .config(config)
-        .build_internal();
+    let (UnstartedDiscovery { state, .. }, server, _) =
+        Builder::new().config(config).build_internal();
 
     // Err when own_info not set
     server
@@ -57,19 +76,6 @@ async fn get_known_peers() -> Result<()> {
             Ed25519Signature::default(),
         )),
     );
-    let private_peer = NodeInfo {
-        peer_id: PeerId([14; 32]),
-        addresses: Vec::new(),
-        timestamp_ms: now_unix(),
-        access_type: AccessType::Private,
-    };
-    state.write().unwrap().known_peers.insert(
-        private_peer.peer_id,
-        VerifiedSignedNodeInfo::new_unchecked(SignedNodeInfo::new_from_data_and_sig(
-            private_peer,
-            Ed25519Signature::default(),
-        )),
-    );
     let response = server
         .get_known_peers_v2(Request::new(()))
         .await
@@ -89,46 +95,371 @@ async fn get_known_peers() -> Result<()> {
 }
 
 #[tokio::test]
-async fn configured_peers_use_distinct_affinities() {
-    let allowlisted_peer = PeerId([21; 32]);
-    let seed_peer = PeerId([22; 32]);
-    let mut config = P2pConfig::default();
-    config.discovery = Some(DiscoveryConfig {
-        allowlisted_peers: vec![AllowlistedPeer {
-            peer_id: allowlisted_peer,
-            address: None,
-        }],
-        ..Default::default()
-    });
-    config.seed_peers.push(SeedPeer {
-        peer_id: Some(seed_peer),
-        address: "/dns/localhost/udp/1".parse().unwrap(),
+async fn get_known_peers_v3() -> Result<()> {
+    let config = P2pConfig::default();
+    let (UnstartedDiscovery { state, .. }, server, _) =
+        Builder::new().config(config).build_internal();
+
+    let our_peer_id = PeerId([9; 32]);
+    let mut our_addresses = BTreeMap::new();
+    our_addresses.insert(EndpointId::P2p(our_peer_id), vec![]);
+
+    let our_info_v2 = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: our_addresses.clone(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
     });
 
-    let (builder, network, keypair) = set_up_network(config);
-    let (mut event_loop, _handle) = builder.build(network.clone(), keypair);
-    event_loop.configure_preferred_peers();
+    // Err when own_info_v2 not set
+    let request_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: BTreeMap::new(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+    server
+        .get_known_peers_v3(Request::new(GetKnownPeersRequestV3 {
+            own_info: SignedVersionedNodeInfo::new_from_data_and_sig(
+                request_info,
+                Ed25519Signature::default(),
+            ),
+        }))
+        .await
+        .unwrap_err();
 
-    assert_eq!(
-        network
-            .known_peers()
-            .get(&allowlisted_peer)
-            .unwrap()
-            .affinity,
-        PeerAffinity::Allowed
+    // Normal response with our_info_v2
+    state.write().unwrap().our_info_v2 = Some(SignedVersionedNodeInfo::new_from_data_and_sig(
+        our_info_v2.clone(),
+        Ed25519Signature::default(),
+    ));
+
+    let request_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: BTreeMap::new(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+    let response = server
+        .get_known_peers_v3(Request::new(GetKnownPeersRequestV3 {
+            own_info: SignedVersionedNodeInfo::new_from_data_and_sig(
+                request_info,
+                Ed25519Signature::default(),
+            ),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.own_info.data(), &our_info_v2);
+    assert!(response.known_peers.is_empty());
+
+    // Normal response with some known peers
+    let other_peer_id = PeerId([13; 32]);
+    let mut other_addresses = BTreeMap::new();
+    other_addresses.insert(EndpointId::P2p(other_peer_id), vec![]);
+    let other_peer = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: other_addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+    state.write().unwrap().known_peers_v2.insert(
+        other_peer_id,
+        VerifiedSignedVersionedNodeInfo::new_unchecked(
+            SignedVersionedNodeInfo::new_from_data_and_sig(
+                other_peer.clone(),
+                Ed25519Signature::default(),
+            ),
+        ),
     );
+
+    let request_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: BTreeMap::new(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+    let response = server
+        .get_known_peers_v3(Request::new(GetKnownPeersRequestV3 {
+            own_info: SignedVersionedNodeInfo::new_from_data_and_sig(
+                request_info,
+                Ed25519Signature::default(),
+            ),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.own_info.data(), &our_info_v2);
     assert_eq!(
-        network.known_peers().get(&seed_peer).unwrap().affinity,
-        PeerAffinity::High
+        response
+            .known_peers
+            .into_iter()
+            .map(|peer| peer.into_data())
+            .collect::<Vec<_>>(),
+        vec![other_peer]
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn trusted_peers_shared_only_with_configured_peers() {
+    // Set up a config with a configured peer (via seed_peers).
+    let configured_peer_id = PeerId([42; 32]);
+    let non_configured_peer_id = PeerId([99; 32]);
+
+    let mut config = P2pConfig::default();
+    config.seed_peers.push(SeedPeer {
+        peer_id: Some(configured_peer_id),
+        address: "/dns/localhost/udp/8080".parse().unwrap(),
+    });
+
+    let (builder, server, _) = Builder::new().config(config).build_internal();
+    let (network, keypair) = crate::utils::build_network_and_key(|router| router);
+    let _ = builder.build(network, keypair);
+
+    let our_info = NodeInfo {
+        peer_id: PeerId([9; 32]),
+        addresses: Vec::new(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    };
+    server.state.write().unwrap().our_info = Some(SignedNodeInfo::new_from_data_and_sig(
+        our_info,
+        Ed25519Signature::default(),
+    ));
+
+    // Add a Trusted peer and a Public peer to known_peers.
+    let trusted_peer = NodeInfo {
+        peer_id: PeerId([10; 32]),
+        addresses: Vec::new(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Trusted,
+    };
+    let public_peer = NodeInfo {
+        peer_id: PeerId([11; 32]),
+        addresses: Vec::new(),
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    };
+
+    {
+        let mut state = server.state.write().unwrap();
+        state.known_peers.insert(
+            trusted_peer.peer_id,
+            VerifiedSignedNodeInfo::new_unchecked(SignedNodeInfo::new_from_data_and_sig(
+                trusted_peer.clone(),
+                Ed25519Signature::default(),
+            )),
+        );
+        state.known_peers.insert(
+            public_peer.peer_id,
+            VerifiedSignedNodeInfo::new_unchecked(SignedNodeInfo::new_from_data_and_sig(
+                public_peer.clone(),
+                Ed25519Signature::default(),
+            )),
+        );
+    }
+
+    // Request from a configured peer - should see both Public and Trusted peers.
+    let request_from_configured = Request::new(()).with_extension(configured_peer_id);
+    let response = server
+        .get_known_peers_v2(request_from_configured)
+        .await
+        .unwrap()
+        .into_inner();
+    let returned_peer_ids: HashSet<_> = response.known_peers.iter().map(|p| p.peer_id).collect();
+    assert!(
+        returned_peer_ids.contains(&trusted_peer.peer_id),
+        "Configured peer should see Trusted peers"
+    );
+    assert!(
+        returned_peer_ids.contains(&public_peer.peer_id),
+        "Configured peer should see Public peers"
+    );
+
+    // Request from a non-configured peer - should see only Public peer, not Trusted.
+    let request_from_non_configured = Request::new(()).with_extension(non_configured_peer_id);
+    let response = server
+        .get_known_peers_v2(request_from_non_configured)
+        .await
+        .unwrap()
+        .into_inner();
+    let returned_peer_ids: HashSet<_> = response.known_peers.iter().map(|p| p.peer_id).collect();
+    assert!(
+        !returned_peer_ids.contains(&trusted_peer.peer_id),
+        "Non-configured peer should NOT see Trusted peers"
+    );
+    assert!(
+        returned_peer_ids.contains(&public_peer.peer_id),
+        "Non-configured peer should see Public peers"
+    );
+
+    // Request with no peer_id - should see only Public peer, not Trusted.
+    let request_anonymous = Request::new(());
+    let response = server
+        .get_known_peers_v2(request_anonymous)
+        .await
+        .unwrap()
+        .into_inner();
+    let returned_peer_ids: HashSet<_> = response.known_peers.iter().map(|p| p.peer_id).collect();
+    assert!(
+        !returned_peer_ids.contains(&trusted_peer.peer_id),
+        "Anonymous request should NOT see Trusted peers"
+    );
+    assert!(
+        returned_peer_ids.contains(&public_peer.peer_id),
+        "Anonymous request should see Public peers"
+    );
+}
+
+#[tokio::test]
+async fn trusted_peers_shared_only_with_configured_peers_v3() {
+    // Set up a config with a configured peer (via seed_peers).
+    let configured_peer_id = PeerId([42; 32]);
+    let non_configured_peer_id = PeerId([99; 32]);
+
+    let mut config = P2pConfig::default();
+    config.seed_peers.push(SeedPeer {
+        peer_id: Some(configured_peer_id),
+        address: "/dns/localhost/udp/8080".parse().unwrap(),
+    });
+
+    let (builder, server, _) = Builder::new().config(config).build_internal();
+    let (network, keypair) = crate::utils::build_network_and_key(|router| router);
+    let _ = builder.build(network, keypair);
+
+    let our_peer_id = PeerId([9; 32]);
+    let mut our_addresses = BTreeMap::new();
+    our_addresses.insert(EndpointId::P2p(our_peer_id), vec![]);
+    let our_info_v2 = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: our_addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+    server.state.write().unwrap().our_info_v2 = Some(
+        SignedVersionedNodeInfo::new_from_data_and_sig(our_info_v2, Ed25519Signature::default()),
+    );
+
+    // Add a Trusted peer and a Public peer to known_peers_v2.
+    let trusted_peer_id = PeerId([10; 32]);
+    let mut trusted_addresses = BTreeMap::new();
+    trusted_addresses.insert(EndpointId::P2p(trusted_peer_id), vec![]);
+    let trusted_peer = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: trusted_addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Trusted,
+    });
+
+    let public_peer_id = PeerId([11; 32]);
+    let mut public_addresses = BTreeMap::new();
+    public_addresses.insert(EndpointId::P2p(public_peer_id), vec![]);
+    let public_peer = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses: public_addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+
+    {
+        let mut state = server.state.write().unwrap();
+        state.known_peers_v2.insert(
+            trusted_peer_id,
+            VerifiedSignedVersionedNodeInfo::new_unchecked(
+                SignedVersionedNodeInfo::new_from_data_and_sig(
+                    trusted_peer.clone(),
+                    Ed25519Signature::default(),
+                ),
+            ),
+        );
+        state.known_peers_v2.insert(
+            public_peer_id,
+            VerifiedSignedVersionedNodeInfo::new_unchecked(
+                SignedVersionedNodeInfo::new_from_data_and_sig(
+                    public_peer.clone(),
+                    Ed25519Signature::default(),
+                ),
+            ),
+        );
+    }
+
+    let make_request = || {
+        let request_info = VersionedNodeInfo::V2(NodeInfoV2 {
+            addresses: BTreeMap::new(),
+            timestamp_ms: now_unix(),
+            access_type: AccessType::Public,
+        });
+        GetKnownPeersRequestV3 {
+            own_info: SignedVersionedNodeInfo::new_from_data_and_sig(
+                request_info,
+                Ed25519Signature::default(),
+            ),
+        }
+    };
+
+    // Request from a configured peer - should see both Public and Trusted peers.
+    let request_from_configured = Request::new(make_request()).with_extension(configured_peer_id);
+    let response = server
+        .get_known_peers_v3(request_from_configured)
+        .await
+        .unwrap()
+        .into_inner();
+    let returned_peer_ids: HashSet<_> = response
+        .known_peers
+        .iter()
+        .filter_map(|p| p.peer_id())
+        .collect();
+    assert!(
+        returned_peer_ids.contains(&trusted_peer_id),
+        "Configured peer should see Trusted peers"
+    );
+    assert!(
+        returned_peer_ids.contains(&public_peer_id),
+        "Configured peer should see Public peers"
+    );
+
+    // Request from a non-configured peer - should see only Public peer, not Trusted.
+    let request_from_non_configured =
+        Request::new(make_request()).with_extension(non_configured_peer_id);
+    let response = server
+        .get_known_peers_v3(request_from_non_configured)
+        .await
+        .unwrap()
+        .into_inner();
+    let returned_peer_ids: HashSet<_> = response
+        .known_peers
+        .iter()
+        .filter_map(|p| p.peer_id())
+        .collect();
+    assert!(
+        !returned_peer_ids.contains(&trusted_peer_id),
+        "Non-configured peer should NOT see Trusted peers"
+    );
+    assert!(
+        returned_peer_ids.contains(&public_peer_id),
+        "Non-configured peer should see Public peers"
+    );
+
+    // Request with no peer_id - should see only Public peer, not Trusted.
+    let request_anonymous = Request::new(make_request());
+    let response = server
+        .get_known_peers_v3(request_anonymous)
+        .await
+        .unwrap()
+        .into_inner();
+    let returned_peer_ids: HashSet<_> = response
+        .known_peers
+        .iter()
+        .filter_map(|p| p.peer_id())
+        .collect();
+    assert!(
+        !returned_peer_ids.contains(&trusted_peer_id),
+        "Anonymous request should NOT see Trusted peers"
+    );
+    assert!(
+        returned_peer_ids.contains(&public_peer_id),
+        "Anonymous request should see Public peers"
     );
 }
 
 #[tokio::test]
 async fn make_connection_to_seed_peer() -> Result<()> {
     let mut config = P2pConfig::default();
-    let (builder, server) = Builder::new(create_test_channel().1)
-        .config(config.clone())
-        .build();
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
     let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
     let (_event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
 
@@ -136,7 +467,7 @@ async fn make_connection_to_seed_peer() -> Result<()> {
         peer_id: None,
         address: format!("/dns/localhost/udp/{}", network_1.local_addr().port()).parse()?,
     });
-    let (builder, server) = Builder::new(create_test_channel().1).config(config).build();
+    let (builder, server, _em) = Builder::new().config(config).build();
     let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
     let (mut event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
 
@@ -160,9 +491,7 @@ async fn make_connection_to_seed_peer() -> Result<()> {
 #[tokio::test]
 async fn make_connection_to_seed_peer_with_peer_id() -> Result<()> {
     let mut config = P2pConfig::default();
-    let (builder, server) = Builder::new(create_test_channel().1)
-        .config(config.clone())
-        .build();
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
     let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
     let (_event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
 
@@ -170,7 +499,7 @@ async fn make_connection_to_seed_peer_with_peer_id() -> Result<()> {
         peer_id: Some(network_1.peer_id()),
         address: format!("/dns/localhost/udp/{}", network_1.local_addr().port()).parse()?,
     });
-    let (builder, server) = Builder::new(create_test_channel().1).config(config).build();
+    let (builder, server, _em) = Builder::new().config(config).build();
     let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
     let (mut event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
 
@@ -195,9 +524,7 @@ async fn make_connection_to_seed_peer_with_peer_id() -> Result<()> {
 async fn three_nodes_can_connect_via_discovery() -> Result<()> {
     // Setup the peer that will be the seed for the other two
     let mut config = P2pConfig::default();
-    let (builder, server) = Builder::new(create_test_channel().1)
-        .config(config.clone())
-        .build();
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
     let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
     let (event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
 
@@ -205,16 +532,14 @@ async fn three_nodes_can_connect_via_discovery() -> Result<()> {
         peer_id: Some(network_1.peer_id()),
         address: format!("/dns/localhost/udp/{}", network_1.local_addr().port()).parse()?,
     });
-    let (builder, server) = Builder::new(create_test_channel().1)
-        .config(config.clone())
-        .build();
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
     let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
     let (mut event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
     // Set an external_address address for node 2 so that it can share its address
     event_loop_2.config.external_address =
         Some(format!("/dns/localhost/udp/{}", network_2.local_addr().port()).parse()?);
 
-    let (builder, server) = Builder::new(create_test_channel().1).config(config).build();
+    let (builder, server, _em) = Builder::new().config(config).build();
     let (network_3, key_3) = build_network_and_key(|router| router.add_rpc_service(server));
     let (event_loop_3, _handle_3) = builder.build(network_3.clone(), key_3);
 
@@ -257,16 +582,13 @@ async fn three_nodes_can_connect_via_discovery() -> Result<()> {
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
-async fn peers_are_added_from_reconfig_channel() -> Result<()> {
-    let (tx_1, rx_1) = create_test_channel();
+async fn peers_are_added_from_endpoint_manager() -> Result<()> {
     let config = P2pConfig::default();
-    let (builder, server) = Builder::new(rx_1).config(config.clone()).build();
+    let (builder, server, endpoint_manager_1) = Builder::new().config(config.clone()).build();
     let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
     let (event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
 
-    let (builder, server) = Builder::new(create_test_channel().1)
-        .config(config.clone())
-        .build();
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
     let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
     let (event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
 
@@ -291,20 +613,17 @@ async fn peers_are_added_from_reconfig_channel() -> Result<()> {
     let (mut subscriber_1, _) = network_1.subscribe()?;
     let (mut subscriber_2, _) = network_2.subscribe()?;
 
-    // We send peer 1 a new peer info (peer 2) in the channel.
+    // We send peer 1 a new peer info (peer 2) via endpoint manager.
     let peer_2_network_pubkey =
         Ed25519PublicKey(ed25519_consensus::VerificationKey::try_from(peer_id_2.0).unwrap());
     let peer2_addr: Multiaddr = format!("/dns/localhost/udp/{}", network_2.local_addr().port())
         .parse()
         .unwrap();
-    tx_1.send(TrustedPeerChangeEvent {
-        new_peers: vec![PeerInfo {
-            peer_id: PeerId(peer_2_network_pubkey.0.to_bytes()),
-            affinity: PeerAffinity::High,
-            address: vec![peer2_addr.to_anemo_address().unwrap()],
-        }],
-    })
-    .unwrap();
+    let _ = endpoint_manager_1.update_endpoint(
+        EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+        AddressSource::Chain,
+        vec![peer2_addr],
+    );
 
     // Now peer 1 and peer 2 are connected.
     let new_peer_for_1 = unwrap_new_peer_event(subscriber_1.recv().await.unwrap());
@@ -319,7 +638,7 @@ async fn peers_are_added_from_reconfig_channel() -> Result<()> {
 async fn test_access_types() {
     // This test case constructs a mesh graph of 11 nodes, with the following topology.
     // Only seed peers are proactively connected. Allowlisted peers allow inbound connections
-    // but do not proactively connect outbound.
+    // but do NOT proactively connect outbound.
     //
     //
     // The topology:
@@ -327,15 +646,15 @@ async fn test_access_types() {
     //                                     /
     //                       ------ 1 (public) ------
     //                      /                        \
-    //    2 (public, seed: 1, allowed: 7, 8)          3 (private, seed: 1, allowed: 4+, 5+)
+    //    2 (public, seed: 1, allowed: 7, 8)          3 (private, seed: 1, 4, 5)
     //       |                                       /             \
-    //       |                 4 (private, allowed: 3+, 5, 6)     5 (private, allowed: 3, 4+)
+    //       |                 4 (private, seed: 3, allowed: 5, 6)  5 (private, seed: 4, allowed: 3)
     //       |                                        \
-    //       |                                      6 (private, allowed: 4+)
-    //     7 (private, allowed: 2+, 8+)
+    //       |                                      6 (private, seed: 4)
+    //     7 (private, seed: 2, 8)
     //       |
     //       |
-    //     8 (private, allowed: 7+, 9+)  p.s. 8's max connection is 0
+    //     8 (private, seed: 7, 9)  p.s. 8's max connection is 0
     //       |
     //       |
     //     9 (public)
@@ -438,7 +757,7 @@ async fn test_access_types() {
             .unwrap(),
     });
 
-    // Node 7, private, allowlisted: Node 2, Node 8
+    // Node 7, private, seed: 2, 8
     let (mut builder_7, network_7, key_7) = set_up_network(
         P2pConfig::default().set_discovery_config(default_private_discovery_config.clone()),
     );
@@ -446,7 +765,7 @@ async fn test_access_types() {
     // Node 9, public
     let (builder_9, network_9, key_9) = set_up_network(default_p2p_config.clone());
 
-    // Node 8, private, seed: 7, 9
+    // Node 8, private, seed: 7, 9.  p.s. 8's max connection is 0
     let (builder_8, network_8, key_8) = {
         let mut p2p_config = P2pConfig::default();
         let mut anemo_config = anemo::Config::default();
@@ -576,7 +895,7 @@ async fn test_access_types() {
     // Let them fully connect
     tokio::time::sleep(Duration::from_secs(10)).await;
 
-    // Node 1 is connected to everyone. But it does not "know" private nodes.
+    // Node 1 is connected to everyone. But it only "knows" public nodes (2, 9).
     assert_peers(
         "Node 1",
         &network_1,
@@ -593,7 +912,7 @@ async fn test_access_types() {
         ]),
     );
 
-    // Node 1 is connected to everyone. But it does not "know" private nodes except the allowlisted ones 7 and 8.
+    // Node 2 is connected to everyone. But it does not "know" private nodes except the allowlisted ones 7 and 8.
     assert_peers(
         "Node 2",
         &network_2,
@@ -610,6 +929,7 @@ async fn test_access_types() {
         ]),
     );
 
+    // Node 3 connects to seeds 1, 4, 5 and discovers more via gossip.
     assert_peers(
         "Node 3",
         &network_3,
@@ -620,6 +940,7 @@ async fn test_access_types() {
         HashSet::from_iter(vec![peer_id_1, peer_id_2, peer_id_4, peer_id_5, peer_id_9]),
     );
 
+    // Node 4 connects to seed 3 and discovers more via gossip.
     assert_peers(
         "Node 4",
         &network_4,
@@ -636,6 +957,7 @@ async fn test_access_types() {
         ]),
     );
 
+    // Node 5 connects to seed 4 and discovers more via gossip.
     assert_peers(
         "Node 5",
         &network_5,
@@ -646,6 +968,7 @@ async fn test_access_types() {
         HashSet::from_iter(vec![peer_id_1, peer_id_2, peer_id_3, peer_id_4, peer_id_9]),
     );
 
+    // Node 6 connects to seed 4 and discovers more via gossip.
     assert_peers(
         "Node 6",
         &network_6,
@@ -656,7 +979,8 @@ async fn test_access_types() {
         HashSet::from_iter(vec![peer_id_1, peer_id_2, peer_id_4, peer_id_9]),
     );
 
-    // Private Node 7 is not advertised to Node 11 through gossip.
+    // Node 7 connects to seeds 2 and 8 and discovers more via gossip.
+    // Node 7 is private so its info is NOT shared via gossip - Node 11 can't discover it.
     assert_peers(
         "Node 7",
         &network_7,
@@ -667,8 +991,8 @@ async fn test_access_types() {
         HashSet::from_iter(vec![peer_id_1, peer_id_2, peer_id_8, peer_id_9]),
     );
 
-    // Node 11 finds Node 8 via Node 2, and invites Node 8 to connect. Node 8 said No
-    // because its `max_concurrent_connections` is 0.
+    // Node 8 has seeds 7 and 9, but max_concurrent_connections is 0 so it can't accept more connections.
+    // Node 8 is private so its info is NOT shared via gossip.
     assert_peers(
         "Node 8",
         &network_8,
@@ -679,6 +1003,7 @@ async fn test_access_types() {
         HashSet::from_iter(vec![peer_id_1, peer_id_2, peer_id_7, peer_id_9]),
     );
 
+    // Node 9 (public, no seeds) is connected by many nodes that discover it.
     assert_peers(
         "Node 9",
         &network_9,
@@ -695,7 +1020,7 @@ async fn test_access_types() {
         ]),
     );
 
-    // Node 10 does not talk to any other private nodes.
+    // Node 10 connects to Node 9 (seed) and discovers more.
     assert_peers(
         "Node 10",
         &network_10,
@@ -706,7 +1031,9 @@ async fn test_access_types() {
         HashSet::from_iter(vec![peer_id_1, peer_id_2, peer_id_9]),
     );
 
-    // Node 11 allowlists 7 and 8, but private peers are not advertised through gossip.
+    // Node 11 connects to seed 1 and discovers more.
+    // Node 11 allowlists 7 and 8 (no addresses), but they're private so their info isn't shared via gossip.
+    // Node 11 can't discover them.
     assert_peers(
         "Node 11",
         &network_11,
@@ -787,9 +1114,7 @@ fn local_allowlisted_peer(peer_id: PeerId, port: Option<u16>) -> AllowlistedPeer
 
 fn set_up_network(p2p_config: P2pConfig) -> (UnstartedDiscovery, Network, NetworkKeyPair) {
     let anemo_config = p2p_config.anemo_config.clone().unwrap_or_default();
-    let (builder, server) = Builder::new(create_test_channel().1)
-        .config(p2p_config)
-        .build();
+    let (builder, server, _em) = Builder::new().config(p2p_config).build();
     let (network, keypair) =
         build_network_with_anemo_config(|router| router.add_rpc_service(server), anemo_config);
     (builder, network, keypair)
@@ -810,10 +1135,1381 @@ fn start_network(
     (event_loop, handle, state)
 }
 
-fn create_test_channel() -> (
-    watch::Sender<TrustedPeerChangeEvent>,
-    watch::Receiver<TrustedPeerChangeEvent>,
-) {
-    let (tx, rx) = watch::channel(TrustedPeerChangeEvent { new_peers: vec![] });
-    (tx, rx)
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_address_source_priority() -> Result<()> {
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager_1) = Builder::new().config(config.clone()).build();
+    let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
+
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
+    let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
+
+    let state_1 = event_loop_1.state.clone();
+
+    tokio::spawn(event_loop_1.start());
+    tokio::spawn(event_loop_2.start());
+
+    let peer_id_2 = network_2.peer_id();
+    let peer_2_network_pubkey =
+        Ed25519PublicKey(ed25519_consensus::VerificationKey::try_from(peer_id_2.0).unwrap());
+
+    let chain_addr: Multiaddr = "/dns/chain.example.com/udp/8080".parse().unwrap();
+    let admin_addr: Multiaddr = "/dns/admin.example.com/udp/9090".parse().unwrap();
+
+    // First, set Chain source address
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Chain,
+            vec![chain_addr.clone()],
+        )
+        .unwrap();
+
+    // Allow discovery to process the message
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify Chain address is used
+    let known_peer = network_1.known_peers().get(&peer_id_2);
+    assert!(known_peer.is_some());
+    let addrs = known_peer.unwrap().address;
+    assert_eq!(addrs.len(), 1);
+    assert!(addrs[0].to_string().contains("chain"));
+
+    // Now set Admin source address (should take priority)
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Admin,
+            vec![admin_addr.clone()],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify Admin address now takes priority
+    let known_peer = network_1.known_peers().get(&peer_id_2);
+    assert!(known_peer.is_some());
+    let addrs = known_peer.unwrap().address;
+    assert_eq!(addrs.len(), 1);
+    assert!(addrs[0].to_string().contains("admin"));
+
+    // Both sources should be stored
+    let state = state_1.read().unwrap();
+    let sources = state.peer_addresses.get(&peer_id_2).unwrap();
+    assert_eq!(sources.len(), 2);
+    assert!(sources.contains_key(&AddressSource::Admin));
+    assert!(sources.contains_key(&AddressSource::Chain));
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_address_source_clear() -> Result<()> {
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager_1) = Builder::new().config(config.clone()).build();
+    let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
+
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
+    let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
+
+    let state_1 = event_loop_1.state.clone();
+
+    tokio::spawn(event_loop_1.start());
+    tokio::spawn(event_loop_2.start());
+
+    let peer_id_2 = network_2.peer_id();
+    let peer_2_network_pubkey =
+        Ed25519PublicKey(ed25519_consensus::VerificationKey::try_from(peer_id_2.0).unwrap());
+
+    let chain_addr: Multiaddr = "/dns/chain.example.com/udp/8080".parse().unwrap();
+    let admin_addr: Multiaddr = "/dns/admin.example.com/udp/9090".parse().unwrap();
+
+    // Set both sources
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Chain,
+            vec![chain_addr.clone()],
+        )
+        .unwrap();
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Admin,
+            vec![admin_addr.clone()],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify Admin address is used
+    let known_peer = network_1.known_peers().get(&peer_id_2);
+    assert!(known_peer.is_some());
+    let addrs = known_peer.unwrap().address;
+    assert!(addrs[0].to_string().contains("admin"));
+
+    // Clear Admin source by sending empty addresses
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Admin,
+            vec![],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify it falls back to Chain address
+    let known_peer = network_1.known_peers().get(&peer_id_2);
+    assert!(known_peer.is_some());
+    let addrs = known_peer.unwrap().address;
+    assert_eq!(addrs.len(), 1);
+    assert!(addrs[0].to_string().contains("chain"));
+
+    // Only Chain source should remain
+    let state = state_1.read().unwrap();
+    let sources = state.peer_addresses.get(&peer_id_2).unwrap();
+    assert_eq!(sources.len(), 1);
+    assert!(sources.contains_key(&AddressSource::Chain));
+    assert!(!sources.contains_key(&AddressSource::Admin));
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_address_source_clear_all() -> Result<()> {
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager_1) = Builder::new().config(config.clone()).build();
+    let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
+
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
+    let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
+
+    tokio::spawn(event_loop_1.start());
+    tokio::spawn(event_loop_2.start());
+
+    let peer_id_2 = network_2.peer_id();
+    let peer_2_network_pubkey =
+        Ed25519PublicKey(ed25519_consensus::VerificationKey::try_from(peer_id_2.0).unwrap());
+
+    let chain_addr: Multiaddr = "/dns/chain.example.com/udp/8080".parse().unwrap();
+
+    // Set Chain source
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Chain,
+            vec![chain_addr.clone()],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify peer is known
+    assert!(network_1.known_peers().get(&peer_id_2).is_some());
+
+    // Clear Chain source
+    endpoint_manager_1
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Chain,
+            vec![],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify peer has empty addresses (clearing all sources)
+    let known_peer = network_1.known_peers().get(&peer_id_2);
+    assert!(known_peer.is_some());
+    assert!(known_peer.unwrap().address.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_save_and_load_stored_peers() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("peer_cache.yaml");
+
+    use fastcrypto::traits::KeyPair as _;
+    let keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let peer_id = PeerId(*fastcrypto::traits::KeyPair::public(&keypair).0.as_bytes());
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(peer_id),
+        vec!["/ip4/127.0.0.1/udp/8080".parse().unwrap()],
+    );
+    let info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: rtd_config::p2p::AccessType::Public,
+    });
+    let signed = info.sign(&keypair);
+
+    save_stored_peers(&path, std::slice::from_ref(&signed));
+    assert!(path.exists());
+
+    let loaded = load_stored_peers(&path);
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].data(), signed.data());
+}
+
+#[tokio::test]
+async fn test_load_stored_peers_missing_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("nonexistent.yaml");
+    let loaded = load_stored_peers(&path);
+    assert!(loaded.is_empty());
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_discovery_address_cleared_on_expiry() -> Result<()> {
+    // Set up two peers. Peer 2 is a seed peer of peer 1's network.
+    let (network_2, _key_2) = build_network_and_key(|router| router);
+    let peer_id_2 = network_2.peer_id();
+
+    let port = network_2.local_addr().port();
+    let seed_multiaddr: Multiaddr = format!("/ip4/127.0.0.1/udp/{port}").parse().unwrap();
+    let seed_addr: anemo::types::Address = seed_multiaddr.to_anemo_address().unwrap();
+    let config = P2pConfig {
+        seed_peers: vec![SeedPeer {
+            peer_id: Some(peer_id_2),
+            address: seed_multiaddr,
+        }],
+        ..Default::default()
+    };
+
+    let (builder, server, _em) = Builder::new().config(config).build();
+    let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network_1.clone(), key_1);
+
+    // Simulate startup: configure preferred peers (registers Seed addresses)
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Verify Seed source is registered
+    {
+        let state = event_loop.state.read().unwrap();
+        let sources = state.peer_addresses.get(&peer_id_2).unwrap();
+        assert!(sources.contains_key(&AddressSource::Seed));
+    }
+
+    // Simulate receiving Discovery addresses for peer 2 (P2P)
+    let discovery_multiaddr: Multiaddr = "/ip4/10.0.0.1/udp/9000".parse().unwrap();
+    let discovery_addr = discovery_multiaddr.to_anemo_address().unwrap();
+    assert_ne!(
+        seed_addr, discovery_addr,
+        "test requires distinct addresses"
+    );
+    event_loop.handle_peer_address_change(
+        peer_id_2,
+        AddressSource::Discovery,
+        vec![discovery_addr.clone()],
+    );
+
+    // Also simulate receiving a Consensus Discovery address for peer 2.
+    // This mirrors what update_known_peers_versioned does for V2 node info.
+    let consensus_addr: Multiaddr = "/ip4/10.0.0.1/udp/9001".parse().unwrap();
+    let peer_2_network_pubkey =
+        NetworkPublicKey::from_bytes(&peer_id_2.0).expect("PeerId is a valid public key");
+    event_loop
+        .endpoint_manager
+        .update_endpoint(
+            EndpointId::Consensus(peer_2_network_pubkey.clone()),
+            AddressSource::Discovery,
+            vec![consensus_addr],
+        )
+        .unwrap();
+
+    // Verify Discovery takes priority over Seed
+    {
+        let state = event_loop.state.read().unwrap();
+        let sources = state.peer_addresses.get(&peer_id_2).unwrap();
+        assert!(sources.contains_key(&AddressSource::Discovery));
+        assert!(sources.contains_key(&AddressSource::Seed));
+        let (top_source, _) = sources.first_key_value().unwrap();
+        assert_eq!(*top_source, AddressSource::Discovery);
+    }
+    let known = network_1.known_peers().get(&peer_id_2).unwrap();
+    assert_eq!(known.address, vec![discovery_addr.clone()]);
+
+    // Insert an expired entry in known_peers_v2 for peer 2
+    {
+        use fastcrypto::traits::KeyPair as _;
+        let keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+        let old_timestamp = now_unix() - ONE_DAY_MILLISECONDS - 1000;
+        let mut addresses = BTreeMap::new();
+        addresses.insert(
+            EndpointId::P2p(peer_id_2),
+            vec!["/ip4/10.0.0.1/udp/9000".parse().unwrap()],
+        );
+        let info = VersionedNodeInfo::V2(NodeInfoV2 {
+            addresses,
+            timestamp_ms: old_timestamp,
+            access_type: AccessType::Public,
+        });
+        let signed = info.sign(&keypair);
+        let verified = VerifiedSignedVersionedNodeInfo::new_unchecked(signed);
+        event_loop
+            .state
+            .write()
+            .unwrap()
+            .known_peers_v2
+            .insert(peer_id_2, verified);
+    }
+
+    // Run handle_tick — the expired entry should be culled and Discovery addresses cleared.
+    // clear_source sends the P2P clear through the mailbox, so drain pending messages.
+    event_loop.handle_tick(std::time::Instant::now(), now_unix());
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // Verify P2P Discovery source was cleared, only Seed remains
+    {
+        let state = event_loop.state.read().unwrap();
+        let sources = state.peer_addresses.get(&peer_id_2).unwrap();
+        assert!(
+            !sources.contains_key(&AddressSource::Discovery),
+            "Discovery source should be cleared after expiry"
+        );
+        assert!(
+            sources.contains_key(&AddressSource::Seed),
+            "Seed source should remain"
+        );
+    }
+
+    // Verify network now uses Seed addresses (fallback)
+    let known = network_1.known_peers().get(&peer_id_2).unwrap();
+    assert_eq!(known.address, vec![seed_addr]);
+
+    // Verify Consensus Discovery address was also cleared.
+    // The endpoint_manager buffers consensus updates when no updater is set.
+    // Set a mock updater to drain the buffer and inspect the updates.
+    let updater = Arc::new(RecordingUpdater(std::sync::Mutex::new(Vec::new())));
+    event_loop
+        .endpoint_manager
+        .set_consensus_address_updater(updater.clone());
+
+    let updates = updater.0.lock().unwrap();
+    let clear = updates.iter().find(|(pubkey, source, addrs)| {
+        *pubkey == peer_2_network_pubkey && *source == AddressSource::Discovery && addrs.is_empty()
+    });
+    assert!(
+        clear.is_some(),
+        "Expected a Consensus Discovery clear for the expired peer"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_seed_fallback_on_discovery_clear() -> Result<()> {
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager) = Builder::new().config(config.clone()).build();
+    let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (event_loop, _handle) = builder.build(network_1.clone(), key_1);
+
+    let state = event_loop.state.clone();
+
+    tokio::spawn(event_loop.start());
+
+    let (network_2, _key_2) = build_network_and_key(|router| router);
+    let peer_id_2 = network_2.peer_id();
+    let peer_2_network_pubkey =
+        Ed25519PublicKey(ed25519_consensus::VerificationKey::try_from(peer_id_2.0).unwrap());
+
+    let seed_addr: Multiaddr = "/dns/seed.example.com/udp/8080".parse().unwrap();
+    let discovery_addr: Multiaddr = "/dns/discovery.example.com/udp/9090".parse().unwrap();
+
+    // Set Seed source
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Seed,
+            vec![seed_addr.clone()],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify Seed address is used
+    let known = network_1.known_peers().get(&peer_id_2);
+    assert!(known.is_some());
+    assert!(known.unwrap().address[0].to_string().contains("seed"));
+
+    // Set Discovery source (higher priority)
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Discovery,
+            vec![discovery_addr.clone()],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify Discovery takes priority
+    let known = network_1.known_peers().get(&peer_id_2).unwrap();
+    assert!(known.address[0].to_string().contains("discovery"));
+
+    // Clear Discovery source
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(PeerId(peer_2_network_pubkey.0.to_bytes())),
+            AddressSource::Discovery,
+            vec![],
+        )
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify fallback to Seed
+    let known = network_1.known_peers().get(&peer_id_2).unwrap();
+    assert_eq!(known.address.len(), 1);
+    assert!(known.address[0].to_string().contains("seed"));
+
+    // Only Seed source should remain
+    let s = state.read().unwrap();
+    let sources = s.peer_addresses.get(&peer_id_2).unwrap();
+    assert_eq!(sources.len(), 1);
+    assert!(sources.contains_key(&AddressSource::Seed));
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_discovery_only_peer_not_in_network_known_peers() -> Result<()> {
+    // A peer learned purely through discovery gossip (no Seed/Chain/Config/Admin source)
+    // should appear in state.known_peers_v2 but NOT in network.known_peers().
+    let config = P2pConfig::default();
+    let (builder, server, _em) = Builder::new().config(config).build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Simulate receiving a gossiped peer via update_known_peers_versioned (V3 path).
+    use fastcrypto::traits::KeyPair as _;
+    let gossip_keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let gossip_peer_id = PeerId(
+        *fastcrypto::traits::KeyPair::public(&gossip_keypair)
+            .0
+            .as_bytes(),
+    );
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(gossip_peer_id),
+        vec!["/ip4/10.0.0.1/udp/8080".parse().unwrap()],
+    );
+    let gossiped_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    })
+    .sign(&gossip_keypair);
+
+    update_known_peers_versioned(
+        event_loop.state.clone(),
+        vec![gossiped_info],
+        event_loop.configured_peers.clone(),
+        &event_loop.chain_peers,
+        &event_loop.endpoint_manager,
+    );
+
+    // Drain mailbox in case update_known_peers_versioned sent any messages.
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // Peer should be in discovery state...
+    {
+        let state = event_loop.state.read().unwrap();
+        assert!(
+            state.known_peers_v2.contains_key(&gossip_peer_id),
+            "Gossiped peer should be in state.known_peers_v2"
+        );
+    }
+
+    // ...but NOT in network.known_peers (no address source was registered)
+    assert!(
+        network.known_peers().get(&gossip_peer_id).is_none(),
+        "Discovery-only peer should not appear in network.known_peers()"
+    );
+    assert!(
+        event_loop
+            .state
+            .read()
+            .unwrap()
+            .peer_addresses
+            .get(&gossip_peer_id)
+            .is_none(),
+        "Discovery-only peer should not have any entry in peer_addresses"
+    );
+
+    // Run a tick — discovery should try to dial the peer via try_to_connect_to_peer
+    // but still not add it to network.known_peers().
+    event_loop.handle_tick(std::time::Instant::now(), now_unix());
+
+    assert!(
+        network.known_peers().get(&gossip_peer_id).is_none(),
+        "Discovery-only peer should not appear in network.known_peers() after tick"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_configured_peer_discovery_address_in_network_known_peers() -> Result<()> {
+    // When a configured (seed) peer's cached node info is loaded on startup,
+    // the Discovery P2P addresses should appear in network.known_peers(),
+    // overriding the lower-priority Seed address.
+    use fastcrypto::traits::KeyPair as _;
+
+    let dir = tempfile::tempdir().unwrap();
+    let store_path = dir.path().join("peer_cache.yaml");
+
+    // Generate a keypair for the seed peer.
+    let seed_keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let seed_peer_id = PeerId(
+        *fastcrypto::traits::KeyPair::public(&seed_keypair)
+            .0
+            .as_bytes(),
+    );
+
+    // Save a cached node info entry with a Discovery-sourced P2P address.
+    let discovery_multiaddr: Multiaddr = "/ip4/10.0.0.1/udp/9000".parse().unwrap();
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(seed_peer_id),
+        vec![discovery_multiaddr.clone()],
+    );
+    let cached_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    })
+    .sign(&seed_keypair);
+    save_stored_peers(&store_path, std::slice::from_ref(&cached_info));
+
+    // Build a node with this peer as a seed and the store path configured.
+    let seed_multiaddr: Multiaddr = "/ip4/192.168.1.1/udp/8080".parse().unwrap();
+    let config = P2pConfig {
+        seed_peers: vec![SeedPeer {
+            peer_id: Some(seed_peer_id),
+            address: seed_multiaddr.clone(),
+        }],
+        discovery: Some(DiscoveryConfig {
+            peer_addr_store_path: Some(store_path),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let (builder, server, _em) = Builder::new().config(config).build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    // Run the startup sequence.
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+    event_loop.load_stored_peers_on_startup();
+
+    // Verify the Discovery address (higher priority) is used in network.known_peers,
+    // not the Seed address.
+    let known = network.known_peers().get(&seed_peer_id);
+    assert!(known.is_some(), "Configured peer should be in known_peers");
+    let discovery_anemo_addr = discovery_multiaddr.to_anemo_address().unwrap();
+    assert_eq!(
+        known.unwrap().address,
+        vec![discovery_anemo_addr],
+        "network.known_peers should use the Discovery address (higher priority than Seed)"
+    );
+
+    // Both sources should be tracked.
+    let state = event_loop.state.read().unwrap();
+    let sources = state.peer_addresses.get(&seed_peer_id).unwrap();
+    assert!(sources.contains_key(&AddressSource::Discovery));
+    assert!(sources.contains_key(&AddressSource::Seed));
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_runtime_gossip_updates_configured_peer_address() -> Result<()> {
+    // Scenario: a configured peer starts with a Chain address, then during runtime
+    // we receive a different P2P address via Discovery gossip. The Discovery address
+    // should override the Chain address in network.known_peers().
+    use fastcrypto::traits::KeyPair as _;
+
+    // Generate a keypair for the remote peer (a validator we'll configure).
+    let remote_keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let remote_peer_id = PeerId(
+        *fastcrypto::traits::KeyPair::public(&remote_keypair)
+            .0
+            .as_bytes(),
+    );
+
+    // Configure the remote peer as a seed so it's in configured_peers.
+    let seed_multiaddr: Multiaddr = "/ip4/192.168.1.1/udp/8080".parse().unwrap();
+    let config = P2pConfig {
+        seed_peers: vec![SeedPeer {
+            peer_id: Some(remote_peer_id),
+            address: seed_multiaddr.clone(),
+        }],
+        ..Default::default()
+    };
+
+    let (builder, server, endpoint_manager) = Builder::new().config(config).build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    // Run the startup sequence (no stored peers).
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Verify Seed address is active.
+    let seed_anemo_addr = seed_multiaddr.to_anemo_address().unwrap();
+    let known = network.known_peers().get(&remote_peer_id).unwrap();
+    assert_eq!(known.address, vec![seed_anemo_addr.clone()]);
+
+    // Also set a Chain address (simulating what rtd-node does at epoch start).
+    let chain_multiaddr: Multiaddr = "/ip4/172.16.0.1/udp/8080".parse().unwrap();
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(remote_peer_id),
+            AddressSource::Chain,
+            vec![chain_multiaddr.clone()],
+        )
+        .unwrap();
+
+    // Process the mailbox message from update_endpoint.
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // Seed has higher priority than Chain, so Seed address should still be active.
+    let known = network.known_peers().get(&remote_peer_id).unwrap();
+    assert_eq!(known.address, vec![seed_anemo_addr]);
+
+    // Now simulate runtime gossip: we receive a V2 node info for the remote peer
+    // with a different P2P address.
+    let discovery_multiaddr: Multiaddr = "/ip4/10.0.0.1/udp/9000".parse().unwrap();
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(remote_peer_id),
+        vec![discovery_multiaddr.clone()],
+    );
+    let gossiped_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    })
+    .sign(&remote_keypair);
+
+    update_known_peers_versioned(
+        event_loop.state.clone(),
+        vec![gossiped_info],
+        event_loop.configured_peers.clone(),
+        &event_loop.chain_peers,
+        &event_loop.endpoint_manager,
+    );
+
+    // Process any mailbox messages generated by update_known_peers_versioned.
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // The Discovery address should now be active (higher priority than Seed and Chain).
+    let discovery_anemo_addr = discovery_multiaddr.to_anemo_address().unwrap();
+    let known = network.known_peers().get(&remote_peer_id).unwrap();
+    assert_eq!(
+        known.address,
+        vec![discovery_anemo_addr],
+        "network.known_peers should use the Discovery address from runtime gossip"
+    );
+
+    // All three sources should be tracked.
+    let state = event_loop.state.read().unwrap();
+    let sources = state.peer_addresses.get(&remote_peer_id).unwrap();
+    assert!(
+        sources.contains_key(&AddressSource::Discovery),
+        "Discovery source should be registered from runtime gossip"
+    );
+    assert!(sources.contains_key(&AddressSource::Seed));
+    assert!(sources.contains_key(&AddressSource::Chain));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn peer_failure_report_adds_cooldown() -> Result<()> {
+    let config = P2pConfig {
+        discovery: Some(DiscoveryConfig {
+            min_peers_for_disconnect: Some(0),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (builder, _server, _em) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router);
+    let (mut event_loop, _handle) = builder.build(network.clone(), keypair);
+
+    let peer_id = PeerId([42; 32]);
+
+    assert!(!event_loop.peer_cooldowns.contains_key(&peer_id));
+
+    event_loop.handle_peer_failure_report(peer_id);
+
+    assert!(event_loop.peer_cooldowns.contains_key(&peer_id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn cooldown_peers_deprioritized_in_handle_tick() -> Result<()> {
+    let mut config = P2pConfig::default();
+    let (builder, server, _em) = Builder::new().config(config.clone()).build();
+    let (network_1, key_1) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (_event_loop_1, _handle_1) = builder.build(network_1.clone(), key_1);
+
+    config.seed_peers.push(SeedPeer {
+        peer_id: Some(network_1.peer_id()),
+        address: format!("/dns/localhost/udp/{}", network_1.local_addr().port()).parse()?,
+    });
+    let (builder, server, _em) = Builder::new().config(config).build();
+    let (network_2, key_2) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop_2, _handle_2) = builder.build(network_2.clone(), key_2);
+
+    // Put network_1's peer on cooldown
+    event_loop_2
+        .peer_cooldowns
+        .insert(network_1.peer_id(), std::time::Instant::now());
+
+    // Add network_1 as a known peer so it's eligible for dialing
+    let peer_info = NodeInfo {
+        peer_id: network_1.peer_id(),
+        addresses: vec![format!("/dns/localhost/udp/{}", network_1.local_addr().port()).parse()?],
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    };
+    event_loop_2.state.write().unwrap().known_peers.insert(
+        network_1.peer_id(),
+        VerifiedSignedNodeInfo::new_unchecked(SignedNodeInfo::new_from_data_and_sig(
+            peer_info,
+            Ed25519Signature::default(),
+        )),
+    );
+
+    // Since the peer is on cooldown and it's the only peer, it should still be dialed
+    // (cooldown peers are deprioritized, not blocked)
+    event_loop_2.handle_tick(std::time::Instant::now(), now_unix());
+
+    assert!(
+        event_loop_2
+            .pending_dials
+            .contains_key(&network_1.peer_id()),
+        "cooldown peer should still be dialed when no preferred peers exist"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn expired_cooldown_moves_peer_to_preferred() -> Result<()> {
+    let config = P2pConfig {
+        discovery: Some(DiscoveryConfig {
+            peer_failure_cooldown_ms: Some(1),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (builder, _server, _em) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router);
+    let (mut event_loop, _handle) = builder.build(network, keypair);
+
+    let peer_id = PeerId([42; 32]);
+    event_loop.peer_cooldowns.insert(
+        peer_id,
+        std::time::Instant::now() - Duration::from_millis(10),
+    );
+
+    // After a tick, the expired cooldown should be cleaned up
+    event_loop.handle_tick(std::time::Instant::now(), now_unix());
+
+    assert!(
+        !event_loop.peer_cooldowns.contains_key(&peer_id),
+        "expired cooldown should be removed"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn configured_peer_exempt_from_failure_report() -> Result<()> {
+    let peer_id = PeerId([42; 32]);
+    let config = P2pConfig {
+        seed_peers: vec![SeedPeer {
+            peer_id: Some(peer_id),
+            address: "/dns/localhost/udp/8080".parse()?,
+        }],
+        ..Default::default()
+    };
+    let (builder, _server, _em) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router);
+    let (mut event_loop, _handle) = builder.build(network, keypair);
+
+    event_loop.handle_peer_failure_report(peer_id);
+
+    assert!(
+        !event_loop.peer_cooldowns.contains_key(&peer_id),
+        "configured peer should not be placed on cooldown"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_chain_peer_registered_as_high_affinity() -> Result<()> {
+    // When a Chain address arrives (no seed_peers configured), the peer should be
+    // registered as High-affinity in network.known_peers().
+    let config = P2pConfig::default();
+
+    let (builder, server, endpoint_manager) = Builder::new().config(config).build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    let remote_peer_id = PeerId([42; 32]);
+    let chain_multiaddr: Multiaddr = "/ip4/172.16.0.1/udp/8080".parse().unwrap();
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(remote_peer_id),
+            AddressSource::Chain,
+            vec![chain_multiaddr.clone()],
+        )
+        .unwrap();
+
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    let known = network.known_peers().get(&remote_peer_id);
+    assert!(
+        known.is_some(),
+        "Chain peer should be in network.known_peers()"
+    );
+    let known = known.unwrap();
+    assert_eq!(known.affinity, PeerAffinity::High);
+    let chain_anemo_addr = chain_multiaddr.to_anemo_address().unwrap();
+    assert_eq!(known.address, vec![chain_anemo_addr]);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_discovery_address_overrides_chain_for_chain_peer() -> Result<()> {
+    // When a Chain peer receives a Discovery-gossiped address, the Discovery
+    // address should override the Chain address (higher priority).
+    use fastcrypto::traits::KeyPair as _;
+
+    let remote_keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let remote_peer_id = PeerId(
+        *fastcrypto::traits::KeyPair::public(&remote_keypair)
+            .0
+            .as_bytes(),
+    );
+
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager) = Builder::new().config(config).build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Deliver a Chain address.
+    let chain_multiaddr: Multiaddr = "/ip4/172.16.0.1/udp/8080".parse().unwrap();
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(remote_peer_id),
+            AddressSource::Chain,
+            vec![chain_multiaddr.clone()],
+        )
+        .unwrap();
+
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // Verify Chain address is active.
+    let chain_anemo_addr = chain_multiaddr.to_anemo_address().unwrap();
+    let known = network.known_peers().get(&remote_peer_id).unwrap();
+    assert_eq!(known.address, vec![chain_anemo_addr]);
+
+    // Simulate Discovery gossip with a different address.
+    let discovery_multiaddr: Multiaddr = "/ip4/10.0.0.1/udp/9000".parse().unwrap();
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(remote_peer_id),
+        vec![discovery_multiaddr.clone()],
+    );
+    let gossiped_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    })
+    .sign(&remote_keypair);
+
+    update_known_peers_versioned(
+        event_loop.state.clone(),
+        vec![gossiped_info],
+        event_loop.configured_peers.clone(),
+        &event_loop.chain_peers,
+        &event_loop.endpoint_manager,
+    );
+
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // The Discovery address should now be active (higher priority than Chain).
+    let discovery_anemo_addr = discovery_multiaddr.to_anemo_address().unwrap();
+    let known = network.known_peers().get(&remote_peer_id).unwrap();
+    assert_eq!(
+        known.address,
+        vec![discovery_anemo_addr],
+        "network.known_peers should use the Discovery address from gossip"
+    );
+
+    // Both sources should be tracked, and the Chain address must remain available
+    // in peer_addresses as the lower-priority fallback (not overwritten by Discovery).
+    let state = event_loop.state.read().unwrap();
+    let sources = state.peer_addresses.get(&remote_peer_id).unwrap();
+    assert!(sources.contains_key(&AddressSource::Discovery));
+    assert!(sources.contains_key(&AddressSource::Chain));
+    let chain_anemo_addr = chain_multiaddr.to_anemo_address().unwrap();
+    assert_eq!(
+        sources.get(&AddressSource::Chain),
+        Some(&vec![chain_anemo_addr]),
+        "Chain address should be retained as the fallback under Discovery"
+    );
+
+    Ok(())
+}
+
+/// Reads the value of the single-series `discovery_active_p2p_address_source` gauge
+/// for a given `peer_id`, or `None` if that series is absent. The value is the
+/// active source's `metric_code` (0 = no address installed).
+fn active_p2p_source_code(registry: &prometheus::Registry, peer_id: &str) -> Option<i64> {
+    let families = registry.gather();
+    let family = families
+        .iter()
+        .find(|f| f.name() == "discovery_active_p2p_address_source")?;
+    family.get_metric().iter().find_map(|m| {
+        m.get_label()
+            .iter()
+            .any(|l| l.name() == "peer_id" && l.value() == peer_id)
+            .then(|| m.gauge.value() as i64)
+    })
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_active_p2p_address_source_metric() -> Result<()> {
+    // A gossiped Discovery address overriding a Chain address must change the
+    // value-encoded gauge from the Chain code to the Discovery code.
+    use fastcrypto::traits::KeyPair as _;
+
+    let remote_keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let remote_peer_id = PeerId(
+        *fastcrypto::traits::KeyPair::public(&remote_keypair)
+            .0
+            .as_bytes(),
+    );
+
+    let registry = prometheus::Registry::new();
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager) = Builder::new()
+        .config(config)
+        .with_metrics(&registry)
+        .build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    let peer_label = remote_peer_id.to_string();
+
+    // Deliver a Chain address: the peer becomes trusted with Chain as the active source.
+    let chain_multiaddr: Multiaddr = "/ip4/172.16.0.1/udp/8080".parse().unwrap();
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(remote_peer_id),
+            AddressSource::Chain,
+            vec![chain_multiaddr],
+        )
+        .unwrap();
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    assert_eq!(
+        active_p2p_source_code(&registry, &peer_label),
+        Some(AddressSource::Chain.metric_code()),
+        "Chain should be the active source"
+    );
+
+    // Gossip a higher-priority Discovery address for the same (trusted) peer.
+    let discovery_multiaddr: Multiaddr = "/ip4/10.0.0.1/udp/9000".parse().unwrap();
+    let mut addresses = BTreeMap::new();
+    addresses.insert(EndpointId::P2p(remote_peer_id), vec![discovery_multiaddr]);
+    let gossiped_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    })
+    .sign(&remote_keypair);
+
+    update_known_peers_versioned(
+        event_loop.state.clone(),
+        vec![gossiped_info],
+        event_loop.configured_peers.clone(),
+        &event_loop.chain_peers,
+        &event_loop.endpoint_manager,
+    );
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    // Discovery now outranks Chain: the gauge value flips to the Discovery code.
+    assert_eq!(
+        active_p2p_source_code(&registry, &peer_label),
+        Some(AddressSource::Discovery.metric_code()),
+        "Discovery should now be the active source"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn test_divergent_discovery_consensus_address_applied() -> Result<()> {
+    // A trusted peer advertises a Discovery *consensus* address that differs from
+    // its on-chain Chain consensus address. The gossiped address must be forwarded
+    // to the consensus updater with AddressSource::Discovery, while the lower-priority
+    // Chain address is also forwarded (so consensus can retain it as a fallback).
+    use fastcrypto::traits::KeyPair as _;
+
+    let remote_keypair = rtd_types::crypto::NetworkKeyPair::generate(&mut rand::thread_rng());
+    let remote_peer_id = PeerId(
+        *fastcrypto::traits::KeyPair::public(&remote_keypair)
+            .0
+            .as_bytes(),
+    );
+    let remote_network_pubkey =
+        NetworkPublicKey::from_bytes(&remote_peer_id.0).expect("PeerId is a valid public key");
+
+    let config = P2pConfig::default();
+    let (builder, server, endpoint_manager) = Builder::new().config(config).build();
+    let (network, key) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), key);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Mark the peer as trusted so its gossiped Consensus endpoint is forwarded.
+    event_loop
+        .chain_peers
+        .write()
+        .unwrap()
+        .insert(remote_peer_id);
+
+    let updater = Arc::new(RecordingUpdater(std::sync::Mutex::new(Vec::new())));
+    event_loop
+        .endpoint_manager
+        .set_consensus_address_updater(updater.clone());
+
+    // The peer's on-chain consensus address (lower priority than Discovery).
+    let chain_consensus_addr: Multiaddr = "/ip4/172.16.0.1/udp/8081".parse().unwrap();
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::Consensus(remote_network_pubkey.clone()),
+            AddressSource::Chain,
+            vec![chain_consensus_addr.clone()],
+        )
+        .unwrap();
+
+    // Gossip a V2 NodeInfo whose Consensus address differs from the Chain address.
+    let discovery_consensus_addr: Multiaddr = "/ip4/10.0.0.1/udp/9001".parse().unwrap();
+    assert_ne!(
+        chain_consensus_addr, discovery_consensus_addr,
+        "test requires divergent Chain vs Discovery consensus addresses"
+    );
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(remote_peer_id),
+        vec!["/ip4/10.0.0.1/udp/9000".parse().unwrap()],
+    );
+    addresses.insert(
+        EndpointId::Consensus(remote_network_pubkey.clone()),
+        vec![discovery_consensus_addr.clone()],
+    );
+    let gossiped_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    })
+    .sign(&remote_keypair);
+
+    update_known_peers_versioned(
+        event_loop.state.clone(),
+        vec![gossiped_info],
+        event_loop.configured_peers.clone(),
+        &event_loop.chain_peers,
+        &event_loop.endpoint_manager,
+    );
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    let updates = updater.0.lock().unwrap();
+
+    // The gossiped consensus address is forwarded with AddressSource::Discovery.
+    let discovery_update = updates
+        .iter()
+        .find(|(pubkey, source, _)| {
+            *pubkey == remote_network_pubkey && *source == AddressSource::Discovery
+        })
+        .expect("gossiped Consensus address should be forwarded with Discovery source");
+    assert_eq!(
+        discovery_update.2,
+        vec![discovery_consensus_addr.clone()],
+        "Discovery consensus address should be the gossiped (divergent) one"
+    );
+
+    // The Chain consensus address is also forwarded, available as a lower-priority fallback.
+    let chain_update = updates
+        .iter()
+        .find(|(pubkey, source, _)| {
+            *pubkey == remote_network_pubkey && *source == AddressSource::Chain
+        })
+        .expect("Chain consensus address should remain available as a fallback");
+    assert_eq!(chain_update.2, vec![chain_consensus_addr]);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn chain_peer_exempt_from_failure_report() -> Result<()> {
+    let config = P2pConfig {
+        discovery: Some(DiscoveryConfig {
+            min_peers_for_disconnect: Some(0),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (builder, server, endpoint_manager) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network, keypair);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    let peer_id = PeerId([42; 32]);
+    let chain_multiaddr: Multiaddr = "/ip4/172.16.0.1/udp/8080".parse().unwrap();
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(peer_id),
+            AddressSource::Chain,
+            vec![chain_multiaddr],
+        )
+        .unwrap();
+
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+
+    event_loop.handle_peer_failure_report(peer_id);
+
+    assert!(
+        !event_loop.peer_cooldowns.contains_key(&peer_id),
+        "chain peer should not be placed on cooldown"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn chain_peer_cleared_on_empty_address() -> Result<()> {
+    let config = P2pConfig {
+        discovery: Some(DiscoveryConfig {
+            min_peers_for_disconnect: Some(0),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (builder, server, endpoint_manager) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network, keypair);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    let peer_id = PeerId([42; 32]);
+    let chain_multiaddr: Multiaddr = "/ip4/172.16.0.1/udp/8080".parse().unwrap();
+
+    // Add a Chain address — peer becomes trusted.
+    endpoint_manager
+        .update_endpoint(
+            EndpointId::P2p(peer_id),
+            AddressSource::Chain,
+            vec![chain_multiaddr],
+        )
+        .unwrap();
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+    assert!(
+        event_loop.chain_peers.read().unwrap().contains(&peer_id),
+        "peer should be in chain_peers after Chain address"
+    );
+
+    // Clear the Chain address — peer should no longer be trusted.
+    endpoint_manager
+        .update_endpoint(EndpointId::P2p(peer_id), AddressSource::Chain, vec![])
+        .unwrap();
+    while let Ok(msg) = event_loop.mailbox.try_recv() {
+        event_loop.handle_message(msg);
+    }
+    assert!(
+        !event_loop.chain_peers.read().unwrap().contains(&peer_id),
+        "peer should be removed from chain_peers after Chain address cleared"
+    );
+
+    // Trusted peers are exempt from failure reports. Verify the peer is no
+    // longer trusted by confirming a failure report now applies a cooldown.
+    event_loop.handle_peer_failure_report(peer_id);
+    assert!(
+        event_loop.peer_cooldowns.contains_key(&peer_id),
+        "former chain peer should no longer be exempt from failure reports"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn allowlisted_peer_not_proactively_dialed() -> Result<()> {
+    let allowlisted_peer_id = PeerId([42; 32]);
+    let seed_peer_id = PeerId([43; 32]);
+
+    let config = P2pConfig {
+        seed_peers: vec![SeedPeer {
+            peer_id: Some(seed_peer_id),
+            address: "/dns/localhost/udp/8080".parse()?,
+        }],
+        discovery: Some(DiscoveryConfig {
+            allowlisted_peers: vec![AllowlistedPeer {
+                peer_id: allowlisted_peer_id,
+                address: Some("/dns/localhost/udp/9090".parse()?),
+            }],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let (builder, server, _em) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), keypair);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Seed peer should be registered as High affinity (actively dialed).
+    let seed_known = network.known_peers().get(&seed_peer_id);
+    assert!(seed_known.is_some(), "seed peer should be in known_peers");
+    assert_eq!(seed_known.unwrap().affinity, PeerAffinity::High);
+
+    // Allowlisted peer should be registered as Allowed (accepts inbound only).
+    let allowed_known = network.known_peers().get(&allowlisted_peer_id);
+    assert!(
+        allowed_known.is_some(),
+        "allowlisted peer should be in known_peers"
+    );
+    assert_eq!(allowed_known.unwrap().affinity, PeerAffinity::Allowed);
+
+    // Seed peer should have an address source tracked in peer_addresses
+    // (it went through handle_peer_address_change).
+    let state = event_loop.state.read().unwrap();
+    assert!(
+        state.peer_addresses.contains_key(&seed_peer_id),
+        "seed peer should have address tracked in peer_addresses"
+    );
+
+    // Allowlisted peer should NOT have an address source in peer_addresses
+    // (it was inserted directly into known_peers, bypassing address tracking).
+    assert!(
+        !state.peer_addresses.contains_key(&allowlisted_peer_id),
+        "allowlisted peer should not have address tracked in peer_addresses"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn allowlisted_peer_eligible_for_dialing_via_gossip() -> Result<()> {
+    let allowlisted_peer_id = PeerId([42; 32]);
+
+    let config = P2pConfig {
+        discovery: Some(DiscoveryConfig {
+            allowlisted_peers: vec![AllowlistedPeer {
+                peer_id: allowlisted_peer_id,
+                address: Some("/dns/localhost/udp/9090".parse()?),
+            }],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let (builder, server, _em) = Builder::new().config(config).build();
+    let (network, keypair) = build_network_and_key(|router| router.add_rpc_service(server));
+    let (mut event_loop, _handle) = builder.build(network.clone(), keypair);
+
+    event_loop.construct_our_info();
+    event_loop.configure_preferred_peers();
+
+    // Simulate the allowlisted peer's NodeInfo arriving via V3 gossip.
+    let mut addresses = BTreeMap::new();
+    addresses.insert(
+        EndpointId::P2p(allowlisted_peer_id),
+        vec!["/dns/localhost/udp/9090".parse().unwrap()],
+    );
+    let peer_info = VersionedNodeInfo::V2(NodeInfoV2 {
+        addresses,
+        timestamp_ms: now_unix(),
+        access_type: AccessType::Public,
+    });
+    event_loop.state.write().unwrap().known_peers_v2.insert(
+        allowlisted_peer_id,
+        VerifiedSignedVersionedNodeInfo::new_unchecked(
+            SignedVersionedNodeInfo::new_from_data_and_sig(peer_info, Ed25519Signature::default()),
+        ),
+    );
+
+    // handle_tick should attempt to dial the allowlisted peer since it has
+    // gossipped addresses in known_peers_v2 and no entry in peer_addresses.
+    event_loop.handle_tick(std::time::Instant::now(), now_unix());
+
+    assert!(
+        event_loop.pending_dials.contains_key(&allowlisted_peer_id),
+        "allowlisted peer with gossipped addresses should be eligible for dialing"
+    );
+
+    Ok(())
 }

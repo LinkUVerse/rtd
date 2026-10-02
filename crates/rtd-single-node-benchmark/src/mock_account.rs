@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::stream::FuturesUnordered;
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::crypto::{AccountKeyPair, get_account_key_pair};
 use rtd_types::object::Object;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Account {

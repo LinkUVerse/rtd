@@ -227,7 +227,7 @@ export default function MultiSigCombineSignatureGenerator() {
 					<CardHeader>
 						<CardTitle>Rtd MultiSig Address</CardTitle>
 						<CardDescription>
-							https://docs.rtd.io/testnet/learn/cryptography/rtd-multisig
+							Multisig address for the connected RTD network.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
@@ -242,7 +242,7 @@ export default function MultiSigCombineSignatureGenerator() {
 					<CardHeader>
 						<CardTitle>Rtd MultiSig Combined Address</CardTitle>
 						<CardDescription>
-							https://docs.rtd.io/testnet/learn/cryptography/rtd-multisig
+							Combined signature for the connected RTD network.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>

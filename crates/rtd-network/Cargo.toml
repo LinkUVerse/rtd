@@ -1,7 +1,7 @@
 [package]
 name = "rtd-network"
 version = "0.0.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -9,11 +9,18 @@ edition = "2024"
 [lints]
 workspace = true
 
+[package.metadata.cargo-machete]
+ignored = ["h2"]
+
 [dependencies]
 anemo.workspace = true
 anemo-tower.workspace = true
 governor.workspace = true
+# Keep the tonic/hyper transport on h2 0.4.19 or newer. h2 0.4.16 can
+# spuriously close highly concurrent connections with ENHANCE_YOUR_CALM.
+h2.workspace = true
 serde.workspace = true
+serde_yaml.workspace = true
 tonic.workspace = true
 tonic-prost.workspace = true
 dashmap.workspace = true
@@ -34,7 +41,11 @@ rtd-config.workspace = true
 rtd-swarm-config.workspace = true
 rtd-simulator.workspace = true
 rtd-protocol-config.workspace = true
-rtd-data-ingestion-core.workspace = true
+object_store.workspace = true
+url.workspace = true
+prost.workspace = true
+zstd.workspace = true
+rtd-rpc.workspace = true
 
 arc-swap.workspace = true
 bcs.workspace = true
@@ -43,6 +54,7 @@ fastcrypto.workspace = true
 fastcrypto-tbls.workspace = true
 linku-common.workspace = true
 linku-network.workspace = true
+once_cell.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 futures.workspace = true

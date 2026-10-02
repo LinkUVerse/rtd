@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: legacy
   lint: false
 ---
-error[Rtd E01001]: invalid object construction
+error[ESC01001]: invalid object construction
    ┌─ tests/rtd_mode/id_leak/through_pack.move:22:17
    │
 22 │         let c = C { id };

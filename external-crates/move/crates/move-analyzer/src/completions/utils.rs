@@ -1,8 +1,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeMap, path::PathBuf};
-
 use crate::symbols::{
     Symbols,
     compilation::{CompiledPkgInfo, SymbolsComputationData},
@@ -15,6 +13,7 @@ use crate::symbols::{
     },
     mod_defs::{AutoImportInsertionInfo, AutoImportInsertionKind, ModuleDefs},
 };
+
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, InsertTextFormat, Position,
     Range, TextEdit,
@@ -23,14 +22,23 @@ use move_compiler::{
     expansion::ast::{Address, ModuleIdent, ModuleIdent_, Visibility},
     naming::ast::{Type, TypeInner},
     parser::keywords::PRIMITIVE_TYPES,
-    shared::Name,
+    shared::{Identifier, Name, ide::AliasAutocompleteInfo},
 };
 use move_ir_types::location::sp;
 use move_symbol_pool::Symbol;
-use once_cell::sync::Lazy;
+
+use std::{path::PathBuf, sync::LazyLock};
+
+/// Describes how a module should be referenced from an auto-imported completion or quick fix.
+pub struct ModuleImportInfo {
+    /// Prefix to insert at the use site, usually the module name or an existing alias.
+    pub module_prefix: String,
+    /// Import to insert for the module, or `None` if the module is already in scope.
+    pub import_text: Option<String>,
+}
 
 /// List of completion items of Move's primitive types.
-pub static PRIMITIVE_TYPE_COMPLETIONS: Lazy<Vec<CompletionItem>> = Lazy::new(|| {
+pub static PRIMITIVE_TYPE_COMPLETIONS: LazyLock<Vec<CompletionItem>> = LazyLock::new(|| {
     let mut primitive_types = PRIMITIVE_TYPES
         .iter()
         .map(|label| completion_item(label, CompletionItemKind::KEYWORD))
@@ -39,15 +47,21 @@ pub static PRIMITIVE_TYPE_COMPLETIONS: Lazy<Vec<CompletionItem>> = Lazy::new(|| 
     primitive_types
 });
 
-/// Get import imsertion info for the cursor's module.
+/// Get import insertion info for the file where the cursor is located.
 pub fn import_insertion_info(
     symbols: &Symbols,
     cursor: &CursorContext,
 ) -> Option<AutoImportInsertionInfo> {
-    cursor
-        .module
-        .and_then(|m| mod_defs(symbols, &m.value))
-        .and_then(|m| m.import_insert_info)
+    // Get the file path from the cursor's location
+    let fhash = cursor.loc.file_hash();
+    let fpath = symbols.files.file_path(&fhash);
+    // For auto-imports, find the module whose range contains the cursor
+    symbols.mod_parsing_info.get(fpath).and_then(|mod_map| {
+        mod_map
+            .iter()
+            .find(|(mod_loc, _)| mod_loc.contains(&cursor.loc))
+            .and_then(|(_, mod_info)| mod_info.import_insert_info)
+    })
 }
 
 /// Get definitions for a given module.
@@ -86,6 +100,57 @@ pub fn auto_import_text_edit(
             ),
         },
     }
+}
+
+/// Checks if a name is already bound in scope to a module, a member alias, a named
+/// address, or a type parameter. Inserting an import with such a name would either
+/// produce a duplicate-alias error (same-scope aliases) or silently shadow the
+/// existing binding for the rest of the module (named addresses, as modules and
+/// addresses share the leading-name namespace).
+///
+/// The member alias check is conservative: only struct and enum aliases share the
+/// leading-name namespace, but alias info does not carry the member kind, so all
+/// member aliases are treated as conflicts (the cost is falling back to a fully
+/// qualified fix or completion).
+pub fn name_taken_in_scope(info: &AliasAutocompleteInfo, name: Symbol) -> bool {
+    info.modules.contains_key(&name)
+        || info.addresses.contains_key(&name)
+        || info.type_params.contains(&name)
+        || info
+            .members
+            .values()
+            .flatten()
+            .any(|member_alias| *member_alias == name)
+}
+
+/// Computes a module prefix and optional module import for a target module.
+/// Returns `None` if importing the module would conflict with a name already in scope.
+pub fn module_import_info(
+    mod_ident: ModuleIdent,
+    info: &AliasAutocompleteInfo,
+) -> Option<ModuleImportInfo> {
+    for (alias, in_scope_mod_ident) in &info.modules {
+        if in_scope_mod_ident.value == mod_ident.value {
+            return Some(ModuleImportInfo {
+                module_prefix: alias.to_string(),
+                import_text: None,
+            });
+        }
+    }
+
+    let module_name = mod_ident.value.module.value();
+    if name_taken_in_scope(info, module_name) {
+        return None;
+    }
+
+    Some(ModuleImportInfo {
+        module_prefix: module_name.to_string(),
+        import_text: Some(format!(
+            "use {}::{}",
+            addr_to_ide_string(&mod_ident.value.address),
+            mod_ident.value.module,
+        )),
+    })
 }
 
 /// Returns an iterator over module identifiers and function names defined in these modules.
@@ -321,24 +386,16 @@ pub fn compute_cursor(
     let cursor_info = Some((cursor_path, cursor_pos));
     let mut symbols_computation_data = SymbolsComputationData::new();
     // we only compute cursor context and tag it on the existing symbols to avoid spending time
-    // recomputing all symbols (saves quite a bit of time when running the test rtdte)
-    let typed_mod_named_address_maps = compiled_pkg_info
-        .program
-        .typed_modules
-        .iter()
-        .map(|(_, _, mdef)| (mdef.loc, mdef.named_address_map.clone()))
-        .collect::<BTreeMap<_, _>>();
+    // recomputing all symbols (saves quite a bit of time when running the test suite)
     let mut cursor_context = compute_symbols_pre_process(
         &mut symbols_computation_data,
         compiled_pkg_info,
         cursor_info,
-        &typed_mod_named_address_maps,
     );
     cursor_context = compute_symbols_parsed_program(
         &mut symbols_computation_data,
         compiled_pkg_info,
         cursor_context,
-        &typed_mod_named_address_maps,
     );
     symbols.cursor_context = cursor_context;
 }

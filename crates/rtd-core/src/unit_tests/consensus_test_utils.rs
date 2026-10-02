@@ -6,9 +6,9 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use arc_swap::ArcSwap;
 use consensus_core::BlockStatus;
 use consensus_types::block::BlockRef;
+use itertools::Itertools;
 use parking_lot::Mutex;
 use prometheus::Registry;
 use rtd_types::digests::{Digest, TransactionDigest};
@@ -18,17 +18,16 @@ use rtd_types::messages_consensus::{
     AuthorityIndex, ConsensusPosition, ConsensusTransaction, ConsensusTransactionKind,
 };
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
-use rtd_types::transaction::{VerifiedCertificate, VerifiedTransaction};
+use rtd_types::transaction::VerifiedTransaction;
 
 use crate::authority::authority_per_epoch_store::{
-    AuthorityPerEpochStore, ExecutionIndicesWithStats,
+    AuthorityPerEpochStore, ExecutionIndicesWithStatsV2,
 };
 use crate::authority::backpressure::BackpressureManager;
-use crate::authority::shared_object_version_manager::{AssignedTxAndVersions, Schedulable};
+use crate::authority::shared_object_version_manager::Schedulable;
 use crate::authority::{AuthorityMetrics, AuthorityState, ExecutionEnv};
 use crate::consensus_adapter::{
-    BlockStatusReceiver, ConnectionMonitorStatusForTests, ConsensusAdapter,
-    ConsensusAdapterMetrics, ConsensusClient,
+    BlockStatusReceiver, ConsensusAdapter, ConsensusAdapterMetrics, ConsensusClient,
 };
 use crate::consensus_handler::{
     ConsensusHandler, ExecutionSchedulerSender, SequencedConsensusTransaction,
@@ -36,17 +35,18 @@ use crate::consensus_handler::{
 };
 use crate::consensus_throughput_calculator::ConsensusThroughputCalculator;
 use crate::consensus_types::consensus_output_api::{ConsensusCommitAPI, ParsedTransaction};
-use crate::execution_scheduler::SchedulingSource;
 use crate::mock_consensus::with_block_status;
 
-pub(crate) type CapturedTransactions =
-    Arc<Mutex<Vec<(Vec<Schedulable>, AssignedTxAndVersions, SchedulingSource)>>>;
+pub(crate) type CapturedTransactions = Arc<Mutex<Vec<crate::consensus_handler::SchedulerMessage>>>;
 
 pub struct TestConsensusCommit {
     pub transactions: Vec<ConsensusTransaction>,
     pub round: u64,
     pub timestamp_ms: u64,
     pub sub_dag_index: u64,
+    /// Indices into `transactions` reported as rejected by consensus voting.
+    rejected_indices: HashSet<usize>,
+    transaction_authors: Option<Vec<consensus_config::AuthorityIndex>>,
 }
 
 impl TestConsensusCommit {
@@ -61,16 +61,28 @@ impl TestConsensusCommit {
             round,
             timestamp_ms,
             sub_dag_index,
+            rejected_indices: HashSet::new(),
+            transaction_authors: None,
         }
     }
 
     pub fn empty(round: u64, timestamp_ms: u64, sub_dag_index: u64) -> Self {
-        Self {
-            transactions: vec![],
-            round,
-            timestamp_ms,
-            sub_dag_index,
-        }
+        Self::new(vec![], round, timestamp_ms, sub_dag_index)
+    }
+
+    pub fn with_rejected_indices(mut self, indices: impl IntoIterator<Item = usize>) -> Self {
+        self.rejected_indices = indices.into_iter().collect();
+        self
+    }
+
+    pub fn with_transaction_authors(mut self, authors: impl IntoIterator<Item = u32>) -> Self {
+        self.transaction_authors = Some(
+            authors
+                .into_iter()
+                .map(consensus_config::AuthorityIndex::new_for_test)
+                .collect(),
+        );
+        self
     }
 }
 
@@ -87,10 +99,6 @@ impl std::fmt::Display for TestConsensusCommit {
 impl ConsensusCommitAPI for TestConsensusCommit {
     fn commit_ref(&self) -> consensus_core::CommitRef {
         consensus_core::CommitRef::default()
-    }
-
-    fn reputation_score_sorted_desc(&self) -> Option<Vec<(AuthorityIndex, u64)>> {
-        None
     }
 
     fn leader_round(&self) -> u64 {
@@ -110,6 +118,28 @@ impl ConsensusCommitAPI for TestConsensusCommit {
     }
 
     fn transactions(&self) -> Vec<(BlockRef, Vec<ParsedTransaction>)> {
+        if let Some(authors) = &self.transaction_authors {
+            return self
+                .transactions
+                .iter()
+                .zip_eq(authors)
+                .enumerate()
+                .map(|(i, (tx, author))| {
+                    let block_ref = BlockRef {
+                        author: *author,
+                        round: self.round as u32,
+                        digest: Default::default(),
+                    };
+                    let parsed_tx = ParsedTransaction {
+                        transaction: tx.clone(),
+                        rejected: self.rejected_indices.contains(&i),
+                        serialized_len: 0,
+                    };
+                    (block_ref, vec![parsed_tx])
+                })
+                .collect();
+        }
+
         let block_ref = BlockRef {
             author: consensus_config::AuthorityIndex::ZERO,
             round: self.round as u32,
@@ -119,9 +149,10 @@ impl ConsensusCommitAPI for TestConsensusCommit {
         let parsed_txs: Vec<ParsedTransaction> = self
             .transactions
             .iter()
-            .map(|tx| ParsedTransaction {
+            .enumerate()
+            .map(|(i, tx)| ParsedTransaction {
                 transaction: tx.clone(),
-                rejected: false,
+                rejected: self.rejected_indices.contains(&i),
                 serialized_len: 0,
             })
             .collect();
@@ -141,6 +172,25 @@ impl ConsensusCommitAPI for TestConsensusCommit {
 pub struct TestConsensusHandlerSetup<C> {
     pub consensus_handler: ConsensusHandler<C>,
     pub captured_transactions: CapturedTransactions,
+    pub metrics: Arc<AuthorityMetrics>,
+}
+
+/// Makes a consensus adapter with the standard test wiring (limits, metrics), backed by the
+/// given consensus client.
+pub fn make_consensus_adapter_with_client_for_test(
+    state: &Arc<AuthorityState>,
+    client: Arc<dyn ConsensusClient>,
+    max_pending_local_submissions: usize,
+) -> Arc<ConsensusAdapter> {
+    Arc::new(ConsensusAdapter::new(
+        client,
+        state.checkpoint_store.clone(),
+        state.name,
+        100_000,
+        max_pending_local_submissions,
+        ConsensusAdapterMetrics::new_test(),
+        Arc::new(tokio::sync::Notify::new()),
+    ))
 }
 
 pub fn make_consensus_adapter_for_test(
@@ -149,8 +199,22 @@ pub fn make_consensus_adapter_for_test(
     execute: bool,
     mock_block_status_receivers: Vec<BlockStatusReceiver>,
 ) -> Arc<ConsensusAdapter> {
-    let metrics = ConsensusAdapterMetrics::new_test();
+    make_consensus_adapter_for_test_with_submit_limit(
+        state,
+        process_via_checkpoint,
+        execute,
+        mock_block_status_receivers,
+        100_000,
+    )
+}
 
+pub fn make_consensus_adapter_for_test_with_submit_limit(
+    state: Arc<AuthorityState>,
+    process_via_checkpoint: HashSet<TransactionDigest>,
+    execute: bool,
+    mock_block_status_receivers: Vec<BlockStatusReceiver>,
+    max_pending_local_submissions: usize,
+) -> Arc<ConsensusAdapter> {
     #[derive(Clone)]
     struct SubmitDirectly {
         state: Arc<AuthorityState>,
@@ -179,16 +243,8 @@ pub fn make_consensus_adapter_for_test(
 
             // Simple processing - just mark transactions for checkpoint execution if needed
             for txn in transactions {
-                if let ConsensusTransactionKind::CertifiedTransaction(cert) = &txn.kind {
-                    let transaction_digest = cert.digest();
-                    if self.process_via_checkpoint.contains(transaction_digest) {
-                        epoch_store
-                            .insert_finalized_transactions(vec![*transaction_digest].as_slice(), 10)
-                            .expect("Should not fail");
-                        executed_via_checkpoint += 1;
-                    }
-                } else if let ConsensusTransactionKind::UserTransaction(tx) = &txn.kind {
-                    let transaction_digest = tx.digest();
+                if let ConsensusTransactionKind::UserTransactionV2(tx) = &txn.kind {
+                    let transaction_digest = tx.tx().digest();
                     if self.process_via_checkpoint.contains(transaction_digest) {
                         epoch_store
                             .insert_finalized_transactions(vec![*transaction_digest].as_slice(), 10)
@@ -221,14 +277,9 @@ pub fn make_consensus_adapter_for_test(
                         // Extract executable transaction from consensus transaction
                         let executable_tx = match &tx.transaction {
                             SequencedConsensusTransactionKind::External(ext) => match &ext.kind {
-                                ConsensusTransactionKind::CertifiedTransaction(cert) => {
-                                    Some(VerifiedExecutableTransaction::new_from_certificate(
-                                        VerifiedCertificate::new_unchecked(*cert.clone()),
-                                    ))
-                                }
-                                ConsensusTransactionKind::UserTransaction(tx) => {
+                                ConsensusTransactionKind::UserTransactionV2(tx) => {
                                     Some(VerifiedExecutableTransaction::new_from_consensus(
-                                        VerifiedTransaction::new_unchecked(*tx.clone()),
+                                        VerifiedTransaction::new_unchecked(tx.tx().clone()),
                                         0,
                                     ))
                                 }
@@ -242,7 +293,7 @@ pub fn make_consensus_adapter_for_test(
                         if let Some(exec_tx) = executable_tx {
                             let versions = epoch_store.assign_shared_object_versions_for_tests(
                                 self.state.get_object_cache_reader().as_ref(),
-                                &vec![exec_tx.clone()],
+                                std::slice::from_ref(&exec_tx),
                             )?;
 
                             let assigned_version = versions
@@ -250,7 +301,7 @@ pub fn make_consensus_adapter_for_test(
                                 .into_iter()
                                 .next()
                                 .map(|(_, v)| v)
-                                .unwrap_or_default();
+                                .unwrap_or_else(crate::authority::shared_object_version_manager::AssignedVersions::empty);
 
                             self.state.execution_scheduler().enqueue(
                                 vec![(
@@ -292,25 +343,14 @@ pub fn make_consensus_adapter_for_test(
             ))
         }
     }
-    let epoch_store = state.epoch_store_for_testing();
     // Make a new consensus adapter instance.
-    Arc::new(ConsensusAdapter::new(
-        Arc::new(SubmitDirectly {
-            state: state.clone(),
-            process_via_checkpoint,
-            execute,
-            mock_block_status_receivers: Arc::new(Mutex::new(mock_block_status_receivers)),
-        }),
-        state.checkpoint_store.clone(),
-        state.name,
-        Arc::new(ConnectionMonitorStatusForTests {}),
-        100_000,
-        100_000,
-        None,
-        None,
-        metrics,
-        epoch_store.protocol_config().clone(),
-    ))
+    let client = Arc::new(SubmitDirectly {
+        state: state.clone(),
+        process_via_checkpoint,
+        execute,
+        mock_block_status_receivers: Arc::new(Mutex::new(mock_block_status_receivers)),
+    });
+    make_consensus_adapter_with_client_for_test(&state, client, max_pending_local_submissions)
 }
 
 /// Creates a ConsensusHandler for testing with a mock ExecutionSchedulerSender that captures transactions
@@ -326,29 +366,19 @@ where
     let metrics = Arc::new(AuthorityMetrics::new(&Registry::new()));
     let throughput_calculator = ConsensusThroughputCalculator::new(None, metrics.clone());
     let backpressure_manager = BackpressureManager::new_for_tests();
-    let consensus_adapter =
-        make_consensus_adapter_for_test(authority.clone(), HashSet::new(), false, vec![]);
-
-    let last_consensus_stats = ExecutionIndicesWithStats {
+    let last_consensus_stats = ExecutionIndicesWithStatsV2 {
         stats: crate::authority::authority_per_epoch_store::ConsensusStats::new(
             consensus_committee.size(),
         ),
         ..Default::default()
     };
 
-    // Create a test ExecutionSchedulerSender that captures transactions
-    let captured_transactions = Arc::new(Mutex::new(Vec::<(
-        Vec<Schedulable>,
-        AssignedTxAndVersions,
-        SchedulingSource,
-    )>::new()));
+    let captured_transactions: CapturedTransactions = Arc::new(Mutex::new(Vec::new()));
     let captured_tx_clone = captured_transactions.clone();
 
-    // Create a channel to capture sent transactions
     let (tx_sender, mut receiver) =
         linku_metrics::monitored_mpsc::unbounded_channel("test_execution_scheduler");
 
-    // Spawn a task to capture transactions from the channel
     tokio::spawn(async move {
         while let Some(item) = receiver.recv().await {
             captured_tx_clone.lock().push(item);
@@ -361,20 +391,20 @@ where
         epoch_store.clone(),
         checkpoint_service,
         execution_scheduler_sender,
-        consensus_adapter,
         authority.get_object_cache_reader().clone(),
-        Arc::new(ArcSwap::default()),
         consensus_committee,
-        metrics,
+        metrics.clone(),
         Arc::new(throughput_calculator),
         backpressure_manager.subscribe(),
         authority.traffic_controller.clone(),
+        authority.transaction_deny_config_manager().clone(),
         last_consensus_stats,
     );
 
     TestConsensusHandlerSetup {
         consensus_handler,
         captured_transactions,
+        metrics,
     }
 }
 

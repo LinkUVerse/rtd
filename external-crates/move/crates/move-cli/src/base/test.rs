@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::reroot_path;
-use crate::NativeFunctionRecord;
 use anyhow::Result;
 use clap::*;
 
@@ -13,15 +12,14 @@ use move_compiler::{
     shared::NumericalAddress,
     unit_test::{TestPlan, plan_builder::construct_test_plan},
 };
-use move_coverage::coverage_map::{CoverageMap, output_map_to_file};
-use move_package_alt::{flavor::MoveFlavor, package::RootPackage};
+use move_coverage::coverage_map::{CoverageMap, TraceConsumer, output_map_to_file};
+use move_package_alt::{MoveFlavor, RootPackage};
 use move_package_alt_compilation::{
     build_config::BuildConfig, build_plan::BuildPlan, compiled_package::BuildNamedAddresses,
     find_env,
 };
 use move_symbol_pool::Symbol;
-use move_unit_test::UnitTestingConfig;
-use move_vm_test_utils::gas_schedule::CostTable;
+use move_unit_test::{TRACE_DIR, TraceType, UnitTestingConfig, vm_test_setup::VMTestSetup};
 // if windows
 #[cfg(target_family = "windows")]
 use std::os::windows::process::ExitStatusExt;
@@ -44,6 +42,9 @@ pub struct Test {
     /// Bound the amount of gas used by any one test.
     #[clap(name = "gas-limit", short = 'i', long = "gas-limit")]
     pub gas_limit: Option<u64>,
+    /// Bound the maximum size of a loaded package (in MB).
+    #[clap(name = "package-size", long = "package-size")]
+    pub package_size: Option<u64>,
     /// An optional filter string to determine which unit tests to run. A unit test will be run only if it
     /// contains this string in its fully qualified (<addr>::<module_name>::<fn_name>) name.
     #[clap(name = "filter")]
@@ -66,7 +67,7 @@ pub struct Test {
     /// Verbose mode
     #[clap(long = "verbose")]
     pub verbose_mode: bool,
-    /// Collect coverage information for later use with the various `move coverage` subcommands. Currently supported only in debug builds.
+    /// Collect coverage information for later use with the various `move coverage` subcommands.
     #[clap(long = "coverage")]
     pub compute_coverage: bool,
 
@@ -79,28 +80,28 @@ pub struct Test {
     pub rand_num_iters: Option<u64>,
 
     /// Enable tracing for tests.
-    #[clap(long = "trace")]
-    pub trace: bool,
+    #[clap(long = "trace", default_missing_value = "full", num_args = 0..=1)]
+    pub trace: Option<TraceType>,
 }
 
 impl Test {
-    pub async fn execute<F: MoveFlavor>(
+    pub async fn execute<F: MoveFlavor, V: VMTestSetup + Sync>(
         self,
         path: Option<&Path>,
         config: BuildConfig,
-        natives: Vec<NativeFunctionRecord>,
-        cost_table: Option<CostTable>,
+        flavor: F,
+        vm_test_setup: V,
     ) -> anyhow::Result<()> {
         let rerooted_path = reroot_path(path)?;
         let compute_coverage = self.compute_coverage;
         // save disassembly if trace execution is enabled
-        let save_disassembly = self.trace;
-        let result = run_move_unit_tests::<F, Stdout>(
+        let save_disassembly = self.trace.is_some();
+        let result = run_move_unit_tests::<F, V, Stdout>(
             &rerooted_path,
             config,
-            self.unit_test_config(),
-            natives,
-            cost_table,
+            self.unit_test_config(None),
+            flavor,
+            vm_test_setup,
             compute_coverage,
             save_disassembly,
             &mut std::io::stdout(),
@@ -114,9 +115,10 @@ impl Test {
         Ok(())
     }
 
-    pub fn unit_test_config(self) -> UnitTestingConfig {
+    pub fn unit_test_config(self, default_execution_bound: Option<u64>) -> UnitTestingConfig {
         let Self {
             gas_limit,
+            package_size,
             filter,
             list,
             num_threads,
@@ -128,7 +130,8 @@ impl Test {
             trace,
         } = self;
         UnitTestingConfig {
-            gas_limit,
+            gas_limit: gas_limit.or(default_execution_bound),
+            package_size,
             filter,
             list,
             num_threads,
@@ -137,7 +140,7 @@ impl Test {
             seed,
             rand_num_iters,
             trace,
-            ..UnitTestingConfig::default_with_bound(None)
+            ..UnitTestingConfig::default_with_bound(default_execution_bound)
         }
     }
 }
@@ -149,12 +152,12 @@ pub enum UnitTestResult {
     Failure,
 }
 
-pub async fn run_move_unit_tests<F: MoveFlavor, W: Write + Send>(
+pub async fn run_move_unit_tests<F: MoveFlavor, V: VMTestSetup + Sync, W: Write + Send>(
     pkg_path: &Path,
     mut build_config: move_package_alt_compilation::build_config::BuildConfig,
     mut unit_test_config: UnitTestingConfig,
-    natives: Vec<NativeFunctionRecord>,
-    cost_table: Option<CostTable>,
+    flavor: F,
+    vm_test_setup: V,
     compute_coverage: bool,
     save_disassembly: bool,
     writer: &mut W,
@@ -165,9 +168,11 @@ pub async fn run_move_unit_tests<F: MoveFlavor, W: Write + Send>(
 
     // Load the package (package graph diagnostics are only needed for CLI commands so
     // ignore them by passing a vector as the writer)
-    let env = find_env::<F>(pkg_path, &build_config)?;
-    let root_pkg =
-        RootPackage::<F>::load(pkg_path.to_path_buf(), env, build_config.mode_set()).await?;
+    let env = find_env::<F>(pkg_path, &build_config, &flavor)?;
+    let root_pkg: RootPackage<F> = build_config
+        .package_loader(pkg_path, &env, flavor)
+        .load()
+        .await?;
     let root_pkg_name = Symbol::from(root_pkg.name().as_str());
 
     let mut addresses: Vec<(String, NumericalAddress)> = vec![];
@@ -180,6 +185,13 @@ pub async fn run_move_unit_tests<F: MoveFlavor, W: Write + Send>(
     // Note: unit_test_config.named_address_values is always set to vec![] (the default value) before
     // being passed in.
     unit_test_config.named_address_values = addresses;
+
+    // If we are computing coverage, then we need to enable tracing, since the coverage information
+    // is derived from the trace. If the user explicitly set the trace config, then we respect that
+    // and don't override it.
+    if compute_coverage && unit_test_config.trace.is_none() {
+        unit_test_config.trace = Some(TraceType::InstructionOnly);
+    }
 
     // Compile the package. We need to intercede in the compilation, process being performed by the
     // Move package system, to first grab the compilation env, construct the test plan from it, and
@@ -215,28 +227,22 @@ pub async fn run_move_unit_tests<F: MoveFlavor, W: Write + Send>(
     let no_tests = test_plan.is_empty();
     let test_plan = TestPlan::new(test_plan, mapped_files, units, vec![]);
 
-    let trace_path = pkg_path.join(".trace");
+    let trace_path = pkg_path.join(TRACE_DIR);
     let coverage_map_path = pkg_path
         .join(".coverage_map")
         .with_extension(MOVE_COVERAGE_MAP_EXTENSION);
     let cleanup_trace = || {
         if compute_coverage && trace_path.exists() {
-            std::fs::remove_file(&trace_path).unwrap();
+            std::fs::remove_dir_all(&trace_path).unwrap();
         }
     };
 
     cleanup_trace();
 
-    // If we need to compute test coverage set the VM tracking environment variable since we will
-    // need this trace to construct the coverage information.
-    if compute_coverage {
-        unsafe { std::env::set_var("MOVE_VM_TRACE", &trace_path) };
-    }
-
     // Run the tests. If any of the tests fail, then we don't produce a coverage report, so cleanup
     // the trace files.
     if !unit_test_config
-        .run_and_report_unit_tests(test_plan, Some(natives), cost_table, writer)?
+        .run_and_report_unit_tests(test_plan, vm_test_setup, writer)?
         .1
     {
         cleanup_trace();
@@ -245,7 +251,7 @@ pub async fn run_move_unit_tests<F: MoveFlavor, W: Write + Send>(
 
     // Compute the coverage map. This will be used by other commands after this.
     if compute_coverage && !no_tests {
-        let coverage_map = CoverageMap::from_trace_file(trace_path);
+        let coverage_map = CoverageMap::from_trace_dir(trace_path);
         output_map_to_file(coverage_map_path, &coverage_map).unwrap();
     }
     Ok((UnitTestResult::Success, warning_diags))

@@ -11,12 +11,12 @@ use crate::collection_types::{Bag, Table, TableVec, VecMap, VecSet};
 use crate::committee::{CommitteeWithNetworkMetadata, NetworkMetadata};
 use crate::error::RtdError;
 use crate::gas::GasCostSummary;
-use crate::storage::ObjectStore;
 use crate::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
 use crate::rtd_system_state::get_validators_from_table_vec;
 use crate::rtd_system_state::rtd_system_state_inner_v1::{
     StakeSubsidyV1, StorageFundV1, ValidatorSetV1,
 };
+use crate::storage::ObjectStore;
 use serde::{Deserialize, Serialize};
 
 /// Rust version of the Move rtd::rtd_system::SystemParametersV2 type
@@ -99,6 +99,10 @@ impl RtdSystemStateTrait for RtdSystemStateInnerV2 {
 
     fn epoch_duration_ms(&self) -> u64 {
         self.parameters.epoch_duration_ms
+    }
+
+    fn extra_fields(&self) -> &Bag {
+        &self.extra_fields
     }
 
     fn safe_mode(&self) -> bool {

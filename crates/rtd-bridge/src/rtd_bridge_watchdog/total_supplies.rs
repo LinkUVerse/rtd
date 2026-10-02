@@ -6,21 +6,21 @@
 use crate::rtd_bridge_watchdog::Observable;
 use async_trait::async_trait;
 use prometheus::IntGaugeVec;
-use std::{collections::BTreeMap, sync::Arc};
-use rtd_sdk::RtdClient;
+use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoRequest;
+use std::collections::BTreeMap;
 
 use tokio::time::Duration;
 use tracing::{error, info};
 
 pub struct TotalSupplies {
-    rtd_client: Arc<RtdClient>,
+    rtd_client: rtd_rpc::Client,
     coins: BTreeMap<String, String>,
     metric: IntGaugeVec,
 }
 
 impl TotalSupplies {
     pub fn new(
-        rtd_client: Arc<RtdClient>,
+        rtd_client: rtd_rpc::Client,
         coins: BTreeMap<String, String>,
         metric: IntGaugeVec,
     ) -> Self {
@@ -42,15 +42,17 @@ impl Observable for TotalSupplies {
         for (coin_name, coin_type) in &self.coins {
             let resp = self
                 .rtd_client
-                .coin_read_api()
-                .get_total_supply(coin_type.clone())
+                .clone()
+                .state_client()
+                .get_coin_info(GetCoinInfoRequest::default().with_coin_type(coin_type))
                 .await;
             match resp {
-                Ok(supply) => {
+                Ok(resp) => {
+                    let supply = resp.into_inner().treasury().total_supply();
                     self.metric
                         .with_label_values(&[coin_name])
-                        .set(supply.value as i64);
-                    info!("Total supply for {coin_type}: {}", supply.value);
+                        .set(supply as i64);
+                    info!("Total supply for {coin_type}: {}", supply);
                 }
                 Err(e) => {
                     error!("Error getting total supply for coin {coin_type}: {:?}", e);

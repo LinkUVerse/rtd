@@ -1,29 +1,43 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
-use std::str::FromStr;
-use rtd_kvstore::{BigTableClient, KeyValueStoreReader, TransactionData};
 use rtd_rpc::field::{FieldMask, FieldMaskTree, FieldMaskUtil};
-use rtd_rpc::merge::Merge;
 use rtd_rpc::proto::rtd::rpc::v2::{
     BatchGetTransactionsRequest, BatchGetTransactionsResponse, ExecutedTransaction,
-    GetTransactionRequest, GetTransactionResponse, GetTransactionResult, Transaction,
-    TransactionEffects, TransactionEvents, UserSignature,
+    GetTransactionRequest, GetTransactionResponse, GetTransactionResult,
 };
 use rtd_rpc_api::{
     ErrorReason, RpcError, TransactionNotFoundError,
-    grpc::v2::ledger_service::validate_batch_size,
-    proto::google::rpc::bad_request::FieldViolation, proto::timestamp_ms_to_proto,
+    proto::google::rpc::bad_request::FieldViolation,
 };
 use rtd_types::base_types::TransactionDigest;
+use std::str::FromStr;
+
+use crate::bigtable_client::BigTableClient;
+use crate::config::{PipelineStage, StagesConfig};
+use crate::render::transaction_to_response;
+use crate::{PackageResolver, resolve};
 
 pub const MAX_BATCH_REQUESTS: usize = 200;
-pub const READ_MASK_DEFAULT: &str = "digest";
+pub const READ_MASK_DEFAULT: &str = rtd_rpc_api::read_mask_defaults::TRANSACTION;
+
+pub(crate) fn validate_read_mask(read_mask: Option<FieldMask>) -> Result<FieldMaskTree, RpcError> {
+    let read_mask = read_mask.unwrap_or_else(|| FieldMask::from_str(READ_MASK_DEFAULT));
+    read_mask
+        .validate::<ExecutedTransaction>()
+        .map_err(|path| {
+            FieldViolation::new("read_mask")
+                .with_description(format!("invalid read_mask path: {path}"))
+                .with_reason(ErrorReason::FieldInvalid)
+        })?;
+    Ok(FieldMaskTree::from(read_mask))
+}
 
 pub async fn get_transaction(
-    mut client: BigTableClient,
+    client: BigTableClient,
+    stages: &StagesConfig,
     request: GetTransactionRequest,
+    resolver: &PackageResolver,
 ) -> Result<GetTransactionResponse, RpcError> {
     let transaction_digest = request
         .digest
@@ -39,129 +53,274 @@ pub async fn get_transaction(
                 .with_reason(ErrorReason::FieldInvalid)
         })?;
 
-    let read_mask = {
-        let read_mask = request
-            .read_mask
-            .unwrap_or_else(|| FieldMask::from_str(READ_MASK_DEFAULT));
-        read_mask
-            .validate::<ExecutedTransaction>()
-            .map_err(|path| {
-                FieldViolation::new("read_mask")
-                    .with_description(format!("invalid read_mask path: {path}"))
-                    .with_reason(ErrorReason::FieldInvalid)
-            })?;
-        FieldMaskTree::from(read_mask)
-    };
+    let read_mask = validate_read_mask(request.read_mask)?;
 
-    let mut response = client.get_transactions(&[transaction_digest]).await?;
-    let transaction = response
-        .pop()
-        .ok_or(TransactionNotFoundError(transaction_digest.into()))?;
-    Ok(GetTransactionResponse::new(transaction_to_response(
-        transaction,
+    let transactions_stage = stages.stage(PipelineStage::Transactions);
+    let objects_stage = stages.stage(PipelineStage::Objects);
+    let mut resolved = resolve::resolve_transactions(
+        client,
+        vec![transaction_digest],
         &read_mask,
-    )?))
+        transactions_stage,
+        objects_stage,
+    )
+    .await?;
+    let (transaction, objects) = resolved
+        .remove(&transaction_digest)
+        .ok_or(TransactionNotFoundError(transaction_digest.into()))?;
+    Ok(GetTransactionResponse::new(
+        transaction_to_response(transaction, &read_mask, objects.as_ref(), resolver).await?,
+    ))
 }
 
 pub async fn batch_get_transactions(
-    mut client: BigTableClient,
+    client: BigTableClient,
+    stages: &StagesConfig,
     BatchGetTransactionsRequest {
         digests, read_mask, ..
     }: BatchGetTransactionsRequest,
+    resolver: &PackageResolver,
 ) -> Result<BatchGetTransactionsResponse, RpcError> {
-    validate_batch_size(digests.len(), MAX_BATCH_REQUESTS)?;
+    let read_mask = validate_read_mask(read_mask)?;
 
-    let read_mask = {
-        let read_mask = read_mask.unwrap_or_else(|| FieldMask::from_str(READ_MASK_DEFAULT));
-        read_mask
-            .validate::<ExecutedTransaction>()
-            .map_err(|path| {
-                FieldViolation::new("read_mask")
-                    .with_description(format!("invalid read_mask path: {path}"))
-                    .with_reason(ErrorReason::FieldInvalid)
-            })?;
-        FieldMaskTree::from(read_mask)
-    };
+    if digests.len() > MAX_BATCH_REQUESTS {
+        return Err(RpcError::new(
+            tonic::Code::InvalidArgument,
+            format!("number of batch requests exceed limit of {MAX_BATCH_REQUESTS}"),
+        ));
+    }
 
     let digests = digests
         .iter()
         .map(|digest| TransactionDigest::from_str(digest))
         .collect::<Result<Vec<_>, _>>()?;
-    let response: HashMap<_, _> = client
-        .get_transactions(&digests)
-        .await?
-        .into_iter()
-        .map(|tx| (*tx.transaction.digest(), tx))
-        .collect();
+    let transactions_stage = stages.stage(PipelineStage::Transactions);
+    let objects_stage = stages.stage(PipelineStage::Objects);
+    let resolved = resolve::resolve_transactions(
+        client,
+        digests.clone(),
+        &read_mask,
+        transactions_stage,
+        objects_stage,
+    )
+    .await?;
 
-    let transactions = digests
-        .into_iter()
-        .map(|digest| {
-            if let Some(tx) = response.get(&digest) {
-                return match transaction_to_response(tx.clone(), &read_mask) {
-                    Ok(tx) => GetTransactionResult::new_transaction(tx),
-                    Err(err) => GetTransactionResult::new_error(err.into_status_proto()),
-                };
+    let mut transactions = Vec::with_capacity(digests.len());
+    for digest in digests {
+        if let Some((tx, objects)) = resolved.get(&digest) {
+            match transaction_to_response(tx.clone(), &read_mask, objects.as_ref(), resolver).await
+            {
+                Ok(tx) => transactions.push(GetTransactionResult::new_transaction(tx)),
+                Err(err) => {
+                    transactions.push(GetTransactionResult::new_error(err.into_status_proto()))
+                }
             }
+        } else {
             let err: RpcError = TransactionNotFoundError(digest.into()).into();
-            GetTransactionResult::new_error(err.into_status_proto())
-        })
-        .collect();
+            transactions.push(GetTransactionResult::new_error(err.into_status_proto()));
+        }
+    }
     Ok(BatchGetTransactionsResponse::new(transactions))
 }
 
-fn transaction_to_response(
-    source: TransactionData,
-    mask: &FieldMaskTree,
-) -> Result<ExecutedTransaction, RpcError> {
-    let mut message = ExecutedTransaction::default();
+#[cfg(test)]
+mod tests {
+    use linku_common::ZipDebugEqIteratorExt;
+    use std::collections::BTreeSet;
 
-    if mask.contains(ExecutedTransaction::DIGEST_FIELD.name) {
-        message.digest = Some(source.transaction.digest().to_string());
+    use rtd_kvstore::testing::insert_checkpoint_rows;
+    use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
+
+    use super::*;
+    use crate::v2::test_utils::{
+        assert_identity_only_object_mask, canonical_transaction_object_keys,
+        query_context_with_mock_and_registry, response_object_keys,
+        two_transaction_object_checkpoint,
+    };
+
+    fn request(
+        digest: TransactionDigest,
+        paths: impl IntoIterator<Item = &'static str>,
+    ) -> GetTransactionRequest {
+        let mut request = GetTransactionRequest::default();
+        request.digest = Some(digest.to_string());
+        request.read_mask = Some(FieldMask::from_paths(paths));
+        request
     }
 
-    if let Some(submask) = mask.subtree(ExecutedTransaction::TRANSACTION_FIELD.name) {
-        let transaction =
-            rtd_sdk_types::Transaction::try_from(source.transaction.transaction_data().clone())?;
-        message.transaction = Some(Transaction::merge_from(transaction, &submask));
+    fn assert_batch_objects(
+        response: BatchGetTransactionsResponse,
+        checkpoint: &rtd_types::full_checkpoint_content::Checkpoint,
+        identity_only: bool,
+    ) {
+        assert_eq!(response.transactions.len(), 3);
+        for (result, expected_index) in
+            response
+                .transactions
+                .into_iter()
+                .zip_debug_eq([Some(1), None, Some(0)])
+        {
+            let Some(index) = expected_index else {
+                let status = result
+                    .to_result()
+                    .expect_err("missing digest should return an error");
+                assert_eq!(status.code, tonic::Code::NotFound as i32);
+                continue;
+            };
+            let transaction = result
+                .to_result()
+                .expect("known digest should return a transaction");
+            assert_eq!(
+                response_object_keys(&transaction),
+                canonical_transaction_object_keys(checkpoint, index)
+            );
+            let sibling_created_id =
+                TestCheckpointBuilder::derive_object_id(if index == 0 { 11 } else { 10 });
+            assert!(
+                response_object_keys(&transaction)
+                    .iter()
+                    .all(|key| key.0 != sibling_created_id),
+                "transaction object set must exclude its sibling's created object"
+            );
+            if identity_only {
+                assert_identity_only_object_mask(&transaction);
+            }
+        }
     }
 
-    if let Some(submask) = mask.subtree(ExecutedTransaction::SIGNATURES_FIELD.name) {
-        message.signatures = source
-            .transaction
-            .tx_signatures()
-            .iter()
-            .map(|s| {
-                rtd_sdk_types::UserSignature::try_from(s.clone())
-                    .map(|s| UserSignature::merge_from(s, &submask))
-            })
-            .collect::<Result<_, _>>()?;
-    }
+    #[tokio::test]
+    async fn get_transaction_objects_honor_parent_and_nested_masks() {
+        let (ctx, _registry, mock, server) =
+            query_context_with_mock_and_registry("get_transaction", 1).await;
+        let checkpoint = two_transaction_object_checkpoint();
+        insert_checkpoint_rows(&mock, &checkpoint).await;
+        let stages = StagesConfig::default();
 
-    if let Some(submask) = mask.subtree(ExecutedTransaction::EFFECTS_FIELD.name) {
-        let effects = TransactionEffects::merge_from(
-            &rtd_sdk_types::TransactionEffects::try_from(source.effects)?,
-            &submask,
+        mock.clear_read_rows_calls().await;
+        let digest = checkpoint.transactions[0].transaction.digest();
+        let transaction = get_transaction(
+            ctx.client().clone(),
+            &stages,
+            request(digest, ["digest"]),
+            ctx.package_resolver(),
+        )
+        .await
+        .expect("digest-only GetTransaction should succeed")
+        .transaction
+        .expect("GetTransaction should return a transaction");
+        assert!(transaction.objects.is_none());
+        assert!(
+            mock.read_rows_calls()
+                .await
+                .iter()
+                .all(|call| call.table != rtd_kvstore::tables::objects::NAME),
+            "digest-only GetTransaction must not read the object table"
         );
-        // TODO: add support for object_types in the KV store
-        message.effects = Some(effects);
-    }
 
-    if let Some(submask) = mask.subtree(ExecutedTransaction::EVENTS_FIELD.name)
-        && let Some(events) = source.events
-    {
-        message.events = Some(TransactionEvents::merge_from(
-            rtd_sdk_types::TransactionEvents::try_from(events)?,
-            &submask,
-        ));
-        // TODO: add support for JSON layout
+        for (paths, identity_only) in [
+            (["objects"].as_slice(), false),
+            (
+                ["objects.objects.object_id", "objects.objects.version"].as_slice(),
+                true,
+            ),
+        ] {
+            for index in 0..checkpoint.transactions.len() {
+                let digest = checkpoint.transactions[index].transaction.digest();
+                let transaction = get_transaction(
+                    ctx.client().clone(),
+                    &stages,
+                    request(digest, paths.iter().copied()),
+                    ctx.package_resolver(),
+                )
+                .await
+                .expect("GetTransaction should succeed")
+                .transaction
+                .expect("GetTransaction should return a transaction");
+                let sibling_created_id =
+                    TestCheckpointBuilder::derive_object_id(if index == 0 { 11 } else { 10 });
+
+                assert_eq!(
+                    response_object_keys(&transaction),
+                    canonical_transaction_object_keys(&checkpoint, index)
+                );
+                assert!(
+                    response_object_keys(&transaction)
+                        .iter()
+                        .all(|key| key.0 != sibling_created_id),
+                    "transaction object set must exclude its sibling's created object"
+                );
+                if identity_only {
+                    assert_identity_only_object_mask(&transaction);
+                }
+            }
+        }
+
+        server.abort();
     }
-    if mask.contains(ExecutedTransaction::CHECKPOINT_FIELD.name) {
-        message.checkpoint = Some(source.checkpoint_number);
+    #[tokio::test]
+    async fn batch_get_transaction_objects_preserve_order_and_deduplicate_reads() {
+        let (ctx, _registry, mock, server) =
+            query_context_with_mock_and_registry("batch_get_transactions", 1).await;
+        let checkpoint = two_transaction_object_checkpoint();
+        insert_checkpoint_rows(&mock, &checkpoint).await;
+        let stages = StagesConfig::default();
+        let first_digest = checkpoint.transactions[0].transaction.digest();
+        let second_digest = checkpoint.transactions[1].transaction.digest();
+        let missing_digest = TransactionDigest::random();
+        let digests = vec![
+            second_digest.to_string(),
+            missing_digest.to_string(),
+            first_digest.to_string(),
+        ];
+
+        let mut parent_request = BatchGetTransactionsRequest::default();
+        parent_request.digests = digests.clone();
+        parent_request.read_mask = Some(FieldMask::from_paths(["objects"]));
+        let parent_response = batch_get_transactions(
+            ctx.client().clone(),
+            &stages,
+            parent_request,
+            ctx.package_resolver(),
+        )
+        .await
+        .expect("parent objects BatchGetTransactions should succeed");
+        assert_batch_objects(parent_response, &checkpoint, false);
+
+        mock.clear_read_rows_calls().await;
+        let mut nested_request = BatchGetTransactionsRequest::default();
+        nested_request.digests = digests;
+        nested_request.read_mask = Some(FieldMask::from_paths([
+            "objects.objects.object_id",
+            "objects.objects.version",
+        ]));
+        let nested_response = batch_get_transactions(
+            ctx.client().clone(),
+            &stages,
+            nested_request,
+            ctx.package_resolver(),
+        )
+        .await
+        .expect("nested objects BatchGetTransactions should succeed");
+        assert_batch_objects(nested_response, &checkpoint, true);
+
+        let mut actual_object_rows = mock
+            .read_rows_calls()
+            .await
+            .into_iter()
+            .filter(|call| call.table == rtd_kvstore::tables::objects::NAME)
+            .flat_map(|call| call.row_keys)
+            .map(|key| key.to_vec())
+            .collect::<Vec<_>>();
+        actual_object_rows.sort();
+        let mut expected_object_rows = (0..checkpoint.transactions.len())
+            .flat_map(|index| canonical_transaction_object_keys(&checkpoint, index))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|key| rtd_kvstore::tables::objects::encode_key(&key))
+            .collect::<Vec<_>>();
+        expected_object_rows.sort();
+        assert_eq!(actual_object_rows, expected_object_rows);
+
+        server.abort();
     }
-    if mask.contains(ExecutedTransaction::TIMESTAMP_FIELD.name) {
-        message.timestamp = Some(timestamp_ms_to_proto(source.timestamp));
-    }
-    // TODO: add support for balance changes
-    Ok(message)
 }

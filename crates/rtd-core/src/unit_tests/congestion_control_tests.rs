@@ -2,7 +2,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::authority::authority_test_utils::certify_shared_obj_transaction_no_execution;
+use crate::authority::authority_test_utils::submit_to_consensus;
 use crate::authority::shared_object_congestion_tracker::SharedObjectCongestionTracker;
 use crate::authority::{AuthorityState, ExecutionEnv};
 use crate::consensus_test_utils;
@@ -16,7 +16,6 @@ use crate::{
     move_call,
 };
 use move_core_types::ident_str;
-use std::sync::Arc;
 use rtd_macros::{register_fail_point_arg, sim_test};
 use rtd_protocol_config::{
     Chain, ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
@@ -26,15 +25,17 @@ use rtd_types::digests::TransactionDigest;
 use rtd_types::effects::{InputConsensusObject, TransactionEffectsAPI};
 use rtd_types::executable_transaction::VerifiedExecutableTransaction;
 use rtd_types::messages_consensus::ConsensusTransaction;
-use rtd_types::transaction::{CertifiedTransaction, VerifiedTransaction};
+use rtd_types::transaction::PlainTransactionWithClaims;
+use rtd_types::transaction::VerifiedTransaction;
 use rtd_types::transaction::{ObjectArg, SharedObjectMutability};
 use rtd_types::{
-    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_key_pair},
-    execution_status::{CongestedObjects, ExecutionFailureStatus},
+    execution_status::{CongestedObjects, ExecutionErrorKind},
     object::Object,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
 };
+use std::sync::Arc;
 
 pub const TEST_ONLY_GAS_PRICE: u64 = 1000;
 pub const TEST_ONLY_GAS_UNIT: u64 = 10_000;
@@ -66,7 +67,7 @@ impl TestSetup {
                 stored_observations_limit: u64::MAX,
                 stake_weighted_median_threshold: 0,
                 default_none_duration_for_new_keys: false,
-                observations_chunk_size: None,
+                observations_chunk_size: Some(18),
             }),
         );
 
@@ -81,9 +82,7 @@ impl TestSetup {
 
         let gas_object_id = ObjectID::random();
         let gas_object = Object::with_id_owner_for_testing(gas_object_id, sender);
-        setup_authority_state
-            .insert_genesis_object(gas_object.clone())
-            .await;
+        setup_authority_state.insert_genesis_object(gas_object.clone());
 
         let package = build_and_publish_test_package(
             &setup_authority_state,
@@ -178,19 +177,17 @@ impl TestSetup {
         genesis_objects.push(TestSetup::convert_to_genesis_obj(
             self.setup_authority_state
                 .get_object(&self.package.0)
-                .await
                 .unwrap(),
         ));
         genesis_objects.push(TestSetup::convert_to_genesis_obj(
             self.setup_authority_state
                 .get_object(&self.gas_object_id)
-                .await
                 .unwrap(),
         ));
 
         for obj in objects {
             genesis_objects.push(TestSetup::convert_to_genesis_obj(
-                self.setup_authority_state.get_object(obj).await.unwrap(),
+                self.setup_authority_state.get_object(obj).unwrap(),
             ));
         }
         genesis_objects
@@ -227,17 +224,13 @@ async fn test_congestion_control_execution_cancellation() {
         .with_protocol_config(test_setup.protocol_config.clone())
         .build()
         .await;
-    authority_state
-        .insert_genesis_objects(&genesis_objects)
-        .await;
+    authority_state.insert_genesis_objects(&genesis_objects);
     let authority_state_2 = TestAuthorityBuilder::new()
         .with_reference_gas_price(TEST_ONLY_GAS_PRICE)
         .with_protocol_config(test_setup.protocol_config.clone())
         .build()
         .await;
-    authority_state_2
-        .insert_genesis_objects(&genesis_objects)
-        .await;
+    authority_state_2.insert_genesis_objects(&genesis_objects);
 
     // Initialize shared object queue so that any transaction touches shared_object_1 should result in congestion and cancellation.
     // Set initial cost of 10 for shared_object_1, which with 0% target_utilization and 0 burst limit
@@ -254,8 +247,9 @@ async fn test_congestion_control_execution_cancellation() {
                 stored_observations_limit: u64::MAX,
                 stake_weighted_median_threshold: 0,
                 default_none_duration_for_new_keys: false,
-                observations_chunk_size: None,
+                observations_chunk_size: Some(18),
             },
+            false,
             false,
         ))
     });
@@ -284,7 +278,6 @@ async fn test_congestion_control_execution_cancellation() {
         .unwrap();
     let owned_object_ref = authority_state
         .get_object(&owned_object.0)
-        .await
         .unwrap()
         .compute_object_reference();
     let arg3 = txn_builder
@@ -306,70 +299,63 @@ async fn test_congestion_control_execution_cancellation() {
     .await
     .unwrap();
 
-    let verified_tx_2 = VerifiedTransaction::new_unchecked(congested_tx.clone());
-
-    let epoch_store_2 = authority_state_2.load_epoch_store_one_call_per_task();
-    let response = authority_state_2
-        .handle_transaction(&epoch_store_2, verified_tx_2.clone())
-        .await
-        .unwrap();
-    let vote = response.status.into_signed_for_testing();
-
-    let committee = authority_state.clone_committee_for_testing();
-    let cert = CertifiedTransaction::new(verified_tx_2.into_message(), vec![vote], &committee)
-        .unwrap()
-        .try_into_verified_for_testing(&committee, &Default::default())
-        .unwrap();
-
-    let consensus_transactions = vec![ConsensusTransaction::new_certificate_message(
+    let consensus_transactions = vec![ConsensusTransaction::new_user_transaction_v2_message(
         &authority_state.name,
-        cert.clone().into(),
+        PlainTransactionWithClaims::no_aliases(congested_tx.clone()),
     )];
     let commit = TestConsensusCommit::new(consensus_transactions, 1, 0, 0);
 
-    consensus_handler.handle_consensus_commit(commit).await;
+    consensus_handler
+        .handle_consensus_commit_for_test(commit)
+        .await;
 
     // Wait for captured transactions to be available
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Get the captured transactions
-    let (scheduled_txns, assigned_tx_and_versions) = {
+    let scheduled_txns = {
         let mut captured = captured_transactions.lock();
         assert!(
             !captured.is_empty(),
             "Expected transactions to be scheduled"
         );
-        let (scheduled_txns, assigned_tx_and_versions, _) = captured.remove(0);
-        (scheduled_txns, assigned_tx_and_versions)
+        let (scheduled_txns, _) = captured.remove(0);
+        scheduled_txns
     };
 
     // Both prologue and the cancelled transaction should be scheduled
     // The cancelled transaction will abort during execution
     assert_eq!(
         scheduled_txns.len(),
-        3,
-        "Expected prologue + cancelled transaction + settlement"
+        2,
+        "Expected prologue + cancelled transaction"
     );
 
     // Now execute the cancelled transaction to get the effects
+    let epoch_store = authority_state.load_epoch_store_one_call_per_task();
+    let executable = VerifiedExecutableTransaction::new_from_consensus(
+        VerifiedTransaction::new_unchecked(congested_tx.clone()),
+        epoch_store.epoch(),
+    );
+
     // Find the assigned versions for our specific transaction
-    let cert_key = cert.key();
-    let assigned_versions = assigned_tx_and_versions
-        .into_map()
-        .get(&cert_key)
-        .expect("Transaction should have assigned versions")
-        .clone();
+    let tx_key = executable.key();
+    let assigned_versions = scheduled_txns
+        .iter()
+        .find(|(s, _)| s.key() == tx_key)
+        .map(|(_, v)| v.clone())
+        .expect("Transaction should have assigned versions");
 
     let execution_env = ExecutionEnv::new().with_assigned_versions(assigned_versions);
     let (effects, execution_error) = authority_state
-        .try_execute_for_test(&cert, execution_env)
+        .try_execute_executable_for_test(&executable, execution_env)
         .await;
 
     // Transaction should be cancelled with `shared_object_1` as the congested object.
     assert!(execution_error.is_some());
     assert_eq!(
         execution_error.unwrap().to_execution_status().0,
-        ExecutionFailureStatus::ExecutionCancelledDueToSharedObjectCongestion {
+        ExecutionErrorKind::ExecutionCancelledDueToSharedObjectCongestion {
             congested_objects: CongestedObjects(vec![shared_object_1.0]),
         }
     );
@@ -377,7 +363,7 @@ async fn test_congestion_control_execution_cancellation() {
 
     // Tests consensus object versions in effects are set correctly.
     assert_eq!(
-        effects.input_consensus_objects(),
+        effects.accessed_consensus_objects(),
         vec![
             InputConsensusObject::Cancelled(shared_object_1.0, SequenceNumber::CONGESTED),
             InputConsensusObject::Cancelled(shared_object_2.0, SequenceNumber::CANCELLED_READ)
@@ -385,13 +371,13 @@ async fn test_congestion_control_execution_cancellation() {
     );
 
     // Run the same transaction in `authority_state_2`, but using the above effects for the execution.
-    let (cert, _) = certify_shared_obj_transaction_no_execution(&authority_state_2, congested_tx)
+    let (executable, _) = submit_to_consensus(&authority_state_2, congested_tx)
         .await
         .unwrap();
     let assigned_versions = authority_state_2
         .epoch_store_for_testing()
         .acquire_shared_version_assignments_from_effects(
-            &VerifiedExecutableTransaction::new_from_certificate(cert.clone()),
+            &executable,
             effects,
             None,
             authority_state_2.get_object_cache_reader().as_ref(),
@@ -399,13 +385,13 @@ async fn test_congestion_control_execution_cancellation() {
         .unwrap();
     let execution_env = ExecutionEnv::new().with_assigned_versions(assigned_versions);
     let (effects_2, execution_error) = authority_state_2
-        .try_execute_for_test(&cert, execution_env)
+        .try_execute_executable_for_test(&executable, execution_env)
         .await;
 
     // Should result in the same cancellation.
     assert_eq!(
         execution_error.unwrap().to_execution_status().0,
-        ExecutionFailureStatus::ExecutionCancelledDueToSharedObjectCongestion {
+        ExecutionErrorKind::ExecutionCancelledDueToSharedObjectCongestion {
             congested_objects: CongestedObjects(vec![shared_object_1.0]),
         }
     );

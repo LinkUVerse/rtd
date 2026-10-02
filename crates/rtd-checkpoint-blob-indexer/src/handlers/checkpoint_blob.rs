@@ -1,16 +1,22 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
+use std::sync::LazyLock;
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::BufMut;
+use bytes::Bytes;
+use bytes::BytesMut;
+use object_store::ObjectStoreExt as _;
 use object_store::path::Path as ObjectPath;
 use prost::Message;
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::pipeline::concurrent::BatchStatus;
 use rtd_indexer_alt_framework::pipeline::concurrent::Handler;
-use rtd_indexer_alt_framework::pipeline::{Processor, concurrent::BatchStatus};
 use rtd_indexer_alt_framework::store::Store;
 use rtd_indexer_alt_object_store::ObjectStore;
-use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::field::FieldMask;
+use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
 use rtd_rpc::proto::rtd::rpc;
 use rtd_types::full_checkpoint_content::Checkpoint;

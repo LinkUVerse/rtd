@@ -6,17 +6,19 @@ use crate::{
     object_runtime::{MoveAccumulatorAction, MoveAccumulatorValue, ObjectRuntime},
 };
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
-use move_binary_format::{safe_assert, safe_assert_eq, safe_unwrap, safe_unwrap_err};
+use move_binary_format::{safe_assert, safe_assert_eq, safe_unwrap};
 use move_core_types::{
     account_address::AccountAddress, gas_algebra::InternalGas, language_storage::TypeTag,
     vm_status::StatusCode,
 };
-use move_vm_runtime::{native_charge_gas_early_exit, native_functions::NativeContext};
-use move_vm_types::{
-    loaded_data::runtime_types::Type,
-    natives::function::NativeResult,
-    values::{Value, VectorSpecialization},
+use move_vm_runtime::{
+    execution::{
+        Type,
+        values::{Value, Vector, VectorSpecialization},
+    },
+    natives::functions::NativeResult,
 };
+use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
 use rtd_types::{base_types::ObjectID, error::VMMemoryLimitExceededSubStatusCode};
 use smallvec::smallvec;
 use std::collections::VecDeque;
@@ -115,7 +117,7 @@ fn emit_impl(
     let event_value_size = abstract_size(
         get_extension!(context, ObjectRuntime)?.protocol_config,
         &event_value,
-    );
+    )?;
 
     // Deriving event value size can be expensive due to recursion overhead
     native_charge_gas_early_exit!(
@@ -150,8 +152,8 @@ fn emit_impl(
     }
 
     // Get the type tag before getting the mutable reference to avoid borrowing issues
-    let stream_head_type_tag = if stream_ref.is_some() {
-        Some(context.type_to_type_tag(&stream_ref.as_ref().unwrap().stream_head_ty)?)
+    let stream_head_type_tag = if let Some(stream_ref) = &stream_ref {
+        Some(context.type_to_type_tag(&stream_ref.stream_head_ty)?)
     } else {
         None
     };
@@ -204,24 +206,23 @@ fn emit_impl(
         stream_head_ty: _,
     }) = stream_ref
     {
-        let stream_id_addr: AccountAddress =
-            safe_unwrap_err!(stream_id.value_as::<AccountAddress>());
+        let stream_id_addr: AccountAddress = safe_unwrap!(stream_id.value_as::<AccountAddress>());
         let accumulator_id: ObjectID =
-            safe_unwrap_err!(accumulator_id.value_as::<AccountAddress>()).into();
-        let events_len = obj_runtime.state.events().len();
-        if events_len == 0 {
-            return Err(
+            safe_unwrap!(accumulator_id.value_as::<AccountAddress>()).into();
+        let event_idx = obj_runtime
+            .state
+            .total_events_emitted()
+            .checked_sub(1)
+            .ok_or_else(|| {
                 PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message("No events found after emitting authenticated event".to_string()),
-            );
-        }
-        let event_idx = events_len - 1;
+                    .with_message("No events found after emitting authenticated event".to_string())
+            })?;
         obj_runtime.emit_accumulator_event(
             accumulator_id,
             MoveAccumulatorAction::Merge,
             stream_id_addr,
             safe_unwrap!(stream_head_type_tag),
-            MoveAccumulatorValue::EventRef(event_idx as u64),
+            MoveAccumulatorValue::EventRef(event_idx),
         )?;
     }
 
@@ -265,7 +266,7 @@ pub fn get_events_by_type(
         .iter()
         .filter_map(|(tag, event)| {
             if &specified_type_tag == tag {
-                Some(event.copy_value().unwrap())
+                Some(event.copy_value())
             } else {
                 None
             }
@@ -273,9 +274,6 @@ pub fn get_events_by_type(
         .collect::<Vec<_>>();
     Ok(NativeResult::ok(
         legacy_test_cost(),
-        smallvec![move_vm_types::values::Vector::pack(
-            specialization,
-            matched_events
-        )?],
+        smallvec![Vector::pack(specialization, matched_events)?],
     ))
 }

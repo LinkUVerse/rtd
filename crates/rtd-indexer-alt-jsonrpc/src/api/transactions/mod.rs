@@ -2,20 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::future;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use rtd_json_rpc_types::{Page, RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions};
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_json_rpc_types::Page;
+use rtd_json_rpc_types::RtdTransactionBlockResponse;
+use rtd_json_rpc_types::RtdTransactionBlockResponseOptions;
 use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
 use rtd_types::digests::TransactionDigest;
 
-use self::{error::Error, filter::RtdTransactionBlockResponseQuery};
-
-use crate::{
-    context::Context,
-    error::{InternalContext, RpcError, rpc_bail},
-};
-
-use super::rpc_module::RpcModule;
+use crate::api::rpc_module::RpcModule;
+use crate::api::transactions::error::Error;
+use crate::api::transactions::filter::RtdTransactionBlockResponseQuery;
+use crate::context::Context;
+use crate::error::InternalContext;
+use crate::error::RpcError;
+use crate::error::rpc_bail;
 
 mod error;
 mod filter;
@@ -115,11 +118,8 @@ impl QueryTransactionsApiServer for QueryTransactions {
                 let mut retries = 0;
                 for _ in 0..config.tx_retry_count {
                     // Retry only if the error is an invalid params error, which can only be due to
-                    // the transaction not being found in the kv store or tx balance changes table.
-                    if let Err(RpcError::InvalidParams(
-                        _e @ (Error::BalanceChangesNotFound(_) | Error::NotFound(_)),
-                    )) = tx
-                    {
+                    // the transaction not being found in the kv store.
+                    if let Err(RpcError::InvalidParams(_e @ Error::NotFound(_))) = tx {
                         interval.tick().await;
                         retries += 1;
                         tx = response::transaction(ctx, *d, &options).await;
@@ -143,7 +143,7 @@ impl QueryTransactionsApiServer for QueryTransactions {
         let data = future::join_all(tx_futures)
             .await
             .into_iter()
-            .zip(digests)
+            .zip_debug_eq(digests)
             .map(|(r, d)| {
                 if let Err(RpcError::InvalidParams(e @ Error::NotFound(_))) = r {
                     rpc_bail!(e)

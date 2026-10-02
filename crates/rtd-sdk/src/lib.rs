@@ -4,8 +4,8 @@
 //! The Rtd Rust SDK
 //!
 //! It aims at providing a similar SDK functionality like the one existing for
-//! [TypeScript](https://github.com/LinkUVerse/rtd/tree/main/sdk/typescript/).
-//! Rtd Rust SDK builds on top of the [JSON RPC API](https://docs.rtd.io/rtd-jsonrpc)
+//! TypeScript SDK in the sibling `rtd-ts-sdk/packages/typescript` checkout.
+//! Rtd Rust SDK builds on top of the JSON-RPC API
 //! and therefore many of the return types are the ones specified in [rtd_types].
 //!
 //! The API is split in several parts corresponding to different functionalities
@@ -32,11 +32,11 @@
 //! which provides a simple and straightforward way of connecting to a Rtd
 //! network and having access to the different available APIs.
 //!
-//! A simple example that connects to a running Rtd local network,
-//! the Rtd devnet, and the Rtd testnet is shown below.
+//! A simple example that connects to a running Rtd local network is shown below.
+//! Public network endpoints must be configured explicitly before using
+//! `build_devnet`, `build_testnet`, or `build_mainnet`.
 //! To successfully run this program, make sure to spin up a local
-//! network with a local validator, a fullnode, and a faucet server
-//! (see [here](https://github.com/stefan-linku/rtd/tree/rust_sdk_api_examples/crates/rtd-sdk/examples#preqrequisites) for more information).
+//! network with a local validator, a fullnode, and a faucet server.
 //!
 //! ```rust,no_run
 //! use rtd_sdk::RtdClientBuilder;
@@ -53,13 +53,6 @@
 //!     let rtd_local = RtdClientBuilder::default().build_localnet().await?;
 //!     println!("Rtd local network version: {:?}", rtd_local.api_version());
 //!
-//!     // Rtd devnet running at `https://fullnode.devnet.io:443`
-//!     let rtd_devnet = RtdClientBuilder::default().build_devnet().await?;
-//!     println!("Rtd devnet version: {:?}", rtd_devnet.api_version());
-//!
-//!     // Rtd testnet running at `https://testnet.devnet.io:443`
-//!     let rtd_testnet = RtdClientBuilder::default().build_testnet().await?;
-//!     println!("Rtd testnet version: {:?}", rtd_testnet.api_version());
 //!     Ok(())
 //!
 //! }
@@ -77,6 +70,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub use rtd_crypto;
+pub use rtd_rpc;
+pub use rtd_sdk_types;
+
 use async_trait::async_trait;
 use base64::Engine;
 use jsonrpsee::core::client::ClientT;
@@ -93,17 +90,18 @@ use rtd_json_rpc_api::{
 };
 pub use rtd_json_rpc_types as rpc_types;
 use rtd_json_rpc_types::{
-    ObjectsPage, RtdObjectDataFilter, RtdObjectDataOptions, RtdObjectResponse,
-    RtdObjectResponseQuery,
+    ObjectsPage, RtdObjectDataFilter, RtdObjectDataOptions, RtdObjectResponseQuery,
 };
 use rtd_transaction_builder::{DataReader, TransactionBuilder};
 pub use rtd_types as types;
 use rtd_types::base_types::{ObjectID, ObjectInfo, RtdAddress};
+use rtd_types::object::Object;
 
 use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
 use crate::error::{Error, RtdRpcResult};
 
 pub mod apis;
+pub mod digests;
 pub mod error;
 pub mod json_rpc_error;
 pub mod rtd_client_config;
@@ -114,9 +112,23 @@ pub const RTD_COIN_TYPE: &str = "0x2::rtd::RTD";
 pub const RTD_LOCAL_NETWORK_URL: &str = "http://127.0.0.1:9000";
 pub const RTD_LOCAL_NETWORK_URL_0: &str = "http://0.0.0.0:9000";
 pub const RTD_LOCAL_NETWORK_GAS_URL: &str = "http://127.0.0.1:5003/v2/gas";
-pub const RTD_DEVNET_URL: &str = "https://fullnode.devnet.rtd.io:443";
-pub const RTD_TESTNET_URL: &str = "https://fullnode.testnet.rtd.io:443";
-pub const RTD_MAINNET_URL: &str = "https://fullnode.mainnet.rtd.io:443";
+/// No public devnet endpoint ships with the fork. Use `RTD_DEVNET_RPC_URL` or `build(url)`.
+pub const RTD_DEVNET_URL: &str = "";
+/// No public testnet endpoint ships with the fork. Use `RTD_TESTNET_RPC_URL` or `build(url)`.
+pub const RTD_TESTNET_URL: &str = "";
+/// No public mainnet endpoint ships with the fork. Use `RTD_MAINNET_RPC_URL` or `build(url)`.
+pub const RTD_MAINNET_URL: &str = "";
+
+fn configured_network_url(network: &str, variable: &str) -> RtdRpcResult<String> {
+    std::env::var(variable)
+        .ok()
+        .filter(|url| !url.trim().is_empty())
+        .ok_or_else(|| {
+            Error::DataError(format!(
+                "RTD {network} RPC URL is not configured; set {variable} or call build(url)"
+            ))
+        })
+}
 
 /// A Rtd client builder for connecting to the Rtd network
 ///
@@ -331,9 +343,9 @@ impl RtdClientBuilder {
         self.build(RTD_LOCAL_NETWORK_URL).await
     }
 
-    /// Returns a [RtdClient] object that is ready to interact with the Rtd devnet.
+    /// Connects to the Rtd devnet URL supplied in `RTD_DEVNET_RPC_URL`.
     ///
-    /// For connecting to a custom URI, use the `build` function instead..
+    /// For connecting to a custom URI, use the `build` function instead.
     ///
     /// # Examples
     ///
@@ -351,10 +363,11 @@ impl RtdClientBuilder {
     /// }
     /// ```
     pub async fn build_devnet(self) -> RtdRpcResult<RtdClient> {
-        self.build(RTD_DEVNET_URL).await
+        self.build(configured_network_url("devnet", "RTD_DEVNET_RPC_URL")?)
+            .await
     }
 
-    /// Returns a [RtdClient] object that is ready to interact with the Rtd testnet.
+    /// Connects to the Rtd testnet URL supplied in `RTD_TESTNET_RPC_URL`.
     ///
     /// For connecting to a custom URI, use the `build` function instead.
     ///
@@ -374,10 +387,11 @@ impl RtdClientBuilder {
     /// }
     /// ```
     pub async fn build_testnet(self) -> RtdRpcResult<RtdClient> {
-        self.build(RTD_TESTNET_URL).await
+        self.build(configured_network_url("testnet", "RTD_TESTNET_RPC_URL")?)
+            .await
     }
 
-    /// Returns a [RtdClient] object that is ready to interact with the Rtd mainnet.
+    /// Connects to the Rtd mainnet URL supplied in `RTD_MAINNET_RPC_URL`.
     ///
     /// For connecting to a custom URI, use the `build` function instead.
     ///
@@ -397,7 +411,8 @@ impl RtdClientBuilder {
     /// }
     /// ```
     pub async fn build_mainnet(self) -> RtdRpcResult<RtdClient> {
-        self.build(RTD_MAINNET_URL).await
+        self.build(configured_network_url("mainnet", "RTD_MAINNET_RPC_URL")?)
+            .await
     }
 
     /// Return the server information as a `ServerInfo` structure.
@@ -630,12 +645,14 @@ impl DataReader for ReadApi {
         Ok(result)
     }
 
-    async fn get_object_with_options(
-        &self,
-        object_id: ObjectID,
-        options: RtdObjectDataOptions,
-    ) -> Result<RtdObjectResponse, anyhow::Error> {
-        Ok(self.get_object_with_options(object_id, options).await?)
+    async fn get_object(&self, object_id: ObjectID) -> Result<Object, anyhow::Error> {
+        let resp = self
+            .get_object_with_options(object_id, RtdObjectDataOptions::bcs_lossless())
+            .await?;
+
+        resp.data
+            .ok_or_else(|| anyhow::anyhow!("unable to fetch object {object_id}"))?
+            .try_into()
     }
 
     /// Returns the reference gas price as a u64 or an error otherwise

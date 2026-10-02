@@ -2,28 +2,43 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
-    cell::RefCell,
-    collections::BTreeSet,
-    sync::atomic::{AtomicBool, Ordering},
+    collections::{BTreeMap, BTreeSet},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
+
+use std::sync::Mutex;
 
 use clap::*;
 use fastcrypto::encoding::{Base58, Encoding, Hex};
+use linku_common::in_integration_test;
 use move_binary_format::{
     binary_config::{BinaryConfig, TableConfig},
     file_format_common::VERSION_1,
 };
+use move_core_types::account_address::AccountAddress;
 use move_vm_config::verifier::VerifierConfig;
-use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
 use rtd_protocol_config_macros::{
     ProtocolConfigAccessors, ProtocolConfigFeatureFlagsGetters, ProtocolConfigOverride,
 };
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use tracing::{info, warn};
+
+pub mod reachability;
+
+// Re-exported so that `assert_reachable_gated!` expands without requiring callers to depend on
+// the antithesis sdk or linku-common directly.
+#[doc(hidden)]
+pub use antithesis_sdk::linkme;
+#[doc(hidden)]
+pub use linku_common::assert_reachable_simtest;
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 106;
+const MAX_PROTOCOL_VERSION: u64 = 138;
 
 // Record history of protocol version allocations here:
 //
@@ -279,12 +294,107 @@ const MAX_PROTOCOL_VERSION: u64 = 106;
 // Version 104: Framework update: CoinRegistry follow up for Coin methods
 //              Enable all non-zero PCRs parsing for nitro attestation native function in Devnet and Testnet.
 // Version 105: Framework update: address aliases
-//              Enable address balances on devnet
 //              Enable multi-epoch transaction expiration.
 //              Enable always include required PCRs (0-4 & 8) parsing even if they are zeros for
 //              nitro attestation native function in Devnet and Testnet.
-// Version 106: Prune address-balance gas payments before gas smashing on
-//              InsufficientFundsForWithdraw failures.
+// Version 106: Framework update: accumulator storage fund calculations
+//              Enable address balances on devnet
+// Version 108: Enable new digit based gas rounding.
+//              Support TxContext in all parameter positions.
+//              Disable entry point signature check.
+//              Enable address aliases on testnet.
+//              Enable poseidon_bn254 on mainnet.
+// Version 109: Update where we set bounds for some binary tables to be a bit more idiomatic.
+// Version 110: Enable parsing on all nonzero custom pcrs in nitro attestation parsing native
+//              function on mainnet.
+//              split_checkpoints_in_consensus_handler in devnet
+//              Enable additional validation on zkLogin public identifier.
+// Version 111: Validator metadata
+// Version 112: Enable Ristretto255 in devnet.
+// Version 113: Validate gas price >= RGP at signing for address balance gas payments.
+// Version 114: Gate seeded test overrides for checkpoint tx limit behind feature flag.
+// Version 115: Gasless transaction drop safety.
+//              Enable address aliases on mainnet.
+//              Relax ValidDuring requirement for transactions with owned inputs.
+// Version 116: Enable Display Registry.
+//              Disable defer_unpaid_amplification (debugging).
+// Version 117: Update Rtd System metadata handling.
+// Version 118: Adds `transfer_migration_cap` to display registry
+// Version 119: Enable the new VM.
+// Version 120: Disallow unused jump tables
+// Version 121: Re-enable defer_unpaid_amplification (devnet + testnet).
+// Version 122: Framework update: vector::empty is deprecated.
+//              Enable bulletproofs verification on devnet.
+//              Enable defer_unpaid_amplification on mainnet.
+// Version 123: Gas accounting refresh (gas_model v13).
+// Version 124: Add timestamp_based_epoch_close feature flag and enable in tests.
+//              Fix native call double-pop in gas meter stack height tracking (gas_model v14).
+//              Limit public inputs in groth16::prepare_verifying_key.
+//              Enable address balances, free tier (gasless), and coin reservations on mainnet.
+//              Enables enable_accumulators, enable_address_balance_gas_payments,
+//              enable_authenticated_event_streams, enable_coin_reservation_obj_refs,
+//              enable_object_funds_withdraw, convert_withdrawal_compatibility_ptb_arguments,
+//              split_checkpoints_in_consensus_handler, include_checkpoint_artifacts_digest_in_summary,
+//              and enable_gasless on mainnet to bring it in line with testnet.
+//              Configure mainnet gasless allowlist with stablecoin types and $0.01 minimum
+//              transfer per stable.
+// Version 125: Enable granular_post_execution_checks.
+//              Enable timestamp_based_epoch_close on testnet.
+// Version 126: Enable early_exit_on_iffw (gates the gas-underflow fix
+//              shipped to mainnet out-of-band in #26816).
+// Version 127: Enable always_advance_dkg_to_resolution.
+//              Update gas prices for range proofs and ristretto group operations.
+//              Enable Ristretto255 group operations and bulletproofs verification on testnet.
+//              Enable init functions for newly introduced modules during package upgrade.
+//              Enable timestamp_based_epoch_close on mainnet.
+// Version 128: Make some additional bounds to binary tables explicit.
+// Version 129: Add `insert_before` and `insert_after` to `rtd::linked_table`
+//              Enable unified linkage in PTBs
+// Version 130: Record unsettled object-funds withdraws using per-account net amounts
+//              from transaction effects instead of running-max withdraw amounts.
+//              Add the `rtd::scratch` per-transaction ephemeral store and its native costs.
+//              Enable zklogin v2 verify (with v1 fallback) for devnet only.
+//              Add an epoch close deadline failsafe for deferred transactions.
+// Version 131: Enable sharing transaction deny configs between validators via consensus.
+//              Enable tx_context_restrictions_verifier: reject system-package
+//              function signatures with `&mut TxContext` + any `&mut _` return
+//              that have no non-`TxContext` `&mut U` parameter.
+// Version 132: Enable defer_owned_object_double_spend on devnet.
+//              Add the `object::record_new_uid_from_hash` native and its cost, tracking the
+//              root version of hash-derived UIDs (`new_uid_from_hash`).
+//              Create the ForwardingAddressRegistry system object on devnet.
+//              Make upgrade-init linkage checks independent of PTB command order.
+// Version 133: Include function signatures in type-node limits.
+//              Bound type nodes in accumulators.
+// Version 134: Add `package::original_package_id` and its native costs.
+//              Reduce the consensus block transaction count and payload limits.
+//              (Both gated to non-mainnet chains.)
+//              Disable defer_unpaid_amplification on mainnet.
+// Version 135: Apply the v134 config changes on mainnet.
+//              Disable defer_unpaid_amplification everywhere.
+// Version 136: Enable ptb_tx_context_restrictions: `TxContext` may appear in a
+//              PTB Move call signature at most once mutably or any number of
+//              times immutably (never by value), and never in return position.
+//              Enable allowed_proposers on devnet.
+//              Add limits for references used by programmable transactions.
+//              Add additional linkage invariant hardening/invariant checks in PTBs.
+//              Add package_arena_size_in_bytes.
+// Version 137: Lower the per-bit cost of bulletproofs range proof verification, and raise the
+//              bound on batch size * range bits from 512 to 1024.
+//              Enable allowances on devnet and testnet.
+//              Enable fix_ptb_generated_reads.
+//              Charge `LdConst` for the abstract value size of the constant instead of its
+//              serialized byte length.
+//              Enable check_object_funds_withdraw_in_execution on devnet and charge for reads.
+//              Enable allowed_proposers on testnet and mainnet.
+//              Validate PTB indices at signing time.
+//              Enable memory_safety_invariant_check_v2.
+// Version 138: Enable BumpOnly
+//              Enable check_object_funds_withdraw_in_execution on testnet.
+//              Disable effects transaction dependencies on testnet.
+//              Enable allowances on mainnet.
+//              Merge colliding deferred-transaction entries in the consensus handler
+//              instead of overwriting (which stranded the displaced transactions).
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -344,17 +454,14 @@ impl std::ops::Add<u64> for ProtocolVersion {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Copy, PartialOrd, Ord, Eq, ValueEnum)]
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Default, PartialEq, Copy, PartialOrd, Ord, Eq, ValueEnum,
+)]
 pub enum Chain {
     Mainnet,
     Testnet,
+    #[default]
     Unknown,
-}
-
-impl Default for Chain {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl Chain {
@@ -402,6 +509,12 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     consensus_order_end_of_epoch_last: bool,
 
+    // If true, validators emit slim (ancestor-compressed) blocks on the consensus block
+    // subscription stream, framed in a block envelope. Gates the wire framing on both
+    // ends of the stream.
+    #[serde(skip_serializing_if = "is_false")]
+    consensus_slim_block_propagation: bool,
+
     // Disallow adding abilities to types during package upgrades.
     #[serde(skip_serializing_if = "is_false")]
     disallow_adding_abilities_on_upgrade: bool,
@@ -431,6 +544,10 @@ struct FeatureFlags {
     // Enable zklogin auth
     #[serde(skip_serializing_if = "is_false")]
     zklogin_auth: bool,
+    // zkLogin circuit verify mode: 0 = accept v1 circuit proofs only, 1 = try the v2
+    // circuit first and fall back to v1 (migration phase), 2 = accept v2 circuit proofs only.
+    #[serde(skip_serializing_if = "is_zero")]
+    zklogin_circuit_mode: u64,
     // How we order transactions coming out of consensus before sending to execution.
     #[serde(skip_serializing_if = "ConsensusTransactionOrdering::is_none")]
     consensus_transaction_ordering: ConsensusTransactionOrdering,
@@ -468,9 +585,11 @@ struct FeatureFlags {
     loaded_child_object_format: bool,
 
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     enable_jwk_consensus_updates: bool,
 
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     end_of_epoch_transaction_supported: bool,
 
     // Perform simple conservation checks keeping into account out of gas scenarios
@@ -496,6 +615,7 @@ struct FeatureFlags {
 
     // Enable bridge protocol
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     bridge: bool,
 
     #[serde(skip_serializing_if = "is_false")]
@@ -525,6 +645,10 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     accept_passkey_in_multisig: bool,
 
+    // If true, additional zkLogin public identifier structure is validated.
+    #[serde(skip_serializing_if = "is_false")]
+    validate_zklogin_public_identifier: bool,
+
     // If true, consensus prologue transaction also includes the consensus output digest.
     // It can be used to detect consensus output folk.
     #[serde(skip_serializing_if = "is_false")]
@@ -553,6 +677,14 @@ struct FeatureFlags {
     // Enable native function for msm.
     #[serde(skip_serializing_if = "is_false")]
     enable_group_ops_native_function_msm: bool,
+
+    // Enable group operations for Ristretto255
+    #[serde(skip_serializing_if = "is_false")]
+    enable_ristretto255_group_ops: bool,
+
+    // Enable native functions for group operations.
+    #[serde(skip_serializing_if = "is_false")]
+    enable_verify_bulletproofs_ristretto255: bool,
 
     // Enable nitro attestation.
     #[serde(skip_serializing_if = "is_false")]
@@ -619,9 +751,10 @@ struct FeatureFlags {
     // Controls whether consensus handler should record consensus determined shared object version
     // assignments in consensus commit prologue transaction.
     // The purpose of doing this is to enable replaying transaction without transaction effects.
-    // V2 also records initial shared versions for consensus objects.
     #[serde(skip_serializing_if = "is_false")]
     record_consensus_determined_version_assignments_in_prologue: bool,
+    // V2 also records initial shared versions for consensus objects.
+    // Deprecated: must always be set to `true`.
     #[serde(skip_serializing_if = "is_false")]
     record_consensus_determined_version_assignments_in_prologue_v2: bool,
 
@@ -683,6 +816,12 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     mysticeti_fastpath: bool,
 
+    // If true, disable pre-consensus locking for owned objects.
+    // All transactions go through consensus, and owned object conflict detection
+    // happens post-consensus via lock acquisition.
+    #[serde(skip_serializing_if = "is_false")]
+    disable_preconsensus_locking: bool,
+
     // Makes the event's sending module version-aware.
     #[serde(skip_serializing_if = "is_false")]
     relocate_event_module: bool,
@@ -709,6 +848,7 @@ struct FeatureFlags {
     // Enables the new logic for collecting the subdag in the consensus linearizer. The new logic does not stop the recursion at the highest
     // committed round for each authority, but allows to commit uncommitted blocks up to gc round (excluded) for that authority.
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     consensus_linearize_subdag_v2: bool,
 
     // Properly convert certain type argument errors in the execution layer.
@@ -728,6 +868,7 @@ struct FeatureFlags {
     minimize_child_object_mutations: bool,
 
     // If true, record the additional state digest in the consensus commit prologue.
+    // Deprecated: must always be set to `true`.
     #[serde(skip_serializing_if = "is_false")]
     record_additional_state_digest_in_prologue: bool,
 
@@ -738,6 +879,7 @@ struct FeatureFlags {
     // If true, then it (1) will not enforce monotonicity checks for a block's ancestors and (2) calculates the commit's timestamp based on the
     // weighted by stake median timestamp of the leader's ancestors.
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     consensus_median_based_commit_timestamp: bool,
 
     // If true, enables the normalization of PTB arguments but does not yet enable splatting
@@ -779,6 +921,7 @@ struct FeatureFlags {
 
     // Enable coin reservation
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     enable_coin_reservation_obj_refs: bool,
 
     // If true, create the root accumulator object in the change epoch transaction.
@@ -788,19 +931,27 @@ struct FeatureFlags {
 
     // Enable authenticated event streams
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     enable_authenticated_event_streams: bool,
 
     // Enable address balance gas payments
     #[serde(skip_serializing_if = "is_false")]
     enable_address_balance_gas_payments: bool,
 
-    // Prevent address-balance gas settlement from underflowing on early withdrawal failures.
+    // Validate gas price >= RGP at signing for address balance gas payments
     #[serde(skip_serializing_if = "is_false")]
-    prune_address_balance_gas_payment_on_iffw: bool,
+    address_balance_gas_check_rgp_at_signing: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    address_balance_gas_reject_gas_coin_arg: bool,
 
     // Enable multi-epoch transaction expiration (max 1 epoch difference)
     #[serde(skip_serializing_if = "is_false")]
     enable_multi_epoch_transaction_expiration: bool,
+
+    // Relax ValidDuring expiration requirement for transactions with owned inputs
+    #[serde(skip_serializing_if = "is_false")]
+    relax_valid_during_for_owned_inputs: bool,
 
     // Enable statically type checked ptb execution
     #[serde(skip_serializing_if = "is_false")]
@@ -838,6 +989,7 @@ struct FeatureFlags {
     allow_private_accumulator_entrypoints: bool,
 
     // If true, include indirect state in the additional consensus digest.
+    // Deprecated: must always be set to `true`.
     #[serde(skip_serializing_if = "is_false")]
     additional_consensus_digest_indirect_state: bool,
 
@@ -845,9 +997,26 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     check_for_init_during_upgrade: bool,
 
+    // If true, run `init` for newly introduced modules during package upgrade.
+    #[serde(skip_serializing_if = "is_false")]
+    enable_init_on_upgrade: bool,
+
+    // If true, analyze upgrade-init linkage after all other PTB linkage constraints.
+    #[serde(skip_serializing_if = "is_false")]
+    enable_order_independent_upgrade_init_linkage: bool,
+
+    // If true, adds additional hardening and checks to upgrade-init linkage entries, and adds
+    // additional linkage invariant checks around linkage.
+    #[serde(skip_serializing_if = "is_false")]
+    harden_linkage_consistency: bool,
+
     // Check shared object transfer restrictions per command.
     #[serde(skip_serializing_if = "is_false")]
     per_command_shared_object_transfer_rules: bool,
+
+    // Validate PTB input and result indices before signing.
+    #[serde(skip_serializing_if = "is_false")]
+    validate_ptb_argument_indices: bool,
 
     // Enable including checkpoint artifacts digest in the summary.
     #[serde(skip_serializing_if = "is_false")]
@@ -860,6 +1029,10 @@ struct FeatureFlags {
     // If true, cancel randomness-using txns when DKG has failed *before* doing other congestion checks.
     #[serde(skip_serializing_if = "is_false")]
     cancel_for_failed_dkg_early: bool,
+
+    // If true, keep advancing the DKG state machine while DKG is pending.
+    #[serde(skip_serializing_if = "is_false")]
+    always_advance_dkg_to_resolution: bool,
 
     // Enable coin registry protocol
     #[serde(skip_serializing_if = "is_false")]
@@ -893,6 +1066,26 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     allow_references_in_ptbs: bool,
 
+    // If true, the tx_context_restrictions_verifier pass runs at Move module
+    // publish time and rejects system-package signatures with `&mut TxContext`
+    // + any `&mut _` return that have no non-`TxContext` `&mut U` parameter.
+    // User packages are exempt: they can express the same shape through
+    // generic instantiation, so PTB arity and auto-injection checks are the
+    // safety mechanism there.
+    #[serde(skip_serializing_if = "is_false")]
+    framework_tx_context_mut_restrictions: bool,
+
+    // Count function and local signatures towards type-node budgets.
+    #[serde(skip_serializing_if = "is_false")]
+    include_function_signatures_in_instantiation_limits: bool,
+
+    // If true, the static PTB verifier restricts `TxContext` in Move call
+    // signatures: it may appear at most once as `&mut TxContext`, or any
+    // number of times as `&TxContext`, never by value, and never in return
+    // position (it can never become a PTB result).
+    #[serde(skip_serializing_if = "is_false")]
+    ptb_tx_context_restrictions: bool,
+
     // Enable display registry protocol
     #[serde(skip_serializing_if = "is_false")]
     enable_display_registry: bool,
@@ -914,21 +1107,187 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     deprecate_global_storage_ops: bool,
 
+    // If true, normalize depth formula to not be empty for zero depth.
+    #[serde(skip_serializing_if = "is_false")]
+    normalize_depth_formula: bool,
+
+    // If true, `LdConst` charges for the abstract value size of the constant instead of its
+    // serialized byte length.
+    #[serde(skip_serializing_if = "is_false")]
+    charge_ld_const_abstract_size: bool,
+
     // If true, skip GC'ed accept votes in CommitFinalizer.
     #[serde(skip_serializing_if = "is_false")]
     consensus_skip_gced_accept_votes: bool,
 
     // If true, include cancelled randomness txns in the consensus commit prologue.
+    // Deprecated: must always be set to `true`.
     #[serde(skip_serializing_if = "is_false")]
     include_cancelled_randomness_txns_in_prologue: bool,
 
     // Enables address aliases.
     #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
     address_aliases: bool,
+
+    // If true, create the forwarding address registry object in the change epoch transaction.
+    #[serde(skip_serializing_if = "is_false")]
+    create_forwarding_address_registry: bool,
+
+    // Corrects signature-to-signer mapping in CheckpointContentsV2.
+    // Deprecated: must always be set to `true`.
+    #[serde(skip_serializing_if = "is_false")]
+    fix_checkpoint_signature_mapping: bool,
 
     // If true, enable object funds withdraw.
     #[serde(skip_serializing_if = "is_false")]
     enable_object_funds_withdraw: bool,
+
+    // If true, unsettled object-funds withdraws are recorded using per-account net
+    // amounts from transaction effects, instead of running-max withdraw amounts.
+    #[serde(skip_serializing_if = "is_false")]
+    record_net_unsettled_object_withdraws: bool,
+
+    // If true, skip GC'ed blocks in direct finalization.
+    #[serde(skip_serializing_if = "is_false")]
+    consensus_skip_gced_blocks_in_direct_finalization: bool,
+
+    // If true, uses a new rounding mechanism for gas calculations, replacing the step-based one
+    #[serde(skip_serializing_if = "is_false")]
+    gas_rounding_halve_digits: bool,
+
+    // If true, enable tx contexts in all argument positions
+    #[serde(skip_serializing_if = "is_false")]
+    flexible_tx_context_positions: bool,
+
+    // If true, disable entry point signature check.
+    #[serde(skip_serializing_if = "is_false")]
+    disable_entry_point_signature_check: bool,
+
+    // If true, convert withdrawal compatibility PTB arguments to coins at the start of the PTB.
+    #[serde(skip_serializing_if = "is_false")]
+    convert_withdrawal_compatibility_ptb_arguments: bool,
+
+    // If true, additional restrictions for hot or not entry functions are enforced.
+    #[serde(skip_serializing_if = "is_false")]
+    restrict_hot_or_not_entry_functions: bool,
+
+    // If true, split checkpoints in consensus handler.
+    #[serde(skip_serializing_if = "is_false")]
+    split_checkpoints_in_consensus_handler: bool,
+
+    // If true, always accept committed system transactions.
+    #[serde(skip_serializing_if = "is_false")]
+    consensus_always_accept_system_transactions: bool,
+
+    // If true perform consistent verification of metadata
+    #[serde(skip_serializing_if = "is_false")]
+    validator_metadata_verify_v2: bool,
+
+    // If true, defer transactions with unpaid consensus amplification
+    // (where duplicate count exceeds gas_price / RGP + 1)
+    #[serde(skip_serializing_if = "is_false")]
+    defer_unpaid_amplification: bool,
+
+    // If true, defer transactions that won an owned object lock when other transactions
+    // in the same commit attempted to lock the same object (double-spend attempt).
+    #[serde(skip_serializing_if = "is_false")]
+    defer_owned_object_double_spend: bool,
+
+    // If true, `TransactionExpiration::Validity` is accepted, allowing a transaction to
+    // restrict which validators may propose it in consensus.
+    #[serde(skip_serializing_if = "is_false")]
+    allowed_proposers: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    randomize_checkpoint_tx_limit_in_tests: bool,
+
+    // If true, mark the gas coin as uninitialized in drop safety when there is no gas coin.
+    #[serde(skip_serializing_if = "is_false")]
+    gasless_transaction_drop_safety: bool,
+
+    // When split-checkpoints enabled, merge randomness and non-randomness schedulables together.
+    // Deprecated: must always be set to `true`.
+    #[serde(skip_serializing_if = "is_false")]
+    merge_randomness_into_checkpoint: bool,
+
+    // If true, use coin party owner information.
+    #[serde(skip_serializing_if = "is_false")]
+    use_coin_party_owner: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    enable_gasless: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    gasless_verify_remaining_balance: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    disallow_jump_orphans: bool,
+
+    // If true, return early on type mismatch in receive_object.
+    #[serde(skip_serializing_if = "is_false")]
+    early_return_receive_object_mismatched_type: bool,
+
+    // If true, use consensus commit timestamps to determine epoch close instead of EndOfPublish voting.
+    // Each validator transitions from AcceptAllCerts to RejectAllCerts when the consensus commit
+    // timestamp exceeds the reconfiguration timestamp. EndOfPublish quorum still works as a
+    // fallback for manual epoch close.
+    #[serde(skip_serializing_if = "is_false")]
+    timestamp_based_epoch_close: bool,
+
+    // If true, groth16::prepare_verifying_key checks that the verifying key has no more than
+    // MAX_PUBLIC_INPUTS public inputs.
+    #[serde(skip_serializing_if = "is_false")]
+    limit_groth16_pvk_inputs: bool,
+
+    // If true, the funds-accumulator address-balance change invariant
+    // (`TemporaryStore::check_address_balance_changes`) is enforced as a consensus check —
+    // violations abort the tx via the conservation-recovery flow. When false, the check still
+    // runs but a violation panics so unexpected violations surface during rollout.
+    #[serde(skip_serializing_if = "is_false")]
+    enforce_address_balance_change_invariant: bool,
+
+    // If true, validators may broadcast `UpdateTransactionDenyConfig` consensus messages.
+    #[serde(skip_serializing_if = "is_false")]
+    share_transaction_deny_config_in_consensus: bool,
+
+    // Enables more granular post-execution checks.
+    #[serde(skip_serializing_if = "is_false")]
+    granular_post_execution_checks: bool,
+
+    // If true, exit early for IFWW transactions.
+    #[serde(skip_serializing_if = "is_false")]
+    early_exit_on_iffw: bool,
+
+    // If true enable unified linkage
+    #[serde(skip_serializing_if = "is_false")]
+    enable_unified_linkage: bool,
+
+    // Enable allowance-sourced funds withdrawals (`WithdrawFrom::SenderAllowance`).
+    // Requires `enable_accumulators`.
+    #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
+    enable_allowances: bool,
+
+    // Fixes last-use scoping and live-reference metering for generated `Read` PTB arguments.
+    #[serde(skip_serializing_if = "is_false")]
+    fix_ptb_generated_reads: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    check_object_funds_withdraw_in_execution: bool,
+    // If true, use the bitset implementation for PTB memory safety invariant check.
+    #[serde(skip_serializing_if = "is_false")]
+    memory_safety_invariant_check_v2: bool,
+
+    // Keep the effects wire representation, but stop collecting transaction dependencies.
+    #[serde(skip_serializing_if = "is_false")]
+    disable_effects_tx_dependencies: bool,
+
+    // If true, a deferred-transaction key collision in the consensus commit handler
+    // merges the colliding entries instead of overwriting the existing one, which
+    // silently dropped the displaced (finalized) transactions.
+    #[serde(skip_serializing_if = "is_false")]
+    merge_colliding_deferrals: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -1080,6 +1439,13 @@ impl ConsensusNetwork {
 pub struct ProtocolConfig {
     pub version: ProtocolVersion,
 
+    /// The chain this config was instantiated for. Unlike the other fields, this is not a
+    /// versioned protocol constant: it identifies the network rather than describing protocol
+    /// behavior, so it is intentionally excluded from serialization (and from the config
+    /// snapshots) and is populated directly from the chain passed to `get_for_version`.
+    #[serde(skip)]
+    chain: Chain,
+
     feature_flags: FeatureFlags,
 
     // ==== Transaction input limits ====
@@ -1197,6 +1563,15 @@ pub struct ProtocolConfig {
     /// Maximum number of "type nodes", a metric for how big a SignatureToken will be when expanded into a fully qualified type. Enforced by the Move bytecode verifier.
     max_type_nodes: Option<u64>,
 
+    /// Maximum number of "type nodes" that can be instantiated in a single function.
+    max_generic_instantiation_type_nodes_per_function: Option<u64>,
+
+    /// Maximum number of "type nodes" that can be instantiated in a module.
+    max_generic_instantiation_type_nodes_per_module: Option<u64>,
+
+    /// Maximum number of "type nodes" allowed in an accumulator.
+    max_accumulator_type_nodes: Option<u64>,
+
     /// Maximum number of push instructions in one function. Enforced by the Move bytecode verifier.
     max_push_size: Option<u64>,
 
@@ -1247,6 +1622,10 @@ pub struct ProtocolConfig {
 
     /// Maximum depth of a Move value within the VM.
     max_move_value_depth: Option<u64>,
+
+    /// Maximum number of bytes a single package's arena may allocate when the package is loaded
+    /// into the VM. If unset, the VM uses its built-in default.
+    package_arena_size_in_bytes: Option<u64>,
 
     /// Maximum number of variants in an enum. Enforced by the bytecode verifier at signing.
     max_move_enum_variants: Option<u64>,
@@ -1352,6 +1731,9 @@ pub struct ProtocolConfig {
     /// Unit gas price, Mist per internal gas unit.
     storage_gas_price: Option<u64>,
 
+    /// Per-object storage cost for accumulator objects, used during end-of-epoch accounting.
+    accumulator_object_storage_cost: Option<u64>,
+
     // === Core Protocol ===
     /// Max number of transactions per checkpoint.
     /// Note that this is a protocol constant and not a config as validators must have this set to
@@ -1386,6 +1768,9 @@ pub struct ProtocolConfig {
     config_read_setting_impl_cost_base: Option<u64>,
     config_read_setting_impl_cost_per_byte: Option<u64>,
 
+    package_original_package_id_impl_cost_base: Option<u64>,
+    package_original_package_id_impl_cost_per_byte: Option<u64>,
+
     // `dynamic_field` module
     // Cost params for the Move native function `hash_type_and_key<K: copy + drop + store>(parent: address, k: K): address`
     dynamic_field_hash_type_and_key_cost_base: Option<u64>,
@@ -1412,6 +1797,22 @@ pub struct ProtocolConfig {
     dynamic_field_has_child_object_with_ty_type_cost_per_byte: Option<u64>,
     dynamic_field_has_child_object_with_ty_type_tag_cost_per_byte: Option<u64>,
 
+    // `scratch` module
+    // Cost params for the Move native function `add_impl<V: drop>(key: address, value: V)`
+    scratch_add_cost_base: Option<u64>,
+    // Cost params for the Move native function `read_impl<V: copy + drop>(key: address): V`
+    scratch_read_cost_base: Option<u64>,
+    scratch_read_value_cost: Option<u64>,
+    // Cost params for the Move native function `remove_impl<V: drop>(key: address): V`
+    scratch_remove_cost_base: Option<u64>,
+    // Cost params for the Move native function `exists_impl(key: address): bool`
+    scratch_exists_cost_base: Option<u64>,
+    // Cost params for the Move native function `exists_with_type_impl<V: drop>(key: address): bool`
+    scratch_exists_with_type_cost_base: Option<u64>,
+    scratch_exists_with_type_type_cost: Option<u64>,
+    // Maximum number of entries in the per-transaction `rtd::scratch` store.
+    max_scratch_pad_size: Option<u64>,
+
     // `event` module
     // Cost params for the Move native function `event::emit<T: copy + drop>(event: T)`
     event_emit_cost_base: Option<u64>,
@@ -1420,6 +1821,12 @@ pub struct ProtocolConfig {
     event_emit_output_cost_per_byte: Option<u64>,
     event_emit_auth_stream_cost: Option<u64>,
 
+    // `funds_accumulator` module
+    // Base cost for reserving object funds for withdrawal.
+    reserve_object_funds_for_withdrawal_cost_base: Option<u64>,
+    // Cost of loading an object's settled balance on the first withdrawal for an owner and type.
+    reserve_object_funds_for_withdrawal_cold_read_cost: Option<u64>,
+
     //  `object` module
     // Cost params for the Move native function `borrow_uid<T: key>(obj: &T): &UID`
     object_borrow_uid_cost_base: Option<u64>,
@@ -1427,6 +1834,9 @@ pub struct ProtocolConfig {
     object_delete_impl_cost_base: Option<u64>,
     // Cost params for the Move native function `record_new_uid(id: address)`
     object_record_new_uid_cost_base: Option<u64>,
+    // Cost params for the Move native function
+    // `record_new_uid_from_hash(parent: address, bytes: address)`
+    object_record_new_uid_from_hash_cost_base: Option<u64>,
 
     // Transfer
     // Cost params for the Move native function `transfer_impl<T: key>(obj: T, recipient: address)`
@@ -1440,6 +1850,8 @@ pub struct ProtocolConfig {
     // Cost params for the Move native function
     // `receive_object<T: key>(p: &mut UID, recv: Receiving<T>T)`
     transfer_receive_object_cost_base: Option<u64>,
+    transfer_receive_object_cost_per_byte: Option<u64>,
+    transfer_receive_object_type_cost_per_byte: Option<u64>,
 
     // TxContext
     // Cost params for the Move native function `transfer_impl<T: key>(obj: T, recipient: address)`
@@ -1585,6 +1997,23 @@ pub struct ProtocolConfig {
     group_ops_bls12381_uncompressed_g1_sum_cost_per_term: Option<u64>,
     group_ops_bls12381_uncompressed_g1_sum_max_terms: Option<u64>,
 
+    group_ops_ristretto_decode_scalar_cost: Option<u64>,
+    group_ops_ristretto_decode_point_cost: Option<u64>,
+    group_ops_ristretto_scalar_add_cost: Option<u64>,
+    group_ops_ristretto_point_add_cost: Option<u64>,
+    group_ops_ristretto_scalar_sub_cost: Option<u64>,
+    group_ops_ristretto_point_sub_cost: Option<u64>,
+    group_ops_ristretto_scalar_mul_cost: Option<u64>,
+    group_ops_ristretto_point_mul_cost: Option<u64>,
+    group_ops_ristretto_scalar_div_cost: Option<u64>,
+    group_ops_ristretto_point_div_cost: Option<u64>,
+
+    verify_bulletproofs_ristretto255_base_cost: Option<u64>,
+    verify_bulletproofs_ristretto255_cost_per_bit_and_commitment: Option<u64>,
+    // Upper bound on batch size * range in bits for a bulletproofs range proof. Defaults to 512
+    // when unset.
+    max_bulletproofs_total_bits: Option<u64>,
+
     // hmac::hmac_sha3_256
     hmac_hmac_sha3_256_cost_base: Option<u64>,
     hmac_hmac_sha3_256_input_cost_per_byte: Option<u64>,
@@ -1647,6 +2076,8 @@ pub struct ProtocolConfig {
     // The cutoff value for the MED outlier detection
     // scoring_decision_cutoff_value: Option<f64>,
     /// === Execution Version ===
+    // custom_setter: see `set_execution_version_for_testing`, which forbids downgrades.
+    #[custom_setter]
     execution_version: Option<u64>,
 
     // Dictates the threshold (percentage of stake) that is used to calculate the "bad" nodes to be
@@ -1697,6 +2128,12 @@ pub struct ProtocolConfig {
     /// The max number of consensus rounds a transaction can be deferred due to shared object congestion.
     /// Transactions will be cancelled after this many rounds.
     max_deferral_rounds_for_congestion_control: Option<u64>,
+
+    /// Time after the scheduled epoch end (`next_reconfiguration_timestamp_ms`) at which epoch
+    /// close stops waiting for deferred transactions to drain: the epoch is closed even if
+    /// deferred transactions remain unscheduled. They are abandoned and can be resubmitted in the
+    /// next epoch. When unset, epoch close waits indefinitely.
+    epoch_close_deadline_ms: Option<u64>,
 
     /// DEPRECATED. Do not use.
     max_txn_cost_overage_per_object_in_commit: Option<u64>,
@@ -1782,6 +2219,48 @@ pub struct ProtocolConfig {
 
     /// The maximum number of updates per settlement transaction.
     max_updates_per_settlement_txn: Option<u32>,
+
+    /// Maximum computation units allowed for a gasless transaction.
+    gasless_max_computation_units: Option<u64>,
+
+    /// Allowed token types for gasless transactions, with minimum transfer sizes per token.
+    gasless_allowed_token_types: Option<Vec<(String, u64)>>,
+
+    /// Maximum number of unused Pure inputs allowed in a gasless transaction.
+    /// Object and FundsWithdrawal inputs must always be used.
+    /// When None, there is no limit (effectively unlimited).
+    gasless_max_unused_inputs: Option<u64>,
+
+    /// Maximum size in bytes of each Pure input in a gasless transaction.
+    /// When None, there is no limit (effectively unlimited).
+    gasless_max_pure_input_bytes: Option<u64>,
+
+    /// Max tps for gasless transactions. Unlimited when unset, zero when set to zero.
+    gasless_max_tps: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[skip_accessor]
+    include_special_package_amendments: Option<Arc<Amendments>>,
+
+    /// Maximum serialized size in bytes of a gasless transaction (SenderSignedData).
+    /// Bounds the persistent storage impact of each admitted gasless transaction.
+    gasless_max_tx_size_bytes: Option<u64>,
+
+    /// The multiplier for each live reference charging per-command. Only used when
+    /// `allow_references_in_ptbs` is enabled.
+    translation_per_live_reference_charge: Option<u64>,
+
+    /// The maximum number of live references while checking a command. Only used when
+    /// `allow_references_in_ptbs` is enabled.
+    max_ptb_live_references: Option<u64>,
+
+    /// The maximum number of references returned by a command. Only used when
+    /// `allow_references_in_ptbs` is enabled.
+    max_ptb_returned_references: Option<u64>,
+
+    /// The maximum number of references returned over the course of the transaction. Only used
+    /// when `allow_references_in_ptbs` is enabled.
+    max_ptb_total_returned_references: Option<u64>,
 }
 
 /// An aliased address.
@@ -1797,6 +2276,11 @@ pub struct AliasedAddress {
 
 // feature flags
 impl ProtocolConfig {
+    /// The chain this config was instantiated for (see the `chain` field).
+    pub fn chain(&self) -> Chain {
+        self.chain
+    }
+
     // Add checks for feature flag support here, e.g.:
     // pub fn check_new_protocol_feature_supported(&self) -> Result<(), Error> {
     //     if self.feature_flags.new_protocol_feature_supported {
@@ -1820,111 +2304,18 @@ impl ProtocolConfig {
         }
     }
 
-    pub fn allow_receiving_object_id(&self) -> bool {
-        self.feature_flags.allow_receiving_object_id
-    }
-
-    pub fn receiving_objects_supported(&self) -> bool {
-        self.feature_flags.receive_objects
-    }
-
-    pub fn package_upgrades_supported(&self) -> bool {
-        self.feature_flags.package_upgrades
-    }
-
-    pub fn check_commit_root_state_digest_supported(&self) -> bool {
-        self.feature_flags.commit_root_state_digest
-    }
-
-    pub fn get_advance_epoch_start_time_in_safe_mode(&self) -> bool {
-        self.feature_flags.advance_epoch_start_time_in_safe_mode
-    }
-
-    pub fn loaded_child_objects_fixed(&self) -> bool {
-        self.feature_flags.loaded_child_objects_fixed
-    }
-
-    pub fn missing_type_is_compatibility_error(&self) -> bool {
-        self.feature_flags.missing_type_is_compatibility_error
-    }
-
-    pub fn scoring_decision_with_validity_cutoff(&self) -> bool {
-        self.feature_flags.scoring_decision_with_validity_cutoff
-    }
-
-    pub fn narwhal_versioned_metadata(&self) -> bool {
-        self.feature_flags.narwhal_versioned_metadata
-    }
-
-    pub fn consensus_order_end_of_epoch_last(&self) -> bool {
-        self.feature_flags.consensus_order_end_of_epoch_last
-    }
-
-    pub fn disallow_adding_abilities_on_upgrade(&self) -> bool {
-        self.feature_flags.disallow_adding_abilities_on_upgrade
-    }
-
-    pub fn disable_invariant_violation_check_in_swap_loc(&self) -> bool {
-        self.feature_flags
-            .disable_invariant_violation_check_in_swap_loc
-    }
-
-    pub fn advance_to_highest_supported_protocol_version(&self) -> bool {
-        self.feature_flags
-            .advance_to_highest_supported_protocol_version
-    }
-
-    pub fn ban_entry_init(&self) -> bool {
-        self.feature_flags.ban_entry_init
-    }
-
-    pub fn package_digest_hash_module(&self) -> bool {
-        self.feature_flags.package_digest_hash_module
-    }
-
-    pub fn disallow_change_struct_type_params_on_upgrade(&self) -> bool {
-        self.feature_flags
-            .disallow_change_struct_type_params_on_upgrade
-    }
-
-    pub fn no_extraneous_module_bytes(&self) -> bool {
-        self.feature_flags.no_extraneous_module_bytes
-    }
-
-    pub fn zklogin_auth(&self) -> bool {
-        self.feature_flags.zklogin_auth
-    }
-
     pub fn zklogin_supported_providers(&self) -> &BTreeSet<String> {
         &self.feature_flags.zklogin_supported_providers
     }
 
+    /// zkLogin circuit verify mode: 0 = v1 circuit only, 1 = v2 circuit with
+    /// fallback to v1, 2 = v2 circuit only.
+    pub fn zklogin_circuit_mode(&self) -> u64 {
+        self.feature_flags.zklogin_circuit_mode
+    }
+
     pub fn consensus_transaction_ordering(&self) -> ConsensusTransactionOrdering {
         self.feature_flags.consensus_transaction_ordering
-    }
-
-    pub fn simplified_unwrap_then_delete(&self) -> bool {
-        self.feature_flags.simplified_unwrap_then_delete
-    }
-
-    pub fn supports_upgraded_multisig(&self) -> bool {
-        self.feature_flags.upgraded_multisig_supported
-    }
-
-    pub fn txn_base_cost_as_multiplier(&self) -> bool {
-        self.feature_flags.txn_base_cost_as_multiplier
-    }
-
-    pub fn shared_object_deletion(&self) -> bool {
-        self.feature_flags.shared_object_deletion
-    }
-
-    pub fn narwhal_new_leader_election_schedule(&self) -> bool {
-        self.feature_flags.narwhal_new_leader_election_schedule
-    }
-
-    pub fn loaded_child_object_format(&self) -> bool {
-        self.feature_flags.loaded_child_object_format
     }
 
     pub fn enable_jwk_consensus_updates(&self) -> bool {
@@ -1936,14 +2327,6 @@ impl ProtocolConfig {
         ret
     }
 
-    pub fn simple_conservation_checks(&self) -> bool {
-        self.feature_flags.simple_conservation_checks
-    }
-
-    pub fn loaded_child_object_format_type(&self) -> bool {
-        self.feature_flags.loaded_child_object_format_type
-    }
-
     pub fn end_of_epoch_transaction_supported(&self) -> bool {
         let ret = self.feature_flags.end_of_epoch_transaction_supported;
         if !ret {
@@ -1953,26 +2336,12 @@ impl ProtocolConfig {
         ret
     }
 
-    pub fn recompute_has_public_transfer_in_execution(&self) -> bool {
-        self.feature_flags
-            .recompute_has_public_transfer_in_execution
-    }
-
-    // this function only exists for readability in the genesis code.
-    pub fn create_authenticator_state_in_genesis(&self) -> bool {
-        self.enable_jwk_consensus_updates()
-    }
-
-    pub fn random_beacon(&self) -> bool {
-        self.feature_flags.random_beacon
-    }
-
     pub fn dkg_version(&self) -> u64 {
         // Version 0 was deprecated and removed, the default is 1 if not set.
         self.random_beacon_dkg_version.unwrap_or(1)
     }
 
-    pub fn enable_bridge(&self) -> bool {
+    pub fn bridge(&self) -> bool {
         let ret = self.feature_flags.bridge;
         if ret {
             // bridge required end-of-epoch transactions
@@ -1982,131 +2351,27 @@ impl ProtocolConfig {
     }
 
     pub fn should_try_to_finalize_bridge_committee(&self) -> bool {
-        if !self.enable_bridge() {
+        if !self.bridge() {
             return false;
         }
         // In the older protocol version, always try to finalize the committee.
         self.bridge_should_try_to_finalize_committee.unwrap_or(true)
     }
 
-    pub fn enable_effects_v2(&self) -> bool {
-        self.feature_flags.enable_effects_v2
-    }
-
-    pub fn narwhal_certificate_v2(&self) -> bool {
-        self.feature_flags.narwhal_certificate_v2
-    }
-
-    pub fn verify_legacy_zklogin_address(&self) -> bool {
-        self.feature_flags.verify_legacy_zklogin_address
-    }
-
-    pub fn accept_zklogin_in_multisig(&self) -> bool {
-        self.feature_flags.accept_zklogin_in_multisig
-    }
-
-    pub fn accept_passkey_in_multisig(&self) -> bool {
-        self.feature_flags.accept_passkey_in_multisig
-    }
-
     pub fn zklogin_max_epoch_upper_bound_delta(&self) -> Option<u64> {
         self.feature_flags.zklogin_max_epoch_upper_bound_delta
     }
 
-    pub fn throughput_aware_consensus_submission(&self) -> bool {
-        self.feature_flags.throughput_aware_consensus_submission
-    }
-
-    pub fn include_consensus_digest_in_prologue(&self) -> bool {
-        self.feature_flags.include_consensus_digest_in_prologue
-    }
-
-    pub fn record_consensus_determined_version_assignments_in_prologue(&self) -> bool {
-        self.feature_flags
-            .record_consensus_determined_version_assignments_in_prologue
-    }
-
-    pub fn record_additional_state_digest_in_prologue(&self) -> bool {
-        self.feature_flags
-            .record_additional_state_digest_in_prologue
-    }
-
-    pub fn record_consensus_determined_version_assignments_in_prologue_v2(&self) -> bool {
-        self.feature_flags
-            .record_consensus_determined_version_assignments_in_prologue_v2
-    }
-
-    pub fn prepend_prologue_tx_in_consensus_commit_in_checkpoints(&self) -> bool {
-        self.feature_flags
-            .prepend_prologue_tx_in_consensus_commit_in_checkpoints
-    }
-
-    pub fn hardened_otw_check(&self) -> bool {
-        self.feature_flags.hardened_otw_check
-    }
-
-    pub fn enable_poseidon(&self) -> bool {
-        self.feature_flags.enable_poseidon
-    }
-
-    pub fn enable_coin_deny_list_v1(&self) -> bool {
-        self.feature_flags.enable_coin_deny_list
-    }
-
-    pub fn enable_accumulators(&self) -> bool {
-        self.feature_flags.enable_accumulators
+    pub fn enable_allowances(&self) -> bool {
+        self.feature_flags.enable_allowances && self.enable_accumulators()
     }
 
     pub fn enable_coin_reservation_obj_refs(&self) -> bool {
-        self.feature_flags.enable_coin_reservation_obj_refs
-    }
-
-    pub fn create_root_accumulator_object(&self) -> bool {
-        self.feature_flags.create_root_accumulator_object
-    }
-
-    pub fn enable_address_balance_gas_payments(&self) -> bool {
-        self.feature_flags.enable_address_balance_gas_payments
-    }
-
-    pub fn prune_address_balance_gas_payment_on_iffw(&self) -> bool {
-        self.feature_flags.prune_address_balance_gas_payment_on_iffw
-    }
-
-    pub fn enable_multi_epoch_transaction_expiration(&self) -> bool {
-        self.feature_flags.enable_multi_epoch_transaction_expiration
+        self.new_vm_enabled() && self.feature_flags.enable_coin_reservation_obj_refs
     }
 
     pub fn enable_authenticated_event_streams(&self) -> bool {
         self.feature_flags.enable_authenticated_event_streams && self.enable_accumulators()
-    }
-
-    pub fn enable_non_exclusive_writes(&self) -> bool {
-        self.feature_flags.enable_non_exclusive_writes
-    }
-
-    pub fn enable_coin_registry(&self) -> bool {
-        self.feature_flags.enable_coin_registry
-    }
-
-    pub fn enable_display_registry(&self) -> bool {
-        self.feature_flags.enable_display_registry
-    }
-
-    pub fn enable_coin_deny_list_v2(&self) -> bool {
-        self.feature_flags.enable_coin_deny_list_v2
-    }
-
-    pub fn enable_group_ops_native_functions(&self) -> bool {
-        self.feature_flags.enable_group_ops_native_functions
-    }
-
-    pub fn enable_group_ops_native_function_msm(&self) -> bool {
-        self.feature_flags.enable_group_ops_native_function_msm
-    }
-
-    pub fn reject_mutable_random_on_entry_functions(&self) -> bool {
-        self.feature_flags.reject_mutable_random_on_entry_functions
     }
 
     pub fn per_object_congestion_control_mode(&self) -> PerObjectCongestionControlMode {
@@ -2121,44 +2386,8 @@ impl ProtocolConfig {
         self.feature_flags.consensus_network
     }
 
-    pub fn correct_gas_payment_limit_check(&self) -> bool {
-        self.feature_flags.correct_gas_payment_limit_check
-    }
-
-    pub fn reshare_at_same_initial_version(&self) -> bool {
-        self.feature_flags.reshare_at_same_initial_version
-    }
-
-    pub fn resolve_abort_locations_to_package_id(&self) -> bool {
-        self.feature_flags.resolve_abort_locations_to_package_id
-    }
-
-    pub fn mysticeti_use_committed_subdag_digest(&self) -> bool {
-        self.feature_flags.mysticeti_use_committed_subdag_digest
-    }
-
-    pub fn enable_vdf(&self) -> bool {
-        self.feature_flags.enable_vdf
-    }
-
-    pub fn fresh_vm_on_framework_upgrade(&self) -> bool {
-        self.feature_flags.fresh_vm_on_framework_upgrade
-    }
-
     pub fn mysticeti_num_leaders_per_round(&self) -> Option<usize> {
         self.feature_flags.mysticeti_num_leaders_per_round
-    }
-
-    pub fn soft_bundle(&self) -> bool {
-        self.feature_flags.soft_bundle
-    }
-
-    pub fn passkey_auth(&self) -> bool {
-        self.feature_flags.passkey_auth
-    }
-
-    pub fn authority_capabilities_v2(&self) -> bool {
-        self.feature_flags.authority_capabilities_v2
     }
 
     pub fn max_transaction_size_bytes(&self) -> u64 {
@@ -2184,55 +2413,8 @@ impl ProtocolConfig {
         }
     }
 
-    pub fn rethrow_serialization_type_layout_errors(&self) -> bool {
-        self.feature_flags.rethrow_serialization_type_layout_errors
-    }
-
-    pub fn consensus_distributed_vote_scoring_strategy(&self) -> bool {
-        self.feature_flags
-            .consensus_distributed_vote_scoring_strategy
-    }
-
-    pub fn consensus_round_prober(&self) -> bool {
-        self.feature_flags.consensus_round_prober
-    }
-
-    pub fn validate_identifier_inputs(&self) -> bool {
-        self.feature_flags.validate_identifier_inputs
-    }
-
     pub fn gc_depth(&self) -> u32 {
         self.consensus_gc_depth.unwrap_or(0)
-    }
-
-    pub fn mysticeti_fastpath(&self) -> bool {
-        self.feature_flags.mysticeti_fastpath
-    }
-
-    pub fn relocate_event_module(&self) -> bool {
-        self.feature_flags.relocate_event_module
-    }
-
-    pub fn uncompressed_g1_group_elements(&self) -> bool {
-        self.feature_flags.uncompressed_g1_group_elements
-    }
-
-    pub fn disallow_new_modules_in_deps_only_packages(&self) -> bool {
-        self.feature_flags
-            .disallow_new_modules_in_deps_only_packages
-    }
-
-    pub fn consensus_smart_ancestor_selection(&self) -> bool {
-        self.feature_flags.consensus_smart_ancestor_selection
-    }
-
-    pub fn consensus_round_prober_probe_accepted_rounds(&self) -> bool {
-        self.feature_flags
-            .consensus_round_prober_probe_accepted_rounds
-    }
-
-    pub fn native_charging_v2(&self) -> bool {
-        self.feature_flags.native_charging_v2
     }
 
     pub fn consensus_linearize_subdag_v2(&self) -> bool {
@@ -2253,40 +2435,6 @@ impl ProtocolConfig {
         res
     }
 
-    pub fn consensus_batched_block_sync(&self) -> bool {
-        self.feature_flags.consensus_batched_block_sync
-    }
-
-    pub fn convert_type_argument_error(&self) -> bool {
-        self.feature_flags.convert_type_argument_error
-    }
-
-    pub fn variant_nodes(&self) -> bool {
-        self.feature_flags.variant_nodes
-    }
-
-    pub fn consensus_zstd_compression(&self) -> bool {
-        self.feature_flags.consensus_zstd_compression
-    }
-
-    pub fn enable_nitro_attestation(&self) -> bool {
-        self.feature_flags.enable_nitro_attestation
-    }
-
-    pub fn enable_nitro_attestation_upgraded_parsing(&self) -> bool {
-        self.feature_flags.enable_nitro_attestation_upgraded_parsing
-    }
-
-    pub fn enable_nitro_attestation_all_nonzero_pcrs_parsing(&self) -> bool {
-        self.feature_flags
-            .enable_nitro_attestation_all_nonzero_pcrs_parsing
-    }
-
-    pub fn enable_nitro_attestation_always_include_required_pcrs_parsing(&self) -> bool {
-        self.feature_flags
-            .enable_nitro_attestation_always_include_required_pcrs_parsing
-    }
-
     pub fn get_consensus_commit_rate_estimation_window_size(&self) -> u32 {
         self.consensus_commit_rate_estimation_window_size
             .unwrap_or(0)
@@ -2302,163 +2450,6 @@ impl ProtocolConfig {
         window_size
     }
 
-    pub fn minimize_child_object_mutations(&self) -> bool {
-        self.feature_flags.minimize_child_object_mutations
-    }
-
-    pub fn move_native_context(&self) -> bool {
-        self.feature_flags.move_native_context
-    }
-
-    pub fn normalize_ptb_arguments(&self) -> bool {
-        self.feature_flags.normalize_ptb_arguments
-    }
-
-    pub fn enforce_checkpoint_timestamp_monotonicity(&self) -> bool {
-        self.feature_flags.enforce_checkpoint_timestamp_monotonicity
-    }
-
-    pub fn max_ptb_value_size_v2(&self) -> bool {
-        self.feature_flags.max_ptb_value_size_v2
-    }
-
-    pub fn resolve_type_input_ids_to_defining_id(&self) -> bool {
-        self.feature_flags.resolve_type_input_ids_to_defining_id
-    }
-
-    pub fn enable_party_transfer(&self) -> bool {
-        self.feature_flags.enable_party_transfer
-    }
-
-    pub fn allow_unbounded_system_objects(&self) -> bool {
-        self.feature_flags.allow_unbounded_system_objects
-    }
-
-    pub fn type_tags_in_object_runtime(&self) -> bool {
-        self.feature_flags.type_tags_in_object_runtime
-    }
-
-    pub fn enable_ptb_execution_v2(&self) -> bool {
-        self.feature_flags.enable_ptb_execution_v2
-    }
-
-    pub fn better_adapter_type_resolution_errors(&self) -> bool {
-        self.feature_flags.better_adapter_type_resolution_errors
-    }
-
-    pub fn record_time_estimate_processed(&self) -> bool {
-        self.feature_flags.record_time_estimate_processed
-    }
-
-    pub fn ignore_execution_time_observations_after_certs_closed(&self) -> bool {
-        self.feature_flags
-            .ignore_execution_time_observations_after_certs_closed
-    }
-
-    pub fn dependency_linkage_error(&self) -> bool {
-        self.feature_flags.dependency_linkage_error
-    }
-
-    pub fn additional_multisig_checks(&self) -> bool {
-        self.feature_flags.additional_multisig_checks
-    }
-
-    pub fn debug_fatal_on_move_invariant_violation(&self) -> bool {
-        self.feature_flags.debug_fatal_on_move_invariant_violation
-    }
-
-    pub fn allow_private_accumulator_entrypoints(&self) -> bool {
-        self.feature_flags.allow_private_accumulator_entrypoints
-    }
-
-    pub fn additional_consensus_digest_indirect_state(&self) -> bool {
-        self.feature_flags
-            .additional_consensus_digest_indirect_state
-    }
-
-    pub fn check_for_init_during_upgrade(&self) -> bool {
-        self.feature_flags.check_for_init_during_upgrade
-    }
-
-    pub fn per_command_shared_object_transfer_rules(&self) -> bool {
-        self.feature_flags.per_command_shared_object_transfer_rules
-    }
-
-    pub fn consensus_checkpoint_signature_key_includes_digest(&self) -> bool {
-        self.feature_flags
-            .consensus_checkpoint_signature_key_includes_digest
-    }
-
-    pub fn include_checkpoint_artifacts_digest_in_summary(&self) -> bool {
-        self.feature_flags
-            .include_checkpoint_artifacts_digest_in_summary
-    }
-
-    pub fn use_mfp_txns_in_load_initial_object_debts(&self) -> bool {
-        self.feature_flags.use_mfp_txns_in_load_initial_object_debts
-    }
-
-    pub fn cancel_for_failed_dkg_early(&self) -> bool {
-        self.feature_flags.cancel_for_failed_dkg_early
-    }
-
-    pub fn abstract_size_in_object_runtime(&self) -> bool {
-        self.feature_flags.abstract_size_in_object_runtime
-    }
-
-    pub fn object_runtime_charge_cache_load_gas(&self) -> bool {
-        self.feature_flags.object_runtime_charge_cache_load_gas
-    }
-
-    pub fn additional_borrow_checks(&self) -> bool {
-        self.feature_flags.additional_borrow_checks
-    }
-
-    pub fn use_new_commit_handler(&self) -> bool {
-        self.feature_flags.use_new_commit_handler
-    }
-
-    pub fn better_loader_errors(&self) -> bool {
-        self.feature_flags.better_loader_errors
-    }
-
-    pub fn generate_df_type_layouts(&self) -> bool {
-        self.feature_flags.generate_df_type_layouts
-    }
-
-    pub fn allow_references_in_ptbs(&self) -> bool {
-        self.feature_flags.allow_references_in_ptbs
-    }
-
-    pub fn private_generics_verifier_v2(&self) -> bool {
-        self.feature_flags.private_generics_verifier_v2
-    }
-
-    pub fn deprecate_global_storage_ops_during_deserialization(&self) -> bool {
-        self.feature_flags
-            .deprecate_global_storage_ops_during_deserialization
-    }
-
-    pub fn enable_observation_chunking(&self) -> bool {
-        matches!(self.feature_flags.per_object_congestion_control_mode,
-            PerObjectCongestionControlMode::ExecutionTimeEstimate(ref params)
-                if params.observations_chunk_size.is_some()
-        )
-    }
-
-    pub fn deprecate_global_storage_ops(&self) -> bool {
-        self.feature_flags.deprecate_global_storage_ops
-    }
-
-    pub fn consensus_skip_gced_accept_votes(&self) -> bool {
-        self.feature_flags.consensus_skip_gced_accept_votes
-    }
-
-    pub fn include_cancelled_randomness_txns_in_prologue(&self) -> bool {
-        self.feature_flags
-            .include_cancelled_randomness_txns_in_prologue
-    }
-
     pub fn address_aliases(&self) -> bool {
         let address_aliases = self.feature_flags.address_aliases;
         assert!(
@@ -2466,24 +2457,41 @@ impl ProtocolConfig {
             "Address aliases requires Mysticeti fastpath to be enabled"
         );
         if address_aliases {
-            // TODO: when flag for disabling CertifiedTransaction is added, add assertion for it here.
+            assert!(
+                self.feature_flags.disable_preconsensus_locking,
+                "Address aliases requires CertifiedTransaction to be disabled"
+            );
         }
         address_aliases
     }
 
-    pub fn enable_object_funds_withdraw(&self) -> bool {
-        self.feature_flags.enable_object_funds_withdraw
+    pub fn new_vm_enabled(&self) -> bool {
+        self.execution_version.is_some_and(|v| v >= 4)
+    }
+
+    pub fn gasless_allowed_token_types(&self) -> &[(String, u64)] {
+        debug_assert!(self.gasless_allowed_token_types.is_some());
+        self.gasless_allowed_token_types.as_deref().unwrap_or(&[])
+    }
+
+    pub fn get_gasless_max_unused_inputs(&self) -> u64 {
+        self.gasless_max_unused_inputs.unwrap_or(u64::MAX)
+    }
+
+    pub fn get_gasless_max_pure_input_bytes(&self) -> u64 {
+        self.gasless_max_pure_input_bytes.unwrap_or(u64::MAX)
+    }
+
+    pub fn get_gasless_max_tx_size_bytes(&self) -> u64 {
+        self.gasless_max_tx_size_bytes.unwrap_or(u64::MAX)
+    }
+
+    pub fn include_special_package_amendments_as_option(&self) -> &Option<Arc<Amendments>> {
+        &self.include_special_package_amendments
     }
 }
 
-#[cfg(not(msim))]
 static POISON_VERSION_METHODS: AtomicBool = AtomicBool::new(false);
-
-// Use a thread local in sim tests for test isolation.
-#[cfg(msim)]
-thread_local! {
-    static POISON_VERSION_METHODS: AtomicBool = AtomicBool::new(false);
-}
 
 // Instantiations for each protocol version.
 impl ProtocolConfig {
@@ -2505,17 +2513,9 @@ impl ProtocolConfig {
 
         let mut ret = Self::get_for_version_impl(version, chain);
         ret.version = version;
+        ret.chain = chain;
 
-        ret = CONFIG_OVERRIDE.with(|ovr| {
-            if let Some(override_fn) = &*ovr.borrow() {
-                warn!(
-                    "overriding ProtocolConfig settings with custom settings (you should not see this log outside of tests)"
-                );
-                override_fn(version, ret)
-            } else {
-                ret
-            }
-        });
+        ret = Self::apply_config_override(version, ret);
 
         if std::env::var("RTD_PROTOCOL_CONFIG_OVERRIDE_ENABLE").is_ok() {
             warn!(
@@ -2536,30 +2536,20 @@ impl ProtocolConfig {
         if version.0 >= ProtocolVersion::MIN.0 && version.0 <= ProtocolVersion::MAX_ALLOWED.0 {
             let mut ret = Self::get_for_version_impl(version, chain);
             ret.version = version;
+            ret.chain = chain;
+            ret = Self::apply_config_override(version, ret);
             Some(ret)
         } else {
             None
         }
     }
 
-    #[cfg(not(msim))]
     pub fn poison_get_for_min_version() {
         POISON_VERSION_METHODS.store(true, Ordering::Relaxed);
     }
 
-    #[cfg(not(msim))]
     fn load_poison_get_for_min_version() -> bool {
         POISON_VERSION_METHODS.load(Ordering::Relaxed)
-    }
-
-    #[cfg(msim)]
-    pub fn poison_get_for_min_version() {
-        POISON_VERSION_METHODS.with(|p| p.store(true, Ordering::Relaxed));
-    }
-
-    #[cfg(msim)]
-    fn load_poison_get_for_min_version() -> bool {
-        POISON_VERSION_METHODS.with(|p| p.load(Ordering::Relaxed))
     }
 
     /// Convenience to get the constants at the current minimum supported version.
@@ -2604,6 +2594,7 @@ impl ProtocolConfig {
         let mut cfg = Self {
             // will be overwritten before being returned
             version,
+            chain,
 
             // All flags are disabled in V1
             feature_flags: Default::default(),
@@ -2654,6 +2645,9 @@ impl ProtocolConfig {
             max_basic_blocks: Some(1024),
             max_value_stack_size: Some(1024),
             max_type_nodes: Some(256),
+            max_generic_instantiation_type_nodes_per_function: None,
+            max_generic_instantiation_type_nodes_per_module: None,
+            max_accumulator_type_nodes: None,
             max_push_size: Some(10000),
             max_struct_definitions: Some(200),
             max_function_definitions: Some(1000),
@@ -2696,6 +2690,7 @@ impl ProtocolConfig {
             storage_fund_reinvest_rate: Some(500),
             reward_slashing_rate: Some(5000),
             storage_gas_price: Some(1),
+            accumulator_object_storage_cost: None,
             max_transactions_per_checkpoint: Some(10_000),
             max_checkpoint_size_bytes: Some(30 * 1024 * 1024),
 
@@ -2716,6 +2711,9 @@ impl ProtocolConfig {
             // Cost params for the Move native function `read_setting_impl``
             config_read_setting_impl_cost_base: None,
             config_read_setting_impl_cost_per_byte: None,
+
+            package_original_package_id_impl_cost_base: None,
+            package_original_package_id_impl_cost_per_byte: None,
 
             // `dynamic_field` module
             // Cost params for the Move native function `hash_type_and_key<K: copy + drop + store>(parent: address, k: K): address`
@@ -2743,6 +2741,16 @@ impl ProtocolConfig {
             dynamic_field_has_child_object_with_ty_type_cost_per_byte: Some(2),
             dynamic_field_has_child_object_with_ty_type_tag_cost_per_byte: Some(2),
 
+            // `scratch` module: introduced in protocol version 130
+            scratch_add_cost_base: None,
+            scratch_read_cost_base: None,
+            scratch_read_value_cost: None,
+            scratch_remove_cost_base: None,
+            scratch_exists_cost_base: None,
+            scratch_exists_with_type_cost_base: None,
+            scratch_exists_with_type_type_cost: None,
+            max_scratch_pad_size: None,
+
             // `event` module
             // Cost params for the Move native function `event::emit<T: copy + drop>(event: T)`
             event_emit_cost_base: Some(52),
@@ -2751,6 +2759,10 @@ impl ProtocolConfig {
             event_emit_output_cost_per_byte: Some(10),
             event_emit_auth_stream_cost: None,
 
+            // `funds_accumulator` module: introduced in protocol version 137.
+            reserve_object_funds_for_withdrawal_cost_base: None,
+            reserve_object_funds_for_withdrawal_cold_read_cost: None,
+
             //  `object` module
             // Cost params for the Move native function `borrow_uid<T: key>(obj: &T): &UID`
             object_borrow_uid_cost_base: Some(52),
@@ -2758,6 +2770,9 @@ impl ProtocolConfig {
             object_delete_impl_cost_base: Some(52),
             // Cost params for the Move native function `record_new_uid(id: address)`
             object_record_new_uid_cost_base: Some(52),
+            // Cost params for the Move native function
+            // `record_new_uid_from_hash(parent: address, bytes: address)`. Introduced in v131.
+            object_record_new_uid_from_hash_cost_base: None,
 
             // `transfer` module
             // Cost params for the Move native function `transfer_impl<T: key>(obj: T, recipient: address)`
@@ -2769,6 +2784,8 @@ impl ProtocolConfig {
             // Cost params for the Move native function `share_object<T: key>(obj: T)`
             transfer_share_object_cost_base: Some(52),
             transfer_receive_object_cost_base: None,
+            transfer_receive_object_type_cost_per_byte: None,
+            transfer_receive_object_cost_per_byte: None,
 
             // `tx_context` module
             // Cost params for the Move native function `transfer_impl<T: key>(obj: T, recipient: address)`
@@ -2867,6 +2884,7 @@ impl ProtocolConfig {
             hash_blake2b256_cost_base: Some(52),
             hash_blake2b256_data_cost_per_byte: Some(2),
             hash_blake2b256_data_cost_per_block: Some(2),
+
             // hash::keccak256
             hash_keccak256_cost_base: Some(52),
             hash_keccak256_data_cost_per_byte: Some(2),
@@ -2916,6 +2934,21 @@ impl ProtocolConfig {
             group_ops_bls12381_uncompressed_g1_sum_base_cost: None,
             group_ops_bls12381_uncompressed_g1_sum_cost_per_term: None,
             group_ops_bls12381_uncompressed_g1_sum_max_terms: None,
+
+            group_ops_ristretto_decode_scalar_cost: None,
+            group_ops_ristretto_decode_point_cost: None,
+            group_ops_ristretto_scalar_add_cost: None,
+            group_ops_ristretto_point_add_cost: None,
+            group_ops_ristretto_scalar_sub_cost: None,
+            group_ops_ristretto_point_sub_cost: None,
+            group_ops_ristretto_scalar_mul_cost: None,
+            group_ops_ristretto_point_mul_cost: None,
+            group_ops_ristretto_scalar_div_cost: None,
+            group_ops_ristretto_point_div_cost: None,
+
+            verify_bulletproofs_ristretto255_base_cost: None,
+            verify_bulletproofs_ristretto255_cost_per_bit_and_commitment: None,
+            max_bulletproofs_total_bits: None,
 
             // zklogin::check_zklogin_id
             check_zklogin_id_cost_base: None,
@@ -2973,6 +3006,7 @@ impl ProtocolConfig {
             // Limits the length of a Move identifier
             max_move_identifier_len: None,
             max_move_value_depth: None,
+            package_arena_size_in_bytes: None,
             max_move_enum_variants: None,
 
             gas_rounding_step: None,
@@ -3008,6 +3042,8 @@ impl ProtocolConfig {
             max_accumulated_txn_cost_per_object_in_narwhal_commit: None,
 
             max_deferral_rounds_for_congestion_control: None,
+
+            epoch_close_deadline_ms: None,
 
             max_txn_cost_overage_per_object_in_commit: None,
 
@@ -3045,8 +3081,20 @@ impl ProtocolConfig {
             translation_per_type_node_charge: None,
             translation_per_reference_node_charge: None,
             translation_per_linkage_entry_charge: None,
+            translation_per_live_reference_charge: None,
+            max_ptb_live_references: None,
+            max_ptb_returned_references: None,
+            max_ptb_total_returned_references: None,
 
             max_updates_per_settlement_txn: None,
+
+            gasless_max_computation_units: None,
+            gasless_allowed_token_types: None,
+            gasless_max_unused_inputs: None,
+            gasless_max_pure_input_bytes: None,
+            gasless_max_tps: None,
+            include_special_package_amendments: None,
+            gasless_max_tx_size_bytes: None,
             // When adding a new constant, set it to None in the earliest version, like this:
             // new_constant: None,
         };
@@ -4364,13 +4412,8 @@ impl ProtocolConfig {
                         .include_cancelled_randomness_txns_in_prologue = true;
                 }
                 105 => {
-                    if chain != Chain::Mainnet && chain != Chain::Testnet {
-                        cfg.feature_flags.enable_accumulators = true;
-                        cfg.feature_flags.enable_address_balance_gas_payments = true;
-                        cfg.feature_flags.enable_authenticated_event_streams = true;
-                        cfg.feature_flags.enable_object_funds_withdraw = true;
-                    }
                     cfg.feature_flags.enable_multi_epoch_transaction_expiration = true;
+                    cfg.feature_flags.disable_preconsensus_locking = true;
 
                     if chain != Chain::Mainnet {
                         cfg.feature_flags
@@ -4378,7 +4421,341 @@ impl ProtocolConfig {
                     }
                 }
                 106 => {
-                    cfg.feature_flags.prune_address_balance_gas_payment_on_iffw = true;
+                    // est. 100 bytes per object * 76 (storage_gas_price)
+                    cfg.accumulator_object_storage_cost = Some(7600);
+
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.enable_accumulators = true;
+                        cfg.feature_flags.enable_address_balance_gas_payments = true;
+                        cfg.feature_flags.enable_authenticated_event_streams = true;
+                        cfg.feature_flags.enable_object_funds_withdraw = true;
+                    }
+                }
+                107 => {
+                    cfg.feature_flags
+                        .consensus_skip_gced_blocks_in_direct_finalization = true;
+
+                    // Trigger edge cases more often in integration tests.
+                    if in_integration_test() {
+                        cfg.consensus_gc_depth = Some(6);
+                        cfg.consensus_max_num_transactions_in_block = Some(8);
+                    }
+                }
+                108 => {
+                    cfg.feature_flags.gas_rounding_halve_digits = true;
+                    cfg.feature_flags.flexible_tx_context_positions = true;
+                    cfg.feature_flags.disable_entry_point_signature_check = true;
+
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.address_aliases = true;
+
+                        cfg.feature_flags.enable_accumulators = true;
+                        cfg.feature_flags.enable_address_balance_gas_payments = true;
+                    }
+
+                    cfg.feature_flags.enable_poseidon = true;
+                }
+                109 => {
+                    cfg.binary_variant_handles = Some(1024);
+                    cfg.binary_variant_instantiation_handles = Some(1024);
+                    cfg.feature_flags.restrict_hot_or_not_entry_functions = true;
+                }
+                110 => {
+                    cfg.feature_flags
+                        .enable_nitro_attestation_all_nonzero_pcrs_parsing = true;
+                    cfg.feature_flags
+                        .enable_nitro_attestation_always_include_required_pcrs_parsing = true;
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.split_checkpoints_in_consensus_handler = true;
+                    }
+                    cfg.feature_flags.validate_zklogin_public_identifier = true;
+                    cfg.feature_flags.fix_checkpoint_signature_mapping = true;
+                    cfg.feature_flags
+                        .consensus_always_accept_system_transactions = true;
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.enable_object_funds_withdraw = true;
+                    }
+                }
+                111 => {
+                    cfg.feature_flags.validator_metadata_verify_v2 = true;
+                }
+                112 => {
+                    cfg.group_ops_ristretto_decode_scalar_cost = Some(7);
+                    cfg.group_ops_ristretto_decode_point_cost = Some(200);
+                    cfg.group_ops_ristretto_scalar_add_cost = Some(10);
+                    cfg.group_ops_ristretto_point_add_cost = Some(500);
+                    cfg.group_ops_ristretto_scalar_sub_cost = Some(10);
+                    cfg.group_ops_ristretto_point_sub_cost = Some(500);
+                    cfg.group_ops_ristretto_scalar_mul_cost = Some(11);
+                    cfg.group_ops_ristretto_point_mul_cost = Some(1200);
+                    cfg.group_ops_ristretto_scalar_div_cost = Some(151);
+                    cfg.group_ops_ristretto_point_div_cost = Some(2500);
+
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.enable_ristretto255_group_ops = true;
+                    }
+                }
+                113 => {
+                    cfg.feature_flags.address_balance_gas_check_rgp_at_signing = true;
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.defer_unpaid_amplification = true;
+                    }
+                }
+                114 => {
+                    cfg.feature_flags.randomize_checkpoint_tx_limit_in_tests = true;
+                    cfg.feature_flags.address_balance_gas_reject_gas_coin_arg = true;
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.split_checkpoints_in_consensus_handler = true;
+                        cfg.feature_flags.enable_authenticated_event_streams = true;
+                        cfg.feature_flags
+                            .include_checkpoint_artifacts_digest_in_summary = true;
+                    }
+                }
+                115 => {
+                    cfg.feature_flags.normalize_depth_formula = true;
+                }
+                116 => {
+                    cfg.feature_flags.gasless_transaction_drop_safety = true;
+                    cfg.feature_flags.address_aliases = true;
+                    cfg.feature_flags.relax_valid_during_for_owned_inputs = true;
+                    // Disabled while debugging
+                    cfg.feature_flags.defer_unpaid_amplification = false;
+                    cfg.feature_flags.enable_display_registry = true;
+                }
+                117 => {}
+                118 => {
+                    cfg.feature_flags.use_coin_party_owner = true;
+                }
+                119 => {
+                    // Enable new VM.
+                    cfg.execution_version = Some(4);
+                    cfg.feature_flags.address_balance_gas_reject_gas_coin_arg = false;
+                    cfg.feature_flags.merge_randomness_into_checkpoint = true;
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.enable_gasless = true;
+                        cfg.gasless_max_computation_units = Some(50_000);
+                        cfg.gasless_allowed_token_types = Some(vec![]);
+                        cfg.feature_flags.enable_coin_reservation_obj_refs = true;
+                        cfg.feature_flags
+                            .convert_withdrawal_compatibility_ptb_arguments = true;
+                    }
+                    cfg.gasless_max_unused_inputs = Some(1);
+                    cfg.gasless_max_pure_input_bytes = Some(32);
+                    cfg.transfer_receive_object_cost_per_byte = Some(1);
+                    cfg.transfer_receive_object_type_cost_per_byte = Some(2);
+                }
+                120 => {
+                    cfg.feature_flags.disallow_jump_orphans = true;
+                }
+                121 => {
+                    // Re-enable unpaid amplification deferral protection (testnet + devnet)
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.defer_unpaid_amplification = true;
+                        cfg.gasless_max_tps = Some(50);
+                    }
+                    cfg.feature_flags
+                        .early_return_receive_object_mismatched_type = true;
+                }
+                122 => {
+                    // Enable unpaid amplification deferral on mainnet
+                    cfg.feature_flags.defer_unpaid_amplification = true;
+                    // Enable bulletproofs range proofs on devnet
+                    cfg.verify_bulletproofs_ristretto255_base_cost = Some(30000);
+                    cfg.verify_bulletproofs_ristretto255_cost_per_bit_and_commitment = Some(6500);
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.enable_verify_bulletproofs_ristretto255 = true;
+                    }
+                    cfg.feature_flags.gasless_verify_remaining_balance = true;
+                    cfg.gasless_max_tx_size_bytes = Some(16 * 1024);
+                    cfg.gasless_max_tps = Some(300);
+                    cfg.gasless_max_computation_units = Some(5_000);
+                }
+                123 => {
+                    cfg.gas_model_version = Some(13);
+                }
+                124 => {
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.timestamp_based_epoch_close = true;
+                    }
+                    cfg.gas_model_version = Some(14);
+                    cfg.feature_flags.limit_groth16_pvk_inputs = true;
+
+                    // Bring mainnet in line with testnet: enable address balances, the
+                    // gasless "free tier", coin reservations, and the rest of the
+                    // accumulator/withdraw stack. These are all already enabled on
+                    // testnet and devnet, so setting them unconditionally is a no-op
+                    // there.
+                    cfg.feature_flags.enable_accumulators = true;
+                    cfg.feature_flags.enable_address_balance_gas_payments = true;
+                    cfg.feature_flags.enable_authenticated_event_streams = true;
+                    cfg.feature_flags.enable_coin_reservation_obj_refs = true;
+                    cfg.feature_flags.enable_object_funds_withdraw = true;
+                    cfg.feature_flags
+                        .convert_withdrawal_compatibility_ptb_arguments = true;
+                    cfg.feature_flags.split_checkpoints_in_consensus_handler = true;
+                    cfg.feature_flags
+                        .include_checkpoint_artifacts_digest_in_summary = true;
+                    cfg.feature_flags.enable_gasless = true;
+
+                    // A new RTD genesis has no pre-registered third-party gas tokens.
+                    cfg.gasless_allowed_token_types = Some(vec![]);
+                }
+                125 => {
+                    cfg.feature_flags.granular_post_execution_checks = true;
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.timestamp_based_epoch_close = true;
+                    }
+                }
+                126 => {
+                    cfg.feature_flags.early_exit_on_iffw = true;
+                }
+                127 => {
+                    cfg.feature_flags.always_advance_dkg_to_resolution = true;
+
+                    cfg.verify_bulletproofs_ristretto255_base_cost = Some(23866);
+                    cfg.verify_bulletproofs_ristretto255_cost_per_bit_and_commitment = Some(1324);
+                    cfg.group_ops_ristretto_decode_scalar_cost = Some(5);
+                    cfg.group_ops_ristretto_decode_point_cost = Some(216);
+                    cfg.group_ops_ristretto_scalar_add_cost = Some(2);
+                    cfg.group_ops_ristretto_point_add_cost = Some(8);
+                    cfg.group_ops_ristretto_scalar_sub_cost = Some(2);
+                    cfg.group_ops_ristretto_point_sub_cost = Some(8);
+                    cfg.group_ops_ristretto_scalar_mul_cost = Some(5);
+                    cfg.group_ops_ristretto_point_mul_cost = Some(1763);
+                    cfg.group_ops_ristretto_scalar_div_cost = Some(557);
+                    cfg.group_ops_ristretto_point_div_cost = Some(2244);
+
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.enable_ristretto255_group_ops = true;
+                        cfg.feature_flags.enable_verify_bulletproofs_ristretto255 = true;
+                    }
+
+                    cfg.feature_flags.timestamp_based_epoch_close = true;
+                }
+                128 => {
+                    cfg.max_generic_instantiation_type_nodes_per_function = Some(10_000);
+                    cfg.max_generic_instantiation_type_nodes_per_module = Some(500_000);
+                    cfg.binary_enum_defs = Some(200);
+                    cfg.binary_enum_def_instantiations = Some(100);
+                }
+                129 => {
+                    cfg.feature_flags.enable_unified_linkage = true;
+                }
+                130 => {
+                    cfg.feature_flags.record_net_unsettled_object_withdraws = true;
+                    cfg.feature_flags.enable_init_on_upgrade = true;
+                    cfg.epoch_close_deadline_ms = Some(120_000);
+                    cfg.scratch_add_cost_base = Some(13);
+                    cfg.scratch_read_cost_base = Some(13);
+                    cfg.scratch_read_value_cost = Some(1);
+                    cfg.scratch_remove_cost_base = Some(13);
+                    cfg.scratch_exists_cost_base = Some(13);
+                    cfg.scratch_exists_with_type_cost_base = Some(13);
+                    cfg.scratch_exists_with_type_type_cost = Some(1);
+                    let max_commands = cfg.max_programmable_tx_commands() as u64;
+                    cfg.max_scratch_pad_size = Some(16 * max_commands);
+                    // Verify with the v2 then v1 for devnet.
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.zklogin_circuit_mode = 1;
+                    }
+                }
+                131 => {
+                    cfg.feature_flags.share_transaction_deny_config_in_consensus = true;
+                    cfg.feature_flags.framework_tx_context_mut_restrictions = true;
+                }
+                132 => {
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.defer_owned_object_double_spend = true;
+                        cfg.feature_flags.create_forwarding_address_registry = true;
+                    }
+                    cfg.object_record_new_uid_from_hash_cost_base = Some(1);
+                    cfg.feature_flags
+                        .enable_order_independent_upgrade_init_linkage = true;
+                }
+                133 => {
+                    cfg.feature_flags
+                        .include_function_signatures_in_instantiation_limits = true;
+                    cfg.max_accumulator_type_nodes = Some(16);
+                }
+                134 => {
+                    // v134 was released to testnet with this content before the 1.77
+                    // branch backfilled its own v134 to disable defer_unpaid_amplification
+                    // on mainnet. To keep (v134, Mainnet) identical across the 1.77 and
+                    // 1.78 branches, the original v134 content is gated off mainnet here
+                    // (it applies to mainnet in v135 instead), and mainnet's v134 carries
+                    // only the deferral disable.
+                    if chain != Chain::Mainnet {
+                        cfg.package_original_package_id_impl_cost_base = Some(52);
+                        let package_read_cost_per_byte = cfg.obj_access_cost_read_per_byte();
+                        cfg.package_original_package_id_impl_cost_per_byte =
+                            Some(package_read_cost_per_byte);
+
+                        cfg.consensus_max_transactions_in_block_bytes = Some(288 * 1024);
+                        cfg.consensus_max_num_transactions_in_block = Some(128);
+                    }
+
+                    if chain == Chain::Mainnet {
+                        cfg.feature_flags.defer_unpaid_amplification = false;
+                    }
+                }
+                135 => {
+                    // Apply the original v134 content on mainnet (no-op re-assignment on
+                    // chains that already applied it in v134).
+                    cfg.package_original_package_id_impl_cost_base = Some(52);
+                    let package_read_cost_per_byte = cfg.obj_access_cost_read_per_byte();
+                    cfg.package_original_package_id_impl_cost_per_byte =
+                        Some(package_read_cost_per_byte);
+
+                    cfg.consensus_max_transactions_in_block_bytes = Some(288 * 1024);
+                    cfg.consensus_max_num_transactions_in_block = Some(128);
+
+                    cfg.feature_flags.defer_unpaid_amplification = false;
+                }
+                136 => {
+                    cfg.feature_flags.ptb_tx_context_restrictions = true;
+
+                    cfg.translation_per_live_reference_charge = Some(1);
+                    cfg.max_ptb_live_references = Some(64);
+                    cfg.max_ptb_returned_references = Some(16);
+                    cfg.max_ptb_total_returned_references = Some(256);
+
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.allowed_proposers = true;
+                    }
+                    cfg.feature_flags.harden_linkage_consistency = true;
+
+                    cfg.package_arena_size_in_bytes = Some(10_000_000);
+                }
+                137 => {
+                    cfg.verify_bulletproofs_ristretto255_cost_per_bit_and_commitment = Some(621);
+                    cfg.max_bulletproofs_total_bits = Some(1024);
+
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.enable_allowances = true;
+                    }
+                    cfg.feature_flags.fix_ptb_generated_reads = true;
+                    cfg.feature_flags.charge_ld_const_abstract_size = true;
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.check_object_funds_withdraw_in_execution = true;
+                    }
+                    cfg.reserve_object_funds_for_withdrawal_cost_base = Some(52);
+                    // Equivalent to the fixed portion of a dynamic-field lookup (52 + 52) plus
+                    // loading the 80-byte accumulator field contents at one gas unit per byte.
+                    cfg.reserve_object_funds_for_withdrawal_cold_read_cost = Some(184);
+
+                    cfg.feature_flags.allowed_proposers = true;
+
+                    cfg.feature_flags.validate_ptb_argument_indices = true;
+                    cfg.feature_flags.memory_safety_invariant_check_v2 = true;
+                }
+                138 => {
+                    cfg.gas_model_version = Some(15);
+                    cfg.feature_flags.enable_allowances = true;
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.check_object_funds_withdraw_in_execution = true;
+                        cfg.feature_flags.disable_effects_tx_dependencies = true;
+                    }
+                    cfg.feature_flags.merge_colliding_deferrals = true;
                 }
                 // Use this template when making changes:
                 //
@@ -4394,18 +4771,25 @@ impl ProtocolConfig {
             }
         }
 
-        // Simtest specific overrides.
-        if cfg!(msim) {
-            // Trigger GC more often.
-            cfg.consensus_gc_depth = Some(5);
+        cfg
+    }
 
-            // Trigger checkpoint splitting more often.
-            // cfg.max_transactions_per_checkpoint = Some(10);
-            // FIXME: Re-introduce this once we resolve the checkpoint splitting issue
-            // in the quarantine output.
+    pub fn apply_seeded_test_overrides(&mut self, seed: &[u8; 32]) {
+        if !self.feature_flags.randomize_checkpoint_tx_limit_in_tests
+            || !self.feature_flags.split_checkpoints_in_consensus_handler
+        {
+            return;
         }
 
-        cfg
+        if !linku_common::in_test_configuration() {
+            return;
+        }
+
+        use rand::{Rng, SeedableRng, rngs::StdRng};
+        let mut rng = StdRng::from_seed(*seed);
+        let max_txns = rng.gen_range(10..=100u64);
+        info!("seeded test override: max_transactions_per_checkpoint = {max_txns}");
+        self.max_transactions_per_checkpoint = Some(max_txns);
     }
 
     // Extract the bytecode verifier config from this protocol config.
@@ -4453,6 +4837,14 @@ impl ProtocolConfig {
             max_basic_blocks: Some(self.max_basic_blocks() as usize),
             max_value_stack_size: self.max_value_stack_size() as usize,
             max_type_nodes: Some(self.max_type_nodes() as usize),
+            max_generic_instantiation_type_nodes_per_function: self
+                .max_generic_instantiation_type_nodes_per_function_as_option()
+                .map(|v| v as usize),
+            max_generic_instantiation_type_nodes_per_module: self
+                .max_generic_instantiation_type_nodes_per_module_as_option()
+                .map(|v| v as usize),
+            include_function_signatures_in_instantiation_limits: self
+                .include_function_signatures_in_instantiation_limits(),
             max_push_size: Some(self.max_push_size() as usize),
             max_dependency_depth: Some(self.max_dependency_depth() as usize),
             max_fields_in_struct: Some(self.max_fields_in_struct() as usize),
@@ -4475,6 +4867,10 @@ impl ProtocolConfig {
             sanity_check_with_regex_reference_safety: sanity_check_with_regex_reference_safety
                 .map(|limit| limit as u128),
             deprecate_global_storage_ops,
+            disable_entry_point_signature_check: self.disable_entry_point_signature_check(),
+            switch_to_regex_reference_safety: false,
+            framework_tx_context_mut_restrictions: self.framework_tx_context_mut_restrictions(),
+            disallow_jump_orphans: self.disallow_jump_orphans(),
         }
     }
 
@@ -4530,14 +4926,22 @@ impl ProtocolConfig {
     /// This must be called at the beginning of the test, before get_for_(min|max)_version is
     /// called, since those functions cache their return value.
     pub fn apply_overrides_for_testing(
-        override_fn: impl Fn(ProtocolVersion, Self) -> Self + Send + 'static,
+        override_fn: impl Fn(ProtocolVersion, Self) -> Self + Send + Sync + 'static,
     ) -> OverrideGuard {
-        CONFIG_OVERRIDE.with(|ovr| {
-            let mut cur = ovr.borrow_mut();
-            assert!(cur.is_none(), "config override already present");
-            *cur = Some(Box::new(override_fn));
-            OverrideGuard
-        })
+        let mut cur = CONFIG_OVERRIDE.lock().unwrap();
+        assert!(cur.is_none(), "config override already present");
+        *cur = Some(Box::new(override_fn));
+        OverrideGuard
+    }
+
+    fn apply_config_override(version: ProtocolVersion, mut ret: Self) -> Self {
+        if let Some(override_fn) = CONFIG_OVERRIDE.lock().unwrap().as_ref() {
+            warn!(
+                "overriding ProtocolConfig settings with custom settings (you should not see this log outside of tests)"
+            );
+            ret = override_fn(version, ret);
+        }
+        ret
     }
 }
 
@@ -4545,46 +4949,26 @@ impl ProtocolConfig {
 // This is only needed for feature_flags. Please suffix each setter with `_for_testing`.
 // Non-feature_flags should already have test setters defined through macros.
 impl ProtocolConfig {
-    pub fn set_advance_to_highest_supported_protocol_version_for_testing(&mut self, val: bool) {
-        self.feature_flags
-            .advance_to_highest_supported_protocol_version = val
-    }
-    pub fn set_commit_root_state_digest_supported_for_testing(&mut self, val: bool) {
-        self.feature_flags.commit_root_state_digest = val
-    }
-    pub fn set_zklogin_auth_for_testing(&mut self, val: bool) {
-        self.feature_flags.zklogin_auth = val
-    }
-    pub fn set_enable_jwk_consensus_updates_for_testing(&mut self, val: bool) {
-        self.feature_flags.enable_jwk_consensus_updates = val
-    }
-    pub fn set_random_beacon_for_testing(&mut self, val: bool) {
-        self.feature_flags.random_beacon = val
-    }
-
-    pub fn set_upgraded_multisig_for_testing(&mut self, val: bool) {
-        self.feature_flags.upgraded_multisig_supported = val
-    }
-    pub fn set_accept_zklogin_in_multisig_for_testing(&mut self, val: bool) {
-        self.feature_flags.accept_zklogin_in_multisig = val
+    // Hand-written (the field is marked #[custom_setter]) to forbid downgrades: an executor
+    // older than the config's protocol version can't link the frameworks of later versions —
+    // its natives tables are frozen. Upgrades are allowed for replay's executor override.
+    pub fn set_execution_version_for_testing(&mut self, val: u64) {
+        let current = self.execution_version.unwrap_or(0);
+        assert!(
+            val >= current,
+            "cannot downgrade execution_version from {current} to {val}: running an old \
+             executor against a newer protocol config/framework is unsupported. To test \
+             frozen executor behavior, start from the last protocol version of that executor \
+             instead, so genesis loads the matching framework snapshot (see \
+             test_address_balance_gas_v3_accumulator_sign)."
+        );
+        self.execution_version = Some(val);
     }
 
-    pub fn set_shared_object_deletion_for_testing(&mut self, val: bool) {
-        self.feature_flags.shared_object_deletion = val;
-    }
-
-    pub fn set_narwhal_new_leader_election_schedule_for_testing(&mut self, val: bool) {
-        self.feature_flags.narwhal_new_leader_election_schedule = val;
-    }
-
-    pub fn set_receive_object_for_testing(&mut self, val: bool) {
-        self.feature_flags.receive_objects = val
-    }
-    pub fn set_narwhal_certificate_v2_for_testing(&mut self, val: bool) {
-        self.feature_flags.narwhal_certificate_v2 = val
-    }
-    pub fn set_verify_legacy_zklogin_address_for_testing(&mut self, val: bool) {
-        self.feature_flags.verify_legacy_zklogin_address = val
+    // Not generated by the feature-flags derive because zklogin_circuit_mode is a u64
+    // flag (the macro only generates setters for bool flags).
+    pub fn set_zklogin_circuit_mode_for_testing(&mut self, val: u64) {
+        self.feature_flags.zklogin_circuit_mode = val
     }
 
     pub fn set_per_object_congestion_control_mode_for_testing(
@@ -4606,79 +4990,8 @@ impl ProtocolConfig {
         self.feature_flags.zklogin_max_epoch_upper_bound_delta = val
     }
 
-    pub fn set_disable_bridge_for_testing(&mut self) {
-        self.feature_flags.bridge = false
-    }
-
     pub fn set_mysticeti_num_leaders_per_round_for_testing(&mut self, val: Option<usize>) {
         self.feature_flags.mysticeti_num_leaders_per_round = val;
-    }
-
-    pub fn set_enable_soft_bundle_for_testing(&mut self, val: bool) {
-        self.feature_flags.soft_bundle = val;
-    }
-
-    pub fn set_passkey_auth_for_testing(&mut self, val: bool) {
-        self.feature_flags.passkey_auth = val
-    }
-
-    pub fn set_enable_party_transfer_for_testing(&mut self, val: bool) {
-        self.feature_flags.enable_party_transfer = val
-    }
-
-    pub fn set_consensus_distributed_vote_scoring_strategy_for_testing(&mut self, val: bool) {
-        self.feature_flags
-            .consensus_distributed_vote_scoring_strategy = val;
-    }
-
-    pub fn set_consensus_round_prober_for_testing(&mut self, val: bool) {
-        self.feature_flags.consensus_round_prober = val;
-    }
-
-    pub fn set_disallow_new_modules_in_deps_only_packages_for_testing(&mut self, val: bool) {
-        self.feature_flags
-            .disallow_new_modules_in_deps_only_packages = val;
-    }
-
-    pub fn set_correct_gas_payment_limit_check_for_testing(&mut self, val: bool) {
-        self.feature_flags.correct_gas_payment_limit_check = val;
-    }
-
-    pub fn set_address_aliases_for_testing(&mut self, val: bool) {
-        self.feature_flags.address_aliases = val;
-    }
-
-    pub fn set_consensus_round_prober_probe_accepted_rounds(&mut self, val: bool) {
-        self.feature_flags
-            .consensus_round_prober_probe_accepted_rounds = val;
-    }
-
-    pub fn set_mysticeti_fastpath_for_testing(&mut self, val: bool) {
-        self.feature_flags.mysticeti_fastpath = val;
-    }
-
-    pub fn set_accept_passkey_in_multisig_for_testing(&mut self, val: bool) {
-        self.feature_flags.accept_passkey_in_multisig = val;
-    }
-
-    pub fn set_consensus_batched_block_sync_for_testing(&mut self, val: bool) {
-        self.feature_flags.consensus_batched_block_sync = val;
-    }
-
-    pub fn set_record_time_estimate_processed_for_testing(&mut self, val: bool) {
-        self.feature_flags.record_time_estimate_processed = val;
-    }
-
-    pub fn set_prepend_prologue_tx_in_consensus_commit_in_checkpoints_for_testing(
-        &mut self,
-        val: bool,
-    ) {
-        self.feature_flags
-            .prepend_prologue_tx_in_consensus_commit_in_checkpoints = val;
-    }
-
-    pub fn enable_accumulators_for_testing(&mut self) {
-        self.feature_flags.enable_accumulators = true;
     }
 
     pub fn disable_accumulators_for_testing(&mut self) {
@@ -4688,91 +5001,56 @@ impl ProtocolConfig {
 
     pub fn enable_coin_reservation_for_testing(&mut self) {
         self.feature_flags.enable_coin_reservation_obj_refs = true;
+        self.feature_flags
+            .convert_withdrawal_compatibility_ptb_arguments = true;
+        // Ensure execution_version >= 4 so new_vm_enabled() returns true,
+        // which is required for enable_coin_reservation_obj_refs() to return true.
+        self.execution_version = Some(self.execution_version.map_or(4, |v| v.max(4)));
     }
 
-    pub fn create_root_accumulator_object_for_testing(&mut self) {
-        self.feature_flags.create_root_accumulator_object = true;
-    }
-
-    pub fn disable_create_root_accumulator_object_for_testing(&mut self) {
-        self.feature_flags.create_root_accumulator_object = false;
+    pub fn disable_coin_reservation_for_testing(&mut self) {
+        self.feature_flags.enable_coin_reservation_obj_refs = false;
+        self.feature_flags
+            .convert_withdrawal_compatibility_ptb_arguments = false;
     }
 
     pub fn enable_address_balance_gas_payments_for_testing(&mut self) {
         self.feature_flags.enable_accumulators = true;
         self.feature_flags.allow_private_accumulator_entrypoints = true;
         self.feature_flags.enable_address_balance_gas_payments = true;
+        self.feature_flags.address_balance_gas_check_rgp_at_signing = true;
+        self.feature_flags.address_balance_gas_reject_gas_coin_arg = false;
+        self.execution_version = Some(self.execution_version.map_or(4, |v| v.max(4)))
     }
 
-    pub fn disable_address_balance_gas_payments_for_testing(&mut self) {
-        self.feature_flags.enable_address_balance_gas_payments = false;
+    pub fn enable_gasless_for_testing(&mut self) {
+        self.enable_address_balance_gas_payments_for_testing();
+        self.feature_flags.enable_gasless = true;
+        self.feature_flags.gasless_verify_remaining_balance = true;
+        self.gasless_max_computation_units = Some(5_000);
+        self.gasless_allowed_token_types = Some(vec![]);
+        self.gasless_max_tps = Some(1000);
+        self.gasless_max_tx_size_bytes = Some(16 * 1024);
     }
 
-    pub fn enable_multi_epoch_transaction_expiration_for_testing(&mut self) {
-        self.feature_flags.enable_multi_epoch_transaction_expiration = true;
+    pub fn disable_gasless_for_testing(&mut self) {
+        self.feature_flags.enable_gasless = false;
+        self.gasless_max_computation_units = None;
+        self.gasless_allowed_token_types = None;
     }
 
     pub fn enable_authenticated_event_streams_for_testing(&mut self) {
-        self.enable_accumulators_for_testing();
+        self.feature_flags.enable_accumulators = true;
         self.feature_flags.enable_authenticated_event_streams = true;
         self.feature_flags
             .include_checkpoint_artifacts_digest_in_summary = true;
-    }
-
-    pub fn disable_authenticated_event_streams_for_testing(&mut self) {
-        self.feature_flags.enable_authenticated_event_streams = false;
-    }
-
-    pub fn enable_non_exclusive_writes_for_testing(&mut self) {
-        self.feature_flags.enable_non_exclusive_writes = true;
-    }
-
-    pub fn set_ignore_execution_time_observations_after_certs_closed_for_testing(
-        &mut self,
-        val: bool,
-    ) {
-        self.feature_flags
-            .ignore_execution_time_observations_after_certs_closed = val;
-    }
-
-    pub fn set_consensus_checkpoint_signature_key_includes_digest_for_testing(
-        &mut self,
-        val: bool,
-    ) {
-        self.feature_flags
-            .consensus_checkpoint_signature_key_includes_digest = val;
-    }
-
-    pub fn set_cancel_for_failed_dkg_early_for_testing(&mut self, val: bool) {
-        self.feature_flags.cancel_for_failed_dkg_early = val;
-    }
-
-    pub fn set_use_mfp_txns_in_load_initial_object_debts_for_testing(&mut self, val: bool) {
-        self.feature_flags.use_mfp_txns_in_load_initial_object_debts = val;
-    }
-
-    pub fn set_authority_capabilities_v2_for_testing(&mut self, val: bool) {
-        self.feature_flags.authority_capabilities_v2 = val;
-    }
-
-    pub fn allow_references_in_ptbs_for_testing(&mut self) {
-        self.feature_flags.allow_references_in_ptbs = true;
-    }
-
-    pub fn set_consensus_skip_gced_accept_votes_for_testing(&mut self, val: bool) {
-        self.feature_flags.consensus_skip_gced_accept_votes = val;
-    }
-
-    pub fn set_enable_object_funds_withdraw_for_testing(&mut self, val: bool) {
-        self.feature_flags.enable_object_funds_withdraw = val;
+        self.feature_flags.split_checkpoints_in_consensus_handler = true;
     }
 }
 
-type OverrideFn = dyn Fn(ProtocolVersion, ProtocolConfig) -> ProtocolConfig + Send;
+type OverrideFn = dyn Fn(ProtocolVersion, ProtocolConfig) -> ProtocolConfig + Send + Sync;
 
-thread_local! {
-    static CONFIG_OVERRIDE: RefCell<Option<Box<OverrideFn>>> = RefCell::new(None);
-}
+static CONFIG_OVERRIDE: Mutex<Option<Box<OverrideFn>>> = Mutex::new(None);
 
 #[must_use]
 pub struct OverrideGuard;
@@ -4780,9 +5058,7 @@ pub struct OverrideGuard;
 impl Drop for OverrideGuard {
     fn drop(&mut self) {
         info!("restoring override fn");
-        CONFIG_OVERRIDE.with(|ovr| {
-            *ovr.borrow_mut() = None;
-        });
+        *CONFIG_OVERRIDE.lock().unwrap() = None;
     }
 }
 
@@ -4855,6 +5131,9 @@ macro_rules! check_limit_by_meter {
         result
     }};
 }
+
+pub type Amendments = BTreeMap<AccountAddress, BTreeMap<AccountAddress, AccountAddress>>;
+
 #[cfg(all(test, not(msim)))]
 mod test {
     use insta::assert_yaml_snapshot;
@@ -4897,18 +5176,6 @@ mod test {
     }
 
     #[test]
-    fn version_106_enables_iffw_gas_payment_pruning() {
-        assert!(
-            !ProtocolConfig::get_for_version(ProtocolVersion::new(105), Chain::Unknown)
-                .prune_address_balance_gas_payment_on_iffw()
-        );
-        assert!(
-            ProtocolConfig::get_for_version(ProtocolVersion::new(106), Chain::Unknown)
-                .prune_address_balance_gas_payment_on_iffw()
-        );
-    }
-
-    #[test]
     fn test_setters() {
         let mut prot: ProtocolConfig =
             ProtocolConfig::get_for_version(ProtocolVersion::new(1), Chain::Unknown);
@@ -4923,6 +5190,62 @@ mod test {
 
         prot.set_attr_for_testing("max_arguments".to_string(), "456".to_string());
         assert_eq!(prot.max_arguments(), 456);
+    }
+
+    #[test]
+    fn test_execution_version_setter_allows_upgrade() {
+        let mut prot = ProtocolConfig::get_for_max_version_UNSAFE();
+        let current = prot.execution_version();
+        prot.set_execution_version_for_testing(current);
+        prot.set_execution_version_for_testing(current + 1);
+        assert_eq!(prot.execution_version(), current + 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot downgrade execution_version")]
+    fn test_execution_version_setter_panics_on_downgrade() {
+        let mut prot = ProtocolConfig::get_for_max_version_UNSAFE();
+        let current = prot.execution_version();
+        prot.set_execution_version_for_testing(current - 1);
+    }
+
+    #[test]
+    fn test_feature_flag_setter_by_string() {
+        let mut prot: ProtocolConfig =
+            ProtocolConfig::get_for_version(ProtocolVersion::new(1), Chain::Unknown);
+        assert!(!prot.zklogin_auth());
+        prot.set_feature_flag_for_testing("zklogin_auth".to_string(), true);
+        assert!(prot.zklogin_auth());
+        prot.set_feature_flag_for_testing("zklogin_auth".to_string(), false);
+        assert!(!prot.zklogin_auth());
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown feature flag")]
+    fn test_feature_flag_setter_unknown_flag() {
+        let mut prot: ProtocolConfig =
+            ProtocolConfig::get_for_version(ProtocolVersion::new(1), Chain::Unknown);
+        prot.set_feature_flag_for_testing("some random string".to_string(), true);
+    }
+
+    #[test]
+    fn test_get_for_version_if_supported_applies_test_overrides() {
+        let before =
+            ProtocolConfig::get_for_version_if_supported(ProtocolVersion::new(1), Chain::Unknown)
+                .unwrap();
+
+        assert!(!before.enable_coin_reservation_obj_refs());
+
+        let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+            cfg.enable_coin_reservation_for_testing();
+            cfg
+        });
+
+        let after =
+            ProtocolConfig::get_for_version_if_supported(ProtocolVersion::new(1), Chain::Unknown)
+                .unwrap();
+
+        assert!(after.enable_coin_reservation_obj_refs());
     }
 
     #[test]
@@ -5059,5 +5382,136 @@ mod test {
             check_limit!(2550000u64, high),
             LimitThresholdCrossed::Hard(2550000, 10000)
         ));
+    }
+
+    #[test]
+    fn new_chain_has_no_upstream_gas_tokens_or_package_amendments() {
+        for chain in [Chain::Mainnet, Chain::Testnet, Chain::Unknown] {
+            let config = ProtocolConfig::get_for_version(ProtocolVersion::MAX, chain);
+            assert!(config.gasless_allowed_token_types().is_empty());
+            assert!(
+                config
+                    .include_special_package_amendments_as_option()
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn render_scalar_fields_use_precision_safe_encoding() {
+        use linku_common::rpc_format::Unmetered;
+
+        let config = ProtocolConfig::get_for_max_version_UNSAFE();
+        let rendered = config
+            .render::<serde_json::Value>(&mut Unmetered)
+            .expect("render should succeed");
+
+        let max_args = rendered
+            .get("max_arguments")
+            .expect("max_arguments set at max version");
+        assert!(
+            max_args.is_number(),
+            "u32 should render as number, got {max_args:?}",
+        );
+
+        let max_tx_size = rendered
+            .get("max_tx_size_bytes")
+            .expect("max_tx_size_bytes set at max version");
+        assert!(
+            max_tx_size.is_string(),
+            "u64 should render as string, got {max_tx_size:?}",
+        );
+    }
+
+    #[test]
+    fn render_includes_non_scalar_gasless_allowlist_as_json() {
+        use linku_common::rpc_format::Unmetered;
+        use serde_json::json;
+
+        let mut config = ProtocolConfig::get_for_max_version_UNSAFE();
+        config.set_gasless_allowed_token_types_for_testing(vec![
+            ("0xa::usdc::USDC".to_string(), 10_000),
+            ("0xb::usdt::USDT".to_string(), 0),
+        ]);
+
+        let rendered = config
+            .render::<serde_json::Value>(&mut Unmetered)
+            .expect("render should succeed under Unmetered budget");
+        let allowlist = rendered
+            .get("gasless_allowed_token_types")
+            .expect("entry should be present after the testing setter");
+
+        // u64 values render as strings to preserve JS precision; the tuple becomes a 2-element
+        // JSON array.
+        assert_eq!(
+            allowlist,
+            &json!([["0xa::usdc::USDC", "10000"], ["0xb::usdt::USDT", "0"],]),
+        );
+    }
+
+    #[test]
+    fn render_targets_prost_value_for_grpc() {
+        use linku_common::rpc_format::Unmetered;
+        use prost_types::value::Kind;
+
+        let mut config = ProtocolConfig::get_for_max_version_UNSAFE();
+        config.set_gasless_allowed_token_types_for_testing(vec![(
+            "0xa::usdc::USDC".to_string(),
+            10_000,
+        )]);
+
+        let rendered = config
+            .render::<prost_types::Value>(&mut Unmetered)
+            .expect("render to prost Value should succeed");
+        let allowlist = rendered
+            .get("gasless_allowed_token_types")
+            .expect("entry should be present after the testing setter");
+
+        // Outer ListValue with one inner ListValue carrying [coin_type_string, amount_string].
+        let Some(Kind::ListValue(outer)) = &allowlist.kind else {
+            panic!(
+                "expected ListValue at the top level, got {:?}",
+                allowlist.kind
+            );
+        };
+        assert_eq!(outer.values.len(), 1, "one allowlisted entry");
+        let Some(Kind::ListValue(entry)) = &outer.values[0].kind else {
+            panic!("expected each entry to be a ListValue");
+        };
+        assert_eq!(entry.values.len(), 2, "entry has (coin_type, amount)");
+
+        let Some(Kind::StringValue(coin_type)) = &entry.values[0].kind else {
+            panic!("expected coin_type as StringValue");
+        };
+        assert_eq!(coin_type, "0xa::usdc::USDC");
+
+        // u64 amount renders as a string, not a NumberValue — this is the precision-safe path.
+        let Some(Kind::StringValue(amount)) = &entry.values[1].kind else {
+            panic!(
+                "expected minimum_transfer_amount as StringValue (precision-safe u64); got {:?}",
+                entry.values[1].kind,
+            );
+        };
+        assert_eq!(amount, "10000");
+    }
+
+    #[test]
+    fn render_emits_null_for_unset_protocol_versions() {
+        use linku_common::rpc_format::Unmetered;
+
+        let config = ProtocolConfig::get_for_version(1.into(), Chain::Unknown);
+        let rendered = config
+            .render::<serde_json::Value>(&mut Unmetered)
+            .expect("render should succeed");
+        // The gasless allowlist key is present in every version's keyset, but renders as JSON
+        // `null` for versions that predate the feature. This keeps the keyset stable across
+        // protocol versions so clients can distinguish "unknown key" from "present but unset".
+        let entry = rendered
+            .get("gasless_allowed_token_types")
+            .expect("key should be present for every protocol version");
+        assert!(
+            entry.is_null(),
+            "value should be null for pre-feature protocol version, got {entry:?}",
+        );
     }
 }

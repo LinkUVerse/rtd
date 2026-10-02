@@ -3,7 +3,6 @@
 
 use move_bytecode_verifier_meter::Scope;
 use prometheus::Registry;
-use std::{path::Path, sync::Arc, time::Instant};
 use rtd_adapter::adapter::run_metered_move_bytecode_verifier;
 use rtd_config::verifier_signing_config::VerifierSigningConfig;
 use rtd_framework::BuiltInFramework;
@@ -11,6 +10,7 @@ use rtd_move_build::CompiledPackage;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{error::RtdErrorKind, metrics::BytecodeVerifierMetrics};
 use rtd_verifier::meter::RtdVerifierMeter;
+use std::{path::Path, sync::Arc, time::Instant};
 
 use crate::setup_examples;
 

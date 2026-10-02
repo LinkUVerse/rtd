@@ -16,12 +16,15 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, ensure};
 use fastcrypto::traits::Signer;
+use prost::Message;
 use rand::rngs::OsRng;
 use rtd_config::verifier_signing_config::VerifierSigningConfig;
 use rtd_config::{genesis, transaction_deny_config::TransactionDenyConfig};
 use rtd_framework_snapshot::load_bytecode_snapshot;
-use rtd_protocol_config::ProtocolVersion;
-use rtd_storage::blob::{Blob, BlobEncoding};
+use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
+use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::merge::Merge;
+use rtd_rpc::proto::rtd::rpc;
 use rtd_swarm_config::genesis_config::AccountConfig;
 use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
@@ -31,15 +34,19 @@ use rtd_types::digests::{ChainIdentifier, ConsensusCommitDigest};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::messages_consensus::ConsensusDeterminedVersionAssignments;
 use rtd_types::object::{Object, Owner};
-use rtd_types::storage::ObjectKey;
-use rtd_types::storage::{ObjectStore, ReadStore, RpcStateReader};
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
+use rtd_types::storage::ObjectKey;
+use rtd_types::storage::{
+    BackingPackageStore, ObjectStore, PackageObject, ReadStore, RpcStateReader,
+    RuntimeObjectResolver,
+};
 use rtd_types::transaction::EndOfEpochTransactionKind;
 use rtd_types::{
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID,
     base_types::{EpochId, RtdAddress},
     committee::Committee,
     effects::TransactionEffects,
-    error::ExecutionError,
+    error::{ExecutionError, RtdResult},
     gas_coin::MIST_PER_RTD,
     inner_temporary_store::InnerTemporaryStore,
     messages_checkpoint::{EndOfEpochData, VerifiedCheckpoint},
@@ -47,12 +54,15 @@ use rtd_types::{
     transaction::{Transaction, VerifiedTransaction},
 };
 
-use self::epoch_state::EpochState;
+pub use self::epoch_state::EpochState;
 pub use self::store::SimulatorStore;
 pub use self::store::in_mem_store::InMemoryStore;
 use self::store::in_mem_store::KeyStore;
 use rtd_core::mock_checkpoint_builder::{MockCheckpointBuilder, ValidatorKeypairProvider};
 use rtd_types::messages_checkpoint::{CheckpointContents, CheckpointSequenceNumber};
+use rtd_types::rtd_system_state::RtdSystemState;
+use rtd_types::transaction_executor::SimulateTransactionResult;
+pub use rtd_types::transaction_executor::TransactionChecks;
 use rtd_types::{
     gas_coin::GasCoin,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
@@ -187,7 +197,8 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
         let checkpoint_builder = MockCheckpointBuilder::new(config.genesis.checkpoint());
 
         let genesis = &config.genesis;
-        let epoch_state = EpochState::new(genesis.rtd_system_object());
+        let chain_identifier = (*genesis.checkpoint().digest()).into();
+        let epoch_state = EpochState::new(genesis.rtd_system_object(), chain_identifier);
 
         Self {
             rng,
@@ -200,6 +211,82 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
             verifier_signing_config: VerifierSigningConfig::default(),
             data_ingestion_path: None,
         }
+    }
+
+    /// Create a new Simulacrum instance with the provided custom state.
+    ///
+    /// Useful for testing specific scenarios or starting from a non-genesis state.
+    ///
+    /// Note: the `system_state` should represent the state of the system that exists after the
+    /// provided `checkpoint`. The `chain_identifier` must match the identity exposed to clients
+    /// because Simulacrum uses it to validate chain-bound transactions.
+    pub fn new_from_custom_state(
+        keystore: KeyStore,
+        checkpoint: VerifiedCheckpoint,
+        system_state: RtdSystemState,
+        chain_identifier: ChainIdentifier,
+        config: &NetworkConfig,
+        store: S,
+        rng: R,
+    ) -> Self {
+        let checkpoint_builder = MockCheckpointBuilder::new(checkpoint);
+        let epoch_state = EpochState::new(system_state, chain_identifier);
+        Self {
+            rng,
+            keystore,
+            genesis: config.genesis.clone(),
+            store,
+            checkpoint_builder,
+            epoch_state,
+            deny_config: TransactionDenyConfig::default(),
+            verifier_signing_config: VerifierSigningConfig::default(),
+            data_ingestion_path: None,
+        }
+    }
+
+    /// Simulate a transaction without committing its outputs.
+    pub fn simulate_transaction(
+        &self,
+        transaction: TransactionData,
+        checks: TransactionChecks,
+        allow_mock_gas_coin: bool,
+    ) -> RtdResult<SimulateTransactionResult>
+    where
+        S: Send + Sync,
+    {
+        self.epoch_state.simulate_transaction(
+            &self.store,
+            &self.deny_config,
+            &self.verifier_signing_config,
+            transaction,
+            checks,
+            allow_mock_gas_coin,
+        )
+    }
+
+    /// Execute a transaction, allowing empty-signature sender impersonation.
+    ///
+    /// Transactions with signatures are verified normally. Transactions with an empty signature
+    /// list are treated as an explicit impersonation request and skip user-signature verification,
+    /// while preserving the normal execution-time input checks.
+    ///
+    /// # Arguments
+    /// * `transaction` - The transaction to execute
+    ///
+    /// # Returns
+    /// The transaction effects and optional execution error
+    pub fn execute_transaction_impersonating(
+        &mut self,
+        transaction: Transaction,
+    ) -> anyhow::Result<(TransactionEffects, Option<ExecutionError>)> {
+        let verified_transaction = if transaction.data().tx_signatures().is_empty() {
+            VerifiedTransaction::new_unchecked(transaction)
+        } else {
+            transaction
+                .try_into_verified_for_testing(self.epoch_state.epoch(), &VerifyParams::default())?
+        };
+
+        self.execute_transaction_impl(verified_transaction)
     }
 
     /// Attempts to execute the provided Transaction.
@@ -281,11 +368,21 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
             let barrier_tx = self
                 .checkpoint_builder
                 .get_barrier_tx(checkpoint_height, &settlement_effects);
-            self.execute_system_transaction(barrier_tx)
+            let barrier_effects = self
+                .execute_system_transaction(barrier_tx)
                 .expect("barrier txn cannot fail")
-                .0
-                .status()
-                .unwrap();
+                .0;
+            barrier_effects.status().unwrap();
+
+            let committed_accumulator_versions = settlement_effects
+                .iter()
+                .chain(std::iter::once(&barrier_effects))
+                .flat_map(TransactionEffectsAPI::object_changes)
+                .filter(|change| change.id == RTD_ACCUMULATOR_ROOT_OBJECT_ID)
+                .filter_map(|change| change.input_version)
+                .collect();
+            self.epoch_state
+                .commit_accumulator_versions(committed_accumulator_versions);
         }
 
         let committee = CommitteeWithKeys::new(&self.keystore, self.epoch_state.committee());
@@ -410,6 +507,7 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
         let new_epoch_state = EpochState::new_with_protocol_config(
             self.store.get_system_state(),
             self.epoch_state.protocol_config().clone(),
+            self.epoch_state.chain_identifier(),
         );
         let end_of_epoch_data = EndOfEpochData {
             next_epoch_committee: new_epoch_state.committee().voting_rights.clone(),
@@ -430,8 +528,12 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
         self.epoch_state = new_epoch_state;
     }
 
-    pub fn store(&self) -> &dyn SimulatorStore {
+    pub fn store(&self) -> &S {
         &self.store
+    }
+
+    pub fn store_mut(&mut self) -> &mut S {
+        &mut self.store
     }
 
     pub fn keystore(&self) -> &KeyStore {
@@ -440,6 +542,14 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
 
     pub fn epoch_start_state(&self) -> &EpochStartSystemState {
         self.epoch_state.epoch_start_state()
+    }
+
+    pub fn system_state(&self) -> RtdSystemState {
+        self.store.get_system_state()
+    }
+
+    pub fn protocol_config(&self) -> &ProtocolConfig {
+        self.epoch_state.protocol_config()
     }
 
     /// Return a handle to the internally held RNG.
@@ -566,13 +676,48 @@ impl<R, S: store::SimulatorStore> Simulacrum<R, S> {
         checkpoint_contents: CheckpointContents,
     ) -> anyhow::Result<()> {
         if let Some(path) = &self.data_ingestion_path {
-            let file_name = format!("{}.chk", checkpoint.sequence_number);
-            let checkpoint_data: rtd_types::full_checkpoint_content::CheckpointData = self
-                .get_checkpoint_data(checkpoint, checkpoint_contents)?
-                .into();
+            let sequence_number = checkpoint.sequence_number;
+            let checkpoint_data = self.get_checkpoint_data(checkpoint, checkpoint_contents)?;
+
+            let mask = FieldMask::from_paths([
+                rpc::v2::Checkpoint::path_builder().sequence_number(),
+                rpc::v2::Checkpoint::path_builder().summary().bcs().value(),
+                rpc::v2::Checkpoint::path_builder().signature().finish(),
+                rpc::v2::Checkpoint::path_builder().contents().bcs().value(),
+                rpc::v2::Checkpoint::path_builder()
+                    .transactions()
+                    .transaction()
+                    .bcs()
+                    .value(),
+                rpc::v2::Checkpoint::path_builder()
+                    .transactions()
+                    .effects()
+                    .bcs()
+                    .value(),
+                rpc::v2::Checkpoint::path_builder()
+                    .transactions()
+                    .effects()
+                    .unchanged_loaded_runtime_objects()
+                    .finish(),
+                rpc::v2::Checkpoint::path_builder()
+                    .transactions()
+                    .events()
+                    .bcs()
+                    .value(),
+                rpc::v2::Checkpoint::path_builder()
+                    .objects()
+                    .objects()
+                    .bcs()
+                    .value(),
+            ]);
+
+            let proto_checkpoint = rpc::v2::Checkpoint::merge_from(&checkpoint_data, &mask.into());
+            let proto_bytes = proto_checkpoint.encode_to_vec();
+            let compressed = zstd::encode_all(&proto_bytes[..], 3)?;
+
+            let file_name = format!("{}.binpb.zst", sequence_number);
             std::fs::create_dir_all(path)?;
-            let blob = Blob::encode(&checkpoint_data, BlobEncoding::Bcs)?;
-            std::fs::write(path.join(file_name), blob.to_bytes())?;
+            std::fs::write(path.join(file_name), compressed)?;
         }
         Ok(())
     }
@@ -613,6 +758,39 @@ impl<T, V: store::SimulatorStore> ObjectStore for Simulacrum<T, V> {
 
     fn get_object_by_key(&self, object_id: &ObjectID, version: VersionNumber) -> Option<Object> {
         self.store.get_object_by_key(object_id, version)
+    }
+}
+
+impl<T, V: store::SimulatorStore> BackingPackageStore for Simulacrum<T, V> {
+    fn get_package_object(&self, package_id: &ObjectID) -> RtdResult<Option<PackageObject>> {
+        self.store.get_package_object(package_id)
+    }
+}
+
+impl<T, V: store::SimulatorStore> RuntimeObjectResolver for Simulacrum<T, V> {
+    fn read_child_object(
+        &self,
+        parent: &ObjectID,
+        child: &ObjectID,
+        child_version_upper_bound: SequenceNumber,
+    ) -> RtdResult<Option<Object>> {
+        self.store
+            .read_child_object(parent, child, child_version_upper_bound)
+    }
+
+    fn get_object_received_at_version(
+        &self,
+        owner: &ObjectID,
+        receiving_object_id: &ObjectID,
+        receive_object_at_version: SequenceNumber,
+        epoch_id: EpochId,
+    ) -> RtdResult<Option<Object>> {
+        self.store.get_object_received_at_version(
+            owner,
+            receiving_object_id,
+            receive_object_at_version,
+            epoch_id,
+        )
     }
 }
 
@@ -749,9 +927,10 @@ impl<T: Send + Sync, V: store::SimulatorStore + Send + Sync> RpcStateReader for 
         None
     }
 
-    fn get_struct_layout(
+    fn get_struct_layout_with_overlay(
         &self,
         _: &move_core_types::language_storage::StructTag,
+        _overlay: &rtd_types::full_checkpoint_content::ObjectSet,
     ) -> rtd_types::storage::error::Result<Option<move_core_types::annotated_value::MoveTypeLayout>>
     {
         Ok(None)
@@ -772,7 +951,7 @@ impl Simulacrum {
             .owned_objects(sender)
             .find(|object| object.is_gas_coin())
             .unwrap();
-        let gas_coin = GasCoin::try_from(&object).unwrap();
+        let gas_coin = GasCoin::try_from(object).unwrap();
         let transfer_amount = gas_coin.value() / 2;
 
         let pt = {
@@ -873,6 +1052,96 @@ mod tests {
     }
 
     #[test]
+    fn simulate_transaction_does_not_commit_outputs() {
+        let mut sim = Simulacrum::new();
+        let recipient = RtdAddress::random_for_testing_only();
+        let (tx, _) = sim.transfer_txn(recipient);
+        let transaction = tx.data().transaction_data().clone();
+        let transaction_digest = transaction.digest();
+        let gas_id = transaction.gas_data().payment[0].0;
+        let gas_before = SimulatorStore::get_object(sim.store(), &gas_id).unwrap();
+        let checkpoint_before = sim.store().get_highest_checkpint().unwrap();
+
+        let result = sim
+            .simulate_transaction(transaction, TransactionChecks::Enabled, false)
+            .unwrap();
+
+        assert!(result.effects.status().is_ok());
+        assert_eq!(result.suggested_gas_price, Some(sim.reference_gas_price()));
+        assert!(sim.store().get_transaction(&transaction_digest).is_none());
+        assert!(
+            sim.store()
+                .get_transaction_effects(&transaction_digest)
+                .is_none()
+        );
+        assert!(
+            sim.store()
+                .get_transaction_events(&transaction_digest)
+                .is_none()
+        );
+        assert_eq!(
+            SimulatorStore::get_object(sim.store(), &gas_id),
+            Some(gas_before)
+        );
+        assert!(sim.store().owned_objects(recipient).next().is_none());
+        assert_eq!(
+            sim.store().get_highest_checkpint().unwrap().digest(),
+            checkpoint_before.digest()
+        );
+
+        let executed_effects = sim.execute_transaction(tx).unwrap().0;
+        assert_eq!(result.effects, executed_effects);
+    }
+
+    #[test]
+    fn simulate_transaction_uses_custom_chain_identifier() {
+        use rtd_types::digests::CheckpointDigest;
+        use rtd_types::transaction::TransactionExpiration;
+
+        let mut rng = OsRng;
+        let config = ConfigBuilder::new_with_temp_dir()
+            .rng(&mut rng)
+            .with_chain_start_timestamp_ms(1)
+            .deterministic_committee_size(NonZeroUsize::MIN)
+            .build();
+        let mut custom_digest = *config.genesis.checkpoint().digest().inner();
+        custom_digest[0] ^= 0xff;
+        let chain_identifier = ChainIdentifier::from(CheckpointDigest::new(custom_digest));
+        assert_ne!(
+            chain_identifier,
+            ChainIdentifier::from(*config.genesis.checkpoint().digest()),
+        );
+
+        let store = InMemoryStore::new(&config.genesis);
+        let keystore = KeyStore::from_network_config(&config);
+        let mut sim = Simulacrum::new_from_custom_state(
+            keystore,
+            config.genesis.checkpoint(),
+            config.genesis.rtd_system_object(),
+            chain_identifier,
+            &config,
+            store,
+            rng,
+        );
+
+        let (tx, _) = sim.transfer_txn(RtdAddress::random_for_testing_only());
+        let mut transaction = tx.data().transaction_data().clone();
+        *transaction.expiration_mut_for_testing() = TransactionExpiration::ValidDuring {
+            min_epoch: Some(0),
+            max_epoch: Some(0),
+            min_timestamp: None,
+            max_timestamp: None,
+            chain: chain_identifier,
+            nonce: 0,
+        };
+
+        let result = sim
+            .simulate_transaction(transaction, TransactionChecks::Enabled, false)
+            .expect("simulation should use the configured chain identifier");
+        assert!(result.effects.status().is_ok());
+    }
+
+    #[test]
     fn transfer() {
         let mut sim = Simulacrum::new();
         let recipient = RtdAddress::random_for_testing_only();
@@ -896,7 +1165,7 @@ mod tests {
             sim.store()
                 .owned_objects(recipient)
                 .next()
-                .and_then(|object| GasCoin::try_from(&object).ok())
+                .and_then(|object| GasCoin::try_from(object).ok())
                 .unwrap()
                 .value()
         );

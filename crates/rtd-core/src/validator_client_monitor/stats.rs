@@ -3,13 +3,12 @@
 
 use crate::validator_client_monitor::{OperationFeedback, OperationType};
 use linku_common::moving_window::MovingWindow;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::time::Duration;
 use rtd_config::validator_client_monitor_config::ValidatorClientMonitorConfig;
 use rtd_types::base_types::AuthorityName;
 use rtd_types::committee::Committee;
-use rtd_types::messages_grpc::TxType;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Duration;
 use tracing::debug;
 
 // TODO: A few optimization to consider:
@@ -112,45 +111,41 @@ impl ClientObservedStats {
         }
     }
 
-    /// Get validator latencies for all validators in the committee for the provided tx type.
+    /// Get validator latencies for all validators in the committee.
     ///
     /// Returns a map of all tracked validators to their stats. For a validator
     pub fn get_all_validator_stats(
         &self,
         committee: &Committee,
-        tx_type: TxType,
     ) -> HashMap<AuthorityName, Duration> {
         committee
             .names()
             .map(|validator| {
-                let latency = self.calculate_client_latency(validator, tx_type);
+                let latency = self.calculate_client_latency(validator);
                 (*validator, latency)
             })
             .collect()
     }
 
-    /// Calculate adjusted latency for a single validator for the provided tx type.
+    /// Calculate adjusted latency for a single validator.
     ///
-    /// Returns the average latency for relevant operations (Consensus and FastPath only)
-    /// with reliability penalty applied. Lower values are better.
-    ///
-    /// Only considers:
-    /// - Consensus operations (for SharedObject transactions)
-    /// - FastPath operations (for SingleWriter transactions)
+    /// Returns the average latency for Consensus operations with reliability penalty applied.
+    /// Lower values are better.
     ///
     /// Returns latency in seconds, with reliability penalty applied as a multiplier.
-    fn calculate_client_latency(&self, validator: &AuthorityName, tx_type: TxType) -> Duration {
+    fn calculate_client_latency(&self, validator: &AuthorityName) -> Duration {
         let Some(stats) = self.validator_stats.get(validator) else {
             return MAX_LATENCY;
         };
 
-        let operation = match tx_type {
-            TxType::SharedObject => OperationType::Consensus,
-            TxType::SingleWriter => OperationType::FastPath,
-        };
+        let operation = OperationType::SharedObjectFinality;
         let Some(latency) = stats.average_latencies.get(&operation) else {
-            // For the target validator and operation type, no latency data has been recorded yet.
-            return MAX_LATENCY;
+            // No latency measurements yet, but health checks may have already told us the
+            // validator is unreachable. Rank known-unhealthy below merely-unmeasured, so that
+            // cold-start selection avoids validators we know are down.
+            let reliability_penalty = MAX_LATENCY
+                .mul_f64((1.0 - stats.reliability.get()) * self.config.reliability_weight);
+            return MAX_LATENCY + reliability_penalty;
         };
 
         // Get the latency for the relevant operation

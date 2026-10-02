@@ -3,12 +3,13 @@ source: crates/move-transactional-test-runner/src/framework.rs
 ---
 processed 3 tasks
 
-task 2, lines 16-21:
+task 2, lines 15-21:
+// mismatched addresses not supported
 //# publish
 Error: Unable to publish module '0000000000000000000000000000000000000000000000000000000000000044::m'. Got VMError: {
-    major_status: MODULE_ADDRESS_DOES_NOT_MATCH_SENDER,
+    major_status: MISMATCHED_MODULE_IDS_IN_PACKAGE,
     sub_status: None,
-    location: undefined,
+    location: 0x44,
     indices: [(AddressIdentifier, 0)],
     offsets: [],
 }

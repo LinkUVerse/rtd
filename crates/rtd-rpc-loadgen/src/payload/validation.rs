@@ -3,14 +3,14 @@
 
 use futures::future::join_all;
 use itertools::Itertools;
-use std::collections::HashSet;
-use std::fmt::Debug;
 use rtd_json_rpc_types::{
     RtdObjectDataOptions, RtdObjectResponse, RtdTransactionBlockEffectsAPI,
     RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
 };
 use rtd_sdk::RtdClient;
 use rtd_types::base_types::{ObjectID, TransactionDigest};
+use std::collections::HashSet;
+use std::fmt::Debug;
 use tracing::error;
 use tracing::log::warn;
 

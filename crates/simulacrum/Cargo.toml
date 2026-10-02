@@ -1,36 +1,32 @@
 [package]
 name = "simulacrum"
 version = "0.1.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
-async-trait.workspace = true
 anyhow.workspace = true
 bcs.workspace = true
 fastcrypto.workspace = true
 move-binary-format.workspace = true
+prost.workspace = true
+zstd.workspace = true
 move-core-types.workspace = true
-once_cell.workspace = true
 rand.workspace = true
-serde.workspace = true
-tracing.workspace = true
 prometheus.workspace = true
-futures.workspace = true
 rtd-core.workspace = true
 
 move-bytecode-utils.workspace = true
-shared-crypto.workspace = true
 rtd-config.workspace = true
-rtd-framework.workspace = true
 rtd-framework-snapshot.workspace = true
-rtd-keys.workspace = true
 rtd-protocol-config.workspace = true
-rtd-storage.workspace = true
+rtd-rpc.workspace = true
 rtd-types.workspace = true
-rtd-genesis-builder.workspace = true
 rtd-execution.workspace = true
 rtd-swarm-config.workspace = true
 rtd-transaction-checks.workspace = true

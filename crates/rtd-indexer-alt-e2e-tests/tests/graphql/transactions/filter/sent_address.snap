@@ -10,7 +10,7 @@ task 1, lines 6-25:
 //# publish
 created: object(1,0)
 mutated: object(0,3)
-gas summary: computation_cost: 1000000, storage_cost: 5570800,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 5586000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 27:
 //# run Test::M1::create --sender A --args 0 @A
@@ -42,20 +42,20 @@ Response: {
   "data": {
     "transactionsA": {
       "pageInfo": {
-        "startCursor": "Mg==",
-        "endCursor": "Mg==",
+        "startCursor": "KAE6BAgAEAI=",
+        "endCursor": "KAE6BAgAEAI=",
         "hasPreviousPage": false,
         "hasNextPage": false
       },
       "edges": [
         {
-          "cursor": "Mg==",
+          "cursor": "KAE6BAgAEAI=",
           "node": {
-            "digest": "4HNKX56jo22koiR5KGwVKTS4wuwzKrxroHCeeGaYpuMU",
+            "digest": "74XecJe2t2baP9fJgfxrBuc7YpX1Nrc7S38wwoYTxdLL",
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 1,
-                "digest": "Cj5q38QZLxjVbxUY4V9FfiWbPCFr4hAAJBirteUorDXv"
+                "digest": "Hvmxjb2HTew26wuPncqUmJRSVyLBZPrE8cdXcMxgxxuk"
               }
             }
           }
@@ -64,20 +64,20 @@ Response: {
     },
     "transactionsB": {
       "pageInfo": {
-        "startCursor": "NA==",
-        "endCursor": "NA==",
+        "startCursor": "KAE6BAgAEAU=",
+        "endCursor": "KAE6BAgAEAU=",
         "hasPreviousPage": false,
         "hasNextPage": false
       },
       "edges": [
         {
-          "cursor": "NA==",
+          "cursor": "KAE6BAgAEAU=",
           "node": {
-            "digest": "2NaVm8WExVGjbVuT2So99qdhY2XNd7RxbKDstDqVE9Qg",
+            "digest": "5LWtVeBUiTA87ugd6888N2ii7ZQiAprV3EvWmdYN4oRt",
             "effects": {
               "checkpoint": {
                 "sequenceNumber": 3,
-                "digest": "9PyPNWMz5bmpWuyrW7jiKcFqHH1ErBBVCLyspra3nxoN"
+                "digest": "BisL2sozvCg91KPNng7MbCfw6mdTXezLQMBXL1jdL7Tp"
               }
             }
           }

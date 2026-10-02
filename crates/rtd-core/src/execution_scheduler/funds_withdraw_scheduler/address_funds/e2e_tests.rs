@@ -17,7 +17,7 @@ use rtd_types::base_types::ObjectID;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::execution_params::FundsWithdrawStatus;
 use rtd_types::{
-    base_types::{SequenceNumber, RtdAddress},
+    base_types::{RtdAddress, SequenceNumber},
     crypto::{AccountKeyPair, get_account_key_pair},
     executable_transaction::VerifiedExecutableTransaction,
     gas_coin::GAS,
@@ -27,10 +27,11 @@ use rtd_types::{
 use tokio::sync::mpsc::{self, unbounded_channel};
 use tokio::time::timeout;
 
-use super::FundsSettlement;
+use super::{FundsSettlement, FundsWithdrawSchedulerType};
 use crate::{
     authority::{
-        AuthorityState, ExecutionEnv, shared_object_version_manager::Schedulable,
+        AuthorityState, ExecutionEnv,
+        shared_object_version_manager::{AssignedVersions, Schedulable},
         test_authority_builder::TestAuthorityBuilder,
     },
     execution_scheduler::{ExecutionScheduler, PendingCertificate},
@@ -61,19 +62,22 @@ async fn create_test_env(init_balances: BTreeMap<TypeTag, u64>) -> TestEnv {
     let account_objects = starting_objects.iter().map(|o| o.id()).collect();
     starting_objects.push(gas_object.clone());
     let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
-    protocol_config.enable_accumulators_for_testing();
+    protocol_config.set_enable_accumulators_for_testing(true);
     let state = TestAuthorityBuilder::new()
         .with_protocol_config(protocol_config)
         .with_starting_objects(&starting_objects)
         .build()
         .await;
+    let registry = prometheus::Registry::new();
     let scheduler = Arc::new(ExecutionScheduler::new(
         state.get_object_cache_reader().clone(),
         state.get_account_funds_read().clone(),
         state.get_transaction_cache_reader().clone(),
         tx_ready_certificates,
         &state.epoch_store_for_testing(),
+        FundsWithdrawSchedulerType::default(),
         state.metrics.clone(),
+        &registry,
     ));
     TestEnv {
         sender,
@@ -92,8 +96,7 @@ impl TestEnv {
             .into_iter()
             .enumerate()
             .map(|(idx, amount)| {
-                let withdraw =
-                    FundsWithdrawalArg::balance_from_sender(amount, GAS::type_tag().into());
+                let withdraw = FundsWithdrawalArg::balance_from_sender(amount, GAS::type_tag());
                 let mut tx_builder = TestTransactionBuilder::new(
                     self.sender,
                     self.gas_object.compute_object_reference(),
@@ -134,8 +137,9 @@ impl TestEnv {
             transactions
                 .iter()
                 .map(|tx| {
-                    let mut env = ExecutionEnv::default();
-                    env.assigned_versions.accumulator_version = Some(version);
+                    let env = ExecutionEnv::default().with_assigned_versions(
+                        AssignedVersions::new_for_testing(vec![], Some(version)),
+                    );
                     (Schedulable::Transaction(tx.clone()), env)
                 })
                 .collect(),

@@ -1,0 +1,24 @@
+---
+title: Oracle
+description: Upstream Sui DeepBook Predict oracle design; no RTD feed or oracle object is verified.
+keywords:
+  - deepbook predict
+  - oracle
+  - upstream design
+---
+
+This page describes the upstream Sui oracle design for DeepBook Predict. **No RTD Predict oracle package, feed writer, oracle object, or live observation is verified.** Former tables of BTC feed IDs and RTD Mainnet or Testnet configuration were copied from another chain and have been removed.
+
+## Oracle objects
+
+The source design separates oracle state from Predict trading state. An `OracleRegistry` binds an underlying to its canonical feed objects. The described inputs include a spot feed, a forward or value store, and a volatility parameter store. A client or contract must use the objects currently bound in the registry of its deployment; an object with the right type alone is not enough.
+
+## Observation integrity
+
+For a port, review who may write each feed, how the source payload is authenticated, how source timestamps are stored, and whether prices can be written and consumed in the same transaction. Freshness is a read-time rule; a submitted update is not proof that an observation is current when a trade executes.
+
+## Pricing and settlement
+
+Live quotes, redemption, market valuation, and expiry settlement may require different oracle observations. The exact combination and fallback policy are properties of the selected Move source revision and its deployed configuration. An RTD integration must verify those paths with an operational feed before advertising a market.
+
+No upstream Sui oracle object ID or public read endpoint should be placed in RTD configuration. See [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) for the RTD deployment status.

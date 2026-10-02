@@ -1,0 +1,16 @@
+---
+title: Asset Tokenization
+description: Asset tokenization is an application pattern; this fork does not include a verified RTD asset-tokenization package.
+keywords:
+  - asset tokenization
+  - Move
+  - RTD status
+---
+
+# Asset tokenization on RTD
+
+An application can represent a fractional asset with Move objects and use a coin or custom token type to record units. Issuance, transfer restrictions, redemption, and the relationship to a real-world asset are application responsibilities.
+
+This checkout does not include the `asset_tokenization` and `template` Move packages described in the upstream example. No corresponding RTD package ID, published npm package, WebAssembly bytecode tool, or public deployment has been verified. The upstream bytecode and package IDs must not be used as RTD deployment inputs.
+
+For a new implementation, start with the checked-in [RTD coin framework](/references/framework/rtd_rtd/coin) and [Move package management](/develop/manage-packages/move-package-management). Compile and test the package against this fork, then publish it to an isolated RTD local network. Review asset custody and transfer rules before using it with real assets.

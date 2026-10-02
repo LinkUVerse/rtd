@@ -2,15 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Error;
+use rtd_protocol_config::Chain;
+use rtd_rpc_api::Client;
+use rtd_types::base_types::ObjectID;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
-use rtd_protocol_config::Chain;
-use rtd_sdk::apis::ReadApi;
-use rtd_types::{base_types::ObjectID, digests::ChainIdentifier};
-
-const MVR_RESOLVER_MAINNET_URL: &str = "https://mainnet.mvr.linkulabs.com";
-const MVR_RESOLVER_TESTNET_URL: &str = "https://testnet.mvr.linkulabs.com";
 
 #[derive(Debug, Serialize)]
 pub struct MvrResolver {
@@ -41,7 +38,7 @@ impl MvrResolver {
 
     /// Given a set of MVR names, resolve them to their corresponding package IDs. Note that this
     /// API will error if the resolved list length does not match with the given input.
-    pub async fn resolve_names(&self, read_api: &ReadApi) -> Result<ResolvedNames, Error> {
+    pub async fn resolve_names(&self, client: &Client) -> Result<ResolvedNames, Error> {
         if self.names.is_empty() {
             return Ok(ResolvedNames {
                 resolution: BTreeMap::new(),
@@ -49,7 +46,7 @@ impl MvrResolver {
         }
 
         let request = reqwest::Client::new();
-        let (url, chain) = mvr_req_url(read_api).await?;
+        let (url, chain) = mvr_req_url(client).await?;
         let json_body = json!(NamesRequest {
             names: self.names.clone()
         });
@@ -84,23 +81,16 @@ impl MvrResolver {
 
 /// Based on the chain id of the current set environment, return the correct MVR URL to use for
 /// resolution.
-async fn mvr_req_url(read_api: &ReadApi) -> Result<(&'static str, &'static str), Error> {
-    let chain_id = read_api.get_chain_identifier().await?;
-    let chain = ChainIdentifier::from_chain_short_id(&chain_id);
-
-    if let Some(chain) = chain {
-        let chain = chain.chain();
-        match chain {
-            Chain::Mainnet => Ok((MVR_RESOLVER_MAINNET_URL, "mainnet")),
-            Chain::Testnet => Ok((MVR_RESOLVER_TESTNET_URL, "testnet")),
-            Chain::Unknown => {
-                anyhow::bail!("Unsupported chain identifier: {:?}", chain);
-            }
-        }
-    } else {
-        anyhow::bail!(
-            "Unsupported chain: {chain_id}. Only mainnet/testnet are supported for \
-            MVR resolution",
-        )
-    }
+async fn mvr_req_url(client: &Client) -> Result<(String, &'static str), Error> {
+    let chain = client.get_chain_identifier().await?;
+    let chain = chain.chain();
+    let (variable, name) = match chain {
+        Chain::Mainnet => ("RTD_MVR_MAINNET_URL", "mainnet"),
+        Chain::Testnet => ("RTD_MVR_TESTNET_URL", "testnet"),
+        Chain::Unknown => anyhow::bail!("MVR is unavailable for an unrecognized RTD chain"),
+    };
+    let url = std::env::var(variable)
+        .map_err(|_| anyhow::anyhow!("Set {variable} to a resolver deployed for RTD {name}"))?;
+    reqwest::Url::parse(&url)?;
+    Ok((url, name))
 }

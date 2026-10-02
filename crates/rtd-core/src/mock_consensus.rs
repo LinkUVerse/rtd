@@ -6,15 +6,15 @@ use crate::authority::{AuthorityState, ExecutionEnv};
 use crate::consensus_adapter::{BlockStatusReceiver, ConsensusClient, SubmitToConsensus};
 
 use consensus_types::block::BlockRef;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
 use rtd_types::committee::EpochId;
 use rtd_types::error::{RtdError, RtdResult};
 use rtd_types::executable_transaction::VerifiedExecutableTransaction;
 use rtd_types::messages_consensus::{
     ConsensusPosition, ConsensusTransaction, ConsensusTransactionKind,
 };
-use rtd_types::transaction::{VerifiedCertificate, VerifiedTransaction};
+use rtd_types::transaction::VerifiedTransaction;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tracing::debug;
@@ -63,16 +63,13 @@ impl MockConsensusClient {
             let env = match consensus_mode {
                 ConsensusMode::Noop => ExecutionEnv::new(),
                 ConsensusMode::DirectSequencing => {
-                    // Extract the executable transaction from the consensus transaction
+                    // Extract the executable transaction from the consensus transaction.
+                    // DEPRECATED: CertifiedTransaction and UserTransaction are no longer
+                    // produced (MFP uses UserTransactionV2).
                     let executable_tx = match &tx.kind {
-                        ConsensusTransactionKind::CertifiedTransaction(cert) => {
-                            Some(VerifiedExecutableTransaction::new_from_certificate(
-                                VerifiedCertificate::new_unchecked(*cert.clone()),
-                            ))
-                        }
-                        ConsensusTransactionKind::UserTransaction(tx) => {
+                        ConsensusTransactionKind::UserTransactionV2(tx) => {
                             Some(VerifiedExecutableTransaction::new_from_consensus(
-                                VerifiedTransaction::new_unchecked(*tx.clone()),
+                                VerifiedTransaction::new_unchecked(tx.tx().clone()),
                                 0,
                             ))
                         }
@@ -84,7 +81,7 @@ impl MockConsensusClient {
                         let assigned_versions = epoch_store
                             .assign_shared_object_versions_for_tests(
                                 validator.get_object_cache_reader().as_ref(),
-                                &vec![exec_tx.clone()],
+                                std::slice::from_ref(&exec_tx),
                             )
                             .unwrap();
 
@@ -93,7 +90,7 @@ impl MockConsensusClient {
                             .into_iter()
                             .next()
                             .map(|(_, v)| v)
-                            .unwrap_or_default();
+                            .unwrap_or_else(crate::authority::shared_object_version_manager::AssignedVersions::empty);
                         ExecutionEnv::new().with_assigned_versions(assigned_version)
                     } else {
                         ExecutionEnv::new()
@@ -101,49 +98,26 @@ impl MockConsensusClient {
                 }
             };
             match &tx.kind {
-                ConsensusTransactionKind::CertifiedTransaction(tx) => {
-                    if tx.is_consensus_tx() {
-                        validator.execution_scheduler().enqueue(
-                            vec![(
-                                VerifiedExecutableTransaction::new_from_certificate(
-                                    VerifiedCertificate::new_unchecked(*tx.clone()),
-                                )
-                                .into(),
-                                env,
-                            )],
-                            &epoch_store,
-                        );
-                    }
+                // DEPRECATED: CertifiedTransaction and UserTransaction are no longer produced.
+                ConsensusTransactionKind::CertifiedTransaction(_)
+                | ConsensusTransactionKind::UserTransaction(_) => {
+                    debug!(
+                        "Ignoring deprecated {:?} in MockConsensusClient",
+                        std::mem::discriminant(&tx.kind)
+                    );
                 }
-                ConsensusTransactionKind::UserTransaction(tx) => {
-                    if tx.is_consensus_tx() {
-                        validator.execution_scheduler().enqueue(
-                            vec![(
-                                VerifiedExecutableTransaction::new_from_consensus(
-                                    VerifiedTransaction::new_unchecked(*tx.clone()),
-                                    0,
-                                )
-                                .into(),
-                                env,
-                            )],
-                            &epoch_store,
-                        );
-                    }
-                }
-                ConsensusTransactionKind::UserTransactionV2(tx) => {
-                    if tx.tx().is_consensus_tx() {
-                        validator.execution_scheduler().enqueue(
-                            vec![(
-                                VerifiedExecutableTransaction::new_from_consensus(
-                                    VerifiedTransaction::new_unchecked(tx.tx().clone()),
-                                    0,
-                                )
-                                .into(),
-                                env,
-                            )],
-                            &epoch_store,
-                        );
-                    }
+                ConsensusTransactionKind::UserTransactionV2(tx) if tx.tx().is_consensus_tx() => {
+                    validator.execution_scheduler().enqueue(
+                        vec![(
+                            VerifiedExecutableTransaction::new_from_consensus(
+                                VerifiedTransaction::new_unchecked(tx.tx().clone()),
+                                0,
+                            )
+                            .into(),
+                            env,
+                        )],
+                        &epoch_store,
+                    );
                 }
                 _ => {}
             }

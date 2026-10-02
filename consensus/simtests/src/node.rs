@@ -9,31 +9,40 @@ use std::{
 
 use anyhow::Result;
 use arc_swap::ArcSwapOption;
-use consensus_config::{AuthorityIndex, Committee, NetworkKeyPair, Parameters, ProtocolKeyPair};
+use consensus_config::{
+    AuthorityIndex, Committee, ConsensusProtocolConfig, NetworkKeyPair, Parameters, ProtocolKeyPair,
+};
 use consensus_core::{
     Clock, CommitConsumerArgs, CommitConsumerMonitor, CommittedSubDag, ConsensusAuthority,
-    NetworkType, TransactionClient, TransactionVerifier, to_socket_addr,
+    NetworkType, TransactionClient, TransactionVerifier, storage::rocksdb_store::RocksDBStore,
+    to_socket_addr,
 };
 use consensus_types::block::BlockTimestampMs;
 use linku_metrics::monitored_mpsc::UnboundedReceiver;
 use linku_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::Mutex;
 use prometheus::Registry;
-use rtd_protocol_config::{ConsensusNetwork, ProtocolConfig};
 use tempfile::TempDir;
 use tracing::{info, trace};
 
 #[derive(Clone)]
 pub struct Config {
+    // When this is an Observer node, then a dummy value is used not overlapping with the validator indices
+    // TODO: use a parameter for Observer nodes
     pub authority_index: AuthorityIndex,
     pub db_dir: Arc<TempDir>,
     pub committee: Committee,
     pub keypairs: Vec<(NetworkKeyPair, ProtocolKeyPair)>,
-    pub network_type: ConsensusNetwork,
+    /// Boot counter for the simulator process. Each new process uses this value.
     pub boot_counter: u64,
     pub clock_drift: BlockTimestampMs,
-    pub protocol_config: ProtocolConfig,
+    pub protocol_config: ConsensusProtocolConfig,
     pub transaction_verifier: Arc<dyn TransactionVerifier>,
+    pub parameters: Parameters,
+    /// Optional network keypair for Observer nodes (which are not part of the committee)
+    pub observer_network_keypair: Option<NetworkKeyPair>,
+    /// Optional pre-allocated IP for Observer nodes (allows controlled IP assignment in tests)
+    pub observer_ip: Option<String>,
 }
 
 pub struct AuthorityNode {
@@ -58,10 +67,40 @@ impl AuthorityNode {
 
     /// Start this Node
     pub async fn start(&self) -> Result<()> {
-        info!(index = %self.config.authority_index, "starting in-memory node");
-        let config = self.config.clone();
+        self.start_with_config(self.config.clone()).await
+    }
+
+    /// Start this Node with an empty store.
+    ///
+    /// The empty store applies only to the process that this call starts.
+    pub async fn start_with_empty_store(&self) -> Result<()> {
+        let db_dir = Arc::new(TempDir::new()?);
+        let mut config = self.config.clone();
+        config.parameters.db_path = db_dir.path().to_path_buf();
+        config.db_dir = db_dir;
+        self.start_with_config(config).await
+    }
+
+    async fn start_with_config(&self, config: Config) -> Result<()> {
+        let node_type = if config.observer_network_keypair.is_some() {
+            "Observer"
+        } else {
+            "Validator"
+        };
+        info!(index = %config.authority_index, node_type = node_type, "starting in-memory node");
+        // Each start creates a new simulator process. The boot counter is
+        // process-local, so use the configured value for each new process.
         *self.inner.lock() = Some(AuthorityNodeInner::spawn(config).await);
         Ok(())
+    }
+
+    /// Return the simulator node ID for the running authority.
+    pub fn sim_node_id(&self) -> rtd_simulator::task::NodeId {
+        self.inner
+            .lock()
+            .as_ref()
+            .expect("Node not initialised")
+            .node_id()
     }
 
     pub fn spawn_committed_subdag_consumer(&self) -> Result<()> {
@@ -114,11 +153,36 @@ impl AuthorityNode {
         }
     }
 
+    pub fn store(&self) -> Arc<RocksDBStore> {
+        let inner = self.inner.lock();
+        if let Some(inner) = inner.as_ref() {
+            inner.store()
+        } else {
+            panic!("Node not initialised");
+        }
+    }
+
+    pub fn transaction_client_if_running(&self) -> Option<Arc<TransactionClient>> {
+        let inner = self.inner.lock();
+        inner
+            .as_ref()
+            .filter(|inner| inner.is_alive())
+            .map(AuthorityNodeInner::transaction_client)
+    }
+
     /// Stop this Node
-    pub fn stop(&self) {
-        info!(index =% self.config.authority_index, "stopping in-memory node");
-        *self.inner.lock() = None;
-        info!(index =% self.config.authority_index, "node stopped");
+    pub async fn stop(&self) {
+        let node_type = if self.config.observer_network_keypair.is_some() {
+            "Observer"
+        } else {
+            "Validator"
+        };
+        info!(index =% self.config.authority_index, node_type = node_type, "stopping in-memory node");
+        let inner = self.inner.lock().take();
+        if let Some(inner) = inner {
+            inner.stop().await;
+        }
+        info!(index =% self.config.authority_index, node_type = node_type, "node stopped");
     }
 
     /// If this Node is currently running
@@ -130,7 +194,7 @@ impl AuthorityNode {
 pub(crate) struct AuthorityNodeInner {
     handle: Option<NodeHandle>,
     cancel_sender: Option<tokio::sync::watch::Sender<bool>>,
-    consensus_authority: ConsensusAuthority,
+    consensus_authority: Option<ConsensusAuthority>,
     commit_receiver: ArcSwapOption<UnboundedReceiver<CommittedSubDag>>,
     commit_consumer_monitor: Arc<CommitConsumerMonitor>,
 }
@@ -151,6 +215,19 @@ impl Drop for AuthorityNodeInner {
 }
 
 impl AuthorityNodeInner {
+    fn node_id(&self) -> rtd_simulator::task::NodeId {
+        self.handle.as_ref().expect("Node handle missing").node_id
+    }
+
+    async fn stop(mut self) {
+        if let Some(cancel_sender) = self.cancel_sender.take() {
+            cancel_sender.send(true).ok();
+        }
+        if let Some(consensus_authority) = self.consensus_authority.take() {
+            consensus_authority.stop().await;
+        }
+    }
+
     /// Spawn a new Node.
     pub async fn spawn(config: Config) -> Self {
         let (startup_sender, mut startup_receiver) = tokio::sync::watch::channel(false);
@@ -159,18 +236,35 @@ impl AuthorityNodeInner {
         let handle = rtd_simulator::runtime::Handle::current();
         let builder = handle.create_node();
 
-        let authority = config.committee.authority(config.authority_index);
-        let socket_addr = to_socket_addr(&authority.address).unwrap();
-        let ip = match socket_addr {
-            SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
-            _ => panic!("unsupported protocol"),
+        // Determine IP address and node name based on whether this is an Observer node
+        let (ip, node_name) = if config.observer_network_keypair.is_some() {
+            // Observer node: use pre-allocated IP if provided, otherwise get a new one
+            let ip_str = if let Some(ref observer_ip) = config.observer_ip {
+                observer_ip.clone()
+            } else {
+                panic!("Observer IP not provided");
+            };
+            let ip: IpAddr = ip_str.parse().expect("Failed to parse IP address");
+
+            // For Observer nodes, use "Observer" as the name prefix
+            (ip, format!("Observer-{}", config.authority_index))
+        } else {
+            // Validator node: use the committee-defined address
+            let authority = config.committee.authority(config.authority_index);
+            let socket_addr = to_socket_addr(&authority.address).unwrap();
+            let ip = match socket_addr {
+                SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
+                _ => panic!("unsupported protocol"),
+            };
+            (ip, format!("{}", config.authority_index))
         };
+
         let init_receiver_swap = Arc::new(ArcSwapOption::empty());
         let int_receiver_swap_clone = init_receiver_swap.clone();
 
         let node = builder
             .ip(ip)
-            .name(format!("{}", config.authority_index))
+            .name(node_name)
             .init(move || {
                 info!("Node restarted");
                 let config = config.clone();
@@ -215,7 +309,7 @@ impl AuthorityNodeInner {
         Self {
             handle: Some(NodeHandle { node_id: node.id() }),
             cancel_sender: Some(cancel_sender),
-            consensus_authority,
+            consensus_authority: Some(consensus_authority),
             commit_receiver: ArcSwapOption::new(Some(Arc::new(commit_receiver))),
             commit_consumer_monitor,
         }
@@ -251,7 +345,17 @@ impl AuthorityNodeInner {
     }
 
     pub fn transaction_client(&self) -> Arc<TransactionClient> {
-        self.consensus_authority.transaction_client()
+        self.consensus_authority
+            .as_ref()
+            .expect("Consensus authority missing")
+            .transaction_client()
+    }
+
+    pub fn store(&self) -> Arc<RocksDBStore> {
+        self.consensus_authority
+            .as_ref()
+            .expect("Consensus authority missing")
+            .store()
     }
 }
 
@@ -264,38 +368,38 @@ pub(crate) async fn make_authority(
 ) {
     let Config {
         authority_index,
-        db_dir,
+        db_dir: _,
         committee,
         keypairs,
-        network_type: _,
         boot_counter,
         protocol_config,
         clock_drift,
         transaction_verifier,
+        parameters,
+        observer_network_keypair,
+        observer_ip: _, // Not used in make_authority, only used in spawn
     } = config;
 
     let registry = Registry::new();
 
-    // Cache less blocks to exercise commit sync.
-    let parameters = Parameters {
-        db_path: db_dir.path().to_path_buf(),
-        dag_state_cached_rounds: 5,
-        commit_sync_parallel_fetches: 2,
-        commit_sync_batch_size: 3,
-        sync_last_known_own_block_timeout: Duration::from_millis(2_000),
-        ..Default::default()
-    };
+    // Determine if this is an Observer node or a Validator node
+    let (protocol_keypair, network_keypair) =
+        if let Some(observer_keypair) = observer_network_keypair {
+            // Observer node: no protocol keypair, use the provided observer network keypair
+            (None, observer_keypair)
+        } else {
+            // Validator node: use keypairs from the committee
+            let protocol_keypair = keypairs[authority_index].1.clone();
+            let network_keypair = keypairs[authority_index].0.clone();
+            (Some(protocol_keypair), network_keypair)
+        };
 
-    let protocol_keypair = keypairs[authority_index].1.clone();
-    let network_keypair = keypairs[authority_index].0.clone();
-
-    let (commit_consumer, commit_receiver, _) = CommitConsumerArgs::new(0, 0);
+    let (commit_consumer, commit_receiver) = CommitConsumerArgs::new(0, 0);
     let commit_consumer_monitor = commit_consumer.monitor();
 
     let authority = ConsensusAuthority::start(
         NetworkType::Tonic,
         0,
-        authority_index,
         committee,
         parameters,
         protocol_config,
@@ -303,11 +407,23 @@ pub(crate) async fn make_authority(
         network_keypair,
         Arc::new(Clock::new_for_test(clock_drift)),
         transaction_verifier,
+        None,
         commit_consumer,
         registry,
         boot_counter,
+        None,
     )
     .await;
 
     (authority, commit_receiver, commit_consumer_monitor)
+}
+
+pub fn default_parameters() -> Parameters {
+    Parameters {
+        dag_state_cached_rounds: 5,
+        commit_sync_parallel_fetches: 2,
+        commit_sync_batch_size: 3,
+        sync_last_known_own_block_timeout: Duration::from_millis(2_000),
+        ..Default::default()
+    }
 }

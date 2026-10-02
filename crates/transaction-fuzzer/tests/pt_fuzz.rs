@@ -13,7 +13,7 @@ use transaction_fuzzer::type_arg_fuzzer::{run_pt, run_pt_effects};
 
 use rtd_types::base_types::ObjectRef;
 use rtd_types::effects::TransactionEffectsAPI;
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::object::Owner;
 use rtd_types::transaction::{CallArg, ObjectArg, ProgrammableTransaction};
 use rtd_types::{MOVE_STDLIB_PACKAGE_ID, RTD_FRAMEWORK_PACKAGE_ID};
@@ -49,13 +49,7 @@ fn publish_coin_factory(
         .created()
         .into_iter()
         .find(|(obj_ref, _)| {
-            if let Some(stag) = exec
-                .rt
-                .block_on(exec.state.get_object(&obj_ref.0))
-                .unwrap()
-                .data
-                .struct_tag()
-            {
+            if let Some(stag) = exec.state.get_object(&obj_ref.0).unwrap().data.struct_tag() {
                 stag.name.as_str().eq("TreasuryCap")
             } else {
                 false
@@ -93,10 +87,10 @@ pub fn run_pt_success(
     assert!(
         matches!(
             status,
-            ExecutionStatus::Failure {
-                error: ExecutionFailureStatus::UnusedValueWithoutDrop { .. },
-                command: _,
-            }
+            ExecutionStatus::Failure(ExecutionFailure {
+                error: ExecutionErrorKind::UnusedValueWithoutDrop { .. },
+                ..
+            })
         ),
         "{:?}",
         status
@@ -105,13 +99,7 @@ pub fn run_pt_success(
         .mutated()
         .into_iter()
         .find(|(obj_ref, _)| {
-            if let Some(stag) = exec
-                .rt
-                .block_on(exec.state.get_object(&obj_ref.0))
-                .unwrap()
-                .data
-                .struct_tag()
-            {
+            if let Some(stag) = exec.state.get_object(&obj_ref.0).unwrap().data.struct_tag() {
                 stag.name.as_str().eq("TreasuryCap")
             } else {
                 false

@@ -3,9 +3,9 @@
 
 use crate::{TestCaseImpl, TestContext, helper::ObjectChecker};
 use async_trait::async_trait;
-use rtd_json_rpc_types::{RtdExecutionStatus, RtdTransactionBlockEffectsAPI};
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_test_transaction_builder::{increment_counter, publish_basics_package_and_make_counter};
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::object::Owner;
 use tracing::info;
 
@@ -40,40 +40,33 @@ impl TestCaseImpl for SharedCounterTest {
             initial_counter_version,
         )
         .await;
-        assert_eq!(
-            *response.effects.as_ref().unwrap().status(),
-            RtdExecutionStatus::Success,
+        assert!(
+            response.effects.status().is_ok(),
             "Increment counter txn failed: {:?}",
-            *response.effects.as_ref().unwrap().status()
+            response.effects.status(),
         );
 
         response
             .effects
-            .as_ref()
-            .unwrap()
-            .shared_objects()
+            .accessed_consensus_objects()
             .iter()
-            .find(|o| o.object_id == counter_id)
+            .find(|o| o.id_and_version().0 == counter_id)
             .expect("Expect obj {counter_id} in shared_objects");
 
         let counter_version = response
             .effects
-            .as_ref()
-            .unwrap()
             .mutated()
             .iter()
             .find_map(|obj| {
                 let Owner::Shared {
                     initial_shared_version,
-                } = obj.owner
+                } = obj.1
                 else {
                     return None;
                 };
 
-                if obj.reference.object_id == counter_id
-                    && initial_shared_version == initial_counter_version
-                {
-                    Some(obj.reference.version)
+                if obj.0.0 == counter_id && initial_shared_version == initial_counter_version {
+                    Some(obj.0.1)
                 } else {
                     None
                 }
@@ -81,17 +74,18 @@ impl TestCaseImpl for SharedCounterTest {
             .expect("Expect obj {counter_id} in mutated");
 
         // Verify fullnode observes the txn
-        ctx.let_fullnode_sync(vec![response.digest], 5).await;
+        ctx.wait_for_txns(&[response.transaction.digest()]).await;
 
         let counter_object = ObjectChecker::new(counter_id)
             .owner(Owner::Shared {
                 initial_shared_version: initial_counter_version,
             })
-            .check_into_object(ctx.get_fullnode_client())
+            .check_into_object(&ctx.get_grpc_client())
             .await;
 
         assert_eq!(
-            counter_object.version, counter_version,
+            counter_object.version(),
+            counter_version,
             "Expect sequence number to be 2"
         );
 

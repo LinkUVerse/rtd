@@ -32,7 +32,7 @@ pub enum Error {
     NameInvalid(String),
 
     #[error("Error evaluating name pattern {0:?}: {1}")]
-    NameError(String, FormatError),
+    NameEvaluation(String, FormatError),
 
     #[error("Display contains too many elements")]
     TooBig,
@@ -56,8 +56,12 @@ pub enum FormatError {
     #[error("Invalid {0}")]
     InvalidIdentifier(OwnedLexeme),
 
-    #[error("Invalid {what}: {err}")]
-    InvalidNumber { what: &'static str, err: String },
+    #[error("Invalid {what} at byte offset {offset}: {err}")]
+    InvalidNumber {
+        what: &'static str,
+        offset: usize,
+        err: String,
+    },
 
     #[error("Odd number of characters in hex {0}")]
     OddHexLiteral(OwnedLexeme),
@@ -80,8 +84,15 @@ pub enum FormatError {
     #[error("Invalid transform: {0}")]
     TransformInvalid(&'static str),
 
+    /// The above error augmented with the offset of the originating expression.
+    #[error("Invalid transform for expression at byte offset {offset}: {reason}")]
+    TransformInvalid_ { offset: usize, reason: &'static str },
+
     #[error("Unexpected end-of-string, expected {expect}")]
     UnexpectedEos { expect: ExpectedSet },
+
+    #[error("Unexpected {0}, expected end-of-string")]
+    UnexpectedRemaining(OwnedLexeme),
 
     #[error("Unexpected {actual}, expected {expect}")]
     UnexpectedToken {
@@ -89,18 +100,22 @@ pub enum FormatError {
         expect: ExpectedSet,
     },
 
-    #[error("Vector at offset {offset} requires 1 type parameter, found {arity}")]
+    #[error("Vector at byte offset {offset} requires 1 type parameter, found {arity}")]
     VectorArity { offset: usize, arity: usize },
 
     #[error("Internal error: vector without element type")]
     VectorNoType,
 
     #[error(
-        "Vector literal's element type, could be {} or {}",
-        .0.to_canonical_display(true),
-        .1.to_canonical_display(true),
+        "Vector at byte offset {offset}, could have element type {} or {}",
+        .this.to_canonical_display(true),
+        .that.to_canonical_display(true),
     )]
-    VectorTypeMismatch(TypeTag, TypeTag),
+    VectorTypeMismatch {
+        offset: usize,
+        this: TypeTag,
+        that: TypeTag,
+    },
 
     #[error("Deserialization error: {0}")]
     Visitor(#[from] AV::Error),
@@ -134,7 +149,46 @@ pub(crate) enum Match<T> {
     Tried(Option<usize>, ExpectedSet),
 }
 
+impl Error {
+    /// Whether this error is because of something outside the user's control.
+    pub fn is_internal_error(&self) -> bool {
+        matches!(self, Self::NameEvaluation(_, e) if e.is_internal_error())
+    }
+
+    /// Whether this error is because a resource limit was exceeded.
+    pub fn is_resource_limit_error(&self) -> bool {
+        matches!(self, Self::NameEvaluation(_, e) if e.is_resource_limit_error())
+            || matches!(
+                self,
+                Self::TooBig | Self::TooManyLoads | Self::TooMuchOutput
+            )
+    }
+}
+
 impl FormatError {
+    /// Whether this error is because of something outside the user's control.
+    pub fn is_internal_error(&self) -> bool {
+        matches!(self, Self::Bcs(_) | Self::Store(_) | Self::Visitor(_))
+    }
+
+    /// Whether this error is because a resource limit was exceeded.
+    pub fn is_resource_limit_error(&self) -> bool {
+        matches!(
+            self,
+            Self::TooBig | Self::TooDeep | Self::TooManyLoads | Self::TooMuchOutput
+        )
+    }
+
+    /// Indicate that the error occurred while processing an expression at `offset`.
+    pub(crate) fn for_expr_at_offset(self, offset: usize) -> Self {
+        match self {
+            FormatError::TransformInvalid(reason) => {
+                FormatError::TransformInvalid_ { offset, reason }
+            }
+            error => error,
+        }
+    }
+
     // Indicate that `tried` was also tried at `offset`, in case the error is related to other
     // tokens that were tried at the same location.
     pub(crate) fn also_tried(self, offset: Option<usize>, tried: ExpectedSet) -> Self {
@@ -245,8 +299,24 @@ impl fmt::Display for ExpectedSet {
 }
 
 impl From<RV::Error> for FormatError {
-    fn from(RV::Error: RV::Error) -> Self {
-        FormatError::Bcs(bcs::Error::Custom("unexpected type".to_string()))
+    fn from(error: RV::Error) -> Self {
+        match error {
+            RV::Error::Visitor(err) => err.into(),
+            RV::Error::Option(err) => err.into(),
+            RV::Error::Meter(err) => err.into(),
+            RV::Error::UnexpectedType => {
+                FormatError::Bcs(bcs::Error::Custom("unexpected type".to_string()))
+            }
+        }
+    }
+}
+
+impl From<RV::MeterError> for FormatError {
+    fn from(error: RV::MeterError) -> Self {
+        match error {
+            RV::MeterError::TooBig => FormatError::TooBig,
+            RV::MeterError::TooDeep => FormatError::TooDeep,
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --accounts A B --addresses test=0x0 --simulator
+//# init --protocol-version 108 --accounts A B --addresses test=0x0 --simulator
 
 //# publish
 module test::transfer_test {
@@ -32,7 +32,7 @@ module test::transfer_test {
 
 //# create-checkpoint
 
-//# programmable --sender A --inputs 10 object(1,0) @B  
+//# programmable --sender A --inputs 10 object(1,1) @B  
 //> 0: test::transfer_test::create_test_object(Input(0));
 //> 1: TransferObjects([Result(0), Input(1)], Input(2));
 

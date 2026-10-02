@@ -6,12 +6,13 @@ use std::path::PathBuf;
 use crate::test_adapter::{FakeID, RtdTestAdapter};
 use anyhow::{bail, ensure};
 use clap;
-use clap::{Args, Parser};
+use clap::{ArgAction, Args, Parser};
 use move_compiler::editions::Flavor;
 use move_core_types::parsing::{
+    address::ParsedAddress,
     parser::Parser as MoveCLParser,
-    parser::{Token, parse_u64, parse_u256},
-    types::{ParsedType, TypeToken},
+    parser::{parse_u64, parse_u256},
+    types::ParsedType,
     values::ValueToken,
     values::{ParsableValue, ParsedValue},
 };
@@ -19,18 +20,21 @@ use move_core_types::runtime_value::{MoveStruct, MoveValue};
 use move_core_types::u256::U256;
 use move_symbol_pool::Symbol;
 use move_transactional_test_runner::tasks::{RunCommand, SyntaxChoice};
-use rtd_graphql_rpc::test_infra::cluster::SnapshotLagConfig;
+use rtd_protocol_config::Chain;
+use rtd_types::accumulator_root::AccumulatorValue;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{SequenceNumber, RtdAddress};
+use rtd_types::base_types::{RtdAddress, SequenceNumber};
+use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
 use rtd_types::move_package::UpgradePolicy;
 use rtd_types::object::{Object, Owner};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::storage::ReadStore;
 use rtd_types::transaction::{
     Argument, CallArg, FundsWithdrawalArg, ObjectArg, SharedObjectMutability,
 };
-use rtd_types::type_input::TypeInput;
 
 pub const RTD_ARGS_LONG: &str = "rtd-args";
+const DEFAULT_CONSISTENT_RANGE: usize = 300;
 
 #[derive(Clone, Debug, clap::Parser)]
 pub struct RtdRunArgs {
@@ -62,10 +66,12 @@ pub struct RtdInitArgs {
     pub accounts: Option<Vec<String>>,
     #[clap(long = "protocol-version")]
     pub protocol_version: Option<u64>,
+    /// Chain to build the protocol config for (mainnet, testnet, unknown).
+    /// Affects chain-gated feature flags. Defaults to `unknown`.
+    #[clap(long = "chain", value_enum)]
+    pub chain: Option<Chain>,
     #[clap(long = "max-gas")]
     pub max_gas: Option<u64>,
-    #[clap(long = "shared-object-deletion")]
-    pub shared_object_deletion: Option<bool>,
     #[clap(long = "simulator")]
     pub simulator: bool,
     #[clap(long = "num-custom-validator-accounts")]
@@ -74,14 +80,10 @@ pub struct RtdInitArgs {
     pub reference_gas_price: Option<u64>,
     #[clap(long = "default-gas-price")]
     pub default_gas_price: Option<u64>,
-    #[clap(flatten)]
-    pub snapshot_config: SnapshotLagConfig,
     #[clap(long = "flavor")]
     pub flavor: Option<Flavor>,
-    /// The number of epochs to keep in the database. Epochs outside of this range will be pruned by
-    /// the indexer.
-    #[clap(long = "epochs-to-keep")]
-    pub epochs_to_keep: Option<u64>,
+    #[clap(long = "consistent-range", default_value_t = DEFAULT_CONSISTENT_RANGE)]
+    pub consistent_range: usize,
     /// Dir for simulacrum to write checkpoint files to. To be passed to the offchain indexer and
     /// reader.
     #[clap(long)]
@@ -89,18 +91,26 @@ pub struct RtdInitArgs {
     /// URL for the Rtd REST API. To be passed to the offchain indexer and reader.
     #[clap(long)]
     pub rest_api_url: Option<String>,
-    /// Enable accumulator features for testing (e.g., authenticated event streams)
-    #[clap(long = "enable-accumulators")]
-    pub enable_accumulators: bool,
-    /// Enable authenticated event streams for testing
-    #[clap(long = "enable-authenticated-event-streams")]
-    pub enable_authenticated_event_streams: bool,
-    /// Enable references in PTBs
-    #[clap(long = "allow-references-in-ptbs")]
-    pub allow_references_in_ptbs: bool,
-    /// Enable non-exclusive write objects for testing
-    #[clap(long = "enable-non-exclusive-write-objects")]
-    pub enable_non_exclusive_writes: bool,
+    /// Override the file format version used when serializing compiled modules
+    #[clap(long = "file-format")]
+    pub file_format_version: Option<u32>,
+    /// Enable gasless feature for testing
+    #[clap(long = "enable-gasless")]
+    pub enable_gasless: bool,
+    /// Set maximum size in bytes for Pure inputs in gasless transactions
+    #[clap(long = "gasless-max-pure-input-bytes")]
+    pub gasless_max_pure_input_bytes: Option<u64>,
+    /// Set maximum number of unused Pure inputs in gasless transactions
+    #[clap(long = "gasless-max-unused-inputs")]
+    pub gasless_max_unused_inputs: Option<u64>,
+    /// Enable a boolean protocol feature flag by name, e.g.
+    /// `--enable-feature-flags zklogin_auth --enable-feature-flags enable_party_transfer`.
+    /// Flag names match the field names of `FeatureFlags` in the rtd-protocol-config crate.
+    #[clap(long = "enable-feature-flags", action = ArgAction::Append)]
+    pub enable_feature_flags: Vec<String>,
+    /// Disable a boolean protocol feature flag by name.
+    #[clap(long = "disable-feature-flags", action = ArgAction::Append)]
+    pub disable_feature_flags: Vec<String>,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -109,6 +119,13 @@ pub struct ViewObjectCommand {
     pub id: FakeID,
     #[clap(long = "hide-contents")]
     pub hide_contents: bool,
+}
+
+#[derive(Debug, clap::Parser)]
+pub struct ViewFundsCommand {
+    #[clap(value_parser = ParsedType::parse)]
+    pub funds_type: ParsedType,
+    pub address: String,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -121,6 +138,8 @@ pub struct TransferObjectCommand {
     pub sender: Option<String>,
     #[clap(long = "gas-budget")]
     pub gas_budget: Option<u64>,
+    #[clap(long = "address-balance-gas")]
+    pub address_balance_gas: bool,
     #[clap(long = "gas-price")]
     pub gas_price: Option<u64>,
 }
@@ -139,10 +158,12 @@ pub struct ProgrammableTransactionCommand {
     pub sponsor: Option<String>,
     #[clap(long = "gas-budget")]
     pub gas_budget: Option<u64>,
+    #[clap(long = "address-balance-gas")]
+    pub address_balance_gas: bool,
     #[clap(long = "gas-price")]
     pub gas_price: Option<u64>,
-    #[clap(long = "gas-payment", value_parser = parse_fake_id)]
-    pub gas_payment: Option<Vec<FakeID>>,
+    #[clap(long = "gas-payment", value_parser = ParsedValue::<RtdExtraValueArgs>::parse)]
+    pub gas_payment: Option<Vec<ParsedValue<RtdExtraValueArgs>>>,
     #[clap(long = "dev-inspect")]
     pub dev_inspect: bool,
     #[clap(long = "dry-run")]
@@ -170,6 +191,8 @@ pub struct UpgradePackageCommand {
     pub sender: String,
     #[clap(long = "gas-budget")]
     pub gas_budget: Option<u64>,
+    #[clap(long = "address-balance-gas")]
+    pub address_balance_gas: bool,
     #[clap(long = "dry-run")]
     pub dry_run: bool,
     #[clap(long = "syntax")]
@@ -285,9 +308,18 @@ pub struct AuthenticatorStateUpdateCommand {
     pub authenticator_obj_initial_shared_version: Option<u64>,
 }
 
+#[derive(Debug, clap::Parser)]
+pub struct GaslessAllowTokenCommand {
+    #[clap(value_parser = ParsedType::parse)]
+    pub token_type: ParsedType,
+    #[clap(long = "min-transfer", default_value = "0")]
+    pub min_transfer: u64,
+}
+
 #[derive(Debug)]
 pub enum RtdSubcommand<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> {
     ViewObject(ViewObjectCommand),
+    ViewFunds(ViewFundsCommand),
     TransferObject(TransferObjectCommand),
     ConsensusCommitPrologue(ConsensusCommitPrologueCommand),
     ProgrammableTransaction(ProgrammableTransactionCommand),
@@ -299,10 +331,12 @@ pub enum RtdSubcommand<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> {
     AdvanceClock(AdvanceClockCommand),
     SetRandomState(SetRandomStateCommand),
     AuthenticatorStateUpdate(AuthenticatorStateUpdateCommand),
+    GaslessAllowToken(GaslessAllowTokenCommand),
     ViewCheckpoint,
     RunGraphql(RunGraphqlCommand),
     RunJsonRpc(RunJsonRpcCommand),
     Bench(RunCommand<ExtraValueArgs>, ExtraRunArgs),
+    BenchProgrammable(ProgrammableTransactionCommand),
 }
 
 impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::FromArgMatches
@@ -312,6 +346,9 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::FromArgMatches
         Ok(match matches.subcommand() {
             Some(("view-object", matches)) => {
                 RtdSubcommand::ViewObject(ViewObjectCommand::from_arg_matches(matches)?)
+            }
+            Some(("view-funds", matches)) => {
+                RtdSubcommand::ViewFunds(ViewFundsCommand::from_arg_matches(matches)?)
             }
             Some(("transfer-object", matches)) => {
                 RtdSubcommand::TransferObject(TransferObjectCommand::from_arg_matches(matches)?)
@@ -348,6 +385,9 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::FromArgMatches
                     AuthenticatorStateUpdateCommand::from_arg_matches(matches)?,
                 )
             }
+            Some(("gasless-allow-token", matches)) => RtdSubcommand::GaslessAllowToken(
+                GaslessAllowTokenCommand::from_arg_matches(matches)?,
+            ),
             Some(("view-checkpoint", _)) => RtdSubcommand::ViewCheckpoint,
             Some(("run-graphql", matches)) => {
                 RtdSubcommand::RunGraphql(RunGraphqlCommand::from_arg_matches(matches)?)
@@ -355,10 +395,15 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::FromArgMatches
             Some(("run-jsonrpc", matches)) => {
                 RtdSubcommand::RunJsonRpc(RunJsonRpcCommand::from_arg_matches(matches)?)
             }
-            Some(("bench", matches)) => RtdSubcommand::Bench(
-                RunCommand::from_arg_matches(matches)?,
-                ExtraRunArgs::from_arg_matches(matches)?,
-            ),
+            Some(("bench", matches)) => match matches.subcommand() {
+                Some(("ptb", sub_matches)) => RtdSubcommand::BenchProgrammable(
+                    ProgrammableTransactionCommand::from_arg_matches(sub_matches)?,
+                ),
+                _ => RtdSubcommand::Bench(
+                    RunCommand::from_arg_matches(matches)?,
+                    ExtraRunArgs::from_arg_matches(matches)?,
+                ),
+            },
             _ => {
                 return Err(clap::Error::raw(
                     clap::error::ErrorKind::InvalidSubcommand,
@@ -380,6 +425,7 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::CommandFactory
     fn command() -> clap::Command {
         clap::Command::new("rtd_sub_command")
             .subcommand(ViewObjectCommand::command().name("view-object"))
+            .subcommand(ViewFundsCommand::command().name("view-funds"))
             .subcommand(TransferObjectCommand::command().name("transfer-object"))
             .subcommand(ConsensusCommitPrologueCommand::command().name("consensus-commit-prologue"))
             .subcommand(ProgrammableTransactionCommand::command().name("programmable"))
@@ -393,11 +439,15 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::CommandFactory
             .subcommand(
                 AuthenticatorStateUpdateCommand::command().name("authenticator-state-update"),
             )
+            .subcommand(GaslessAllowTokenCommand::command().name("gasless-allow-token"))
             .subcommand(clap::Command::new("view-checkpoint"))
             .subcommand(RunGraphqlCommand::command().name("run-graphql"))
             .subcommand(RunJsonRpcCommand::command().name("run-jsonrpc"))
             .subcommand(
-                RunCommand::<ExtraValueArgs>::augment_args(ExtraRunArgs::command()).name("bench"),
+                RunCommand::<ExtraValueArgs>::augment_args(ExtraRunArgs::command())
+                    .name("bench")
+                    .args_conflicts_with_subcommands(true)
+                    .subcommand(ProgrammableTransactionCommand::command().name("ptb")),
             )
     }
 
@@ -419,6 +469,8 @@ pub enum RtdExtraValueArgs {
     Owned(FakeID, Option<SequenceNumber>),
     Shared(SharedObjectMutability, FakeID, Option<SequenceNumber>),
     Withdraw(u64, ParsedType),
+    CoinReservation(u64, ParsedType),
+    AllowanceWithdraw(u64, ParsedType, ParsedAddress, FakeID),
 }
 
 #[derive(Clone)]
@@ -431,6 +483,13 @@ pub enum RtdValue {
     Owned(FakeID, Option<SequenceNumber>),
     Shared(SharedObjectMutability, FakeID, Option<SequenceNumber>),
     Withdraw(u64, move_core_types::language_storage::TypeTag),
+    CoinReservation(u64, move_core_types::language_storage::TypeTag),
+    AllowanceWithdraw(
+        u64,
+        move_core_types::language_storage::TypeTag,
+        RtdAddress,
+        FakeID,
+    ),
 }
 
 impl RtdExtraValueArgs {
@@ -502,70 +561,79 @@ impl RtdExtraValueArgs {
     fn parse_withdraw_value<'a, I: Iterator<Item = (ValueToken, &'a str)>>(
         parser: &mut MoveCLParser<'a, ValueToken, I>,
     ) -> anyhow::Result<Self> {
+        let (amount, parsed_type) = Self::parse_typed_amount(parser, "withdraw")?;
+        Ok(RtdExtraValueArgs::Withdraw(amount, parsed_type))
+    }
+
+    fn parse_coin_reservation_value<'a, I: Iterator<Item = (ValueToken, &'a str)>>(
+        parser: &mut MoveCLParser<'a, ValueToken, I>,
+    ) -> anyhow::Result<Self> {
+        let (amount, parsed_type) = Self::parse_typed_amount(parser, "coin_reservation")?;
+        Ok(RtdExtraValueArgs::CoinReservation(amount, parsed_type))
+    }
+
+    /// Parses `<ident_name><Type>(amount)`.
+    fn parse_typed_amount<'a, I: Iterator<Item = (ValueToken, &'a str)>>(
+        parser: &mut MoveCLParser<'a, ValueToken, I>,
+        ident_name: &str,
+    ) -> anyhow::Result<(u64, ParsedType)> {
         let contents = parser.advance(ValueToken::Ident)?;
-        ensure!(contents == "withdraw");
+        ensure!(contents == ident_name);
 
-        // Format: withdraw<Type>(amount)
-        parser.advance(ValueToken::LAngle)?;
+        let type_args = parser.parse_type_args()?;
+        let [parsed_type]: [ParsedType; 1] =
+            type_args.try_into().map_err(|type_args: Vec<_>| {
+                anyhow::anyhow!(
+                    "{} expects exactly one type argument, got {}",
+                    ident_name,
+                    type_args.len()
+                )
+            })?;
 
-        // Parse type - collect all tokens until we hit the matching RAngle
-        // Need to track nesting level for types like Balance<Coin<RTD>>
-        let mut type_parts = Vec::new();
-        let mut angle_bracket_depth = 1; // We already consumed the opening <
-        loop {
-            let (tok, s) = match parser.peek() {
-                Some(v) => v,
-                None => bail!("Unexpected end of input while parsing withdraw type"),
-            };
-            match tok {
-                ValueToken::Whitespace => {
-                    parser.advance(ValueToken::Whitespace)?;
-                    // Skip whitespace
-                }
-                ValueToken::Ident => {
-                    parser.advance(ValueToken::Ident)?;
-                    type_parts.push(s.to_string());
-                }
-                ValueToken::ColonColon => {
-                    parser.advance(ValueToken::ColonColon)?;
-                    type_parts.push("::".to_string());
-                }
-                ValueToken::LAngle => {
-                    parser.advance(ValueToken::LAngle)?;
-                    type_parts.push("<".to_string());
-                    angle_bracket_depth += 1;
-                }
-                ValueToken::RAngle => {
-                    parser.advance(ValueToken::RAngle)?;
-                    angle_bracket_depth -= 1;
-                    if angle_bracket_depth == 0 {
-                        // This is the closing > for withdraw<Type>
-                        break;
-                    }
-                    type_parts.push(">".to_string());
-                }
-                ValueToken::Comma => {
-                    parser.advance(ValueToken::Comma)?;
-                    type_parts.push(",".to_string());
-                }
-                _ => bail!("Unexpected token {:?} while parsing withdraw type", tok),
-            }
-        }
-
-        let type_str = type_parts.join("");
-
-        // Parse the type from the type string
-        let type_tokens: Vec<_> = TypeToken::tokenize(&type_str)?.into_iter().collect();
-        let mut type_parser = move_core_types::parsing::parser::Parser::new(type_tokens);
-        let parsed_type = type_parser.parse_type()?;
-
-        // Now parse (amount)
         parser.advance(ValueToken::LParen)?;
         let amount_str = parser.advance(ValueToken::Number)?;
         let (amount, _) = parse_u64(amount_str)?;
         parser.advance(ValueToken::RParen)?;
 
-        Ok(RtdExtraValueArgs::Withdraw(amount, parsed_type))
+        Ok((amount, parsed_type))
+    }
+
+    fn parse_allowance_withdraw_value<'a, I: Iterator<Item = (ValueToken, &'a str)>>(
+        parser: &mut MoveCLParser<'a, ValueToken, I>,
+    ) -> anyhow::Result<Self> {
+        let contents = parser.advance(ValueToken::Ident)?;
+        ensure!(contents == "allowance_withdraw");
+
+        // Format: allowance_withdraw<Type>(amount, @funder, object(N,M))
+        let type_args = parser.parse_type_args()?;
+        let [parsed_type]: [ParsedType; 1] =
+            type_args.try_into().map_err(|type_args: Vec<_>| {
+                anyhow::anyhow!(
+                    "allowance_withdraw expects exactly one type argument, got {}",
+                    type_args.len()
+                )
+            })?;
+
+        parser.advance(ValueToken::LParen)?;
+        let amount_str = parser.advance(ValueToken::Number)?;
+        let (amount, _) = parse_u64(amount_str)?;
+        parser.advance(ValueToken::Comma)?;
+        parser.advance(ValueToken::AtSign)?;
+        let funder = parser.parse_address()?;
+        parser.advance(ValueToken::Comma)?;
+        let (fake_id, version) = Self::parse_receiving_or_object_value(parser, "object")?;
+        ensure!(
+            version.is_none(),
+            "allowance_withdraw does not take an object version"
+        );
+        parser.advance(ValueToken::RParen)?;
+
+        Ok(RtdExtraValueArgs::AllowanceWithdraw(
+            amount,
+            parsed_type,
+            funder,
+            fake_id,
+        ))
     }
 
     fn parse_receiving_or_object_value<'a, I: Iterator<Item = (ValueToken, &'a str)>>(
@@ -617,6 +685,12 @@ impl RtdValue {
             RtdValue::Withdraw(_, _) => {
                 panic!("unexpected nested Rtd withdraw reservation in args")
             }
+            RtdValue::CoinReservation(_, _) => {
+                panic!("unexpected nested Rtd coin reservation in args")
+            }
+            RtdValue::AllowanceWithdraw(_, _, _, _) => {
+                panic!("unexpected nested Rtd allowance withdraw reservation in args")
+            }
         }
     }
 
@@ -631,6 +705,12 @@ impl RtdValue {
             RtdValue::Shared(_, _, _) => panic!("unexpected nested Rtd shared object in args"),
             RtdValue::Withdraw(_, _) => {
                 panic!("unexpected nested Rtd withdraw reservation in args")
+            }
+            RtdValue::CoinReservation(_, _) => {
+                panic!("unexpected nested Rtd coin reservation in args")
+            }
+            RtdValue::AllowanceWithdraw(_, _, _, _) => {
+                panic!("unexpected nested Rtd allowance withdraw reservation in args")
             }
         }
     }
@@ -691,6 +771,7 @@ impl RtdValue {
                 initial_shared_version,
             } => initial_shared_version,
             Owner::ConsensusAddressOwner { start_version, .. } => start_version,
+            Owner::Party { start_version, .. } => start_version,
         };
         Ok(ObjectArg::SharedObject {
             id,
@@ -718,6 +799,11 @@ impl RtdValue {
                 initial_shared_version,
                 mutability: SharedObjectMutability::Mutable,
             }),
+            Owner::Party { .. } => {
+                // TODO(Party WIP)
+                // We need to know the sender for mutability flag
+                todo!("Party WIP")
+            }
             Owner::AddressOwner(_) | Owner::ObjectOwner(_) | Owner::Immutable => {
                 let obj_ref = obj.compute_object_reference();
                 Ok(ObjectArg::ImmOrOwnedObject(obj_ref))
@@ -725,7 +811,11 @@ impl RtdValue {
         }
     }
 
-    pub(crate) fn into_call_arg(self, test_adapter: &RtdTestAdapter) -> anyhow::Result<CallArg> {
+    pub(crate) fn into_call_arg(
+        self,
+        test_adapter: &RtdTestAdapter,
+        sender: RtdAddress,
+    ) -> anyhow::Result<CallArg> {
         Ok(match self {
             RtdValue::Object(fake_id, version) => {
                 CallArg::Object(Self::object_arg(fake_id, version, test_adapter)?)
@@ -761,10 +851,30 @@ impl RtdValue {
                             type_tag
                         )
                     })?;
-                let inner_type_input = TypeInput::from(inner_type);
                 CallArg::FundsWithdrawal(FundsWithdrawalArg::balance_from_sender(
-                    amount,
-                    inner_type_input,
+                    amount, inner_type,
+                ))
+            }
+            RtdValue::CoinReservation(amount, type_tag) => {
+                let accumulator_obj_id = *AccumulatorValue::get_field_id(sender, &type_tag)
+                    .map_err(|e| anyhow::anyhow!("Failed to compute accumulator object ID: {e}"))?
+                    .inner();
+                let epoch = test_adapter.get_latest_epoch_id().unwrap_or(0);
+                let object_ref = ParsedObjectRefWithdrawal::new(accumulator_obj_id, epoch, amount)
+                    .encode(SequenceNumber::new(), test_adapter.get_chain_identifier());
+                CallArg::Object(ObjectArg::ImmOrOwnedObject(object_ref))
+            }
+            RtdValue::AllowanceWithdraw(amount, type_tag, funder, fake_id) => {
+                let inner_type =
+                    Balance::maybe_get_balance_type_param(&type_tag).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "allowance_withdraw only supports Balance<T> types, got: {}",
+                            type_tag
+                        )
+                    })?;
+                let allowance = Self::resolve_object(fake_id, None, test_adapter)?.id();
+                CallArg::FundsWithdrawal(FundsWithdrawalArg::balance_from_allowance(
+                    amount, inner_type, funder, allowance,
                 ))
             }
         })
@@ -774,6 +884,7 @@ impl RtdValue {
         self,
         builder: &mut ProgrammableTransactionBuilder,
         test_adapter: &RtdTestAdapter,
+        sender: RtdAddress,
     ) -> anyhow::Result<Argument> {
         match self {
             RtdValue::ObjVec(vec) => builder.make_obj_vec(
@@ -782,7 +893,7 @@ impl RtdValue {
                     .collect::<Result<Vec<ObjectArg>, _>>()?,
             ),
             value => {
-                let call_arg = value.into_call_arg(test_adapter)?;
+                let call_arg = value.into_call_arg(test_adapter, sender)?;
                 builder.input(call_arg)
             }
         }
@@ -806,6 +917,12 @@ impl ParsableValue for RtdExtraValueArgs {
                 Some(Self::parse_non_exlucsive_write_value(parser))
             }
             (ValueToken::Ident, "withdraw") => Some(Self::parse_withdraw_value(parser)),
+            (ValueToken::Ident, "coin_reservation") => {
+                Some(Self::parse_coin_reservation_value(parser))
+            }
+            (ValueToken::Ident, "allowance_withdraw") => {
+                Some(Self::parse_allowance_withdraw_value(parser))
+            }
             _ => None,
         }
     }
@@ -847,6 +964,15 @@ impl ParsableValue for RtdExtraValueArgs {
             RtdExtraValueArgs::Withdraw(amount, parsed_type) => {
                 let type_tag = parsed_type.into_type_tag(mapping)?;
                 Ok(RtdValue::Withdraw(amount, type_tag))
+            }
+            RtdExtraValueArgs::CoinReservation(amount, parsed_type) => {
+                let type_tag = parsed_type.into_type_tag(mapping)?;
+                Ok(RtdValue::CoinReservation(amount, type_tag))
+            }
+            RtdExtraValueArgs::AllowanceWithdraw(amount, parsed_type, funder, id) => {
+                let type_tag = parsed_type.into_type_tag(mapping)?;
+                let funder: RtdAddress = funder.into_account_address(&|s| mapping(s))?.into();
+                Ok(RtdValue::AllowanceWithdraw(amount, type_tag, funder, id))
             }
         }
     }

@@ -1,19 +1,37 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::path::PathBuf;
+
 use anyhow::Result;
+use clap::Parser;
 use prometheus::Registry;
-use std::{collections::HashMap, env};
-use rtd_analytics_indexer::{
-    JobConfig,
-    analytics_metrics::AnalyticsMetrics,
-    package_store::package_cache_worker::{PACKAGE_CACHE_WORKER_NAME, PackageCacheWorker},
-};
-use rtd_data_ingestion_core::{
-    DataIngestionMetrics, IndexerExecutor, ReaderOptions, ShimIndexerProgressStore, WorkerPool,
-};
-use tokio::{signal, sync::oneshot};
+use rtd_futures::service::Error;
+use rtd_indexer_alt_framework::IndexerArgs;
+use rtd_indexer_alt_framework::ingestion::ClientArgs;
+use rtd_indexer_alt_metrics::MetricsArgs;
 use tracing::info;
+
+use rtd_analytics_indexer::IndexerConfig;
+use rtd_analytics_indexer::build_analytics_indexer;
+use rtd_analytics_indexer::metrics::Metrics;
+
+#[derive(Parser)]
+#[command(name = "rtd-analytics-indexer")]
+struct Args {
+    /// Path to YAML config file
+    #[arg(long)]
+    config: PathBuf,
+
+    #[command(flatten)]
+    client_args: ClientArgs,
+
+    #[command(flatten)]
+    indexer_args: IndexerArgs,
+
+    #[command(flatten)]
+    metrics_args: MetricsArgs,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,103 +39,47 @@ async fn main() -> Result<()> {
         .with_env()
         .init();
 
-    let args: Vec<String> = env::args().collect();
-    assert_eq!(args.len(), 2, "configuration yaml file is required");
+    let args = Args::parse();
 
-    // Parse the config
-    let config: JobConfig = serde_yaml::from_str(&std::fs::read_to_string(&args[1])?)?;
+    let config: IndexerConfig = serde_yaml::from_str(&std::fs::read_to_string(&args.config)?)?;
     info!("Parsed config: {:#?}", config);
 
-    // Setup metrics
-    let registry_service = linku_metrics::start_prometheus_server(
-        format!(
-            "{}:{}",
-            config.client_metric_host, config.client_metric_port
-        )
-        .parse()
-        .unwrap(),
-    );
-    let registry: Registry = registry_service.default_registry();
-    linku_metrics::init_metrics(&registry);
-    let metrics = AnalyticsMetrics::new(&registry);
+    let is_bounded_job = args.indexer_args.last_checkpoint.is_some();
 
-    let remote_store_url = config.remote_store_url.clone();
-    let remote_store_options = config.remote_store_options.clone();
-    let batch_size = config.batch_size;
-    let data_limit = config.data_limit;
-    let timeout_secs = config.remote_store_timeout_secs;
+    let registry = Registry::new();
+    let metrics_service =
+        rtd_indexer_alt_metrics::MetricsService::new(args.metrics_args, registry.clone());
 
-    let (processors, maybe_package_cache) = config.create_checkpoint_processors(metrics).await?;
+    let metrics = Metrics::new(&registry);
 
-    let mut watermarks = HashMap::new();
-    let mut min_watermark = processors
-        .iter()
-        .peekable()
-        .peek()
-        .map(|p| p.starting_checkpoint_seq_num)
-        .unwrap_or(0);
-    for processor in processors.iter() {
-        let watermark = processor
-            .last_committed_checkpoint()
-            .map(|seq_num| seq_num + 1)
-            .unwrap_or(0);
-        min_watermark = watermark.min(min_watermark);
-        watermarks.insert(processor.task_name.clone(), watermark);
+    let service = build_analytics_indexer(
+        config,
+        args.indexer_args,
+        args.client_args,
+        metrics,
+        registry,
+    )
+    .await?;
+
+    let s_metrics = metrics_service.run().await?;
+
+    match service.attach(s_metrics).main().await {
+        Ok(()) => {
+            info!("Indexer completed successfully");
+        }
+        Err(Error::Terminated) => {
+            info!("Received termination signal");
+            if is_bounded_job {
+                std::process::exit(1);
+            }
+        }
+        Err(Error::Aborted) => {
+            std::process::exit(1);
+        }
+        Err(Error::Task(_)) => {
+            std::process::exit(2);
+        }
     }
 
-    let num_workers = processors.len() + if maybe_package_cache.is_some() { 1 } else { 0 };
-
-    if maybe_package_cache.is_some() {
-        watermarks.insert(PACKAGE_CACHE_WORKER_NAME.to_string(), min_watermark);
-    }
-
-    let progress_store = ShimIndexerProgressStore::new(watermarks);
-    let mut executor = IndexerExecutor::new(
-        progress_store,
-        num_workers,
-        DataIngestionMetrics::new(&registry),
-    );
-    if let Some(package_cache) = maybe_package_cache {
-        let worker = PackageCacheWorker::new(package_cache);
-        executor
-            .register(WorkerPool::new(
-                worker,
-                PACKAGE_CACHE_WORKER_NAME.to_string(),
-                1,
-            ))
-            .await?;
-    }
-
-    for processor in processors {
-        let task_name = processor.task_name.clone();
-        let worker_pool = WorkerPool::new(processor, task_name, 1);
-        executor.register(worker_pool).await?;
-    }
-
-    let reader_options = ReaderOptions {
-        batch_size,
-        data_limit,
-        timeout_secs,
-        ..Default::default()
-    };
-
-    let (exit_sender, exit_receiver) = oneshot::channel();
-    let executor_progress = executor.run(
-        tempfile::tempdir()?.keep(),
-        Some(remote_store_url),
-        remote_store_options,
-        reader_options,
-        exit_receiver,
-    );
-
-    tokio::spawn(async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
-        exit_sender
-            .send(())
-            .expect("Failed to gracefully process shutdown");
-    });
-    executor_progress.await?;
     Ok(())
 }

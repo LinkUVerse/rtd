@@ -1,8 +1,8 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::error::ExecutionErrorKind;
 use crate::error::{RtdError, RtdErrorKind};
+use crate::execution_status::ExecutionErrorKind;
 use crate::{
     RTD_FRAMEWORK_ADDRESS,
     base_types::ObjectID,
@@ -35,6 +35,10 @@ pub const PAY_MODULE_NAME: &IdentStr = ident_str!("pay");
 pub const PAY_JOIN_FUNC_NAME: &IdentStr = ident_str!("join");
 pub const PAY_SPLIT_N_FUNC_NAME: &IdentStr = ident_str!("divide_and_keep");
 pub const PAY_SPLIT_VEC_FUNC_NAME: &IdentStr = ident_str!("split_vec");
+pub const REDEEM_FUNDS_FUNC_NAME: &IdentStr = ident_str!("redeem_funds");
+pub const SEND_FUNDS_FUNC_NAME: &IdentStr = ident_str!("send_funds");
+pub const INTO_BALANCE_FUNC_NAME: &IdentStr = ident_str!("into_balance");
+pub const PUT_FUNC_NAME: &IdentStr = ident_str!("put");
 
 // Rust version of the Move rtd::coin::Coin type
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, Eq, PartialEq)]

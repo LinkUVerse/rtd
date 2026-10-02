@@ -15,6 +15,16 @@ use futures::{StreamExt, TryStreamExt};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use integer_encoding::VarIntReader;
 use object_store::path::Path;
+use rtd_config::object_storage_config::ObjectStoreConfig;
+use rtd_core::authority::AuthorityStore;
+use rtd_core::authority::authority_store_tables::{AuthorityPerpetualTables, LiveObject};
+use rtd_futures::stream::TrySpawnStreamExt;
+use rtd_storage::blob::{Blob, BlobEncoding};
+use rtd_storage::object_store::http::HttpDownloaderBuilder;
+use rtd_storage::object_store::util::path_to_filesystem;
+use rtd_storage::object_store::{ObjectStoreGetExt, ObjectStoreListExt, ObjectStorePutExt};
+use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber};
+use rtd_types::global_state_hash::GlobalStateHash;
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::File;
@@ -24,17 +34,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
-use rtd_config::object_storage_config::ObjectStoreConfig;
-use rtd_core::authority::AuthorityStore;
-use rtd_core::authority::authority_store_tables::{AuthorityPerpetualTables, LiveObject};
-use rtd_futures::stream::TrySpawnStreamExt;
-use rtd_storage::blob::{Blob, BlobEncoding};
-use rtd_storage::object_store::http::HttpDownloaderBuilder;
-use rtd_storage::object_store::util::{copy_files, path_to_filesystem};
-use rtd_storage::object_store::{ObjectStoreGetExt, ObjectStoreListExt, ObjectStorePutExt};
-use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber};
-use rtd_types::global_state_hash::GlobalStateHash;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, error, info};
@@ -42,6 +42,12 @@ use tracing::{debug, error, info};
 pub type SnapshotChecksums = (DigestByBucketAndPartition, GlobalStateHash);
 pub type DigestByBucketAndPartition = BTreeMap<u32, BTreeMap<u32, [u8; 32]>>;
 pub type Sha3DigestType = Arc<Mutex<BTreeMap<u32, BTreeMap<u32, [u8; 32]>>>>;
+
+pub struct StateAccumulatorSender {
+    pub partials: mpsc::Sender<(GlobalStateHash, u64)>,
+    pub completion: oneshot::Sender<()>,
+}
+
 #[derive(Clone)]
 pub struct StateSnapshotReaderV1 {
     epoch: u64,
@@ -52,7 +58,7 @@ pub struct StateSnapshotReaderV1 {
     object_files: BTreeMap<u32, BTreeMap<u32, FileMetadata>>,
     m: MultiProgress,
     concurrency: usize,
-    max_retries: usize,
+    num_parallel_chunks: usize,
     remote_epoch_prefix: Path,
 }
 
@@ -68,53 +74,38 @@ impl StateSnapshotReaderV1 {
         let max_attempts = max_retries + 1;
         loop {
             attempts += 1;
-            match src_store.get_bytes(src).await {
-                Ok(bytes) => {
-                    if bytes.is_empty() {
-                        tracing::warn!("Not copying empty file: {:?}", src);
-                        return Ok(());
-                    }
-                    match dest_store.put_bytes(dest, bytes).await {
-                        Ok(_) => return Ok(()),
-                        Err(e) => {
-                            if attempts >= max_attempts {
-                                return Err(anyhow::anyhow!(
-                                    "Failed to write {} after {} attempts: {}",
-                                    dest,
-                                    attempts,
-                                    e
-                                ));
-                            }
-                            tracing::warn!(
-                                "Failed to write {} (attempt {}/{}): {}, retrying in {}ms",
-                                dest,
-                                attempts,
-                                max_attempts,
-                                e,
-                                1000 * attempts
-                            );
-                            tokio::time::sleep(Duration::from_millis(1000 * attempts as u64)).await;
-                        }
-                    }
+            let result = async {
+                let bytes = src_store
+                    .get_bytes(src)
+                    .await
+                    .with_context(|| format!("Failed to download {src}"))?;
+                if bytes.is_empty() {
+                    return Err(anyhow!("Downloaded empty file {src}"));
                 }
-                Err(e) => {
-                    if attempts >= max_attempts {
-                        return Err(anyhow::anyhow!(
-                            "Failed to download {} after {} attempts: {}",
-                            src,
-                            attempts,
-                            e
-                        ));
-                    }
+                dest_store
+                    .put_bytes(dest, bytes)
+                    .await
+                    .with_context(|| format!("Failed to write {dest}"))
+            }
+            .await;
+
+            match result {
+                Ok(()) => return Ok(()),
+                Err(error) if attempts >= max_attempts => {
+                    return Err(error).with_context(|| {
+                        format!("Failed to copy {src} to {dest} after {attempts} attempts")
+                    });
+                }
+                Err(error) => {
                     tracing::warn!(
-                        "Failed to download {} (attempt {}/{}): {}, retrying in {}ms",
+                        "Failed to copy {} to {} (attempt {}/{}): {}; retrying",
                         src,
+                        dest,
                         attempts,
                         max_attempts,
-                        e,
-                        1000 * attempts
+                        error,
                     );
-                    tokio::time::sleep(Duration::from_millis(1000 * attempts as u64)).await;
+                    tokio::time::sleep(Duration::from_secs(attempts as u64)).await;
                 }
             }
         }
@@ -128,6 +119,7 @@ impl StateSnapshotReaderV1 {
         m: MultiProgress,
         skip_reset_local_store: bool,
         max_retries: usize,
+        num_parallel_chunks: usize,
     ) -> Result<Self> {
         let remote_object_store = if remote_store_config.no_sign_request {
             remote_store_config.make_http()?
@@ -230,8 +222,7 @@ impl StateSnapshotReaderV1 {
             }
         }
 
-        let mut src_files = Vec::new();
-        let mut dest_files = Vec::new();
+        let mut files = Vec::new();
 
         let existing_files = if skip_reset_local_store {
             let mut existing = std::collections::HashSet::new();
@@ -255,28 +246,40 @@ impl StateSnapshotReaderV1 {
                 {
                     continue;
                 }
-                src_files.push(file_metadata.file_path(&remote_epoch_prefix));
-                dest_files.push(dest);
+                files.push((file_metadata.file_path(&remote_epoch_prefix), dest));
             }
         }
 
         let progress_bar = m.add(
-            ProgressBar::new(src_files.len() as u64).with_style(
+            ProgressBar::new(files.len() as u64).with_style(
                 ProgressStyle::with_template(
                     "[{elapsed_precise}] {wide_bar} {pos} out of {len} missing .ref files done ({msg})",
                 )
                 .unwrap(),
             ),
         );
-        copy_files(
-            &src_files,
-            &dest_files,
-            &remote_object_store,
-            &local_object_store,
-            download_concurrency,
-            Some(progress_bar.clone()),
-        )
-        .await?;
+        futures::stream::iter(files)
+            .map(|(src, dest)| {
+                let remote_object_store = remote_object_store.clone();
+                let local_object_store = local_object_store.clone();
+                let progress_bar = progress_bar.clone();
+                async move {
+                    Self::copy_file_with_retry(
+                        &src,
+                        &dest,
+                        &remote_object_store,
+                        &local_object_store,
+                        max_retries,
+                    )
+                    .await?;
+                    progress_bar.inc(1);
+                    progress_bar.set_message(format!("file: {dest}"));
+                    Ok::<(), anyhow::Error>(())
+                }
+            })
+            .buffer_unordered(download_concurrency.get())
+            .try_collect::<Vec<_>>()
+            .await?;
         progress_bar.finish_with_message("Missing ref files download complete");
         Ok(StateSnapshotReaderV1 {
             epoch,
@@ -287,16 +290,16 @@ impl StateSnapshotReaderV1 {
             object_files,
             m,
             concurrency: download_concurrency.get(),
-            max_retries,
+            num_parallel_chunks,
             remote_epoch_prefix,
         })
     }
 
     pub async fn read(
         &mut self,
-        perpetual_db: &AuthorityPerpetualTables,
+        perpetual_db: Arc<AuthorityPerpetualTables>,
         abort_registration: AbortRegistration,
-        sender: Option<tokio::sync::mpsc::Sender<(GlobalStateHash, u64)>>,
+        accumulator: Option<StateAccumulatorSender>,
     ) -> Result<()> {
         // This computes and stores the sha3 digest of object references in REFERENCE file for each
         // bucket partition. When downloading objects, we will match sha3 digest of object references
@@ -304,9 +307,9 @@ impl StateSnapshotReaderV1 {
         // references and start building state accumulator and fail early if the state root hash
         // doesn't match but we still need to ensure that objects match references exactly.
         let (sha3_digests, num_part_files) = self.compute_checksum().await?;
-        let accum_handle =
-            sender.map(|sender| self.spawn_accumulation_tasks(sender, num_part_files));
-        self.sync_live_objects(perpetual_db, abort_registration, sha3_digests)
+        let accum_handle = accumulator
+            .map(|accumulator| self.spawn_accumulation_tasks(accumulator, num_part_files));
+        self.sync_live_objects(perpetual_db.clone(), abort_registration, sha3_digests)
             .await?;
         if let Some(handle) = accum_handle {
             handle.await?;
@@ -389,9 +392,13 @@ impl StateSnapshotReaderV1 {
 
     fn spawn_accumulation_tasks(
         &self,
-        sender: tokio::sync::mpsc::Sender<(GlobalStateHash, u64)>,
+        accumulator: StateAccumulatorSender,
         num_part_files: usize,
     ) -> JoinHandle<()> {
+        let StateAccumulatorSender {
+            partials: sender,
+            completion,
+        } = accumulator;
         // Spawn accumulation progress bar
         let concurrency = self.concurrency;
         let accum_counter = Arc::new(AtomicU64::new(0));
@@ -474,17 +481,19 @@ impl StateSnapshotReaderV1 {
                     .await;
             }
             accum_progress_bar.finish_with_message("Accumulation complete");
+            let _ = completion.send(());
         })
     }
 
     async fn sync_live_objects(
         &self,
-        perpetual_db: &AuthorityPerpetualTables,
+        perpetual_db: Arc<AuthorityPerpetualTables>,
         abort_registration: AbortRegistration,
         sha3_digests: Arc<Mutex<DigestByBucketAndPartition>>,
     ) -> Result<(), anyhow::Error> {
         let epoch_dir = self.remote_epoch_prefix.clone();
         let concurrency = self.concurrency;
+        let num_parallel_chunks = self.num_parallel_chunks;
         let remote_object_store = self.remote_object_store.clone();
         let input_files: Vec<_> = self
             .object_files
@@ -507,7 +516,7 @@ impl StateSnapshotReaderV1 {
         );
         let obj_progress_bar_clone = obj_progress_bar.clone();
         let instant = Instant::now();
-        let downloaded_bytes = AtomicUsize::new(0);
+        let downloaded_bytes = Arc::new(AtomicUsize::new(0));
 
         let ret = Abortable::new(
             async move {
@@ -538,25 +547,30 @@ impl StateSnapshotReaderV1 {
                     .boxed()
                     .buffer_unordered(concurrency)
                     .try_for_each(|(bytes, file_metadata, sha3_digest)| {
-                        let bytes_len = bytes.len();
-                        let result: Result<(), anyhow::Error> =
-                            LiveObjectIter::new(&file_metadata, bytes).map(|obj_iter| {
-                                AuthorityStore::bulk_insert_live_objects(
-                                    perpetual_db,
-                                    obj_iter,
-                                    &sha3_digest,
-                                )
-                                .expect("Failed to insert live objects");
-                            });
-                        downloaded_bytes.fetch_add(bytes_len, Ordering::Relaxed);
-                        obj_progress_bar_clone.inc(1);
-                        obj_progress_bar_clone.set_message(format!(
-                            "Download speed: {} MiB/s",
-                            downloaded_bytes.load(Ordering::Relaxed) as f64
-                                / (1024 * 1024) as f64
-                                / instant.elapsed().as_secs_f64(),
-                        ));
-                        futures::future::ready(result)
+                        let perpetual_db = perpetual_db.clone();
+                        let obj_progress_bar_clone = obj_progress_bar_clone.clone();
+                        let downloaded_bytes = downloaded_bytes.clone();
+                        async move {
+                            let bytes_len = bytes.len();
+                            let objects: Vec<LiveObject> =
+                                LiveObjectIter::new(&file_metadata, bytes)?.collect();
+                            AuthorityStore::bulk_insert_live_objects(
+                                perpetual_db,
+                                objects,
+                                &sha3_digest,
+                                num_parallel_chunks,
+                            )
+                            .await?;
+                            downloaded_bytes.fetch_add(bytes_len, Ordering::Relaxed);
+                            obj_progress_bar_clone.inc(1);
+                            obj_progress_bar_clone.set_message(format!(
+                                "Download speed: {} MiB/s",
+                                downloaded_bytes.load(Ordering::Relaxed) as f64
+                                    / (1024 * 1024) as f64
+                                    / instant.elapsed().as_secs_f64(),
+                            ));
+                            Ok(())
+                        }
                     })
                     .await
             },
@@ -801,5 +815,48 @@ impl Iterator for LiveObjectIter {
     type Item = LiveObject;
     fn next(&mut self) -> Option<Self::Item> {
         self.next_object().ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StateSnapshotReaderV1;
+    use object_store::path::Path;
+    use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn rejects_empty_snapshot_file() -> anyhow::Result<()> {
+        let source = TempDir::new()?;
+        let destination = TempDir::new()?;
+        fs::write(source.path().join("empty.ref"), b"")?;
+
+        let source_store = ObjectStoreConfig {
+            object_store: Some(ObjectStoreType::File),
+            directory: Some(source.path().to_path_buf()),
+            ..Default::default()
+        }
+        .make()?;
+        let destination_store = ObjectStoreConfig {
+            object_store: Some(ObjectStoreType::File),
+            directory: Some(destination.path().to_path_buf()),
+            ..Default::default()
+        }
+        .make()?;
+
+        let error = StateSnapshotReaderV1::copy_file_with_retry(
+            &Path::from("empty.ref"),
+            &Path::from("empty.ref"),
+            &source_store,
+            &destination_store,
+            0,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("Downloaded empty file empty.ref"));
+        assert!(!destination.path().join("empty.ref").exists());
+        Ok(())
     }
 }

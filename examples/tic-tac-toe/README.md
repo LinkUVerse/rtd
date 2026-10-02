@@ -3,8 +3,7 @@
 This is an end-to-end example for on-chain tic-tac-toe. It includes:
 
 -   A [Move package](./move), containing two protocols for running a game of
-    tic-tac-toe. One that uses shared objects and consensus and another
-    that uses owned objects, and the fast path (no consensus).
+    tic-tac-toe. One uses shared objects and the other uses owned objects.
 -   A [React front-end](./ui), in TypeScript built on top of
     `create-react-dapp`, using the TS SDK and `dapp-kit`.
 -   A [Rust CLI](./cli), using the Rust SDK.
@@ -84,9 +83,8 @@ sequenceDiagram
 
 ## Multisig tic-tac-toe
 
-The owned protocol avoids consensus, but it requires trusting a third
-party for liveness (The third party cannot make a false move, but it
-can choose not to place a move, or simply forget to). That third party
+The owned protocol requires a third-party admin for liveness. The admin
+cannot make a false move, but can choose not to place a move. That third party
 may also need to run a service that keeps track of marks sent to games
 in order to apply them promptly, which adds complexity.
 

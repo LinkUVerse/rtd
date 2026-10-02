@@ -1,0 +1,26 @@
+---
+title: Fiat On-Ramps
+description: Requirements for adding a fiat on-ramp to an RTD application.
+keywords:
+  - fiat
+  - on-ramp
+  - payments
+  - wallet integration
+questions:
+  - Can I buy RTD through a fiat on-ramp?
+answer: >-
+  No fiat on-ramp provider has been verified for RTD. RTD does not yet have a
+  public Mainnet. Confirm chain and asset support with a provider before
+  enabling a purchase flow.
+---
+
+No fiat on-ramp provider has been verified for RTD. RTD does not yet have a public Mainnet. Provider lists and supported assets from the upstream Sui ecosystem do not establish RTD support.
+
+Before offering fiat purchases in an RTD application, verify all of the following with the provider and in a test deployment:
+
+1. The provider explicitly supports the RTD chain ID and the intended RTD asset type.
+2. The provider can deliver that asset to an RTD address and provides a transaction digest on the same chain.
+3. Your application checks the actual RTD transaction and recipient before crediting the user.
+4. Regional availability, KYC requirements, fees, refunds, and failure recovery are documented for your intended users.
+
+Until these checks pass, use a local faucet for development and do not advertise a live fiat purchase path. See [funding wallets](/onchain-finance/funding-wallets) for local development options.

@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: legacy
   lint: false
 ---
-error[Rtd E02010]: invalid coin creation call
+error[ESC02010]: invalid coin creation call
    ┌─ tests/rtd_mode/private_generics/new_currency.move:17:9
    │
 17 │         coin_registry::new_currency<External>();

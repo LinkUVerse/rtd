@@ -1,11 +1,15 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use async_graphql::*;
-use std::{fmt, str::FromStr};
-use rtd_types::{parse_rtd_address, parse_rtd_module_id};
+use std::fmt;
+use std::str::FromStr;
 
-use crate::api::scalars::{impl_string_input, rtd_address::RtdAddress};
+use async_graphql::*;
+use rtd_types::parse_rtd_address;
+use rtd_types::parse_rtd_module_id;
+
+use crate::api::scalars::impl_string_input;
+use crate::api::scalars::rtd_address::RtdAddress;
 
 /// GraphQL scalar containing a filter on modules. The filter can be one of:
 ///

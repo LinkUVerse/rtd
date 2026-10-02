@@ -1,18 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Context, bail};
-use rtd_types::{
-    base_types::{ObjectRef, RtdAddress},
-    effects::{TransactionEffects, TransactionEffectsAPI},
-    execution_status::ExecutionStatus,
-    object::Owner,
-};
+use anyhow::Context;
+use anyhow::bail;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::effects::TransactionEffects;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::execution_status::{ExecutionFailure, ExecutionStatus};
+use rtd_types::object::Owner;
 
 /// Returns the reference for the first address-owned object created in the effects, or an error if
 /// there is none.
 pub fn address_owned(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
-    if let ExecutionStatus::Failure { error, command } = fx.status() {
+    if let ExecutionStatus::Failure(ExecutionFailure { error, command }) = fx.status() {
         bail!("Transaction failed: {error} (command {command:?})");
     }
 
@@ -25,7 +26,7 @@ pub fn address_owned(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
 /// Returns the reference for the first address-owned object created in the effects owned by
 /// `owner`, or an error if there is none.
 pub fn address_owned_by(fx: &TransactionEffects, owner: RtdAddress) -> anyhow::Result<ObjectRef> {
-    if let ExecutionStatus::Failure { error, command } = fx.status() {
+    if let ExecutionStatus::Failure(ExecutionFailure { error, command }) = fx.status() {
         bail!("Transaction failed: {error} (command {command:?})");
     }
 
@@ -40,7 +41,7 @@ pub fn address_owned_by(fx: &TransactionEffects, owner: RtdAddress) -> anyhow::R
 /// Returns the reference for the first immutable object created in the effects, or an error if
 /// there is none.
 pub fn immutable(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
-    if let ExecutionStatus::Failure { error, command } = fx.status() {
+    if let ExecutionStatus::Failure(ExecutionFailure { error, command }) = fx.status() {
         bail!("Transaction failed: {error} (command {command:?})");
     }
 
@@ -53,7 +54,7 @@ pub fn immutable(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
 /// Returns the reference for the first shared object created in the effects, or an error if there
 /// is none.
 pub fn shared(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
-    if let ExecutionStatus::Failure { error, command } = fx.status() {
+    if let ExecutionStatus::Failure(ExecutionFailure { error, command }) = fx.status() {
         bail!("Transaction failed: {error} (command {command:?})");
     }
 
@@ -66,7 +67,7 @@ pub fn shared(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
 /// Returns the reference for the first address-owned object mutated in the effects that is not a
 /// gas payment, or an error if there is none.
 pub fn address_mutated(fx: &TransactionEffects) -> anyhow::Result<ObjectRef> {
-    if let ExecutionStatus::Failure { error, command } = fx.status() {
+    if let ExecutionStatus::Failure(ExecutionFailure { error, command }) = fx.status() {
         bail!("Transaction failed: {error} (command {command:?})");
     }
 

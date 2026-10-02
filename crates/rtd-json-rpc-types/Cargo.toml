@@ -1,10 +1,13 @@
 [package]
 name = "rtd-json-rpc-types"
 version = "0.0.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true
@@ -32,10 +35,13 @@ move-bytecode-utils.workspace = true
 move-disassembler.workspace = true
 move-ir-types.workspace = true
 
+linku-common.workspace = true
 linku-metrics.workspace = true
 rtd-types.workspace = true
 rtd-json.workspace = true
 rtd-package-resolver.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 insta.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

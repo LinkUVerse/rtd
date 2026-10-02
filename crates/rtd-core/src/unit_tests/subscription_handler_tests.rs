@@ -10,10 +10,10 @@ use move_core_types::{
     language_storage::StructTag,
 };
 
+use rtd_json_rpc_types::RtdMoveStruct;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
-use rtd_json_rpc_types::RtdMoveStruct;
 
 use rtd_types::base_types::ObjectID;
 use rtd_types::gas_coin::GasCoin;

@@ -2,6 +2,10 @@
 
 -----
 
+RTD has no public Mainnet, release download endpoint, metrics proxy, or
+documentation site yet. Verify every network address and artifact source before
+using these operator examples against an RTD network.
+
 This repo contains:
 
 - [Rtd for Node Operators](./rtd_for_node_operators.md) - This documentation aggregates all the information about deploying and operating the Rtd Node software for Node Operators.

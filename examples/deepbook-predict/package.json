@@ -1,0 +1,17 @@
+{
+  "name": "deepbook-predict-examples",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeScript examples for the DeepBook Predict docs.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@linku/deepbook-v3": "^2.5.0",
+    "@linku/rtd": "^2.30.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}

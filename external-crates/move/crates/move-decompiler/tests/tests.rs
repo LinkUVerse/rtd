@@ -4,7 +4,7 @@
 use move_decompiler::{generate_from_model, testing::structuring_unit_test};
 
 use move_command_line_common::insta_assert;
-use move_package_alt::package::RootPackage;
+use move_package_alt::{RootPackage, Vanilla};
 use move_package_alt_compilation::{build_config::BuildConfig, model_builder};
 use move_symbol_pool::Symbol;
 
@@ -41,16 +41,13 @@ fn run_move_test(file_path: &Path) -> datatest_stable::Result<()> {
     };
 
     let mut writer = Vec::new();
-    let env = move_package_alt::flavor::vanilla::default_environment();
-    let root_pkg = RootPackage::<move_package_alt::flavor::Vanilla>::load_sync(
-        pkg_dir.to_path_buf(),
-        env,
-        config.mode_set(),
-    )?;
+    let root_pkg: RootPackage<Vanilla> = config
+        .package_loader(pkg_dir, &Vanilla::default_environment(), Vanilla::new())
+        .load_sync()?;
 
     let model = model_builder::build(&mut writer, &root_pkg, &config)?;
 
-    let bytecode = move_stackless_bytecode_2::from_model(&model, /* optimize */ true)?;
+    let bytecode = move_stackless_bytecode_2::from_model(&model, /* optimize */ false)?;
 
     let test_module_names = std::io::BufReader::new(std::fs::File::open(file_path)?)
         .lines()
@@ -64,11 +61,13 @@ fn run_move_test(file_path: &Path) -> datatest_stable::Result<()> {
 
     for pkg in &bytecode.packages {
         // let pkg_name = pkg.name;
+        let resolved_pkg = model.package(&pkg.address);
         for (module_name, m) in &pkg.modules {
             if test_module_names.contains(module_name) {
                 // FIXME pkg name not coherent, address name returned instead
                 let name = format!("{}", module_name);
-                let module = move_decompiler::translate::module(&config, m.clone());
+                let resolved = resolved_pkg.module(*module_name);
+                let module = move_decompiler::translate::module(&config, resolved, m.clone());
                 let decompiled = format!("{}", module);
                 insta_assert! {
                     input_path: file_path,
@@ -94,12 +93,10 @@ fn run_full_test(file_path: &Path) -> datatest_stable::Result<()> {
     };
 
     let mut writer = Vec::new();
-    let env = move_package_alt::flavor::vanilla::default_environment();
-    let loaded_root_pkg = RootPackage::<move_package_alt::flavor::Vanilla>::load_sync(
-        pkg_dir.to_path_buf(),
-        env,
-        config.mode_set(),
-    )?;
+    let env = Vanilla::default_environment();
+    let loaded_root_pkg: RootPackage<Vanilla> = config
+        .package_loader(pkg_dir, &env, Vanilla::new())
+        .load_sync()?;
     let root_pkg_info = loaded_root_pkg.package_info();
     let root_pkg = root_pkg_info.display_name();
 

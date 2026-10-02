@@ -1,6 +1,6 @@
 Command `build`:
 BUILDING Test
-warning[W09002]: unused variable
+warning[WC09002]: unused variable
   ┌─ ./sources/m.move:2:16
   │
 2 │ public fun foo(x: u64): u64 {
@@ -9,7 +9,7 @@ warning[W09002]: unused variable
   = This warning can be suppressed with '#[allow(unused_variable)]' applied to the 'module' or module member ('const', 'fun', or 'struct')
 
 Command `disassemble --package Test --name m`:
-// Move bytecode v6
+// Move bytecode v7
 module 42.m {
 
 public foo(x#0#0: u64): u64 {
@@ -20,7 +20,7 @@ B0:
 
 }
 
-warning[W09002]: unused variable
+warning[WC09002]: unused variable
   ┌─ ./sources/m.move:2:16
   │
 2 │ public fun foo(x: u64): u64 {
@@ -34,7 +34,7 @@ Command `build --silence-warnings --warnings-are-errors`:
 BUILDING Test
 Command `build --warnings-are-errors`:
 BUILDING Test
-error[E09002]: unused variable
+error[EC09002]: unused variable
   ┌─ ./sources/m.move:2:16
   │
 2 │ public fun foo(x: u64): u64 {

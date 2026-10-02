@@ -6,10 +6,10 @@ use crate::validator_commands::{
 };
 use anyhow::Ok;
 use fastcrypto::encoding::{Base64, Encoding};
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_types::crypto::RtdKeyPair;
 use rtd_types::transaction::TransactionData;
 use rtd_types::{base_types::RtdAddress, crypto::Signature, transaction::Transaction};
+use shared_crypto::intent::{Intent, IntentMessage};
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]
@@ -25,11 +25,11 @@ async fn test_print_raw_rgp_txn() -> Result<(), anyhow::Error> {
         .keypair();
     let validator_address: RtdAddress = RtdAddress::from(&keypair.public());
     let mut context = test_cluster.wallet;
-    let rtd_client = context.get_client().await?;
+    let rtd_client = context.grpc_client()?;
     let (_, summary) = get_validator_summary(&rtd_client, validator_address)
         .await?
         .unwrap();
-    let operation_cap_id = summary.operation_cap_id;
+    let operation_cap_id = summary.operation_cap_id().parse()?;
 
     // Execute the command and get the serialized transaction data.
     let response = RtdValidatorCommand::DisplayGasPriceUpdateRawTxn {
@@ -62,6 +62,6 @@ async fn test_print_raw_rgp_txn() -> Result<(), anyhow::Error> {
         .unwrap();
 
     // Check that the gas price is updated correctly.
-    assert_eq!(summary.next_epoch_gas_price, 42);
+    assert_eq!(summary.next_epoch_gas_price(), 42);
     Ok(())
 }

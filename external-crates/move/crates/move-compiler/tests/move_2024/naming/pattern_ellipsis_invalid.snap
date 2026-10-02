@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: core
   edition: 2024.alpha
   lint: false
 ---
-error[E03013]: positional call mismatch
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:16:13
    │
  3 │         D
@@ -16,7 +16,7 @@ error[E03013]: positional call mismatch
    │
    = Remove '()' arguments from this pattern
 
-error[E03013]: positional call mismatch
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:17:13
    │
  3 │         D
@@ -27,7 +27,7 @@ error[E03013]: positional call mismatch
    │
    = Remove '{ }' arguments from this pattern
 
-error[E03013]: positional call mismatch
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:18:13
    │
  3 │         D
@@ -38,7 +38,7 @@ error[E03013]: positional call mismatch
    │
    = Remove '()' arguments from this pattern
 
-warning[W09002]: unused variable
+warning[WC09002]: unused variable
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:18:18
    │
 18 │             Y::D(x, ..) => 0,
@@ -46,7 +46,13 @@ warning[W09002]: unused variable
    │
    = This warning can be suppressed with '#[allow(unused_variable)]' applied to the 'module' or module member ('const', 'fun', or 'struct')
 
-error[E03013]: positional call mismatch
+error[EC04010]: cannot infer type
+   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:18:18
+   │
+18 │             Y::D(x, ..) => 0,
+   │                  ^ Could not infer this type. Try adding an annotation
+
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:19:13
    │
  3 │         D
@@ -57,7 +63,7 @@ error[E03013]: positional call mismatch
    │
    = Remove '{ }' arguments from this pattern
 
-warning[W09002]: unused variable
+warning[WC09002]: unused variable
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:19:18
    │
 19 │             Y::D{x, ..} => 0,
@@ -65,7 +71,13 @@ warning[W09002]: unused variable
    │
    = This warning can be suppressed with '#[allow(unused_variable)]' applied to the 'module' or module member ('const', 'fun', or 'struct')
 
-error[E03013]: positional call mismatch
+error[EC04010]: cannot infer type
+   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:19:18
+   │
+19 │             Y::D{x, ..} => 0,
+   │                  ^ Could not infer this type. Try adding an annotation
+
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:25:13
    │
  7 │         D()
@@ -76,7 +88,7 @@ error[E03013]: positional call mismatch
    │
    = Positional patterns take arguments using '()'
 
-error[E03013]: positional call mismatch
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:26:13
    │
  7 │         D()
@@ -87,7 +99,13 @@ error[E03013]: positional call mismatch
    │
    = Positional patterns take arguments using '()'
 
-error[E03013]: positional call mismatch
+error[EC03010]: unbound field
+   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:27:13
+   │
+27 │             X::D{x, ..} => 0,
+   │             ^^^^^^^^^^^ Unbound field 'x' in '0x42::m::X::D'
+
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:27:13
    │
  7 │         D()
@@ -98,13 +116,7 @@ error[E03013]: positional call mismatch
    │
    = Positional patterns take arguments using '()'
 
-error[E03010]: unbound field
-   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:27:13
-   │
-27 │             X::D{x, ..} => 0,
-   │             ^^^^^^^^^^^ Unbound field 'x' in '0x42::m::X::D'
-
-warning[W09002]: unused variable
+warning[WC09002]: unused variable
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:27:18
    │
 27 │             X::D{x, ..} => 0,
@@ -112,7 +124,13 @@ warning[W09002]: unused variable
    │
    = This warning can be suppressed with '#[allow(unused_variable)]' applied to the 'module' or module member ('const', 'fun', or 'struct')
 
-error[E03013]: positional call mismatch
+error[EC04010]: cannot infer type
+   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:27:18
+   │
+27 │             X::D{x, ..} => 0,
+   │                  ^ Could not infer this type. Try adding an annotation
+
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:33:13
    │
 11 │         D{}
@@ -123,7 +141,7 @@ error[E03013]: positional call mismatch
    │
    = Named patterns take arguments using '{ }'
 
-error[E03013]: positional call mismatch
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:34:13
    │
 11 │         D{}
@@ -134,7 +152,13 @@ error[E03013]: positional call mismatch
    │
    = Named patterns take arguments using '{ }'
 
-error[E03013]: positional call mismatch
+error[EC03010]: unbound field
+   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:35:13
+   │
+35 │             Z::D(x, ..) => 0,
+   │             ^^^^^^^^^^^ Unbound field '0' in '0x42::m::Z::D'
+
+error[EC03013]: positional call mismatch
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:35:13
    │
 11 │         D{}
@@ -145,16 +169,16 @@ error[E03013]: positional call mismatch
    │
    = Named patterns take arguments using '{ }'
 
-error[E03010]: unbound field
-   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:35:13
-   │
-35 │             Z::D(x, ..) => 0,
-   │             ^^^^^^^^^^^ Unbound field '0' in '0x42::m::Z::D'
-
-warning[W09002]: unused variable
+warning[WC09002]: unused variable
    ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:35:18
    │
 35 │             Z::D(x, ..) => 0,
    │                  ^ Unused local variable 'x'. Consider removing or prefixing with an underscore: '_x'
    │
    = This warning can be suppressed with '#[allow(unused_variable)]' applied to the 'module' or module member ('const', 'fun', or 'struct')
+
+error[EC04010]: cannot infer type
+   ┌─ tests/move_2024/naming/pattern_ellipsis_invalid.move:35:18
+   │
+35 │             Z::D(x, ..) => 0,
+   │                  ^ Could not infer this type. Try adding an annotation

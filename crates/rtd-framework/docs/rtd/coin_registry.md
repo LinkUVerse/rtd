@@ -69,7 +69,6 @@ supply information, regulatory status, and metadata capabilities.
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -102,6 +101,7 @@ supply information, regulatory status, and metadata capabilities.
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -1547,7 +1547,7 @@ dynamic field for future borrows.
     ctx: &<b>mut</b> TxContext,
 ): (CoinMetadata&lt;T&gt;, <a href="../rtd/coin_registry.md#rtd_coin_registry_Borrow">Borrow</a>&lt;T&gt;) {
     <b>assert</b>!(!currency.<a href="../rtd/coin_registry.md#rtd_coin_registry_is_migrated_from_legacy">is_migrated_from_legacy</a>(), <a href="../rtd/coin_registry.md#rtd_coin_registry_EBorrowLegacyMetadata">EBorrowLegacyMetadata</a>);
-    <b>if</b> (!df::exists_(&currency.id, <a href="../rtd/coin_registry.md#rtd_coin_registry_LegacyMetadataKey">LegacyMetadataKey</a>())) {
+    <b>if</b> (!df::exists(&currency.id, <a href="../rtd/coin_registry.md#rtd_coin_registry_LegacyMetadataKey">LegacyMetadataKey</a>())) {
         <b>let</b> legacy = currency.<a href="../rtd/coin_registry.md#rtd_coin_registry_to_legacy_metadata">to_legacy_metadata</a>(ctx);
         df::add(&<b>mut</b> currency.id, <a href="../rtd/coin_registry.md#rtd_coin_registry_LegacyMetadataKey">LegacyMetadataKey</a>(), legacy);
     };
@@ -1590,7 +1590,7 @@ Note to self: Borrow requirement prevents deletion through this method.
     <a href="../rtd/borrow.md#rtd_borrow">borrow</a>: <a href="../rtd/coin_registry.md#rtd_coin_registry_Borrow">Borrow</a>&lt;T&gt;,
     _ctx: &<b>mut</b> TxContext,
 ) {
-    <b>assert</b>!(!df::exists_(&currency.id, <a href="../rtd/coin_registry.md#rtd_coin_registry_LegacyMetadataKey">LegacyMetadataKey</a>()), <a href="../rtd/coin_registry.md#rtd_coin_registry_EDuplicateBorrow">EDuplicateBorrow</a>);
+    <b>assert</b>!(!df::exists(&currency.id, <a href="../rtd/coin_registry.md#rtd_coin_registry_LegacyMetadataKey">LegacyMetadataKey</a>()), <a href="../rtd/coin_registry.md#rtd_coin_registry_EDuplicateBorrow">EDuplicateBorrow</a>);
     <b>let</b> <a href="../rtd/coin_registry.md#rtd_coin_registry_Borrow">Borrow</a> {} = <a href="../rtd/borrow.md#rtd_borrow">borrow</a>;
     // Always store up to date value.
     legacy.update_coin_metadata(

@@ -1,7 +1,7 @@
 [package]
 name = "rtd-json-rpc-tests"
 version = "0.0.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -41,6 +41,7 @@ jsonrpsee.workspace = true
 prometheus.workspace = true
 rand.workspace = true
 reqwest.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 shared-crypto.workspace = true

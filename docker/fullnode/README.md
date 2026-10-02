@@ -1,135 +1,23 @@
-# Use Docker to Run a Rtd Full node Locally
+# Local RTD full node container template
 
-Follow the steps in this Readme to install and configure a Rtd Full node for testing locally using Docker. The instructions were validated on the following operating system/processor combinations:
+This Compose template needs an RTD image built from this source checkout, a genesis blob from the **same RTD network**, and that network's full node configuration. The source fork does not publish a verified Mainnet or Testnet image, public genesis download, or seed peer list.
 
- * Linux/AMD64
- * Darwin/AMD64
- * Darwin/ARM64
+From the repository root, build the image and prepare local files:
 
-## Prerequisites
-
- * [Install Docker](https://docs.docker.com/get-docker/) 
- * [Install Docker Compose](https://docs.docker.com/compose/install/)
- * Download the Full node [docker-compose.yaml](https://github.com/LinkUVerse/rtd/blob/main/docker/fullnode/docker-compose.yaml) file.
-
-
-## Configure Rtd Full node
-
-Download the latest version of the Rtd Full node configuration file [fullnode-template.yaml](https://github.com/LinkUVerse/rtd/raw/main/crates/rtd-config/data/fullnode-template.yaml). Use the following command to download the file:
-
-```shell
-wget https://github.com/LinkUVerse/rtd/raw/main/crates/rtd-config/data/fullnode-template.yaml
+```sh
+docker build -f docker/rtd-node/Dockerfile -t rtd-node:local .
+cp crates/rtd-config/data/fullnode-template.yaml docker/fullnode/fullnode-template.yaml
+cp /path/to/your/rtd-network/genesis.blob docker/fullnode/genesis.blob
 ```
 
-### Download the Rtd genesis blob
+Review `docker/fullnode/fullnode-template.yaml` and set the peer list, network address, and paths for the RTD network that produced the genesis blob. A standalone node cannot join a network without the correct genesis and reachable peers. The local development network started by `rtd start` is a separate workflow; see [local network setup](../../docs/content/getting-started/onboarding/local-network.mdx).
 
-The genesis blob contains the information that defined the Rtd network configuration. Before you can start the Full node, you need to download the most recent file to ensure compatibility with the version of Rtd you use. Use the following command to download the [genesis.blob](https://github.com/LinkUVerse/rtd-genesis/raw/main/devnet/genesis.blob) from the `devnet` branch of the Rtd repository:
+Start the container only after the image, genesis and config are ready:
 
-```wget https://github.com/LinkUVerse/rtd-genesis/raw/main/devnet/genesis.blob```
-
-## Start your Rtd Full node
-
-Run the following command to start the Rtd fullnode in Docker:
-
-```shell
-docker compose up
+```sh
+cd docker/fullnode
+RTD_NODE_IMAGE=rtd-node:local docker compose up -d
+RTD_NODE_IMAGE=rtd-node:local docker compose logs -f fullnode
 ```
 
-**Important:** The commands in this document assume you use Docker Compose V2. The `docker compose` command uses a dash (`docker-compose`) in Docker Compose V1. If you use Docker Compose V1, replace the space in each `docker compose` command with a dash (`docker-compose`). For more information, see [Docker Compose V2](https://docs.docker.com/compose/#compose-v2-and-the-new-docker-compose-command).
-
-## Test the Rtd Full node
-
-After the Full node starts you can test the JSON-RPC interfaces.
-
-## View activity on your local Full node with Rtd Explorer
-
-Rtd Explorer supports connecting to a local network. To view activity on your local Full node, open the URL: [https://explorer.rtd.io/?network=local](https://explorer.rtd.io/?network=local).
-
-You can also change the network that Rtd Explorer connects to by selecting it in the Rtd Explorer interface. 
-
-### Stop the Full node
-
-Run the following command to stop the Full node when you finish using it:
-```shell
-docker compose stop
-```
-
-## Troubleshooting
-
-If you encounter errors or your Full node stops working, run the commands in the following section to resolve the issue.
-
-### Start the Full node in detached mode
-
-First, try starting the Full node in detached mode:
-
-```shell
-docker compose up -d
-```
-
-### Reset the environment
-
-If you continue to see issues, stop the Full node (`docker compose stop`) and delete the Docker container and volume. Then run the following command to start a new instance of the Full node using the same genesis blob. 
-
-```shell
-docker compose down --volumes
-```
-
-### Stats (CPU/MEM USAGE %)
-
-To view usage details for the Full node running in Docker, run the following command:
-```shell
-docker stats
-```
-
-This command shows a live data stream of the Docker container resource usage, such as CPU and memory. To view data for all containers, use the following command:
-```shell
-docker stats -a
-```
-
-### Inspect the state of a running Full node
-
-Get the running container ID:
-
-```shell
-docker ps
-```
-
-Connect to a bash shell inside the container:
-
-```shell
-docker exec -it $CONTAINER_ID /bin/bash
-```
-
-Inspect the database:
-
-```shell
-ls -la rtddb/
-```
-
-### Investigate local RPC connectivity issues
-
-Update the `json-rpc-address` in the Full node config to listen on all addresses:
-
-```shell
-sed -i 's/127.0.0.1/0.0.0.0/' fullnode-template.yaml
-```
-
-```shell
--json-rpc-address: "127.0.0.1:9000"
-+json-rpc-address: "0.0.0.0:9000"
-```
-
-### Install wget and curl
-
-Download each package. For example, on macOS use [homebrew](https://brew.sh/):
-
-```brew install wget curl```
-
-### Learn more about Rtd
- * https://docs.rtd.io/learn
-
-### Learn more about building and running a Full node from source code
- * https://docs.rtd.io/build/fullnode
-
-### Learn more about Docker Compose
- * https://docs.docker.com/compose/gettingstarted/
+Verify health through the endpoint configured in your full node file, the node logs, and a successful request to that exact network. JSON-RPC may be available in a local development configuration; future RTD Mainnet will not expose JSON-RPC. Stop with `RTD_NODE_IMAGE=rtd-node:local docker compose down`.

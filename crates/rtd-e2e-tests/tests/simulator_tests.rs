@@ -10,8 +10,8 @@ use rand::{
     distributions::{Distribution, Uniform},
     rngs::OsRng,
 };
-use std::collections::{HashMap, HashSet};
 use rtd_test_transaction_builder::make_transfer_rtd_transaction;
+use std::collections::{HashMap, HashSet};
 use tokio::time::{Duration, Instant, sleep};
 use tracing::{debug, trace};
 
@@ -33,7 +33,7 @@ async fn make_fut(i: usize) -> usize {
     i
 }
 
-#[sim_test(check_determinism)]
+#[sim_test]
 async fn test_futures_ordered() {
     telemetry_subscribers::init_for_testing();
 
@@ -46,7 +46,7 @@ async fn test_futures_ordered() {
     debug!("final rng state: {}", OsRng.r#gen::<u32>());
 }
 
-#[sim_test(check_determinism)]
+#[sim_test]
 async fn test_futures_unordered() {
     telemetry_subscribers::init_for_testing();
 
@@ -61,7 +61,7 @@ async fn test_futures_unordered() {
     debug!("final rng state: {}", OsRng.r#gen::<u32>());
 }
 
-#[sim_test(check_determinism)]
+#[sim_test]
 async fn test_select_unbiased() {
     let mut f1 = FuturesUnordered::from_iter((0..200).map(make_fut));
     let mut f2 = FuturesUnordered::from_iter((0..200).map(make_fut));
@@ -92,7 +92,7 @@ async fn test_select_unbiased() {
     debug!("final rng state: {}", OsRng.r#gen::<u32>());
 }
 
-#[sim_test(check_determinism)]
+#[sim_test]
 async fn test_hash_collections() {
     telemetry_subscribers::init_for_testing();
 
@@ -123,12 +123,16 @@ async fn test_hash_collections() {
 
 // Test that starting up a network + fullnode, and sending one transaction through that network is
 // repeatable and deterministic.
-#[sim_test(check_determinism)]
+#[sim_test]
 async fn test_net_determinism() {
     let mut test_cluster = TestClusterBuilder::new().build().await;
 
     let txn = make_transfer_rtd_transaction(&test_cluster.wallet, None, None).await;
-    let digest = test_cluster.execute_transaction(txn).await.digest;
+    let digest = test_cluster
+        .execute_transaction(txn)
+        .await
+        .transaction
+        .digest();
 
     sleep(Duration::from_millis(1000)).await;
 

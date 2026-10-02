@@ -2,6 +2,11 @@
 
 本文档详细说明如何从 Sui 区块链源码完整 fork 出一条全新品牌的区块链，确保与原 Sui 网络完全不兼容。
 
+> 2026-09-23 上游刷新：先阅读 [当前上游刷新说明](UPSTREAM_REFRESH_2026-09-23.md)。
+> 本文档保留旧 fork 的历史步骤；新上游新增的本地 HTTP crate、protobuf 生成、
+> 历史快照与节点恢复逻辑需要按刷新说明处理。下文旧版 Genesis 参数、
+> 依赖清单和故障处理命令不应直接用于当前上游；以刷新说明及当前源码为准。
+
 ## 目录
 
 1. [概述](#概述)
@@ -93,7 +98,7 @@ export MY_USERNAME="your-github-username"
 
 ## 第二部分：Fork 所有依赖仓库
 
-### 2.1 必须 Fork 的仓库（6 个核心）
+### 2.1 旧版依赖仓库清单（6 个核心）
 
 | # | 仓库名称 | 原始 URL | 用途 |
 |---|---------|----------|------|
@@ -103,6 +108,13 @@ export MY_USERNAME="your-github-username"
 | 4 | **sui-rust-sdk** | https://github.com/MystenLabs/sui-rust-sdk | Rust SDK |
 | 5 | **anemo** | https://github.com/mystenlabs/anemo | P2P 网络框架 |
 | 6 | **async-graphql** | https://github.com/amnn/async-graphql | GraphQL 分支 |
+
+上表与下方的 `gh repo fork` 命令是旧 fork 的操作记录，不能作为当前依赖
+清单直接重跑。本次源码的依赖版本以 `Cargo.toml` 和 `Cargo.lock` 为准；
+Rust SDK 已使用 `LinkUVerse/rtd-rust-sdk`，HTTP crate 已纳入本地源码树。
+若还要求所有传递依赖源码和来源均不含旧品牌，需按
+[刷新说明中的真实未 fork 依赖](UPSTREAM_REFRESH_2026-09-23.md#已确认的依赖版本)
+继续处理，不能只改仓库 URL 字符串。
 
 ### 2.2 Fork 命令
 
@@ -141,12 +153,10 @@ cd rtd
 将 `rtd-brand-rename.sh` 脚本放入项目的 `fork-instruct/final/` 目录，然后执行：
 
 ```bash
-# 完整执行所有阶段
-./fork-instruct/final/rtd-brand-rename.sh all
-
-# 或单独执行某个阶段
-./fork-instruct/final/rtd-brand-rename.sh phase01  # 文本替换
-./fork-instruct/final/rtd-brand-rename.sh phase03  # 重命名 crates
+# 先执行文本和目录变换；phase13 需要先解决依赖并生成当前字节码
+for phase in 01 02 03 04 05 06 07 08 09 10 11 12; do
+  ./fork-instruct/final/rtd-brand-rename.sh "phase${phase}"
+done
 ```
 
 ### 3.2 脚本执行的阶段
@@ -165,9 +175,9 @@ cd rtd
 | phase09 | 重命名 move | Move 编译器目录 |
 | phase10 | 重命名其他 | 其他 sui* 目录 |
 | phase11 | 重命名文件 | sui*.rs 等文件 |
-| phase12 | 修复特殊情况 | 常量冲突等问题 |
+| phase12 | 修复特殊情况 | 常量、协议字面量、Bech32 私钥校验和与本地 HTTP crate |
 | phase13 | 重编译字节码 | 重新编译 Move 包 |
-| phase14 | 清理验证 | 检查遗漏和统计 |
+| phase14 | 清理验证 | 检查遗漏、统计并运行 `cargo fmt --all` |
 
 ### 3.3 处理编译错误
 
@@ -191,7 +201,7 @@ cargo build --workspace
 品牌重命名只修改了 Move 源代码，但预编译的字节码文件仍包含原始的 `sui::SUI`。需要：
 
 1. 重新编译 `packages_compiled/` 目录
-2. 删除或重新生成 `bytecode_snapshot/` 目录
+2. 按全新 genesis 策略处理 `bytecode_snapshot/` 与对应 manifest
 
 ### 4.2 重编译 packages_compiled
 
@@ -205,14 +215,15 @@ UPDATE=1 cargo test -p rtd-framework --test build-system-packages
 - 生成新的 `packages_compiled/` 字节码文件
 - 新字节码将包含正确的 `rtd::RTD` 名称
 
-### 4.3 删除旧的字节码快照
+### 4.3 处理历史字节码快照
 
-```bash
-# 删除所有历史版本的字节码快照
-rm -rf crates/rtd-framework-snapshot/bytecode_snapshot/*
-```
-
-删除后，genesis 过程会自动使用 `BuiltInFramework`（新编译的字节码）。
+原始上游的 `crates/rtd-framework-snapshot/manifest.json` 引用多个历史版本。
+不能直接清空 `bytecode_snapshot/`：loader、genesis builder 和兼容性测试仍可能
+按 manifest 查找这些文件。本次 RTD 新链只保留版本 138 的五个系统包；先
+重新生成该版本快照，再按
+[刷新说明中的两阶段绑定步骤](UPSTREAM_REFRESH_2026-09-23.md#历史字节码快照)
+更新 manifest 和源码提交，使用 `finalize-rtd-snapshots.py` 同步移除 3–137
+旧链快照，并运行兼容性测试。不得单独删除文件或保留指向旧文件的 manifest。
 
 ### 4.4 验证重编译结果
 
@@ -271,7 +282,7 @@ ssfn_config_info: ~
 validator_config_info: ~
 parameters:
   chain_start_timestamp_ms: 1759857384897
-  protocol_version: 105  # 使用最新协议版本
+  protocol_version: 138  # 本次上游源码的 ProtocolVersion::MAX；刷新源码后重新核对
   allow_insertion_of_extra_objects: true
   epoch_duration_ms: 86400000
   stake_subsidy_start_epoch: 0
@@ -313,8 +324,11 @@ one-time witness type 0x2::sui::SUI is instantiated in the 0x2::sui::new functio
 **解决方案**：
 ```bash
 UPDATE=1 cargo test -p rtd-framework --test build-system-packages
-rm -rf crates/rtd-framework-snapshot/bytecode_snapshot/*
 ```
+
+然后按[刷新说明](UPSTREAM_REFRESH_2026-09-23.md#历史字节码快照)
+生成当前版本快照、绑定源码提交、检查 manifest 与字节码并运行兼容性测试；
+不能只清空目录，也不能跳过两阶段 Git revision 绑定。
 
 ### Q2: `MISSING_DEPENDENCY` 错误
 
@@ -327,7 +341,8 @@ VMError with status MISSING_DEPENDENCY at location Module ModuleId { address: 0x
 
 **解决方案**：
 1. 检查 `genesis-config.yaml` 中的 `protocol_version`
-2. 使用支持的协议版本（1-105）
+2. 当前新链首次 genesis 只能使用版本 138；后续刷新应以源码中的
+   `ProtocolVersion::MAX` 和 RTD 快照 manifest 为准，不能使用上游旧链快照
 
 ### Q3: 编译错误 - 常量冲突
 

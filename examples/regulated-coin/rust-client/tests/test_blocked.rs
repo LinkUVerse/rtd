@@ -7,18 +7,14 @@ use anyhow::{anyhow, Result};
 use move_core_types::account_address::AccountAddress;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::{StructTag, TypeTag};
-use rust_client::tx_run::{execute_command, AppCommand, AppConfig};
 use rtd_config::{rtd_config_dir, RTD_CLIENT_CONFIG, RTD_KEYSTORE_FILENAME};
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore};
 use rtd_sdk::rpc_types::{ObjectChange, RtdTransactionBlockResponse};
 use rtd_sdk::types::base_types::{ObjectID, ObjectRef, RtdAddress};
 use rtd_sdk::wallet_context::WalletContext;
+use rust_client::tx_run::{execute_command, AppCommand, AppConfig};
 
-// Change from here
-const PACKAGE_ID: &'static str =
-    "0x5da522e939ce9fdcb15d4b3d03a16aa408706105cf90114cedc9613809f04c20";
 const MODULE: &'static str = "regulated_coin";
-// To here
 
 fn cmd_rtd_client_switch(new_addr: RtdAddress) -> Result<()> {
     println!("SWITCHING TO ADDRESS: {new_addr}");
@@ -42,7 +38,7 @@ fn get_other_address(different_from: RtdAddress) -> Result<RtdAddress> {
 }
 
 async fn get_config() -> Result<AppConfig> {
-    let package_id = ObjectID::from_hex_literal(PACKAGE_ID)?;
+    let package_id = ObjectID::from_hex_literal(&std::env::var("RTD_REGULATED_COIN_PACKAGE_ID")?)?;
     let otw = MODULE.to_uppercase();
     let type_tag = TypeTag::Struct(Box::new(StructTag {
         address: AccountAddress::new(package_id.as_ref().try_into()?),
@@ -61,6 +57,7 @@ async fn get_config() -> Result<AppConfig> {
 }
 
 #[tokio::test]
+#[ignore = "requires a regulated coin deployment and two funded RTD test addresses"]
 async fn test_is_blocked() -> Result<()> {
     let mut config = get_config().await?;
     let admin_addr = config.wallet_context.active_address()?;

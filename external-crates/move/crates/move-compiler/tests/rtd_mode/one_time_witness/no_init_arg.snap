@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: legacy
   lint: false
 ---
-error[Rtd E02003]: invalid 'init' function
+error[ESC02003]: invalid 'init' function
   ┌─ tests/rtd_mode/one_time_witness/no_init_arg.move:8:20
   │
 6 │     struct M has drop { dummy: bool }

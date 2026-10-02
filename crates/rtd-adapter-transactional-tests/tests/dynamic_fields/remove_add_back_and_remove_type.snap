@@ -3,6 +3,11 @@ source: external-crates/move/crates/move-transactional-test-runner/src/framework
 ---
 processed 5 tasks
 
+// This test attempts to remove a child, add it back, remove it again, and then transfer/delete it.
+// This is an interesting test case because when child objects are removed, added back and removed again,
+// they won't show up in the child_object_effects in the object runtiem. We must look at either transfers
+// or deleted_object_ids to figure them out.
+
 init:
 A: object(0,0)
 
@@ -10,7 +15,7 @@ task 1, lines 11-48:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 8762800,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 8785600,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 50:
 //# run test::m1::create --sender A

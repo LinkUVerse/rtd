@@ -1,9 +1,15 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::config::WatchdogConfig;
+use crate::action_executor::BridgeActionExecutor;
+use crate::client::bridge_authority_aggregator::BridgeAuthorityAggregator;
+use crate::config::{BridgeClientConfig, BridgeNodeConfig, WatchdogConfig};
 use crate::crypto::BridgeAuthorityPublicKeyBytes;
-use crate::metered_eth_provider::MeteredEthHttpProvider;
+use crate::eth_syncer::EthSyncer;
+use crate::events::init_all_struct_tags;
+use crate::metrics::BridgeMetrics;
+use crate::monitor::{self, BridgeMonitor};
+use crate::orchestrator::BridgeOrchestrator;
 use crate::rtd_bridge_watchdog::eth_bridge_status::EthBridgeStatus;
 use crate::rtd_bridge_watchdog::eth_vault_balance::{EthereumVaultBalance, VaultAsset};
 use crate::rtd_bridge_watchdog::metrics::WatchdogMetrics;
@@ -11,42 +17,29 @@ use crate::rtd_bridge_watchdog::rtd_bridge_status::RtdBridgeStatus;
 use crate::rtd_bridge_watchdog::total_supplies::TotalSupplies;
 use crate::rtd_bridge_watchdog::{BridgeWatchDog, Observable};
 use crate::rtd_client::RtdBridgeClient;
+use crate::rtd_syncer::RtdSyncer;
+use crate::server::handler::BridgeRequestHandler;
+use crate::server::{BridgeNodePublicMetadata, run_server};
+use crate::storage::BridgeOrchestratorTables;
 use crate::types::BridgeCommittee;
 use crate::utils::{
-    get_committee_voting_power_by_name, get_eth_contract_addresses, get_validator_names_by_pub_keys,
+    EthProvider, get_committee_voting_power_by_name, get_eth_contract_addresses,
+    get_validator_names_by_pub_keys,
 };
-use crate::{
-    action_executor::BridgeActionExecutor,
-    client::bridge_authority_aggregator::BridgeAuthorityAggregator,
-    config::{BridgeClientConfig, BridgeNodeConfig},
-    eth_syncer::EthSyncer,
-    events::init_all_struct_tags,
-    metrics::BridgeMetrics,
-    monitor::BridgeMonitor,
-    orchestrator::BridgeOrchestrator,
-    server::{BridgeNodePublicMetadata, handler::BridgeRequestHandler, run_server},
-    storage::BridgeOrchestratorTables,
-    rtd_syncer::RtdSyncer,
-};
+use alloy::primitives::Address as EthAddress;
 use arc_swap::ArcSwap;
-use ethers::providers::Provider;
-use ethers::types::Address as EthAddress;
+use linku_common::ZipDebugEqIteratorExt;
 use linku_metrics::spawn_logged_monitored_task;
-use std::collections::BTreeMap;
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
-    time::Duration,
+use rtd_types::Identifier;
+use rtd_types::bridge::{
+    BRIDGE_COMMITTEE_MODULE_NAME, BRIDGE_LIMITER_MODULE_NAME, BRIDGE_MODULE_NAME,
+    BRIDGE_TREASURY_MODULE_NAME,
 };
-use rtd_types::{
-    Identifier,
-    bridge::{
-        BRIDGE_COMMITTEE_MODULE_NAME, BRIDGE_LIMITER_MODULE_NAME, BRIDGE_MODULE_NAME,
-        BRIDGE_TREASURY_MODULE_NAME,
-    },
-    event::EventID,
-};
+use rtd_types::event::EventID;
+use std::collections::{BTreeMap, HashMap};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::JoinHandle;
 use tracing::info;
 
@@ -104,9 +97,8 @@ pub async fn run_bridge_node(
     // Before reconfiguration happens we only set it once when the node starts
     let rtd_system = server_config
         .rtd_client
-        .jsonrpc_client()
-        .governance_api()
-        .get_latest_rtd_system_state()
+        .grpc_client()
+        .get_system_state_summary(None)
         .await?;
 
     // Start Client
@@ -152,7 +144,7 @@ pub async fn run_bridge_node(
 async fn start_watchdog(
     watchdog_config: Option<WatchdogConfig>,
     registry: &prometheus::Registry,
-    eth_provider: Arc<Provider<MeteredEthHttpProvider>>,
+    eth_provider: EthProvider,
     eth_bridge_proxy_address: EthAddress,
     rtd_client: Arc<RtdBridgeClient>,
 ) {
@@ -166,58 +158,22 @@ async fn start_watchdog(
         usdt_address,
         wbtc_address,
         lbtc_address,
-    ) = get_eth_contract_addresses(eth_bridge_proxy_address, &eth_provider)
+    ) = get_eth_contract_addresses(eth_bridge_proxy_address, eth_provider.clone())
         .await
         .unwrap_or_else(|e| panic!("get_eth_contract_addresses should not fail: {}", e));
 
-    let eth_vault_balance = EthereumVaultBalance::new(
-        eth_provider.clone(),
-        vault_address,
-        weth_address,
-        VaultAsset::WETH,
-        watchdog_metrics.eth_vault_balance.clone(),
-    )
-    .await
-    .unwrap_or_else(|e| panic!("Failed to create eth vault balance: {}", e));
-
-    let usdt_vault_balance = EthereumVaultBalance::new(
-        eth_provider.clone(),
-        vault_address,
-        usdt_address,
-        VaultAsset::USDT,
-        watchdog_metrics.usdt_vault_balance.clone(),
-    )
-    .await
-    .unwrap_or_else(|e| panic!("Failed to create usdt vault balance: {}", e));
-
-    let wbtc_vault_balance = EthereumVaultBalance::new(
-        eth_provider.clone(),
-        vault_address,
-        wbtc_address,
-        VaultAsset::WBTC,
-        watchdog_metrics.wbtc_vault_balance.clone(),
-    )
-    .await
-    .unwrap_or_else(|e| panic!("Failed to create wbtc vault balance: {}", e));
-
-    let lbtc_vault_balance = if !lbtc_address.is_zero() {
-        Some(
-            EthereumVaultBalance::new(
-                eth_provider.clone(),
-                vault_address,
-                lbtc_address,
-                VaultAsset::LBTC,
-                watchdog_metrics.lbtc_vault_balance.clone(),
-            )
-            .await
-            .unwrap_or_else(|e| panic!("Failed to create lbtc vault balance: {}", e)),
-        )
-    } else {
-        None
-    };
+    // If vault_address is zero (can happen due to storage layout mismatch during upgrades),
+    // skip vault balance monitoring but allow node to start for signing server functionality.
+    let vault_monitoring_enabled = !vault_address.is_zero() && !weth_address.is_zero();
+    if !vault_monitoring_enabled {
+        tracing::warn!(
+            "Vault address or token addresses are zero - skipping vault balance monitoring. \
+            This is expected during storage layout mismatch recovery."
+        );
+    }
 
     let eth_bridge_status = EthBridgeStatus::new(
-        eth_provider,
+        eth_provider.clone(),
         eth_bridge_proxy_address,
         watchdog_metrics.eth_bridge_paused.clone(),
     );
@@ -227,24 +183,64 @@ async fn start_watchdog(
         watchdog_metrics.rtd_bridge_paused.clone(),
     );
 
-    let mut observables: Vec<Box<dyn Observable + Send + Sync>> = vec![
-        Box::new(eth_vault_balance),
-        Box::new(usdt_vault_balance),
-        Box::new(wbtc_vault_balance),
-        Box::new(eth_bridge_status),
-        Box::new(rtd_bridge_status),
-    ];
+    let mut observables: Vec<Box<dyn Observable + Send + Sync>> =
+        vec![Box::new(eth_bridge_status), Box::new(rtd_bridge_status)];
 
-    // Add lbtc_vault_balance if it's available
-    if let Some(balance) = lbtc_vault_balance {
-        observables.push(Box::new(balance));
+    // Add vault balance monitors only when addresses are valid
+    if vault_monitoring_enabled {
+        let eth_vault_balance = EthereumVaultBalance::new(
+            eth_provider.clone(),
+            vault_address,
+            weth_address,
+            VaultAsset::WETH,
+            watchdog_metrics.eth_vault_balance.clone(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Failed to create eth vault balance: {}", e));
+
+        let usdt_vault_balance = EthereumVaultBalance::new(
+            eth_provider.clone(),
+            vault_address,
+            usdt_address,
+            VaultAsset::USDT,
+            watchdog_metrics.usdt_vault_balance.clone(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Failed to create usdt vault balance: {}", e));
+
+        let wbtc_vault_balance = EthereumVaultBalance::new(
+            eth_provider.clone(),
+            vault_address,
+            wbtc_address,
+            VaultAsset::WBTC,
+            watchdog_metrics.wbtc_vault_balance.clone(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Failed to create wbtc vault balance: {}", e));
+
+        observables.push(Box::new(eth_vault_balance));
+        observables.push(Box::new(usdt_vault_balance));
+        observables.push(Box::new(wbtc_vault_balance));
+
+        if !lbtc_address.is_zero() {
+            let lbtc_vault_balance = EthereumVaultBalance::new(
+                eth_provider,
+                vault_address,
+                lbtc_address,
+                VaultAsset::LBTC,
+                watchdog_metrics.lbtc_vault_balance.clone(),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("Failed to create lbtc vault balance: {}", e));
+            observables.push(Box::new(lbtc_vault_balance));
+        }
     }
 
     if let Some(watchdog_config) = watchdog_config
         && !watchdog_config.total_supplies.is_empty()
     {
         let total_supplies = TotalSupplies::new(
-            Arc::new(rtd_client.jsonrpc_client().clone()),
+            rtd_client.grpc_client().clone().into_inner(),
             watchdog_config.total_supplies,
             watchdog_metrics.total_supplies.clone(),
         );
@@ -267,6 +263,7 @@ async fn start_client_components(
         &store,
         client_config.rtd_bridge_module_last_processed_event_id_override,
     );
+
     let eth_contracts_to_watch = get_eth_contracts_to_watch(
         &store,
         &client_config.eth_contracts,
@@ -276,6 +273,18 @@ async fn start_client_components(
 
     let rtd_client = client_config.rtd_client.clone();
 
+    let last_processed_bridge_event_id = rtd_modules_to_watch
+        .get(&BRIDGE_MODULE_NAME.to_owned())
+        .and_then(|opt| *opt);
+
+    let next_sequence_number = get_next_sequence_number(
+        &store,
+        &rtd_client,
+        last_processed_bridge_event_id,
+        client_config.rtd_bridge_next_sequence_number_override,
+    )
+    .await;
+
     let mut all_handles = vec![];
     let (task_handles, eth_events_rx, _) =
         EthSyncer::new(client_config.eth_client.clone(), eth_contracts_to_watch)
@@ -284,12 +293,17 @@ async fn start_client_components(
             .expect("Failed to start eth syncer");
     all_handles.extend(task_handles);
 
-    let (task_handles, rtd_events_rx) = RtdSyncer::new(
+    let (task_handles, rtd_grpc_events_rx) = RtdSyncer::new(
         client_config.rtd_client,
         rtd_modules_to_watch,
         metrics.clone(),
     )
-    .run(Duration::from_secs(2))
+    .run_grpc(
+        client_config.rtd_bridge_chain_id,
+        next_sequence_number,
+        Duration::from_secs(2),
+        10,
+    )
     .await
     .expect("Failed to start rtd syncer");
     all_handles.extend(task_handles);
@@ -305,13 +319,6 @@ async fn start_client_components(
 
     let (bridge_pause_tx, bridge_pause_rx) = tokio::sync::watch::channel(is_bridge_paused);
 
-    let (rtd_monitor_tx, rtd_monitor_rx) = linku_metrics::metered_channel::channel(
-        10000,
-        &linku_metrics::get_metrics()
-            .unwrap()
-            .channel_inflight
-            .with_label_values(&["rtd_monitor_queue"]),
-    );
     let (eth_monitor_tx, eth_monitor_rx) = linku_metrics::metered_channel::channel(
         10000,
         &linku_metrics::get_metrics()
@@ -334,6 +341,17 @@ async fn start_client_components(
     )
     .await;
 
+    let (rtd_monitor_tx, rtd_monitor_rx) = linku_metrics::metered_channel::channel(
+        10000,
+        &linku_metrics::get_metrics()
+            .unwrap()
+            .channel_inflight
+            .with_label_values(&["rtd_monitor_queue"]),
+    );
+    tokio::spawn(monitor::subscribe_bridge_events(
+        rtd_client.grpc_client().clone().into_inner(),
+        rtd_monitor_tx,
+    ));
     let monitor = BridgeMonitor::new(
         rtd_client.clone(),
         rtd_monitor_rx,
@@ -347,16 +365,63 @@ async fn start_client_components(
 
     let orchestrator = BridgeOrchestrator::new(
         rtd_client,
-        rtd_events_rx,
+        rtd_grpc_events_rx,
         eth_events_rx,
         store.clone(),
-        rtd_monitor_tx,
         eth_monitor_tx,
         metrics,
     );
 
-    all_handles.extend(orchestrator.run(bridge_action_executor).await);
+    all_handles.extend(orchestrator.run_with_grpc(bridge_action_executor).await);
     Ok(all_handles)
+}
+
+async fn get_next_sequence_number<C: crate::rtd_client::RtdClientInner>(
+    store: &BridgeOrchestratorTables,
+    rtd_client: &crate::rtd_client::RtdClient<C>,
+    last_processed_bridge_event_id: Option<EventID>,
+    next_sequence_number_override: Option<u64>,
+) -> u64 {
+    if let Some(next_sequence_number_override) = next_sequence_number_override {
+        info!("Overriding next sequence number to {next_sequence_number_override}",);
+        return next_sequence_number_override;
+    }
+
+    if let Ok(Some(sequence_number)) = store.get_rtd_sequence_number_cursor() {
+        info!("Using sequence number {sequence_number} from storage",);
+        return sequence_number;
+    }
+
+    if let Some(event_id) = last_processed_bridge_event_id {
+        match rtd_client.get_sequence_number_from_event_id(event_id).await {
+            Ok(Some(sequence_number)) => {
+                let next = sequence_number + 1;
+                info!(
+                    ?event_id,
+                    last_processed_seq = sequence_number,
+                    next_seq_to_read = next,
+                    "Migrated from legacy event cursor to sequence number cursor"
+                );
+                return next;
+            }
+            Ok(None) => {
+                info!(
+                    ?event_id,
+                    "Could not extract sequence number from legacy event cursor, starting from 0"
+                );
+            }
+            Err(e) => {
+                info!(
+                    ?event_id,
+                    ?e,
+                    "Failed to get sequence number from legacy event cursor, starting from 0"
+                );
+            }
+        }
+    }
+
+    info!("No cursor found for gRPC syncer, starting from sequence number 0");
+    0
 }
 
 fn get_rtd_modules_to_watch(
@@ -384,7 +449,7 @@ fn get_rtd_modules_to_watch(
     let mut rtd_modules_to_watch = HashMap::new();
     for (module_identifier, cursor) in rtd_bridge_modules
         .iter()
-        .zip(rtd_bridge_module_stored_cursor)
+        .zip_debug_eq(rtd_bridge_module_stored_cursor)
     {
         if cursor.is_none() {
             info!(
@@ -407,7 +472,7 @@ fn get_eth_contracts_to_watch(
         .get_eth_event_cursors(eth_contracts)
         .expect("Failed to get eth event cursors from storage");
     let mut eth_contracts_to_watch = HashMap::new();
-    for (contract, stored_cursor) in eth_contracts.iter().zip(stored_eth_cursors) {
+    for (contract, stored_cursor) in eth_contracts.iter().zip_debug_eq(stored_eth_cursors) {
         // start block precedence:
         // eth_contracts_start_block_override > stored cursor > eth_contracts_start_block_fallback
         match (eth_contracts_start_block_override, stored_cursor) {
@@ -433,7 +498,8 @@ fn get_eth_contracts_to_watch(
 
 #[cfg(test)]
 mod tests {
-    use ethers::types::Address as EthAddress;
+    use alloy::primitives::Address as EthAddress;
+    use alloy::primitives::U160;
     use prometheus::Registry;
 
     use super::*;
@@ -461,8 +527,8 @@ mod tests {
         telemetry_subscribers::init_for_testing();
         let temp_dir = tempfile::tempdir().unwrap();
         let eth_contracts = vec![
-            EthAddress::from_low_u64_be(1),
-            EthAddress::from_low_u64_be(2),
+            EthAddress::from(U160::from(1)),
+            EthAddress::from(U160::from(2)),
         ];
         let store = BridgeOrchestratorTables::new(temp_dir.path());
 
@@ -510,92 +576,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_get_rtd_modules_to_watch() {
-        telemetry_subscribers::init_for_testing();
-        let temp_dir = tempfile::tempdir().unwrap();
-
-        let store = BridgeOrchestratorTables::new(temp_dir.path());
-        let bridge_module = BRIDGE_MODULE_NAME.to_owned();
-        let committee_module = BRIDGE_COMMITTEE_MODULE_NAME.to_owned();
-        let treasury_module = BRIDGE_TREASURY_MODULE_NAME.to_owned();
-        let limiter_module = BRIDGE_LIMITER_MODULE_NAME.to_owned();
-        // No override, no stored watermark, use None
-        let rtd_modules_to_watch = get_rtd_modules_to_watch(&store, None);
-        assert_eq!(
-            rtd_modules_to_watch,
-            vec![
-                (bridge_module.clone(), None),
-                (committee_module.clone(), None),
-                (treasury_module.clone(), None),
-                (limiter_module.clone(), None)
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>()
-        );
-
-        // no stored watermark, use override
-        let override_cursor = EventID {
-            tx_digest: TransactionDigest::random(),
-            event_seq: 42,
-        };
-        let rtd_modules_to_watch = get_rtd_modules_to_watch(&store, Some(override_cursor));
-        assert_eq!(
-            rtd_modules_to_watch,
-            vec![
-                (bridge_module.clone(), Some(override_cursor)),
-                (committee_module.clone(), Some(override_cursor)),
-                (treasury_module.clone(), Some(override_cursor)),
-                (limiter_module.clone(), Some(override_cursor))
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>()
-        );
-
-        // No override, found stored watermark for `bridge` module, use stored watermark for `bridge`
-        // and None for `committee`
-        let stored_cursor = EventID {
-            tx_digest: TransactionDigest::random(),
-            event_seq: 100,
-        };
-        store
-            .update_rtd_event_cursor(bridge_module.clone(), stored_cursor)
-            .unwrap();
-        let rtd_modules_to_watch = get_rtd_modules_to_watch(&store, None);
-        assert_eq!(
-            rtd_modules_to_watch,
-            vec![
-                (bridge_module.clone(), Some(stored_cursor)),
-                (committee_module.clone(), None),
-                (treasury_module.clone(), None),
-                (limiter_module.clone(), None)
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>()
-        );
-
-        // found stored watermark, use override
-        let stored_cursor = EventID {
-            tx_digest: TransactionDigest::random(),
-            event_seq: 100,
-        };
-        store
-            .update_rtd_event_cursor(committee_module.clone(), stored_cursor)
-            .unwrap();
-        let rtd_modules_to_watch = get_rtd_modules_to_watch(&store, Some(override_cursor));
-        assert_eq!(
-            rtd_modules_to_watch,
-            vec![
-                (bridge_module.clone(), Some(override_cursor)),
-                (committee_module.clone(), Some(override_cursor)),
-                (treasury_module.clone(), Some(override_cursor)),
-                (limiter_module.clone(), Some(override_cursor))
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>()
-        );
-    }
-
     #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
     async fn test_starting_bridge_node() {
         telemetry_subscribers::init_for_testing();
@@ -619,9 +599,13 @@ mod tests {
                 bridge_client_key_path: None,
                 bridge_client_gas_object: None,
                 rtd_bridge_module_last_processed_event_id_override: None,
+                rtd_bridge_next_sequence_number_override: None,
             },
             eth: EthConfig {
-                eth_rpc_url: bridge_test_cluster.eth_rpc_url(),
+                eth_rpc_url: None,
+                eth_rpc_urls: Some(vec![bridge_test_cluster.eth_rpc_url()]),
+                eth_rpc_quorum: 1,
+                eth_health_check_interval_secs: 300,
                 eth_bridge_proxy_address: bridge_test_cluster.rtd_bridge_address(),
                 eth_bridge_chain_id: BridgeChainId::EthCustom as u8,
                 eth_contracts_start_block_fallback: None,
@@ -686,9 +670,13 @@ mod tests {
                     tx_digest: TransactionDigest::random(),
                     event_seq: 0,
                 }),
+                rtd_bridge_next_sequence_number_override: None,
             },
             eth: EthConfig {
-                eth_rpc_url: bridge_test_cluster.eth_rpc_url(),
+                eth_rpc_url: None,
+                eth_rpc_urls: Some(vec![bridge_test_cluster.eth_rpc_url()]),
+                eth_rpc_quorum: 1,
+                eth_health_check_interval_secs: 300,
                 eth_bridge_proxy_address: bridge_test_cluster.rtd_bridge_address(),
                 eth_bridge_chain_id: BridgeChainId::EthCustom as u8,
                 eth_contracts_start_block_fallback: Some(0),
@@ -764,9 +752,13 @@ mod tests {
                     tx_digest: TransactionDigest::random(),
                     event_seq: 0,
                 }),
+                rtd_bridge_next_sequence_number_override: None,
             },
             eth: EthConfig {
-                eth_rpc_url: bridge_test_cluster.eth_rpc_url(),
+                eth_rpc_url: None,
+                eth_rpc_urls: Some(vec![bridge_test_cluster.eth_rpc_url()]),
+                eth_rpc_quorum: 1,
+                eth_health_check_interval_secs: 300,
                 eth_bridge_proxy_address: bridge_test_cluster.rtd_bridge_address(),
                 eth_bridge_chain_id: BridgeChainId::EthCustom as u8,
                 eth_contracts_start_block_fallback: Some(0),

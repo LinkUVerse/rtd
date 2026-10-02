@@ -1,0 +1,53 @@
+---
+title: RTD Networks
+description: Network identity and endpoint status for the RTD source fork.
+keywords: [rtd networks, localnet, devnet, testnet, mainnet, chain id]
+goal:
+  description: Reader can distinguish verified local RTD networks from unverified public services
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Has reader questions
+    - has_answer: true
+      label: Has a direct answer
+questions:
+  - Which RTD networks are verified?
+  - Where can I find an RTD RPC endpoint?
+answer: >-
+  The RTD source fork can start a local development network. Public RTD
+  Mainnet, Testnet, and Devnet endpoints and chain IDs have not been verified.
+---
+
+RTD is a fork of the Sui codebase with a distinct native coin and a distinct
+chain identity. Nodes from the two chains cannot join one another. A network
+name alone is insufficient to identify a chain: check its genesis digest and
+chain ID before sending transactions or indexing data.
+
+## Local development network
+
+The RTD node binary can start a new local network from its own genesis. The
+local genesis and any resulting chain ID are specific to that launch. Configure
+the CLI with the RPC endpoint produced by the local deployment rather than
+copying a public Sui URL. See [Local Network](/getting-started/onboarding/local-network)
+and [Configure a Rtd Client](/getting-started/onboarding/configure-rtd-client).
+
+A local faucet, indexer, and JSON-RPC server are available only if the chosen
+local deployment starts them. Check process readiness and query the actual
+endpoint before relying on it.
+
+## Public networks
+
+This source fork does not define verified public RTD Mainnet, Testnet, or Devnet
+genesis digests, public RPC endpoints, explorers, faucets, or snapshot buckets.
+The familiar Sui network names and URLs found in inherited documentation are
+not RTD network configuration. Do not use them to sign, broadcast, inspect, or
+fund RTD transactions.
+
+When a public RTD network is launched, its operator must publish the genesis
+digest, chain ID, signed network configuration, RPC and faucet endpoints,
+operational status, and a supported binary release. Then this page can document
+those network-specific details with verification instructions.

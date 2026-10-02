@@ -12,21 +12,25 @@ pub mod checked {
 
     use crate::gas::GasUsageReport;
     use crate::gas_model::gas_predicates::check_for_gas_price_too_high;
+    use crate::gas_model::gas_v2::PerObjectStorage;
     use crate::{
         ObjectID,
         effects::{TransactionEffects, TransactionEffectsAPI},
         error::{ExecutionError, RtdResult, UserInputError, UserInputResult},
-        gas_model::{gas_v2::RtdGasStatus as RtdGasStatusV2, tables::GasStatus},
+        gas_model::{
+            gas_v2::RtdGasStatus as RtdGasStatusV2, gas_v3::RtdGasStatus as RtdGasStatusV3,
+            tables::GasStatus,
+        },
         object::Object,
         rtd_serde::{BigInt, Readable},
         transaction::ObjectReadResult,
     };
     use enum_dispatch::enum_dispatch;
     use itertools::MultiUnzip;
+    use rtd_protocol_config::ProtocolConfig;
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
     use serde_with::serde_as;
-    use rtd_protocol_config::ProtocolConfig;
 
     #[enum_dispatch]
     pub trait RtdGasStatusAPI {
@@ -50,19 +54,29 @@ pub mod checked {
             object_id: ObjectID,
             new_size: usize,
             storage_rebate: u64,
-        ) -> u64;
+        ) -> Option<u64>;
         fn charge_storage_and_rebate(&mut self) -> Result<(), ExecutionError>;
         fn adjust_computation_on_out_of_gas(&mut self);
         fn gas_usage_report(&self) -> GasUsageReport;
+        fn check_gas_balance(
+            &self,
+            gas_objs: &[&ObjectReadResult],
+            gas_budget: u64,
+            available_address_balance_gas: u64,
+        ) -> UserInputResult;
+        fn check_gas_objects(&self, gas_objs: &[&ObjectReadResult]) -> UserInputResult;
+        fn per_object_storage(&self) -> &Vec<(ObjectID, PerObjectStorage)>;
     }
 
-    /// Version aware enum for gas status.
+    /// Version-aware gas status: `V2` is the legacy model (`gas_model_version < 15`, incl. replay),
+    /// `V3` is the v15+ pipeline. Dispatched by `gas_model_version() >= 15`.
     #[enum_dispatch(RtdGasStatusAPI)]
     #[derive(Debug)]
     pub enum RtdGasStatus {
         // V1 does not exists any longer as it was a pre mainnet version.
         // So we start the enum from V2
         V2(RtdGasStatusV2),
+        V3(RtdGasStatusV3),
     }
 
     impl RtdGasStatus {
@@ -92,33 +106,32 @@ pub mod checked {
                 .into());
             }
 
-            Ok(Self::V2(RtdGasStatusV2::new_with_budget(
-                gas_budget,
-                gas_price,
-                reference_gas_price,
-                config,
-            )))
-        }
-
-        pub fn new_unmetered() -> Self {
-            Self::V2(RtdGasStatusV2::new_unmetered())
-        }
-
-        // This is the only public API on RtdGasStatus, all other gas related operations should
-        // go through `GasCharger`
-        pub fn check_gas_balance(
-            &self,
-            gas_objs: &[&ObjectReadResult],
-            gas_budget: u64,
-        ) -> UserInputResult {
-            match self {
-                Self::V2(status) => status.check_gas_balance(gas_objs, gas_budget),
+            // Dispatch by gas model version: v15+ uses the clean gas_v3 pipeline;
+            // everything older keeps the legacy gas_v2 path so replay determinism holds.
+            if config.gas_model_version() >= 15 {
+                Ok(Self::V3(RtdGasStatusV3::new_with_budget(
+                    gas_budget,
+                    gas_price,
+                    reference_gas_price,
+                    config,
+                )))
+            } else {
+                Ok(Self::V2(RtdGasStatusV2::new_with_budget(
+                    gas_budget,
+                    gas_price,
+                    reference_gas_price,
+                    config,
+                )))
             }
         }
 
-        pub fn gas_price(&self) -> u64 {
-            match self {
-                Self::V2(status) => status.gas_price(),
+        pub fn new_unmetered(config: &ProtocolConfig) -> Self {
+            // Same dispatch as `new`: v15+ uses gas_v3, everything older keeps gas_v2 so
+            // replay determinism holds.
+            if config.gas_model_version() >= 15 {
+                Self::V3(RtdGasStatusV3::new_unmetered())
+            } else {
+                Self::V2(RtdGasStatusV2::new_unmetered())
             }
         }
     }

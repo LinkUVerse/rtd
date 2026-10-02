@@ -1,7 +1,44 @@
 ---
 title: Rtd Client PTB CLI
-description: The Rtd Client PTB CLI enables a user to construct a PTB and execute it from the command line or a file.
-keywords: [ client ptb, rtd client ptb, programmable transaction block, ptbs, rtd cli ptbs, rtd ptb cli, ptb cli, execute ptb from cli, execute ptb from file, ptb help ]
+description: >-
+  The Rtd Client PTB CLI enables a user to construct a PTB and execute it from
+  the command line or a file.
+keywords:
+  - client ptb
+  - rtd client ptb
+  - programmable transaction block
+  - ptbs
+  - rtd cli ptbs
+  - rtd ptb cli
+  - ptb cli
+  - execute ptb from cli
+  - execute ptb from file
+  - ptb help
+goal:
+  description: 'Reader can look up client ptb cli command syntax, flags, and usage examples'
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - pattern: '```'
+      min: 1
+      label: Has command examples
+    - pattern: 'rtd '
+      min: 2
+      label: Shows CLI command usage
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Rtd Client PTB CLI in Rtd?
+  - What are the available rtd client ptb cli commands?
+  - What flags does rtd client ptb cli support?
+answer: >-
+  The `client ptb` command allows you to specify the transactions for execution
+  in a programmable transaction block (PTB) directly from your CLI or through
+  bash scripts.
 ---
 
 The `client ptb` command allows you to specify the transactions for execution in a programmable transaction block (PTB) directly from your CLI or through bash scripts.
@@ -20,17 +57,17 @@ The following list itemizes all the available args for the `rtd client ptb` comm
 $ rtd client ptb --help
 ```
 
-<ImportContent source="console-output/rtd-client-ptb-help.mdx" mode="snippet" />
+<ImportContent source="console-output/rtd-client-ptb-help" mode="snippet" />
 
 ## Design philosophy and concepts
 
-The main philosophy behind the CLI PTB support is to enable a user to build and execute a PTB from the command line. Bash scripts can be used to construct and execute the PTB just as you would do from the command line, providing great flexibility when it comes to automating different tasks.
+The main philosophy behind the CLI PTB support is to enable you to build and execute a PTB from the command line. You can use bash scripts to construct and execute the PTB just as you would from the command line, providing great flexibility when it comes to automating different tasks.
 
-Besides using existing [traditional PTB](/concepts/transactions/prog-txn-blocks/) related concepts, we introduce a few new and important concepts for this command.
+In addition to existing [traditional PTB](/develop/transactions/ptbs/prog-txn-blocks) related concepts, this command introduces a few new and important concepts.
 
 :::warning
 
-All the following examples were tested using a `bash` shell environment and your experience may vary depending on how your shell interprets the input values (e.g., zsh requires to pass values in brackets by adding quotes around it: "[]"; bash accepts them without quotes).
+All the following examples were tested using a `bash` shell environment and your experience might vary depending on how your shell interprets the input values (for example, zsh requires you to pass values in brackets by adding quotes around them: "[]"; bash accepts them without quotes).
 
 :::
 
@@ -55,7 +92,7 @@ To pass in multiple types, delimit them with a comma:
 
 ### Strings
 
-CLI PTBs support string literals as inputs, which will be encoded as pure values that can be used as inputs to `vector<u8>`, `std::ascii::String` and `std::string::String` parameters. The following example previews a transaction block that passes the string `"Hello, world"` to a function `m::f` in a package `$PKG` (its ID is held in an environment variable).
+CLI PTBs support string literals as inputs, which are encoded as pure values that can be used as inputs to `vector<u8>`, `std::ascii::String`, and `std::string::String` parameters. The following example previews a transaction block that passes the string `"Hello, world"` to a function `m::f` in a package `$PKG` (its ID is held in an environment variable).
 
 ```sh
 $ rtd client ptb --move-call "$PKG::m::f" '"Hello, world"' --gas-budget 10000000 --preview
@@ -69,7 +106,7 @@ Double-quoted string literals tend to also be valid syntax for shells (like `bas
 
 ### Addresses and Object IDs
 
-<ImportContent source="address-prefix.mdx" mode="snippet" />
+<ImportContent source="address-prefix" mode="snippet" />
 
 Here are some examples for `transfer-objects` and `gas-coin`:
 
@@ -107,6 +144,20 @@ For `none`, you can use the `none` keyword. For `some`, you can use the `some` k
 $ rtd client ptb --move-call "0x1::option::destroy_none" none
 ```
 
+### Address balance withdrawals
+
+CLI PTBs support address balance withdrawal inputs using `withdrawal(AMOUNT)` for RTD or `withdrawal<COIN_TYPE>(AMOUNT)` for another coin type. A withdrawal input creates a `Withdrawal<Balance<T>>` value that must be redeemed in the same PTB with `rtd::coin::redeem_funds<T>` or `rtd::balance::redeem_funds<T>`.
+
+```sh
+$ rtd client ptb \
+--move-call rtd::coin::redeem_funds "<rtd::rtd::RTD>" 'withdrawal(1000000000)' \
+--assign coin \
+--transfer-objects "[coin]" @0x02a212de6a9dfa3a69e22387acfbafbb1a9e591bd9d636e7895dcfc8de05f331 \
+--gas-budget 50000000
+```
+
+Quote the withdrawal literal in shells that treat `<`, `>`, or parentheses specially.
+
 ### Addresses
 
 ### Assign
@@ -116,7 +167,7 @@ Use the `--assign` argument to bind values to variables. There are two ways you 
 - assign a value to a variable
 - assign a variable to the result of the previous command
 
-Let's look at the first case where you assign a value to a variable. You want to check if some variable's value is `none`. Call the `0x1::option::is_none` function from the Move standard library, and pass in the variable name:
+In the first case, you assign a value to a variable. You want to check if some variable's value is `none`. Call the `0x1::option::is_none` function from the Move standard library, and pass in the variable name:
 
 ```sh
 $ rtd client ptb \
@@ -131,7 +182,7 @@ CLI PTB uses name resolution for common packages like `rtd`, `std`, `deepbook`, 
 
 :::
 
-In the second case, if a previous command outputs some result, you can bound it to a variable for later access. Let's see an example where you want a new coin with 1000 MIST, which you can achieve by using the `split-coins` command. After you do that, you want to transfer the new coin to another address. Without the `--assign` argument, you couldn't instruct the CLI to transfer that new coin object as you would not have a way to refer to it.
+In the second case, if a previous command outputs some result, you can bind it to a variable for later access. Consider an example where you want a new coin with 1000 MIST, which you can achieve by using the `split-coins` command. After you do that, you want to transfer the new coin to another address. Without the `--assign` argument, you couldn't instruct the CLI to transfer that new coin object as you would not have a way to refer to it.
 
 ```sh
 $ rtd client ptb \
@@ -174,7 +225,7 @@ To call a specific function from a specific package, you can use the following c
 
 ### Publish
 
-Publishing a package is one of the most important commands you need when working with Rtd. While the CLI has a standalone `publish` command, PTBs also support publishing and upgrading packages. One main difference is that with `rtd client ptb`, you must explicitly transfer the `UpgradeCap` object that is returned when creating a package, or destroy it with a call to [`make_immutable`](/concepts/rtd-move-concepts/packages.mdx). Here is an example on how to publish a Move project on chain using the `rtd client ptb` command. It makes a call to the `rtd::tx_context::sender` to acquire the sender and assigns the result of that call to the `sender` variable, and then calls the publish command. The result of `publish` is bounded to `upgrade_cap` variable, and then this object is transferred to the sender.
+Publishing a package is one of the most important commands you need when working with Rtd. While the CLI has a standalone `publish` command, PTBs also support publishing and upgrading packages. One main difference is that with `rtd client ptb`, you must explicitly transfer the `UpgradeCap` object that is returned when creating a package, or destroy it with a call to [`make_immutable`](/develop/publish-upgrade-packages). Here is an example on how to publish a Move project on chain using the `rtd client ptb` command. It makes a call to the `rtd::tx_context::sender` to acquire the sender and assigns the result of that call to the `sender` variable, and then calls the publish command. The result of `publish` is bound to the `upgrade_cap` variable, and then this object is transferred to the sender.
 
 ```sh
 $ rtd client ptb \

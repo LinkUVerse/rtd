@@ -6,6 +6,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -33,6 +36,15 @@ env:
   RUST_BACKTRACE: short
   # RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
+  # sccache role selection: trusted refs → RW role; same-repo pull_request → RO
+  # role (read-only, cannot poison the cache); forks / extensions / everything else
+  # → empty → setup-sccache falls back to a local cache. Forks are skipped because
+  # GitHub caps fork id-token to none (role-to-assume would hard-fail OIDC); this
+  # skip is a fail-safe, NOT a security boundary — the RO role still trusts
+  # pull_request (Decision A). The extensions branch is deliberately untrusted
+  # (dormant; see AWS_OIDC_MIGRATION_INVENTORY.md). No workflow_dispatch here, so no
+  # override-ref clause. Keep in sync with the rtd-sccache-{rw,ro}-github trusts.
+  SCCACHE_ROLE: ${{ (contains(fromJSON('["refs/heads/main","refs/heads/devnet","refs/heads/testnet","refs/heads/mainnet"]'), github.ref) || (startsWith(github.ref, 'refs/heads/releases/rtd-') && endsWith(github.ref, '-release'))) && vars.RTD_AWS_SCCACHE_RW_ROLE_ARN || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) && vars.RTD_AWS_SCCACHE_RO_ROLE_ARN || '' }}
 
 jobs:
   diff:
@@ -41,12 +53,15 @@ jobs:
       isRust: ${{ steps.diff.outputs.isRust }}
       isMove: ${{ steps.diff.outputs.isMove }}
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
       - name: Detect Changes
         uses: "./.github/actions/diffs"
         id: diff
 
   external-crates-test:
+    permissions:
+      contents: read
+      id-token: write # OIDC token to assume the sccache role on trusted refs
     needs: [diff, rustfmt, clippy]
     if: needs.diff.outputs.isRust == 'true'
     timeout-minutes: 45
@@ -62,10 +77,17 @@ jobs:
           - [ubuntu-ghcloud]
       fail-fast: false
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+      - uses: ./.github/actions/setup-sccache
+        with:
+          role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
+          key-prefix: ubuntu-ghcloud
       - uses: taiki-e/install-action@nextest
       - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
+        uses: pierotofy/set-swap-space@fc79b3f67fa8a838184ce84a674ca12238d2c761 # pin@master
         with:
           swap-size-gb: 256
       - name: Install python dependencies
@@ -94,11 +116,21 @@ jobs:
       - run: 'echo "No build required" '
 
   clippy:
+    permissions:
+      contents: read
+      id-token: write # OIDC token to assume the sccache role on trusted refs
     needs: diff
     if: needs.diff.outputs.isRust == 'true'
     runs-on: [ubuntu-ghcloud]
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+      - uses: ./.github/actions/setup-sccache
+        with:
+          role-to-assume: ${{ env.SCCACHE_ROLE }}
+          aws-account-id: ${{ vars.RTD_AWS_ACCOUNT_ID }}
+          sccache-bucket: ${{ vars.RTD_SCCACHE_BUCKET }}
+          aws-region: ${{ vars.RTD_AWS_REGION }}
+          key-prefix: ubuntu-ghcloud
       - run: rustup component add clippy
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
@@ -112,13 +144,10 @@ jobs:
     if: needs.diff.outputs.isRust == 'true'
     runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
       - run: rustup component add rustfmt
       - name: rustfmt
-        uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # pin@v1.0.3
-        with:
-          command: fmt
-          args: --check --all
+        run: cargo fmt --check --all
 
   cargo-deny:
     name: cargo-deny (advisories, licenses, bans, ...)
@@ -126,6 +155,6 @@ jobs:
     if: needs.diff.outputs.isRust == 'true'
     runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # Pin v4.1.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
       - uses: taiki-e/install-action@cargo-deny
       - run: cargo deny --manifest-path external-crates/move/Cargo.toml check --hide-inclusion-graph

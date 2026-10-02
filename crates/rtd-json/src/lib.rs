@@ -25,9 +25,9 @@ use serde_json::{Number, Value as JsonValue, json};
 
 use rtd_types::MOVE_STDLIB_ADDRESS;
 use rtd_types::base_types::{
-    ObjectID, RESOLVED_ASCII_STR, RESOLVED_STD_OPTION, RESOLVED_UTF8_STR, STD_ASCII_MODULE_NAME,
-    STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME, STD_OPTION_STRUCT_NAME, STD_UTF8_MODULE_NAME,
-    STD_UTF8_STRUCT_NAME, RtdAddress, TxContext, TxContextKind, is_primitive_type_tag,
+    ObjectID, RESOLVED_ASCII_STR, RESOLVED_STD_OPTION, RESOLVED_UTF8_STR, RtdAddress,
+    STD_ASCII_MODULE_NAME, STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME, STD_OPTION_STRUCT_NAME,
+    STD_UTF8_MODULE_NAME, STD_UTF8_STRUCT_NAME, TxContext, TxContextKind, is_primitive_type_tag,
     move_ascii_str_layout, move_utf8_str_layout,
 };
 use rtd_types::id::{self, ID, RESOLVED_RTD_ID};
@@ -575,9 +575,11 @@ pub fn primitive_type(
         SignatureToken::U128 => MoveTypeLayout::U128,
         SignatureToken::U256 => MoveTypeLayout::U256,
         SignatureToken::Address => MoveTypeLayout::Address,
+
         SignatureToken::Vector(inner) => {
             MoveTypeLayout::Vector(Box::new(primitive_type(view, type_args, inner)?))
         }
+
         SignatureToken::Datatype(struct_handle_idx) => {
             let resolved_struct = resolve_struct(view, *struct_handle_idx);
             if resolved_struct == RESOLVED_ASCII_STR {
@@ -591,6 +593,7 @@ pub fn primitive_type(
                 return None;
             }
         }
+
         SignatureToken::DatatypeInstantiation(struct_inst) => {
             let (idx, targs) = &**struct_inst;
             let resolved_struct = resolve_struct(view, *idx);
@@ -602,12 +605,16 @@ pub fn primitive_type(
                 return None;
             }
         }
+
         SignatureToken::TypeParameter(idx) => {
             layout_of_primitive_typetag(type_args.get(*idx as usize)?)?
         }
-        SignatureToken::Signer
-        | SignatureToken::Reference(_)
-        | SignatureToken::MutableReference(_) => return None,
+
+        SignatureToken::Reference(sig) | SignatureToken::MutableReference(sig) => {
+            primitive_type(view, type_args, sig)?
+        }
+
+        SignatureToken::Signer => return None,
     })
 }
 
@@ -786,6 +793,8 @@ fn resolve_call_args(
     json_args: &[RtdJsonValue],
     parameter_types: &[SignatureToken],
 ) -> Result<Vec<ResolvedCallArg>, anyhow::Error> {
+    #[allow(clippy::disallowed_methods)]
+    // Intentional zip: parameter_types includes implicit TxContext params not in json_args
     json_args
         .iter()
         .zip(parameter_types)
@@ -838,6 +847,8 @@ pub fn resolve_move_function_args(
     }
     // Check that the args are valid and convert to the correct format
     let call_args = resolve_call_args(&module, type_args, &combined_args_json, parameters)?;
+    #[allow(clippy::disallowed_methods)]
+    // Intentional zip: parameters includes implicit TxContext param not in call_args
     let tupled_call_args = call_args
         .into_iter()
         .zip(parameters.iter())

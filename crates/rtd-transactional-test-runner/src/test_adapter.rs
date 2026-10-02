@@ -25,42 +25,30 @@ use move_compiler::{
 };
 use move_core_types::ident_str;
 use move_core_types::parsing::address::ParsedAddress;
+use move_core_types::parsing::values::ParsedValue;
 use move_core_types::{
     account_address::AccountAddress,
-    identifier::IdentStr,
+    identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, TypeTag},
 };
 use move_symbol_pool::Symbol;
 use move_transactional_test_runner::framework::MaybeNamedCompiledModule;
 use move_transactional_test_runner::tasks::TaskCommand;
 use move_transactional_test_runner::{
-    framework::{CompiledState, MoveTestAdapter, compile_any, store_modules},
+    framework::{CompiledState, MoveTestAdapter, PreCompiledDeps, compile_any, store_modules},
     tasks::{InitCommand, RunCommand, SyntaxChoice, TaskInput},
 };
-use move_vm_runtime::session::SerializedReturnValues;
-use once_cell::sync::Lazy;
+use move_vm_runtime::dev_utils::vm_arguments::ValueFrame;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use serde::Deserialize;
-use serde_json::Value;
-use std::borrow::Cow;
-use std::collections::HashSet;
-use std::fmt::{self, Write};
-use std::path::PathBuf;
-use std::time::Duration;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::Path,
-    sync::Arc,
-};
 use rtd_core::authority::AuthorityState;
 use rtd_core::authority::shared_object_version_manager::AssignedVersions;
 use rtd_core::authority::test_authority_builder::TestAuthorityBuilder;
-use rtd_framework::DEFAULT_FRAMEWORK_PATH;
-use rtd_graphql_rpc::test_infra::cluster::{RetentionConfig, SnapshotLagConfig};
+use rtd_framework::{BuiltInFramework, DEFAULT_FRAMEWORK_PATH};
 use rtd_json_rpc_api::QUERY_MAX_RESULT_LIMIT;
 use rtd_json_rpc_types::{
-    DevInspectResults, DryRunTransactionBlockResponse, RtdAccumulatorOperation, RtdExecutionStatus,
-    RtdTransactionBlockEffects, RtdTransactionBlockEffectsAPI, RtdTransactionBlockEvents,
+    DevInspectResults, DryRunTransactionBlockResponse, RtdAccumulatorOperation,
+    RtdAccumulatorValue, RtdExecutionStatus, RtdTransactionBlockEffects,
+    RtdTransactionBlockEffectsAPI, RtdTransactionBlockEvents,
 };
 use rtd_protocol_config::{
     Chain, ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
@@ -71,16 +59,20 @@ use rtd_storage::{
 };
 use rtd_swarm_config::genesis_config::AccountConfig;
 use rtd_swarm_config::network_config_builder::KeyPairWrapper;
+use rtd_types::accumulator_root::AccumulatorValue;
 use rtd_types::base_types::{SequenceNumber, VersionNumber};
 use rtd_types::committee::EpochId;
 use rtd_types::crypto::{
     AuthorityKeyPair, AuthorityPublicKeyBytes, RandomnessRound, get_authority_key_pair,
 };
-use rtd_types::digests::{ConsensusCommitDigest, TransactionDigest};
-use rtd_types::effects::{
-    AccumulatorOperation, TransactionEffects, TransactionEffectsAPI, TransactionEvents,
+use rtd_types::digests::{
+    ChainIdentifier, CheckpointDigest, ConsensusCommitDigest, TransactionDigest,
 };
-use rtd_types::execution_status::ExecutionFailureStatus;
+use rtd_types::effects::{
+    AccumulatorOperation, AccumulatorValue as EffectsAccumulatorValue, TransactionEffects,
+    TransactionEffectsAPI, TransactionEvents,
+};
+use rtd_types::execution_status::ExecutionErrorKind;
 use rtd_types::messages_checkpoint::{
     CheckpointContents, CheckpointContentsDigest, CheckpointSequenceNumber, VerifiedCheckpoint,
 };
@@ -91,11 +83,12 @@ use rtd_types::storage::{ObjectStore, RpcStateReader};
 use rtd_types::transaction::Command;
 use rtd_types::transaction::ProgrammableTransaction;
 use rtd_types::utils::to_sender_signed_transaction_with_multi_signers;
-use rtd_types::{BRIDGE_ADDRESS, MOVE_STDLIB_PACKAGE_ID};
+use rtd_types::{BRIDGE_ADDRESS, MOVE_STDLIB_PACKAGE_ID, RTD_DISPLAY_REGISTRY_OBJECT_ID};
 use rtd_types::{DEEPBOOK_ADDRESS, RTD_DENY_LIST_OBJECT_ID};
 use rtd_types::{DEEPBOOK_PACKAGE_ID, RTD_RANDOMNESS_STATE_OBJECT_ID};
 use rtd_types::{
-    MOVE_STDLIB_ADDRESS, RTD_CLOCK_OBJECT_ID, RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_STATE_OBJECT_ID,
+    MOVE_STDLIB_ADDRESS, RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_CLOCK_OBJECT_ID,
+    RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_STATE_OBJECT_ID,
     base_types::{ObjectID, ObjectRef, RTD_ADDRESS_LENGTH, RtdAddress},
     crypto::{AccountKeyPair, get_key_pair_from_rng},
     event::Event,
@@ -107,11 +100,30 @@ use rtd_types::{
     programmable_transaction_builder::ProgrammableTransactionBuilder,
 };
 use rtd_types::{RTD_SYSTEM_PACKAGE_ID, utils::to_sender_signed_transaction};
-use rtd_types::{execution_status::ExecutionStatus, transaction::TransactionKind};
-use rtd_types::{gas::GasCostSummary, object::GAS_VALUE_FOR_TESTING};
+use rtd_types::{balance::Balance, gas_coin::GAS};
+use rtd_types::{
+    coin_reservation::ParsedObjectRefWithdrawal, gas::GasCostSummary, object::GAS_VALUE_FOR_TESTING,
+};
+use rtd_types::{
+    execution_status::{ExecutionFailure, ExecutionStatus},
+    transaction::TransactionKind,
+};
 use rtd_types::{
     move_package::MovePackage,
     transaction::{Argument, CallArg, TransactionDataAPI, TransactionExpiration},
+};
+use serde::Deserialize;
+use serde_json::Value;
+use simulacrum::SimulatorStore;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::fmt::{self, Write};
+use std::path::PathBuf;
+use std::time::Duration;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+    sync::{Arc, LazyLock},
 };
 use tempfile::{NamedTempFile, tempdir};
 
@@ -133,6 +145,8 @@ const WELL_KNOWN_OBJECTS: &[ObjectID] = &[
     RTD_DENY_LIST_OBJECT_ID,
     RTD_RANDOMNESS_STATE_OBJECT_ID,
     RTD_COIN_REGISTRY_OBJECT_ID,
+    RTD_DISPLAY_REGISTRY_OBJECT_ID,
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID,
 ];
 // TODO use the file name as a seed
 const RNG_SEED: [u8; 32] = [
@@ -145,19 +159,6 @@ const GAS_FOR_TESTING: u64 = GAS_VALUE_FOR_TESTING;
 
 const DEFAULT_CHAIN_START_TIMESTAMP: u64 = 0;
 
-/// Extra args related to configuring the indexer and reader.
-// TODO: the configs are still tied to the indexer crate, eventually we'd like a new command that is
-// more agnostic
-pub struct OffChainConfig {
-    pub snapshot_config: SnapshotLagConfig,
-    pub retention_config: Option<RetentionConfig>,
-    /// Dir for simulacrum to write checkpoint files to. To be passed to the offchain indexer if it
-    /// uses file-based ingestion.
-    pub data_ingestion_path: PathBuf,
-    /// URL for the Rtd REST API. To be passed to the offchain indexer if it uses the REST API.
-    pub rest_api_url: Option<String>,
-}
-
 pub struct RtdTestAdapter {
     pub(crate) compiled_state: CompiledState,
     /// For upgrades: maps an upgraded package name to the original package name.
@@ -168,6 +169,11 @@ pub struct RtdTestAdapter {
     object_enumeration: BiBTreeMap<ObjectID, FakeID>,
     /// Mapping from task ID to a transaction digest, for use in named variable substitution.
     digest_enumeration: BTreeMap<u64, TransactionDigest>,
+    /// Mapping from a checkpoint's sequence number to its digest, for use in named variable
+    /// substitution as `@{cp_digest_N}`.
+    cp_digest_enumeration: BTreeMap<u64, CheckpointDigest>,
+    /// Tracks the global creation order of each object across all transactions.
+    creation_order: BTreeMap<ObjectID, u64>,
     next_fake: (u64, u64),
     gas_price: u64,
     pub(crate) staged_modules: BTreeMap<Symbol, StagedPackage>,
@@ -182,6 +188,18 @@ pub struct RtdTestAdapter {
     pub offchain_config: Option<OffChainConfig>,
     /// A trait encapsulating methods to interact with offchain state.
     pub offchain_reader: Option<Box<dyn OffchainStateReader>>,
+    /// Override for the file format version used when serializing compiled modules.
+    file_format_version: Option<u32>,
+}
+
+/// Extra args related to configuring the indexer and reader.
+pub struct OffChainConfig {
+    pub consistent_range: usize,
+    /// Dir for simulacrum to write checkpoint files to. To be passed to the offchain indexer if it
+    /// uses file-based ingestion.
+    pub data_ingestion_path: PathBuf,
+    /// URL for the Rtd REST API. To be passed to the offchain indexer if it uses the REST API.
+    pub rest_api_url: Option<String>,
 }
 
 struct AdapterInitConfig {
@@ -196,6 +214,8 @@ struct AdapterInitConfig {
     /// Configuration for offchain state reader read from the file itself, and can be passed to the
     /// specific indexing and reader flavor.
     offchain_config: Option<OffChainConfig>,
+    /// Override for the file format version used when serializing compiled modules.
+    file_format_version: Option<u32>,
 }
 
 pub(crate) struct StagedPackage {
@@ -222,7 +242,13 @@ struct TxnSummary {
     wrapped: Vec<ObjectID>,
     unchanged_shared: Vec<ObjectID>,
     events: Vec<Event>,
-    accumulators_written: Vec<(ObjectID, RtdAddress, TypeTag, AccumulatorOperation)>,
+    accumulators_written: Vec<(
+        ObjectID,
+        RtdAddress,
+        TypeTag,
+        AccumulatorOperation,
+        EffectsAccumulatorValue,
+    )>,
     gas_summary: GasCostSummary,
 }
 
@@ -232,21 +258,22 @@ impl AdapterInitConfig {
         let RtdInitArgs {
             accounts,
             protocol_version,
+            chain,
             max_gas,
-            shared_object_deletion,
             simulator,
             num_custom_validator_accounts,
             reference_gas_price,
             default_gas_price,
-            snapshot_config,
             flavor,
-            epochs_to_keep,
+            consistent_range,
             data_ingestion_path,
             rest_api_url,
-            enable_accumulators,
-            enable_authenticated_event_streams,
-            allow_references_in_ptbs,
-            enable_non_exclusive_writes,
+            file_format_version,
+            enable_gasless,
+            gasless_max_pure_input_bytes,
+            gasless_max_unused_inputs,
+            enable_feature_flags,
+            disable_feature_flags,
         } = rtd_args;
 
         let map = verify_and_create_named_address_mapping(named_addresses).unwrap();
@@ -254,6 +281,7 @@ impl AdapterInitConfig {
             .map(|v| v.into_iter().collect::<BTreeSet<_>>())
             .unwrap_or_default();
 
+        let chain = chain.unwrap_or(Chain::Unknown);
         let mut protocol_config = if let Some(protocol_version) = protocol_version {
             assert!(
                 protocol_version <= ProtocolVersion::max().as_u64(),
@@ -266,24 +294,32 @@ impl AdapterInitConfig {
                 "Do not set the protocol version to the max {}. It can lead to unanticipated test changes once the max version is bumped. Instead, leave it unset to always use the max version.",
                 protocol_version,
             );
-            ProtocolConfig::get_for_version(protocol_version.into(), Chain::Unknown)
+            ProtocolConfig::get_for_version(protocol_version.into(), chain)
         } else {
-            ProtocolConfig::get_for_max_version_UNSAFE()
+            ProtocolConfig::get_for_version(ProtocolVersion::MAX, chain)
         };
-        if enable_accumulators {
-            protocol_config.enable_accumulators_for_testing();
+        if enable_gasless {
+            protocol_config.enable_gasless_for_testing();
         }
-        if enable_authenticated_event_streams {
-            protocol_config.enable_authenticated_event_streams_for_testing();
+        if let Some(max_bytes) = gasless_max_pure_input_bytes {
+            assert!(
+                enable_gasless,
+                "gasless-max-pure-input-bytes requires --enable-gasless"
+            );
+            protocol_config.set_gasless_max_pure_input_bytes_for_testing(max_bytes);
         }
-        if allow_references_in_ptbs {
-            protocol_config.allow_references_in_ptbs_for_testing();
+        if let Some(max_unused) = gasless_max_unused_inputs {
+            assert!(
+                enable_gasless,
+                "gasless-max-unused-inputs requires --enable-gasless"
+            );
+            protocol_config.set_gasless_max_unused_inputs_for_testing(max_unused);
         }
-        if enable_non_exclusive_writes {
-            protocol_config.enable_non_exclusive_writes_for_testing();
+        for flag in enable_feature_flags {
+            protocol_config.set_feature_flag_for_testing(flag, true);
         }
-        if let Some(enable) = shared_object_deletion {
-            protocol_config.set_shared_object_deletion_for_testing(enable);
+        for flag in disable_feature_flags {
+            protocol_config.set_feature_flag_for_testing(flag, false);
         }
         // Older protocol versions use deprecated congestion control modes. Override to use
         // ExecutionTimeEstimate mode which is the only supported mode.
@@ -307,17 +343,10 @@ impl AdapterInitConfig {
         if num_custom_validator_accounts > 0 && !simulator {
             panic!("Can only set custom validator account in simulator mode");
         }
-        if reference_gas_price.is_some() && !simulator {
-            panic!("Can only set reference gas price in simulator mode");
-        }
 
         let offchain_config = if simulator {
-            let retention_config =
-                epochs_to_keep.map(RetentionConfig::new_with_default_retention_only_for_testing);
-
             Some(OffChainConfig {
-                snapshot_config,
-                retention_config,
+                consistent_range,
                 data_ingestion_path: data_ingestion_path.unwrap_or(tempdir().unwrap().keep()),
                 rest_api_url,
             })
@@ -335,6 +364,7 @@ impl AdapterInitConfig {
             default_gas_price,
             flavor,
             offchain_config,
+            file_format_version,
         }
     }
 }
@@ -360,7 +390,8 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
         >,
     ) -> Option<String> {
         match &task.command {
-            TaskCommand::Subcommand(RtdSubcommand::ProgrammableTransaction(..)) => {
+            TaskCommand::Subcommand(RtdSubcommand::ProgrammableTransaction(..))
+            | TaskCommand::Subcommand(RtdSubcommand::BenchProgrammable(..)) => {
                 let data_str = std::fs::read_to_string(task.data.as_ref()?)
                     .ok()?
                     .trim()
@@ -371,6 +402,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             | TaskCommand::PrintBytecode(_)
             | TaskCommand::Publish(_, _)
             | TaskCommand::Run(_, _)
+            | TaskCommand::PublishAndCall(_, _)
             | TaskCommand::Subcommand(..) => None,
         }
     }
@@ -385,7 +417,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
 
     async fn init(
         default_syntax: SyntaxChoice,
-        pre_compiled_deps: Option<Arc<PreCompiledProgramInfo>>,
+        pre_compiled_deps: Option<PreCompiledDeps>,
         task_opt: Option<
             move_transactional_test_runner::tasks::TaskInput<(
                 move_transactional_test_runner::tasks::InitCommand,
@@ -395,10 +427,11 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
         _path: &Path,
     ) -> (Self, Option<String>) {
         let rng = StdRng::from_seed(RNG_SEED);
-        assert!(
-            pre_compiled_deps.is_some(),
-            "Must populate 'pre_compiled_deps' with Rtd framework"
-        );
+        let pre_compiled_deps =
+            pre_compiled_deps.expect("Must populate 'pre_compiled_deps' with Rtd framework");
+        // Overlap framework compilation with executor setup.
+        let framework_compile =
+            tokio::task::spawn_blocking(move || Arc::clone(LazyLock::force(pre_compiled_deps)));
 
         // Unpack the init arguments
         let AdapterInitConfig {
@@ -411,6 +444,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             default_gas_price,
             flavor,
             offchain_config,
+            file_format_version,
         } = match task_opt.map(|t| t.command) {
             Some((init_cmd, rtd_args)) => AdapterInitConfig::from_args(init_cmd, rtd_args),
             None => AdapterInitConfig::default(),
@@ -442,11 +476,23 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             )
             .await
         } else {
-            init_val_fullnode_executor(rng, account_names, additional_mapping, &protocol_config)
-                .await
+            init_val_fullnode_executor(
+                rng,
+                account_names,
+                additional_mapping,
+                &protocol_config,
+                reference_gas_price,
+            )
+            .await
         };
 
         let object_ids = objects.iter().map(|obj| obj.id()).collect::<Vec<_>>();
+
+        let pre_compiled_deps = framework_compile
+            .await
+            .expect("framework compilation panicked");
+
+        rtd_types::transaction::clear_gasless_tokens_for_testing();
 
         let mut test_adapter = Self {
             is_simulator,
@@ -457,7 +503,8 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             read_replica,
             compiled_state: CompiledState::new(
                 named_address_mapping,
-                pre_compiled_deps,
+                Some(pre_compiled_deps),
+                BuiltInFramework::iter_system_packages().flat_map(|package| package.modules()),
                 Some(NumericalAddress::new(
                     AccountAddress::ZERO.into_bytes(),
                     NumberFormat::Hex,
@@ -471,10 +518,13 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             default_syntax,
             object_enumeration: BiBTreeMap::new(),
             digest_enumeration: BTreeMap::new(),
+            cp_digest_enumeration: BTreeMap::new(),
+            creation_order: BTreeMap::new(),
             next_fake: (0, 0),
             // TODO: make this configurable
             gas_price: default_gas_price.unwrap_or(DEFAULT_GAS_PRICE),
             staged_modules: BTreeMap::new(),
+            file_format_version,
         };
 
         for well_known in WELL_KNOWN_OBJECTS.iter().copied() {
@@ -498,6 +548,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
         } else {
             Some(output)
         };
+
         (test_adapter, output)
     }
 
@@ -522,7 +573,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             .map(|m| {
                 let mut module_bytes = vec![];
                 m.module
-                    .serialize_with_version(m.module.version, &mut module_bytes)
+                    .serialize_with_version(self.serialize_version(&m.module), &mut module_bytes)
                     .unwrap();
                 Ok(module_bytes)
             })
@@ -556,7 +607,11 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 builder.publish_immutable(modules_bytes, dependencies);
             };
             let pt = builder.finish();
-            let payments = self.get_payments(sender_acc, vec![]);
+            let payments = vec![
+                self.get_object(&sender_acc.gas, None)
+                    .unwrap()
+                    .compute_object_reference(),
+            ];
 
             let transaction = TransactionData::new_programmable(
                 sender_acc.address,
@@ -644,7 +699,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
         args: Vec<RtdValue>,
         gas_budget: Option<u64>,
         extra: Self::ExtraRunArgs,
-    ) -> anyhow::Result<(Option<String>, SerializedReturnValues)> {
+    ) -> anyhow::Result<(Option<String>, ValueFrame)> {
         self.next_task();
         let RtdRunArgs { summarize, .. } = extra;
         let transaction = self.build_function_call_tx(
@@ -652,10 +707,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
         )?;
         let summary = self.execute_txn(transaction).await?;
         let output = self.object_summary_output(&summary, summarize);
-        let empty = SerializedReturnValues {
-            mutable_reference_outputs: vec![],
-            return_values: vec![],
-        };
+        let empty = ValueFrame::empty();
         Ok((output, empty))
     }
 
@@ -673,6 +725,8 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             stop_line,
             data,
             task_text,
+            unattached_comments_before: _,
+            unattached_comments_after: _,
         } = task;
         macro_rules! get_obj {
             ($fake_id:ident, $version:expr) => {{
@@ -694,6 +748,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             }};
             ($fake_id:ident) => {{ get_obj!($fake_id, None) }};
         }
+        let bench_programmable = matches!(&command, RtdSubcommand::BenchProgrammable(_));
         match command {
             RtdSubcommand::RunGraphql(RunGraphqlCommand {
                 show_usage,
@@ -793,6 +848,20 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 write!(&mut output, "Response: {}", resp.response_body).unwrap();
                 Ok(Some(output))
             }
+            RtdSubcommand::GaslessAllowToken(GaslessAllowTokenCommand {
+                token_type,
+                min_transfer,
+            }) => {
+                let state = self.compiled_state();
+                let type_tag = token_type
+                    .into_type_tag(&|s| Some(state.resolve_named_address(s)))
+                    .map_err(|e| anyhow::anyhow!("invalid gasless token type: {e}"))?;
+                rtd_types::transaction::add_gasless_token_for_testing(
+                    type_tag.to_canonical_string(true),
+                    min_transfer,
+                );
+                Ok(None)
+            }
             RtdSubcommand::ViewCheckpoint => {
                 let latest_chk = self.executor.get_latest_checkpoint_sequence_number()?;
                 let chk = self
@@ -803,7 +872,10 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             }
             RtdSubcommand::CreateCheckpoint(CreateCheckpointCommand { count }) => {
                 for _ in 0..count.unwrap_or(1) {
-                    self.executor.create_checkpoint().await?;
+                    let checkpoint = self.executor.create_checkpoint().await?;
+                    let summary = checkpoint.data();
+                    self.cp_digest_enumeration
+                        .insert(summary.sequence_number, *checkpoint.digest());
                 }
                 let latest_chk = self.executor.get_latest_checkpoint_sequence_number()?;
                 Ok(Some(format!("Checkpoint created: {}", latest_chk)))
@@ -950,21 +1022,60 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     }
                 }))
             }
+            RtdSubcommand::ViewFunds(ViewFundsCommand {
+                funds_type,
+                address: address_str,
+            }) => {
+                let type_tag = funds_type.into_type_tag(&|s| {
+                    Some(
+                        self.compiled_state
+                            .named_address_mapping
+                            .get(s)?
+                            .into_inner(),
+                    )
+                })?;
+                let address = match self.accounts.get(&address_str) {
+                    Some(test_account) => test_account.address,
+                    None => panic!("Unbound account {}", address_str),
+                };
+                let acc_obj_id = AccumulatorValue::get_field_id(address, &type_tag)?;
+                let obj = match ObjectStore::get_object(&*self.executor, acc_obj_id.inner()) {
+                    Some(obj) => obj,
+                    None => {
+                        return Ok(Some("No funds accumulator object found".to_owned()));
+                    }
+                };
+                let move_obj = obj.data.try_as_move().unwrap();
+                let acc_value = AccumulatorValue::try_from(move_obj).unwrap();
+                let value = acc_value.as_u128().unwrap();
+                Ok(Some(format!("{}", value)))
+            }
             RtdSubcommand::TransferObject(TransferObjectCommand {
                 id: fake_id,
                 recipient,
                 sender,
                 gas_budget,
+                address_balance_gas,
                 gas_price,
             }) => {
                 let mut builder = ProgrammableTransactionBuilder::new();
-                let obj_arg = RtdValue::Object(fake_id, None).into_argument(&mut builder, self)?;
+                let sender_address = self.get_sender(sender.clone()).address;
+                let obj_arg = RtdValue::Object(fake_id, None).into_argument(
+                    &mut builder,
+                    self,
+                    sender_address,
+                )?;
                 let recipient = match self.accounts.get(&recipient) {
                     Some(test_account) => test_account.address,
                     None => panic!("Unbound account {}", recipient),
                 };
-                let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
                 let gas_price: u64 = gas_price.unwrap_or(self.gas_price);
+                let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
+                let expiration = if address_balance_gas {
+                    self.get_replay_protected_expiration()
+                } else {
+                    TransactionExpiration::None
+                };
                 let transaction = self.sign_txn(sender, |sender, gas| {
                     let rec_arg = builder.pure(recipient).unwrap();
                     builder.command(rtd_types::transaction::Command::TransferObjects(
@@ -972,7 +1083,11 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                         rec_arg,
                     ));
                     let pt = builder.finish();
-                    TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price)
+                    let gas = if address_balance_gas { vec![] } else { gas };
+                    let mut tx_data =
+                        TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price);
+                    *tx_data.expiration_mut_for_testing() = expiration;
+                    tx_data
                 });
                 let summary = self.execute_txn(transaction).await?;
                 let output = self.object_summary_output(&summary, /* summarize */ false);
@@ -996,6 +1111,19 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 sender,
                 sponsor,
                 gas_budget,
+                address_balance_gas,
+                gas_price,
+                gas_payment,
+                dev_inspect,
+                dry_run,
+                expiration,
+                inputs,
+            })
+            | RtdSubcommand::BenchProgrammable(ProgrammableTransactionCommand {
+                sender,
+                sponsor,
+                gas_budget,
+                address_balance_gas,
                 gas_price,
                 gas_payment,
                 dev_inspect,
@@ -1003,6 +1131,9 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 expiration,
                 inputs,
             }) => {
+                if bench_programmable && (dev_inspect || dry_run) {
+                    bail!("bench ptb does not support dev-inspect or dry-run");
+                }
                 if dev_inspect && self.is_simulator() {
                     bail!("Dev inspect is not supported on simulator mode");
                 }
@@ -1012,17 +1143,22 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 }
 
                 let inputs = self.compiled_state().resolve_args(inputs)?;
+                let sender_address = self.get_sender(sender.clone()).address;
                 let inputs: Vec<CallArg> = inputs
                     .into_iter()
-                    .map(|arg| arg.into_call_arg(self))
+                    .map(|arg| arg.into_call_arg(self, sender_address))
                     .collect::<anyhow::Result<_>>()?;
-                let file = data.ok_or_else(|| {
-                    anyhow::anyhow!("Missing commands for programmable transaction")
-                })?;
-                let contents = std::fs::read_to_string(file.path())?;
+                // `data` is absent when taskification finds no input text (rather than creating an
+                // empty temporary file), including when comments are rendered separately in
+                // snapshots. Treat it as empty input instead of rejecting an empty transaction.
+                let contents = match data {
+                    Some(file) => std::fs::read_to_string(file.path())?,
+                    None => String::new(),
+                };
                 let commands = ParsedCommand::parse_vec(&contents)?;
                 let staged = &self.staged_modules;
                 let state = &self.compiled_state;
+                let file_format_version = self.file_format_version;
                 let commands = commands
                     .into_iter()
                     .map(|c| {
@@ -1034,9 +1170,9 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                                     .iter()
                                     .map(|m| {
                                         let mut buf = vec![];
-                                        m.module
-                                            .serialize_with_version(m.module.version, &mut buf)
-                                            .unwrap();
+                                        let version =
+                                            file_format_version.unwrap_or(m.module.version);
+                                        m.module.serialize_with_version(version, &mut buf).unwrap();
                                         buf
                                     })
                                     .collect();
@@ -1047,16 +1183,35 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     })
                     .collect::<anyhow::Result<Vec<Command>>>()?;
 
+                if dev_inspect {
+                    assert!(
+                        gas_budget.is_none(),
+                        "Meaningless to set gas budget with dev-inspect"
+                    );
+                }
+
+                let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
+
                 let summary = if !dev_inspect && !dry_run {
-                    let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
                     let gas_price = gas_price.unwrap_or(self.gas_price);
-                    let expiration = expiration
-                        .map(TransactionExpiration::Epoch)
-                        .unwrap_or(TransactionExpiration::None);
+                    let expiration = match expiration {
+                        Some(epoch) => TransactionExpiration::Epoch(epoch),
+                        None if address_balance_gas => self.get_replay_protected_expiration(),
+                        None => TransactionExpiration::None,
+                    };
+                    let sender_acc = self.get_sender(sender.clone());
+                    let sponsor_acc = sponsor
+                        .clone()
+                        .map_or(sender_acc, |a| self.get_sender(Some(a)));
+                    let payment_refs = if address_balance_gas {
+                        vec![]
+                    } else {
+                        self.resolve_gas_payments(sponsor_acc, gas_payment)?
+                    };
                     let transaction = self.sign_sponsor_txn(
                         sender,
                         sponsor,
-                        gas_payment.unwrap_or_default(),
+                        payment_refs,
                         |sender, sponsor, gas| {
                             let mut tx_data = TransactionData::new_programmable_allow_sponsor(
                                 sender,
@@ -1070,17 +1225,43 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                             tx_data
                         },
                     );
+                    if bench_programmable {
+                        let assigned_versions = AssignedVersions::empty();
+                        let objects = self
+                            .executor
+                            .read_input_objects(transaction.clone(), assigned_versions)
+                            .await?;
+                        // only run benchmarks in release mode
+                        if !cfg!(debug_assertions) {
+                            let mut c = Criterion::default();
+                            let bench_name = format!("benchmark_tx_task_{number}");
+                            c.bench_function(&bench_name, |b| {
+                                let tx = transaction.clone();
+                                let objects = objects.clone();
+                                b.iter(|| {
+                                    self.executor
+                                        .prepare_txn(tx.clone(), objects.clone())
+                                        .unwrap();
+                                })
+                            });
+                        }
+                    }
                     self.execute_txn(transaction).await?
                 } else if dry_run {
-                    let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
                     let gas_price = gas_price.unwrap_or(self.gas_price);
-                    let expiration = expiration
-                        .map(TransactionExpiration::Epoch)
-                        .unwrap_or(TransactionExpiration::None);
+                    let expiration = match expiration {
+                        Some(epoch) => TransactionExpiration::Epoch(epoch),
+                        None if address_balance_gas => self.get_replay_protected_expiration(),
+                        None => TransactionExpiration::None,
+                    };
                     let sender = self.get_sender(sender);
                     let sponsor = sponsor.map_or(sender, |a| self.get_sender(Some(a)));
 
-                    let payments = self.get_payments(sponsor, gas_payment.unwrap_or_default());
+                    let payments = if address_balance_gas {
+                        vec![]
+                    } else {
+                        self.resolve_gas_payments(sponsor, gas_payment)?
+                    };
 
                     let mut transaction = TransactionData::new_programmable(
                         sender.address,
@@ -1092,10 +1273,6 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     *transaction.expiration_mut_for_testing() = expiration;
                     self.dry_run(transaction).await?
                 } else {
-                    assert!(
-                        gas_budget.is_none(),
-                        "Meaningless to set gas budget with dev-inspect"
-                    );
                     let sender_address = self.get_sender(sender).address;
                     let transaction =
                         TransactionKind::ProgrammableTransaction(ProgrammableTransaction {
@@ -1114,6 +1291,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 dependencies,
                 sender,
                 gas_budget,
+                address_balance_gas,
                 dry_run,
                 syntax,
                 policy,
@@ -1158,6 +1336,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     original_package_addrs.push((*dep, dep_address));
                 }
                 let gas_price = gas_price.unwrap_or(self.gas_price);
+                let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
 
                 let result = compile_any(
                     self,
@@ -1203,6 +1382,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                             dry_run,
                             policy,
                             gas_price,
+                            address_balance_gas,
                         ).await?;
                         Ok((output, modules))
                     },
@@ -1219,7 +1399,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                         .named_address_mapping
                         .insert(package, before_upgrade);
                 }
-                let (warnings_opt, output, data, modules) = result?;
+                let (warnings_opt, data, (output, modules)) = result?;
                 // skip storing modules if this is a dry run
                 if !dry_run {
                     store_modules(self, syntax, data, modules);
@@ -1231,7 +1411,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 dependencies,
             }) => {
                 let syntax = syntax.unwrap_or_else(|| self.default_syntax());
-                let (warnings_opt, output, data, modules) = compile_any(
+                let (warnings_opt, data, (output, modules)) = compile_any(
                     self,
                     "upgrade",
                     syntax,
@@ -1266,7 +1446,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     .map(|m| {
                         let mut buf = vec![];
                         m.module
-                            .serialize_with_version(m.module.version, &mut buf)
+                            .serialize_with_version(self.serialize_version(&m.module), &mut buf)
                             .unwrap();
                         buf
                     })
@@ -1332,8 +1512,11 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     RtdValue::Shared(_, _, _) => {
                         bail!("shared object is not supported as an input")
                     }
-                    RtdValue::Withdraw(_, _) => {
+                    RtdValue::Withdraw(_, _) | RtdValue::AllowanceWithdraw(_, _, _, _) => {
                         bail!("withdraw reservation is not supported as an input for set-address")
+                    }
+                    RtdValue::CoinReservation(_, _) => {
+                        bail!("coin reservation is not supported as an input for set-address")
                     }
                 };
                 let value = NumericalAddress::new(value.into_bytes(), NumberFormat::Hex);
@@ -1390,7 +1573,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                     .unwrap();
 
                 // Note: benchmark does not support shared object version assignment
-                let assigned_versions = AssignedVersions::default();
+                let assigned_versions = AssignedVersions::empty();
                 let objects = self
                     .executor
                     .read_input_objects(tx.clone(), assigned_versions)
@@ -1400,7 +1583,8 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 if !cfg!(debug_assertions) {
                     let mut c = Criterion::default();
 
-                    c.bench_function("benchmark_tx", |b| {
+                    let bench_name = format!("benchmark_tx_task_{number}");
+                    c.bench_function(&bench_name, |b| {
                         let tx = tx.clone();
                         let objects = objects.clone();
                         b.iter(|| {
@@ -1449,6 +1633,24 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
         }
         anyhow!(err)
     }
+
+    /// Rtd implements module publishes with calls via normal publish with `init` functions.
+    /// When we add init functions with arguments, we will need to implement this. For now we leave
+    /// this unimplemented.
+    async fn publish_modules_with_calls(
+        &mut self,
+        _modules: Vec<MaybeNamedCompiledModule>,
+        _calls: Vec<(ModuleId, Identifier, Vec<RtdValue>)>,
+        _signers: Vec<ParsedAddress>,
+        _gas_budget: Option<u64>,
+        _extra_args: Self::ExtraPublishArgs,
+    ) -> anyhow::Result<(
+        Option<String>,
+        Vec<MaybeNamedCompiledModule>,
+        Vec<ValueFrame>,
+    )> {
+        unimplemented!()
+    }
 }
 
 fn merge_output(left: Option<String>, right: Option<String>) -> Option<String> {
@@ -1463,6 +1665,13 @@ fn merge_output(left: Option<String>, right: Option<String>) -> Option<String> {
 }
 
 impl RtdTestAdapter {
+    /// Returns the file format version to use when serializing a module. If a file format
+    /// version override was specified via `--file-format`, that version is used; otherwise
+    /// the module's own version is used.
+    fn serialize_version(&self, module: &CompiledModule) -> u32 {
+        self.file_format_version.unwrap_or(module.version)
+    }
+
     pub fn with_offchain_reader(&mut self, offchain_reader: Box<dyn OffchainStateReader>) {
         self.offchain_reader = Some(offchain_reader);
     }
@@ -1475,8 +1684,24 @@ impl RtdTestAdapter {
         &*self.executor
     }
 
-    pub fn into_executor(self) -> Box<dyn TransactionalAdapter> {
-        self.executor
+    pub(crate) fn get_chain_identifier(&self) -> ChainIdentifier {
+        self.get_checkpoint_by_sequence_number(0)
+            .map(|cp| ChainIdentifier::from(*cp.digest()))
+            .unwrap_or_else(|| {
+                ChainIdentifier::from(rtd_types::digests::CheckpointDigest::default())
+            })
+    }
+
+    fn get_replay_protected_expiration(&self) -> TransactionExpiration {
+        let current_epoch = self.get_latest_epoch_id().unwrap_or(0);
+        TransactionExpiration::ValidDuring {
+            min_epoch: Some(current_epoch),
+            max_epoch: Some(current_epoch),
+            min_timestamp: None,
+            max_timestamp: None,
+            chain: self.get_chain_identifier(),
+            nonce: 0,
+        }
     }
 
     fn named_variables(&self) -> BTreeMap<String, String> {
@@ -1507,6 +1732,10 @@ impl RtdTestAdapter {
 
         for (tid, digest) in &self.digest_enumeration {
             variables.insert(format!("digest_{tid}"), digest.to_string());
+        }
+
+        for (seq, digest) in &self.cp_digest_enumeration {
+            variables.insert(format!("cp_digest_{seq}"), digest.to_string());
         }
 
         variables
@@ -1571,28 +1800,33 @@ impl RtdTestAdapter {
         upgrade_capability: FakeID,
         dependencies: Vec<String>,
         sender: String,
-        gas_budget: Option<u64>,
+        gas_budget: u64,
         dry_run: bool,
         policy: u8,
         gas_price: u64,
+        address_balance_gas: bool,
     ) -> anyhow::Result<Option<String>> {
         let modules_bytes = modules
             .iter()
             .map(|m| {
                 let mut module_bytes = vec![];
                 m.module
-                    .serialize_with_version(m.module.version, &mut module_bytes)?;
+                    .serialize_with_version(self.serialize_version(&m.module), &mut module_bytes)?;
                 Ok(module_bytes)
             })
             .collect::<anyhow::Result<Vec<Vec<u8>>>>()?;
-        let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
 
         let dependencies = self.get_dependency_ids(dependencies, /* include_std */ true)?;
 
         let mut builder = ProgrammableTransactionBuilder::new();
 
         // Argument::Input(0)
-        RtdValue::Object(upgrade_capability, None).into_argument(&mut builder, self)?;
+        let sender_address = self.get_sender(Some(sender.clone())).address;
+        RtdValue::Object(upgrade_capability, None).into_argument(
+            &mut builder,
+            self,
+            sender_address,
+        )?;
         let upgrade_arg = builder.pure(policy).unwrap();
         let digest: Vec<u8> = MovePackage::compute_digest_for_modules_and_deps(
             &modules_bytes,
@@ -1623,21 +1857,32 @@ impl RtdTestAdapter {
         );
 
         let pt = builder.finish();
+        let expiration = if address_balance_gas {
+            self.get_replay_protected_expiration()
+        } else {
+            TransactionExpiration::None
+        };
 
         if dry_run {
-            let transaction = TransactionData::new_programmable(
+            let mut transaction = TransactionData::new_programmable(
                 self.get_sender(Some(sender)).address,
                 vec![],
                 pt,
                 gas_budget,
                 gas_price,
             );
+            *transaction.expiration_mut_for_testing() = expiration;
             let summary = self.dry_run(transaction).await?;
             return Ok(self.object_summary_output(&summary, false));
         }
 
-        let data =
-            |sender, gas| TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price);
+        let data = |sender, gas: Vec<ObjectRef>| {
+            let gas = if address_balance_gas { vec![] } else { gas };
+            let mut tx_data =
+                TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price);
+            *tx_data.expiration_mut_for_testing() = expiration;
+            tx_data
+        };
         let transaction = self.sign_txn(Some(sender), data);
         let summary = self.execute_txn(transaction).await?;
 
@@ -1677,30 +1922,64 @@ impl RtdTestAdapter {
             /* gas */ Vec<ObjectRef>,
         ) -> TransactionData,
     ) -> Transaction {
-        self.sign_sponsor_txn(sender, None, vec![], move |sender, _, gas| {
+        let sender_acc = self.get_sender(sender.clone());
+        let gas_ref = self
+            .get_object(&sender_acc.gas, None)
+            .unwrap()
+            .compute_object_reference();
+        self.sign_sponsor_txn(sender, None, vec![gas_ref], move |sender, _, gas| {
             txn_data(sender, gas)
         })
     }
 
-    fn get_payments(&self, sponsor: &TestAccount, payments: Vec<FakeID>) -> Vec<ObjectRef> {
-        let payments = if payments.is_empty() {
-            vec![sponsor.gas]
-        } else {
-            payments
-                .into_iter()
-                .map(|payment| {
-                    self.fake_to_real_object_id(payment)
-                        .expect("Could not find specified payment object")
-                })
-                .collect::<Vec<ObjectID>>()
+    fn resolve_gas_payments(
+        &self,
+        sponsor: &TestAccount,
+        gas_payment: Option<Vec<ParsedValue<RtdExtraValueArgs>>>,
+    ) -> anyhow::Result<Vec<ObjectRef>> {
+        let Some(payments) = gas_payment else {
+            let obj = self.get_object(&sponsor.gas, None).unwrap();
+            return Ok(vec![obj.compute_object_reference()]);
         };
-
-        payments
+        if payments.is_empty() {
+            let obj = self.get_object(&sponsor.gas, None).unwrap();
+            return Ok(vec![obj.compute_object_reference()]);
+        }
+        let resolved = self.compiled_state.resolve_args(payments)?;
+        let chain_id = self.get_chain_identifier();
+        let current_epoch = self.get_latest_epoch_id().unwrap_or(0);
+        resolved
             .into_iter()
-            .map(|payment| {
-                self.get_object(&payment, None)
-                    .unwrap()
-                    .compute_object_reference()
+            .map(|value| match value {
+                RtdValue::Object(fake_id, _) => {
+                    let obj_id = self
+                        .fake_to_real_object_id(fake_id)
+                        .expect("Could not find specified payment object");
+                    Ok(self
+                        .get_object(&obj_id, None)
+                        .unwrap()
+                        .compute_object_reference())
+                }
+                RtdValue::Withdraw(amount, type_tag) => {
+                    let expected_type = Balance::type_tag(GAS::type_tag());
+                    assert!(
+                        type_tag == expected_type,
+                        "Gas payment withdraw type must be {}, got {}",
+                        expected_type,
+                        type_tag
+                    );
+                    let accumulator_obj_id =
+                        *AccumulatorValue::get_field_id(sponsor.address, &expected_type)
+                            .expect("Failed to compute accumulator object ID")
+                            .inner();
+                    Ok(
+                        ParsedObjectRefWithdrawal::new(accumulator_obj_id, current_epoch, amount)
+                            .encode(SequenceNumber::new(), chain_id),
+                    )
+                }
+                _ => bail!(
+                    "Invalid gas payment: only object(...) and withdraw<...>(...) are allowed"
+                ),
             })
             .collect()
     }
@@ -1709,7 +1988,7 @@ impl RtdTestAdapter {
         &self,
         sender: Option<String>,
         sponsor: Option<String>,
-        payment: Vec<FakeID>,
+        payment_refs: Vec<ObjectRef>,
         txn_data: impl FnOnce(
             /* sender */ RtdAddress,
             /* sponsor */ RtdAddress,
@@ -1718,8 +1997,6 @@ impl RtdTestAdapter {
     ) -> Transaction {
         let sender = self.get_sender(sender);
         let sponsor = sponsor.map_or(sender, |a| self.get_sender(Some(a)));
-
-        let payment_refs = self.get_payments(sponsor, payment);
 
         let data = txn_data(sender.address, sponsor.address, payment_refs);
 
@@ -1758,9 +2035,10 @@ impl RtdTestAdapter {
             sender, gas_price, ..
         } = extra;
         let mut builder = ProgrammableTransactionBuilder::new();
+        let sender_address = self.get_sender(sender.clone()).address;
         let arguments = args
             .into_iter()
-            .map(|arg| arg.into_argument(&mut builder, self))
+            .map(|arg| arg.into_argument(&mut builder, self, sender_address))
             .collect::<anyhow::Result<_>>()?;
         let package_id = ObjectID::from(*module_id.address());
 
@@ -1828,11 +2106,14 @@ impl RtdTestAdapter {
                     event.write.address.address,
                     event.write.address.ty.clone(),
                     event.write.operation.clone(),
+                    event.write.value.clone(),
                 )
             })
             .collect();
 
         let gas_summary = effects.gas_cost_summary();
+
+        self.record_creation_order(digest, &created_ids);
 
         // make sure objects that have previously not been in storage get assigned a fake id.
         let mut might_need_fake_id: Vec<_> = created_ids
@@ -1844,14 +2125,14 @@ impl RtdTestAdapter {
         // Use a stable sort before assigning fake ids, so test output remains stable.
         might_need_fake_id.sort_by_key(|id| self.get_object_sorting_key(id));
 
-        accumulators_written.sort_by_key(|(_, address, ty, _)| {
+        accumulators_written.sort_by_key(|(_, address, ty, _, _)| {
             (
                 self.stabilize_str(format!("{}", address)),
                 self.stabilize_str(format!("{}", ty)),
             )
         });
 
-        might_need_fake_id.extend(accumulators_written.iter().map(|(id, _, _, _)| *id));
+        might_need_fake_id.extend(accumulators_written.iter().map(|(id, _, _, _, _)| *id));
 
         for id in might_need_fake_id {
             self.enumerate_fake(id);
@@ -1874,7 +2155,7 @@ impl RtdTestAdapter {
         unwrapped_then_deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
         wrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
         unchanged_shared_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
-        accumulators_written.sort_by_key(|(id, _, _, _)| self.real_to_fake_object_id(id));
+        accumulators_written.sort_by_key(|(id, _, _, _, _)| self.real_to_fake_object_id(id));
 
         match effects.status() {
             ExecutionStatus::Success => {
@@ -1895,14 +2176,14 @@ impl RtdTestAdapter {
                     unchanged_shared: unchanged_shared_ids,
                 })
             }
-            ExecutionStatus::Failure { error, command } => {
+            ExecutionStatus::Failure(ExecutionFailure { error, command }) => {
                 let execution_msg = if is_consensus_tx {
                     format!("Debug of error: {error:?} at command {command:?}")
                 } else {
                     format!("Execution Error: {}", error_opt.unwrap())
                 };
                 let error = match error {
-                    ExecutionFailureStatus::MoveAbort(loc, code)
+                    ExecutionErrorKind::MoveAbort(loc, code)
                         if ErrorBitset::from_u64(*code).is_some() =>
                     {
                         let clever_code = ErrorBitset::from_u64(*code).unwrap();
@@ -1923,11 +2204,7 @@ impl RtdTestAdapter {
     }
 
     async fn dry_run(&mut self, transaction: TransactionData) -> anyhow::Result<TxnSummary> {
-        let digest = transaction.digest();
-        let results = self
-            .executor
-            .dry_run_transaction_block(transaction, digest)
-            .await?;
+        let results = self.executor.dry_run_transaction_block(transaction).await?;
         let DryRunTransactionBlockResponse {
             effects, events, ..
         } = results;
@@ -1981,6 +2258,15 @@ impl RtdTestAdapter {
                     RtdAccumulatorOperation::Merge => AccumulatorOperation::Merge,
                     RtdAccumulatorOperation::Split => AccumulatorOperation::Split,
                 };
+                let value = match &event.value {
+                    RtdAccumulatorValue::Integer(v) => EffectsAccumulatorValue::Integer(*v),
+                    RtdAccumulatorValue::IntegerTuple(a, b) => {
+                        EffectsAccumulatorValue::IntegerTuple(*a, *b)
+                    }
+                    RtdAccumulatorValue::EventDigest(digests) => {
+                        EffectsAccumulatorValue::EventDigest(digests.clone())
+                    }
+                };
                 (
                     event.accumulator_obj,
                     event.address,
@@ -1990,11 +2276,14 @@ impl RtdTestAdapter {
                         .try_into()
                         .expect("Failed to parse accumulator type tag"),
                     operation,
+                    value,
                 )
             })
             .collect();
 
         let gas_summary = effects.gas_cost_summary();
+
+        self.record_creation_order(effects.transaction_digest(), &created_ids);
 
         // make sure objects that have previously not been in storage get assigned a fake id.
         let mut might_need_fake_id: Vec<_> = created_ids
@@ -2005,14 +2294,18 @@ impl RtdTestAdapter {
 
         // Use a stable sort before assigning fake ids, so test output remains stable.
         might_need_fake_id.sort_by_key(|id| self.get_object_sorting_key(id));
-        accumulators_written.sort_by_key(|(_, address, ty, _)| {
+        accumulators_written.sort_by_key(|(_, address, ty, _, _)| {
             (
                 self.stabilize_str(format!("{}", address)),
                 self.stabilize_str(format!("{}", ty)),
             )
         });
 
-        might_need_fake_id.extend(accumulators_written.iter().map(|(obj_id, _, _, _)| *obj_id));
+        might_need_fake_id.extend(
+            accumulators_written
+                .iter()
+                .map(|(obj_id, _, _, _, _)| *obj_id),
+        );
 
         for id in might_need_fake_id {
             self.enumerate_fake(id);
@@ -2028,7 +2321,7 @@ impl RtdTestAdapter {
         deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
         unwrapped_then_deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
         wrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
-        accumulators_written.sort_by_key(|(id, _, _, _)| self.real_to_fake_object_id(id));
+        accumulators_written.sort_by_key(|(id, _, _, _, _)| self.real_to_fake_object_id(id));
 
         let events = events
             .data
@@ -2065,8 +2358,35 @@ impl RtdTestAdapter {
 
     // stable way of sorting objects by type. Does not however, produce a stable sorting
     // between objects of the same type
-    fn get_object_sorting_key(&self, id: &ObjectID) -> String {
-        match &self.get_object(id, None).unwrap().data {
+    fn record_creation_order(&mut self, digest: &TransactionDigest, created_ids: &[ObjectID]) {
+        if created_ids.is_empty() {
+            return;
+        }
+        let mut remaining: HashSet<ObjectID> = created_ids.iter().copied().collect();
+        let mut n = 0u64;
+        // We probe derive_id(digest, n) for increasing n until all created IDs are found.
+        // Internal Move operations may consume derive_id slots that don't appear in effects
+        // (e.g., objects created and deleted in the same transaction), so the number of slots
+        // can exceed the number of objects in effects. Use a generous hard cap; the warning
+        // in object_summary_output will flag if this is ever insufficient.
+        let max_probes = 2048u64;
+        while !remaining.is_empty() && n < max_probes {
+            let candidate = ObjectID::derive_id(*digest, n);
+            if remaining.remove(&candidate) {
+                self.creation_order
+                    .insert(candidate, self.creation_order.len() as u64);
+            }
+            n += 1;
+        }
+    }
+
+    // Sort objects by creation order, with ties broken by type. This is used to assign fake IDs in
+    // a stable way, so that test outputs are stable. Objects that have not been seen before (and
+    // thus have no creation order) will be sorted at the end, and among them the ones of the same
+    // type will be sorted together.
+    fn get_object_sorting_key(&self, id: &ObjectID) -> (u64, String, ObjectID) {
+        let creation_id = self.creation_order.get(id).copied().unwrap_or(u64::MAX);
+        let type_key = match &self.get_object(id, None).unwrap().data {
             object::Data::Move(obj) => self.stabilize_str(format!("{}", obj.type_())),
             object::Data::Package(pkg) => pkg
                 .serialized_module_map()
@@ -2074,7 +2394,10 @@ impl RtdTestAdapter {
                 .map(|s| s.as_str())
                 .collect::<Vec<_>>()
                 .join(","),
-        }
+        };
+        // ObjectID as final tiebreaker for objects with the same creation order and type
+        // (e.g., dynamic field objects whose IDs are derived from parent+key, not fresh_id).
+        (creation_id, type_key, *id)
     }
 
     pub(crate) fn fake_to_real_object_id(&self, fake_id: FakeID) -> Option<ObjectID> {
@@ -2220,7 +2543,13 @@ impl RtdTestAdapter {
 
     fn list_accumulator_events(
         &self,
-        accumulators: &[(ObjectID, RtdAddress, TypeTag, AccumulatorOperation)],
+        accumulators: &[(
+            ObjectID,
+            RtdAddress,
+            TypeTag,
+            AccumulatorOperation,
+            EffectsAccumulatorValue,
+        )],
         summarize: bool,
     ) -> String {
         if summarize {
@@ -2228,7 +2557,7 @@ impl RtdTestAdapter {
         }
         accumulators
             .iter()
-            .map(|(obj_id, address, ty, operation)| {
+            .map(|(obj_id, address, ty, operation, value)| {
                 let fake_id_str = self.format_fake_id(obj_id);
                 let address_str = self.stabilize_str(format!("{}", address));
                 let ty_str = self.stabilize_str(format!("{}", ty));
@@ -2236,7 +2565,19 @@ impl RtdTestAdapter {
                     AccumulatorOperation::Merge => "Merge",
                     AccumulatorOperation::Split => "Split",
                 };
-                format!("({}, {}, {}, {})", fake_id_str, address_str, ty_str, op_str)
+                let value_str = match value {
+                    EffectsAccumulatorValue::Integer(v) => format!("{}", v),
+                    EffectsAccumulatorValue::IntegerTuple(a, b) => format!("({}, {})", a, b),
+                    EffectsAccumulatorValue::EventDigest(digests) => {
+                        let indices: Vec<_> =
+                            digests.iter().map(|(idx, _)| format!("{}", idx)).collect();
+                        format!("event_indices:[{}]", indices.join(", "))
+                    }
+                };
+                format!(
+                    "({}, {}, {}, {}, {})",
+                    fake_id_str, address_str, ty_str, op_str, value_str
+                )
             })
             .collect::<Vec<_>>()
             .join(", ")
@@ -2387,11 +2728,12 @@ impl Default for AdapterInitConfig {
             default_gas_price: None,
             flavor: None,
             offchain_config: None,
+            file_format_version: None,
         }
     }
 }
 
-static NAMED_ADDRESSES: Lazy<BTreeMap<String, NumericalAddress>> = Lazy::new(|| {
+static NAMED_ADDRESSES: LazyLock<BTreeMap<String, NumericalAddress>> = LazyLock::new(|| {
     let mut map = move_stdlib::named_addresses();
     assert!(map.get("std").unwrap().into_inner() == MOVE_STDLIB_ADDRESS);
     // TODO fix Rtd framework constants
@@ -2426,7 +2768,9 @@ static NAMED_ADDRESSES: Lazy<BTreeMap<String, NumericalAddress>> = Lazy::new(|| 
     map
 });
 
-pub static PRE_COMPILED: Lazy<PreCompiledProgramInfo> = Lazy::new(|| {
+/// Compiler metadata for the system packages, including macro definitions.
+/// Bytecode is loaded separately from `BuiltInFramework`.
+pub static PRE_COMPILED: LazyLock<Arc<PreCompiledProgramInfo>> = LazyLock::new(|| {
     // TODO invoke package system? Or otherwise pull the versions for these packages as per their
     // actual Move.toml files. They way they are treated here is odd, too, though.
     let rtd_files: &Path = Path::new(DEFAULT_FRAMEWORK_PATH);
@@ -2474,7 +2818,6 @@ pub static PRE_COMPILED: Lazy<PreCompiledProgramInfo> = Lazy::new(|| {
         }],
         None,
         None,
-        false,
         Flags::empty(),
         None,
     )
@@ -2484,28 +2827,57 @@ pub static PRE_COMPILED: Lazy<PreCompiledProgramInfo> = Lazy::new(|| {
             eprintln!("!!!Rtd framework failed to compile!!!");
             move_compiler::diagnostics::report_diagnostics(&files, diags)
         }
-        Ok(res) => res,
+        Ok(res) => Arc::new(res),
     }
 });
 
 async fn create_validator_fullnode(
     protocol_config: &ProtocolConfig,
     objects: &[Object],
+    reference_gas_price: Option<u64>,
 ) -> (Arc<AuthorityState>, Arc<AuthorityState>) {
-    let builder = TestAuthorityBuilder::new()
-        .with_protocol_config(protocol_config.clone())
-        .with_starting_objects(objects);
-    let state = builder.clone().build().await;
-    let fullnode_key_pair = get_authority_key_pair().1;
-    let fullnode = builder.with_keypair(&fullnode_key_pair).build().await;
-    (state, fullnode)
+    // Build network config once and share it between validator and fullnode
+    let network_config = {
+        let mut builder =
+            rtd_swarm_config::network_config_builder::ConfigBuilder::new_with_temp_dir()
+                .with_reference_gas_price(reference_gas_price.unwrap_or(500));
+        builder = builder.with_protocol_version(protocol_config.version);
+        Arc::new(builder.build())
+    };
+
+    // Both builds need the same process-wide protocol config override.
+    // Install it here because separate overrides in each build would conflict.
+    let _guard = {
+        let protocol_config = protocol_config.clone();
+        ProtocolConfig::apply_overrides_for_testing(move |_, _| protocol_config.clone())
+    };
+    let build_node = |keypair: Option<AuthorityKeyPair>| {
+        let network_config = network_config.clone();
+        let objects = objects.to_vec();
+        tokio::spawn(async move {
+            let mut builder = TestAuthorityBuilder::new()
+                .with_starting_objects(&objects)
+                .with_shared_network_config(&network_config)
+                .insert_genesis_checkpoint()
+                .skip_genesis_owner_index();
+            if let Some(keypair) = &keypair {
+                builder = builder.with_keypair(keypair);
+            }
+            builder.build().await
+        })
+    };
+    let validator = build_node(None);
+    let fullnode = build_node(Some(get_authority_key_pair().1));
+    tokio::try_join!(validator, fullnode).expect("authority setup task panicked")
 }
 
 async fn create_val_fullnode_executor(
     protocol_config: &ProtocolConfig,
     objects: &[Object],
+    reference_gas_price: Option<u64>,
 ) -> ValidatorWithFullnode {
-    let (validator, fullnode) = create_validator_fullnode(protocol_config, objects).await;
+    let (validator, fullnode) =
+        create_validator_fullnode(protocol_config, objects, reference_gas_price).await;
 
     let metrics = KeyValueStoreMetrics::new_for_tests();
     let kv_store = Arc::new(TransactionKeyValueStore::new(
@@ -2513,10 +2885,13 @@ async fn create_val_fullnode_executor(
         metrics,
         validator.clone(),
     ));
+
     ValidatorWithFullnode {
         validator,
         fullnode,
         kv_store,
+        pending_effects: Vec::new(),
+        next_checkpoint_seq: 1, // 0 is genesis
     }
 }
 
@@ -2536,6 +2911,7 @@ async fn init_val_fullnode_executor(
     account_names: BTreeSet<String>,
     additional_mapping: BTreeMap<String, NumericalAddress>,
     protocol_config: &ProtocolConfig,
+    reference_gas_price: Option<u64>,
 ) -> (
     Box<dyn TransactionalAdapter>,
     AccountSetup,
@@ -2575,7 +2951,9 @@ async fn init_val_fullnode_executor(
     // Make a default account with a gas object
     let default_account = mk_account();
 
-    let executor = Box::new(create_val_fullnode_executor(protocol_config, &objects).await);
+    let executor = Box::new(
+        create_val_fullnode_executor(protocol_config, &objects, reference_gas_price).await,
+    );
 
     update_named_address_mapping(
         &mut named_address_mapping,
@@ -2629,7 +3007,6 @@ async fn init_sim_executor(
 
     // Validators are sorted by their authority public key in tests. Sort before assigning
     // names so that validators are ordered by name (validator_0, validator_1, ..).
-    // See https://github.com/LinkUVerse/rtd/blob/272c471e3ad1f91b2564efdaaa17100e475f732e/crates/rtd-swarm-config/src/network_config_builder.rs#L443
     let addr_keys: Vec<_> = (0..num_custom_validator_accounts)
         // Make a validator account with a gas object
         .map(|_| {

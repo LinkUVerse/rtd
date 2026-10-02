@@ -1,49 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::anyhow;
-use async_trait::async_trait;
-use core::panic;
-use fastcrypto::traits::ToFromBytes;
-use std::collections::HashMap;
-use std::str::from_utf8;
-use std::sync::Arc;
-use std::time::Duration;
-use rtd_json_rpc_types::BcsEvent;
-use rtd_json_rpc_types::{EventFilter, Page, RtdEvent};
-use rtd_json_rpc_types::{
-    EventPage, RtdExecutionStatus, RtdObjectDataOptions, RtdTransactionBlockResponseOptions,
-};
-use rtd_rpc::field::{FieldMask, FieldMaskUtil};
-use rtd_rpc::proto::rtd::rpc::v2::{
-    Checkpoint, ExecuteTransactionRequest, ExecutedTransaction, GetCheckpointRequest,
-    GetObjectRequest, GetServiceInfoRequest, GetTransactionRequest, Object,
-    Transaction as ProtoTransaction, UserSignature as ProtoUserSignature,
-};
-use rtd_sdk::{RtdClient as RtdSdkClient, RtdClientBuilder};
-use rtd_sdk_types::Address;
-use rtd_types::BRIDGE_PACKAGE_ID;
-use rtd_types::RTD_BRIDGE_OBJECT_ID;
-use rtd_types::TypeTag;
-use rtd_types::base_types::ObjectRef;
-use rtd_types::base_types::SequenceNumber;
-use rtd_types::bridge::{
-    BridgeSummary, BridgeWrapper, MoveTypeBridgeMessageKey, MoveTypeBridgeRecord,
-};
-use rtd_types::bridge::{BridgeTrait, BridgeTreasurySummary};
-use rtd_types::bridge::{MoveTypeBridgeMessage, MoveTypeParsedTokenTransferMessage};
-use rtd_types::bridge::{MoveTypeCommitteeMember, MoveTypeTokenTransferPayload};
-use rtd_types::collection_types::LinkedTableNode;
-use rtd_types::gas_coin::GasCoin;
-use rtd_types::object::Owner;
-use rtd_types::parse_rtd_type_tag;
-use rtd_types::transaction::ObjectArg;
-use rtd_types::transaction::SharedObjectMutability;
-use rtd_types::transaction::Transaction;
-use rtd_types::{Identifier, base_types::ObjectID, digests::TransactionDigest, event::EventID};
-use tokio::sync::OnceCell;
-use tracing::{error, warn};
-
 use crate::crypto::BridgeAuthorityPublicKey;
 use crate::error::{BridgeError, BridgeResult};
 use crate::events::RtdBridgeEvent;
@@ -53,6 +10,49 @@ use crate::types::BridgeActionStatus;
 use crate::types::ParsedTokenTransferMessage;
 use crate::types::RtdEvents;
 use crate::types::{BridgeAction, BridgeAuthority, BridgeCommittee};
+use async_trait::async_trait;
+use core::panic;
+use fastcrypto::traits::ToFromBytes;
+use rtd_json_rpc_types::BcsEvent;
+use rtd_json_rpc_types::RtdEvent;
+use rtd_json_rpc_types::RtdExecutionStatus;
+use rtd_rpc::field::{FieldMask, FieldMaskUtil};
+use rtd_rpc::proto::rtd::rpc::v2::{
+    Checkpoint, ExecuteTransactionRequest, ExecutedTransaction, GetCheckpointRequest,
+    GetObjectRequest, GetServiceInfoRequest, GetTransactionRequest, Object,
+    Transaction as ProtoTransaction, UserSignature as ProtoUserSignature,
+};
+use rtd_sdk_types::Address;
+use rtd_types::BRIDGE_PACKAGE_ID;
+use rtd_types::Identifier;
+use rtd_types::RTD_BRIDGE_OBJECT_ID;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::bridge::{
+    BridgeSummary, BridgeWrapper, MoveTypeBridgeMessageKey, MoveTypeBridgeRecord,
+};
+use rtd_types::bridge::{BridgeTrait, BridgeTreasurySummary};
+use rtd_types::bridge::{MoveTypeBridgeMessage, MoveTypeParsedTokenTransferMessage};
+use rtd_types::bridge::{
+    MoveTypeCommitteeMember, MoveTypeTokenTransferPayload, MoveTypeTokenTransferPayloadV2,
+};
+use rtd_types::collection_types::LinkedTableNode;
+use rtd_types::digests::TransactionDigest;
+use rtd_types::event::EventID;
+use rtd_types::gas_coin::GasCoin;
+use rtd_types::object::Owner;
+use rtd_types::parse_rtd_type_tag;
+use rtd_types::transaction::ObjectArg;
+use rtd_types::transaction::SharedObjectMutability;
+use rtd_types::transaction::Transaction;
+use std::collections::HashMap;
+use std::str::from_utf8;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::OnceCell;
+use tracing::{error, warn};
 
 pub struct RtdClient<P> {
     inner: P,
@@ -62,8 +62,7 @@ pub struct RtdClient<P> {
 pub type RtdBridgeClient = RtdClient<RtdClientInternal>;
 
 pub struct RtdClientInternal {
-    jsonrpc_client: RtdSdkClient,
-    grpc_client: rtd_rpc::Client,
+    grpc_client: rtd_rpc_api::Client,
 }
 
 #[derive(Clone, Debug)]
@@ -74,17 +73,8 @@ pub struct ExecuteTransactionResult {
 
 impl RtdBridgeClient {
     pub async fn new(rpc_url: &str, bridge_metrics: Arc<BridgeMetrics>) -> anyhow::Result<Self> {
-        let jsonrpc_client = RtdClientBuilder::default()
-            .build(rpc_url)
-            .await
-            .map_err(|e| {
-                anyhow!("Can't establish connection with Rtd Rpc {rpc_url}. Error: {e}")
-            })?;
-        let grpc_client = rtd_rpc::Client::new(rpc_url)?;
-        let inner = RtdClientInternal {
-            jsonrpc_client,
-            grpc_client,
-        };
+        let grpc_client = rtd_rpc_api::Client::new(rpc_url)?;
+        let inner = RtdClientInternal { grpc_client };
         let self_ = Self {
             inner,
             bridge_metrics,
@@ -93,11 +83,7 @@ impl RtdBridgeClient {
         Ok(self_)
     }
 
-    pub fn jsonrpc_client(&self) -> &RtdSdkClient {
-        &self.inner.jsonrpc_client
-    }
-
-    pub fn grpc_client(&self) -> &rtd_rpc::Client {
+    pub fn grpc_client(&self) -> &rtd_rpc_api::Client {
         &self.inner.grpc_client
     }
 }
@@ -139,31 +125,6 @@ where
             bridge_object_arg
         })
         .await
-    }
-
-    /// Query emitted Events that are defined in the given Move Module.
-    pub async fn query_events_by_module(
-        &self,
-        package: ObjectID,
-        module: Identifier,
-        // cursor is exclusive
-        cursor: Option<EventID>,
-    ) -> BridgeResult<Page<RtdEvent, EventID>> {
-        let filter = EventFilter::MoveEventModule {
-            package,
-            module: module.clone(),
-        };
-        let events = self.inner.query_events(filter.clone(), cursor).await?;
-
-        // Safeguard check that all events are emitted from requested package and module
-        assert!(
-            events
-                .data
-                .iter()
-                .all(|event| event.type_.address.as_ref() == package.as_ref()
-                    && event.type_.module == module)
-        );
-        Ok(events)
     }
 
     /// Returns BridgeAction from a Rtd Transaction with transaction hash
@@ -405,17 +366,61 @@ where
             .get_gas_data_panic_if_not_gas(gas_object_id)
             .await
     }
+
+    pub async fn get_bridge_records_in_range(
+        &self,
+        source_chain_id: u8,
+        start_seq_num: u64,
+        end_seq_num: u64,
+    ) -> Result<Vec<(u64, MoveTypeBridgeRecord)>, BridgeError> {
+        self.inner
+            .get_bridge_records_in_range(source_chain_id, start_seq_num, end_seq_num)
+            .await
+    }
+
+    pub async fn get_token_transfer_next_seq_number(
+        &self,
+        source_chain_id: u8,
+    ) -> Result<u64, BridgeError> {
+        self.inner
+            .get_token_transfer_next_seq_number(source_chain_id)
+            .await
+    }
+
+    /// Temporary measure to get corresponding sequence number cursor from a Bridge Module EventID
+    pub async fn get_sequence_number_from_event_id(
+        &self,
+        event_id: EventID,
+    ) -> BridgeResult<Option<u64>> {
+        let events = self
+            .inner
+            .get_events_by_tx_digest(event_id.tx_digest)
+            .await?;
+
+        let event = events
+            .events
+            .get(event_id.event_seq as usize)
+            .ok_or(BridgeError::NoBridgeEventsInTxPosition)?;
+
+        if event.type_.address.as_ref() != BRIDGE_PACKAGE_ID.as_ref() {
+            return Ok(None);
+        }
+
+        let bridge_event = match RtdBridgeEvent::try_from_rtd_event(event)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        match bridge_event {
+            RtdBridgeEvent::RtdToEthTokenBridgeV1(event) => Ok(Some(event.nonce)),
+            _ => Ok(None),
+        }
+    }
 }
 
 /// Use a trait to abstract over the RtdSDKClient and RtdMockClient for testing.
 #[async_trait]
 pub trait RtdClientInner: Send + Sync {
-    async fn query_events(
-        &self,
-        query: EventFilter,
-        cursor: Option<EventID>,
-    ) -> Result<EventPage, BridgeError>;
-
     async fn get_events_by_tx_digest(
         &self,
         tx_digest: TransactionDigest,
@@ -467,152 +472,29 @@ pub trait RtdClientInner: Send + Sync {
         &self,
         gas_object_id: ObjectID,
     ) -> (GasCoin, ObjectRef, Owner);
+
+    async fn get_bridge_records_in_range(
+        &self,
+        source_chain_id: u8,
+        start_seq_num: u64,
+        end_seq_num: u64,
+    ) -> Result<Vec<(u64, MoveTypeBridgeRecord)>, BridgeError>;
+
+    async fn get_token_transfer_next_seq_number(
+        &self,
+        source_chain_id: u8,
+    ) -> Result<u64, BridgeError>;
 }
 
 #[async_trait]
-impl RtdClientInner for RtdSdkClient {
-    async fn query_events(
-        &self,
-        query: EventFilter,
-        cursor: Option<EventID>,
-    ) -> Result<EventPage, BridgeError> {
-        self.event_api()
-            .query_events(query, cursor, None, false)
-            .await
-            .map_err(Into::into)
-    }
-
-    async fn get_events_by_tx_digest(
-        &self,
-        _tx_digest: TransactionDigest,
-    ) -> Result<RtdEvents, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_chain_identifier(&self) -> Result<String, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_reference_gas_price(&self) -> Result<u64, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_latest_checkpoint_sequence_number(&self) -> Result<u64, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_mutable_bridge_object_arg(&self) -> Result<ObjectArg, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_bridge_summary(&self) -> Result<BridgeSummary, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_token_transfer_action_onchain_status(
-        &self,
-        _bridge_object_arg: ObjectArg,
-        _source_chain_id: u8,
-        _seq_number: u64,
-    ) -> Result<BridgeActionStatus, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_token_transfer_action_onchain_signatures(
-        &self,
-        _bridge_object_arg: ObjectArg,
-        _source_chain_id: u8,
-        _seq_number: u64,
-    ) -> Result<Option<Vec<Vec<u8>>>, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn execute_transaction_block_with_effects(
-        &self,
-        tx: Transaction,
-    ) -> Result<ExecuteTransactionResult, BridgeError> {
-        use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
-        match self.quorum_driver_api().execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new().with_effects().with_events(),
-            Some(rtd_types::quorum_driver_types::ExecuteTransactionRequestType::WaitForEffectsCert),
-        ).await {
-            Ok(response) => {
-                let effects = response.effects.expect("We requested effects but got None.");
-                let events = response.events.expect("We requested events but got None.");
-                Ok(ExecuteTransactionResult {
-                    status: effects.status().clone(),
-                    events: events.data,
-                })
-            }
-            Err(e) => Err(BridgeError::RtdTxFailureGeneric(e.to_string())),
-        }
-    }
-
-    async fn get_parsed_token_transfer_message(
-        &self,
-        _bridge_object_arg: ObjectArg,
-        _source_chain_id: u8,
-        _seq_number: u64,
-    ) -> Result<Option<MoveTypeParsedTokenTransferMessage>, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_bridge_record(
-        &self,
-        _source_chain_id: u8,
-        _seq_number: u64,
-    ) -> Result<Option<MoveTypeBridgeRecord>, BridgeError> {
-        unimplemented!("use gRPC implementation")
-    }
-
-    async fn get_gas_data_panic_if_not_gas(
-        &self,
-        gas_object_id: ObjectID,
-    ) -> (GasCoin, ObjectRef, Owner) {
-        loop {
-            match self
-                .read_api()
-                .get_object_with_options(
-                    gas_object_id,
-                    RtdObjectDataOptions::default().with_owner().with_content(),
-                )
-                .await
-                .map(|resp| resp.data)
-            {
-                Ok(Some(gas_obj)) => {
-                    let owner = gas_obj.owner.clone().expect("Owner is requested");
-                    let gas_coin = GasCoin::try_from(&gas_obj)
-                        .unwrap_or_else(|err| panic!("{} is not a gas coin: {err}", gas_object_id));
-                    return (gas_coin, gas_obj.object_ref(), owner);
-                }
-                other => {
-                    warn!("Can't get gas object: {:?}: {:?}", gas_object_id, other);
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                }
-            }
-        }
-    }
-}
-
-#[async_trait]
-impl RtdClientInner for rtd_rpc::Client {
-    async fn query_events(
-        &self,
-        _query: EventFilter,
-        _cursor: Option<EventID>,
-    ) -> Result<EventPage, BridgeError> {
-        //TODO we'll need to reimplement the rtd_syncer to iterate though records instead of
-        //querying events using this api
-        unimplemented!("query_events not supported in gRPC");
-    }
-
+impl RtdClientInner for rtd_rpc_api::Client {
     async fn get_events_by_tx_digest(
         &self,
         tx_digest: TransactionDigest,
     ) -> Result<RtdEvents, BridgeError> {
         let mut client = self.clone();
         let resp = client
+            .inner_mut()
             .ledger_client()
             .get_transaction(
                 GetTransactionRequest::new(&(tx_digest.into())).with_read_mask(
@@ -664,6 +546,7 @@ impl RtdClientInner for rtd_rpc::Client {
     async fn get_chain_identifier(&self) -> Result<String, BridgeError> {
         let chain_id = self
             .clone()
+            .inner_mut()
             .ledger_client()
             .get_service_info(GetServiceInfoRequest::default())
             .await?
@@ -676,7 +559,7 @@ impl RtdClientInner for rtd_rpc::Client {
 
     async fn get_reference_gas_price(&self) -> Result<u64, BridgeError> {
         let mut client = self.clone();
-        rtd_rpc::Client::get_reference_gas_price(&mut client)
+        rtd_rpc::Client::get_reference_gas_price(client.inner_mut())
             .await
             .map_err(Into::into)
     }
@@ -685,6 +568,7 @@ impl RtdClientInner for rtd_rpc::Client {
         let mut client = self.clone();
         let resp =
             client
+                .inner_mut()
                 .ledger_client()
                 .get_checkpoint(GetCheckpointRequest::latest().with_read_mask(
                     FieldMask::from_paths([Checkpoint::path_builder().sequence_number()]),
@@ -697,6 +581,7 @@ impl RtdClientInner for rtd_rpc::Client {
     async fn get_mutable_bridge_object_arg(&self) -> Result<ObjectArg, BridgeError> {
         let owner = self
             .clone()
+            .inner_mut()
             .ledger_client()
             .get_object(
                 GetObjectRequest::new(&(RTD_BRIDGE_OBJECT_ID.into())).with_read_mask(
@@ -723,6 +608,7 @@ impl RtdClientInner for rtd_rpc::Client {
             .get_or_try_init::<BridgeError, _, _>(|| async {
                 let bridge_wrapper_bcs = self
                     .clone()
+                    .inner_mut()
                     .ledger_client()
                     .get_object(
                         GetObjectRequest::new(&(RTD_BRIDGE_OBJECT_ID.into())).with_read_mask(
@@ -746,6 +632,7 @@ impl RtdClientInner for rtd_rpc::Client {
 
         let field_bcs = self
             .clone()
+            .inner_mut()
             .ledger_client()
             .get_object(GetObjectRequest::new(&bridge_inner_id).with_read_mask(
                 FieldMask::from_paths([Object::path_builder().contents().finish()]),
@@ -824,6 +711,7 @@ impl RtdClientInner for rtd_rpc::Client {
 
         let response = self
             .clone()
+            .inner_mut()
             .execution_client()
             .execute_transaction(request)
             .await
@@ -909,10 +797,16 @@ impl RtdClientInner for rtd_rpc::Client {
             payload,
         } = record.message;
 
-        let mut parsed_payload: MoveTypeTokenTransferPayload = bcs::from_bytes(&payload)?;
-
-        // we deser'd le bytes but this needs to be interpreted as be bytes
-        parsed_payload.amount = u64::from_be_bytes(parsed_payload.amount.to_le_bytes());
+        // Parse payload based on message version.
+        let parsed_payload: MoveTypeTokenTransferPayload = if message_version == 2 {
+            let mut v2: MoveTypeTokenTransferPayloadV2 = bcs::from_bytes(&payload)?;
+            v2.amount = u64::from_be_bytes(v2.amount.to_le_bytes());
+            v2.into()
+        } else {
+            let mut v1: MoveTypeTokenTransferPayload = bcs::from_bytes(&payload)?;
+            v1.amount = u64::from_be_bytes(v1.amount.to_le_bytes());
+            v1
+        };
 
         Ok(Some(MoveTypeParsedTokenTransferMessage {
             message_version,
@@ -959,6 +853,7 @@ impl RtdClientInner for rtd_rpc::Client {
         let response =
             match self
                 .clone()
+                .inner_mut()
                 .ledger_client()
                 .get_object(GetObjectRequest::new(&record_id).with_read_mask(
                     FieldMask::from_paths([Object::path_builder().contents().finish()]),
@@ -993,6 +888,7 @@ impl RtdClientInner for rtd_rpc::Client {
             let result = async {
                 let resp = self
                     .clone()
+                    .inner_mut()
                     .ledger_client()
                     .get_object(
                         GetObjectRequest::new(&(gas_object_id.into())).with_read_mask(
@@ -1026,18 +922,41 @@ impl RtdClientInner for rtd_rpc::Client {
             }
         }
     }
+
+    async fn get_bridge_records_in_range(
+        &self,
+        source_chain_id: u8,
+        start_seq_num: u64,
+        end_seq_num: u64,
+    ) -> Result<Vec<(u64, MoveTypeBridgeRecord)>, BridgeError> {
+        let mut records = Vec::new();
+        for seq_num in start_seq_num..=end_seq_num {
+            if let Some(record) = self.get_bridge_record(source_chain_id, seq_num).await? {
+                records.push((seq_num, record));
+            }
+        }
+        Ok(records)
+    }
+
+    async fn get_token_transfer_next_seq_number(
+        &self,
+        _source_chain_id: u8,
+    ) -> Result<u64, BridgeError> {
+        let summary = self.get_bridge_summary().await?;
+        // The bridge's sequence_nums is keyed by message_type
+        const TOKEN_MESSAGE_TYPE: u8 = 0;
+        let seq_num = summary
+            .sequence_nums
+            .iter()
+            .find(|(msg_type, _)| *msg_type == TOKEN_MESSAGE_TYPE)
+            .map(|(_, seq)| *seq)
+            .unwrap_or(0);
+        Ok(seq_num)
+    }
 }
 
 #[async_trait]
 impl RtdClientInner for RtdClientInternal {
-    async fn query_events(
-        &self,
-        query: EventFilter,
-        cursor: Option<EventID>,
-    ) -> Result<EventPage, BridgeError> {
-        self.jsonrpc_client.query_events(query, cursor).await
-    }
-
     async fn get_events_by_tx_digest(
         &self,
         tx_digest: TransactionDigest,
@@ -1046,11 +965,11 @@ impl RtdClientInner for RtdClientInternal {
     }
 
     async fn get_chain_identifier(&self) -> Result<String, BridgeError> {
-        self.grpc_client.get_chain_identifier().await
+        RtdClientInner::get_chain_identifier(&self.grpc_client).await
     }
 
     async fn get_reference_gas_price(&self) -> Result<u64, BridgeError> {
-        self.grpc_client.get_reference_gas_price().await
+        RtdClientInner::get_reference_gas_price(&self.grpc_client).await
     }
 
     async fn get_latest_checkpoint_sequence_number(&self) -> Result<u64, BridgeError> {
@@ -1131,8 +1050,28 @@ impl RtdClientInner for RtdClientInternal {
         &self,
         gas_object_id: ObjectID,
     ) -> (GasCoin, ObjectRef, Owner) {
-        self.jsonrpc_client
+        self.grpc_client
             .get_gas_data_panic_if_not_gas(gas_object_id)
+            .await
+    }
+
+    async fn get_bridge_records_in_range(
+        &self,
+        source_chain_id: u8,
+        start_seq_num: u64,
+        end_seq_num: u64,
+    ) -> Result<Vec<(u64, MoveTypeBridgeRecord)>, BridgeError> {
+        self.grpc_client
+            .get_bridge_records_in_range(source_chain_id, start_seq_num, end_seq_num)
+            .await
+    }
+
+    async fn get_token_transfer_next_seq_number(
+        &self,
+        source_chain_id: u8,
+    ) -> Result<u64, BridgeError> {
+        self.grpc_client
+            .get_token_transfer_next_seq_number(source_chain_id)
             .await
     }
 }
@@ -1150,14 +1089,14 @@ mod tests {
             get_test_rtd_to_eth_bridge_action,
         },
     };
-    use ethers::types::Address as EthAddress;
+    use alloy::primitives::Address as EthAddress;
     use move_core_types::account_address::AccountAddress;
-    use serde::{Deserialize, Serialize};
-    use std::str::FromStr;
     use rtd_json_rpc_types::BcsEvent;
     use rtd_types::base_types::RtdAddress;
     use rtd_types::bridge::{BridgeChainId, TOKEN_ID_RTD, TOKEN_ID_USDC};
     use rtd_types::crypto::get_key_pair;
+    use serde::{Deserialize, Serialize};
+    use std::str::FromStr;
 
     use super::*;
     use crate::events::{RtdToEthTokenBridgeV1, init_all_struct_tags};
@@ -1189,7 +1128,7 @@ mod tests {
             source_chain: sanitized_event_1.rtd_chain_id as u8,
             sender_address: sanitized_event_1.rtd_address.to_vec(),
             target_chain: sanitized_event_1.eth_chain_id as u8,
-            target_address: sanitized_event_1.eth_address.as_bytes().to_vec(),
+            target_address: sanitized_event_1.eth_address.to_vec(),
             token_type: sanitized_event_1.token_id,
             amount_rtd_adjusted: sanitized_event_1.amount_rtd_adjusted,
         };

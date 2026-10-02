@@ -72,6 +72,7 @@ impl WritePathPendingTransactionLog {
         Ok(())
     }
 
+    /// Release the current process's inflight marker without deleting the durable recovery record.
     pub fn release_transaction(&self, tx: &TransactionDigest) {
         self.transactions_set.lock().remove(tx);
     }

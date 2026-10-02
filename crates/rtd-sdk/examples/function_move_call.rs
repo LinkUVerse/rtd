@@ -3,7 +3,6 @@
 
 mod utils;
 use anyhow::anyhow;
-use shared_crypto::intent::Intent;
 use rtd_config::{RTD_KEYSTORE_FILENAME, rtd_config_dir};
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore};
 use rtd_sdk::{
@@ -12,10 +11,11 @@ use rtd_sdk::{
         Identifier,
         base_types::ObjectID,
         programmable_transaction_builder::ProgrammableTransactionBuilder,
-        quorum_driver_types::ExecuteTransactionRequestType,
         transaction::{Argument, CallArg, Command, Transaction, TransactionData},
+        transaction_driver_types::ExecuteTransactionRequestType,
     },
 };
+use shared_crypto::intent::Intent;
 use utils::setup_for_write;
 
 // This example shows how to use programmable transactions to chain multiple

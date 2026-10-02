@@ -17,9 +17,7 @@ title: Module `rtd::accumulator_settlement`
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
-<b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
 <b>use</b> <a href="../rtd/bcs.md#rtd_bcs">rtd::bcs</a>;
 <b>use</b> <a href="../rtd/dynamic_field.md#rtd_dynamic_field">rtd::dynamic_field</a>;
 <b>use</b> <a href="../rtd/hash.md#rtd_hash">rtd::hash</a>;
@@ -143,7 +141,7 @@ digest.
 
 
 
-<pre><code><b>fun</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_settle_u128">settle_u128</a>&lt;T&gt;(accumulator_root: &<b>mut</b> <a href="../rtd/accumulator.md#rtd_accumulator_AccumulatorRoot">rtd::accumulator::AccumulatorRoot</a>, owner: <b>address</b>, merge: u128, split: u128, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
+<pre><code><b>fun</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_settle_u128">settle_u128</a>&lt;T&gt;(accumulator_root: &<b>mut</b> <a href="../rtd/accumulator.md#rtd_accumulator_AccumulatorRoot">rtd::accumulator::AccumulatorRoot</a>, owner: <b>address</b>, merge: u128, split: u128, ctx: &<a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>)
 </code></pre>
 
 
@@ -157,7 +155,7 @@ digest.
     owner: <b>address</b>,
     merge: u128,
     split: u128,
-    ctx: &<b>mut</b> TxContext,
+    ctx: &TxContext,
 ) {
     <b>assert</b>!(ctx.sender() == @0x0, <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_ENotSystemAddress">ENotSystemAddress</a>);
     // Merge and split should be netted out prior to calling this function.
@@ -172,14 +170,12 @@ digest.
         <b>if</b> (is_zero) {
             <b>let</b> value = accumulator_root.remove_accumulator&lt;T, U128&gt;(name);
             destroy_u128(value);
-            accumulator_root.remove_metadata&lt;T&gt;(owner);
         }
     } <b>else</b> {
         // cannot split <b>if</b> the field does not yet exist
         <b>assert</b>!(split == 0, <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_EInvalidSplitAmount">EInvalidSplitAmount</a>);
         <b>let</b> value = create_u128(merge);
         accumulator_root.add_accumulator(name, value);
-        accumulator_root.create_metadata&lt;T&gt;(owner, ctx);
     };
 }
 </code></pre>
@@ -317,7 +313,7 @@ Called by the settlement transaction to track conservation of RTD.
 
 
 <pre><code><b>fun</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_new_stream_head">new_stream_head</a>(new_root: u256, event_count_delta: u64, checkpoint_seq: u64): <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_EventStreamHead">EventStreamHead</a> {
-    <b>let</b> <b>mut</b> initial_mmr = vector::empty();
+    <b>let</b> <b>mut</b> initial_mmr = vector[];
     <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_add_to_mmr">add_to_mmr</a>(new_root, &<b>mut</b> initial_mmr);
     <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement_EventStreamHead">EventStreamHead</a> {
         mmr: initial_mmr,

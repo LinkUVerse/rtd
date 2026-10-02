@@ -6,20 +6,18 @@ use crate::config::Config;
 use crate::graphql::query_last_checkpoint_of_epoch;
 use crate::object_store::RtdObjectStore;
 use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::io::Read;
-use std::{fs, io::Write};
 use rtd_config::genesis::Genesis;
-use rtd_data_ingestion_core::end_of_epoch_data;
-use rtd_sdk::RtdClientBuilder;
+use rtd_rpc_api::Client;
+use rtd_storage::object_store::util::end_of_epoch_data;
 use rtd_types::{
     crypto::AuthorityQuorumSignInfo, message_envelope::Envelope,
     messages_checkpoint::CheckpointSummary,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::io::Read;
+use std::{fs, io::Write};
 use tracing::info;
-
-const CHECKPOINT_BUCKET_TIMEOUT_SECS: u64 = 5;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CheckpointsList {
@@ -149,8 +147,7 @@ async fn sync_checkpoint_list_to_latest_using_checkpoint_bucket(
     archive_url: String,
 ) -> anyhow::Result<CheckpointsList> {
     info!("Syncing checkpoints from Archive store");
-    let checkpoints =
-        end_of_epoch_data(archive_url, vec![], CHECKPOINT_BUCKET_TIMEOUT_SECS).await?;
+    let checkpoints = end_of_epoch_data(&archive_url, vec![]).await?;
     Ok(CheckpointsList { checkpoints })
 }
 
@@ -193,15 +190,10 @@ async fn sync_checkpoint_list_to_latest_using_graphql(
     let mut last_epoch = summary.epoch();
 
     // Download the very latest checkpoint
-    let client = RtdClientBuilder::default()
-        .build(config.full_node_url.as_str())
-        .await
-        .expect("Cannot connect to full node");
+    let mut client =
+        Client::new(config.full_node_url.as_str()).expect("Cannot connect to full node");
 
-    let latest_seq = client
-        .read_api()
-        .get_latest_checkpoint_sequence_number()
-        .await?;
+    let latest_seq = client.get_latest_checkpoint().await?.sequence_number;
     let latest = object_store.download_checkpoint_summary(latest_seq).await?;
 
     // Sequentially record all the missing end of epoch checkpoints numbers
@@ -238,9 +230,7 @@ pub async fn check_and_sync_checkpoints(config: &Config) -> anyhow::Result<()> {
     // Load the genesis committee
     let mut genesis_path = config.checkpoint_summary_dir.clone();
     genesis_path.push(&config.genesis_filename);
-    let genesis_committee = Genesis::load(&genesis_path)?
-        .committee()
-        .map_err(|e| anyhow!(format!("Cannot load Genesis: {e}")))?;
+    let genesis_committee = Genesis::load(&genesis_path)?.committee();
 
     // Check the signatures of all checkpoints
     // And download any missing ones

@@ -1,13 +1,18 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
+use anyhow::anyhow;
 use diesel::prelude::*;
 use rtd_field_count::FieldCount;
-use rtd_protocol_config::{Chain, ProtocolVersion};
-use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
+use rtd_protocol_config::Chain;
+use rtd_protocol_config::ProtocolVersion;
+use rtd_types::digests::ChainIdentifier;
+use rtd_types::digests::CheckpointDigest;
 
-use crate::schema::{kv_checkpoints, kv_genesis};
+use crate::schema::cp_digests;
+use crate::schema::kv_checkpoints;
+use crate::schema::kv_genesis;
 
 #[derive(Insertable, Debug, Clone, FieldCount, Queryable)]
 #[diesel(table_name = kv_checkpoints)]
@@ -19,6 +24,13 @@ pub struct StoredCheckpoint {
     pub checkpoint_summary: Vec<u8>,
     /// BCS serialized AuthorityQuorumSignInfo
     pub validator_signatures: Vec<u8>,
+}
+
+#[derive(Insertable, Debug, Clone, FieldCount, Queryable, Selectable)]
+#[diesel(table_name = cp_digests)]
+pub struct StoredCpDigest {
+    pub cp_sequence_number: i64,
+    pub cp_digest: Vec<u8>,
 }
 
 #[derive(Insertable, Selectable, Queryable, Debug, Clone)]

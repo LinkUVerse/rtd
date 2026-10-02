@@ -1,23 +1,32 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
+use std::time::Duration;
 
-use anyhow::{Context as _, ensure};
+use anyhow::Context as _;
+use anyhow::ensure;
 use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use move_core_types::ident_str;
 use reqwest::Client;
-use serde_json::{Value, json};
-use simulacrum::Simulacrum;
-use rtd_indexer_alt_e2e_tests::{FullCluster, OffchainClusterConfig, find};
-use rtd_indexer_alt_jsonrpc::config::{NameServiceConfig, RpcConfig as JsonRpcConfig};
+use rtd_indexer_alt_jsonrpc::config::NameServiceConfig;
+use rtd_indexer_alt_jsonrpc::config::RpcConfig as JsonRpcConfig;
 use rtd_move_build::BuildConfig;
-use rtd_types::{
-    base_types::{ObjectID, RtdAddress},
-    effects::TransactionEffectsAPI,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{ObjectArg, SharedObjectMutability, Transaction, TransactionData},
-};
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::ObjectArg;
+use rtd_types::transaction::SharedObjectMutability;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
+use serde_json::Value;
+use serde_json::json;
+use simulacrum::Simulacrum;
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
+use rtd_indexer_alt_e2e_tests::find;
 
 /// 5 RTD gas budget
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
@@ -349,7 +358,7 @@ impl RtdNSCluster {
 
         let data = TransactionData::new_programmable(
             sender,
-            vec![fx.gas_object().0],
+            vec![fx.gas_object().unwrap().0],
             builder.finish(),
             DEFAULT_GAS_BUDGET,
             sim.reference_gas_price(),
@@ -380,7 +389,7 @@ impl RtdNSCluster {
 
         let data = TransactionData::new_programmable(
             sender,
-            vec![fx.gas_object().0],
+            vec![fx.gas_object().unwrap().0],
             builder.finish(),
             DEFAULT_GAS_BUDGET,
             sim.reference_gas_price(),

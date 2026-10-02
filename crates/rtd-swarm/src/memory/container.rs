@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::node::RuntimeType;
-use futures::FutureExt;
 use rtd_config::NodeConfig;
 use rtd_node::{RtdNode, RtdNodeHandle};
 use rtd_types::base_types::ConciseableName;
@@ -102,6 +101,7 @@ impl Container {
                     "Started Prometheus HTTP endpoint. To query metrics use\n\tcurl -s http://{}/metrics",
                     config.metrics_address
                 );
+                let admin_interface_port = config.admin_interface_port;
                 let server = RtdNode::start_with_startup_target(
                     config,
                     registry_service,
@@ -109,15 +109,19 @@ impl Container {
                 )
                 .await
                 .unwrap();
-                let mut node_shutdown_receiver = server.subscribe_to_shutdown_channel();
+                let admin_node = server.clone();
+                tokio::spawn(async move {
+                    rtd_node::admin::run_admin_server(admin_node, admin_interface_port, None).await;
+                });
+                let mut node_shutdown = server.subscribe_to_shutdown_channel();
                 // Notify that we've successfully started the node
                 let _ = startup_sender.send(Arc::downgrade(&server));
-                // Run until the owner cancels the container or an internally supervised critical
-                // task requests node shutdown.
+                // Stop the isolated runtime if the checkpoint service enters
+                // fail-stop, as well as on explicit swarm cancellation.
                 tokio::select! {
-                    _ = cancel_receiver.map(|_| ()) => {}
-                    _ = node_shutdown_receiver.recv() => {
-                        info!("Node requested shutdown after a critical service failure");
+                    _ = cancel_receiver => {}
+                    result = node_shutdown.recv() => {
+                        tracing::warn!(?result, "in-memory node requested shutdown");
                     }
                 }
 

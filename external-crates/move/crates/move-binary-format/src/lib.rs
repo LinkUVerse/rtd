@@ -128,66 +128,17 @@ impl fmt::Display for IndexKind {
     }
 }
 
-// TODO: is this outdated?
-/// Represents the kind of a signature token.
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum SignatureTokenKind {
-    /// Any sort of owned value that isn't an array (Integer, Bool, Struct etc).
-    Value,
-    /// A reference.
-    Reference,
-    /// A mutable reference.
-    MutableReference,
-}
-
-impl fmt::Display for SignatureTokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use SignatureTokenKind::*;
-
-        let desc = match self {
-            Value => "value",
-            Reference => "reference",
-            MutableReference => "mutable reference",
-        };
-
-        f.write_str(desc)
-    }
-}
-
-/// A macro which should be preferred in critical runtime paths for unwrapping an option
-/// if a `PartialVMError` is expected. In debug mode, this will panic. Otherwise
+/// A macro which should be preferred in critical runtime paths for unwrapping an `Option` or
+/// `Result` when a `PartialVMError` is expected. In debug mode, this will panic. Otherwise
 /// we return an Err.
+///
+/// Works on both `Option<T>` and `Result<T, E>` via the `SafeUnwrap` trait.
 #[macro_export]
 macro_rules! safe_unwrap {
     ($e:expr) => {{
-        match $e {
-            Some(x) => x,
-            None => {
-                let err = move_binary_format::errors::PartialVMError::new(
-                    move_core_types::vm_status::StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                )
-                .with_message(format!("{}:{} (none)", file!(), line!()));
-                if cfg!(debug_assertions) {
-                    panic!("{:?}", err);
-                } else {
-                    return Err(err);
-                }
-            }
-        }
-    }};
-}
-
-/// Similar as above but for Result
-#[macro_export]
-macro_rules! safe_unwrap_err {
-    ($e:expr) => {{
-        match $e {
+        match $crate::errors::SafeUnwrap::safe_unwrap_or_error($e, file!(), line!()) {
             Ok(x) => x,
-            Err(e) => {
-                let err = move_binary_format::errors::PartialVMError::new(
-                    move_core_types::vm_status::StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                )
-                .with_message(format!("{}:{} {:#}", file!(), line!(), e));
+            Err(err) => {
                 if cfg!(debug_assertions) {
                     panic!("{:?}", err);
                 } else {
@@ -203,8 +154,10 @@ macro_rules! safe_unwrap_err {
 macro_rules! safe_assert {
     ($e:expr) => {{
         if !$e {
-            let err = PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                .with_message(format!("{}:{} (assert)", file!(), line!()));
+            let err = $crate::errors::PartialVMError::new(
+                move_core_types::vm_status::StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
+            )
+            .with_message(format!("{}:{} (assert)", file!(), line!()));
             if cfg!(debug_assertions) {
                 panic!("{:?}", err)
             } else {
@@ -240,26 +193,72 @@ macro_rules! safe_assert_eq {
     }};
 }
 
-#[cfg(test)]
-mod safe_assert_eq_tests {
-    use super::errors::PartialVMResult;
+/// Create a PartialVMError with the given error code and an optional message.
+#[macro_export]
+macro_rules! partial_vm_error {
+    ($error_name:ident $(,)?) => {{
 
-    fn assert_equal(left: u64, right: u64) -> PartialVMResult<()> {
-        crate::safe_assert_eq!(left, right);
-        Ok(())
-    }
+        let _e = $crate::errors::PartialVMError::new(
+            move_core_types::vm_status::StatusCode::$error_name,
+        );
+        #[cfg(all(debug_assertions, not(test)))]
+        {
+            if _e.major_status().status_type() == move_core_types::vm_status::StatusType::InvariantViolation {
+                panic!(
+                    "INVARIANT VIOLATION: {:?}",
+                    _e
+                );
+            }
+        }
+        _e
+    }};
+    ($error_name:ident, $($body:tt)*) => {{
+        let _e = $crate::errors::PartialVMError::new(
+            move_core_types::vm_status::StatusCode::$error_name,
+        ).with_message(
+            format!($($body)*),
+        );
+        #[cfg(all(debug_assertions, not(test)))]
+        {
+            if _e.major_status().status_type() == move_core_types::vm_status::StatusType::InvariantViolation {
+                panic!(
+                    "INVARIANT VIOLATION: {:?}",
+                    _e
+                );
+            }
+        }
+        _e
+    }};
+}
 
-    #[test]
-    fn accepts_equal_values() {
-        assert!(assert_equal(7, 7).is_ok());
-    }
+/// A macro for performing a checked cast from one type to another, returning a
+/// PartialVMError if the cast fails.
+#[macro_export]
+macro_rules! checked_as {
+    ($value:expr, $target_type:ty) => {{
+        let v = $value;
+        <$target_type>::try_from(v).map_err(|e| {
+            $crate::partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "Value {} cannot be safely cast to {}: {:?}",
+                v,
+                stringify!($target_type),
+                e
+            )
+        })
+    }};
+}
 
-    #[test]
-    fn rejects_unequal_values() {
-        #[cfg(debug_assertions)]
-        assert!(std::panic::catch_unwind(|| assert_equal(7, 8)).is_err());
-
-        #[cfg(not(debug_assertions))]
-        assert!(assert_equal(7, 8).is_err());
-    }
+#[macro_export]
+macro_rules! partial_vm_error_with_debug_message {
+    ($error_name:ident, $body:expr) => {{
+        let _e = $crate::errors::PartialVMError::new(
+            move_core_types::vm_status::StatusCode::$error_name,
+        );
+        if cfg!(debug_assertions) {
+            _e.with_message($body)
+        } else {
+            _e
+        }
+    }};
 }

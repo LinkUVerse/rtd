@@ -1,20 +1,17 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use rtd_sdk_types::{Address, Object, Version};
-use rtd_sdk_types::{CheckpointSequenceNumber, EpochId, SignedTransaction, ValidatorCommittee};
-use rtd_types::balance_change::BalanceChange;
-use rtd_types::base_types::{ObjectID, ObjectType};
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_sdk_types::{EpochId, ValidatorCommittee};
+use rtd_types::base_types::TransactionDigest;
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::storage::ObjectKey;
 use rtd_types::storage::RpcStateReader;
 use rtd_types::storage::error::{Error as StorageError, Result};
-use rtd_types::storage::{ObjectStore, TransactionInfo};
 use tap::Pipe;
-
-use crate::Direction;
 
 #[derive(Clone)]
 pub struct StateReader {
@@ -31,28 +28,6 @@ impl StateReader {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn get_object(&self, object_id: Address) -> crate::Result<Option<Object>> {
-        self.inner
-            .get_object(&object_id.into())
-            .map(TryInto::try_into)
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self))]
-    pub fn get_object_with_version(
-        &self,
-        object_id: Address,
-        version: Version,
-    ) -> crate::Result<Option<Object>> {
-        self.inner
-            .get_object_by_key(&object_id.into(), version.into())
-            .map(TryInto::try_into)
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    #[tracing::instrument(skip(self))]
     pub fn get_committee(&self, epoch: EpochId) -> Option<ValidatorCommittee> {
         self.inner
             .get_committee(epoch)
@@ -64,6 +39,21 @@ impl StateReader {
         rtd_types::rtd_system_state::get_rtd_system_state(self.inner())
             .map_err(StorageError::custom)
             .map_err(StorageError::custom)
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub fn get_display_object_v2_by_type(
+        &self,
+        object_type: &move_core_types::language_storage::StructTag,
+    ) -> Option<rtd_types::display_registry::Display> {
+        let object_id =
+            rtd_types::display_registry::display_object_id(object_type.clone().into()).ok()?;
+
+        let object = self.inner.get_object(&object_id)?;
+
+        let move_object = object.data.try_as_move()?;
+
+        bcs::from_bytes(move_object.contents()).ok()
     }
 
     #[tracing::instrument(skip(self))]
@@ -90,12 +80,11 @@ impl StateReader {
         &self,
         digest: rtd_sdk_types::Digest,
     ) -> crate::Result<(
-        rtd_sdk_types::SignedTransaction,
+        rtd_types::transaction::TransactionData,
+        Vec<rtd_types::signature::GenericSignature>,
         rtd_types::effects::TransactionEffects,
         Option<rtd_types::effects::TransactionEvents>,
     )> {
-        use rtd_types::effects::TransactionEffectsAPI;
-
         let transaction_digest = digest.into();
 
         let transaction = (*self
@@ -117,19 +106,87 @@ impl StateReader {
             None
         };
 
-        Ok((transaction.try_into()?, effects, events))
+        let transaction = transaction.into_data().into_inner();
+        let signatures = transaction.tx_signatures;
+        let transaction = transaction.intent_message.value;
+
+        Ok((transaction, signatures, effects, events))
     }
 
-    #[tracing::instrument(skip(self))]
-    pub fn get_transaction_info(
+    /// Fetch transaction reads using checkpoints supplied by the ledger index rows.
+    pub fn multi_get_transaction_reads(
         &self,
-        digest: &rtd_types::digests::TransactionDigest,
-    ) -> Option<TransactionInfo> {
-        self.inner()
-            .indexes()?
-            .get_transaction_info(digest)
-            .ok()
-            .flatten()
+        items: &[(rtd_sdk_types::Digest, u64)],
+    ) -> crate::Result<Vec<TransactionRead>> {
+        let transaction_digests = items
+            .iter()
+            .map(|(digest, _)| (*digest).into())
+            .collect::<Vec<TransactionDigest>>();
+        let transactions = self.inner().multi_get_transactions(&transaction_digests);
+        let effects = self
+            .inner()
+            .multi_get_transaction_effects(&transaction_digests);
+        let events = self.inner().multi_get_events(&transaction_digests);
+        let unchanged_loaded_runtime_objects = self
+            .inner()
+            .multi_get_unchanged_loaded_runtime_objects(&transaction_digests);
+        let timestamps = dedup_checkpoint_timestamps(
+            items.iter().map(|(_, checkpoint)| *checkpoint),
+            |unique| {
+                self.inner()
+                    .multi_get_checkpoint_by_sequence_number(unique)
+                    .into_iter()
+                    .map(|checkpoint| checkpoint.map(|checkpoint| checkpoint.timestamp_ms))
+                    .collect()
+            },
+        );
+
+        let mut reads = Vec::with_capacity(items.len());
+        for (
+            ((((digest, checkpoint), _transaction_digest), transaction), (effects, events)),
+            unchanged_loaded_runtime_objects,
+        ) in items
+            .iter()
+            .copied()
+            .zip_debug_eq(transaction_digests)
+            .zip_debug_eq(transactions)
+            .zip_debug_eq(effects.into_iter().zip_debug_eq(events))
+            .zip_debug_eq(unchanged_loaded_runtime_objects)
+        {
+            let transaction = (*transaction.ok_or(TransactionNotFoundError(digest))?)
+                .clone()
+                .into_inner();
+            let effects = effects.ok_or(TransactionNotFoundError(digest))?;
+            let events = if effects.events_digest().is_some() {
+                events.ok_or(TransactionNotFoundError(digest))?.pipe(Some)
+            } else {
+                None
+            };
+
+            let transaction = transaction.into_data().into_inner();
+            let signatures = transaction.tx_signatures;
+            let transaction = transaction.intent_message.value;
+            let timestamp_ms = timestamps[&checkpoint];
+
+            reads.push(TransactionRead {
+                digest,
+                transaction,
+                signatures,
+                effects,
+                events,
+                timestamp_ms,
+                unchanged_loaded_runtime_objects,
+            });
+        }
+
+        Ok(reads)
+    }
+
+    pub fn multi_get_events(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<rtd_types::effects::TransactionEvents>> {
+        self.inner().multi_get_events(digests)
     }
 
     #[tracing::instrument(skip(self))]
@@ -137,245 +194,100 @@ impl StateReader {
         &self,
         digest: rtd_sdk_types::Digest,
     ) -> crate::Result<TransactionRead> {
-        let (
-            SignedTransaction {
-                transaction,
-                signatures,
-            },
-            effects,
-            events,
-        ) = self.get_transaction(digest)?;
+        let (transaction, signatures, effects, events) = self.get_transaction(digest)?;
 
-        let (checkpoint, balance_changes, object_types) =
-            if let Some(info) = self.get_transaction_info(&(digest.into())) {
-                (
-                    Some(info.checkpoint),
-                    Some(info.balance_changes),
-                    Some(info.object_types),
-                )
-            } else {
-                let checkpoint = self.inner().get_transaction_checkpoint(&(digest.into()));
-                (checkpoint, None, None)
-            };
-        let timestamp_ms = if let Some(checkpoint) = checkpoint {
-            self.inner()
-                .get_checkpoint_by_sequence_number(checkpoint)
-                .map(|checkpoint| checkpoint.timestamp_ms)
-        } else {
-            None
-        };
+        let checkpoint = self.inner().get_transaction_checkpoint(&(digest.into()));
+        let timestamp_ms =
+            checkpoint.and_then(|checkpoint| self.checkpoint_timestamp_ms(checkpoint));
 
         let unchanged_loaded_runtime_objects = self
             .inner()
             .get_unchanged_loaded_runtime_objects(&(digest.into()));
 
         Ok(TransactionRead {
-            digest: transaction.digest(),
+            digest,
             transaction,
             signatures,
             effects,
             events,
-            checkpoint,
             timestamp_ms,
-            balance_changes,
-            object_types,
             unchanged_loaded_runtime_objects,
         })
     }
 
-    #[allow(unused)]
-    pub fn checkpoint_iter(
-        &self,
-        direction: Direction,
-        start: CheckpointSequenceNumber,
-    ) -> CheckpointIter {
-        CheckpointIter::new(self.clone(), direction, start)
+    /// Timestamp of the checkpoint summary, if it is still in the store.
+    fn checkpoint_timestamp_ms(&self, checkpoint: u64) -> Option<u64> {
+        self.inner()
+            .get_checkpoint_by_sequence_number(checkpoint)
+            .map(|checkpoint| checkpoint.timestamp_ms)
     }
 
-    #[allow(unused)]
-    pub fn transaction_iter(
+    pub fn lookup_address_balance(
         &self,
-        direction: Direction,
-        cursor: (CheckpointSequenceNumber, Option<usize>),
-    ) -> CheckpointTransactionsIter {
-        CheckpointTransactionsIter::new(self.clone(), direction, cursor)
+        owner: rtd_types::base_types::RtdAddress,
+        coin_type: move_core_types::language_storage::StructTag,
+    ) -> Option<u64> {
+        use rtd_types::MoveTypeTagTraitGeneric;
+        use rtd_types::RTD_ACCUMULATOR_ROOT_OBJECT_ID;
+        use rtd_types::accumulator_root::AccumulatorKey;
+        use rtd_types::dynamic_field::DynamicFieldKey;
+
+        let balance_type = rtd_types::balance::Balance::type_tag(coin_type.into());
+
+        let key = AccumulatorKey { owner };
+        let key_type_tag = AccumulatorKey::get_type_tag(&[balance_type]);
+
+        DynamicFieldKey(RTD_ACCUMULATOR_ROOT_OBJECT_ID, key, key_type_tag)
+            .into_unbounded_id()
+            .unwrap()
+            .load_object(self.inner())
+            .and_then(|o| o.load_value::<u128>().ok())
+            .map(|balance| balance as u64)
     }
+
+    // Return the lowest available checkpoint watermark for which the RPC service can return proper
+    // responses for.
+    pub fn get_lowest_available_checkpoint(&self) -> Result<u64, crate::RpcError> {
+        // This is the lowest lowest_available_checkpoint from the checkpoint store
+        let lowest_available_checkpoint = self.inner().get_lowest_available_checkpoint()?;
+        // This is the lowest lowest_available_checkpoint from the perpetual store
+        let lowest_available_checkpoint_objects =
+            self.inner().get_lowest_available_checkpoint_objects()?;
+
+        // Return the higher of the two for our lower watermark
+        Ok(lowest_available_checkpoint.max(lowest_available_checkpoint_objects))
+    }
+}
+
+fn dedup_checkpoint_timestamps(
+    checkpoints: impl IntoIterator<Item = u64>,
+    fetch: impl FnOnce(&[u64]) -> Vec<Option<u64>>,
+) -> HashMap<u64, Option<u64>> {
+    let unique_checkpoints = checkpoints
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if unique_checkpoints.is_empty() {
+        return HashMap::new();
+    }
+
+    let timestamps = fetch(&unique_checkpoints);
+    unique_checkpoints
+        .into_iter()
+        .zip_debug_eq(timestamps)
+        .collect()
 }
 
 #[derive(Debug)]
 pub struct TransactionRead {
     pub digest: rtd_sdk_types::Digest,
-    pub transaction: rtd_sdk_types::Transaction,
-    pub signatures: Vec<rtd_sdk_types::UserSignature>,
+    pub transaction: rtd_types::transaction::TransactionData,
+    pub signatures: Vec<rtd_types::signature::GenericSignature>,
     pub effects: rtd_types::effects::TransactionEffects,
     pub events: Option<rtd_types::effects::TransactionEvents>,
-    pub checkpoint: Option<u64>,
     pub timestamp_ms: Option<u64>,
-    pub balance_changes: Option<Vec<BalanceChange>>,
-    pub object_types: Option<HashMap<ObjectID, ObjectType>>,
     pub unchanged_loaded_runtime_objects: Option<Vec<ObjectKey>>,
-}
-
-pub struct CheckpointTransactionsIter {
-    reader: StateReader,
-    direction: Direction,
-
-    next_cursor: Option<(CheckpointSequenceNumber, Option<usize>)>,
-    checkpoint: Option<(
-        rtd_types::messages_checkpoint::CheckpointSummary,
-        rtd_types::messages_checkpoint::CheckpointContents,
-    )>,
-}
-
-impl CheckpointTransactionsIter {
-    #[allow(unused)]
-    pub fn new(
-        reader: StateReader,
-        direction: Direction,
-        start: (CheckpointSequenceNumber, Option<usize>),
-    ) -> Self {
-        Self {
-            reader,
-            direction,
-            next_cursor: Some(start),
-            checkpoint: None,
-        }
-    }
-}
-
-impl Iterator for CheckpointTransactionsIter {
-    type Item = Result<(CursorInfo, rtd_types::digests::TransactionDigest)>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let (current_checkpoint, transaction_index) = self.next_cursor?;
-
-            let (checkpoint, contents) = if let Some(checkpoint) = &self.checkpoint {
-                if checkpoint.0.sequence_number != current_checkpoint {
-                    self.checkpoint = None;
-                    continue;
-                } else {
-                    checkpoint
-                }
-            } else {
-                let checkpoint = self
-                    .reader
-                    .inner()
-                    .get_checkpoint_by_sequence_number(current_checkpoint)?;
-                let contents = self
-                    .reader
-                    .inner()
-                    .get_checkpoint_contents_by_sequence_number(checkpoint.sequence_number)?;
-
-                self.checkpoint = Some((checkpoint.into_inner().into_data(), contents));
-                self.checkpoint.as_ref().unwrap()
-            };
-
-            let index = transaction_index
-                .map(|idx| idx.clamp(0, contents.size().saturating_sub(1)))
-                .unwrap_or_else(|| match self.direction {
-                    Direction::Ascending => 0,
-                    Direction::Descending => contents.size().saturating_sub(1),
-                });
-
-            self.next_cursor = {
-                let next_index = match self.direction {
-                    Direction::Ascending => {
-                        let next_index = index + 1;
-                        if next_index >= contents.size() {
-                            None
-                        } else {
-                            Some(next_index)
-                        }
-                    }
-                    Direction::Descending => index.checked_sub(1),
-                };
-
-                let next_checkpoint = if next_index.is_some() {
-                    Some(current_checkpoint)
-                } else {
-                    match self.direction {
-                        Direction::Ascending => current_checkpoint.checked_add(1),
-                        Direction::Descending => current_checkpoint.checked_sub(1),
-                    }
-                };
-
-                next_checkpoint.map(|checkpoint| (checkpoint, next_index))
-            };
-
-            if contents.size() == 0 {
-                continue;
-            }
-
-            let digest = contents.inner()[index].transaction;
-
-            let cursor_info = CursorInfo {
-                checkpoint: checkpoint.sequence_number,
-                timestamp_ms: checkpoint.timestamp_ms,
-                index: index as u64,
-                next_cursor: self.next_cursor,
-            };
-
-            return Some(Ok((cursor_info, digest)));
-        }
-    }
-}
-
-#[allow(unused)]
-pub struct CursorInfo {
-    pub checkpoint: CheckpointSequenceNumber,
-    pub timestamp_ms: u64,
-    #[allow(unused)]
-    pub index: u64,
-
-    // None if there are no more transactions in the store
-    pub next_cursor: Option<(CheckpointSequenceNumber, Option<usize>)>,
-}
-
-pub struct CheckpointIter {
-    reader: StateReader,
-    direction: Direction,
-
-    next_cursor: Option<CheckpointSequenceNumber>,
-}
-
-impl CheckpointIter {
-    #[allow(unused)]
-    pub fn new(reader: StateReader, direction: Direction, start: CheckpointSequenceNumber) -> Self {
-        Self {
-            reader,
-            direction,
-            next_cursor: Some(start),
-        }
-    }
-}
-
-impl Iterator for CheckpointIter {
-    type Item = Result<(
-        rtd_types::messages_checkpoint::CertifiedCheckpointSummary,
-        rtd_types::messages_checkpoint::CheckpointContents,
-    )>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let current_checkpoint = self.next_cursor?;
-
-        let checkpoint = self
-            .reader
-            .inner()
-            .get_checkpoint_by_sequence_number(current_checkpoint)?
-            .into_inner();
-        let contents = self
-            .reader
-            .inner()
-            .get_checkpoint_contents_by_sequence_number(checkpoint.sequence_number)?;
-
-        self.next_cursor = match self.direction {
-            Direction::Ascending => current_checkpoint.checked_add(1),
-            Direction::Descending => current_checkpoint.checked_sub(1),
-        };
-
-        Some(Ok((checkpoint, contents)))
-    }
 }
 
 #[derive(Debug)]
@@ -392,5 +304,84 @@ impl std::error::Error for TransactionNotFoundError {}
 impl From<TransactionNotFoundError> for crate::RpcError {
     fn from(value: TransactionNotFoundError) -> Self {
         Self::new(tonic::Code::NotFound, value.to_string())
+    }
+}
+
+pub struct DisplayStore<'s> {
+    state: &'s StateReader,
+}
+
+impl<'s> DisplayStore<'s> {
+    pub fn new(state: &'s StateReader) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait::async_trait]
+impl rtd_display::v2::Store for DisplayStore<'_> {
+    async fn latest(
+        &self,
+        id: move_core_types::account_address::AccountAddress,
+    ) -> anyhow::Result<Option<(move_core_types::annotated_value::MoveTypeLayout, Vec<u8>)>> {
+        let Some(object) = self.state.inner().get_object(&id.into()) else {
+            return Ok(None);
+        };
+
+        let Some(move_object) = object.data.try_as_move() else {
+            return Ok(None);
+        };
+
+        let object_type = move_object.type_().clone().into();
+
+        let Some(layout) = self.state.inner().get_struct_layout(&object_type)? else {
+            return Ok(None);
+        };
+
+        Ok(Some((layout, move_object.contents().to_vec())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+
+    #[test]
+    fn dedup_checkpoint_timestamps_fetches_sorted_unique_checkpoints_once() {
+        let fetch_calls = Cell::new(0);
+        let timestamps = dedup_checkpoint_timestamps([5, 5, 3, 5, 3], |checkpoints| {
+            fetch_calls.set(fetch_calls.get() + 1);
+            assert_eq!(checkpoints, &[3, 5]);
+            vec![Some(300), Some(500)]
+        });
+
+        assert_eq!(fetch_calls.get(), 1);
+        assert_eq!(timestamps.len(), 2);
+        assert_eq!(timestamps[&3], Some(300));
+        assert_eq!(timestamps[&5], Some(500));
+    }
+
+    #[test]
+    fn dedup_checkpoint_timestamps_skips_fetch_for_empty_input() {
+        let fetch_calls = Cell::new(0);
+        let timestamps = dedup_checkpoint_timestamps([], |_| {
+            fetch_calls.set(fetch_calls.get() + 1);
+            Vec::new()
+        });
+
+        assert_eq!(fetch_calls.get(), 0);
+        assert!(timestamps.is_empty());
+    }
+
+    #[test]
+    fn dedup_checkpoint_timestamps_preserves_missing_summary() {
+        let timestamps = dedup_checkpoint_timestamps([2, 1], |checkpoints| {
+            assert_eq!(checkpoints, &[1, 2]);
+            vec![None, Some(200)]
+        });
+
+        assert_eq!(timestamps[&1], None);
+        assert_eq!(timestamps[&2], Some(200));
     }
 }

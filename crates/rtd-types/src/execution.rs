@@ -6,24 +6,26 @@ use crate::{
     accumulator_event::AccumulatorEvent,
     base_types::{ObjectID, ObjectRef, SequenceNumber},
     digests::{ObjectDigest, TransactionDigest},
-    error::RtdError,
+    error::{ExecutionError, RtdError},
     event::Event,
     is_system_package,
     object::{Data, Object, Owner},
+    rtd_system_state::RTD_SYSTEM_STATE_INNER_MODULE_NAME,
     storage::{BackingPackageStore, ObjectChange},
     transaction::{Argument, Command, SharedObjectMutability},
     type_input::TypeInput,
 };
 use move_core_types::{
-    identifier::Identifier,
+    ident_str,
+    identifier::IdentStr,
     language_storage::{StructTag, TypeTag},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-const RTD_SYSTEM_STATE_INNER_MODULE: &str = "rtd_system_state_inner";
-const EXECUTION_TIME_OBSERVATION_CHUNK_KEY_STRUCT: &str = "ExecutionTimeObservationChunkKey";
+const EXECUTION_TIME_OBSERVATION_CHUNK_KEY_STRUCT: &IdentStr =
+    ident_str!("ExecutionTimeObservationChunkKey");
 
 /// A type containing all of the information needed to work in execution with an object whose
 /// consensus stream is ended, and when committing the execution effects of the transaction.
@@ -119,18 +121,60 @@ impl ExecutionResultsV2 {
         self.accumulator_events.clear();
     }
 
-    pub fn merge_results(&mut self, new_results: Self) {
+    /// If `consistent_merge` is true, the deletes and writes in `new_results` will update the
+    /// results any existing writes and deletes in `self` respectively. If false, it is assumed
+    /// that deletes and writes are disjoint.
+    /// If `invariant_checks` is true, the function will check for disjointness between deleted
+    /// and created/written objects.
+    pub fn merge_results(
+        &mut self,
+        new_results: Self,
+        consistent_merge: bool,
+        invariant_checks: bool,
+    ) -> Result<(), ExecutionError> {
+        if consistent_merge {
+            // An object written before the merge (e.g., gas coin written by smash_gas) may be
+            // deleted by the new results (e.g., send_funds destroying the gas coin during PTB
+            // execution). Remove such stale entries.
+            for id in &new_results.deleted_object_ids {
+                self.written_objects.remove(id);
+                // additional hardening
+                self.created_object_ids.remove(id);
+            }
+            // While not possible currently, we should ensure that any object previously marked as
+            // deleted is now marked only as written
+            for id in new_results.written_objects.keys() {
+                self.deleted_object_ids.remove(id);
+            }
+        }
+
         self.written_objects.extend(new_results.written_objects);
         self.modified_objects.extend(new_results.modified_objects);
         self.created_object_ids
             .extend(new_results.created_object_ids);
         self.deleted_object_ids
             .extend(new_results.deleted_object_ids);
+
+        if invariant_checks {
+            // debug assert that deleted is disjoint with created and written
+            assert_invariant!(
+                self.deleted_object_ids
+                    .is_disjoint(&self.created_object_ids),
+                "Deleted object IDs should be disjoint with created object IDs"
+            );
+            assert_invariant!(
+                self.written_objects
+                    .keys()
+                    .all(|id| !self.deleted_object_ids.contains(id)),
+                "Deleted object IDs should be disjoint with written object IDs"
+            );
+        }
         self.user_events.extend(new_results.user_events);
         self.accumulator_events
             .extend(new_results.accumulator_events);
         self.settlement_input_rtd += new_results.settlement_input_rtd;
         self.settlement_output_rtd += new_results.settlement_output_rtd;
+        Ok(())
     }
 
     pub fn update_version_and_previous_tx(
@@ -312,8 +356,8 @@ impl MoveTypeTagTrait for ExecutionTimeObservationChunkKey {
     fn get_type_tag() -> TypeTag {
         TypeTag::Struct(Box::new(StructTag {
             address: RTD_SYSTEM_ADDRESS,
-            module: Identifier::new(RTD_SYSTEM_STATE_INNER_MODULE).unwrap(),
-            name: Identifier::new(EXECUTION_TIME_OBSERVATION_CHUNK_KEY_STRUCT).unwrap(),
+            module: RTD_SYSTEM_STATE_INNER_MODULE_NAME.to_owned(),
+            name: EXECUTION_TIME_OBSERVATION_CHUNK_KEY_STRUCT.to_owned(),
             type_params: vec![],
         }))
     }

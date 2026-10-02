@@ -6,6 +6,16 @@ processed 15 tasks
 init:
 A: object(0,0)
 
+// 1. Default behavior of getTransactionBlock (no options)
+// 2. Setting a limit
+// 3. Setting a limit and cursor
+// 4. Changing the order
+// 5. Setting the order, cursor and limit
+// 6. Providing a bad cursor
+// 7. Page size too large
+// 8. Unsupported filter
+// 9. Supplying response options
+
 task 1, lines 16-18:
 //# programmable --sender A --inputs 12 @A
 //> 0: SplitCoins(Gas, [Input(0)]);
@@ -58,37 +68,42 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "3FJ4fSrf7toVCANccxAbeJ5A1iSzwKLghCYcaz9atbCD",
+        "digest": "85r5mfnut7T1NNBmbL7RpGMf9caJe5VEnpiCJxkz7eDE",
         "timestampMs": "0",
         "checkpoint": "0"
       },
       {
-        "digest": "Fx83wfghpUeiBQJ2C1Vt9WwY5rkGUWWgoXSCGfomqqnv",
+        "digest": "7BPZ2MKqvmQznwTbkrkPKegZ9Px8VUQftMnJ1CYDdZCe",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "4tTfhF9TpbEbJ1efxQbc6A4DWVbBzUYwNhXgt7zsmJsc",
+        "digest": "5kUwrwna9qrLbYxzbMMrP6KEiVhgFWq2Lu2VrxLFNem9",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "BULsDepy775taHDviboyivQdnoWkB5QMDYiM1kGcfbQ9",
+        "digest": "2megPN8PhG2pryGwqSWAiiMc3GAoFWugiUFUbxF4fiQZ",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "3H9FD5LGcHgFSQBfiziYa5f31b86iuQe9Cn5DVMenMAG",
+        "digest": "FvUAw31nRwYo1LqfxyvBdtbsRqXxPiTPNmRExvAxRJ7c",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "8p2kdvQUf3TKihDPyC62ggc79intjzNW7TnfaA7an9At",
+        "digest": "5BoY6JV1G6KUvXbn6mh2jzxgPATEEBR5tsXsw47Nxw2i",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
         "timestampMs": "0",
         "checkpoint": "1"
       }
     ],
-    "nextCursor": "NQ==",
+    "nextCursor": "Ng==",
     "hasNextPage": false
   }
 }
@@ -101,17 +116,17 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "3FJ4fSrf7toVCANccxAbeJ5A1iSzwKLghCYcaz9atbCD",
+        "digest": "85r5mfnut7T1NNBmbL7RpGMf9caJe5VEnpiCJxkz7eDE",
         "timestampMs": "0",
         "checkpoint": "0"
       },
       {
-        "digest": "Fx83wfghpUeiBQJ2C1Vt9WwY5rkGUWWgoXSCGfomqqnv",
+        "digest": "7BPZ2MKqvmQznwTbkrkPKegZ9Px8VUQftMnJ1CYDdZCe",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "4tTfhF9TpbEbJ1efxQbc6A4DWVbBzUYwNhXgt7zsmJsc",
+        "digest": "5kUwrwna9qrLbYxzbMMrP6KEiVhgFWq2Lu2VrxLFNem9",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -129,23 +144,23 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "BULsDepy775taHDviboyivQdnoWkB5QMDYiM1kGcfbQ9",
+        "digest": "2megPN8PhG2pryGwqSWAiiMc3GAoFWugiUFUbxF4fiQZ",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "3H9FD5LGcHgFSQBfiziYa5f31b86iuQe9Cn5DVMenMAG",
+        "digest": "FvUAw31nRwYo1LqfxyvBdtbsRqXxPiTPNmRExvAxRJ7c",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "8p2kdvQUf3TKihDPyC62ggc79intjzNW7TnfaA7an9At",
+        "digest": "5BoY6JV1G6KUvXbn6mh2jzxgPATEEBR5tsXsw47Nxw2i",
         "timestampMs": "0",
         "checkpoint": "1"
       }
     ],
     "nextCursor": "NQ==",
-    "hasNextPage": false
+    "hasNextPage": true
   }
 }
 
@@ -157,32 +172,37 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "8p2kdvQUf3TKihDPyC62ggc79intjzNW7TnfaA7an9At",
+        "digest": "FnRLaJFCiQDLmx8HEJsaNfLAnGX1TULDnuLWBhDrLACm",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "3H9FD5LGcHgFSQBfiziYa5f31b86iuQe9Cn5DVMenMAG",
+        "digest": "5BoY6JV1G6KUvXbn6mh2jzxgPATEEBR5tsXsw47Nxw2i",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "BULsDepy775taHDviboyivQdnoWkB5QMDYiM1kGcfbQ9",
+        "digest": "FvUAw31nRwYo1LqfxyvBdtbsRqXxPiTPNmRExvAxRJ7c",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "4tTfhF9TpbEbJ1efxQbc6A4DWVbBzUYwNhXgt7zsmJsc",
+        "digest": "2megPN8PhG2pryGwqSWAiiMc3GAoFWugiUFUbxF4fiQZ",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "Fx83wfghpUeiBQJ2C1Vt9WwY5rkGUWWgoXSCGfomqqnv",
+        "digest": "5kUwrwna9qrLbYxzbMMrP6KEiVhgFWq2Lu2VrxLFNem9",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "3FJ4fSrf7toVCANccxAbeJ5A1iSzwKLghCYcaz9atbCD",
+        "digest": "7BPZ2MKqvmQznwTbkrkPKegZ9Px8VUQftMnJ1CYDdZCe",
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "85r5mfnut7T1NNBmbL7RpGMf9caJe5VEnpiCJxkz7eDE",
         "timestampMs": "0",
         "checkpoint": "0"
       }
@@ -200,12 +220,12 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "4tTfhF9TpbEbJ1efxQbc6A4DWVbBzUYwNhXgt7zsmJsc",
+        "digest": "5kUwrwna9qrLbYxzbMMrP6KEiVhgFWq2Lu2VrxLFNem9",
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "Fx83wfghpUeiBQJ2C1Vt9WwY5rkGUWWgoXSCGfomqqnv",
+        "digest": "7BPZ2MKqvmQznwTbkrkPKegZ9Px8VUQftMnJ1CYDdZCe",
         "timestampMs": "0",
         "checkpoint": "1"
       }
@@ -245,7 +265,7 @@ Response: {
   "result": {
     "data": [
       {
-        "digest": "4tTfhF9TpbEbJ1efxQbc6A4DWVbBzUYwNhXgt7zsmJsc",
+        "digest": "5kUwrwna9qrLbYxzbMMrP6KEiVhgFWq2Lu2VrxLFNem9",
         "transaction": {
           "data": {
             "messageVersion": "v1",
@@ -292,9 +312,9 @@ Response: {
             "gasData": {
               "payment": [
                 {
-                  "objectId": "0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a",
+                  "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
                   "version": 2,
-                  "digest": "HPfMHJxiZ7ozY7jppcCGe2MwZ2TCFCCcmugtNvUgRuts"
+                  "digest": "A5qnEjJ3wStHWEWTPZajJjEZQixjutFeG3cmF1jWupfY"
                 }
               ],
               "owner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
@@ -303,14 +323,14 @@ Response: {
             }
           },
           "txSignatures": [
-            "APiQZonSLcnMfxma2YMk7AvdgkWSew2B3HWH98dbyf5Z67cR5ojet/acq516WO9rbD/hEJJMd51bgmjm3MOyTgN/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
+            "AK1J3GGLJOpS7Qj/o/PLq59fidaNxCorvbpyOu+ChpInqV9iuI95KpWCQY0zWsKaKP6iud7pnVj3Lyue9woxHgV/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
           ]
         },
         "timestampMs": "0",
         "checkpoint": "1"
       },
       {
-        "digest": "BULsDepy775taHDviboyivQdnoWkB5QMDYiM1kGcfbQ9",
+        "digest": "2megPN8PhG2pryGwqSWAiiMc3GAoFWugiUFUbxF4fiQZ",
         "transaction": {
           "data": {
             "messageVersion": "v1",
@@ -357,9 +377,9 @@ Response: {
             "gasData": {
               "payment": [
                 {
-                  "objectId": "0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a",
+                  "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
                   "version": 3,
-                  "digest": "CnQFnb8LS9rdRHjkWFo5GKnP5QBNkRAe6eoamKnxFWEQ"
+                  "digest": "CAmoeDmTzPZySEdgRkTYAeagKCtcPdDYymfQrj6pnrsK"
                 }
               ],
               "owner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
@@ -368,7 +388,7 @@ Response: {
             }
           },
           "txSignatures": [
-            "AEgcwTWMXQYfQwFRXqb3R26Z7LMv7ODaZHJ8zJd2LT88eg+2Y98zJwUUDxxmMj3tAadcwBgLTdcRFe6lzcO2jgl/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
+            "AByHa3jZikIFJEq3vkj2i/LQGwsvDnE0ZldA6WNgJSTAk33XjfqeVdgV8zcHd3F3vcB5dbN0Uv1xWtePrlfd2gZ/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
           ]
         },
         "timestampMs": "0",

@@ -20,6 +20,7 @@ use fastcrypto::{
     secp256r1::Secp256r1PublicKey,
     traits::{EncodeDecodeBase64, ToFromBytes, VerifyingKey},
 };
+use linku_common::ZipDebugEqIteratorExt;
 use once_cell::sync::OnceCell;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -109,6 +110,19 @@ impl AuthenticatorTrait for MultiSig {
                 error: "Invalid multisig pubkey".to_string(),
             })?;
 
+        // Additional validation on zkLogin public identifier struct if flag is enabled.
+        if verify_params.validate_zklogin_public_identifier {
+            for (pk, _weight) in &self.multisig_pk.pk_map {
+                if let PublicKey::ZkLogin(zklogin_pk) = pk {
+                    zklogin_pk
+                        .validate()
+                        .map_err(|e| RtdErrorKind::InvalidSignature {
+                            error: format!("Invalid zkLogin pk in multisig: {}", e),
+                        })?;
+                }
+            }
+        }
+
         if RtdAddress::from(&self.multisig_pk) != multisig_address {
             return Err(RtdErrorKind::InvalidSignature {
                 error: "Invalid address derived from pks".to_string(),
@@ -116,7 +130,7 @@ impl AuthenticatorTrait for MultiSig {
             .into());
         }
 
-        if !self.get_zklogin_sigs()?.is_empty() && !verify_params.accept_zklogin_in_multisig {
+        if self.has_zklogin_sigs() && !verify_params.accept_zklogin_in_multisig {
             return Err(RtdErrorKind::InvalidSignature {
                 error: "zkLogin sig not supported inside multisig".to_string(),
             }
@@ -131,13 +145,12 @@ impl AuthenticatorTrait for MultiSig {
         }
 
         let mut weight_sum: u16 = 0;
-        let message = bcs::to_bytes(&value).expect("Message serialization should not fail");
         let mut hasher = DefaultHash::default();
-        hasher.update(message);
+        bcs::serialize_into(&mut hasher, &value).expect("Message serialization should not fail");
         let digest = hasher.finalize().digest;
         // Verify each signature against its corresponding signature scheme and public key.
         // TODO: further optimization can be done because multiple Ed25519 signatures can be batch verified.
-        for (sig, i) in self.sigs.iter().zip(as_indices(self.bitmap)?) {
+        for (sig, i) in self.sigs.iter().zip_debug_eq(as_indices(self.bitmap)?) {
             let (subsig_pubkey, weight) =
                 self.multisig_pk
                     .pk_map
@@ -430,6 +443,12 @@ impl MultiSig {
             .iter()
             .any(|s| matches!(s, CompressedSignature::Passkey(_)))
     }
+
+    pub fn has_zklogin_sigs(&self) -> bool {
+        self.sigs
+            .iter()
+            .any(|s| matches!(s, CompressedSignature::ZkLogin(_)))
+    }
 }
 
 impl ToFromBytes for MultiSig {
@@ -519,7 +538,7 @@ impl MultiSigPublicKey {
         }
 
         Ok(MultiSigPublicKey {
-            pk_map: pks.into_iter().zip(weights).collect(),
+            pk_map: pks.into_iter().zip_debug_eq(weights).collect(),
             threshold,
         })
     }

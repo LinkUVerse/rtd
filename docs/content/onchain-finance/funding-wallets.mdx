@@ -1,0 +1,22 @@
+---
+title: Funding Wallets
+description: Fund wallets on a local RTD development network.
+keywords:
+  - funding
+  - faucet
+  - wallet
+  - local development
+questions:
+  - How do I get RTD into a development wallet?
+answer: >-
+  Use the faucet configured for your own RTD development network. No public RTD
+  Mainnet, exchange withdrawal, fiat on-ramp, or bridge route is verified.
+---
+
+To transact on a local RTD development chain, a wallet needs the native RTD coin for gas. Use the faucet configured when that development network was created. Check the wallet's active chain ID and address before requesting funds, then verify the received coin on the same chain. Development coins have no monetary value.
+
+If you reset the local chain, its genesis and chain ID can change. A balance, object, or package ID from the previous chain is not portable to the new chain. Refresh the wallet environment and deployment records after a reset.
+
+RTD has no public Mainnet. No exchange withdrawal, fiat on-ramp, Wormhole route, or public RTD Bridge has been verified. Do not send RTD or other assets to upstream Sui addresses or to an endpoint that merely uses a similar name. See [bridging tokens](/onchain-finance/fungible-tokens/rtd-bridging) for the requirements to operate an RTD bridge.
+
+An application may later sponsor a user's gas fees, but sponsorship requires a separately configured service, signing policy, funding wallet, and abuse controls. It is not provided by a public RTD gas station in this fork.

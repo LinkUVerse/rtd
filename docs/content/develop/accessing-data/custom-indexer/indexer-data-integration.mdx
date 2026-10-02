@@ -1,0 +1,169 @@
+---
+title: Integrate Custom Data Sources with a Custom Indexer
+sidebar_label: Integrate Data Sources
+description: >-
+  Choose checkpoint data sources operated for the same RTD chain as a custom
+  indexer, including fullnode gRPC, object stores, and local checkpoint files.
+keywords:
+  - rtd custom indexer
+  - checkpoint data sources
+  - grpc streaming
+  - object store
+  - google cloud storage
+  - blockchain data ingestion
+  - rtd indexing framework
+goal:
+  description: >-
+    Reader can choose and configure the appropriate checkpoint sources for
+    backfill, recovery, steady-state production ingestion, and testing.
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - min_words: 300
+      label: Needs more content depth
+    - pattern: '```'
+      min: 1
+      label: Has code examples
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+builder_paths:
+  - path_id: agentic-payments
+    path_name: Agentic Payments
+    step: Indexer data integration
+    stage: Ship
+  - path_id: walrus-agentic
+    path_name: Walrus Agentic Data Storage
+    step: Indexer data integration
+    stage: Ship
+questions:
+  - Which checkpoint source should an RTD indexer use?
+  - How do I configure an operator-owned checkpoint bucket?
+  - How do I switch between backfill and fullnode gRPC ingestion?
+answer: >-
+  Backfill from a checkpoint store whose operator confirms its RTD genesis,
+  available range, credentials, and retention, then use an operated RTD fullnode
+  gRPC endpoint for steady state. No RTD public checkpoint or fullnode endpoint
+  is configured or verified by this fork.
+---
+
+The `rtd-indexer-alt-framework` ingests ordered RTD checkpoints from one polling-based source and can optionally add fullnode gRPC streaming for lower latency at the network tip. RTD has not launched Mainnet, and this fork has no verified public Testnet or Devnet checkpoint bucket, fullnode endpoint, or archival service. Obtain all sources from the operator of the RTD chain you are indexing. Confirm the source's genesis digest or chain ID, checkpoint range, retention, and access policy before use; a Sui source cannot provide RTD checkpoints.
+
+## Checkpoint data sources {#checkpoint-data-sources}
+
+| **Source** | **CLI configuration** | **Retention** | **Recommended use** |
+| --- | --- | --- | --- |
+| Operator-owned fullnode gRPC | `--rpc-api-url` and optional `--streaming-url` | Depends on the fullnode | Steady-state ingestion |
+| Operator-owned GCS checkpoint bucket | `--remote-store-gcs`; billing header only if Requester Pays is enabled | Depends on the bucket | Backfill and recovery when required history exists |
+| Operator-owned S3 or Azure checkpoint store | `--remote-store-s3` or `--remote-store-azure` | Depends on the store | Backfill and recovery when required history exists |
+| Operator-owned HTTP checkpoint store | `--remote-store-url` | Depends on the store | Backfill or testing within its available range |
+| Local checkpoint files | `--local-ingestion-path` | Files present locally | Reproducible development and tests |
+| Operator-owned archival gRPC service | `--rpc-api-url` if it serves checkpoints via `LedgerService` | Depends on the service | Targeted historical ingestion after verifying its chain and range |
+
+The operator must supply any bucket name or service URL. None of the example hostnames in upstream Sui documentation identify an RTD service. Never combine checkpoints from separate chain IDs, including different local genesis runs.
+
+## Recommended production flow
+
+Use separate backfill and steady-state processes. Both processes use the same database and pipeline configuration, so the steady-state process resumes from committed watermarks after the backfill stops. Both sources must contain checkpoints from the same RTD genesis.
+
+### Backfill from an operator-owned GCS bucket
+
+Use this example only after the RTD network operator gives you a bucket containing the required history. Configure the GCS credentials and replace the bucket name. If that bucket uses Requester Pays, also pass a billing project in the `x-goog-user-project` header:
+
+```sh
+$ export GOOGLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json
+$ export GOOGLE_CLOUD_PROJECT=your-billing-project
+$ export RTD_CHECKPOINT_BUCKET=YOUR_OPERATOR_BUCKET_NAME
+
+$ cargo run -- \
+  --remote-store-gcs "$RTD_CHECKPOINT_BUCKET" \
+  --remote-store-header "x-goog-user-project:${GOOGLE_CLOUD_PROJECT}"
+```
+
+Omit the billing header if Requester Pays is not enabled. Authentication details depend on the storage operator; confirm they work before starting a long backfill. This example does not imply that any RTD public bucket exists or retains full history.
+
+### Switch to fullnode gRPC at the network tip
+
+After every required pipeline catches up, stop the bucket-backed process and restart with polling and streaming through a fullnode that serves the same RTD chain:
+
+```sh
+$ export FULLNODE_GRPC_URL=http://127.0.0.1:9000
+
+$ cargo run -- \
+  --rpc-api-url "$FULLNODE_GRPC_URL" \
+  --streaming-url "$FULLNODE_GRPC_URL"
+```
+
+Replace the loopback URL with the actual endpoint of your operated fullnode if it runs elsewhere. The polling client retrieves checkpoints missed during short streaming interruptions, subject to the fullnode's retention. If an outage or lag exceeds that retention, stop the process and recover the missing range from a same-chain store that actually retains it before switching back to fullnode gRPC.
+
+## Push-based data source
+
+Streaming pushes newly produced checkpoints from a fullnode with lower latency than polling. It emits checkpoints near the network tip, so always configure a polling source as well. Use an operated RTD fullnode that exposes both gRPC methods:
+
+```sh
+$ export FULLNODE_GRPC_URL=http://127.0.0.1:9000
+
+$ cargo run -- \
+  --rpc-api-url "$FULLNODE_GRPC_URL" \
+  --streaming-url "$FULLNODE_GRPC_URL"
+```
+
+The streaming client automatically falls back to the polling client when streaming is unavailable or when it needs an earlier checkpoint that remains within the polling source's retention.
+
+RTD has no verified public-good fullnode endpoints. Replace the loopback example if your node listens on a different address or port.
+
+## Polling-based data sources
+
+### Operator-owned GCS checkpoint buckets
+
+Use `--remote-store-gcs` for backfill or recovery only when the operator's bucket contains the required checkpoint range. Do not pass a `gs://` URL to `--remote-store-url`; provide only the bucket name to `--remote-store-gcs`. If Requester Pays is enabled, include the billing header shown in the [GCS backfill example](#backfill-from-an-operator-owned-gcs-bucket).
+
+See Google Cloud's [Use Requester Pays](https://cloud.google.com/storage/docs/using-requester-pays) documentation and [Running a Remote Store](/operators/data-management/remote-store-setup) for more information.
+
+### Fullnode gRPC polling
+
+Use `--rpc-api-url` without `--streaming-url` when polling alone is sufficient. Set it to the fullnode gRPC endpoint operated for your RTD chain:
+
+```sh
+$ export FULLNODE_GRPC_URL=http://127.0.0.1:9000
+$ cargo run -- --rpc-api-url "$FULLNODE_GRPC_URL"
+```
+
+Replace the loopback URL with your node's actual address and port. Polling can serve local development or steady-state workloads that do not need the lowest possible latency. Historical availability is limited by the fullnode's retention; verify its available checkpoint range before using it for a backfill.
+
+### Operator-owned HTTP checkpoint store
+
+Use `--remote-store-url` only with a checkpoint HTTP store that your RTD network operator has deployed and that serves the same chain. Supply its URL and the first checkpoint it actually retains:
+
+```sh
+$ export RTD_CHECKPOINT_HTTP_URL=http://127.0.0.1:8080
+$ export FIRST_AVAILABLE_CHECKPOINT=0
+
+$ cargo run -- \
+  --remote-store-url "$RTD_CHECKPOINT_HTTP_URL" \
+  --first-checkpoint "$FIRST_AVAILABLE_CHECKPOINT"
+```
+
+The loopback URL and checkpoint number are examples; replace both with verified operator values. A fresh pipeline starts at checkpoint 0 unless you provide `--first-checkpoint`. If checkpoint 0 is absent, set the actual first available checkpoint or the indexer can retry missing data indefinitely. Once a pipeline has a committed watermark, it resumes from that watermark and ignores `--first-checkpoint`. No fixed 30-day or full-history retention is assumed.
+
+### Local path
+
+Local checkpoint files provide reproducible development and test inputs:
+
+```sh
+$ cargo run -- --local-ingestion-path /path/to/checkpoints
+```
+
+Use a local path for unit and integration tests with known checkpoint data. Do not rely on a fullnode's local ingestion directory as an operated production store because the node does not automatically clean up those files.
+
+### Archival Service gRPC
+
+The source tree includes an Archival Service implementation of the gRPC `LedgerService`. Configure an operator-owned service through `--rpc-api-url` only after confirming that it serves checkpoint data from the same RTD chain. Check its retention and throughput with the operator. An archival service is not bundled as a public RTD endpoint.
+
+For a large sequential backfill, use an operator-owned checkpoint store if it contains the required history and offers enough throughput. Use archival gRPC for targeted historical ingestion when its operator has enabled and verified that use. Do not assume that any service retains every RTD checkpoint or supports streaming.
+
+See [Querying Historical Data with Archival Service](/develop/accessing-data/archival-store/using-archival-store) for endpoint details.

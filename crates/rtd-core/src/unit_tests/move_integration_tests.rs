@@ -5,7 +5,7 @@
 use super::*;
 use crate::authority::authority_tests::{
     TestCallArg, call_move, call_move_, execute_programmable_transaction, init_state_with_ids,
-    send_and_confirm_transaction,
+    submit_and_execute,
 };
 use move_core_types::{
     account_address::AccountAddress,
@@ -17,7 +17,7 @@ use move_core_types::{
 use rtd_types::{
     RTD_FRAMEWORK_PACKAGE_ID,
     base_types::{RESOLVED_ASCII_STR, RESOLVED_STD_OPTION, RESOLVED_UTF8_STR},
-    error::ExecutionErrorKind,
+    execution_status::ExecutionErrorKind,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     utils::to_sender_signed_transaction,
 };
@@ -28,12 +28,13 @@ use rtd_move_build::BuildConfig;
 use rtd_types::{
     crypto::{AccountKeyPair, get_key_pair},
     error::RtdError,
+    executable_transaction::VerifiedExecutableTransaction,
 };
 
+use rtd_types::execution_status::{CommandArgumentError, ExecutionFailure, ExecutionStatus};
+use rtd_types::move_package::UpgradeCap;
 use std::{collections::HashSet, path::PathBuf};
 use std::{env, str::FromStr};
-use rtd_types::execution_status::{CommandArgumentError, ExecutionFailureStatus, ExecutionStatus};
-use rtd_types::move_package::UpgradeCap;
 
 #[tokio::test]
 #[cfg_attr(msim, ignore)]
@@ -53,7 +54,7 @@ async fn test_object_wrapping_unwrapping() {
     )
     .await;
 
-    let gas_version = authority.get_object(&gas).await.unwrap().version();
+    let gas_version = authority.get_object(&gas).unwrap().version();
     let create_child_version = SequenceNumber::lamport_increment([gas_version]);
 
     // Create a Child object.
@@ -79,7 +80,7 @@ async fn test_object_wrapping_unwrapping() {
     assert_eq!(child_object_ref.1, create_child_version);
 
     let wrapped_version =
-        SequenceNumber::lamport_increment([child_object_ref.1, effects.gas_object().0.1]);
+        SequenceNumber::lamport_increment([child_object_ref.1, effects.gas_object().unwrap().0.1]);
 
     // Create a Parent object, by wrapping the child object.
     let effects = call_move(
@@ -124,7 +125,7 @@ async fn test_object_wrapping_unwrapping() {
     assert_eq!(parent_object_ref.1, wrapped_version);
 
     let unwrapped_version =
-        SequenceNumber::lamport_increment([parent_object_ref.1, effects.gas_object().0.1]);
+        SequenceNumber::lamport_increment([parent_object_ref.1, effects.gas_object().unwrap().0.1]);
 
     // Extract the child out of the parent.
     let effects = call_move(
@@ -163,7 +164,7 @@ async fn test_object_wrapping_unwrapping() {
     let rewrap_version = SequenceNumber::lamport_increment([
         parent_object_ref.1,
         child_object_ref.1,
-        effects.gas_object().0.1,
+        effects.gas_object().unwrap().0.1,
     ]);
 
     // Wrap the child to the parent again.
@@ -202,7 +203,7 @@ async fn test_object_wrapping_unwrapping() {
     let parent_object_ref = effects.mutated_excluding_gas().first().unwrap().0;
 
     let deleted_version =
-        SequenceNumber::lamport_increment([parent_object_ref.1, effects.gas_object().0.1]);
+        SequenceNumber::lamport_increment([parent_object_ref.1, effects.gas_object().unwrap().0.1]);
 
     // Now delete the parent object, which will in turn delete the child object.
     let effects = call_move(
@@ -340,9 +341,10 @@ async fn test_object_owning_another_object() {
         Owner::Shared { .. }
         | Owner::Immutable
         | Owner::AddressOwner(_)
-        | Owner::ConsensusAddressOwner { .. } => panic!(),
+        | Owner::ConsensusAddressOwner { .. }
+        | Owner::Party { .. } => panic!(),
     };
-    let field_object = authority.get_object(&field_id).await.unwrap();
+    let field_object = authority.get_object(&field_id).unwrap();
     assert_eq!(field_object.owner, parent.0);
 
     // Mutate the child directly will now fail because we need the parent to authenticate.
@@ -1127,7 +1129,10 @@ async fn test_entry_point_vector_error() {
     .unwrap();
     // should fail as we passed object of the wrong type
     assert!(
-        matches!(effects.status(), ExecutionStatus::Failure { .. }),
+        matches!(
+            effects.status(),
+            ExecutionStatus::Failure(ExecutionFailure { .. })
+        ),
         "{:?}",
         effects.status()
     );
@@ -1187,7 +1192,10 @@ async fn test_entry_point_vector_error() {
     .unwrap();
     // should fail as we passed object of the wrong type as the first element of the vector
     assert!(
-        matches!(effects.status(), ExecutionStatus::Failure { .. }),
+        matches!(
+            effects.status(),
+            ExecutionStatus::Failure(ExecutionFailure { .. })
+        ),
         "{:?}",
         effects.status()
     );
@@ -1224,7 +1232,6 @@ async fn test_entry_point_vector_error() {
         "obj_vec_destroy",
         vec![],
         vec![TestCallArg::ObjVec(vec![shared_obj_id])],
-        true, // shared object in arguments
     )
     .await
     .unwrap();
@@ -1275,13 +1282,13 @@ async fn test_entry_point_vector_error() {
     // should fail as we have the same object passed in vector and as a separate by-value argument
     assert_eq!(
         result.unwrap().status(),
-        &ExecutionStatus::Failure {
+        &ExecutionStatus::Failure(ExecutionFailure {
             error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::ArgumentWithoutValue,
             },
             command: Some(1)
-        }
+        })
     );
 
     // mint an owned object
@@ -1324,13 +1331,13 @@ async fn test_entry_point_vector_error() {
     // should fail as we have the same object passed in vector and as a separate by-reference argument
     assert_eq!(
         result.unwrap().status(),
-        &ExecutionStatus::Failure {
+        &ExecutionStatus::Failure(ExecutionFailure {
             error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::ArgumentWithoutValue,
             },
             command: Some(1)
-        }
+        })
     );
 }
 
@@ -1514,7 +1521,10 @@ async fn test_entry_point_vector_any_error() {
     .unwrap();
     // should fail as we passed object of the wrong type
     assert!(
-        matches!(effects.status(), ExecutionStatus::Failure { .. }),
+        matches!(
+            effects.status(),
+            ExecutionStatus::Failure(ExecutionFailure { .. })
+        ),
         "{:?}",
         effects.status()
     );
@@ -1574,7 +1584,10 @@ async fn test_entry_point_vector_any_error() {
     .unwrap();
     // should fail as we passed object of the wrong type as the first element of the vector
     assert!(
-        matches!(effects.status(), ExecutionStatus::Failure { .. }),
+        matches!(
+            effects.status(),
+            ExecutionStatus::Failure(ExecutionFailure { .. })
+        ),
         "{:?}",
         effects.status()
     );
@@ -1611,7 +1624,6 @@ async fn test_entry_point_vector_any_error() {
         "obj_vec_destroy_any",
         vec![any_type_tag.clone()],
         vec![TestCallArg::ObjVec(vec![shared_obj_id])],
-        true, // shared object in arguments
     )
     .await
     .unwrap();
@@ -1662,13 +1674,13 @@ async fn test_entry_point_vector_any_error() {
     // should fail as we have the same object passed in vector and as a separate by-value argument
     assert_eq!(
         result.unwrap().status(),
-        &ExecutionStatus::Failure {
+        &ExecutionStatus::Failure(ExecutionFailure {
             error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::ArgumentWithoutValue,
             },
             command: Some(1)
-        }
+        })
     );
 
     // mint an owned object
@@ -1710,13 +1722,13 @@ async fn test_entry_point_vector_any_error() {
     .await;
     assert_eq!(
         result.unwrap().status(),
-        &ExecutionStatus::Failure {
+        &ExecutionStatus::Failure(ExecutionFailure {
             error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::ArgumentWithoutValue,
             },
             command: Some(1)
-        }
+        })
     );
 }
 
@@ -2028,13 +2040,13 @@ async fn test_entry_point_string_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 
     // pass a invalid ascii string
@@ -2063,13 +2075,13 @@ async fn test_entry_point_string_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 
     // pass a invalid utf8 string
@@ -2098,13 +2110,13 @@ async fn test_entry_point_string_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 }
 
@@ -2153,13 +2165,13 @@ async fn test_entry_point_string_vec_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 }
 
@@ -2198,13 +2210,13 @@ async fn test_entry_point_string_option_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 
     // pass an utf8 string option with an invalid string
@@ -2228,13 +2240,13 @@ async fn test_entry_point_string_option_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 
     // pass a vector as an option
@@ -2256,13 +2268,13 @@ async fn test_entry_point_string_option_error() {
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidBCSBytes
             },
             command: Some(0)
-        }
+        })
     );
 }
 
@@ -2564,13 +2576,13 @@ async fn error_test_make_move_vec_for_type<T: Clone + Serialize>(
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::command_argument_error(
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::command_argument_error(
                 CommandArgumentError::InvalidMakeMoveVecNonObjectArgument,
                 0
             ),
             command: Some(0)
-        }
+        })
     );
 
     // invalid BCS for any Move value
@@ -2593,13 +2605,13 @@ async fn error_test_make_move_vec_for_type<T: Clone + Serialize>(
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::command_argument_error(
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::command_argument_error(
                 CommandArgumentError::InvalidBCSBytes,
                 0
             ),
             command: Some(0)
-        }
+        })
     );
 
     // invalid bcs bytes at end
@@ -2624,13 +2636,13 @@ async fn error_test_make_move_vec_for_type<T: Clone + Serialize>(
     .unwrap();
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::command_argument_error(
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::command_argument_error(
                 CommandArgumentError::InvalidBCSBytes,
                 3,
             ),
             command: Some(0)
-        }
+        })
     );
 }
 
@@ -2819,7 +2831,7 @@ pub async fn build_and_try_publish_test_package(
     let all_module_bytes = compiled_package.get_package_bytes(with_unpublished_deps);
     let dependencies = compiled_package.get_dependency_storage_package_ids();
 
-    let gas_object = authority.get_object(gas_object_id).await;
+    let gas_object = authority.get_object(gas_object_id);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
 
     let data = TransactionData::new_module(
@@ -2834,10 +2846,7 @@ pub async fn build_and_try_publish_test_package(
 
     (
         transaction.clone(),
-        send_and_confirm_transaction(authority, transaction)
-            .await
-            .unwrap()
-            .1,
+        submit_and_execute(authority, transaction).await.unwrap().1,
     )
 }
 
@@ -2859,6 +2868,57 @@ pub async fn build_and_publish_test_package(
     )
     .await
     .0
+}
+
+pub async fn build_and_publish_package_with_upgrade_cap(
+    authority: &AuthorityState,
+    sender: &RtdAddress,
+    sender_key: &AccountKeyPair,
+    gas_object_id: &ObjectID,
+    modules: Vec<Vec<u8>>,
+    dep_ids: Vec<ObjectID>,
+) -> (ObjectRef, ObjectRef) {
+    let gas_price = authority.reference_gas_price_for_testing().unwrap();
+    let gas_budget = TEST_ONLY_GAS_UNIT_FOR_PUBLISH * gas_price;
+    let effects = {
+        let gas_object = authority.get_object(gas_object_id);
+        let gas_object_ref = gas_object.unwrap().compute_object_reference();
+
+        let data = TransactionData::new_module(
+            *sender,
+            gas_object_ref,
+            modules,
+            dep_ids,
+            gas_budget,
+            gas_price,
+        );
+        let transaction = to_sender_signed_transaction(data, sender_key);
+
+        submit_and_execute(authority, transaction)
+            .await
+            .unwrap()
+            .1
+            .into_data()
+    };
+
+    assert!(
+        matches!(effects.status(), ExecutionStatus::Success),
+        "{:?}",
+        effects.status()
+    );
+
+    let package = effects
+        .created()
+        .into_iter()
+        .find(|(_, owner)| matches!(owner, Owner::Immutable))
+        .unwrap();
+    let upgrade_cap = effects
+        .created()
+        .into_iter()
+        .find(|(_, owner)| matches!(owner, Owner::AddressOwner(_)))
+        .unwrap();
+
+    (package.0, upgrade_cap.0)
 }
 
 pub async fn build_and_publish_test_package_with_upgrade_cap(
@@ -2919,7 +2979,7 @@ pub async fn collect_packages_and_upgrade_caps(
         if !matches!(owner, Owner::AddressOwner(_)) {
             continue;
         }
-        let cap = authority.get_object(&obj_ref.0).await.unwrap();
+        let cap = authority.get_object(&obj_ref.0).unwrap();
         let bcs = cap.data.try_as_move().unwrap().contents();
         let obj: UpgradeCap = bcs::from_bytes(bcs).unwrap();
         let pkg = packages.get(&obj.package.bytes).unwrap();
@@ -2934,10 +2994,10 @@ pub async fn run_multi_txns(
     sender_key: &AccountKeyPair,
     gas_object_id: &ObjectID,
     builder: ProgrammableTransactionBuilder,
-) -> Result<(CertifiedTransaction, SignedTransactionEffects), RtdError> {
+) -> Result<(VerifiedExecutableTransaction, SignedTransactionEffects), RtdError> {
     // build the transaction data
     let pt = builder.finish();
-    let gas_object = authority.get_object(gas_object_id).await;
+    let gas_object = authority.get_object(gas_object_id);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
     let gas_price = authority.reference_gas_price_for_testing().unwrap();
     let gas_budget = pt.non_system_packages_to_be_published().count() as u64
@@ -2947,7 +3007,7 @@ pub async fn run_multi_txns(
         TransactionData::new_programmable(sender, vec![gas_object_ref], pt, gas_budget, gas_price);
     // run the transaction
     let transaction = to_sender_signed_transaction(data, sender_key);
-    send_and_confirm_transaction(authority, transaction).await
+    submit_and_execute(authority, transaction).await
 }
 
 pub fn build_multi_publish_txns(

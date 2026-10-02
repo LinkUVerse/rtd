@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
 use super::{
-    EnvironmentName, GitSha, LocalDepInfo, OnChainDepInfo, PackageName, PublishAddresses,
+    EnvironmentName, GitSha, LocalDepInfo, OnChainAddress, PackageName, PublishAddresses,
     RenderToml,
     toml_format::{expand_toml, flatten_toml},
 };
@@ -68,7 +68,7 @@ pub struct Pin {
 #[serde(untagged)]
 pub enum LockfileDependencyInfo {
     Local(LocalDepInfo),
-    OnChain(OnChainDepInfo),
+    OnChain(OnChainAddress),
     Git(LockfileGitDepInfo),
     Root(RootDepInfo),
 }
@@ -166,12 +166,12 @@ mod tests {
             [pinned.mainnet.Foo_0]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
             manifest_digest = "..."
-            deps = { std = "MoveStdlib", rtd = "Rtd" }
+            deps = { rtd = "Rtd", std = "MoveStdlib" }
 
             [pinned.mainnet.Foo_1]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
             manifest_digest = "..."
-            deps = { std = "MoveStdlib", rtd = "Rtd" }
+            deps = { rtd = "Rtd", std = "MoveStdlib" }
 
             [pinned.mainnet.MoveStdlib]
             source = { git = "...", subdir = "...", rev = "da39a3ee5e6b4b0d3255bfef95601890afd80709" }
@@ -188,10 +188,15 @@ mod tests {
             manifest_digest = "..."
             deps = {}
 
+            [pinned.testnet.OnChainPkg]
+            source = { on-chain = "0x0000000000000000000000000000000000000000000000000000000000000001" }
+            manifest_digest = "..."
+            deps = {}
+
             [pinned.testnet.example]
             source = { local = "." }
             manifest_digest = "..."
-            deps = { bar = "bar", foo = "Foo_0", non = "Foo_1", std = "MoveStdlib", rtd = "Rtd" }
+            deps = { bar = "bar", foo = "Foo_0", non = "Foo_1", onchain = "OnChainPkg", rtd = "Rtd", std = "MoveStdlib" }
             "###
         );
 

@@ -4,28 +4,29 @@
 use std::fmt::{self, Display, Formatter, Write};
 
 use enum_dispatch::enum_dispatch;
+use rtd_package_resolver::{PackageStore, Resolver};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use rtd_package_resolver::{PackageStore, Resolver};
 use tabled::{
     builder::Builder as TableBuilder,
     settings::{Panel as TablePanel, Style as TableStyle, style::HorizontalLine},
 };
 
 use fastcrypto::encoding::Base64;
+use linku_common::ZipDebugEqIteratorExt;
+use linku_metrics::monitored_scope;
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::identifier::{IdentStr, Identifier};
 use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
-use linku_metrics::monitored_scope;
 use nonempty::NonEmpty;
 use rtd_json::{RtdJsonValue, primitive_type};
 use rtd_types::RTD_FRAMEWORK_ADDRESS;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::base_types::{
-    EpochId, ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest,
+    EpochId, ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest,
 };
 use rtd_types::crypto::RtdSignature;
 use rtd_types::digests::Digest;
@@ -38,26 +39,26 @@ use rtd_types::effects::{
     TransactionEvents,
 };
 use rtd_types::error::{ExecutionError, RtdError, RtdResult};
-use rtd_types::execution_status::ExecutionStatus;
+use rtd_types::execution_status::{ExecutionFailure, ExecutionStatus};
 use rtd_types::gas::GasCostSummary;
 use rtd_types::layout_resolver::{LayoutResolver, get_layout_from_struct_tag};
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::messages_consensus::ConsensusDeterminedVersionAssignments;
 use rtd_types::object::Owner;
 use rtd_types::parse_rtd_type_tag;
-use rtd_types::quorum_driver_types::ExecuteTransactionRequestType;
-use rtd_types::signature::GenericSignature;
-use rtd_types::storage::{DeleteKind, WriteKind};
 use rtd_types::rtd_serde::Readable;
 use rtd_types::rtd_serde::{
-    BigInt, SequenceNumber as AsSequenceNumber, RtdTypeTag as AsRtdTypeTag,
+    BigInt, RtdTypeTag as AsRtdTypeTag, SequenceNumber as AsSequenceNumber,
 };
+use rtd_types::signature::GenericSignature;
+use rtd_types::storage::{DeleteKind, WriteKind};
 use rtd_types::transaction::{
     Argument, CallArg, ChangeEpoch, Command, EndOfEpochTransactionKind, GenesisObject,
     InputObjectKind, ObjectArg, ProgrammableMoveCall, ProgrammableTransaction, Reservation,
     SenderSignedData, TransactionData, TransactionDataAPI, TransactionKind, WithdrawFrom,
     WithdrawalTypeArg,
 };
+use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
 use rtd_types::{authenticator_state::ActiveJwk, transaction::SharedObjectMutability};
 
 use crate::balance_changes::BalanceChange;
@@ -623,6 +624,12 @@ impl RtdTransactionBlockKind {
                             EndOfEpochTransactionKind::AddressAliasStateCreate => {
                                 RtdEndOfEpochTransactionKind::AddressAliasStateCreate
                             }
+                            EndOfEpochTransactionKind::WriteAccumulatorStorageCost(_) => {
+                                RtdEndOfEpochTransactionKind::WriteAccumulatorStorageCost
+                            }
+                            EndOfEpochTransactionKind::ForwardingAddressRegistryCreate => {
+                                RtdEndOfEpochTransactionKind::ForwardingAddressRegistryCreate
+                            }
                         })
                         .collect(),
                 })
@@ -1054,7 +1061,7 @@ impl TryFrom<TransactionEffects> for RtdTransactionBlockEffects {
                 gas_used: effect.gas_cost_summary().clone(),
                 shared_objects: to_rtd_object_ref(
                     effect
-                        .input_consensus_objects()
+                        .accessed_consensus_objects()
                         .into_iter()
                         .map(|kind| {
                             #[allow(deprecated)]
@@ -1069,10 +1076,20 @@ impl TryFrom<TransactionEffects> for RtdTransactionBlockEffects {
                 deleted: to_rtd_object_ref(effect.deleted().to_vec()),
                 unwrapped_then_deleted: to_rtd_object_ref(effect.unwrapped_then_deleted().to_vec()),
                 wrapped: to_rtd_object_ref(effect.wrapped().to_vec()),
-                gas_object: OwnedObjectRef {
-                    owner: effect.gas_object().1,
-                    reference: effect.gas_object().0.into(),
-                },
+                gas_object: effect.gas_object().map_or_else(
+                    || OwnedObjectRef {
+                        owner: Owner::AddressOwner(RtdAddress::default()),
+                        reference: RtdObjectRef {
+                            object_id: ObjectID::ZERO,
+                            version: SequenceNumber::default(),
+                            digest: ObjectDigest::MIN,
+                        },
+                    },
+                    |(obj_ref, owner)| OwnedObjectRef {
+                        owner,
+                        reference: obj_ref.into(),
+                    },
+                ),
                 events_digest: effect.events_digest().copied(),
                 dependencies: effect.dependencies().to_vec(),
                 abort_error: effect
@@ -1429,16 +1446,16 @@ impl From<ExecutionStatus> for RtdExecutionStatus {
     fn from(status: ExecutionStatus) -> Self {
         match status {
             ExecutionStatus::Success => Self::Success,
-            ExecutionStatus::Failure {
+            ExecutionStatus::Failure(ExecutionFailure {
                 error,
                 command: None,
-            } => Self::Failure {
+            }) => Self::Failure {
                 error: format!("{error:?}"),
             },
-            ExecutionStatus::Failure {
+            ExecutionStatus::Failure(ExecutionFailure {
                 error,
                 command: Some(idx),
-            } => Self::Failure {
+            }) => Self::Failure {
                 error: format!("{error:?} in command {idx}"),
             },
         }
@@ -1656,7 +1673,7 @@ impl Display for RtdTransactionBlock {
                 "   {}\n",
                 match tx_sig {
                     Signature(sig) => Base64::from_bytes(sig.signature_bytes()).encoded(),
-                    _ => Base64::from_bytes(tx_sig.as_ref()).encoded(), // the signatures for multisig and zklogin are not rtdted to be parsed out. they should be interpreted as a whole
+                    _ => Base64::from_bytes(tx_sig.as_ref()).encoded(), // the signatures for multisig and zklogin are not suited to be parsed out. they should be interpreted as a whole
                 }
             )]);
         }
@@ -1791,6 +1808,8 @@ pub enum RtdEndOfEpochTransactionKind {
     CoinRegistryCreate,
     DisplayRegistryCreate,
     AddressAliasStateCreate,
+    WriteAccumulatorStorageCost,
+    ForwardingAddressRegistryCreate,
 }
 
 #[serde_as]
@@ -1899,7 +1918,7 @@ impl RtdProgrammableTransactionBlock {
         Ok(RtdProgrammableTransactionBlock {
             inputs: inputs
                 .into_iter()
-                .zip(input_types)
+                .zip_debug_eq(input_types)
                 .map(|(arg, layout)| RtdCallArg::try_from(arg, layout.as_ref()))
                 .collect::<Result<_, _>>()?,
             commands: commands.into_iter().map(RtdCommand::from).collect(),
@@ -1910,12 +1929,20 @@ impl RtdProgrammableTransactionBlock {
         value: ProgrammableTransaction,
         package_resolver: &Resolver<impl PackageStore>,
     ) -> Result<Self, anyhow::Error> {
-        let input_types = package_resolver.pure_input_layouts(&value).await?;
+        // If the resolver can't infer layouts (e.g. a MoveCall references a function the resolver
+        // can't find), fall back to rendering every pure input as untyped bytes rather than
+        // failing the whole conversion. Matches the legacy `rtd-json-rpc` behavior and the
+        // `rtd-indexer-alt-graphql` behavior at `programmable/mod.rs`.
+        let input_types = match package_resolver.pure_input_layouts(&value).await {
+            Ok(layouts) => layouts,
+            Err(_) => vec![None; value.inputs.len()],
+        };
+
         let ProgrammableTransaction { inputs, commands } = value;
         Ok(RtdProgrammableTransactionBlock {
             inputs: inputs
                 .into_iter()
-                .zip(input_types)
+                .zip_debug_eq(input_types)
                 .map(|(arg, layout)| RtdCallArg::try_from(arg, layout.as_ref()))
                 .collect::<Result<_, _>>()?,
             commands: commands.into_iter().map(RtdCommand::from).collect(),
@@ -1945,6 +1972,8 @@ impl RtdProgrammableTransactionBlock {
                     else {
                         return result_types;
                     };
+                    #[allow(clippy::disallowed_methods)]
+                    // Intentional zip: types includes implicit TxContext params not in arguments
                     for (arg, type_) in c.arguments.iter().zip(types) {
                         if let (&Argument::Input(i), Some(type_)) = (arg, type_)
                             && let Some(x) = result_types.get_mut(i as usize)
@@ -2387,17 +2416,19 @@ impl RtdCallArg {
             }
             CallArg::FundsWithdrawal(arg) => RtdCallArg::FundsWithdrawal(RtdFundsWithdrawalArg {
                 reservation: match arg.reservation {
-                    Reservation::EntireBalance => RtdReservation::EntireBalance,
                     Reservation::MaxAmountU64(amount) => RtdReservation::MaxAmountU64(amount),
                 },
                 type_arg: match arg.type_arg {
                     WithdrawalTypeArg::Balance(type_input) => {
-                        RtdWithdrawalTypeArg::Balance(type_input.to_type_tag()?.into())
+                        RtdWithdrawalTypeArg::Balance(type_input.into())
                     }
                 },
                 withdraw_from: match arg.withdraw_from {
                     WithdrawFrom::Sender => RtdWithdrawFrom::Sender,
                     WithdrawFrom::Sponsor => RtdWithdrawFrom::Sponsor,
+                    WithdrawFrom::SenderAllowance { funder, allowance } => {
+                        RtdWithdrawFrom::SenderAllowance { funder, allowance }
+                    }
                 },
             }),
         })
@@ -2478,7 +2509,6 @@ pub enum RtdObjectArg {
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RtdReservation {
-    EntireBalance,
     MaxAmountU64(
         #[schemars(with = "BigInt<u64>")]
         #[serde_as(as = "BigInt<u64>")]
@@ -2497,6 +2527,10 @@ pub enum RtdWithdrawalTypeArg {
 pub enum RtdWithdrawFrom {
     Sender,
     Sponsor,
+    SenderAllowance {
+        funder: RtdAddress,
+        allowance: ObjectID,
+    },
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -2613,5 +2647,64 @@ impl Filter<EffectsWithInput> for TransactionFilter {
             TransactionFilter::Checkpoint(_) => false,
             TransactionFilter::FromOrToAddress { addr: _ } => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use move_core_types::account_address::AccountAddress;
+    use move_core_types::ident_str;
+    use rtd_package_resolver::Package;
+    use rtd_package_resolver::error::Error as PackageResolverError;
+    use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+
+    use super::*;
+
+    struct EmptyPackageStore;
+
+    #[async_trait]
+    impl PackageStore for EmptyPackageStore {
+        async fn fetch(&self, id: AccountAddress) -> rtd_package_resolver::Result<Arc<Package>> {
+            Err(PackageResolverError::PackageNotFound(id))
+        }
+    }
+
+    #[tokio::test]
+    async fn programmable_transaction_falls_back_when_layout_resolution_fails() {
+        let mut builder = ProgrammableTransactionBuilder::new();
+        let recipient = builder.pure(RtdAddress::ZERO).unwrap();
+        builder.programmable_move_call(
+            ObjectID::ZERO,
+            ident_str!("pay").to_owned(),
+            ident_str!("pay_all_rtd").to_owned(),
+            vec![],
+            vec![recipient],
+        );
+
+        let resolver = Resolver::new(EmptyPackageStore);
+        let transaction = RtdProgrammableTransactionBlock::try_from_with_package_resolver(
+            builder.finish(),
+            &resolver,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(transaction.commands.len(), 1);
+        assert_eq!(transaction.inputs.len(), 1);
+
+        let RtdCallArg::Pure(input) = &transaction.inputs[0] else {
+            panic!("expected pure input");
+        };
+        assert_eq!(input.value_type(), None);
+
+        // RtdAddress::ZERO BCS-encodes to 32 zero bytes. With no layout, those bytes should come
+        // through unchanged as a JSON array of numbers.
+        assert_eq!(
+            input.value().to_json_value(),
+            serde_json::json!(vec![0u8; 32]),
+        );
     }
 }

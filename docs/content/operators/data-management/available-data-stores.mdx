@@ -1,0 +1,55 @@
+---
+title: RTD data stores
+description: Configure checkpoint and snapshot stores for a network you operate.
+keywords:
+  - RTD
+  - checkpoints
+  - snapshots
+---
+
+# RTD data stores
+
+RTD has no verified public checkpoint, archival, or snapshot service. The Sui
+bucket names and hostnames inherited from upstream do not identify RTD data.
+Do not use them to bootstrap or restore an RTD node.
+
+RTD production infrastructure must use self-hosted open-source middleware.
+Google Cloud Bigtable/Storage, Amazon S3, Azure Blob, and other managed cloud
+data stores are not supported runtime dependencies. The `S3` flags below refer
+only to the protocol exposed by RTD-operated MinIO.
+
+## Choosing a store
+
+First verify the genesis digest and chain ID of the network you operate. Then
+configure a store populated by that same RTD network. Set credentials and
+retention according to your own infrastructure.
+
+## Checkpoint remote stores
+
+### MinIO published bucket (full retention) {#checkpoint-s3}
+
+Supply a self-hosted MinIO bucket only after verifying it contains
+continuously published checkpoints for your RTD chain ID. The producer writes
+to a separate staging bucket; consumers receive read-only access to verified
+published objects. No RTD bucket is provided by this source tree.
+
+### HTTPS endpoints {#checkpoint-https}
+
+Set an HTTPS endpoint explicitly if your operator runs one. Confirm its chain
+ID and retention before using it for recovery or backfill. There is no default
+public RTD checkpoint endpoint.
+
+## Snapshot stores
+
+### Formal snapshot HTTPS endpoints {#formal-https}
+
+Use a snapshot endpoint only after checking its chain ID and snapshot hash
+against a trusted RTD operator. No public endpoint is configured.
+
+### Formal snapshot buckets {#formal-buckets}
+
+Use an operator-owned bucket with verified RTD snapshots and credentials.
+
+### Formal snapshot free bucket {#formal-free}
+
+No public RTD free snapshot bucket has been verified.

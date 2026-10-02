@@ -10,23 +10,14 @@ Before running the frontend, it's recommended that you follow the API setup to
 
 ### Demo Contracts
 
-The following packages are published and used for demo purposes on Testnet.
-
-For `escrow-contract.json` file:
-
-```json
-{
-  "packageId": "0xead655f291ed9e1f5cac3bc4b2cfcccec91502940c0ba4d846936268964524c9"
-}
-```
-
-For `demo-contract.json` file:
-
-```json
-{
-  "packageId": "0x164183829178d7620595919907d35bd3800b4345152f793594af8b2ba252d58a"
-}
-```
+No demo packages are pre-deployed on RTD. Publish both contracts on the target
+RTD network and set `VITE_RTD_ESCROW_PACKAGE_ID` and
+`VITE_RTD_DEMO_PACKAGE_ID` to the generated package IDs. The frontend requires
+these values at startup. It defaults to localnet; for a remote network set its
+`VITE_RTD_<NETWORK>_RPC_URL` before connecting a wallet. Set
+`VITE_RTD_API_URL` if the local API is not at `http://localhost:3000/`.
+Optional `VITE_RTD_EXPLORER_URL` enables object and address links; without
+an RTD explorer deployment, IDs remain copyable text.
 
 ### Constants
 

@@ -3,14 +3,15 @@
 
 #[cfg(msim)]
 mod sim_only_tests {
-    use std::path::PathBuf;
-    use std::time::Duration;
-    use rtd_json_rpc_types::{RtdTransactionBlockEffects, RtdTransactionBlockEffectsAPI};
     use rtd_macros::sim_test;
     use rtd_node::RtdNode;
     use rtd_test_transaction_builder::publish_package;
+    use rtd_types::effects::TransactionEffects;
+    use rtd_types::effects::TransactionEffectsAPI;
     use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
     use rtd_types::{base_types::ObjectID, digests::TransactionDigest};
+    use std::path::PathBuf;
+    use std::time::Duration;
     use test_cluster::{TestCluster, TestClusterBuilder};
     use tokio::time::timeout;
 
@@ -58,7 +59,7 @@ mod sim_only_tests {
                 // Manually initiating a pruning and compaction job to make sure that deleted objects are gong from object store.
                 state
                     .database_for_testing()
-                    .prune_objects_and_compact_for_testing(checkpoint_store, None)
+                    .prune_objects_and_compact_for_testing(checkpoint_store)
                     .await;
 
                 // Check that no object with `child_id` exists in object store.
@@ -114,7 +115,7 @@ mod sim_only_tests {
                 // Manually initiating a pruning and compaction job to make sure that deleted objects are gong from object store.
                 state
                     .database_for_testing()
-                    .prune_objects_and_compact_for_testing(checkpoit_store, None)
+                    .prune_objects_and_compact_for_testing(checkpoit_store)
                     .await;
 
                 // Check that both root and child objects are gone from object store.
@@ -153,10 +154,9 @@ mod sim_only_tests {
             )
             .await
             .effects
-            .unwrap()
             .created()[0]
-            .reference
-            .object_id;
+            .0
+            .0;
 
         (package_id, object_id)
     }
@@ -172,10 +172,8 @@ mod sim_only_tests {
             )
             .await
             .effects
-            .unwrap()
             .created()[0]
-            .reference
-            .to_object_ref()
+            .0
             .0
     }
 
@@ -184,7 +182,7 @@ mod sim_only_tests {
         package_id: ObjectID,
         object_id: ObjectID,
         child_id: ObjectID,
-    ) -> RtdTransactionBlockEffects {
+    ) -> TransactionEffects {
         let object = test_cluster.wallet.get_object_ref(object_id).await.unwrap();
         let child = test_cluster.wallet.get_object_ref(child_id).await.unwrap();
         let effects = test_cluster
@@ -201,8 +199,7 @@ mod sim_only_tests {
                     .build(),
             )
             .await
-            .effects
-            .unwrap();
+            .effects;
         assert_eq!(effects.wrapped().len(), 1);
         effects
     }
@@ -211,7 +208,7 @@ mod sim_only_tests {
         test_cluster: &TestCluster,
         package_id: ObjectID,
         object_id: ObjectID,
-    ) -> RtdTransactionBlockEffects {
+    ) -> TransactionEffects {
         let object = test_cluster.wallet.get_object_ref(object_id).await.unwrap();
         let effects = test_cluster
             .sign_and_execute_transaction(
@@ -227,8 +224,7 @@ mod sim_only_tests {
                     .build(),
             )
             .await
-            .effects
-            .unwrap();
+            .effects;
         assert!(effects.deleted().is_empty());
         effects
     }
@@ -237,7 +233,7 @@ mod sim_only_tests {
         test_cluster: &TestCluster,
         package_id: ObjectID,
         object_id: ObjectID,
-    ) -> RtdTransactionBlockEffects {
+    ) -> TransactionEffects {
         let object = test_cluster.wallet.get_object_ref(object_id).await.unwrap();
         let effects = test_cluster
             .sign_and_execute_transaction(
@@ -248,8 +244,7 @@ mod sim_only_tests {
                     .build(),
             )
             .await
-            .effects
-            .unwrap();
+            .effects;
         assert_eq!(effects.deleted().len(), 1);
         effects
     }

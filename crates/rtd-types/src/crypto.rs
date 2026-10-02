@@ -4,8 +4,8 @@ use crate::base_types::{AuthorityName, ConciseableName, RtdAddress};
 use crate::committee::CommitteeTrait;
 use crate::committee::{Committee, EpochId, StakeUnit};
 use crate::error::{RtdError, RtdErrorKind, RtdResult};
-use crate::signature::GenericSignature;
 use crate::rtd_serde::{Readable, RtdBitmap};
+use crate::signature::GenericSignature;
 use anyhow::{Error, anyhow};
 use derive_more::{AsMut, AsRef, From};
 pub use enum_dispatch::enum_dispatch;
@@ -284,6 +284,49 @@ impl ZkLoginPublicIdentifier {
         bytes.extend(address_seed.padded());
 
         Ok(Self(bytes))
+    }
+
+    /// Validates zkLogin public identifier structure: iss_len || iss || padded_32_byte_address_seed.
+    pub fn validate(&self) -> RtdResult<()> {
+        let bytes = &self.0;
+
+        // Parse issuer length and bytes.
+        let iss_len = *bytes
+            .first()
+            .ok_or_else(|| RtdErrorKind::InvalidSignature {
+                error: "invalid zklogin pk".to_string(),
+            })? as usize;
+        let iss_bytes =
+            bytes
+                .get(1..1 + iss_len)
+                .ok_or_else(|| RtdErrorKind::InvalidSignature {
+                    error: "invalid zklogin pk iss length".to_string(),
+                })?;
+
+        // Validate issuer string.
+        std::str::from_utf8(iss_bytes).map_err(|e| RtdErrorKind::InvalidSignature {
+            error: format!("zkLogin pk issuer is not valid: {}", e),
+        })?;
+
+        // Validate address seed length <= 32 bytes.
+        let address_seed_bytes =
+            bytes
+                .get(1 + iss_len..)
+                .ok_or_else(|| RtdErrorKind::InvalidSignature {
+                    error: "zkLogin pk has no address seed".to_string(),
+                })?;
+
+        if address_seed_bytes.len() > 32 {
+            return Err(RtdErrorKind::InvalidSignature {
+                error: format!(
+                    "address seed must be at most 32 bytes, got {}",
+                    address_seed_bytes.len()
+                ),
+            }
+            .into());
+        }
+
+        Ok(())
     }
 }
 impl AsRef<[u8]> for PublicKey {
@@ -730,7 +773,7 @@ impl Signature {
         // itself that computes the BCS hash of the Rust type prefix and `struct TransactionData`.
         // (See `fn digest` in `impl Message for SenderSignedData`).
         let mut hasher = DefaultHash::default();
-        hasher.update(bcs::to_bytes(&value).expect("Message serialization should not fail"));
+        bcs::serialize_into(&mut hasher, &value).expect("Message serialization should not fail");
 
         Signer::sign(secret, &hasher.finalize().digest)
     }
@@ -999,7 +1042,7 @@ impl<S: RtdSignatureInner + Sized> RtdSignature for S {
         T: Serialize,
     {
         let mut hasher = DefaultHash::default();
-        hasher.update(bcs::to_bytes(&value).expect("Message serialization should not fail"));
+        bcs::serialize_into(&mut hasher, &value).expect("Message serialization should not fail");
         let digest = hasher.finalize().digest;
 
         let (sig, pk) = &self.get_verification_inputs()?;
@@ -1244,7 +1287,6 @@ impl TryFrom<&RtdAuthorityStrongQuorumSignInfo> for AuthorityStrongQuorumSignInf
 // maintain the invariant that valid certificates with distinct signatures are equivalent, but yet-unchecked
 // certificates that differ on signers aren't.
 //
-// see also https://github.com/LinkUVerse/rtd/issues/266
 static_assertions::assert_not_impl_any!(AuthorityStrongQuorumSignInfo: Hash, Eq, PartialEq);
 
 impl<const STRONG_THRESHOLD: bool> AuthoritySignInfoTrait
@@ -1447,7 +1489,7 @@ where
 
 /// Activate the blanket implementation of `Signable` based on serde and BCS.
 /// * We use `serde_name` to extract a seed from the name of structs and enums.
-/// * We use `BCS` to generate canonical bytes rtdtable for hashing and signing.
+/// * We use `BCS` to generate canonical bytes suitable for hashing and signing.
 ///
 /// # Safety
 /// We protect the access to this marker trait through a "sealed trait" pattern:

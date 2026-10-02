@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::checkpoints::CheckpointStore;
-use crate::rpc_index::RpcIndexStore;
 use std::fmt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+pub type RpcLiveIndexCheckpoint = Arc<dyn Fn() -> Option<u64> + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum FullnodeReadinessLag {
@@ -19,7 +20,7 @@ pub enum FullnodeReadinessLag {
     ObjectState,
     #[error("secondary index is behind the startup target")]
     SecondaryIndex,
-    #[error("RPC index is behind the startup target")]
+    #[error("RPC live index is behind the startup target")]
     RpcIndex,
 }
 
@@ -72,7 +73,7 @@ impl fmt::Display for FullnodeCatchingUp {
             ),
             FullnodeReadinessLag::RpcIndex => write_checkpoint_progress(
                 formatter,
-                "RPC index checkpoint",
+                "RPC live index checkpoint",
                 self.status.rpc_index_checkpoint,
                 self.status.startup_target,
             ),
@@ -131,9 +132,9 @@ fn checkpoint_reached(current: Option<u64>, target: u64) -> bool {
 }
 
 pub struct FullnodeReadiness {
-    startup_target: u64,
+    startup_target: AtomicU64,
     checkpoint_store: Arc<CheckpointStore>,
-    rpc_index: Option<Arc<RpcIndexStore>>,
+    rpc_index: Option<RpcLiveIndexCheckpoint>,
     secondary_index_required: bool,
     network_startup_complete: AtomicBool,
     pending_recovery_started: AtomicBool,
@@ -143,13 +144,13 @@ impl FullnodeReadiness {
     pub fn new(
         startup_target: u64,
         checkpoint_store: Arc<CheckpointStore>,
-        rpc_index: Option<Arc<RpcIndexStore>>,
+        rpc_index: Option<RpcLiveIndexCheckpoint>,
         secondary_index_required: bool,
         network_startup_required: bool,
         pending_recovery_required: bool,
     ) -> Self {
         Self {
-            startup_target,
+            startup_target: AtomicU64::new(startup_target),
             checkpoint_store,
             rpc_index,
             secondary_index_required,
@@ -159,7 +160,11 @@ impl FullnodeReadiness {
     }
 
     pub fn startup_target(&self) -> u64 {
-        self.startup_target
+        self.startup_target.load(Ordering::Acquire)
+    }
+
+    pub fn advance_startup_target(&self, target: u64) {
+        self.startup_target.fetch_max(target, Ordering::AcqRel);
     }
 
     pub fn mark_pending_recovery_started(&self) {
@@ -176,18 +181,13 @@ impl FullnodeReadiness {
             .get_highest_executed_checkpoint_seq_number()
             .ok()
             .flatten();
-        let rpc_index_checkpoint = self.rpc_index.as_ref().and_then(|index| {
-            index
-                .get_highest_indexed_checkpoint_seq_number()
-                .ok()
-                .flatten()
-        });
+        let rpc_index_checkpoint = self.rpc_index.as_ref().and_then(|index| index());
 
-        // HighestExecuted is bumped only after object writes, synchronous secondary indexing,
-        // and the RPC-index checkpoint commit have completed.
+        // HighestExecuted is bumped after object writes and synchronous secondary indexing.
+        // The embedded RPC store indexes asynchronously and has its own live-cohort watermark.
         FullnodeReadinessStatus {
             network_startup_complete: self.network_startup_complete.load(Ordering::Acquire),
-            startup_target: self.startup_target,
+            startup_target: self.startup_target(),
             highest_executed_checkpoint,
             object_state_checkpoint: highest_executed_checkpoint,
             secondary_index_checkpoint: self
@@ -208,6 +208,12 @@ impl FullnodeReadiness {
     pub fn is_ready(&self) -> bool {
         self.ensure_ready().is_ok()
     }
+
+    pub fn is_ready_after_network_startup(&self) -> bool {
+        let mut status = self.status();
+        status.network_startup_complete = true;
+        status.ensure_ready().is_ok()
+    }
 }
 
 #[cfg(test)]
@@ -218,6 +224,7 @@ mod tests {
     use rtd_types::messages_checkpoint::VerifiedCheckpoint;
     use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     fn ready_status() -> FullnodeReadinessStatus {
         FullnodeReadinessStatus {
@@ -311,7 +318,7 @@ mod tests {
 
         assert_eq!(
             message,
-            "Fullnode is catching up: RPC index checkpoint is unavailable; startup target is 42"
+            "Fullnode is catching up: RPC live index checkpoint is unavailable; startup target is 42"
         );
         assert!(!message.contains("FullnodeReadinessStatus"));
         assert!(!message.contains("Some("));
@@ -353,5 +360,64 @@ mod tests {
 
         readiness.ensure_ready().unwrap();
         assert_eq!(readiness.status().object_state_checkpoint, Some(1));
+    }
+
+    #[tokio::test]
+    async fn embedded_live_index_must_reach_startup_target() {
+        let directory = linku_common::tempdir().unwrap();
+        let checkpoint_store =
+            CheckpointStore::new(directory.path(), Arc::new(PrunerWatermarks::default()));
+        let mut builder = TestCheckpointBuilder::new(0);
+        for _ in 0..=1 {
+            let checkpoint = VerifiedCheckpoint::new_unchecked(builder.build_checkpoint().summary);
+            checkpoint_store
+                .insert_verified_checkpoint(&checkpoint)
+                .unwrap();
+            checkpoint_store
+                .update_highest_executed_checkpoint(&checkpoint)
+                .unwrap();
+        }
+
+        let live_index = Arc::new(AtomicU64::new(0));
+        let index_watermark = live_index.clone();
+        let readiness = FullnodeReadiness::new(
+            1,
+            checkpoint_store,
+            Some(Arc::new(move || {
+                Some(index_watermark.load(Ordering::Acquire))
+            })),
+            false,
+            false,
+            false,
+        );
+        assert_eq!(
+            readiness.ensure_ready().unwrap_err().lag,
+            FullnodeReadinessLag::RpcIndex
+        );
+
+        live_index.store(1, Ordering::Release);
+        readiness.ensure_ready().unwrap();
+    }
+
+    #[tokio::test]
+    async fn recovery_target_advances_monotonically_before_network_gate_opens() {
+        let checkpoint_store = CheckpointStore::new_for_tests();
+        let mut builder = TestCheckpointBuilder::new(0);
+        let genesis = VerifiedCheckpoint::new_unchecked(builder.build_checkpoint().summary);
+        checkpoint_store
+            .insert_verified_checkpoint(&genesis)
+            .unwrap();
+        checkpoint_store
+            .update_highest_executed_checkpoint(&genesis)
+            .unwrap();
+
+        let readiness = FullnodeReadiness::new(0, checkpoint_store, None, false, true, false);
+        assert!(!readiness.is_ready());
+        assert!(readiness.is_ready_after_network_startup());
+
+        readiness.advance_startup_target(1);
+        readiness.advance_startup_target(0);
+        assert_eq!(readiness.startup_target(), 1);
+        assert!(!readiness.is_ready_after_network_startup());
     }
 }

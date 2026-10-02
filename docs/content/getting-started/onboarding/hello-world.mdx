@@ -1,0 +1,81 @@
+---
+title: Build and Publish a Package
+sidebar_label: Build and Publish
+description: Build an RTD Move example from this repository and publish to a local RTD network.
+keywords:
+  - Move package
+  - build package
+  - publish package
+questions:
+  - How do I build an RTD Move package?
+  - Where can I find a local source example?
+  - How do I publish to my local RTD chain?
+answer: >-
+  Use the first_package example in this repository. Build and test it against
+  the fork source, then publish only after checking your local network, address,
+  gas, and chain ID.
+---
+
+The `examples/move/first_package` directory in this repository is a local RTD Move package. Its `Move.toml` uses this checkout's RTD framework and its `sources` directory defines an example module. The package has no dependency on a renamed external tutorial repository.
+
+Before building, obtain the chain identifier from your running local network with `rtd client chain-identifier --format hex`. Add this section to the example's `Move.toml`, replacing the placeholder with that actual output:
+
+```toml
+[environments]
+localnet = "<YOUR_RTD_CHAIN_ID>"
+```
+
+The checked-in example has no environment section. Without this step, a configured CLI cannot resolve its dependencies for your local network. The current RTD package manager supplies the `rtd` and `std` system dependencies implicitly; the example manifest uses that format.
+
+Until the fork's pinned system package revision is available from its RTD Git remote, direct builds also need a temporary Git URL rewrite to this full local checkout. Run these commands from the repository root in the same shell before entering the example directory:
+
+```sh
+export RTD_SOURCE_DIR="$(git rev-parse --show-toplevel)"
+export MOVE_HOME="$(mktemp -d)"
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0="url.file://${RTD_SOURCE_DIR}/.insteadOf"
+export GIT_CONFIG_VALUE_0="https://github.com/LinkUVerse/rtd.git"
+```
+
+The checkout must contain the system package Git revision recorded by this fork. The rewrite affects Git commands run with these shell environment variables and does not alter your global Git configuration.
+
+## Build
+
+From the root of this repository:
+
+```sh
+cd examples/move/first_package
+rtd move build --build-env localnet
+rtd move test --build-env localnet
+```
+
+Move compilation checks syntax and types; tests exercise the example's local behavior. A successful build does not publish anything onchain.
+
+## Verify the target network
+
+[Configure the RTD client](/getting-started/onboarding/configure-rtd-client) for a network you operate, then inspect the active endpoint before publishing:
+
+```sh
+rtd client active-env
+rtd client chain-identifier --format hex
+rtd client active-address
+rtd client gas
+```
+
+Compare the chain ID with the genesis expected for this network. Gas must belong to that same chain. No RTD public Testnet or faucet is assumed.
+
+## Publish
+
+With `examples/move/first_package` as the current directory, publish to the active RTD network:
+
+```sh
+rtd client publish --build-env localnet
+```
+
+Record the transaction digest and package ID returned by the CLI. Query the package through the same network before using it in another transaction:
+
+```sh
+rtd client object <YOUR_PACKAGE_ID>
+```
+
+Package IDs from Sui or from another RTD genesis cannot be used here. For a React frontend, see [Connect a Frontend](/getting-started/onboarding/app-frontends); its wallet and SDK integration must be verified separately.

@@ -2,34 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![allow(clippy::inconsistent_digit_grouping)]
+use crate::crypto::BridgeAuthorityPublicKeyBytes;
+use crate::error::BridgeError;
+use crate::metrics::BridgeMetrics;
+use crate::server::handler::BridgeRequestHandlerTrait;
+use crate::types::{
+    AddTokensOnEvmAction, AddTokensOnRtdAction, AssetPriceUpdateAction, BlocklistCommitteeAction,
+    BlocklistType, BridgeAction, EmergencyAction, EmergencyActionType, EvmContractUpgradeAction,
+    LimitUpdateAction, SignedBridgeAction,
+};
 use crate::with_metrics;
-use crate::{
-    crypto::BridgeAuthorityPublicKeyBytes,
-    error::BridgeError,
-    metrics::BridgeMetrics,
-    server::handler::BridgeRequestHandlerTrait,
-    types::{
-        AddTokensOnEvmAction, AddTokensOnRtdAction, AssetPriceUpdateAction,
-        BlocklistCommitteeAction, BlocklistType, BridgeAction, EmergencyAction,
-        EmergencyActionType, EvmContractUpgradeAction, LimitUpdateAction, SignedBridgeAction,
-    },
-};
-use axum::{
-    Json,
-    extract::{DefaultBodyLimit, Path, Request, State},
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
-};
-use axum::{Router, http::StatusCode, routing::get};
-use ethers::types::Address as EthAddress;
+use alloy::primitives::Address as EthAddress;
+use axum::Json;
+use axum::Router;
+use axum::extract::{DefaultBodyLimit, Path, Request, State};
+use axum::http::StatusCode;
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
+use axum::routing::get;
 use fastcrypto::ed25519::Ed25519PublicKey;
-use fastcrypto::{
-    encoding::{Encoding, Hex},
-    traits::ToFromBytes,
-};
-use rtd_types::{TypeTag, bridge::BridgeChainId};
+use fastcrypto::encoding::{Encoding, Hex};
+use fastcrypto::traits::ToFromBytes;
+use rtd_types::TypeTag;
+use rtd_types::bridge::BridgeChainId;
+use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
-use std::{net::SocketAddr, str::FromStr};
 use tracing::{info, instrument};
 
 pub mod governance_verifier;
@@ -39,6 +37,7 @@ pub mod handler;
 pub(crate) mod mock_handler;
 
 pub const APPLICATION_JSON: &str = "application/json";
+
 pub const MAX_REQUEST_URI_SIZE: usize = 8 * 1024;
 pub const MAX_REQUEST_BODY_SIZE: usize = 64 * 1024;
 
@@ -744,6 +743,7 @@ mod tests {
     use crate::server::mock_handler::BridgeRequestMockHandler;
     use crate::test_utils::get_test_authorities_and_run_mock_bridge_server;
     use crate::types::BridgeCommittee;
+    use axum::response::IntoResponse;
 
     #[tokio::test]
     async fn test_bridge_server_handle_blocklist_update_action_path() {
@@ -864,19 +864,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_bridge_error_response_is_sanitized() {
-        let response = BridgeError::Generic("sensitive server detail".to_string()).into_response();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(body, "BridgeError::InternalError");
-        assert!(!body.contains("sensitive server detail"));
-    }
-
-    #[tokio::test]
     async fn test_bridge_server_rejects_oversized_uri() {
         let mock = BridgeRequestMockHandler::new();
         let (_handles, ports) = crate::test_utils::run_mock_bridge_server(vec![mock]);
@@ -889,10 +876,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            response.status().as_u16(),
-            StatusCode::URI_TOO_LONG.as_u16()
-        );
+        assert_eq!(response.status(), StatusCode::URI_TOO_LONG);
     }
 
     fn setup() -> BridgeClient {
@@ -903,5 +887,18 @@ mod tests {
         let committee = BridgeCommittee::new(authorities).unwrap();
         let pub_key = committee.members().keys().next().unwrap();
         BridgeClient::new(pub_key.clone(), Arc::new(committee)).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_bridge_error_response_is_sanitized() {
+        let response = BridgeError::Generic("sensitive server detail".to_string()).into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert_eq!(body, "BridgeError::InternalError");
+        assert!(!body.contains("sensitive server detail"));
     }
 }

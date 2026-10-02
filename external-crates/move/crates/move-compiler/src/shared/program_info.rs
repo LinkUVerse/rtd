@@ -15,8 +15,8 @@ use crate::{
     parser::ast::{
         ConstantName, DatatypeName, DocComment, Field, FunctionName, TargetKind, VariantName,
     },
-    shared::{unique_map::UniqueMap, *},
     rtd_mode::info::{RtdInfo, RtdModInfo},
+    shared::{unique_map::UniqueMap, *},
     typing::ast::{self as T},
 };
 use move_core_types::runtime_value;
@@ -42,6 +42,7 @@ pub struct ConstantInfo {
     pub index: usize,
     pub attributes: Attributes,
     pub defined_loc: Loc,
+    pub visibility: Visibility,
     pub signature: Type,
     // Set after compilation
     pub value: OnceLock<runtime_value::MoveValue>,
@@ -110,6 +111,7 @@ macro_rules! program_info {
                 index: cdef.index,
                 attributes: cdef.attributes.clone(),
                 defined_loc: cname.loc(),
+                visibility: cdef.visibility,
                 signature: cdef.signature.clone(),
                 value: OnceLock::new(),
             });
@@ -491,6 +493,13 @@ impl<const AFTER_TYPING: bool> ProgramInfo<AFTER_TYPING> {
         &self.enum_definition(m, n).type_parameters
     }
 
+    pub fn is_enum(&self, module: &ModuleIdent, datatype_name: &DatatypeName) -> bool {
+        matches!(
+            self.datatype_kind(module, datatype_name),
+            DatatypeKind::Enum
+        )
+    }
+
     /// Returns the enum variant names in sorted order.
     pub fn enum_variants(
         &self,
@@ -504,7 +513,7 @@ impl<const AFTER_TYPING: bool> ProgramInfo<AFTER_TYPING> {
             .clone()
             .into_iter()
             .collect::<Vec<_>>();
-        names.sort_by(|(_, ndx0), (_, ndx1)| ndx0.cmp(ndx1));
+        names.sort_by_key(|(_, ndx0)| *ndx0);
         names.into_iter().map(|(name, _ndx)| name).collect()
     }
 

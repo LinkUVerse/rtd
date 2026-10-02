@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use once_cell::sync::OnceCell;
+use rtd_types::base_types::TransactionDigest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use rtd_types::base_types::TransactionDigest;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]

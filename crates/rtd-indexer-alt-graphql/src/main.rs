@@ -5,12 +5,14 @@ use anyhow::Context;
 use clap::Parser;
 use prometheus::Registry;
 use rtd_futures::service::Error;
-use rtd_indexer_alt_graphql::{
-    args::{Args, Command},
-    config::{IndexerConfig, RpcLayer},
-    start_rpc,
-};
-use rtd_indexer_alt_metrics::{MetricsService, uptime};
+use rtd_indexer_alt_graphql::args::Args;
+use rtd_indexer_alt_graphql::args::Command;
+use rtd_indexer_alt_graphql::config::IndexerConfig;
+use rtd_indexer_alt_graphql::config::RpcLayer;
+use rtd_indexer_alt_graphql::start_rpc;
+use rtd_indexer_alt_metrics::MetricsService;
+use rtd_indexer_alt_metrics::uptime;
+use telemetry_subscribers::TelemetryConfig;
 use tokio::fs;
 
 // Define the `GIT_REVISION` const
@@ -26,12 +28,19 @@ static VERSION: &str = const_str::concat!(
     GIT_REVISION
 );
 
+#[cfg(all(not(target_env = "msvc"), feature = "jemalloc"))]
+#[global_allocator]
+static JEMALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     // Enable tracing, configured by environment variables.
-    let _guard = telemetry_subscribers::TelemetryConfig::new()
+    let _guard = TelemetryConfig::new()
+        // ErrorLayer is disabled by default in TelemetryConfig, but enabled by default in GraphQL
+        // to give useful error output for debugging request timeouts.
+        .with_enable_error_layer(true)
         .with_env()
         .init();
 
@@ -51,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
             metrics_args,
             config,
             indexer_config,
+            subscription_args,
         } => {
             let rpc_config = if let Some(path) = config {
                 let contents = fs::read_to_string(path)
@@ -96,6 +106,7 @@ async fn main() -> anyhow::Result<()> {
                 consistent_reader_args,
                 rpc_args,
                 system_package_task_args,
+                subscription_args,
                 VERSION,
                 rpc_config,
                 pg_pipelines,

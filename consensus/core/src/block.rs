@@ -52,6 +52,12 @@ pub(crate) struct BlockTransactionVotes {
     pub(crate) rejects: Vec<TransactionIndex>,
 }
 
+/// Maximum number of transaction vote targets in a V3 block. The proposer and the block verifier
+/// must use the same limit, which bounds the cost of block verification and vote tracking.
+pub(crate) fn max_transaction_vote_targets(context: &Context) -> usize {
+    context.protocol_config.gc_depth().max(1) as usize * context.committee.size()
+}
+
 /// A block includes references to previous round blocks and transactions that the authority
 /// considers valid.
 /// Well behaved authorities produce at most one block per round, but malicious authorities can
@@ -62,6 +68,7 @@ pub(crate) struct BlockTransactionVotes {
 pub enum Block {
     V1(BlockV1),
     V2(BlockV2),
+    V3(BlockV3),
 }
 
 #[allow(private_interfaces)]
@@ -73,10 +80,21 @@ pub trait BlockAPI {
     fn slot(&self) -> Slot;
     fn timestamp_ms(&self) -> BlockTimestampMs;
     fn ancestors(&self) -> &[BlockRef];
+
+    /// Transactions included in this block.
     fn transactions(&self) -> &[Transaction];
     fn transactions_data(&self) -> Vec<&[u8]>;
-    fn commit_votes(&self) -> &[CommitVote];
+
+    /// Votes on if a transaction should be accepted or rejected.
     fn transaction_votes(&self) -> &[BlockTransactionVotes];
+
+    /// Highest round for which this block does not carry implicit accept votes.
+    /// V1 and V2 use the genesis round because they have no cutoff.
+    fn transaction_votes_cutoff_round(&self) -> Round;
+
+    /// Votes on commits observed by this authority.
+    fn commit_votes(&self) -> &[CommitVote];
+
     fn misbehavior_reports(&self) -> &[MisbehaviorReport];
 }
 
@@ -162,12 +180,16 @@ impl BlockAPI for BlockV1 {
         self.transactions.iter().map(|t| t.data()).collect()
     }
 
-    fn commit_votes(&self) -> &[CommitVote] {
-        &self.commit_votes
-    }
-
     fn transaction_votes(&self) -> &[BlockTransactionVotes] {
         &[]
+    }
+
+    fn transaction_votes_cutoff_round(&self) -> Round {
+        GENESIS_ROUND
+    }
+
+    fn commit_votes(&self) -> &[CommitVote] {
+        &self.commit_votes
     }
 
     fn misbehavior_reports(&self) -> &[MisbehaviorReport] {
@@ -188,7 +210,6 @@ pub(crate) struct BlockV2 {
     misbehavior_reports: Vec<MisbehaviorReport>,
 }
 
-#[allow(unused)]
 impl BlockV2 {
     pub(crate) fn new(
         epoch: Epoch,
@@ -197,8 +218,8 @@ impl BlockV2 {
         timestamp_ms: BlockTimestampMs,
         ancestors: Vec<BlockRef>,
         transactions: Vec<Transaction>,
-        commit_votes: Vec<CommitVote>,
         transaction_votes: Vec<BlockTransactionVotes>,
+        commit_votes: Vec<CommitVote>,
         misbehavior_reports: Vec<MisbehaviorReport>,
     ) -> BlockV2 {
         Self {
@@ -208,8 +229,8 @@ impl BlockV2 {
             timestamp_ms,
             ancestors,
             transactions,
-            commit_votes,
             transaction_votes,
+            commit_votes,
             misbehavior_reports,
         }
     }
@@ -222,8 +243,8 @@ impl BlockV2 {
             timestamp_ms: context.epoch_start_timestamp_ms,
             ancestors: vec![],
             transactions: vec![],
-            commit_votes: vec![],
             transaction_votes: vec![],
+            commit_votes: vec![],
             misbehavior_reports: vec![],
         }
     }
@@ -266,6 +287,118 @@ impl BlockAPI for BlockV2 {
         &self.transaction_votes
     }
 
+    fn transaction_votes_cutoff_round(&self) -> Round {
+        GENESIS_ROUND
+    }
+
+    fn commit_votes(&self) -> &[CommitVote] {
+        &self.commit_votes
+    }
+
+    fn misbehavior_reports(&self) -> &[MisbehaviorReport] {
+        &self.misbehavior_reports
+    }
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+pub(crate) struct BlockV3 {
+    epoch: Epoch,
+    round: Round,
+    author: AuthorityIndex,
+    timestamp_ms: BlockTimestampMs,
+    ancestors: Vec<BlockRef>,
+    transactions: Vec<Transaction>,
+    transaction_votes: Vec<BlockTransactionVotes>,
+    transaction_votes_cutoff_round: Round,
+    commit_votes: Vec<CommitVote>,
+    misbehavior_reports: Vec<MisbehaviorReport>,
+}
+
+#[allow(dead_code)]
+impl BlockV3 {
+    pub(crate) fn new(
+        epoch: Epoch,
+        round: Round,
+        author: AuthorityIndex,
+        timestamp_ms: BlockTimestampMs,
+        ancestors: Vec<BlockRef>,
+        transactions: Vec<Transaction>,
+        transaction_votes: Vec<BlockTransactionVotes>,
+        transaction_votes_cutoff_round: Round,
+        commit_votes: Vec<CommitVote>,
+        misbehavior_reports: Vec<MisbehaviorReport>,
+    ) -> BlockV3 {
+        Self {
+            epoch,
+            round,
+            author,
+            timestamp_ms,
+            ancestors,
+            transactions,
+            transaction_votes,
+            transaction_votes_cutoff_round,
+            commit_votes,
+            misbehavior_reports,
+        }
+    }
+
+    fn genesis_block(context: &Context, author: AuthorityIndex) -> Self {
+        Self {
+            epoch: context.committee.epoch(),
+            round: GENESIS_ROUND,
+            author,
+            timestamp_ms: context.epoch_start_timestamp_ms,
+            ancestors: vec![],
+            transactions: vec![],
+            transaction_votes: vec![],
+            transaction_votes_cutoff_round: GENESIS_ROUND,
+            commit_votes: vec![],
+            misbehavior_reports: vec![],
+        }
+    }
+}
+
+impl BlockAPI for BlockV3 {
+    fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
+    fn round(&self) -> Round {
+        self.round
+    }
+
+    fn author(&self) -> AuthorityIndex {
+        self.author
+    }
+
+    fn slot(&self) -> Slot {
+        Slot::new(self.round, self.author)
+    }
+
+    fn timestamp_ms(&self) -> BlockTimestampMs {
+        self.timestamp_ms
+    }
+
+    fn ancestors(&self) -> &[BlockRef] {
+        &self.ancestors
+    }
+
+    fn transactions(&self) -> &[Transaction] {
+        &self.transactions
+    }
+
+    fn transactions_data(&self) -> Vec<&[u8]> {
+        self.transactions.iter().map(|t| t.data()).collect()
+    }
+
+    fn transaction_votes(&self) -> &[BlockTransactionVotes] {
+        &self.transaction_votes
+    }
+
+    fn transaction_votes_cutoff_round(&self) -> Round {
+        self.transaction_votes_cutoff_round
+    }
+
     fn commit_votes(&self) -> &[CommitVote] {
         &self.commit_votes
     }
@@ -277,7 +410,7 @@ impl BlockAPI for BlockV2 {
 
 /// Slot is the position of blocks in the DAG. It can contain 0, 1 or multiple blocks
 /// from the same authority at the same round.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Default, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct Slot {
     pub round: Round,
     pub authority: AuthorityIndex,
@@ -288,7 +421,6 @@ impl Slot {
         Self { round, authority }
     }
 
-    #[cfg(test)]
     pub fn new_for_test(round: Round, authority: u32) -> Self {
         Self {
             round,
@@ -355,6 +487,7 @@ impl SignedBlock {
         ensure!(
             committee.is_valid_index(block.author()),
             ConsensusError::InvalidAuthorityIndex {
+                loc: format!("verifying signature {}", block.slot()),
                 index: block.author(),
                 max: committee.size() - 1
             }
@@ -385,7 +518,7 @@ struct InnerBlockDigest([u8; consensus_config::DIGEST_LENGTH]);
 /// Computes the digest of a Block, only for signing and verifications.
 fn compute_inner_block_digest(block: &Block) -> ConsensusResult<InnerBlockDigest> {
     let mut hasher = DefaultHashFunction::new();
-    hasher.update(bcs::to_bytes(block).map_err(ConsensusError::SerializationFailure)?);
+    bcs::serialize_into(&mut hasher, block).map_err(ConsensusError::SerializationFailure)?;
     Ok(InnerBlockDigest(hasher.finalize().into()))
 }
 
@@ -550,7 +683,9 @@ pub(crate) fn genesis_blocks(context: &Context) -> Vec<VerifiedBlock> {
         .committee
         .authorities()
         .map(|(authority_index, _)| {
-            let block = if context.protocol_config.mysticeti_fastpath() {
+            let block = if context.protocol_config.enable_v3() {
+                Block::V3(BlockV3::genesis_block(context, authority_index))
+            } else if context.protocol_config.transaction_voting_enabled() {
                 Block::V2(BlockV2::genesis_block(context, authority_index))
             } else {
                 Block::V1(BlockV1::genesis_block(context, authority_index))
@@ -563,26 +698,6 @@ pub(crate) fn genesis_blocks(context: &Context) -> Vec<VerifiedBlock> {
             VerifiedBlock::new_verified(signed_block, serialized)
         })
         .collect::<Vec<VerifiedBlock>>()
-}
-
-/// A block certified by consensus for fast path execution.
-#[derive(Clone)]
-pub struct CertifiedBlock {
-    /// All transactions in the block have a quorum of accept or reject votes.
-    pub block: VerifiedBlock,
-    /// Sorted transaction indices that indicate the transactions rejected by a quorum.
-    pub rejected: Vec<TransactionIndex>,
-}
-
-impl CertifiedBlock {
-    pub fn new(block: VerifiedBlock, rejected: Vec<TransactionIndex>) -> Self {
-        Self { block, rejected }
-    }
-}
-
-/// A batch of certified blocks output by consensus for processing.
-pub struct CertifiedBlocksOutput {
-    pub blocks: Vec<CertifiedBlock>,
 }
 
 /// Creates fake blocks for testing.
@@ -623,7 +738,25 @@ impl TestBlock {
         self
     }
 
-    pub fn set_ancestors(mut self, ancestors: Vec<BlockRef>) -> Self {
+    /// Sorts then sets ancestors in the TestBlock.
+    /// Author's own block is always first, which is expected by BlockVerifier and
+    /// the rest of the system.
+    pub fn set_ancestors(mut self, mut ancestors: Vec<BlockRef>) -> Self {
+        ancestors.sort_by(|a, b| {
+            if a.author == self.block.author {
+                return std::cmp::Ordering::Less;
+            }
+            if b.author == self.block.author {
+                return std::cmp::Ordering::Greater;
+            }
+            a.author.cmp(&b.author)
+        });
+        self.block.ancestors = ancestors;
+        self
+    }
+
+    /// Sets ancestors in the TestBlock exactly as provided.
+    pub fn set_ancestors_raw(mut self, ancestors: Vec<BlockRef>) -> Self {
         self.block.ancestors = ancestors;
         self
     }
@@ -646,6 +779,23 @@ impl TestBlock {
 
     pub fn build(self) -> Block {
         Block::V2(self.block)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn build_v3(self, transaction_votes_cutoff_round: Round) -> Block {
+        let block = self.block;
+        Block::V3(BlockV3::new(
+            block.epoch,
+            block.round,
+            block.author,
+            block.timestamp_ms,
+            block.ancestors,
+            block.transactions,
+            block.transaction_votes,
+            transaction_votes_cutoff_round,
+            block.commit_votes,
+            block.misbehavior_reports,
+        ))
     }
 }
 
@@ -672,10 +822,21 @@ mod tests {
     use fastcrypto::error::FastCryptoError;
 
     use crate::{
-        block::{BlockAPI, SignedBlock, TestBlock, genesis_blocks},
+        block::{BlockAPI, SignedBlock, TestBlock, genesis_blocks, max_transaction_vote_targets},
         context::Context,
         error::ConsensusError,
     };
+
+    #[tokio::test]
+    async fn test_max_transaction_vote_targets() {
+        let (mut context, _) = Context::new_for_test(4);
+        context.protocol_config.set_gc_depth_for_testing(5);
+        assert_eq!(max_transaction_vote_targets(&context), 20);
+
+        // A GC depth of zero must not make the limit zero, which would remove all vote targets.
+        context.protocol_config.set_gc_depth_for_testing(0);
+        assert_eq!(max_transaction_vote_targets(&context), 4);
+    }
 
     #[tokio::test]
     async fn test_sign_and_verify() {

@@ -12,14 +12,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use consensus_types::block::BlockRef;
-use std::{
-    collections::{BTreeMap, HashMap},
-    net::SocketAddr,
-    sync::{
-        Arc, Mutex as StdMutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
 use rtd_types::{
     base_types::{AuthorityName, random_object_ref},
     committee::Committee,
@@ -30,15 +22,21 @@ use rtd_types::{
     },
     messages_consensus::ConsensusPosition,
     messages_grpc::{
-        HandleCertificateRequestV3, HandleCertificateResponseV2, HandleCertificateResponseV3,
-        HandleSoftBundleCertificatesRequestV3, HandleSoftBundleCertificatesResponseV3,
-        HandleTransactionResponse, ObjectInfoRequest, ObjectInfoResponse, SubmitTxRequest,
-        SubmitTxResponse, SubmitTxResult, SystemStateRequest, TransactionInfoRequest,
-        TransactionInfoResponse, TxType, ValidatorHealthRequest, ValidatorHealthResponse,
-        WaitForEffectsRequest, WaitForEffectsResponse,
+        ObjectInfoRequest, ObjectInfoResponse, SubmitTxRequest, SubmitTxResponse, SubmitTxResult,
+        SystemStateRequest, TransactionInfoRequest, TransactionInfoResponse, TxType,
+        ValidatorHealthRequest, ValidatorHealthResponse, WaitForEffectsRequest,
+        WaitForEffectsResponse,
     },
     rtd_system_state::RtdSystemState,
-    transaction::{CertifiedTransaction, Transaction},
+    transaction::Transaction,
+};
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    sync::{
+        Arc, Mutex as StdMutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::time::{Duration, sleep};
 
@@ -137,38 +135,6 @@ impl AuthorityAPI for MockAuthority {
         _client_addr: Option<SocketAddr>,
     ) -> Result<WaitForEffectsResponse, RtdError> {
         unimplemented!();
-    }
-
-    async fn handle_transaction(
-        &self,
-        _transaction: Transaction,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleTransactionResponse, RtdError> {
-        unimplemented!();
-    }
-
-    async fn handle_certificate_v2(
-        &self,
-        _certificate: CertifiedTransaction,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleCertificateResponseV2, RtdError> {
-        unimplemented!();
-    }
-
-    async fn handle_certificate_v3(
-        &self,
-        _request: HandleCertificateRequestV3,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleCertificateResponseV3, RtdError> {
-        unimplemented!()
-    }
-
-    async fn handle_soft_bundle_certificates_v3(
-        &self,
-        _request: HandleSoftBundleCertificatesRequestV3,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleSoftBundleCertificatesResponseV3, RtdError> {
-        unimplemented!()
     }
 
     async fn handle_object_info_request(
@@ -337,8 +303,8 @@ async fn test_submit_transaction_with_amplification() {
                     },
                 }),
             );
-            // Ensure all requests reach validators before they reply.
-            mock_authority.set_response_delay(Duration::from_secs(5));
+            // Ensure all requests reach validators before they reply, but respond before backup delay (1s).
+            mock_authority.set_response_delay(Duration::from_millis(500));
         }
 
         let amplification_factor = gas_price / reference_gas_price;

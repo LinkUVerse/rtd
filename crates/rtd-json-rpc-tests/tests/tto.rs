@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_json_rpc_api::{
     CoinReadApiClient, IndexerApiClient, TransactionBuilderClient, WriteApiClient,
 };
@@ -13,14 +12,16 @@ use rtd_move_build::BuildConfig;
 use rtd_types::Identifier;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_types::quorum_driver_types::ExecuteTransactionRequestType;
 use rtd_types::transaction::{CallArg, ObjectArg, TransactionData, TransactionKind};
+use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[tokio::test]
 async fn test_indexing_with_tto() {
     let cluster = TestClusterBuilder::new().build().await;
 
+    #[allow(deprecated)]
     let http_client = cluster.rpc_client();
     let address = cluster.get_address_0();
 

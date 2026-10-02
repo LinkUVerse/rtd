@@ -9,7 +9,6 @@ use anyhow::Result;
 use prost_types::FieldMask;
 use rand::rngs::OsRng;
 use rand::seq::IteratorRandom;
-use std::time::Duration;
 use rtd_rosetta::errors::Error;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
@@ -23,6 +22,7 @@ use rtd_types::{
     object::Object,
     transaction::Transaction,
 };
+use std::time::Duration;
 
 /// Helper function to get all coins for an address using gRPC list_owned_objects
 /// This replaces get_all_coins JSON-RPC calls with native gRPC implementation
@@ -199,22 +199,26 @@ pub async fn execute_transaction(
         .with_signatures(signatures)
         .with_read_mask(FieldMask::from_paths(["*"]));
 
-    let response = client
-        .execute_transaction_and_wait_for_checkpoint(exec_request, Duration::from_secs(20))
+    let response = match client
+        .execute_transaction_and_wait_for_checkpoint(exec_request, Duration::from_secs(30))
         .await
-        .inspect_err(|e| {
-            if let rtd_rpc::client::ExecuteAndWaitError::CheckpointTimeout(response) = e {
-                eprintln!(
-                    "txn status: {:?}",
-                    response.get_ref().transaction().effects().status()
-                );
-            }
-        })
-        .ok() // errors can be huge, avoid printing them if unwrap fails
-        .unwrap()
-        .into_inner()
-        .transaction()
-        .to_owned();
+    {
+        Ok(response) => response,
+        Err(rtd_rpc::client::ExecuteAndWaitError::CheckpointTimeout(response)) => {
+            eprintln!(
+                "txn status: {:?}",
+                response.get_ref().transaction().effects().status()
+            );
+            wait_for_transaction(client, &signed_transaction.digest().to_string())
+                .await
+                .unwrap();
+            response
+        }
+        Err(_) => panic!("txn failed to execute"),
+    }
+    .into_inner()
+    .transaction()
+    .to_owned();
 
     Ok(response)
 }

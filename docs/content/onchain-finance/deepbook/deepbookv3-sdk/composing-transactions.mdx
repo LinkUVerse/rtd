@@ -1,0 +1,15 @@
+---
+title: "Composing DeepBook Transactions"
+sidebar_label: Composing Transactions
+description: "Deployment status for Composing DeepBook Transactions in the RTD fork."
+keywords:
+  - RTD
+  - composing transactions
+---
+# Composing DeepBook Transactions
+
+This page previously described an upstream Sui DeepBook workflow as if it were deployed on RTD. **It is not an operational RTD guide.** RTD has no public Mainnet, and no public RTD DeepBook Testnet is verified.
+
+The RTD TypeScript SDK does not include `@linku/deepbook-v3`; the former SDK calls and code examples were inherited from Sui and cannot be presented as working RTD integration steps.
+
+To enable this topic, first port the relevant Move contracts and SDK, deploy them to a specifically identified RTD network, and verify the package IDs, shared objects, coin types, transaction results, and indexer against that chain. Publish an RTD-specific guide only after those checks pass. See [DeepBook deployment status](/onchain-finance/deepbook) and [RTD networks](/develop/rtd-architecture/networks).

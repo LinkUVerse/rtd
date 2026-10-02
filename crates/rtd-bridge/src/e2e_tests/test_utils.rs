@@ -1,91 +1,79 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::abi::EthBridgeConfig;
-use crate::abi::{EthBridgeCommittee, EthBridgeEvent, EthERC20, EthRtdBridge, EthRtdBridgeEvents};
-use crate::config::default_ed25519_key_pair;
-use crate::crypto::BridgeAuthorityKeyPair;
-use crate::crypto::BridgeAuthorityPublicKeyBytes;
-use crate::crypto::BridgeAuthoritySignInfo;
+use crate::abi::{
+    EthBridgeCommittee, EthBridgeConfigInstance, EthBridgeEvent, EthERC20, EthRtdBridge,
+    EthRtdBridgeEvents,
+};
+use crate::config::{BridgeNodeConfig, EthConfig, RtdConfig, default_ed25519_key_pair};
+use crate::crypto::{
+    BridgeAuthorityKeyPair, BridgeAuthorityPublicKeyBytes, BridgeAuthoritySignInfo,
+};
 use crate::events::*;
 use crate::metrics::BridgeMetrics;
+use crate::node::run_bridge_node;
+use crate::rtd_client::{RtdBridgeClient, RtdClientInner};
+use crate::rtd_transaction_builder::{
+    build_add_tokens_on_rtd_transaction, build_committee_register_transaction,
+};
 use crate::server::BridgeNodePublicMetadata;
-use crate::rtd_transaction_builder::build_add_tokens_on_rtd_transaction;
-use crate::rtd_transaction_builder::build_committee_register_transaction;
-use crate::types::CertifiedBridgeAction;
-use crate::types::VerifiedCertifiedBridgeAction;
-use crate::types::{BridgeAction, BridgeActionStatus};
-use crate::types::{BridgeCommitteeValiditySignInfo, RtdToEthTokenTransfer};
-use crate::utils::EthSigner;
-use crate::utils::get_eth_signer_client;
-use crate::utils::publish_and_register_coins_return_add_coins_on_rtd_action;
-use crate::utils::wait_for_server_to_be_up;
-use ethers::types::Address as EthAddress;
+use crate::types::{
+    BridgeAction, BridgeActionStatus, BridgeCommitteeValiditySignInfo, CertifiedBridgeAction,
+    RtdToEthTokenTransfer, RtdToEthTokenTransferV2, VerifiedCertifiedBridgeAction,
+};
+use crate::utils::{
+    EthSignerProvider, get_eth_provider, get_eth_signer_provider,
+    publish_and_register_coins_return_add_coins_on_rtd_action, wait_for_server_to_be_up,
+};
+use alloy::primitives::{Address as EthAddress, Bytes, U256};
+use alloy::rpc::types::TransactionReceipt;
+use anyhow::anyhow;
 use futures::Future;
 use futures::future::join_all;
+use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::ident_str;
 use move_core_types::language_storage::{StructTag, TypeTag};
 use prometheus::Registry;
+use rand::Rng;
+use rand::SeedableRng;
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
-use std::fs::{self, DirBuilder};
-use std::io::{Read, Write};
-use std::path::Path;
-use std::path::PathBuf;
-use std::process::Command;
-use std::str::FromStr;
-use std::sync::Arc;
-use rtd_json_rpc_api::BridgeReadApiClient;
-use rtd_json_rpc_types::RtdEvent;
-use rtd_json_rpc_types::RtdExecutionStatus;
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
-use rtd_json_rpc_types::RtdTransactionBlockResponse;
-use rtd_json_rpc_types::RtdTransactionBlockResponseOptions;
-use rtd_json_rpc_types::RtdTransactionBlockResponseQuery;
-use rtd_json_rpc_types::TransactionFilter;
+use rtd_config::local_ip_utils::get_available_port;
+use rtd_rpc_api::Client;
+use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_test_transaction_builder::TestTransactionBuilder;
-use rtd_types::base_types::{ObjectID, ObjectRef};
-use rtd_types::bridge::BridgeChainId;
-use rtd_types::bridge::BridgeSummary;
-use rtd_types::bridge::BridgeTrait;
-use rtd_types::bridge::get_bridge_obj_initial_shared_version;
-use rtd_types::bridge::{BRIDGE_MODULE_NAME, get_bridge};
-use rtd_types::bridge::{TOKEN_ID_BTC, TOKEN_ID_ETH, TOKEN_ID_USDC, TOKEN_ID_USDT};
+use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
+use rtd_types::bridge::{
+    BRIDGE_MODULE_NAME, BridgeChainId, BridgeSummary, BridgeTrait, TOKEN_ID_BTC, TOKEN_ID_ETH,
+    TOKEN_ID_USDC, TOKEN_ID_USDT, get_bridge, get_bridge_obj_initial_shared_version,
+};
 use rtd_types::committee::{ProtocolVersion, TOTAL_VOTING_POWER};
-use rtd_types::crypto::ToFromBytes;
-use rtd_types::crypto::get_key_pair;
-use rtd_types::digests::TransactionDigest;
+use rtd_types::crypto::{EncodeDecodeBase64, KeypairTraits, ToFromBytes, get_key_pair};
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::event::Event;
+use rtd_types::execution_status::ExecutionStatus;
 use rtd_types::object::Object;
-use rtd_types::transaction::{ObjectArg, SharedObjectMutability, Transaction, TransactionData};
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::{
+    CallArg, ObjectArg, SharedObjectMutability, Transaction, TransactionData,
+};
 use rtd_types::{BRIDGE_PACKAGE_ID, RTD_BRIDGE_OBJECT_ID};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs;
+use std::fs::{DirBuilder, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command};
+use std::str::FromStr;
+use std::sync::Arc;
+use tap::TapFallible;
+use tempfile::tempdir;
+use test_cluster::{TestCluster, TestClusterBuilder};
 use tokio::join;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
-
-use tracing::error;
-use tracing::info;
-
-use crate::config::{BridgeNodeConfig, EthConfig, RtdConfig};
-use crate::node::run_bridge_node;
-use crate::rtd_client::RtdBridgeClient;
-use anyhow::anyhow;
-use ethers::prelude::*;
-use move_core_types::ident_str;
-use std::process::Child;
-use rtd_config::local_ip_utils::get_available_port;
-use rtd_sdk::RtdClient;
-use rtd_types::base_types::RtdAddress;
-use rtd_types::crypto::EncodeDecodeBase64;
-use rtd_types::crypto::KeypairTraits;
-use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use tap::TapFallible;
-use tempfile::tempdir;
-use test_cluster::TestCluster;
-use test_cluster::TestClusterBuilder;
+use tracing::{error, info};
 
 const BRIDGE_COMMITTEE_NAME: &str = "BridgeCommittee";
 const RTD_BRIDGE_NAME: &str = "RtdBridge";
@@ -109,7 +97,7 @@ pub struct BridgeTestCluster {
     eth_environment: EthBridgeEnvironment,
     bridge_node_handles: Option<Vec<JoinHandle<()>>>,
     approved_governance_actions_for_next_start: Option<Vec<Vec<BridgeAction>>>,
-    bridge_tx_cursor: Option<TransactionDigest>,
+    events_cursor: Option<u64>,
     eth_chain_id: BridgeChainId,
     rtd_chain_id: BridgeChainId,
 }
@@ -196,12 +184,12 @@ impl BridgeTestClusterBuilder {
 
         let mut bridge_node_handles = None;
         if self.with_bridge_cluster {
-            let approved_governace_actions = self
+            let approved_governance_actions = self
                 .approved_governance_actions
                 .clone()
                 .unwrap_or(vec![vec![]; self.num_validators]);
             bridge_node_handles = Some(
-                start_bridge_cluster(&test_cluster, &eth_environment, approved_governace_actions)
+                start_bridge_cluster(&test_cluster, &eth_environment, approved_governance_actions)
                     .await,
             );
         }
@@ -209,6 +197,7 @@ impl BridgeTestClusterBuilder {
             RtdBridgeClient::new(&test_cluster.inner.fullnode_handle.rpc_url, metrics)
                 .await
                 .unwrap();
+
         info!(
             "Bridge committee: {:?}",
             bridge_client
@@ -224,7 +213,7 @@ impl BridgeTestClusterBuilder {
             eth_environment,
             bridge_node_handles,
             approved_governance_actions_for_next_start: self.approved_governance_actions,
-            bridge_tx_cursor: None,
+            events_cursor: None,
             rtd_chain_id: self.rtd_chain_id,
             eth_chain_id: self.eth_chain_id,
         }
@@ -252,8 +241,7 @@ impl BridgeTestClusterBuilder {
         // Give anvil a bit of time to start
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
         let (eth_signer, eth_pk_hex) = eth_environment
-            .get_signer(TEST_PK)
-            .await
+            .get_signer_provider(TEST_PK)
             .unwrap_or_else(|e| panic!("Failed to get eth signer from anvil at {anvil_url}: {e}"));
         let deployed_contracts =
             deploy_sol_contract(&anvil_url, eth_signer, bridge_keys, eth_pk_hex).await;
@@ -264,18 +252,19 @@ impl BridgeTestClusterBuilder {
 }
 
 impl BridgeTestCluster {
-    pub async fn get_eth_signer_and_private_key(&self) -> anyhow::Result<(EthSigner, String)> {
-        self.eth_environment.get_signer(TEST_PK).await
+    pub fn get_eth_signer_and_private_key(&self) -> anyhow::Result<(EthSignerProvider, String)> {
+        self.eth_environment.get_signer_provider(TEST_PK)
     }
 
-    pub async fn get_eth_signer_and_address(&self) -> anyhow::Result<(EthSigner, EthAddress)> {
-        let (eth_signer, _) = self.get_eth_signer_and_private_key().await?;
-        let eth_address = eth_signer.address();
+    pub fn get_eth_signer_and_address(&self) -> anyhow::Result<(EthSignerProvider, EthAddress)> {
+        let (eth_signer, private_key) = self.get_eth_signer_and_private_key()?;
+        let signer = alloy::signers::local::PrivateKeySigner::from_str(&private_key)?;
+        let eth_address = signer.address();
         Ok((eth_signer, eth_address))
     }
 
-    pub async fn get_eth_signer(&self) -> EthSigner {
-        let (eth_signer, _) = self.get_eth_signer_and_private_key().await.unwrap();
+    pub fn get_eth_signer(&self) -> EthSignerProvider {
+        let (eth_signer, _) = self.get_eth_signer_and_private_key().unwrap();
         eth_signer
     }
 
@@ -283,8 +272,8 @@ impl BridgeTestCluster {
         &self.bridge_client
     }
 
-    pub fn rtd_client(&self) -> &RtdClient {
-        &self.test_cluster.inner.fullnode_handle.rtd_client
+    pub fn grpc_client(&self) -> Client {
+        self.test_cluster.inner.fullnode_handle.grpc_client.clone()
     }
 
     pub fn rtd_user_address(&self) -> RtdAddress {
@@ -354,7 +343,7 @@ impl BridgeTestCluster {
     pub async fn sign_and_execute_transaction(
         &self,
         tx_data: &TransactionData,
-    ) -> RtdTransactionBlockResponse {
+    ) -> ExecutedTransaction {
         self.test_cluster
             .inner
             .sign_and_execute_transaction(tx_data)
@@ -371,7 +360,7 @@ impl BridgeTestCluster {
 
     pub async fn start_bridge_cluster(&mut self) {
         assert!(self.bridge_node_handles.is_none());
-        let approved_governace_actions = self
+        let approved_governance_actions = self
             .approved_governance_actions_for_next_start
             .clone()
             .unwrap_or(vec![vec![], vec![], vec![], vec![]]);
@@ -379,99 +368,172 @@ impl BridgeTestCluster {
             start_bridge_cluster(
                 &self.test_cluster,
                 &self.eth_environment,
-                approved_governace_actions,
+                approved_governance_actions,
             )
             .await,
         );
     }
 
-    /// Returns new bridge transaction. It advanaces the stored tx digest cursor.
-    /// When `assert_success` is true, it asserts all transactions are successful.
-    pub async fn new_bridge_transactions(
-        &mut self,
-        assert_success: bool,
-    ) -> Vec<RtdTransactionBlockResponse> {
-        let resps = self
-            .rtd_client()
-            .read_api()
-            .query_transaction_blocks(
-                RtdTransactionBlockResponseQuery {
-                    filter: Some(TransactionFilter::InputObject(RTD_BRIDGE_OBJECT_ID)),
-                    options: Some(RtdTransactionBlockResponseOptions::full_content()),
-                },
-                self.bridge_tx_cursor,
-                None,
-                false,
-            )
-            .await
-            .unwrap();
-        self.bridge_tx_cursor = resps.next_cursor;
-
-        for tx in &resps.data {
-            if assert_success {
-                assert!(tx.status_ok().unwrap());
-            }
-            let events = &tx.events.as_ref().unwrap().data;
-            if events
-                .iter()
-                .any(|e| &e.type_ == TokenTransferApproved.get().unwrap())
-            {
-                assert!(
-                    events
-                        .iter()
-                        .any(|e| &e.type_ == TokenTransferClaimed.get().unwrap()
-                            || &e.type_ == TokenTransferApproved.get().unwrap())
-                );
-            } else if events
-                .iter()
-                .any(|e| &e.type_ == TokenTransferAlreadyClaimed.get().unwrap())
-            {
-                assert!(
-                    events
-                        .iter()
-                        .all(|e| &e.type_ == TokenTransferAlreadyClaimed.get().unwrap()
-                            || &e.type_ == TokenTransferAlreadyApproved.get().unwrap())
-                );
-            }
-            // TODO: check for other events e.g. TokenRegistrationEvent, NewTokenEvent etc
-        }
-        resps.data
-    }
-
-    /// Returns events that are emitted in new bridge transaction and match `event_types`.
-    /// It advanaces the stored tx digest cursor.
-    /// See `new_bridge_transactions` for `assert_success`.
+    /// Returns events that are emitted in new bridge transactions and match `event_types`,
+    /// polling until at least `expected_count` matching events are found or the timeout expires
+    /// (returning however many were found by then). It advances the stored checkpoint cursor.
+    ///
+    /// Polling is necessary because transaction execution (and therefore onchain bridge action
+    /// status) is observable before the transaction lands in a checkpoint, so at the time of the
+    /// call the events may not be in any checkpoint yet.
     pub async fn new_bridge_events(
         &mut self,
         event_types: HashSet<StructTag>,
-        assert_success: bool,
-    ) -> Vec<RtdEvent> {
-        let txes = self.new_bridge_transactions(assert_success).await;
+        expected_count: usize,
+    ) -> Vec<Event> {
+        let mut client = self.grpc_client();
+        let mut matched: Vec<Event> = Vec::new();
 
-        txes.iter()
-            .flat_map(|tx| {
-                tx.events
-                    .as_ref()
-                    .unwrap()
-                    .data
-                    .iter()
-                    .filter(|e| event_types.contains(&e.type_))
-                    .cloned()
-            })
-            .collect()
+        let deadline = Instant::now() + tokio::time::Duration::from_secs(30);
+        loop {
+            let target = client
+                .get_latest_checkpoint()
+                .await
+                .unwrap()
+                .sequence_number;
+
+            for checkpoint in self.events_cursor.unwrap_or(0)..=target {
+                let checkpoint = client.get_full_checkpoint(checkpoint).await.unwrap();
+
+                for tx in checkpoint.transactions {
+                    if let Some(e) = tx.events {
+                        matched.extend(
+                            e.data
+                                .into_iter()
+                                .filter(|e| event_types.contains(&e.type_)),
+                        );
+                    }
+                }
+            }
+
+            // `target` has already been scanned; start after it on the next call/iteration.
+            self.events_cursor = Some(target + 1);
+
+            if matched.len() >= expected_count || Instant::now() > deadline {
+                return matched;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    /// Upgrades the RtdBridge proxy to RtdBridgeV2.
+    /// This method:
+    /// 1. Deploys RtdBridgeV2 implementation using forge
+    /// 2. Creates an EvmContractUpgradeAction
+    /// 3. Signs it with all bridge authority keys
+    /// 4. Executes the upgrade via upgradeWithSignatures
+    pub async fn upgrade_bridge_to_v2(&self) -> anyhow::Result<()> {
+        use crate::crypto::BridgeAuthoritySignInfo;
+        use crate::eth_transaction_builder::build_evm_upgrade_transaction;
+        use crate::types::{BridgeCommitteeValiditySignInfo, EvmContractUpgradeAction};
+        use std::collections::BTreeMap;
+
+        let sol_path = format!("{}/../../bridge/evm", env!("CARGO_MANIFEST_DIR"));
+        let eth_signer = self.get_eth_signer();
+        let rtd_bridge_proxy = self.contracts().rtd_bridge;
+
+        info!("Upgrading RtdBridge to V2...");
+        info!("  Proxy address: {:?}", rtd_bridge_proxy);
+
+        // Step 1: Deploy RtdBridgeV2 implementation using forge create
+        let (_, eth_pk_hex) = self.get_eth_signer_and_private_key()?;
+        let output = std::process::Command::new("forge")
+            .current_dir(&sol_path)
+            .args([
+                "create",
+                "contracts/RtdBridgeV2.sol:RtdBridgeV2",
+                "--rpc-url",
+                &self.eth_rpc_url(),
+                "--private-key",
+                &eth_pk_hex,
+                "--json",
+            ])
+            .output()
+            .expect("Failed to deploy RtdBridgeV2");
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("Failed to deploy RtdBridgeV2: {}", stderr));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let deploy_result: serde_json::Value = serde_json::from_str(&stdout)?;
+        let new_impl_address_str = deploy_result["deployedTo"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse deployed address"))?;
+        let new_impl_address = EthAddress::from_str(new_impl_address_str)?;
+        info!("  New implementation address: {:?}", new_impl_address);
+
+        // Step 2: Get the current upgrade nonce from the committee
+        let bridge_contract = EthRtdBridge::new(rtd_bridge_proxy, eth_signer.clone());
+        let committee_address = bridge_contract.committee().call().await?;
+        let committee_contract = EthBridgeCommittee::new(committee_address, eth_signer.clone());
+        let upgrade_nonce = committee_contract.nonces(6u8).call().await?; // 6 = UPGRADE message type
+
+        // Step 3: Create the upgrade action
+        let upgrade_action = EvmContractUpgradeAction {
+            nonce: upgrade_nonce,
+            chain_id: self.eth_chain_id,
+            proxy_address: rtd_bridge_proxy,
+            new_impl_address,
+            call_data: vec![], // No initializer needed for V2
+        };
+        let action = BridgeAction::EvmContractUpgradeAction(upgrade_action.clone());
+
+        // Step 4: Sign with all bridge authority keys
+        let mut signatures = BTreeMap::new();
+        for i in 0..self.num_validators {
+            let key = self.bridge_authority_key(i);
+            let sig = BridgeAuthoritySignInfo::new(&action, &key);
+            signatures.insert(key.public().into(), sig.signature);
+        }
+        let sigs = BridgeCommitteeValiditySignInfo { signatures };
+
+        info!(
+            "  Collected {} signatures for upgrade",
+            sigs.signatures.len()
+        );
+
+        // Step 5: Execute the upgrade
+        let tx = build_evm_upgrade_transaction(upgrade_action, &sigs)
+            .map_err(|e| anyhow::anyhow!("Failed to build upgrade transaction: {:?}", e))?;
+        let receipt = send_eth_tx_and_get_tx_receipt(eth_signer, tx).await;
+        // let pending_tx = tx.send().await?;
+        // let receipt = pending_tx
+        //     .await?
+        //     .ok_or_else(|| anyhow::anyhow!("Failed to get transaction receipt for upgrade"))?;
+
+        if !receipt.status() {
+            return Err(anyhow::anyhow!(
+                "Upgrade transaction failed with status: {:?}",
+                receipt.status()
+            ));
+        }
+
+        info!(
+            "  Upgrade transaction successful: {:?}",
+            receipt.transaction_hash
+        );
+        info!("RtdBridge upgraded to V2 successfully!");
+
+        Ok(())
     }
 }
 
-pub async fn get_eth_signer_client_e2e_test_only(
+pub fn get_eth_signer_provider_e2e_test_only(
     eth_rpc_url: &str,
-) -> anyhow::Result<(EthSigner, String)> {
+) -> anyhow::Result<(EthSignerProvider, String)> {
     // This private key is derived from the default anvil setting.
     // Mnemonic:          test test test test test test test test test test test junk
     // Derivation path:   m/44'/60'/0'/0/
     // DO NOT USE IT ANYWHERE ELSE EXCEPT FOR RUNNING AUTOMATIC INTEGRATION TESTING
-    let url = eth_rpc_url.to_string();
     let private_key_0 = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356";
-    let signer_0 = get_eth_signer_client(&url, private_key_0).await?;
+    let signer_0 = get_eth_signer_provider(eth_rpc_url, private_key_0)?;
     Ok((signer_0, private_key_0.to_string()))
 }
 
@@ -518,7 +580,7 @@ struct SolDeployConfig {
 
 pub(crate) async fn deploy_sol_contract(
     anvil_url: &str,
-    eth_signer: EthSigner,
+    eth_signer_provider: EthSignerProvider,
     bridge_authority_keys: Vec<BridgeAuthorityKeyPair>,
     eth_private_key_hex: String,
 ) -> DeployedSolContracts {
@@ -663,28 +725,36 @@ pub(crate) async fn deploy_sol_contract(
         ka: deployed_contracts.remove(KA_NAME).unwrap(),
     };
     let eth_bridge_committee =
-        EthBridgeCommittee::new(contracts.bridge_committee, eth_signer.clone().into());
+        EthBridgeCommittee::new(contracts.bridge_committee, eth_signer_provider);
     for (i, (m, s)) in committee_members
         .iter()
-        .zip(committee_member_stake.iter())
+        .zip_debug_eq(committee_member_stake.iter())
         .enumerate()
     {
         let eth_address = EthAddress::from_str(m).unwrap();
         assert_eq!(
             eth_bridge_committee
-                .committee_index(eth_address)
+                .committeeIndex(eth_address)
+                .call()
                 .await
                 .unwrap(),
             i as u8
         );
         assert_eq!(
             eth_bridge_committee
-                .committee_stake(eth_address)
+                .committeeStake(eth_address)
+                .call()
                 .await
                 .unwrap(),
             *s as u16
         );
-        assert!(!eth_bridge_committee.blocklist(eth_address).await.unwrap());
+        assert!(
+            !eth_bridge_committee
+                .blocklist(eth_address)
+                .call()
+                .await
+                .unwrap()
+        );
     }
     contracts
 }
@@ -716,11 +786,11 @@ impl EthBridgeEnvironment {
         })
     }
 
-    pub(crate) async fn get_signer(
+    pub(crate) fn get_signer_provider(
         &self,
         private_key: &str,
-    ) -> anyhow::Result<(EthSigner, String)> {
-        let signer = get_eth_signer_client(&self.rpc_url, private_key).await?;
+    ) -> anyhow::Result<(EthSignerProvider, String)> {
+        let signer = get_eth_signer_provider(&self.rpc_url, private_key)?;
         Ok((signer, private_key.to_string()))
     }
 
@@ -728,22 +798,12 @@ impl EthBridgeEnvironment {
         self.contracts.as_ref().unwrap()
     }
 
-    pub fn get_bridge_config(
-        &self,
-    ) -> EthBridgeConfig<ethers::prelude::Provider<ethers::providers::Http>> {
-        let provider = Arc::new(
-            ethers::prelude::Provider::<ethers::providers::Http>::try_from(&self.rpc_url)
-                .unwrap()
-                .interval(std::time::Duration::from_millis(2000)),
-        );
-        EthBridgeConfig::new(self.contracts().bridge_config, provider.clone())
-    }
-
     pub async fn get_supported_token(&self, token_id: u8) -> (EthAddress, u8, u64) {
-        let config = self.get_bridge_config();
-        let token_address = config.token_address_of(token_id).call().await.unwrap();
-        let token_rtd_decimal = config.token_rtd_decimal_of(token_id).call().await.unwrap();
-        let token_price = config.token_price_of(token_id).call().await.unwrap();
+        let provider = get_eth_provider(&self.rpc_url).unwrap();
+        let config = EthBridgeConfigInstance::new(self.contracts().bridge_config, provider);
+        let token_address = config.tokenAddressOf(token_id).call().await.unwrap();
+        let token_rtd_decimal = config.tokenRtdDecimalOf(token_id).call().await.unwrap();
+        let token_price = config.tokenPriceOf(token_id).call().await.unwrap();
         (token_address, token_rtd_decimal, token_price)
     }
 }
@@ -780,8 +840,8 @@ pub(crate) async fn start_bridge_cluster(
     let mut handles = vec![];
     for (i, ((kp, server_listen_port), approved_governance_actions)) in bridge_authority_keys
         .iter()
-        .zip(bridge_server_ports.iter())
-        .zip(approved_governance_actions.into_iter())
+        .zip_debug_eq(bridge_server_ports.iter())
+        .zip_debug_eq(approved_governance_actions)
         .enumerate()
     {
         // prepare node config (server + client)
@@ -801,7 +861,10 @@ pub(crate) async fn start_bridge_cluster(
             run_client: i == 0,
             db_path: Some(db_path),
             eth: EthConfig {
-                eth_rpc_url: eth_environment.rpc_url.clone(),
+                eth_rpc_url: None, // to be deprecated
+                eth_rpc_urls: Some(vec![eth_environment.rpc_url.clone()]),
+                eth_rpc_quorum: 1,
+                eth_health_check_interval_secs: 300,
                 eth_bridge_proxy_address: eth_bridge_contract_address.clone(),
                 eth_bridge_chain_id: BridgeChainId::EthCustom as u8,
                 eth_contracts_start_block_fallback: Some(0),
@@ -813,6 +876,7 @@ pub(crate) async fn start_bridge_cluster(
                 bridge_client_key_path: None,
                 bridge_client_gas_object: None,
                 rtd_bridge_module_last_processed_event_id_override: None,
+                rtd_bridge_next_sequence_number_override: None,
             },
             metrics_key_pair: default_ed25519_key_pair(),
             metrics: None,
@@ -847,15 +911,16 @@ pub async fn get_signatures(
         .collect()
 }
 
-pub(crate) async fn send_eth_tx_and_get_tx_receipt<B, M, D>(
-    call: FunctionCall<B, M, D>,
+pub(crate) async fn send_eth_tx_and_get_tx_receipt<P, N>(
+    provider: P,
+    tx: N::TransactionRequest,
 ) -> TransactionReceipt
 where
-    M: Middleware,
-    B: std::borrow::Borrow<M>,
-    D: ethers::abi::Detokenize,
+    P: alloy::providers::Provider<N>,
+    N: alloy::network::Network<ReceiptResponse = TransactionReceipt>,
 {
-    call.send().await.unwrap().await.unwrap().unwrap()
+    let pending_tx = provider.send_transaction(tx).await.unwrap();
+    pending_tx.get_receipt().await.unwrap()
 }
 
 /// A simple struct to create a temporary directory that
@@ -945,15 +1010,13 @@ impl TestClusterWrapperBuilder {
         // Committee registers themselves
         let mut server_ports = vec![];
         let mut tasks = vec![];
-        let quorum_driver_api = test_cluster.quorum_driver_api().clone();
         // Reorder the nodes so that the last node has the largest stake.
         let validator_with_max_stake = test_cluster
-            .rtd_client()
-            .governance_api()
-            .get_committee_info(None)
+            .grpc_client()
+            .get_committee(None)
             .await
             .unwrap()
-            .validators
+            .voting_rights
             .iter()
             .max_by(|a, b| a.0.cmp(&b.0))
             .unwrap()
@@ -971,7 +1034,7 @@ impl TestClusterWrapperBuilder {
         let reordered_nodes = other_nodes
             .iter()
             .chain(std::iter::once(&node_with_max_stake));
-        for (node, kp) in reordered_nodes.zip(self.bridge_authority_keys.iter()) {
+        for (node, kp) in reordered_nodes.zip_debug_eq(self.bridge_authority_keys.iter()) {
             let validator_address = node.config().rtd_address();
             // create committee registration tx
             let gas = test_cluster
@@ -999,14 +1062,10 @@ impl TestClusterWrapperBuilder {
                 data,
                 vec![node.config().account_key_pair.keypair()],
             );
-            let api_clone = quorum_driver_api.clone();
+            let api_clone = test_cluster.wallet.grpc_client().unwrap();
             tasks.push(async move {
                 api_clone
-                    .execute_transaction_block(
-                        tx,
-                        RtdTransactionBlockResponseOptions::new().with_effects(),
-                        None,
-                    )
+                    .execute_transaction_and_wait_for_checkpoint(&tx)
                     .await
             });
         }
@@ -1073,19 +1132,14 @@ impl TestClusterWrapperBuilder {
             .unwrap();
 
             let response = test_cluster.sign_and_execute_transaction(&tx).await;
-            assert_eq!(
-                response.effects.unwrap().status(),
-                &RtdExecutionStatus::Success
-            );
+            assert!(response.effects.status().is_ok());
             info!("Deploy tokens took {:?} secs", timer.elapsed().as_secs());
         } else {
             await_committee_register_tasks(&test_cluster, tasks).await;
         }
         async fn await_committee_register_tasks(
             test_cluster: &TestCluster,
-            tasks: Vec<
-                impl Future<Output = Result<RtdTransactionBlockResponse, rtd_sdk::error::Error>>,
-            >,
+            tasks: Vec<impl Future<Output = Result<ExecutedTransaction, tonic::Status>>>,
         ) {
             // The tx may fail if a member tries to register when the committee is already finalized.
             // In that case, we just need to check the committee members is not empty since once
@@ -1093,7 +1147,7 @@ impl TestClusterWrapperBuilder {
             let responses = join_all(tasks).await;
             let mut has_failure = false;
             for response in responses {
-                if response.unwrap().effects.unwrap().status() != &RtdExecutionStatus::Success {
+                if response.unwrap().effects.status() != &ExecutionStatus::Success {
                     has_failure = true;
                 }
             }
@@ -1165,9 +1219,8 @@ impl TestClusterWrapper {
 
 async fn get_bridge_summary(test_cluster: &TestCluster) -> BridgeSummary {
     test_cluster
-        .rtd_client()
-        .http()
-        .get_latest_bridge()
+        .grpc_client()
+        .get_bridge_summary()
         .await
         .unwrap()
 }
@@ -1229,49 +1282,102 @@ pub async fn initiate_bridge_eth_to_rtd(
     amount: u64,
     nonce: u64,
 ) -> Result<(), anyhow::Error> {
-    info!("Depositing native Ether to Solidity contract, nonce: {nonce}, amount: {amount}");
-    let (eth_signer, eth_address) = bridge_test_cluster
-        .get_eth_signer_and_address()
-        .await
-        .unwrap();
+    initiate_bridge_eth_to_rtd_internal(bridge_test_cluster, amount, nonce, false).await
+}
+
+pub async fn initiate_bridge_eth_to_rtd_v2(
+    bridge_test_cluster: &BridgeTestCluster,
+    amount: u64,
+    nonce: u64,
+) -> Result<(), anyhow::Error> {
+    initiate_bridge_eth_to_rtd_internal(bridge_test_cluster, amount, nonce, true).await
+}
+
+async fn initiate_bridge_eth_to_rtd_internal(
+    bridge_test_cluster: &BridgeTestCluster,
+    amount: u64,
+    nonce: u64,
+    use_v2: bool,
+) -> Result<(), anyhow::Error> {
+    info!(
+        "Depositing native Ether to Solidity contract (v{}), nonce: {nonce}, amount: {amount}",
+        if use_v2 { "2" } else { "1" }
+    );
+    let (eth_signer, eth_address) = bridge_test_cluster.get_eth_signer_and_address().unwrap();
 
     let rtd_address = bridge_test_cluster.rtd_user_address();
     let rtd_chain_id = bridge_test_cluster.rtd_chain_id();
     let eth_chain_id = bridge_test_cluster.eth_chain_id();
     let token_id = TOKEN_ID_ETH;
 
-    let rtd_amount = (U256::from(amount) * U256::exp10(8)).as_u64(); // DP for Ether on Rtd
+    let rtd_amount = (U256::from(amount) * U256::from(10).pow(U256::from(8))).to::<u64>(); // DP for Ether on Rtd
+    let eth_amount = U256::from(amount) * U256::from(10).pow(U256::from(18));
 
-    let eth_tx = deposit_native_eth_to_sol_contract(
-        &eth_signer,
+    let contract = EthRtdBridge::new(
         bridge_test_cluster.contracts().rtd_bridge,
-        rtd_address,
-        rtd_chain_id,
-        amount,
-    )
-    .await;
-    let tx_receipt = send_eth_tx_and_get_tx_receipt(eth_tx).await;
+        eth_signer.clone(),
+    );
+    let rtd_recipient_address = rtd_address.to_vec().into();
+    let tx_receipt = if use_v2 {
+        let call = contract
+            .bridgeETHV2(rtd_recipient_address, rtd_chain_id as u8)
+            .value(eth_amount);
+        send_eth_tx_and_get_tx_receipt(eth_signer, call.into_transaction_request()).await
+    } else {
+        let call = contract
+            .bridgeETH(rtd_recipient_address, rtd_chain_id as u8)
+            .value(eth_amount);
+        send_eth_tx_and_get_tx_receipt(eth_signer, call.into_transaction_request()).await
+    };
+
     let eth_bridge_event = tx_receipt
-        .logs
+        .logs()
         .iter()
         .find_map(EthBridgeEvent::try_from_log)
         .unwrap();
-    let EthBridgeEvent::EthRtdBridgeEvents(EthRtdBridgeEvents::TokensDepositedFilter(
-        eth_bridge_event,
-    )) = eth_bridge_event
-    else {
-        unreachable!();
+    let (
+        source_chain_id,
+        destination_chain_id,
+        emitted_token_id,
+        emitted_amount,
+        sender,
+        recipient,
+        timestamp,
+    ) = match eth_bridge_event {
+        EthBridgeEvent::EthRtdBridgeEvents(EthRtdBridgeEvents::TokensDeposited(event)) => (
+            event.sourceChainID,
+            event.destinationChainID,
+            event.tokenID,
+            event.rtdAdjustedAmount,
+            event.senderAddress,
+            event.recipientAddress.to_vec(),
+            None,
+        ),
+        EthBridgeEvent::EthRtdBridgeEvents(EthRtdBridgeEvents::TokensDepositedV2(event)) => (
+            event.sourceChainID,
+            event.destinationChainID,
+            event.tokenID,
+            event.rtdAdjustedAmount,
+            event.senderAddress,
+            event.recipientAddress.to_vec(),
+            Some(event.timestampSeconds),
+        ),
+        _ => unreachable!(),
     };
+
     // assert eth log matches
-    assert_eq!(eth_bridge_event.source_chain_id, eth_chain_id as u8);
-    assert_eq!(eth_bridge_event.nonce, nonce);
-    assert_eq!(eth_bridge_event.destination_chain_id, rtd_chain_id as u8);
-    assert_eq!(eth_bridge_event.token_id, token_id);
-    assert_eq!(eth_bridge_event.rtd_adjusted_amount, rtd_amount);
-    assert_eq!(eth_bridge_event.sender_address, eth_address);
-    assert_eq!(eth_bridge_event.recipient_address, rtd_address.to_vec());
+    assert_eq!(source_chain_id, eth_chain_id as u8);
+    assert_eq!(destination_chain_id, rtd_chain_id as u8);
+    assert_eq!(emitted_token_id, token_id);
+    assert_eq!(emitted_amount, rtd_amount);
+    assert_eq!(sender, eth_address);
+    assert_eq!(recipient, rtd_address.to_vec());
+    if use_v2 {
+        assert!(timestamp.is_some(), "V2 deposit must emit timestamp");
+    }
     info!(
-        "Deposited Eth to Solidity contract, block: {:?}",
+        "Deposited Eth to Solidity contract (v{}), block: {:?}",
+        if use_v2 { "2" } else { "1" },
         tx_receipt.block_number
     );
 
@@ -1294,11 +1400,56 @@ pub async fn initiate_bridge_rtd_to_eth(
     nonce: u64,
     rtd_amount: u64,
 ) -> Result<RtdToEthTokenTransfer, anyhow::Error> {
+    match initiate_bridge_rtd_to_eth_internal(
+        bridge_test_cluster,
+        eth_address,
+        token,
+        nonce,
+        rtd_amount,
+        false,
+    )
+    .await?
+    {
+        BridgeAction::RtdToEthTokenTransfer(action) => Ok(action),
+        _ => unreachable!("Expected V1 token transfer action"),
+    }
+}
+
+pub async fn initiate_bridge_rtd_to_eth_v2(
+    bridge_test_cluster: &BridgeTestCluster,
+    eth_address: EthAddress,
+    token: ObjectRef,
+    nonce: u64,
+    rtd_amount: u64,
+) -> Result<RtdToEthTokenTransferV2, anyhow::Error> {
+    match initiate_bridge_rtd_to_eth_internal(
+        bridge_test_cluster,
+        eth_address,
+        token,
+        nonce,
+        rtd_amount,
+        true,
+    )
+    .await?
+    {
+        BridgeAction::RtdToEthTokenTransferV2(action) => Ok(action),
+        _ => unreachable!("Expected V2 token transfer action"),
+    }
+}
+
+async fn initiate_bridge_rtd_to_eth_internal(
+    bridge_test_cluster: &BridgeTestCluster,
+    eth_address: EthAddress,
+    token: ObjectRef,
+    nonce: u64,
+    rtd_amount: u64,
+    use_v2: bool,
+) -> Result<BridgeAction, anyhow::Error> {
     let bridge_object_arg = bridge_test_cluster
         .bridge_client()
         .get_mutable_bridge_object_arg_must_succeed()
         .await;
-    let rtd_client = bridge_test_cluster.rtd_client();
+    let rtd_client = bridge_test_cluster.grpc_client();
     let token_types = bridge_test_cluster
         .bridge_client()
         .get_token_id_map()
@@ -1315,11 +1466,12 @@ pub async fn initiate_bridge_rtd_to_eth(
         token,
         bridge_object_arg,
         &token_types,
+        use_v2,
     )
     .await
     {
         Ok(resp) => {
-            if !resp.status_ok().unwrap() {
+            if !resp.effects.status().is_ok() {
                 return Err(anyhow!("Rtd TX error"));
             } else {
                 resp
@@ -1332,31 +1484,43 @@ pub async fn initiate_bridge_rtd_to_eth(
     let bridge_action = rtd_events
         .iter()
         .filter_map(|e| {
-            let rtd_bridge_event = RtdBridgeEvent::try_from_rtd_event(e).unwrap()?;
+            let rtd_bridge_event = RtdBridgeEvent::try_from_event(e).unwrap()?;
             rtd_bridge_event.try_into_bridge_action()
         })
-        .find_map(|e| {
-            if let BridgeAction::RtdToEthTokenTransfer(a) = e {
-                Some(a)
-            } else {
-                None
-            }
+        .find(|action| {
+            matches!(
+                action,
+                BridgeAction::RtdToEthTokenTransfer(_) | BridgeAction::RtdToEthTokenTransferV2(_)
+            )
         })
         .unwrap();
-    info!("Deposited Eth to move package");
-    assert_eq!(bridge_action.nonce, nonce);
-    assert_eq!(
-        bridge_action.rtd_chain_id,
-        bridge_test_cluster.rtd_chain_id()
+    info!(
+        "Deposited Eth to move package via v{}",
+        if use_v2 { "2" } else { "1" }
     );
-    assert_eq!(
-        bridge_action.eth_chain_id,
-        bridge_test_cluster.eth_chain_id()
-    );
-    assert_eq!(bridge_action.rtd_address, rtd_address);
-    assert_eq!(bridge_action.eth_address, eth_address);
-    assert_eq!(bridge_action.token_id, TOKEN_ID_ETH);
-    assert_eq!(bridge_action.amount_adjusted, rtd_amount);
+
+    match &bridge_action {
+        BridgeAction::RtdToEthTokenTransfer(action) => {
+            assert_eq!(action.nonce, nonce);
+            assert_eq!(action.rtd_chain_id, bridge_test_cluster.rtd_chain_id());
+            assert_eq!(action.eth_chain_id, bridge_test_cluster.eth_chain_id());
+            assert_eq!(action.rtd_address, rtd_address);
+            assert_eq!(action.eth_address, eth_address);
+            assert_eq!(action.token_id, TOKEN_ID_ETH);
+            assert_eq!(action.amount_adjusted, rtd_amount);
+        }
+        BridgeAction::RtdToEthTokenTransferV2(action) => {
+            assert_eq!(action.nonce, nonce);
+            assert_eq!(action.rtd_chain_id, bridge_test_cluster.rtd_chain_id());
+            assert_eq!(action.eth_chain_id, bridge_test_cluster.eth_chain_id());
+            assert_eq!(action.rtd_address, rtd_address);
+            assert_eq!(action.eth_address, eth_address);
+            assert_eq!(action.token_id, TOKEN_ID_ETH);
+            assert_eq!(action.amount_adjusted, rtd_amount);
+            assert!(action.timestamp_ms > 0, "V2 action must include timestamp");
+        }
+        _ => unreachable!(),
+    }
 
     // Wait for the bridge action to be approved
     wait_for_transfer_action_status(
@@ -1413,8 +1577,46 @@ async fn wait_for_transfer_action_status(
     }
 }
 
+/// Polls the fullnode's owned-object index until `address` owns an ETH coin, and returns it.
+/// The index is only updated after the claiming transaction's checkpoint is indexed, so the coin
+/// may not be visible immediately after the transfer's onchain status becomes `Claimed` (which is
+/// read from live object state). `exclude` filters out a coin from an earlier transfer that has
+/// since been bridged away, in case the index still shows it.
+pub async fn wait_for_eth_coin_owned_by(
+    bridge_test_cluster: &BridgeTestCluster,
+    address: RtdAddress,
+    exclude: Option<ObjectID>,
+) -> Object {
+    let now = std::time::Instant::now();
+    loop {
+        let eth_coin = bridge_test_cluster
+            .grpc_client()
+            .get_owned_objects(address, None, None, None)
+            .await
+            .unwrap()
+            .items
+            .iter()
+            .find(|o| {
+                Some(o.id()) != exclude
+                    && o.struct_tag()
+                        .unwrap()
+                        .to_canonical_string(true)
+                        .contains("ETH")
+            })
+            .cloned();
+        if let Some(eth_coin) = eth_coin {
+            return eth_coin;
+        }
+        assert!(
+            now.elapsed().as_secs() <= 60,
+            "Timeout waiting for {address} to own an ETH coin"
+        );
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+}
+
 async fn deposit_eth_to_rtd_package(
-    rtd_client: &RtdClient,
+    rtd_client: Client,
     rtd_address: RtdAddress,
     wallet_context: &WalletContext,
     target_chain: BridgeChainId,
@@ -1422,20 +1624,37 @@ async fn deposit_eth_to_rtd_package(
     token: ObjectRef,
     bridge_object_arg: ObjectArg,
     rtd_token_type_tags: &HashMap<u8, TypeTag>,
-) -> Result<RtdTransactionBlockResponse, anyhow::Error> {
+    use_v2: bool,
+) -> Result<ExecutedTransaction, anyhow::Error> {
     let mut builder = ProgrammableTransactionBuilder::new();
     let arg_target_chain = builder.pure(target_chain as u8).unwrap();
-    let arg_target_address = builder.pure(target_address.as_bytes()).unwrap();
+    let arg_target_address = builder.pure(target_address.as_slice()).unwrap();
     let arg_token = builder.obj(ObjectArg::ImmOrOwnedObject(token)).unwrap();
     let arg_bridge = builder.obj(bridge_object_arg).unwrap();
-
-    builder.programmable_move_call(
-        BRIDGE_PACKAGE_ID,
-        BRIDGE_MODULE_NAME.to_owned(),
-        ident_str!("send_token").to_owned(),
-        vec![rtd_token_type_tags.get(&TOKEN_ID_ETH).unwrap().clone()],
-        vec![arg_bridge, arg_target_chain, arg_target_address, arg_token],
-    );
+    if use_v2 {
+        let arg_clock = builder.input(CallArg::CLOCK_IMM).unwrap();
+        builder.programmable_move_call(
+            BRIDGE_PACKAGE_ID,
+            BRIDGE_MODULE_NAME.to_owned(),
+            ident_str!("send_token_v2").to_owned(),
+            vec![rtd_token_type_tags.get(&TOKEN_ID_ETH).unwrap().clone()],
+            vec![
+                arg_bridge,
+                arg_target_chain,
+                arg_target_address,
+                arg_token,
+                arg_clock,
+            ],
+        );
+    } else {
+        builder.programmable_move_call(
+            BRIDGE_PACKAGE_ID,
+            BRIDGE_MODULE_NAME.to_owned(),
+            ident_str!("send_token").to_owned(),
+            vec![rtd_token_type_tags.get(&TOKEN_ID_ETH).unwrap().clone()],
+            vec![arg_bridge, arg_target_chain, arg_target_address, arg_token],
+        );
+    }
 
     let pt = builder.finish();
     let gas_object_ref = wallet_context
@@ -1448,11 +1667,7 @@ async fn deposit_eth_to_rtd_package(
         vec![gas_object_ref],
         pt,
         500_000_000,
-        rtd_client
-            .governance_api()
-            .get_reference_gas_price()
-            .await
-            .unwrap(),
+        rtd_client.get_reference_gas_price().await.unwrap(),
     );
     let tx = wallet_context.sign_transaction(&tx_data).await;
     wallet_context.execute_transaction_may_fail(tx).await
@@ -1465,24 +1680,27 @@ pub async fn initiate_bridge_erc20_to_rtd(
     token_id: u8,
     nonce: u64,
 ) -> Result<(), anyhow::Error> {
-    let (eth_signer, eth_address) = bridge_test_cluster
-        .get_eth_signer_and_address()
-        .await
-        .unwrap();
+    let (eth_signer, eth_address) = bridge_test_cluster.get_eth_signer_and_address().unwrap();
 
     // First, mint ERC20 tokens to the signer
-    let contract = EthERC20::new(token_address, eth_signer.clone().into());
-    let decimal = contract.decimals().await? as usize;
-    let amount = U256::from(amount_u64) * U256::exp10(decimal);
-    let rtd_amount = amount.as_u64();
+    let contract = EthERC20::new(token_address, eth_signer.clone());
+    let decimal = contract.decimals().call().await?;
+    let amount = U256::from(amount_u64) * U256::from(10).pow(U256::from(decimal));
+    let rtd_amount = amount.to::<u64>();
     let mint_call = contract.mint(eth_address, amount);
-    let mint_tx_receipt = send_eth_tx_and_get_tx_receipt(mint_call).await;
-    assert_eq!(mint_tx_receipt.status.unwrap().as_u64(), 1);
+    let mint_tx_receipt =
+        send_eth_tx_and_get_tx_receipt(eth_signer.clone(), mint_call.into_transaction_request())
+            .await;
+    assert!(mint_tx_receipt.status());
 
     // Second, set allowance
     let allowance_call = contract.approve(bridge_test_cluster.contracts().rtd_bridge, amount);
-    let allowance_tx_receipt = send_eth_tx_and_get_tx_receipt(allowance_call).await;
-    assert_eq!(allowance_tx_receipt.status.unwrap().as_u64(), 1);
+    let allowance_tx_receipt = send_eth_tx_and_get_tx_receipt(
+        eth_signer.clone(),
+        allowance_call.into_transaction_request(),
+    )
+    .await;
+    assert!(allowance_tx_receipt.status());
 
     // Third, deposit to bridge
     let rtd_recipient_address = bridge_test_cluster.rtd_user_address();
@@ -1495,35 +1713,36 @@ pub async fn initiate_bridge_erc20_to_rtd(
     );
     let contract = EthRtdBridge::new(
         bridge_test_cluster.contracts().rtd_bridge,
-        eth_signer.clone().into(),
+        eth_signer.clone(),
     );
-    let deposit_call = contract.bridge_erc20(
+    let deposit_call = contract.bridgeERC20(
         token_id,
         amount,
         rtd_recipient_address.to_vec().into(),
         rtd_chain_id as u8,
     );
-    let tx_receipt = send_eth_tx_and_get_tx_receipt(deposit_call).await;
+    let tx_receipt =
+        send_eth_tx_and_get_tx_receipt(eth_signer.clone(), deposit_call.into_transaction_request())
+            .await;
     let eth_bridge_event = tx_receipt
-        .logs
+        .logs()
         .iter()
         .find_map(EthBridgeEvent::try_from_log)
         .unwrap();
-    let EthBridgeEvent::EthRtdBridgeEvents(EthRtdBridgeEvents::TokensDepositedFilter(
-        eth_bridge_event,
-    )) = eth_bridge_event
+    let EthBridgeEvent::EthRtdBridgeEvents(EthRtdBridgeEvents::TokensDeposited(eth_bridge_event)) =
+        eth_bridge_event
     else {
         unreachable!();
     };
     // assert eth log matches
-    assert_eq!(eth_bridge_event.source_chain_id, eth_chain_id as u8);
+    assert_eq!(eth_bridge_event.sourceChainID, eth_chain_id as u8);
     assert_eq!(eth_bridge_event.nonce, nonce);
-    assert_eq!(eth_bridge_event.destination_chain_id, rtd_chain_id as u8);
-    assert_eq!(eth_bridge_event.token_id, token_id);
-    assert_eq!(eth_bridge_event.rtd_adjusted_amount, rtd_amount);
-    assert_eq!(eth_bridge_event.sender_address, eth_address);
+    assert_eq!(eth_bridge_event.destinationChainID, rtd_chain_id as u8);
+    assert_eq!(eth_bridge_event.tokenID, token_id);
+    assert_eq!(eth_bridge_event.rtdAdjustedAmount, rtd_amount);
+    assert_eq!(eth_bridge_event.senderAddress, eth_address);
     assert_eq!(
-        eth_bridge_event.recipient_address,
+        eth_bridge_event.recipientAddress,
         rtd_recipient_address.to_vec()
     );
     info!(
@@ -1544,19 +1763,4 @@ pub async fn initiate_bridge_erc20_to_rtd(
             token_id, amount_u64, "Eth to Rtd bridge transfer claimed"
         );
     })
-}
-
-pub(crate) async fn deposit_native_eth_to_sol_contract(
-    signer: &EthSigner,
-    contract_address: EthAddress,
-    rtd_recipient_address: RtdAddress,
-    rtd_chain_id: BridgeChainId,
-    amount: u64,
-) -> ContractCall<EthSigner, ()> {
-    let contract = EthRtdBridge::new(contract_address, signer.clone().into());
-    let rtd_recipient_address = rtd_recipient_address.to_vec().into();
-    let amount = U256::from(amount) * U256::exp10(18); // 1 ETH
-    contract
-        .bridge_eth(rtd_recipient_address, rtd_chain_id as u8)
-        .value(amount)
 }

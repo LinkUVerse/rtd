@@ -6,24 +6,23 @@ use crate::authority::authority_store_pruner::{
 };
 use crate::authority::authority_store_tables::AuthorityPerpetualTables;
 use crate::checkpoints::CheckpointStore;
-use crate::rpc_index::RpcIndexStore;
 use anyhow::Result;
 use bytes::Bytes;
 use futures::future::try_join_all;
-use object_store::DynObjectStore;
 use object_store::path::Path;
+use object_store::{DynObjectStore, ObjectStoreExt};
 use prometheus::{IntGauge, Registry, register_int_gauge_with_registry};
-use std::fs;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_config::node::AuthorityStorePruningConfig;
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use rtd_storage::object_store::util::{
     copy_recursively, find_all_dirs_with_epoch_prefix, find_missing_epochs_dirs,
     path_to_filesystem, put, run_manifest_update_loop, write_snapshot_manifest,
 };
+use std::fs;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 pub const SUCCESS_MARKER: &str = "_SUCCESS";
@@ -134,13 +133,14 @@ impl DBCheckpointHandler {
     }
     pub fn start(self: Arc<Self>) -> tokio::sync::broadcast::Sender<()> {
         let (kill_sender, _kill_receiver) = tokio::sync::broadcast::channel::<()>(1);
-        if self.output_object_store.is_some() {
+        if let Some(output_object_store) = self.output_object_store.as_ref() {
+            let output_object_store = output_object_store.clone();
             tokio::task::spawn(Self::run_db_checkpoint_upload_loop(
                 self.clone(),
                 kill_sender.subscribe(),
             ));
             tokio::task::spawn(run_manifest_update_loop(
-                self.output_object_store.as_ref().unwrap().clone(),
+                output_object_store,
                 kill_sender.subscribe(),
             ));
         } else {
@@ -256,7 +256,6 @@ impl DBCheckpointHandler {
         let checkpoint_store = Arc::new(CheckpointStore::new_for_db_checkpoint_handler(
             &db_path.join("checkpoints"),
         ));
-        let rpc_index = RpcIndexStore::new_without_init(&db_path);
         let metrics = AuthorityStorePruningMetrics::new(&Registry::default());
         info!(
             "Pruning db checkpoint in {:?} for epoch: {epoch}",
@@ -265,8 +264,8 @@ impl DBCheckpointHandler {
         AuthorityStorePruner::prune_objects_for_eligible_epochs(
             &perpetual_db,
             &checkpoint_store,
-            Some(&rpc_index),
             None,
+            &mut rtd_rpc_store::RetractionCursors::default(),
             self.pruning_config.clone(),
             metrics,
             epoch_duration_ms,
@@ -384,11 +383,11 @@ mod tests {
         DBCheckpointHandler, SUCCESS_MARKER, TEST_MARKER, UPLOAD_COMPLETED_MARKER,
     };
     use itertools::Itertools;
-    use std::fs;
     use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
     use rtd_storage::object_store::util::{
         find_all_dirs_with_epoch_prefix, find_missing_epochs_dirs, path_to_filesystem,
     };
+    use std::fs;
     use tempfile::TempDir;
 
     #[tokio::test]

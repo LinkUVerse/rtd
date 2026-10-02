@@ -3,12 +3,9 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::ident_str;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
 use rtd_core::authority::AuthorityState;
 use rtd_macros::*;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
@@ -18,11 +15,11 @@ use rtd_types::{
     governance::StakedRtd,
     object::{Object, Owner},
     programmable_transaction_builder::ProgrammableTransactionBuilder,
-    storage::ObjectStore,
     rtd_system_state::{
         RtdSystemStateTrait,
         rtd_system_state_summary::{RtdSystemStateSummary, RtdValidatorSummary},
     },
+    storage::ObjectStore,
     transaction::{
         Argument, Command, ObjectArg, ProgrammableTransaction,
         TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE, TransactionData,
@@ -31,6 +28,10 @@ use rtd_types::{
 use rtd_types::{
     base_types::SequenceNumber,
     effects::{TransactionEffects, TransactionEffectsAPI},
+};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
 };
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
@@ -173,9 +174,10 @@ impl StressTestRunner {
 
         let epoch_store = state.load_epoch_store_one_call_per_task();
         let backing_package_store = state.get_backing_package_store();
-        let mut layout_resolver = epoch_store
-            .executor()
-            .type_layout_resolver(Box::new(backing_package_store.as_ref()));
+        let mut layout_resolver = epoch_store.executor().type_layout_resolver(
+            epoch_store.protocol_config(),
+            Box::new(backing_package_store.as_ref()),
+        );
         for (obj_ref, _) in effects.created() {
             let object_opt = state
                 .get_object_store()
@@ -200,7 +202,7 @@ impl StressTestRunner {
         }
 
         println!("CONSENSUS:");
-        for kind in effects.input_consensus_objects() {
+        for kind in effects.accessed_consensus_objects() {
             let (obj_id, version) = kind.id_and_version();
             let object = state
                 .get_object_store()
@@ -340,7 +342,7 @@ mod add_stake {
                 let epoch_store = state.load_epoch_store_one_call_per_task();
                 let mut layout_resolver = epoch_store
                     .executor()
-                    .type_layout_resolver(Box::new(cache.as_ref()));
+                    .type_layout_resolver(epoch_store.protocol_config(), Box::new(cache.as_ref()));
                 let staked_amount =
                     object.get_total_rtd(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
                 assert_eq!(staked_amount, self.stake_amount);
@@ -469,7 +471,7 @@ async fn fuzz_dynamic_committee() {
         .collect::<Vec<_>>();
 
     // Sorted by address.
-    initial_committee.sort_by(|a, b| a.0.cmp(&b.0));
+    initial_committee.sort_by_key(|a| a.0);
 
     // Advance epoch to see the resulting state.
     runner.change_epoch().await;
@@ -514,10 +516,10 @@ async fn fuzz_dynamic_committee() {
         .map(|v| (v.rtd_address, v.voting_power))
         .collect::<Vec<_>>();
 
-    post_epoch_committee.sort_by(|a, b| a.0.cmp(&b.0));
+    post_epoch_committee.sort_by_key(|a| a.0);
     post_epoch_committee
         .iter()
-        .zip(initial_committee.iter())
+        .zip_debug_eq(initial_committee.iter())
         .for_each(|(a, b)| {
             assert_eq!(a.0, b.0); // same address
             assert!(a.1.abs_diff(b.1) < 2); // rounding error correction

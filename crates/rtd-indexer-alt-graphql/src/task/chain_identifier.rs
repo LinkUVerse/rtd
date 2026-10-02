@@ -1,15 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use diesel::QueryDsl;
 use rtd_futures::service::Service;
-use rtd_indexer_alt_reader::pg_reader::{Connection, PgReader};
+use rtd_indexer_alt_reader::pg_reader::Connection;
+use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_indexer_alt_schema::schema::kv_genesis;
-use rtd_types::digests::{ChainIdentifier as NativeChainIdentifier, CheckpointDigest};
-use tokio::{sync::SetOnce, time};
+use rtd_types::digests::ChainIdentifier as NativeChainIdentifier;
+use rtd_types::digests::CheckpointDigest;
+use tokio::sync::SetOnce;
+use tokio::time;
 use tracing::warn;
 
 #[derive(Clone, Default)]

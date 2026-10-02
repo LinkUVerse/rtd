@@ -9,24 +9,6 @@ fn temp_dir() -> std::path::PathBuf {
         .keep()
 }
 
-#[tokio::test]
-async fn refuses_to_open_a_tidehunter_directory_as_rocksdb() {
-    let path = temp_dir();
-    std::fs::write(path.join("wal_000001"), []).expect("Failed to create TideHunter WAL marker");
-
-    let panic = std::panic::catch_unwind(|| {
-        open_cf_opts(path, None, MetricConf::default(), &[]).unwrap();
-    })
-    .expect_err("Opening a TideHunter directory as RocksDB must be rejected");
-    let message = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or_default();
-
-    assert!(message.contains("DB type mismatch: expected Rocks, found TideHunter"));
-}
-
 fn get_iter<K, V>(db: &DBMap<K, V>) -> impl Iterator<Item = (K, V)> + use<'_, K, V>
 where
     K: Serialize + DeserializeOwned,
@@ -121,6 +103,15 @@ async fn test_safe_drop_db() {
     safe_drop_db(tmp_path, Duration::from_secs(30))
         .await
         .unwrap();
+}
+
+#[cfg(tidehunter)]
+#[test]
+fn test_is_tidehunter_db_detects_shape_v2_marker() {
+    let path = temp_dir();
+    std::fs::write(path.join("shape_v2.yaml"), "").unwrap();
+
+    assert!(is_tidehunter_db(&path));
 }
 
 #[tokio::test]
@@ -770,7 +761,7 @@ fn open_rocksdb<P: AsRef<Path>>(path: P, opt_cfs: &[&str]) -> Arc<Database> {
     .expect("failed to open rocksdb")
 }
 
-/// Two types that have different BCS serialization formats.
+/// Two types that have different BCS serialization formats
 mod type_mismatch_types {
     use serde::{Deserialize, Serialize};
 
@@ -781,30 +772,36 @@ mod type_mismatch_types {
         pub field_c: Vec<u8>,
     }
 
+    /// A different type with an incompatible layout - BCS is position-based,
+    /// so even with the same field names, different types will fail to deserialize
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
     pub struct IncompatibleValue {
-        pub field_a: String,
-        pub field_b: u64,
+        pub field_a: String, // Changed from u64 to String - will fail to deserialize
+        pub field_b: u64,    // Changed from String to u64
     }
 }
 
 #[tokio::test]
-async fn safe_iter_returns_error_on_deserialization_failure() {
+async fn test_safe_iter_returns_error_on_deserialization_failure() {
     use type_mismatch_types::{IncompatibleValue, OriginalValue};
 
     let path = temp_dir();
     let cf_name = "test_cf";
-    let rocks = open_rocksdb(path, &[cf_name]);
+
+    // Step 1: Create a database and insert values with OriginalValue type
+    let rocks = open_rocksdb(path.clone(), &[cf_name]);
 
     let db_original: DBMap<i32, OriginalValue> =
         DBMap::reopen(&rocks, Some(cf_name), &ReadWriteOptions::default(), false)
             .expect("Failed to open storage");
-    for (key, value) in [
+
+    // Insert multiple values
+    let original_values = vec![
         (
             1,
             OriginalValue {
                 field_a: 100,
-                field_b: "hello".to_owned(),
+                field_b: "hello".to_string(),
                 field_c: vec![1, 2, 3],
             },
         ),
@@ -812,7 +809,7 @@ async fn safe_iter_returns_error_on_deserialization_failure() {
             2,
             OriginalValue {
                 field_a: 200,
-                field_b: "world".to_owned(),
+                field_b: "world".to_string(),
                 field_c: vec![4, 5, 6],
             },
         ),
@@ -820,22 +817,178 @@ async fn safe_iter_returns_error_on_deserialization_failure() {
             3,
             OriginalValue {
                 field_a: 300,
-                field_b: "test".to_owned(),
+                field_b: "test".to_string(),
                 field_c: vec![7, 8, 9],
             },
         ),
-    ] {
-        db_original.insert(&key, &value).unwrap();
+    ];
+
+    for (key, value) in &original_values {
+        db_original
+            .insert(key, value)
+            .expect("Failed to insert value");
     }
 
-    assert_eq!(db_original.safe_iter().count(), 3);
+    // Verify the values were inserted correctly with the original type
+    let original_count = db_original.safe_iter().count();
+    assert_eq!(
+        original_count, 3,
+        "Should have 3 values when reading with correct type"
+    );
 
+    // Step 2: Reopen the same column family with a different, incompatible value type
     let db_incompatible: DBMap<i32, IncompatibleValue> =
         DBMap::reopen(&rocks, Some(cf_name), &ReadWriteOptions::default(), false)
-            .expect("Failed to reopen storage with incompatible type");
+            .expect("Failed to reopen storage with different type");
+
+    // Step 3: Iterate using safe_iter with the incompatible type
+    // The values should fail to deserialize and return Err for each entry
     let results: Vec<_> = db_incompatible.safe_iter().collect();
 
-    assert_eq!(results.len(), 3);
-    assert!(results.iter().all(Result::is_err));
-    assert_eq!(db_original.safe_iter().count(), 3);
+    // EXPECTED BEHAVIOR:
+    // - We inserted 3 values into the database
+    // - When we iterate with an incompatible type, deserialization fails
+    // - safe_iter should return an Err for each entry that fails to deserialize
+    // - This allows callers to detect and handle deserialization failures
+
+    // We should get exactly 3 results - one for each entry in the database
+    assert_eq!(
+        results.len(),
+        3,
+        "safe_iter should yield one result per database entry"
+    );
+
+    // Count how many Ok results we got (should be 0 - all fail to deserialize)
+    let ok_count = results.iter().filter(|r| r.is_ok()).count();
+    assert_eq!(
+        ok_count, 0,
+        "No values should deserialize successfully with incompatible type"
+    );
+
+    // Count how many Err results we got (should be 3 - all entries fail)
+    let err_count = results.iter().filter(|r| r.is_err()).count();
+    assert_eq!(
+        err_count, 3,
+        "All entries should return Err when deserialization fails"
+    );
+
+    // Verify each result is an error
+    for (i, result) in results.iter().enumerate() {
+        assert!(result.is_err(), "Entry {} should be an Err, got Ok", i);
+    }
+
+    // Verify the data is still there by reading with the correct type
+    let verification_count = db_original.safe_iter().count();
+    assert_eq!(
+        verification_count, 3,
+        "Data should still exist in the database"
+    );
+}
+
+#[cfg(tidehunter)]
+fn open_th_map(name: &str) -> DBMap<u64, String> {
+    use crate::tidehunter_util::{KeyShapeBuilder, KeyType, ThConfig, add_key_space, open};
+    let mut builder = KeyShapeBuilder::new();
+    // u64 keys serialize to 8 fixed bytes via `be_fix_int_ser`.
+    let config = ThConfig::new(8, 16, KeyType::uniform(1));
+    add_key_space(&mut builder, name, &config);
+    let key_shape = builder.build();
+    let metric_conf = MetricConf::new("test_snapshot_iter");
+    let (inner_db, registry_id) = open(temp_dir().as_path(), key_shape, &metric_conf);
+    let ks = inner_db.ks(name);
+    let db = Arc::new(Database::new(
+        Storage::TideHunter(inner_db.clone()),
+        metric_conf,
+        Some(registry_id),
+    ));
+    DBMap::reopen_th(db, name, ks, None)
+}
+
+#[cfg(tidehunter)]
+#[tokio::test]
+async fn test_snapshot_iterator_tidehunter_point_in_time() {
+    let db = open_th_map("snapshot_iter");
+    db.insert(&1, &"a".to_string()).unwrap();
+    db.insert(&2, &"b".to_string()).unwrap();
+    db.insert(&3, &"c".to_string()).unwrap();
+
+    // Open the snapshot iterator (captures the frontier now), THEN mutate the
+    // live map: overwrite k1, delete k2, add k4.
+    let iter = db.snapshot_iterator();
+    db.insert(&1, &"A".to_string()).unwrap();
+    db.remove(&2).unwrap();
+    db.insert(&4, &"d".to_string()).unwrap();
+
+    // The iterator still yields the pre-mutation snapshot, even though the live
+    // map has advanced (this is what the tidehunter checkpoint buys us; a plain
+    // tidehunter iterator would not be stable here).
+    let snapshot: Vec<(u64, String)> = iter.map(Result::unwrap).collect();
+    assert_eq!(
+        snapshot,
+        vec![
+            (1, "a".to_string()),
+            (2, "b".to_string()),
+            (3, "c".to_string())
+        ]
+    );
+
+    // A fresh snapshot iterator observes the latest state.
+    let live: Vec<(u64, String)> = db.snapshot_iterator().map(Result::unwrap).collect();
+    assert_eq!(
+        live,
+        vec![
+            (1, "A".to_string()),
+            (3, "c".to_string()),
+            (4, "d".to_string())
+        ]
+    );
+
+    // Bounds and reverse work on the snapshot too: reverse [1, 3] inclusive over
+    // the live state {1, 3, 4} yields keys 3 then 1.
+    let reversed: Vec<(u64, String)> = db
+        .snapshot_iterator_with_bounds(Some(1), Some(3), true)
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(reversed, vec![(3, "c".to_string()), (1, "A".to_string())]);
+}
+
+#[cfg(tidehunter)]
+#[tokio::test]
+async fn test_open_destroys_undeclared_key_spaces() {
+    use crate::tidehunter_util::{KeyShapeBuilder, KeyType, ThConfig, add_key_space, open};
+
+    fn open_db(path: &std::path::Path, db_name: &str, names: &[&str]) -> Arc<tidehunter::db::Db> {
+        let mut builder = KeyShapeBuilder::new();
+        let config = ThConfig::new(8, 16, KeyType::uniform(1));
+        for name in names {
+            add_key_space(&mut builder, name, &config);
+        }
+        let (db, _registry_id) = open(path, builder.build(), &MetricConf::new(db_name));
+        db
+    }
+
+    let path = temp_dir();
+    let key = [1u8; 8];
+
+    let db = open_db(&path, "destroy_ks_1", &["a", "b"]);
+    db.insert(db.ks("a"), key.to_vec(), b"va".to_vec()).unwrap();
+    db.insert(db.ks("b"), key.to_vec(), b"vb".to_vec()).unwrap();
+    drop(db);
+
+    // Reopening without "b" destroys it; "a" is untouched.
+    let db = open_db(&path, "destroy_ks_2", &["a"]);
+    assert_eq!(
+        db.get(db.ks("a"), &key).unwrap().as_deref(),
+        Some(b"va".as_slice())
+    );
+    drop(db);
+
+    // Re-declaring "b" reconnects to a fresh, empty key space instead of the
+    // destroyed data.
+    let db = open_db(&path, "destroy_ks_3", &["a", "b"]);
+    assert_eq!(
+        db.get(db.ks("a"), &key).unwrap().as_deref(),
+        Some(b"va".as_slice())
+    );
+    assert!(db.get(db.ks("b"), &key).unwrap().is_none());
 }

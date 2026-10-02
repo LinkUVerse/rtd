@@ -5,7 +5,7 @@
 use crate::{
     cfgir::ast as G,
     diag,
-    diagnostics::{Diagnostic, DiagnosticReporter, Diagnostics, warning_filters::WarningFilters},
+    diagnostics::{Diagnostic, DiagnosticReporter, Diagnostics, filter::FilterScope},
     expansion::ast::{Address, Attributes, ModuleIdent, ModuleIdent_},
     hlir::ast as HA,
     ice, ice_assert,
@@ -63,7 +63,7 @@ impl<'env> Context<'env> {
         self.reporter.add_diags(diags);
     }
 
-    pub fn push_warning_filter_scope(&mut self, filters: WarningFilters) {
+    pub fn push_warning_filter_scope(&mut self, filters: FilterScope) {
         self.reporter.push_warning_filter_scope(filters)
     }
 
@@ -102,7 +102,7 @@ pub fn construct_test_plan(
         prog.modules
             .key_cloned_iter()
             .flat_map(|(module_ident, module_def)| {
-                context.push_warning_filter_scope(module_def.warning_filter);
+                context.push_warning_filter_scope(module_def.warning_filter.clone());
                 let plan = construct_module_test_plan(
                     &mut context,
                     package_filter,
@@ -129,7 +129,7 @@ fn construct_module_test_plan(
         .functions
         .iter()
         .filter_map(|(loc, fn_name, func)| {
-            context.push_warning_filter_scope(func.warning_filter);
+            context.push_warning_filter_scope(func.warning_filter.clone());
             let info = build_test_info(context, loc, fn_name, func)
                 .map(|test_case| (fn_name.to_string(), test_case));
             context.pop_warning_filter_scope();
@@ -318,8 +318,11 @@ fn convert_minor_code_to_sub_status_code(
         sp!(_, KA::MinorCode_::Value(value)) => Some(MoveErrorType::Code(*value)),
         sp!(loc, KA::MinorCode_::Constant(module, member)) => {
             let Some(module_constants) = context.constants().get(module) else {
-                // NB: Name resolution _should_ have already complained about this.
-                debug_assert!(context.env.has_errors());
+                context.add_diag(diag!(
+                    Attributes::InvalidValue,
+                    (*loc, INVALID_VALUE),
+                    (module.loc, format!("Unbound module '{module}'")),
+                ));
                 return None;
             };
             let Some(constant) = module_constants.get_(&member.value) else {

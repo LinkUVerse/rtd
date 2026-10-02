@@ -49,13 +49,79 @@ fun test_diff() {
 }
 
 #[test]
-fun test_divide_and_round_up() {
-    integer_tests::test_divide_and_round_up!(MAX, CASES);
+fun test_mul_div() {
+    integer_tests::test_mul_div!<u8, u16>(MAX, CASES);
+}
+
+#[test]
+fun test_mul_div_ceil() {
+    integer_tests::test_mul_div_ceil!<u8, u16>(MAX, CASES);
+}
+
+#[test]
+fun test_mul_div_exhaustive() {
+    let step: u8 = 32;
+    let mut x = 0u8;
+    while (x < MAX) {
+        let mut y = 0u8;
+        while (y < MAX) {
+            let mut z = 0u8;
+            while (z < MAX) {
+                integer_tests::check_mul_div!<u8, u16>(MAX, x, y, z);
+                z = z.saturating_add(step);
+            };
+            y = y.saturating_add(step);
+        };
+        x = x.saturating_add(step);
+    }
+}
+
+#[test]
+fun test_mul_div_ceil_exhaustive() {
+    let step: u8 = 48;
+    let mut x = 0u8;
+    while (x < MAX) {
+        let mut y = 0u8;
+        while (y < MAX) {
+            let mut z = 0u8;
+            while (z < MAX) {
+                integer_tests::check_mul_div_ceil!<u8, u16>(MAX, x, y, z);
+                z = z.saturating_add(step);
+            };
+            y = y.saturating_add(step);
+        };
+        x = x.saturating_add(step);
+    }
 }
 
 #[test, expected_failure(arithmetic_error, location = std::u8)]
-fun test_divide_and_round_up_error() {
-    1u8.divide_and_round_up(0);
+fun test_mul_div_div_by_zero() {
+    1u8.mul_div(1, 0);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u8)]
+fun test_mul_div_ceil_div_by_zero() {
+    1u8.mul_div_ceil(1, 0);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u8)]
+fun test_mul_div_overflow() {
+    MAX.mul_div(MAX, 1);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u8)]
+fun test_mul_div_ceil_overflow() {
+    MAX.mul_div_ceil(MAX, 1);
+}
+
+#[test, allow(deprecated_usage)]
+fun test_div_ceil() {
+    integer_tests::test_div_ceil!(MAX, CASES);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u8)]
+fun test_div_ceil_error() {
+    1u8.div_ceil(0);
 }
 
 #[test]
@@ -88,4 +154,124 @@ fun test_dos() {
     255u8.do_eq!(|i| sum = sum + (i as u16));
     assert_eq!(sum, 32640);
     integer_tests::test_dos!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_add() {
+    integer_tests::test_checked_add!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_sub() {
+    integer_tests::test_checked_sub!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_mul() {
+    integer_tests::test_checked_mul!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_div() {
+    integer_tests::test_checked_div!(MAX, CASES);
+}
+
+#[test]
+fun test_saturating_add() {
+    integer_tests::test_saturating_add!(MAX, CASES);
+}
+
+#[test]
+fun test_saturating_sub() {
+    integer_tests::test_saturating_sub!(MAX, CASES);
+}
+
+#[test]
+fun test_saturating_mul() {
+    integer_tests::test_saturating_mul!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_shl() {
+    integer_tests::test_checked_shl!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_checked_shr() {
+    integer_tests::test_checked_shr!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_lossless_shl() {
+    integer_tests::test_lossless_shl!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_lossless_shr() {
+    integer_tests::test_lossless_shr!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_lossless_div() {
+    integer_tests::test_lossless_div!(MAX, CASES);
+}
+
+#[test]
+fun exhaustive_test_add() {
+    let max = MAX as u16;
+    0u16.range_do_eq!(max, |i| {
+        let mut overflown = false;
+        'inner: {
+            0u16.range_do_eq!(i, |j| {
+                let i_u8 = i as u8;
+                let j_u8 = j as u8;
+                let sum = i + j;
+                if (sum > max) {
+                    assert_eq!(i_u8.checked_add(j_u8), option::none());
+                    assert_eq!(i_u8.saturating_add(j_u8), MAX);
+                    assert_eq!(j_u8.checked_add(i_u8), option::none());
+                    assert_eq!(j_u8.saturating_add(i_u8), MAX);
+                    if (overflown) return 'inner;
+                    // iterate once more after the first overflow
+                    overflown = true;
+                } else {
+                    let sum_u8 = sum as u8;
+                    assert_eq!(i_u8.checked_add(j_u8), option::some(sum_u8));
+                    assert_eq!(i_u8.saturating_add(j_u8), sum_u8);
+                    assert_eq!(j_u8.checked_add(i_u8), option::some(sum_u8));
+                    assert_eq!(j_u8.saturating_add(i_u8), sum_u8);
+                }
+            })
+        }
+    });
+}
+
+#[test]
+fun exhaustive_test_mul() {
+    let max = MAX as u16;
+    0u16.range_do_eq!(max, |i| {
+        let mut overflown = false;
+        'inner: {
+            0u16.range_do_eq!(i, |j| {
+                let i_u8 = i as u8;
+                let j_u8 = j as u8;
+                let prod = i * j;
+                if (prod > max) {
+                    assert_eq!(i_u8.checked_mul(j_u8), option::none());
+                    assert_eq!(i_u8.saturating_mul(j_u8), MAX);
+                    assert_eq!(j_u8.checked_mul(i_u8), option::none());
+                    assert_eq!(j_u8.saturating_mul(i_u8), MAX);
+                    if (overflown) return 'inner;
+                    // iterate once more after the first overflow
+                    overflown = true;
+                } else {
+                    let prod_u8 = prod as u8;
+                    assert_eq!(i_u8.checked_mul(j_u8), option::some(prod_u8));
+                    assert_eq!(i_u8.saturating_mul(j_u8), prod_u8);
+                    assert_eq!(j_u8.checked_mul(i_u8), option::some(prod_u8));
+                    assert_eq!(j_u8.saturating_mul(i_u8), prod_u8);
+                }
+            })
+        };
+    });
 }

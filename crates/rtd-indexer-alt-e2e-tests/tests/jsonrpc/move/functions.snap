@@ -6,11 +6,22 @@ processed 15 tasks
 init:
 A: object(0,0)
 
+//  1. Public function from v1 of a package
+//  2. An entry function from v1 of a package
+//  3. Same public function from v2 of a package
+//  4. Same entry function at v2, with a different signature
+//  5. A new function introduced in v2 of a package, using a v2 type.
+//  6. Attempting to get a function with invalid identifiers.
+//  7. Attempting to get a function from an object that doesn't exist.
+//  8. Attempting to get a function from a move object (not a package)
+//  9. Attempting to get a function from a module that doesn't exist.
+// 10. Attempting to get a function that doesn't exist in its module.
+
 task 1, lines 17-28:
 //# publish --upgradeable --sender A
 created: object(1,0), object(1,1)
 mutated: object(0,0)
-gas summary: computation_cost: 1000000, storage_cost: 6353600,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 6368800,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 30:
 //# create-checkpoint
@@ -29,7 +40,7 @@ Response: {
       "U64",
       {
         "Struct": {
-          "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+          "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
           "module": "M",
           "name": "O",
           "typeArguments": []
@@ -38,7 +49,7 @@ Response: {
       {
         "MutableReference": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -48,7 +59,7 @@ Response: {
       {
         "Vector": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -61,7 +72,7 @@ Response: {
       {
         "Reference": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -70,7 +81,7 @@ Response: {
       },
       {
         "Struct": {
-          "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+          "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
           "module": "M",
           "name": "O",
           "typeArguments": []
@@ -79,7 +90,7 @@ Response: {
       {
         "Vector": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -110,7 +121,7 @@ task 5, lines 44-63:
 //# upgrade --package P --sender A --upgrade-capability 1,1
 created: object(5,0)
 mutated: object(0,0), object(1,1)
-gas summary: computation_cost: 1000000, storage_cost: 7250400,  storage_rebate: 2595780, non_refundable_storage_fee: 26220
+gas summary: computation_cost: 1000000, storage_cost: 7273200,  storage_rebate: 2595780, non_refundable_storage_fee: 26220
 
 task 6, line 65:
 //# create-checkpoint
@@ -129,7 +140,7 @@ Response: {
       "U64",
       {
         "Struct": {
-          "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+          "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
           "module": "M",
           "name": "O",
           "typeArguments": []
@@ -138,7 +149,7 @@ Response: {
       {
         "MutableReference": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -148,7 +159,7 @@ Response: {
       {
         "Vector": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -161,7 +172,7 @@ Response: {
       {
         "Reference": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -170,7 +181,7 @@ Response: {
       },
       {
         "Struct": {
-          "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+          "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
           "module": "M",
           "name": "O",
           "typeArguments": []
@@ -179,7 +190,7 @@ Response: {
       {
         "Vector": {
           "Struct": {
-            "address": "0x03a580e6a364b5a89ddce9fdd023f76b61b5df5c9ff2bbb01525240d4f1438b3",
+            "address": "0xb31e94757641da605883e0588e4396c0ddf671785b99c6de5c314a952e97d944",
             "module": "M",
             "name": "O",
             "typeArguments": []
@@ -205,7 +216,7 @@ Response: {
       {
         "Reference": {
           "Struct": {
-            "address": "0xad738da99314f24c84fec6bdb0b1d0df9d64e96e2ab68af6498195e65142ea3c",
+            "address": "0x18469e508d45317f901382ba3b5249d67977cb53e68209b34f775efa3eee2cda",
             "module": "M",
             "name": "O2",
             "typeArguments": []
@@ -264,7 +275,7 @@ Response: {
   "id": 7,
   "error": {
     "code": -32602,
-    "message": "Invalid Params: Package not found: 0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a"
+    "message": "Invalid Params: Package not found: 0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f"
   }
 }
 
@@ -275,7 +286,7 @@ Response: {
   "id": 8,
   "error": {
     "code": -32602,
-    "message": "Invalid Params: Module not found: 0xad738da99314f24c84fec6bdb0b1d0df9d64e96e2ab68af6498195e65142ea3c::N"
+    "message": "Invalid Params: Module not found: 0x18469e508d45317f901382ba3b5249d67977cb53e68209b34f775efa3eee2cda::N"
   }
 }
 
@@ -286,6 +297,6 @@ Response: {
   "id": 9,
   "error": {
     "code": -32602,
-    "message": "Invalid Params: Function not found: 0xad738da99314f24c84fec6bdb0b1d0df9d64e96e2ab68af6498195e65142ea3c::M::qux"
+    "message": "Invalid Params: Function not found: 0x18469e508d45317f901382ba3b5249d67977cb53e68209b34f775efa3eee2cda::M::qux"
   }
 }

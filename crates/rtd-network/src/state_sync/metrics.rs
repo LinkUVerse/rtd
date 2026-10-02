@@ -6,8 +6,8 @@ use prometheus::{
     Histogram, IntCounter, IntGauge, Registry, register_histogram_with_registry,
     register_int_counter_with_registry, register_int_gauge_with_registry,
 };
-use std::sync::Arc;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use std::sync::Arc;
 use tap::Pipe;
 
 #[derive(Clone)]
@@ -63,6 +63,19 @@ impl Metrics {
         }
         None
     }
+
+    pub fn inc_peers_reported_for_failure(&self) {
+        if let Some(inner) = &self.0 {
+            inner.peers_reported_for_failure.inc();
+        }
+    }
+
+    pub fn get_peers_reported_for_failure(&self) -> u64 {
+        self.0
+            .as_ref()
+            .map(|inner| inner.peers_reported_for_failure.get())
+            .unwrap_or(0)
+    }
 }
 
 struct Inner {
@@ -70,6 +83,7 @@ struct Inner {
     highest_verified_checkpoint: IntGauge,
     highest_synced_checkpoint: IntGauge,
     checkpoints_synced_from_archive: IntCounter,
+    peers_reported_for_failure: IntCounter,
     checkpoint_summary_age: Histogram,
     // TODO: delete once users are migrated to non-LinkU histogram.
     checkpoint_summary_age_ms: LinkUHistogram,
@@ -101,6 +115,12 @@ impl Inner {
             checkpoints_synced_from_archive: register_int_counter_with_registry!(
                 "checkpoints_synced_from_archive",
                 "Checkpoints synced from archive",
+                registry
+            )
+            .unwrap(),
+            peers_reported_for_failure: register_int_counter_with_registry!(
+                "state_sync_peers_reported_for_failure",
+                "Peers reported due to consistent state sync failures",
                 registry
             )
             .unwrap(),

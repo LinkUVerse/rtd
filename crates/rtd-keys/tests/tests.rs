@@ -13,7 +13,7 @@ use rtd_keys::keystore::{
     ALIASES_FILE_EXTENSION, AccountKeystore, Alias, FileBasedKeystore, GenerateOptions,
     GeneratedKey, InMemKeystore, Keystore,
 };
-use rtd_types::crypto::{DefaultHash, SignatureScheme, RtdSignatureInner};
+use rtd_types::crypto::{DefaultHash, RtdSignatureInner, SignatureScheme};
 use rtd_types::{
     base_types::{RTD_ADDRESS_LENGTH, RtdAddress},
     crypto::Ed25519RtdSignature,

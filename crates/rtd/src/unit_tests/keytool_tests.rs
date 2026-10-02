@@ -17,27 +17,28 @@ use fastcrypto::encoding::Hex;
 use fastcrypto::traits::ToFromBytes;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentScope;
 use rtd_keys::key_identity::KeyIdentity;
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, InMemKeystore, Keystore};
+use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::base_types::ObjectDigest;
 use rtd_types::base_types::ObjectID;
-use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::crypto::AuthorityKeyPair;
 use rtd_types::crypto::Ed25519RtdSignature;
 use rtd_types::crypto::EncodeDecodeBase64;
+use rtd_types::crypto::RtdKeyPair;
+use rtd_types::crypto::RtdSignatureInner;
 use rtd_types::crypto::Secp256k1RtdSignature;
 use rtd_types::crypto::Secp256r1RtdSignature;
 use rtd_types::crypto::Signature;
 use rtd_types::crypto::SignatureScheme;
-use rtd_types::crypto::RtdKeyPair;
-use rtd_types::crypto::RtdSignatureInner;
 use rtd_types::crypto::get_key_pair;
 use rtd_types::crypto::get_key_pair_from_rng;
 use rtd_types::transaction::TEST_ONLY_GAS_UNIT_FOR_TRANSFER;
 use rtd_types::transaction::TransactionData;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentScope;
 use tempfile::TempDir;
 use tokio::test;
 
@@ -55,11 +56,13 @@ async fn test_addresses_command() -> Result<(), anyhow::Error> {
             .await?;
     }
 
+    let mut context = WalletContext::new_for_tests(keystore, None, None);
+
     // List all addresses with flag
     KeyToolCommand::List {
         sort_by_alias: true,
     }
-    .execute(&mut keystore)
+    .execute(&mut context)
     .await
     .unwrap();
     Ok(())
@@ -164,12 +167,11 @@ async fn test_read_write_keystore_with_flag() {
 }
 
 #[test]
-async fn test_rtd_operations_config() {
+async fn test_legacy_operations_key_fixtures() {
     let temp_dir = TempDir::new().unwrap();
     let path = temp_dir.path().join("rtd.keystore");
     let path1 = path.clone();
-    // This is the hardcoded keystore in rtd-operation: https://github.com/LinkUVerse/rtd-operations/blob/af04c9d3b61610dbb36401aff6bef29d06ef89f8/docker/config/generate/static/rtd.keystore
-    // If this test fails, address hardcoded in rtd-operations is likely needed be updated.
+    // Pinned legacy operations keystore fixture; this checks address derivation only.
     let kp = RtdKeyPair::decode_base64("ANRj4Rx5FZRehqwrctiLgZDPrY/3tI5+uJLCdaXPCj6C").unwrap();
     let contents = vec![kp.encode_base64()];
     let res = std::fs::write(path, serde_json::to_string_pretty(&contents).unwrap());
@@ -182,8 +184,7 @@ async fn test_rtd_operations_config() {
         read.unwrap().addresses()[0]
     );
 
-    // This is the hardcoded keystore in rtd-operation: https://github.com/LinkUVerse/rtd-operations/blob/af04c9d3b61610dbb36401aff6bef29d06ef89f8/docker/config/generate/static/rtd-benchmark.keystore
-    // If this test fails, address hardcoded in rtd-operations is likely needed be updated.
+    // Second pinned legacy operations keystore fixture.
     let path2 = temp_dir.path().join("rtd-benchmark.keystore");
     let path3 = path2.clone();
     let kp = RtdKeyPair::decode_base64("APCWxPNCbgGxOYKeMfPqPmXmwdNVyau9y4IsyBcmC14A").unwrap();
@@ -219,19 +220,19 @@ async fn test_private_keys_import_export() -> Result<(), anyhow::Error> {
     // private key in Bech32, private key in Hex, private key in Base64, derived Rtd address in Hex
     const TEST_CASES: &[(&str, &str, &str, &str)] = &[
         (
-            "rtdprivkey1qzwant3kaegmjy4qxex93s0jzvemekkjmyv3r2sjwgnv2y479pgsywhveae",
+            "rtdprivkey1qzwant3kaegmjy4qxex93s0jzvemekkjmyv3r2sjwgnv2y479pgsygv9h3t",
             "0x9dd9ae36ee51b912a0364c58c1f21333bcdad2d91911aa127226c512be285102",
             "AJ3ZrjbuUbkSoDZMWMHyEzO82tLZGRGqEnImxRK+KFEC",
             "0x90f3e6d73b5730f16974f4df1d3441394ebae62186baf83608599f226455afa7",
         ),
         (
-            "rtdprivkey1qrh2sjl88rze74hwjndw3l26dqyz63tea5u9frtwcsqhmfk9vxdlx8cpv0g",
+            "rtdprivkey1qrh2sjl88rze74hwjndw3l26dqyz63tea5u9frtwcsqhmfk9vxdlxprgzr6",
             "0xeea84be738c59f56ee94dae8fd5a68082d4579ed38548d6ec4017da6c5619bf3",
             "AO6oS+c4xZ9W7pTa6P1aaAgtRXntOFSNbsQBfabFYZvz",
             "0xfd233cd9a5dd7e577f16fa523427c75fbc382af1583c39fdf1c6747d2ed807a3",
         ),
         (
-            "rtdprivkey1qzg73qyvfz0wpnyectkl08nrhe4pgnu0vqx8gydu96qx7uj4wyr8gcrjlh3",
+            "rtdprivkey1qzg73qyvfz0wpnyectkl08nrhe4pgnu0vqx8gydu96qx7uj4wyr8g7cm3mr",
             "0x91e8808c489ee0cc99c2edf79e63be6a144f8f600c7411bc2e806f7255710674",
             "AJHogIxInuDMmcLt955jvmoUT49gDHQRvC6Ab3JVcQZ0",
             "0x81aaefa4a883e72e8b6ccd3bec307e25fe3d79b14e43b778695c55dcec42f4f0",
@@ -239,14 +240,15 @@ async fn test_private_keys_import_export() -> Result<(), anyhow::Error> {
     ];
     // assert correctness
     for (private_key, private_key_hex, private_key_base64, address) in TEST_CASES {
-        let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let mut context = WalletContext::new_for_tests(keystore, None, None);
         KeyToolCommand::Import {
             alias: None,
             input_string: private_key.to_string(),
             key_scheme: SignatureScheme::ED25519,
             derivation_path: None,
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await?;
         let kp = RtdKeyPair::decode(private_key).unwrap();
         let kp_from_hex = RtdKeyPair::Ed25519(
@@ -259,13 +261,13 @@ async fn test_private_keys_import_export() -> Result<(), anyhow::Error> {
 
         let addr = RtdAddress::from_str(address).unwrap();
         assert_eq!(RtdAddress::from(&kp.public()), addr);
-        assert!(keystore.addresses().contains(&addr));
+        assert!(context.config.keystore.addresses().contains(&addr));
 
         // Export output shows the private key in Bech32
         let output = KeyToolCommand::Export {
             key_identity: KeyIdentity::Address(addr),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await?;
         match output {
             CommandOutput::Export(exported) => {
@@ -276,7 +278,8 @@ async fn test_private_keys_import_export() -> Result<(), anyhow::Error> {
     }
 
     for (private_key, _, _, addr) in TEST_CASES {
-        let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let mut context = WalletContext::new_for_tests(keystore, None, None);
         // assert failure when private key is malformed
         let output = KeyToolCommand::Import {
             alias: None,
@@ -284,7 +287,7 @@ async fn test_private_keys_import_export() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: None,
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await;
         assert!(output.is_err());
 
@@ -295,7 +298,7 @@ async fn test_private_keys_import_export() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: None,
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await;
         assert!(output.is_err());
     }
@@ -309,35 +312,36 @@ async fn test_mnemonics_ed25519() -> Result<(), anyhow::Error> {
     const TEST_CASES: [[&str; 3]; 3] = [
         [
             "film crazy soon outside stand loop subway crumble thrive popular green nuclear struggle pistol arm wife phrase warfare march wheat nephew ask sunny firm",
-            "rtdprivkey1qrwsjvr6gwaxmsvxk4cfun99ra8uwxg3c9pl0nhle7xxpe4s80y05ctazer",
+            "rtdprivkey1qrwsjvr6gwaxmsvxk4cfun99ra8uwxg3c9pl0nhle7xxpe4s80y057s5v43",
             "a2d14fad60c56049ecf75246a481934691214ce413e6a8ae2fe6834c173a6133",
         ],
         [
             "require decline left thought grid priority false tiny gasp angle royal system attack beef setup reward aunt skill wasp tray vital bounce inflict level",
-            "rtdprivkey1qzdvpa77ct272ultqcy20dkw78dysnfyg90fhcxkdm60el0qht9mvzlsh4j",
+            "rtdprivkey1qzdvpa77ct272ultqcy20dkw78dysnfyg90fhcxkdm60el0qht9mvyyeeeq",
             "1ada6e6f3f3e4055096f606c746690f1108fcc2ca479055cc434a3e1d3f758aa",
         ],
         [
             "organ crash swim stick traffic remember army arctic mesh slice swear summer police vast chaos cradle squirrel hood useless evidence pet hub soap lake",
-            "rtdprivkey1qqqscjyyr64jea849dfv9cukurqj2swx0m3rr4hr7sw955jy07tzgcde5ut",
+            "rtdprivkey1qqqscjyyr64jea849dfv9cukurqj2swx0m3rr4hr7sw955jy07tzg7ks6se",
             "e69e896ca10f5a77732769803cc2b5707f0ab9d4407afb5e4b4464b89769af14",
         ],
     ];
 
     for t in TEST_CASES {
-        let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let mut context = WalletContext::new_for_tests(keystore, None, None);
         KeyToolCommand::Import {
             alias: None,
             input_string: t[0].to_string(),
             key_scheme: SignatureScheme::ED25519,
             derivation_path: None,
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await?;
         let kp = RtdKeyPair::decode(t[1]).unwrap();
         let addr = RtdAddress::from_str(t[2]).unwrap();
         assert_eq!(RtdAddress::from(&kp.public()), addr);
-        assert!(keystore.addresses().contains(&addr));
+        assert!(context.config.keystore.addresses().contains(&addr));
     }
     Ok(())
 }
@@ -348,35 +352,36 @@ async fn test_mnemonics_secp256k1() -> Result<(), anyhow::Error> {
     const TEST_CASES: [[&str; 3]; 3] = [
         [
             "film crazy soon outside stand loop subway crumble thrive popular green nuclear struggle pistol arm wife phrase warfare march wheat nephew ask sunny firm",
-            "rtdprivkey1qyqr6yvxdqkh32ep4pk9caqvphmk9epn6rhkczcrhaeermsyvwsg783y9am",
+            "rtdprivkey1qyqr6yvxdqkh32ep4pk9caqvphmk9epn6rhkczcrhaeermsyvwsg7p2dt3f",
             "9e8f732575cc5386f8df3c784cd3ed1b53ce538da79926b2ad54dcc1197d2532",
         ],
         [
             "require decline left thought grid priority false tiny gasp angle royal system attack beef setup reward aunt skill wasp tray vital bounce inflict level",
-            "rtdprivkey1q8hexn5m2u36tx39ln5e22hfseadknp7d2qlkhe30ejy7fc6am5aqkqpqsj",
+            "rtdprivkey1q8hexn5m2u36tx39ln5e22hfseadknp7d2qlkhe30ejy7fc6am5aqsmgwuq",
             "9fd5a804ed6b46d36949ff7434247f0fd594673973ece24aede6b86a7b5dae01",
         ],
         [
             "organ crash swim stick traffic remember army arctic mesh slice swear summer police vast chaos cradle squirrel hood useless evidence pet hub soap lake",
-            "rtdprivkey1qxx6yf53jgxvsmccst8cuwnj0rx4k4uzvn9aalvag7ns0xf0g8j2x246jst",
+            "rtdprivkey1qxx6yf53jgxvsmccst8cuwnj0rx4k4uzvn9aalvag7ns0xf0g8j2xvwnuue",
             "60287d7c38dee783c2ab1077216124011774be6b0764d62bd05f32c88979d5c5",
         ],
     ];
 
     for t in TEST_CASES {
-        let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let mut context = WalletContext::new_for_tests(keystore, None, None);
         KeyToolCommand::Import {
             alias: None,
             input_string: t[0].to_string(),
             key_scheme: SignatureScheme::Secp256k1,
             derivation_path: None,
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await?;
         let kp = RtdKeyPair::decode(t[1]).unwrap();
         let addr = RtdAddress::from_str(t[2]).unwrap();
         assert_eq!(RtdAddress::from(&kp.public()), addr);
-        assert!(keystore.addresses().contains(&addr));
+        assert!(context.config.keystore.addresses().contains(&addr));
     }
     Ok(())
 }
@@ -387,36 +392,37 @@ async fn test_mnemonics_secp256r1() -> Result<(), anyhow::Error> {
     const TEST_CASES: [[&str; 3]; 3] = [
         [
             "act wing dilemma glory episode region allow mad tourist humble muffin oblige",
-            "rtdprivkey1qgj6vet4rstf2p00j860xctkg4fyqqq5hxgu4mm0eg60fq787ujnqs5wc8q",
+            "rtdprivkey1qgj6vet4rstf2p00j860xctkg4fyqqq5hxgu4mm0eg60fq787ujnqk08ktj",
             "0x4a822457f1970468d38dae8e63fb60eefdaa497d74d781f581ea2d137ec36f3a",
         ],
         [
             "flag rebel cabbage captain minimum purpose long already valley horn enrich salt",
-            "rtdprivkey1qgmgr6dza8slgxn0rcxcy47xeas9l565cc5q440ngdzr575rc2356gzlq7a",
+            "rtdprivkey1qgmgr6dza8slgxn0rcxcy47xeas9l565cc5q440ngdzr575rc2356wekwj0",
             "0xcd43ecb9dd32249ff5748f5e4d51855b01c9b1b8bbe7f8638bb8ab4cb463b920",
         ],
         [
             "area renew bar language pudding trial small host remind supreme cabbage era",
-            "rtdprivkey1qt2gsye4dyn0lxey0ht6d5f2ada7ew9044a49y2f3mymy2uf0hr55jmfze3",
+            "rtdprivkey1qt2gsye4dyn0lxey0ht6d5f2ada7ew9044a49y2f3mymy2uf0hr555qqv4r",
             "0x0d9047b7e7b698cc09c955ea97b0c68c2be7fb3aebeb59edcc84b1fb87e0f28e",
         ],
     ];
 
     for [mnemonics, sk, address] in TEST_CASES {
-        let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let mut context = WalletContext::new_for_tests(keystore, None, None);
         KeyToolCommand::Import {
             alias: None,
             input_string: mnemonics.to_string(),
             key_scheme: SignatureScheme::Secp256r1,
             derivation_path: None,
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await?;
 
         let kp = RtdKeyPair::decode(sk).unwrap();
         let addr = RtdAddress::from_str(address).unwrap();
         assert_eq!(RtdAddress::from(&kp.public()), addr);
-        assert!(keystore.addresses().contains(&addr));
+        assert!(context.config.keystore.addresses().contains(&addr));
     }
 
     Ok(())
@@ -424,7 +430,8 @@ async fn test_mnemonics_secp256r1() -> Result<(), anyhow::Error> {
 
 #[test]
 async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
-    let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let mut context = WalletContext::new_for_tests(keystore, None, None);
     assert!(
         KeyToolCommand::Import {
             alias: None,
@@ -432,7 +439,7 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: Some("m/44'/1'/0'/0/0".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_err()
     );
@@ -444,7 +451,7 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: Some("m/0'/784'/0'/0/0".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_err()
     );
@@ -456,7 +463,7 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: Some("m/54'/784'/0'/0/0".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_err()
     );
@@ -468,7 +475,7 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::Secp256k1,
             derivation_path: Some("m/54'/784'/0'/0'/0'".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_err()
     );
@@ -480,7 +487,7 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::Secp256k1,
             derivation_path: Some("m/44'/784'/0'/0/0".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_err()
     );
@@ -490,7 +497,9 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
 
 #[test]
 async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
-    let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let mut context = WalletContext::new_for_tests(keystore, None, None);
+
     assert!(
         KeyToolCommand::Import {
             alias: None,
@@ -498,7 +507,7 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: Some("m/44'/784'/0'/0'/0'".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_ok()
     );
@@ -510,7 +519,7 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: Some("m/44'/784'/0'/0'/1'".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_ok()
     );
@@ -522,7 +531,7 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::ED25519,
             derivation_path: Some("m/44'/784'/1'/0'/1'".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_ok()
     );
@@ -534,7 +543,7 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::Secp256k1,
             derivation_path: Some("m/54'/784'/0'/0/1".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_ok()
     );
@@ -546,7 +555,7 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
             key_scheme: SignatureScheme::Secp256k1,
             derivation_path: Some("m/54'/784'/1'/0/1".parse().unwrap()),
         }
-        .execute(&mut keystore)
+        .execute(&mut context)
         .await
         .is_ok()
     );
@@ -555,13 +564,14 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
 
 #[test]
 async fn test_keytool_bls12381() -> Result<(), anyhow::Error> {
-    let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let mut context = WalletContext::new_for_tests(keystore, None, None);
     KeyToolCommand::Generate {
         key_scheme: SignatureScheme::BLS12381,
         derivation_path: None,
         word_length: None,
     }
-    .execute(&mut keystore)
+    .execute(&mut context)
     .await?;
     Ok(())
 }
@@ -569,10 +579,11 @@ async fn test_keytool_bls12381() -> Result<(), anyhow::Error> {
 #[test]
 async fn test_sign_command() -> Result<(), anyhow::Error> {
     // Add a keypair
-    let mut keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(1));
-    let binding = keystore.addresses();
+    let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(1));
+    let mut context = WalletContext::new_for_tests(keystore, None, None);
+    let binding = context.config.keystore.addresses();
     let sender = binding.first().unwrap();
-    let alias = keystore.get_alias(sender).unwrap();
+    let alias = context.config.keystore.get_alias(sender).unwrap();
 
     // Create a dummy TransactionData
     let gas = (
@@ -598,7 +609,7 @@ async fn test_sign_command() -> Result<(), anyhow::Error> {
         data: Base64::encode(bcs::to_bytes(&tx_data)?),
         intent: Some(Intent::rtd_app(IntentScope::PersonalMessage)),
     }
-    .execute(&mut keystore)
+    .execute(&mut context)
     .await?;
 
     // Sign an intent message for the transaction data without intent passed in, so default is used.
@@ -607,7 +618,7 @@ async fn test_sign_command() -> Result<(), anyhow::Error> {
         data: Base64::encode(bcs::to_bytes(&tx_data)?),
         intent: None,
     }
-    .execute(&mut keystore)
+    .execute(&mut context)
     .await?;
 
     // Sign an intent message for the transaction data without intent passed in, so default is used.
@@ -617,7 +628,7 @@ async fn test_sign_command() -> Result<(), anyhow::Error> {
         data: Base64::encode(bcs::to_bytes(&tx_data)?),
         intent: None,
     }
-    .execute(&mut keystore)
+    .execute(&mut context)
     .await?;
     Ok(())
 }

@@ -4,17 +4,24 @@
 use std::path::PathBuf;
 
 use fastcrypto::ed25519::Ed25519KeyPair;
-use move_core_types::{ident_str, language_storage::StructTag};
+use move_core_types::ident_str;
+use move_core_types::language_storage::StructTag;
 use rtd_move_build::BuildConfig;
-use rtd_types::{
-    Identifier, RTD_COIN_REGISTRY_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
-    base_types::{ObjectID, ObjectRef, RtdAddress},
-    effects::TransactionEffects,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{
-        CallArg, Command, ObjectArg, SharedObjectMutability, Transaction, TransactionData,
-    },
-};
+use rtd_types::Identifier;
+use rtd_types::RTD_COIN_REGISTRY_OBJECT_ID;
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::effects::TransactionEffects;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::CallArg;
+use rtd_types::transaction::Command;
+use rtd_types::transaction::ObjectArg;
+use rtd_types::transaction::SharedObjectMutability;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
 
 use crate::FullCluster;
 

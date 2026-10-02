@@ -6,9 +6,6 @@ use crate::authority_aggregator::{AuthorityAggregator, AuthorityAggregatorBuilde
 use crate::test_authority_clients::LocalAuthorityClient;
 use fastcrypto::traits::KeyPair;
 use futures::future::join_all;
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_config::genesis::Genesis;
 use rtd_config::local_ip_utils;
 use rtd_config::node::AuthorityOverloadConfig;
@@ -23,6 +20,9 @@ use rtd_types::crypto::{
     generate_proof_of_possession, get_key_pair,
 };
 use rtd_types::object::Object;
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 async fn init_genesis(
     committee_size: usize,
@@ -137,7 +137,7 @@ pub async fn init_local_authorities_with_genesis(
 ) -> AuthorityAggregator<LocalAuthorityClient> {
     telemetry_subscribers::init_for_testing();
     let mut clients = BTreeMap::new();
-    let genesis_committee = genesis.committee().unwrap();
+    let genesis_committee = genesis.committee();
     for state in authorities {
         let name = state.name;
         let client = LocalAuthorityClient::new_from_authority(state);

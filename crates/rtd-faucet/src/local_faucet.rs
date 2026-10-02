@@ -5,21 +5,18 @@ use std::fmt;
 use std::sync::Arc;
 
 use anyhow::bail;
+use backoff::ExponentialBackoff;
+use rtd_rpc_api::client::ExecutedTransaction;
+use rtd_sdk::types::effects::TransactionEffectsAPI;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tracing::info;
 
 use crate::FaucetConfig;
 use crate::FaucetError;
-use rtd_sdk::{
-    rpc_types::{RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions},
-    types::quorum_driver_types::ExecuteTransactionRequestType,
-};
 
 use crate::CoinInfo;
-use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
-use rtd_sdk::rpc_types::RtdTransactionBlockEffectsAPI;
 use rtd_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_sdk::types::{
     base_types::{ObjectID, RtdAddress},
@@ -27,9 +24,16 @@ use rtd_sdk::types::{
     transaction::{Transaction, TransactionData},
 };
 use rtd_sdk::wallet_context::WalletContext;
+use shared_crypto::intent::Intent;
 
 const GAS_BUDGET: u64 = 10_000_000;
 const NUM_RETRIES: u8 = 2;
+
+/// On a freshly created `--force-regenesis` network the genesis coin objects may not yet be
+/// readable the instant the cluster reports started — especially on slow or contended storage —
+/// so the gas-coin scan is retried with backoff for up to this long before failing.
+const GAS_COIN_LOOKUP_INITIAL_INTERVAL: Duration = Duration::from_millis(200);
+const GAS_COIN_LOOKUP_MAX_ELAPSED_TIME: Duration = Duration::from_secs(10);
 
 pub struct LocalFaucet {
     wallet: WalletContext,
@@ -105,19 +109,14 @@ impl LocalFaucet {
             .await
             .map_err(FaucetError::internal)?;
 
-        let Some(ref effects) = tx.effects else {
-            return Err(FaucetError::internal(
-                "Failed to get coin id from response".to_string(),
-            ));
-        };
-
-        let coins: Vec<CoinInfo> = effects
+        let coins: Vec<CoinInfo> = tx
+            .effects
             .created()
-            .iter()
+            .into_iter()
             .map(|o| CoinInfo {
                 amount: self.coin_amount,
-                id: o.object_id(),
-                transfer_tx_digest: *effects.transaction_digest(),
+                id: o.0.0,
+                transfer_tx_digest: *tx.effects.transaction_digest(),
             })
             .collect();
 
@@ -128,7 +127,7 @@ impl LocalFaucet {
         &self,
         tx_data: &TransactionData,
         coin_id: ObjectID,
-    ) -> Result<RtdTransactionBlockResponse, anyhow::Error> {
+    ) -> Result<ExecutedTransaction, anyhow::Error> {
         let signature = self
             .wallet
             .config
@@ -138,22 +137,18 @@ impl LocalFaucet {
             .map_err(FaucetError::internal)?;
         let tx = Transaction::from_data(tx_data.clone(), vec![signature]);
 
-        let client = self.wallet.get_client().await?;
+        let client = self.wallet.grpc_client()?;
 
-        Ok(client
-            .quorum_driver_api()
-            .execute_transaction_block(
-                tx.clone(),
-                RtdTransactionBlockResponseOptions::new().with_effects(),
-                Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-            )
+        client
+            .execute_transaction_and_wait_for_checkpoint(&tx)
             .await
             .map_err(|e| {
                 FaucetError::internal(format!(
                     "Failed to execute PayRtd transaction for coin {:?}, with err {:?}",
                     coin_id, e
                 ))
-            })?)
+            })
+            .map_err(Into::into)
     }
 
     async fn execute_txn_with_retries(
@@ -161,7 +156,7 @@ impl LocalFaucet {
         tx: TransactionData,
         coin_id: ObjectID,
         num_retries: u8,
-    ) -> Result<RtdTransactionBlockResponse, anyhow::Error> {
+    ) -> Result<ExecutedTransaction, anyhow::Error> {
         let mut retry_delay = Duration::from_millis(500);
         let mut i = 0;
 
@@ -188,6 +183,9 @@ impl LocalFaucet {
 /// Finds gas coins with sufficient balance and returns the address to use as the active address
 /// for the faucet. If the initial active address in the wallet does not have enough gas coins,
 /// it will iterate through the addresses to find one with sufficient gas coins.
+///
+/// Retries the scan with exponential backoff so that a transient startup race — where genesis
+/// coins are not yet readable — does not fail the faucet.
 async fn find_gas_coins_and_address(
     wallet: &mut WalletContext,
     config: &FaucetConfig,
@@ -195,8 +193,38 @@ async fn find_gas_coins_and_address(
     let active_address = wallet
         .active_address()
         .map_err(|e| FaucetError::Wallet(e.to_string()))?;
+    let wallet = &*wallet;
 
-    for address in std::iter::once(active_address).chain(wallet.get_addresses().into_iter()) {
+    let backoff = ExponentialBackoff {
+        initial_interval: GAS_COIN_LOOKUP_INITIAL_INTERVAL,
+        current_interval: GAS_COIN_LOOKUP_INITIAL_INTERVAL,
+        max_elapsed_time: Some(GAS_COIN_LOOKUP_MAX_ELAPSED_TIME),
+        ..Default::default()
+    };
+
+    backoff::future::retry(backoff, || async move {
+        let found = scan_for_gas_coins(wallet, active_address, config)
+            .await
+            .map_err(backoff::Error::transient)?;
+
+        found.ok_or_else(|| {
+            backoff::Error::transient(FaucetError::Wallet(
+                "No address found with sufficient coins".to_string(),
+            ))
+        })
+    })
+    .await
+}
+
+/// Scans the wallet's addresses once for a gas coin with a balance of at least `config.amount`,
+/// returning the matching coins and the address that holds them, or `Ok(None)` if no such coin is
+/// currently visible.
+async fn scan_for_gas_coins(
+    wallet: &WalletContext,
+    active_address: RtdAddress,
+    config: &FaucetConfig,
+) -> Result<Option<(Vec<GasCoin>, RtdAddress)>, FaucetError> {
+    for address in std::iter::once(active_address).chain(wallet.get_addresses()) {
         let coins: Vec<_> = wallet
             .gas_objects(address)
             .await
@@ -212,13 +240,11 @@ async fn find_gas_coins_and_address(
             .collect();
 
         if !coins.is_empty() {
-            return Ok((coins, address));
+            return Ok(Some((coins, address)));
         }
     }
 
-    Err(FaucetError::Wallet(
-        "No address found with sufficient coins".to_string(),
-    ))
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -231,7 +257,7 @@ mod tests {
     async fn test_local_faucet_execute_txn() {
         // Setup test cluster
         let cluster = TestClusterBuilder::new().build().await;
-        let client = cluster.rtd_client().clone();
+        let client = cluster.grpc_client();
 
         let config = FaucetConfig::default();
         let local_faucet = LocalFaucet::new(cluster.wallet, config).await.unwrap();
@@ -243,22 +269,20 @@ mod tests {
         assert!(tx.is_ok());
 
         let coins = client
-            .coin_read_api()
-            .get_coins(recipient, None, None, None)
+            .get_owned_objects(recipient, None, None, None)
             .await
             .unwrap();
 
-        assert_eq!(coins.data.len(), local_faucet.num_coins);
+        assert_eq!(coins.items.len(), local_faucet.num_coins);
 
         let tx = local_faucet.local_request_execute_tx(recipient).await;
         assert!(tx.is_ok());
         let coins = client
-            .coin_read_api()
-            .get_coins(recipient, None, None, None)
+            .get_owned_objects(recipient, None, None, None)
             .await
             .unwrap();
 
-        assert_eq!(coins.data.len(), 2 * local_faucet.num_coins);
+        assert_eq!(coins.items.len(), 2 * local_faucet.num_coins);
     }
 
     #[tokio::test]

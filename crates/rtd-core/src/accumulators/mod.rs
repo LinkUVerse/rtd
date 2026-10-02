@@ -4,8 +4,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use itertools::Itertools;
-use move_core_types::u256::U256;
 use linku_common::fatal;
+use move_core_types::ident_str;
+use move_core_types::u256::U256;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::accumulator_root::{
@@ -15,9 +16,10 @@ use rtd_types::accumulator_root::{
 use rtd_types::balance::{BALANCE_MODULE_NAME, BALANCE_STRUCT_NAME};
 use rtd_types::base_types::SequenceNumber;
 
+use rtd_types::accumulator_root::ACCUMULATOR_METADATA_MODULE;
 use rtd_types::digests::Digest;
 use rtd_types::effects::{
-    AccumulatorAddress, AccumulatorOperation, AccumulatorValue, AccumulatorWriteV1,
+    AccumulatorAddress, AccumulatorOperation, AccumulatorValue, AccumulatorWriteV1, IDOperation,
     TransactionEffects, TransactionEffectsAPI,
 };
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
@@ -35,6 +37,9 @@ pub mod funds_read;
 // provides balance read functionality for RPC
 pub mod balances;
 pub mod coin_reservations;
+pub mod object_funds_checker;
+pub(crate) mod transaction_rewriting;
+pub mod unsettled_object_withdrawals;
 
 /// Merged value is the value stored inside accumulator objects.
 /// Each mergeable Move type will map to a single variant as its representation.
@@ -217,6 +222,8 @@ pub(crate) struct AccumulatorSettlementTxBuilder {
     updates: BTreeMap<AccumulatorObjId, Update>,
     // addresses is only used for lookups.
     addresses: HashMap<AccumulatorObjId, AccumulatorAddress>,
+    num_deposits: u64,
+    num_withdrawals: u64,
 }
 
 impl AccumulatorSettlementTxBuilder {
@@ -227,8 +234,9 @@ impl AccumulatorSettlementTxBuilder {
         tx_index_offset: u64,
     ) -> Self {
         let mut updates = BTreeMap::<_, _>::new();
-
         let mut addresses = HashMap::<_, _>::new();
+        let mut num_deposits = 0u64;
+        let mut num_withdrawals = 0u64;
 
         for (tx_index, effect) in ckpt_effects.iter().enumerate() {
             let tx = effect.transaction_digest();
@@ -276,6 +284,7 @@ impl AccumulatorSettlementTxBuilder {
 
                 match operation {
                     AccumulatorOperation::Merge => {
+                        num_deposits += 1;
                         entry.merge.accumulate_into(
                             value,
                             checkpoint_seq,
@@ -283,6 +292,7 @@ impl AccumulatorSettlementTxBuilder {
                         );
                     }
                     AccumulatorOperation::Split => {
+                        num_withdrawals += 1;
                         entry.split.accumulate_into(
                             value,
                             checkpoint_seq,
@@ -293,11 +303,20 @@ impl AccumulatorSettlementTxBuilder {
             }
         }
 
-        Self { updates, addresses }
+        Self {
+            updates,
+            addresses,
+            num_deposits,
+            num_withdrawals,
+        }
     }
 
-    pub fn num_updates(&self) -> usize {
-        self.updates.len()
+    pub fn num_deposits(&self) -> u64 {
+        self.num_deposits
+    }
+
+    pub fn num_withdrawals(&self) -> u64 {
+        self.num_withdrawals
     }
 
     /// Returns a unified map of funds changes for all accounts.
@@ -324,7 +343,9 @@ impl AccumulatorSettlementTxBuilder {
         checkpoint_height: u64,
         checkpoint_seq: u64,
     ) -> Vec<TransactionKind> {
-        let Self { updates, addresses } = self;
+        let Self {
+            updates, addresses, ..
+        } = self;
 
         let build_one_settlement_txn = |idx: u64, updates: &mut Vec<(AccumulatorObjId, Update)>| {
             let (total_input_rtd, total_output_rtd) =
@@ -453,6 +474,9 @@ pub fn build_accumulator_barrier_tx(
     settlement_effects: &[TransactionEffects],
 ) -> TransactionKind {
     let num_settlements = settlement_effects.len() as u64;
+
+    let (objects_created, objects_destroyed) = count_accumulator_object_changes(settlement_effects);
+
     let mut builder = ProgrammableTransactionBuilder::new();
     let root = builder
         .input(CallArg::Object(ObjectArg::SharedObject {
@@ -472,5 +496,71 @@ pub fn build_accumulator_barrier_tx(
         0,
     );
 
+    let objects_created_arg = builder.pure(objects_created).unwrap();
+    let objects_destroyed_arg = builder.pure(objects_destroyed).unwrap();
+    builder.programmable_move_call(
+        RTD_FRAMEWORK_PACKAGE_ID,
+        ACCUMULATOR_METADATA_MODULE.into(),
+        ident_str!("record_accumulator_object_changes").into(),
+        vec![],
+        vec![root, objects_created_arg, objects_destroyed_arg],
+    );
+
     TransactionKind::ProgrammableSystemTransaction(builder.finish())
+}
+
+pub(crate) fn count_accumulator_object_changes(
+    settlement_effects: &[TransactionEffects],
+) -> (u64, u64) {
+    settlement_effects
+        .iter()
+        .flat_map(|effects| effects.object_changes())
+        .fold((0u64, 0u64), |(created, destroyed), change| {
+            match change.id_operation {
+                IDOperation::Created => (created + 1, destroyed),
+                IDOperation::Deleted => (created, destroyed + 1),
+                IDOperation::None => (created, destroyed),
+            }
+        })
+}
+
+#[cfg(test)]
+mod barrier_settlement_key_tests {
+    use super::*;
+    use rtd_types::transaction::TransactionKey;
+
+    #[test]
+    fn test_barrier_tx_returns_accumulator_settlement_key() {
+        let epoch = 5u64;
+        let checkpoint_height = 42u64;
+
+        let kind = build_accumulator_barrier_tx(
+            epoch,
+            SequenceNumber::from_u64(1),
+            checkpoint_height,
+            &[], // no settlement effects needed for key extraction
+        );
+
+        assert_eq!(
+            kind.accumulator_barrier_settlement_key(),
+            Some(TransactionKey::AccumulatorSettlement(
+                epoch,
+                checkpoint_height
+            ))
+        );
+        assert!(kind.is_accumulator_barrier_settle_tx());
+    }
+
+    #[test]
+    fn test_settlement_tx_has_no_barrier_key() {
+        // Non-barrier settlement transactions use ReadOnly access to the accumulator root,
+        // so they should not return an AccumulatorSettlement key.
+        let protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
+        let builder = AccumulatorSettlementTxBuilder::new(None, &[], 0, 0);
+        let txns = builder.build_tx(&protocol_config, 5, SequenceNumber::from_u64(1), 42, 0);
+        for txn in txns {
+            assert_eq!(txn.accumulator_barrier_settlement_key(), None);
+            assert!(!txn.is_accumulator_barrier_settle_tx());
+        }
+    }
 }

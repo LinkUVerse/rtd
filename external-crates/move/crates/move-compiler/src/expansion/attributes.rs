@@ -293,6 +293,9 @@ fn attribute(
         PA::Syntax { kind } => KA::Syntax(A::SyntaxAttribute { kind }),
         // -- allow --
         PA::Allow { allow_set } => KA::Diagnostic(A::DiagnosticAttribute::Allow { allow_set }),
+        PA::Deny { deny_set } => KA::Diagnostic(A::DiagnosticAttribute::Deny { deny_set }),
+        PA::Expect { expect_set } => KA::Diagnostic(A::DiagnosticAttribute::Expect { expect_set }),
+        PA::Warn { warn_set } => KA::Diagnostic(A::DiagnosticAttribute::Warn { warn_set }),
         PA::LintAllow { allow_set } => {
             KA::Diagnostic(A::DiagnosticAttribute::LintAllow { allow_set })
         }
@@ -304,7 +307,7 @@ fn attribute(
             location,
         } => {
             let failure =
-                expected_failure_attribute(context, &loc, failure_kind, minor_status, location)?;
+                expected_failure_attribute(context, &loc, *failure_kind, minor_status, location)?;
             KA::Testing(TestingAttribute::ExpectedFailure(Box::new(failure)))
         }
         PA::RandomTest => KA::Testing(A::TestingAttribute::RandTest),
@@ -358,11 +361,11 @@ fn ext_attribue(
 fn expected_failure_attribute(
     context: &mut Context,
     attr_loc: &Loc,
-    failure_kind: Box<P::ExpectedFailureKind>,
+    failure_kind: P::ExpectedFailureKind,
     minor_status: Option<P::AttributeValue>,
     location: Option<P::NameAccessChain>,
 ) -> Option<A::ExpectedFailure> {
-    let sp!(failure_loc, failure_kind) = *failure_kind;
+    let sp!(failure_loc, failure_kind) = failure_kind;
     match failure_kind {
         P::ExpectedFailureKind_::Empty => Some(A::ExpectedFailure::Expected),
         P::ExpectedFailureKind_::Name(name) => expected_failure_named(

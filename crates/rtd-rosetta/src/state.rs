@@ -5,14 +5,18 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use prost_types::FieldMask;
-use std::str::FromStr;
-use std::sync::Arc;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{Checkpoint, GetCheckpointRequest, get_checkpoint_request};
+use rtd_rpc::proto::rtd::rpc::v2::{
+    Checkpoint, GetCheckpointRequest, GetServiceInfoRequest, get_checkpoint_request,
+};
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::digests::CheckpointDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use std::str::FromStr;
+use std::sync::Arc;
+
+use rtd_types::digests::ChainIdentifier;
 
 use crate::operations::Operations;
 use crate::types::{
@@ -24,6 +28,7 @@ use crate::{CoinMetadataCache, Error};
 pub struct OnlineServerContext {
     pub client: GrpcClient,
     pub coin_metadata_cache: CoinMetadataCache,
+    pub chain_id: ChainIdentifier,
     block_provider: Arc<dyn BlockProvider + Send + Sync>,
 }
 
@@ -32,11 +37,13 @@ impl OnlineServerContext {
         client: GrpcClient,
         block_provider: Arc<dyn BlockProvider + Send + Sync>,
         coin_metadata_cache: CoinMetadataCache,
+        chain_id: ChainIdentifier,
     ) -> Self {
         Self {
             client,
             block_provider,
             coin_metadata_cache,
+            chain_id,
         }
     }
 
@@ -53,10 +60,6 @@ pub trait BlockProvider {
     async fn genesis_block_identifier(&self) -> Result<BlockIdentifier, Error>;
     async fn oldest_block_identifier(&self) -> Result<BlockIdentifier, Error>;
     async fn current_block_identifier(&self) -> Result<BlockIdentifier, Error>;
-    async fn create_block_identifier(
-        &self,
-        checkpoint: CheckpointSequenceNumber,
-    ) -> Result<BlockIdentifier, Error>;
 }
 
 #[derive(Clone)]
@@ -139,8 +142,23 @@ impl BlockProvider for CheckpointBlockProvider {
     }
 
     async fn current_block(&self) -> Result<BlockResponse, Error> {
-        let request = GetCheckpointRequest::latest()
-            .with_read_mask(FieldMask::from_paths(["sequence_number"]));
+        let request = GetCheckpointRequest::latest().with_read_mask(FieldMask::from_paths([
+            "sequence_number",
+            "digest",
+            "summary.sequence_number",
+            "summary.previous_digest",
+            "summary.timestamp",
+            "transactions.digest",
+            "transactions.transaction.sender",
+            "transactions.transaction.gas_payment",
+            "transactions.transaction.kind",
+            "transactions.effects.gas_object",
+            "transactions.effects.gas_used",
+            "transactions.effects.status",
+            "transactions.balance_changes",
+            "transactions.events.events.event_type",
+            "transactions.events.events.json",
+        ]));
 
         let mut client = self.client.clone();
         let response = client
@@ -149,21 +167,45 @@ impl BlockProvider for CheckpointBlockProvider {
             .await?
             .into_inner();
 
-        let sequence_number = response.checkpoint().sequence_number();
-        self.get_block_by_index(sequence_number).await
+        let checkpoint = response
+            .checkpoint
+            .ok_or_else(|| Error::DataError("Checkpoint not found".to_string()))?;
+
+        self.create_block_response(checkpoint).await
     }
 
     async fn genesis_block_identifier(&self) -> Result<BlockIdentifier, Error> {
-        self.create_block_identifier(0).await
+        let response = self
+            .client
+            .clone()
+            .ledger_client()
+            .get_service_info(GetServiceInfoRequest::default())
+            .await?
+            .into_inner();
+        let chain_id = response
+            .chain_id
+            .ok_or_else(|| Error::DataError("Missing chain_id".to_string()))?;
+        let hash = CheckpointDigest::from_str(&chain_id)?;
+        Ok(BlockIdentifier { index: 0, hash })
     }
 
     async fn oldest_block_identifier(&self) -> Result<BlockIdentifier, Error> {
-        self.create_block_identifier(0).await
+        let response = self
+            .client
+            .clone()
+            .ledger_client()
+            .get_service_info(GetServiceInfoRequest::default())
+            .await?
+            .into_inner();
+        let lowest = response
+            .lowest_available_checkpoint
+            .ok_or_else(|| Error::DataError("Missing lowest_available_checkpoint".to_string()))?;
+        self.create_block_identifier(lowest).await
     }
 
     async fn current_block_identifier(&self) -> Result<BlockIdentifier, Error> {
         let request = GetCheckpointRequest::latest()
-            .with_read_mask(FieldMask::from_paths(["sequence_number"]));
+            .with_read_mask(FieldMask::from_paths(["sequence_number", "digest"]));
 
         let response = self
             .client
@@ -177,16 +219,10 @@ impl BlockProvider for CheckpointBlockProvider {
             .checkpoint
             .ok_or_else(|| Error::DataError("Missing checkpoint".to_string()))?;
 
-        let sequence_number = checkpoint.sequence_number();
-
-        self.create_block_identifier(sequence_number).await
-    }
-
-    async fn create_block_identifier(
-        &self,
-        checkpoint: CheckpointSequenceNumber,
-    ) -> Result<BlockIdentifier, Error> {
-        self.create_block_identifier(checkpoint).await
+        Ok(BlockIdentifier {
+            index: checkpoint.sequence_number(),
+            hash: CheckpointDigest::from_str(checkpoint.digest())?,
+        })
     }
 }
 
@@ -283,5 +319,206 @@ impl CheckpointBlockProvider {
             index,
             hash: CheckpointDigest::from_str(hash)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod checkpoint_race_tests {
+    use super::*;
+    use crate::types::{
+        AccountBalanceRequest, AccountIdentifier, Currencies, Currency, NetworkIdentifier, RtdEnv,
+    };
+    use axum::extract::State;
+    use axum::{Extension, Json};
+    use axum_extra::extract::WithRejection;
+    use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::{LedgerService, LedgerServiceServer};
+    use rtd_rpc::proto::rtd::rpc::v2::state_service_server::{StateService, StateServiceServer};
+    use rtd_rpc::proto::rtd::rpc::v2::{
+        Balance, CheckpointSummary, GetBalanceRequest, GetBalanceResponse, GetCheckpointResponse,
+        get_checkpoint_request,
+    };
+    use rtd_types::base_types::RtdAddress;
+    use std::marker::PhantomData;
+    use std::num::NonZeroUsize;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tonic::{Request, Response, Status};
+
+    const AHEAD_CHECKPOINT: u64 = 42;
+
+    #[derive(Clone)]
+    struct SplitHeightLedger {
+        latest_requests: Arc<AtomicUsize>,
+        sequence_requests: Arc<AtomicUsize>,
+    }
+
+    fn ahead_checkpoint() -> Checkpoint {
+        let mut summary = CheckpointSummary::default();
+        summary.sequence_number = Some(AHEAD_CHECKPOINT);
+        summary.previous_digest = Some(CheckpointDigest::new([1; 32]).to_string());
+        summary.timestamp = Some(prost_types::Timestamp {
+            seconds: 1,
+            nanos: 0,
+        });
+
+        let mut checkpoint = Checkpoint::default();
+        checkpoint.sequence_number = Some(AHEAD_CHECKPOINT);
+        checkpoint.digest = Some(CheckpointDigest::new([2; 32]).to_string());
+        checkpoint.summary = Some(summary);
+        checkpoint
+    }
+
+    #[tonic::async_trait]
+    impl LedgerService for SplitHeightLedger {
+        async fn get_checkpoint(
+            &self,
+            request: Request<GetCheckpointRequest>,
+        ) -> Result<Response<GetCheckpointResponse>, Status> {
+            match request.into_inner().checkpoint_id {
+                None => {
+                    self.latest_requests.fetch_add(1, Ordering::SeqCst);
+                    let mut response = GetCheckpointResponse::default();
+                    response.checkpoint = Some(ahead_checkpoint());
+                    Ok(Response::new(response))
+                }
+                Some(get_checkpoint_request::CheckpointId::SequenceNumber(AHEAD_CHECKPOINT)) => {
+                    self.sequence_requests.fetch_add(1, Ordering::SeqCst);
+                    Err(Status::not_found(format!(
+                        "Checkpoint {AHEAD_CHECKPOINT} not found"
+                    )))
+                }
+                Some(checkpoint_id) => Err(Status::invalid_argument(format!(
+                    "unexpected checkpoint request: {checkpoint_id:?}"
+                ))),
+            }
+        }
+    }
+
+    #[tonic::async_trait]
+    impl StateService for SplitHeightLedger {
+        async fn get_balance(
+            &self,
+            _request: Request<GetBalanceRequest>,
+        ) -> Result<Response<GetBalanceResponse>, Status> {
+            let mut balance = Balance::default();
+            balance.balance = Some(100);
+            let mut response = GetBalanceResponse::default();
+            response.balance = Some(balance);
+            Ok(Response::new(response))
+        }
+    }
+
+    async fn start_split_height_ledger(
+        ledger: SplitHeightLedger,
+    ) -> (GrpcClient, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let incoming = stream::unfold(listener, |listener| async move {
+            let result = listener.accept().await.map(|(stream, _)| stream);
+            Some((result, listener))
+        });
+        let handle = tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(LedgerServiceServer::new(ledger.clone()))
+                .add_service(StateServiceServer::new(ledger))
+                .serve_with_incoming(incoming)
+                .await
+                .unwrap();
+        });
+        let client = GrpcClient::new(format!("http://{address}")).unwrap();
+        (client, handle)
+    }
+
+    #[tokio::test]
+    async fn current_block_uses_single_latest_request() {
+        let latest_requests = Arc::new(AtomicUsize::new(0));
+        let sequence_requests = Arc::new(AtomicUsize::new(0));
+        let ledger = SplitHeightLedger {
+            latest_requests: latest_requests.clone(),
+            sequence_requests: sequence_requests.clone(),
+        };
+        let (client, server) = start_split_height_ledger(ledger).await;
+        let coin_metadata_cache =
+            CoinMetadataCache::new(client.clone(), NonZeroUsize::new(1).unwrap());
+        let provider = CheckpointBlockProvider::new(client, coin_metadata_cache);
+
+        let response = provider.current_block().await.unwrap();
+
+        assert_eq!(response.block.block_identifier.index, AHEAD_CHECKPOINT);
+        assert_eq!(latest_requests.load(Ordering::SeqCst), 1);
+        assert_eq!(sequence_requests.load(Ordering::SeqCst), 0);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn current_block_identifier_uses_single_latest_request() {
+        let latest_requests = Arc::new(AtomicUsize::new(0));
+        let sequence_requests = Arc::new(AtomicUsize::new(0));
+        let ledger = SplitHeightLedger {
+            latest_requests: latest_requests.clone(),
+            sequence_requests: sequence_requests.clone(),
+        };
+        let (client, server) = start_split_height_ledger(ledger).await;
+        let coin_metadata_cache =
+            CoinMetadataCache::new(client.clone(), NonZeroUsize::new(1).unwrap());
+        let provider = CheckpointBlockProvider::new(client, coin_metadata_cache);
+
+        let identifier = provider.current_block_identifier().await.unwrap();
+
+        assert_eq!(identifier.index, AHEAD_CHECKPOINT);
+        assert_eq!(latest_requests.load(Ordering::SeqCst), 1);
+        assert_eq!(sequence_requests.load(Ordering::SeqCst), 0);
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn account_balance_uses_single_latest_request() {
+        let latest_requests = Arc::new(AtomicUsize::new(0));
+        let sequence_requests = Arc::new(AtomicUsize::new(0));
+        let ledger = SplitHeightLedger {
+            latest_requests: latest_requests.clone(),
+            sequence_requests: sequence_requests.clone(),
+        };
+        let (client, server) = start_split_height_ledger(ledger).await;
+        let coin_metadata_cache =
+            CoinMetadataCache::new(client.clone(), NonZeroUsize::new(1).unwrap());
+        let block_provider = Arc::new(CheckpointBlockProvider::new(
+            client.clone(),
+            coin_metadata_cache.clone(),
+        ));
+        let context = OnlineServerContext::new(
+            client,
+            block_provider,
+            coin_metadata_cache,
+            ChainIdentifier::from(CheckpointDigest::new([3; 32])),
+        );
+        let request = AccountBalanceRequest {
+            network_identifier: NetworkIdentifier {
+                blockchain: "rtd".to_string(),
+                network: RtdEnv::LocalNet,
+            },
+            account_identifier: AccountIdentifier {
+                address: RtdAddress::ZERO,
+                sub_account: None,
+            },
+            block_identifier: Default::default(),
+            currencies: Currencies(vec![Currency::default()]),
+        };
+
+        let response = crate::account::balance(
+            State(context),
+            Extension(RtdEnv::LocalNet),
+            WithRejection(Json(request), PhantomData),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.block_identifier.index, AHEAD_CHECKPOINT);
+        assert_eq!(response.balances[0].value, 100);
+        assert_eq!(latest_requests.load(Ordering::SeqCst), 1);
+        assert_eq!(sequence_requests.load(Ordering::SeqCst), 0);
+
+        server.abort();
     }
 }

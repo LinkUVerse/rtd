@@ -72,7 +72,6 @@ tokens and coins. <code><a href="../rtd/coin.md#rtd_coin_Coin">Coin</a></code> c
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -103,6 +102,7 @@ tokens and coins. <code><a href="../rtd/coin.md#rtd_coin_Coin">Coin</a></code> c
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -709,6 +709,7 @@ Put a <code><a href="../rtd/coin.md#rtd_coin_Coin">Coin</a>&lt;T&gt;</code> to t
 ## Function `redeem_funds`
 
 Redeem a <code>Withdrawal&lt;Balance&lt;T&gt;&gt;</code> and create a <code><a href="../rtd/coin.md#rtd_coin_Coin">Coin</a>&lt;T&gt;</code> from the withdrawn Balance<T>.
+Aborts if an object withdrawal exceeds the funds currently available to the object.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/coin.md#rtd_coin_redeem_funds">redeem_funds</a>&lt;T&gt;(withdrawal: <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_Withdrawal">rtd::funds_accumulator::Withdrawal</a>&lt;<a href="../rtd/balance.md#rtd_balance_Balance">rtd::balance::Balance</a>&lt;T&gt;&gt;, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/coin.md#rtd_coin_Coin">rtd::coin::Coin</a>&lt;T&gt;
@@ -1028,7 +1029,7 @@ See <code><a href="../rtd/coin.md#rtd_coin_create_regulated_currency_v2">create_
 ): <a href="../rtd/coin.md#rtd_coin_DenyCapV2">DenyCapV2</a>&lt;T&gt; {
     <b>let</b> <a href="../rtd/coin.md#rtd_coin_DenyCap">DenyCap</a> { id } = cap;
     id.delete();
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.migrate_v1_to_v2(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, ctx);
     <a href="../rtd/coin.md#rtd_coin_DenyCapV2">DenyCapV2</a> {
         id: <a href="../rtd/object.md#rtd_object_new">object::new</a>(ctx),
@@ -1149,7 +1150,7 @@ address will be unable to receive objects of this coin type.
     addr: <b>address</b>,
     ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_add(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, addr, ctx)
 }
 </code></pre>
@@ -1182,7 +1183,7 @@ next epoch.
     addr: <b>address</b>,
     ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_remove(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, addr, ctx)
 }
 </code></pre>
@@ -1213,7 +1214,7 @@ in the current epoch will be unable to receive objects of this coin type.
     addr: <b>address</b>,
     ctx: &TxContext,
 ): bool {
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_contains_current_epoch(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, addr, ctx)
 }
 </code></pre>
@@ -1241,7 +1242,7 @@ start of the next epoch, the address will be unable to receive objects of this c
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/coin.md#rtd_coin_deny_list_v2_contains_next_epoch">deny_list_v2_contains_next_epoch</a>&lt;T&gt;(<a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>: &DenyList, addr: <b>address</b>): bool {
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_contains_next_epoch(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, addr)
 }
 </code></pre>
@@ -1274,7 +1275,7 @@ addresses will be unable to receive objects of this coin type.
     ctx: &<b>mut</b> TxContext,
 ) {
     <b>assert</b>!(deny_cap.<a href="../rtd/coin.md#rtd_coin_allow_global_pause">allow_global_pause</a>, <a href="../rtd/coin.md#rtd_coin_EGlobalPauseNotAllowed">EGlobalPauseNotAllowed</a>);
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_enable_global_pause(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, ctx)
 }
 </code></pre>
@@ -1307,7 +1308,7 @@ type will still be paused until the start of the next epoch.
     ctx: &<b>mut</b> TxContext,
 ) {
     <b>assert</b>!(deny_cap.<a href="../rtd/coin.md#rtd_coin_allow_global_pause">allow_global_pause</a>, <a href="../rtd/coin.md#rtd_coin_EGlobalPauseNotAllowed">EGlobalPauseNotAllowed</a>);
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_disable_global_pause(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, ctx)
 }
 </code></pre>
@@ -1336,7 +1337,7 @@ Check if the global pause is enabled for the given coin type in the current epoc
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>: &DenyList,
     ctx: &TxContext,
 ): bool {
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_is_global_pause_enabled_current_epoch(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty, ctx)
 }
 </code></pre>
@@ -1362,7 +1363,7 @@ Check if the global pause is enabled for the given coin type in the next epoch.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/coin.md#rtd_coin_deny_list_v2_is_global_pause_enabled_next_epoch">deny_list_v2_is_global_pause_enabled_next_epoch</a>&lt;T&gt;(<a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>: &DenyList): bool {
-    <b>let</b> ty = type_name::with_original_ids&lt;T&gt;().into_string().into_bytes();
+    <b>let</b> ty = type_name::with_defining_ids&lt;T&gt;().into_string().into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v2_is_global_pause_enabled_next_epoch(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, ty)
 }
 </code></pre>
@@ -1940,7 +1941,7 @@ from interacting with the specified coin type as an input to a transaction.
     addr: <b>address</b>,
     _ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> `type` = type_name::into_string(type_name::get_with_original_ids&lt;T&gt;()).into_bytes();
+    <b>let</b> `type` = type_name::into_string(type_name::with_defining_ids&lt;T&gt;()).into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v1_add(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, `type`, addr)
 }
 </code></pre>
@@ -1972,7 +1973,7 @@ Aborts with <code>ENotFrozen</code> if the address is not already in the list.
     addr: <b>address</b>,
     _ctx: &<b>mut</b> TxContext,
 ) {
-    <b>let</b> `type` = type_name::into_string(type_name::get_with_original_ids&lt;T&gt;()).into_bytes();
+    <b>let</b> `type` = type_name::into_string(type_name::with_defining_ids&lt;T&gt;()).into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v1_remove(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, `type`, addr)
 }
 </code></pre>
@@ -1999,7 +2000,7 @@ return false if given a non-coin type.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/coin.md#rtd_coin_deny_list_contains">deny_list_contains</a>&lt;T&gt;(<a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>: &DenyList, addr: <b>address</b>): bool {
-    <b>let</b> name = type_name::get_with_original_ids&lt;T&gt;();
+    <b>let</b> name = type_name::with_defining_ids&lt;T&gt;();
     <b>if</b> (type_name::is_primitive(&name)) <b>return</b> <b>false</b>;
     <b>let</b> `type` = type_name::into_string(name).into_bytes();
     <a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.v1_contains(<a href="../rtd/coin.md#rtd_coin_DENY_LIST_COIN_INDEX">DENY_LIST_COIN_INDEX</a>, `type`, addr)

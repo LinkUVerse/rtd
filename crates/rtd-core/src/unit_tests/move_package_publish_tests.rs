@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::authority::{
-    authority_tests::{call_move, init_state_with_ids, send_and_confirm_transaction},
+    authority_tests::{call_move, init_state_with_ids, submit_and_execute},
     move_integration_tests::{build_and_publish_test_package, build_test_package},
 };
 
 use move_binary_format::CompiledModule;
+use move_core_types::identifier::Identifier;
+use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
+    MOVE_STDLIB_PACKAGE_ID,
     base_types::ObjectID,
     error::{RtdErrorKind, UserInputError},
     object::{Data, ObjectRead, Owner},
-    transaction::{TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TransactionData},
+    transaction::{Argument, TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TransactionData},
     utils::to_sender_signed_transaction,
 };
 
@@ -20,11 +23,11 @@ use rtd_types::crypto::{AccountKeyPair, get_key_pair};
 use crate::authority::move_integration_tests::{
     build_multi_publish_txns, build_package, run_multi_txns,
 };
-use std::collections::HashSet;
 use rtd_framework::BuiltInFramework;
 use rtd_types::effects::TransactionEffectsAPI;
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use std::collections::HashSet;
 
 #[tokio::test]
 #[cfg_attr(msim, ignore)]
@@ -96,7 +99,7 @@ async fn test_publish_empty_package() {
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
     let rgp = authority.reference_gas_price_for_testing().unwrap();
-    let gas_object = authority.get_object(&gas).await;
+    let gas_object = authority.get_object(&gas);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
 
     // empty package
@@ -109,7 +112,7 @@ async fn test_publish_empty_package() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let err = send_and_confirm_transaction(&authority, transaction)
+    let err = submit_and_execute(&authority, transaction)
         .await
         .unwrap_err();
     assert_eq!(
@@ -129,16 +132,13 @@ async fn test_publish_empty_package() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let result = send_and_confirm_transaction(&authority, transaction)
-        .await
-        .unwrap()
-        .1;
+    let result = submit_and_execute(&authority, transaction).await.unwrap().1;
     assert_eq!(
         result.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::VMVerificationOrDeserializationError,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::VMVerificationOrDeserializationError,
             command: Some(0)
-        }
+        })
     )
 }
 
@@ -148,7 +148,7 @@ async fn test_publish_duplicate_modules() {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
-    let gas_object = authority.get_object(&gas).await;
+    let gas_object = authority.get_object(&gas);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
     let rgp = authority.reference_gas_price_for_testing().unwrap();
 
@@ -165,16 +165,13 @@ async fn test_publish_duplicate_modules() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let result = send_and_confirm_transaction(&authority, transaction)
-        .await
-        .unwrap()
-        .1;
+    let result = submit_and_execute(&authority, transaction).await.unwrap().1;
     assert_eq!(
         result.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::VMVerificationOrDeserializationError,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::VMVerificationOrDeserializationError,
             command: Some(0)
-        }
+        })
     )
 }
 
@@ -184,7 +181,7 @@ async fn test_publish_extraneous_bytes_modules() {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas = ObjectID::random();
     let authority = init_state_with_ids(vec![(sender, gas)]).await;
-    let gas_object = authority.get_object(&gas).await;
+    let gas_object = authority.get_object(&gas);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
     let rgp = authority.reference_gas_price_for_testing().unwrap();
 
@@ -201,14 +198,11 @@ async fn test_publish_extraneous_bytes_modules() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let result = send_and_confirm_transaction(&authority, transaction)
-        .await
-        .unwrap()
-        .1;
+    let result = submit_and_execute(&authority, transaction).await.unwrap().1;
     assert_eq!(result.status(), &ExecutionStatus::Success);
 
     // make the bytes invalid
-    let gas_object = authority.get_object(&gas).await;
+    let gas_object = authority.get_object(&gas);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
     let mut modules = correct_modules.clone();
     modules[0].push(0);
@@ -222,20 +216,17 @@ async fn test_publish_extraneous_bytes_modules() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let result = send_and_confirm_transaction(&authority, transaction)
-        .await
-        .unwrap()
-        .1;
+    let result = submit_and_execute(&authority, transaction).await.unwrap().1;
     assert_eq!(
         result.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::VMVerificationOrDeserializationError,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::VMVerificationOrDeserializationError,
             command: Some(0)
-        }
+        })
     );
 
     // make the bytes invalid, in a different way
-    let gas_object = authority.get_object(&gas).await;
+    let gas_object = authority.get_object(&gas);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
     let mut modules = correct_modules.clone();
     let first_module = modules[0].clone();
@@ -250,20 +241,17 @@ async fn test_publish_extraneous_bytes_modules() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let result = send_and_confirm_transaction(&authority, transaction)
-        .await
-        .unwrap()
-        .1;
+    let result = submit_and_execute(&authority, transaction).await.unwrap().1;
     assert_eq!(
         result.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::VMVerificationOrDeserializationError,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::VMVerificationOrDeserializationError,
             command: Some(0)
-        }
+        })
     );
 
     // make the bytes invalid by adding metadata
-    let gas_object = authority.get_object(&gas).await;
+    let gas_object = authority.get_object(&gas);
     let gas_object_ref = gas_object.unwrap().compute_object_reference();
     let mut modules = correct_modules.clone();
     let new_bytes = {
@@ -287,16 +275,13 @@ async fn test_publish_extraneous_bytes_modules() {
         rgp,
     );
     let transaction = to_sender_signed_transaction(data, &sender_key);
-    let result = send_and_confirm_transaction(&authority, transaction)
-        .await
-        .unwrap()
-        .1;
+    let result = submit_and_execute(&authority, transaction).await.unwrap().1;
     assert_eq!(
         result.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::VMVerificationOrDeserializationError,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::VMVerificationOrDeserializationError,
             command: Some(0)
-        }
+        })
     )
 }
 
@@ -360,4 +345,71 @@ async fn test_publish_more_than_max_packages_error() {
             }
         }
     );
+}
+
+// Deserialization of publish/upgrade modules moved from execution into loading (gated by
+// `enable_unified_linkage`), which runs before the typing pass. So for a PTB whose command 0 is a
+// type-mismatched `MoveCall` and command 1 publishes undeserializable bytes, the reported error
+// flips: typing reports the type error at command 0 (off), vs loading reports the deserialization
+// error at command 1 (on).
+#[tokio::test]
+#[cfg_attr(msim, ignore)]
+async fn test_publish_deserialize_error_phasing() {
+    async fn run(unified_linkage: bool) -> (ExecutionErrorKind, Option<usize>) {
+        let _guard = ProtocolConfig::apply_overrides_for_testing(move |_, mut config| {
+            config.set_enable_unified_linkage_for_testing(unified_linkage);
+            config.set_harden_linkage_consistency_for_testing(unified_linkage);
+            config
+        });
+
+        let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
+        let gas_object_id = ObjectID::random();
+        let authority = init_state_with_ids(vec![(sender, gas_object_id)]).await;
+
+        // Valid modules, corrupted so deserialization fails.
+        let mut modules =
+            build_test_package("object_owner", /* with_unpublished_deps */ false);
+        modules[0].push(0);
+
+        let mut builder = ProgrammableTransactionBuilder::new();
+        // command 0: pass the gas coin (a `Coin<RTD>`) where `vector<u8>` is expected => type error.
+        builder.programmable_move_call(
+            MOVE_STDLIB_PACKAGE_ID,
+            Identifier::new("ascii").unwrap(),
+            Identifier::new("string").unwrap(),
+            vec![],
+            vec![Argument::GasCoin],
+        );
+        // command 1: publish undeserializable modules.
+        let cap = builder.publish_upgradeable(modules, BuiltInFramework::all_package_ids());
+        builder.transfer_arg(sender, cap);
+
+        let effects = run_multi_txns(&authority, sender, &sender_key, &gas_object_id, builder)
+            .await
+            .unwrap()
+            .1
+            .into_data();
+        match effects.status() {
+            ExecutionStatus::Failure(ExecutionFailure { error, command }) => {
+                (error.clone(), *command)
+            }
+            s => panic!("expected failure, got {s:?}"),
+        }
+    }
+
+    // Old phasing: type error surfaces first, at the move call.
+    let (off_kind, off_cmd) = run(false).await;
+    assert_ne!(
+        off_kind,
+        ExecutionErrorKind::VMVerificationOrDeserializationError
+    );
+    assert_eq!(off_cmd, Some(0));
+
+    // New phasing: deserialization error surfaces first, at the publish.
+    let (on_kind, on_cmd) = run(true).await;
+    assert_eq!(
+        on_kind,
+        ExecutionErrorKind::VMVerificationOrDeserializationError
+    );
+    assert_eq!(on_cmd, Some(1));
 }

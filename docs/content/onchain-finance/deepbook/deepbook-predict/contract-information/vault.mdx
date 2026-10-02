@@ -1,0 +1,29 @@
+---
+title: Vault
+description: Upstream Sui DeepBook Predict liquidity pool design; no RTD pool is verified.
+keywords:
+  - deepbook predict
+  - pool vault
+  - liquidity
+  - upstream design
+---
+
+This is a source design reference for the upstream Sui `PoolVault` and PLP flow. **No RTD Predict pool, PLP type, USDC quote coin, or configured capacity has been verified.** Numeric bounds and balances from the earlier Mainnet and Testnet tables were inherited from another chain and have been removed.
+
+## Pool accounting {#accounting-model}
+
+The pool holds capital backing the market positions. Its accounting separates idle collateral from capital assigned to individual expiry markets, pending liquidity requests, and liabilities. Before an RTD port can accept funds, its collateral type, payout coverage, rounding, and share accounting must be reviewed against the chosen Move source and tested on the target chain.
+
+## Asynchronous liquidity {#async-liquidity}
+
+The upstream design queues supply and withdrawal requests. Submitting a request does not immediately mint or burn a pool share. A later valuation cycle computes one pool mark and processes eligible queue entries under their individual minimum-output bounds. A caller must inspect the resulting events and balances to know what was filled, refunded, or left pending.
+
+## The flush {#the-flush}
+
+A pool valuation starts by snapshotting market state, values the markets at that frozen mark, then finishes and applies queue fills. This can span multiple transactions. The source includes a recovery path for a stale or incomplete valuation, but its deadlines and authority checks are deployment configuration. No RTD operator, market set, or schedule is established by these pages.
+
+## Funding a market {#rebalance}
+
+A new expiry market needs working collateral before it can mint positions. The pool may move idle collateral to or from a market while preserving per-market payout coverage. An RTD deployment must verify that this mechanism works with the chosen quote coin and that a real market is funded before publishing a trading guide.
+
+See [Design](/onchain-finance/deepbook/deepbook-predict/design) for the overall architecture and [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) for deployment status.

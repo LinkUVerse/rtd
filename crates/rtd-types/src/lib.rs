@@ -7,7 +7,7 @@
     rust_2021_compatibility
 )]
 
-use base_types::{SequenceNumber, RtdAddress};
+use base_types::{RtdAddress, SequenceNumber};
 use move_binary_format::CompiledModule;
 use move_binary_format::file_format::{AbilitySet, SignatureToken};
 use move_bytecode_utils::resolve_struct;
@@ -29,6 +29,7 @@ pub mod accumulator_event;
 pub mod accumulator_metadata;
 pub mod accumulator_root;
 pub mod address_alias;
+pub mod allowance;
 pub mod authenticator_state;
 pub mod balance;
 pub mod balance_change;
@@ -77,24 +78,25 @@ pub mod move_package;
 pub mod multisig;
 pub mod multisig_legacy;
 pub mod nitro_attestation;
+pub mod node_role;
 pub mod object;
 pub mod passkey_authenticator;
 pub mod programmable_transaction_builder;
-pub mod proto_value;
 pub mod ptb_trace;
-pub mod quorum_driver_types;
 pub mod randomness_state;
 pub mod rpc_proto_conversions;
-pub mod signature;
-pub mod signature_verification;
-pub mod storage;
 pub mod rtd_sdk_types_conversions;
 pub mod rtd_serde;
 pub mod rtd_system_state;
+pub mod signature;
+pub mod signature_verification;
+pub mod storage;
 pub mod supported_protocol_versions;
 pub mod test_checkpoint_data_builder;
 pub mod traffic_control;
 pub mod transaction;
+pub mod transaction_deny_rules;
+pub mod transaction_driver_types;
 pub mod transaction_executor;
 pub mod transfer;
 pub mod type_input;
@@ -143,10 +145,25 @@ built_in_ids! {
     RTD_DENY_LIST_ADDRESS / RTD_DENY_LIST_OBJECT_ID = 0x403;
     RTD_ACCUMULATOR_ROOT_ADDRESS / RTD_ACCUMULATOR_ROOT_OBJECT_ID = 0xacc;
     RTD_ADDRESS_ALIAS_STATE_ADDRESS / RTD_ADDRESS_ALIAS_STATE_OBJECT_ID = 0xa;
+    RTD_FORWARDING_ADDRESS_REGISTRY_ADDRESS / RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID = 0xfa;
 }
 
 pub const RTD_SYSTEM_STATE_OBJECT_SHARED_VERSION: SequenceNumber = OBJECT_START_VERSION;
 pub const RTD_CLOCK_OBJECT_SHARED_VERSION: SequenceNumber = OBJECT_START_VERSION;
+
+/// System objects that a transaction may read *implicitly* during execution, i.e. without declaring
+/// them as shared inputs. Their read version is recorded in effects (as a read-only consensus
+/// object) and reproduced when executing from effects (checkpoint execution during state sync, and
+/// crash recovery) so the read resolves to the same version on every node. Execution paths that are
+/// not sequenced by consensus (dev-inspect / dry-run) pin these objects at their latest committed
+/// versions instead.
+///
+/// Membership here only says the object *may* be read implicitly, so its read version must be
+/// reproducible. A transaction can still declare such an object as an explicit shared input (e.g.
+/// a settlement transaction mutating the accumulator root, or a user transaction that passes it
+/// in); declared inputs are version-assigned through the normal shared-input path, independent of
+/// this set. Extend this as more implicitly-read system objects arise.
+pub const IMPLICITLY_READ_SYSTEM_OBJECTS: &[ObjectID] = &[RTD_ACCUMULATOR_ROOT_OBJECT_ID];
 
 pub fn rtd_framework_address_concat_string(suffix: &str) -> String {
     format!("{}{suffix}", RTD_FRAMEWORK_ADDRESS.to_hex_literal())
@@ -188,8 +205,8 @@ pub fn parse_rtd_fq_name(s: &str) -> anyhow::Result<(ModuleId, String)> {
 /// brackets). Parsing succeeds if and only if `s` matches this format exactly, with no remaining
 /// input. This function is intended for use within the authority codebase.
 pub fn parse_rtd_struct_tag(s: &str) -> anyhow::Result<StructTag> {
-    use move_core_types::parsing::types::ParsedStructType;
-    ParsedStructType::parse(s)?.into_struct_tag(&resolve_address)
+    use move_core_types::parsing::types::ParsedDatatype;
+    ParsedDatatype::parse(s)?.into_struct_tag(&resolve_address)
 }
 
 /// Parse `s` as a type: Either a struct type (see `parse_rtd_struct_tag`), a primitive type, or a

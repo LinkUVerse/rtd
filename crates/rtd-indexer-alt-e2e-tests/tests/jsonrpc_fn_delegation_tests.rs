@@ -1,140 +1,112 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::Context;
-use prometheus::Registry;
 use reqwest::Client;
-use serde_json::{Value, json};
-use rtd_futures::service::Service;
-use rtd_indexer_alt_jsonrpc::{
-    NodeArgs, RpcArgs, args::SystemPackageTaskArgs, config::RpcConfig, start_rpc,
-};
-use rtd_indexer_alt_reader::bigtable_reader::BigtableArgs;
-use rtd_macros::sim_test;
-use rtd_pg_db::{DbArgs, temp::get_available_port};
+use rtd_indexer_alt_e2e_tests::OffchainCluster;
+use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
+use rtd_indexer_alt_e2e_tests::local_ingestion_client_args;
+use rtd_indexer_alt_jsonrpc::NodeArgs as JsonRpcNodeArgs;
+use rtd_kvstore::ALL_PIPELINE_NAMES;
 use rtd_swarm_config::genesis_config::AccountConfig;
-use rtd_test_transaction_builder::{make_publish_transaction, make_staking_transaction};
-use rtd_types::{base_types::RtdAddress, transaction::TransactionDataAPI};
-use test_cluster::{TestCluster, TestClusterBuilder};
+use rtd_test_transaction_builder::TestTransactionBuilder;
+use rtd_test_transaction_builder::make_staking_transaction;
+use rtd_types::RTD_SYSTEM_PACKAGE_ID;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::effects::TransactionEffects;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::MIST_PER_RTD;
+use rtd_types::governance::ADD_STAKE_FUN_NAME;
+use rtd_types::object::Owner;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::rtd_system_state::RTD_SYSTEM_MODULE_NAME;
+use rtd_types::transaction::Argument;
+use rtd_types::transaction::CallArg;
+use rtd_types::transaction::Command;
+use rtd_types::transaction::ObjectArg;
+use rtd_types::transaction::TransactionData;
+use rtd_types::transaction::TransactionDataAPI;
+use serde_json::Value;
+use serde_json::json;
+use test_cluster::TestCluster;
+use test_cluster::TestClusterBuilder;
 use url::Url;
+
+// SplitCoins requires fewer than 512 amount arguments.
+const MAX_STAKES_PER_SPLIT: usize = 500;
+const STAKES_PER_CREATION_TX: usize = 580;
+const TEST_GAS_BUDGET: u64 = 50_000_000_000;
 
 struct FnDelegationTestCluster {
     onchain_cluster: TestCluster,
-    rpc_url: Url,
-    /// Hold on to the service so it doesn't get dropped (and therefore aborted) until the cluster
-    /// goes out of scope.
-    #[allow(unused)]
-    service: Service,
+    offchain: OffchainCluster,
     client: Client,
+    /// Checkpoint ingestion directory shared between TestCluster and OffchainCluster, held to keep
+    /// the temp dir alive for the lifetime of the cluster.
+    _ingestion_dir: tempfile::TempDir,
 }
 
 impl FnDelegationTestCluster {
-    /// Creates a new test cluster with an RPC with transaction execution enabled.
     async fn new() -> anyhow::Result<Self> {
+        let (client_args, ingestion_dir) = local_ingestion_client_args();
+
         let onchain_cluster = TestClusterBuilder::new()
-            .with_num_validators(1)
-            .with_epoch_duration_ms(300_000) // 5 minutes
+            .with_num_validators(2)
+            .with_epoch_duration_ms(300_000)
             .with_accounts(vec![
                 AccountConfig {
                     address: None,
-                    gas_amounts: vec![1_000_000_000_000; 2],
+                    gas_amounts: vec![1_000_000_000_000; 5],
                 };
                 4
             ])
+            .with_data_ingestion_dir(ingestion_dir.path().to_owned())
             .build()
             .await;
 
-        // Unwrap since we know the URL should be valid.
         let fullnode_rpc_url = Url::parse(onchain_cluster.rpc_url())?;
 
-        let rpc_listen_address =
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), get_available_port());
-        let rpc_url = Url::parse(&format!("http://{}/", rpc_listen_address))
-            .expect("Failed to parse RPC URL");
-
-        // We don't expose metrics in these tests, but we create a registry to collect them anyway.
-        let registry = Registry::new();
-
-        let rpc_args = RpcArgs {
-            rpc_listen_address,
-            ..Default::default()
-        };
-
-        let service = start_rpc(
-            None,
-            None,
-            DbArgs::default(),
-            BigtableArgs::default(),
-            rpc_args,
-            NodeArgs {
-                fullnode_rpc_url: Some(fullnode_rpc_url),
+        // Pass `client_args` to link the OffchainCluster to the checkpoint ingestion directory
+        // written to by the TestCluster
+        let offchain = OffchainCluster::new(
+            client_args,
+            OffchainClusterConfig {
+                jsonrpc_node_args: JsonRpcNodeArgs {
+                    fullnode_grpc_url: Some(fullnode_rpc_url.to_string()),
+                },
+                ..Default::default()
             },
-            SystemPackageTaskArgs::default(),
-            RpcConfig::default(),
-            &registry,
+            &prometheus::Registry::new(),
         )
         .await
-        .expect("Failed to start JSON-RPC server");
+        .context("Failed to create off-chain cluster")?;
 
         Ok(Self {
             onchain_cluster,
-            rpc_url,
-            service,
+            offchain,
             client: Client::new(),
+            _ingestion_dir: ingestion_dir,
         })
     }
 
-    /// Builds a simple transaction and returns the digest, tx bytes, and sigs to be used for testing.
-    async fn transfer_transaction(&self) -> anyhow::Result<(String, String, Vec<String>)> {
-        let addresses = self.onchain_cluster.wallet.get_addresses();
-
-        let recipient = addresses[1];
-        let tx = self
-            .onchain_cluster
-            .test_transaction_builder()
-            .await
-            .transfer_rtd(Some(1_000), recipient)
-            .build();
-        let tx_digest = tx.digest().to_string();
-        let signed_tx = self.onchain_cluster.wallet.sign_transaction(&tx).await;
-        let (tx_bytes, sigs) = signed_tx.to_tx_bytes_and_signatures();
-        let tx_bytes = tx_bytes.encoded();
-        let sigs: Vec<_> = sigs.iter().map(|sig| sig.encoded()).collect();
-
-        Ok((tx_digest, tx_bytes, sigs))
-    }
-
-    /// Builds a transaction that would abort if called by a normal user.
-    async fn privileged_transaction(&self) -> anyhow::Result<(String, String, Vec<String>)> {
-        let tx: rtd_types::transaction::TransactionData = self
-            .onchain_cluster
-            .test_transaction_builder()
-            .await
-            .call_request_remove_validator()
-            .build();
-        let tx_digest = tx.digest().to_string();
-        let signed_tx = self.onchain_cluster.wallet.sign_transaction(&tx).await;
-        let (tx_bytes, sigs) = signed_tx.to_tx_bytes_and_signatures();
-        let tx_bytes = tx_bytes.encoded();
-        let sigs: Vec<_> = sigs.iter().map(|sig| sig.encoded()).collect();
-
-        Ok((tx_digest, tx_bytes, sigs))
-    }
-
     async fn get_validator_address(&self) -> RtdAddress {
+        self.get_validator_addresses().await[0]
+    }
+
+    async fn get_validator_addresses(&self) -> Vec<RtdAddress> {
         self.onchain_cluster
-            .rtd_client()
-            .governance_api()
-            .get_latest_rtd_system_state()
+            .grpc_client()
+            .get_system_state_summary(None)
             .await
             .unwrap()
             .active_validators
-            .first()
-            .unwrap()
-            .rtd_address
+            .iter()
+            .map(|v| v.rtd_address)
+            .collect()
     }
 
     async fn execute_jsonrpc(&self, method: String, params: Value) -> anyhow::Result<Value> {
@@ -147,7 +119,7 @@ impl FnDelegationTestCluster {
 
         let response = self
             .client
-            .post(self.rpc_url.clone())
+            .post(self.offchain.jsonrpc_url())
             .json(&query)
             .send()
             .await
@@ -160,269 +132,131 @@ impl FnDelegationTestCluster {
 
         Ok(body)
     }
+
+    /// Wait for the indexer, consistent store, and BigTable to all catch up to the fullnode's
+    /// latest checkpoint.
+    async fn wait_for_indexing(&self) {
+        let cp = self
+            .onchain_cluster
+            .fullnode_handle
+            .rtd_node
+            .state()
+            .get_latest_checkpoint_sequence_number()
+            .unwrap();
+
+        let timeout = Duration::from_secs(60);
+        self.offchain
+            .wait_for_indexer(cp, timeout)
+            .await
+            .expect("Timed out waiting for indexer");
+        self.offchain
+            .wait_for_consistent_store(cp, timeout)
+            .await
+            .expect("Timed out waiting for consistent store");
+        self.offchain
+            .wait_for_bigtable(&ALL_PIPELINE_NAMES, cp, timeout)
+            .await
+            .expect("Timed out waiting for bigtable");
+    }
 }
 
-#[sim_test]
-async fn test_execution() {
-    telemetry_subscribers::init_for_testing();
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let (tx_digest, tx_bytes, sigs) = test_cluster.transfer_transaction().await.unwrap();
-
-    // Call the executeTransactionBlock method and check that the response is valid.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_executeTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": tx_bytes,
-                "signatures": sigs,
-                "options": {
-                    "showInput": true,
-                    "showRawInput": true,
-                    "showEffects": true,
-                    "showRawEffects": true,
-                    "showEvents": true,
-                    "showObjectChanges": true,
-                    "showBalanceChanges": true,
-                },
-            }),
-        )
-        .await
-        .unwrap();
-
-    tracing::info!("execution rpc response is {:?}", response);
-
-    // Checking that all the requested fields are present in the response.
-    assert_eq!(response["result"]["digest"], tx_digest);
-    assert!(response["result"]["transaction"].is_object());
-    assert!(response["result"]["rawTransaction"].is_string());
-    assert!(response["result"]["effects"].is_object());
-    assert!(response["result"]["rawEffects"].is_array());
-    assert!(response["result"]["events"].is_array());
-    assert!(response["result"]["objectChanges"].is_array());
-    assert!(response["result"]["balanceChanges"].is_array());
-}
-
-#[sim_test]
-async fn test_execution_with_deprecated_mode() {
-    telemetry_subscribers::init_for_testing();
-
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let (_, tx_bytes, sigs) = test_cluster.transfer_transaction().await.unwrap();
-
-    // Call the executeTransactionBlock method and check that the response is valid.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_executeTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": tx_bytes,
-                "signatures": sigs,
-                "request_type": "WaitForLocalExecution",
-            }),
-        )
-        .await
-        .unwrap();
-
-    tracing::info!("execution rpc response is {:?}", response);
-
-    assert_eq!(response["error"]["code"], -32602);
-    assert_eq!(
-        response["error"]["message"],
-        "Invalid Params: WaitForLocalExecution mode is deprecated"
-    );
-}
-
-#[sim_test]
-async fn test_execution_with_no_sigs() {
-    telemetry_subscribers::init_for_testing();
-
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let (_, tx_bytes, _) = test_cluster.transfer_transaction().await.unwrap();
-
-    // Call the executeTransactionBlock method and check that the response is valid.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_executeTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": tx_bytes,
-            }),
-        )
-        .await
-        .unwrap();
-
-    tracing::info!("execution rpc response is {:?}", response);
-
-    assert_eq!(response["error"]["code"], -32602);
-    assert_eq!(response["error"]["message"], "Invalid params");
+/// Pulls the single sender-owned object created by a staking tx — the newly minted StakedRtd.
+fn staked_rtd_id_from_effects(effects: &TransactionEffects, owner: RtdAddress) -> ObjectID {
+    let mut created = effects.created().into_iter().filter_map(|((id, _, _), o)| {
+        matches!(o, Owner::AddressOwner(addr) if addr == owner).then_some(id)
+    });
+    let id = created
+        .next()
+        .expect("staking tx should create a StakedRtd owned by the sender");
     assert!(
-        response["error"]["data"]
-            .as_str()
-            .unwrap()
-            .starts_with("missing field `signatures`")
+        created.next().is_none(),
+        "unexpected additional sender-owned objects created by staking tx"
     );
+    id
 }
 
-#[sim_test]
-async fn test_execution_with_empty_sigs() {
-    telemetry_subscribers::init_for_testing();
+/// Projects a `getStakes`/`getStakesByIds` response to `(validatorAddress, [stakedRtdId])` so
+/// comparisons are insensitive to reward values (which can shift between back-to-back dry runs).
+fn stake_id_projection(result: &Value) -> Vec<(String, Vec<String>)> {
+    result
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            let validator = entry["validatorAddress"].as_str().unwrap().to_string();
+            let ids = entry["stakes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s["stakedRtdId"].as_str().unwrap().to_string())
+                .collect();
+            (validator, ids)
+        })
+        .collect()
+}
 
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
+async fn create_many_stakes(
+    cluster: &TestCluster,
+    stake_coin: ObjectRef,
+    validator: RtdAddress,
+    mut count: usize,
+) {
+    let wallet = &cluster.wallet;
+    let gas_price = wallet.get_reference_gas_price().await.unwrap();
+    let accounts_and_objs = wallet.get_all_accounts_and_gas_objects().await.unwrap();
 
-    let (_, tx_bytes, _) = test_cluster.transfer_transaction().await.unwrap();
+    let (sender, gas_objects) = &accounts_and_objs[0];
+    let gas_object = gas_objects
+        .iter()
+        .copied()
+        .find(|object| object.0 != stake_coin.0)
+        .expect("missing gas object distinct from stake coin");
 
-    // Call the executeTransactionBlock method and check that the response is valid.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_executeTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": tx_bytes,
-                "signatures": [],
-            }),
-        )
-        .await
-        .unwrap();
+    let mut ptb = ProgrammableTransactionBuilder::new();
+    let system = ptb.input(CallArg::RTD_SYSTEM_MUT).unwrap();
+    let stake_coin = ptb.obj(ObjectArg::ImmOrOwnedObject(stake_coin)).unwrap();
+    let validator = ptb.pure(validator).unwrap();
+    let stake_amount = ptb.pure(MIST_PER_RTD).unwrap();
 
-    tracing::info!("execution rpc response is {:?}", response);
+    while count > 0 {
+        let chunk_size = count.min(MAX_STAKES_PER_SPLIT);
+        let Argument::Result(split_command) = ptb.command(Command::SplitCoins(
+            stake_coin,
+            vec![stake_amount; chunk_size],
+        )) else {
+            unreachable!("SplitCoins should return a command result")
+        };
 
-    assert_eq!(response["error"]["code"], -32002);
-    assert_eq!(
-        response["error"]["message"],
-        "Invalid user signature: Expect 1 signer signatures but got 0"
+        for result in 0..chunk_size {
+            ptb.programmable_move_call(
+                RTD_SYSTEM_PACKAGE_ID,
+                RTD_SYSTEM_MODULE_NAME.to_owned(),
+                ADD_STAKE_FUN_NAME.to_owned(),
+                vec![],
+                vec![
+                    system,
+                    Argument::NestedResult(split_command, result as u16),
+                    validator,
+                ],
+            );
+        }
+
+        count -= chunk_size;
+    }
+
+    let transaction_data = TransactionData::new_programmable(
+        *sender,
+        vec![gas_object],
+        ptb.finish(),
+        TEST_GAS_BUDGET,
+        gas_price,
     );
+
+    let transaction = wallet.sign_transaction(&transaction_data).await;
+    wallet.execute_transaction_must_succeed(transaction).await;
 }
 
-#[sim_test]
-async fn test_execution_with_aborted_tx() {
-    telemetry_subscribers::init_for_testing();
-
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let (_, tx_bytes, sigs) = test_cluster.privileged_transaction().await.unwrap();
-
-    // Call the executeTransactionBlock method and check that the response is valid.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_executeTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": tx_bytes,
-                "signatures": sigs,
-                "options": {
-                    "showEffects": true,
-                },
-            }),
-        )
-        .await
-        .unwrap();
-
-    tracing::info!("execution rpc response is {:?}", response);
-
-    assert_eq!(response["result"]["effects"]["status"]["status"], "failure");
-}
-
-#[sim_test]
-async fn test_dry_run() {
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let (_, tx_bytes, _) = test_cluster.transfer_transaction().await.unwrap();
-
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_dryRunTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": tx_bytes,
-            }),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response["result"]["effects"]["status"]["status"], "success");
-}
-
-#[sim_test]
-async fn test_dry_run_with_invalid_tx() {
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtd_dryRunTransactionBlock".to_string(),
-            json!({
-                "tx_bytes": "invalid_tx_bytes",
-            }),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response["error"]["code"], -32602);
-    assert_eq!(response["error"]["message"], "Invalid params");
-    assert!(
-        response["error"]["data"]
-            .as_str()
-            .unwrap()
-            .starts_with("Invalid value was given to the function")
-    );
-}
-
-#[sim_test]
-async fn test_get_all_balances() {
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-
-    let address = test_cluster.onchain_cluster.wallet.get_addresses()[1];
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtdx_getAllBalances".to_string(),
-            json!({ "owner": address.to_string().as_str()}),
-        )
-        .await
-        .unwrap();
-    // Only check that FN can return a valid response and not check the contents;
-    // the contents is FN logic and thus should be tested on the FN side.
-    assert_eq!(response["result"][0]["coinType"], "0x2::rtd::RTD");
-}
-
-#[sim_test]
-async fn test_get_all_balances_with_invalid_address() {
-    let test_cluster = FnDelegationTestCluster::new()
-        .await
-        .expect("Failed to create test cluster");
-    let invalid_address = "23333";
-
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtdx_getAllBalances".to_string(),
-            json!({ "owner": invalid_address }),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response["error"]["code"], -32602);
-    assert_eq!(response["error"]["message"], "Invalid params");
-    assert!(
-        response["error"]["data"]
-            .as_str()
-            .unwrap()
-            .contains("Deserialization failed")
-    );
-}
-
-#[sim_test]
+#[tokio::test]
 async fn test_get_stakes_and_by_ids() {
     let test_cluster = FnDelegationTestCluster::new()
         .await
@@ -438,6 +272,8 @@ async fn test_get_stakes_and_by_ids() {
     wallet
         .execute_transaction_must_succeed(staking_transaction)
         .await;
+
+    test_cluster.wait_for_indexing().await;
 
     // Get the stake by owner.
     let get_stakes_response = test_cluster
@@ -470,7 +306,53 @@ async fn test_get_stakes_and_by_ids() {
     assert_eq!(get_stakes_response, get_stakes_by_ids_response);
 }
 
-#[sim_test]
+#[tokio::test]
+async fn test_get_stakes_batches_reward_calculation() {
+    let test_cluster = FnDelegationTestCluster::new()
+        .await
+        .expect("Failed to create test cluster");
+
+    let validator = test_cluster.get_validator_address().await;
+    let accounts_and_objs = test_cluster
+        .onchain_cluster
+        .wallet
+        .get_all_accounts_and_gas_objects()
+        .await
+        .unwrap();
+
+    let stake_owner = accounts_and_objs[0].0;
+    let stake_coins = [accounts_and_objs[0].1[1], accounts_and_objs[0].1[2]];
+    for stake_coin in stake_coins {
+        create_many_stakes(
+            &test_cluster.onchain_cluster,
+            stake_coin,
+            validator,
+            STAKES_PER_CREATION_TX,
+        )
+        .await;
+    }
+
+    test_cluster.wait_for_indexing().await;
+
+    let response = test_cluster
+        .execute_jsonrpc(
+            "rtdx_getStakes".to_string(),
+            json!({ "owner": stake_owner }),
+        )
+        .await
+        .unwrap();
+
+    assert!(response["error"].is_null(), "request failed: {response}");
+    let stake_count = response["result"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|delegation| delegation["stakes"].as_array().unwrap().len())
+        .sum::<usize>();
+    assert_eq!(stake_count, STAKES_PER_CREATION_TX * stake_coins.len());
+}
+
+#[tokio::test]
 async fn test_get_stakes_invalid_params() {
     let test_cluster = FnDelegationTestCluster::new()
         .await
@@ -512,7 +394,154 @@ async fn test_get_stakes_invalid_params() {
     );
 }
 
-#[sim_test]
+#[tokio::test]
+async fn test_stakes_correct_ordering() {
+    let test_cluster = FnDelegationTestCluster::new()
+        .await
+        .expect("Failed to create test cluster");
+
+    let wallet = &test_cluster.onchain_cluster.wallet;
+    let validators = test_cluster.get_validator_addresses().await;
+    assert!(validators.len() >= 2, "need at least 2 validators");
+    let validator_a = validators[0];
+    let validator_b = validators[1];
+
+    // Stake once to validator A.
+    let tx_a = make_staking_transaction(wallet, validator_a).await;
+    let stake_owner_address = tx_a.data().transaction_data().sender();
+    let effects_a = wallet.execute_transaction_must_succeed(tx_a).await.effects;
+    let stake_a = staked_rtd_id_from_effects(&effects_a, stake_owner_address);
+
+    // Stake twice to validator B (from the same owner).
+    let tx_b1 = make_staking_transaction(wallet, validator_b).await;
+    let effects_b1 = wallet.execute_transaction_must_succeed(tx_b1).await.effects;
+    let stake_b1 = staked_rtd_id_from_effects(&effects_b1, stake_owner_address);
+    let tx_b2 = make_staking_transaction(wallet, validator_b).await;
+    let effects_b2 = wallet.execute_transaction_must_succeed(tx_b2).await.effects;
+    let stake_b2 = staked_rtd_id_from_effects(&effects_b2, stake_owner_address);
+
+    test_cluster.wait_for_indexing().await;
+
+    let response = test_cluster
+        .execute_jsonrpc(
+            "rtdx_getStakes".to_string(),
+            json!({ "owner": stake_owner_address }),
+        )
+        .await
+        .unwrap();
+
+    let result = &response["result"];
+
+    // Should have 2 DelegatedStake entries (one per validator).
+    assert_eq!(result.as_array().unwrap().len(), 2);
+
+    // Validator A: exactly the stake from tx_a.
+    let entry_a = result
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["validatorAddress"] == validator_a.to_string().as_str())
+        .expect("missing DelegatedStake for validator A");
+    let entry_a_ids: Vec<&str> = entry_a["stakes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["stakedRtdId"].as_str().unwrap())
+        .collect();
+    assert_eq!(entry_a_ids, vec![stake_a.to_string().as_str()]);
+
+    // Validator B: the two stakes from tx_b1 and tx_b2 (order is `list_owned_objects`-driven,
+    // so compare as a set).
+    let entry_b = result
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["validatorAddress"] == validator_b.to_string().as_str())
+        .expect("missing DelegatedStake for validator B");
+    let entry_b_ids: std::collections::HashSet<String> = entry_b["stakes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["stakedRtdId"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        entry_b_ids,
+        std::collections::HashSet::from([stake_b1.to_string(), stake_b2.to_string()])
+    );
+
+    // All stakes should be Pending (epoch 0, no rewards yet).
+    for entry in result.as_array().unwrap() {
+        for stake in entry["stakes"].as_array().unwrap() {
+            assert_eq!(stake["status"], "Pending");
+        }
+    }
+
+    // Advance one epoch so the stakes reach their activation epoch. Stakes requested in epoch 0
+    // have activation_epoch = 1, so after one reconfiguration current_epoch >= activation_epoch.
+    test_cluster.onchain_cluster.trigger_reconfiguration().await;
+
+    test_cluster.wait_for_indexing().await;
+
+    let response = test_cluster
+        .execute_jsonrpc(
+            "rtdx_getStakes".to_string(),
+            json!({ "owner": stake_owner_address }),
+        )
+        .await
+        .unwrap();
+    let result = &response["result"];
+
+    // All stakes should now be Active
+    for entry in result.as_array().unwrap() {
+        for stake in entry["stakes"].as_array().unwrap() {
+            assert_eq!(stake["status"], "Active", "stake not active: {stake}");
+            let _reward: u64 = stake["estimatedReward"]
+                .as_str()
+                .expect("estimatedReward should be a BigInt string")
+                .parse()
+                .expect("estimatedReward should parse as u64");
+        }
+    }
+
+    // Query just validator B's two stakes by ID. Inner stake ordering follows caller-provided
+    // ID order, so feeding [b1, b2] should return them in that order.
+    let forward_response = test_cluster
+        .execute_jsonrpc(
+            "rtdx_getStakesByIds".to_string(),
+            json!({ "staked_rtd_ids": [stake_b1, stake_b2] }),
+        )
+        .await
+        .unwrap();
+
+    let forward_b_ids: Vec<String> = stake_id_projection(&forward_response["result"])
+        .into_iter()
+        .flat_map(|(_, ids)| ids)
+        .collect();
+    assert_eq!(
+        forward_b_ids,
+        vec![stake_b1.to_string(), stake_b2.to_string()]
+    );
+
+    // Reversing the input IDs flips the inner ordering.
+    let reversed_response = test_cluster
+        .execute_jsonrpc(
+            "rtdx_getStakesByIds".to_string(),
+            json!({ "staked_rtd_ids": [stake_b2, stake_b1] }),
+        )
+        .await
+        .unwrap();
+
+    let reversed_b_ids: Vec<String> = stake_id_projection(&reversed_response["result"])
+        .into_iter()
+        .flat_map(|(_, ids)| ids)
+        .collect();
+    assert_eq!(
+        reversed_b_ids,
+        vec![stake_b2.to_string(), stake_b1.to_string()]
+    );
+}
+
+#[tokio::test]
 async fn test_get_validators_apy() {
     let test_cluster = FnDelegationTestCluster::new()
         .await
@@ -531,81 +560,126 @@ async fn test_get_validators_apy() {
     );
 }
 
-#[sim_test]
-async fn test_get_balance() {
+/// Withdrawing a stake (calling `rtd_system::request_withdraw_stake`) deletes the StakedRtd
+/// object. With two stakes in play, withdrawing one of them should drop only that one from a
+/// `getStakesByIds` response covering both. The remaining stake must still come back. This is
+/// our documented divergence from legacy `rtd-json-rpc`, which returned Unstaked for the
+/// withdrawn one.
+#[tokio::test]
+async fn test_get_stakes_by_ids_omits_withdrawn() {
     let test_cluster = FnDelegationTestCluster::new()
         .await
         .expect("Failed to create test cluster");
+
     let wallet = &test_cluster.onchain_cluster.wallet;
+    let validator_address = test_cluster.get_validator_address().await;
 
-    // Publish another coin to better test the API.
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.extend(["packages", "coin"]);
-    let publish_transaction = make_publish_transaction(wallet, path).await;
-    let owner_address = publish_transaction.data().transaction_data().sender();
+    // Create two stakes.
+    let staking_tx_a = make_staking_transaction(wallet, validator_address).await;
+    let stake_owner = staking_tx_a.data().transaction_data().sender();
+    wallet.execute_transaction_must_succeed(staking_tx_a).await;
+    let staking_tx_b = make_staking_transaction(wallet, validator_address).await;
+    wallet.execute_transaction_must_succeed(staking_tx_b).await;
 
-    let execution_result = wallet
-        .execute_transaction_must_succeed(publish_transaction)
+    test_cluster.wait_for_indexing().await;
+
+    // Pull both stake IDs out of the get_stakes response.
+    let get_stakes_response = test_cluster
+        .execute_jsonrpc(
+            "rtdx_getStakes".to_string(),
+            json!({ "owner": stake_owner }),
+        )
+        .await
+        .unwrap();
+    let stake_ids: Vec<ObjectID> = get_stakes_response["result"][0]["stakes"]
+        .as_array()
+        .expect("missing stakes array")
+        .iter()
+        .map(|s| {
+            s["stakedRtdId"]
+                .as_str()
+                .expect("missing stakedRtdId")
+                .parse()
+                .expect("malformed stakedRtdId")
+        })
+        .collect();
+    assert_eq!(stake_ids.len(), 2, "expected two stakes, got {stake_ids:?}");
+    let withdrawn_stake_id = stake_ids[0];
+    let kept_stake_id = stake_ids[1];
+
+    // Withdraw the first stake.
+    let stake_ref = test_cluster
+        .onchain_cluster
+        .get_latest_object_ref(&withdrawn_stake_id)
         .await;
+    let gas_price = wallet.get_reference_gas_price().await.unwrap();
+    let accounts_and_objs = wallet.get_all_accounts_and_gas_objects().await.unwrap();
+    let sender = accounts_and_objs[0].0;
+    let gas_object = accounts_and_objs[0].1[0];
+    let unstake_tx = wallet
+        .sign_transaction(
+            &TestTransactionBuilder::new(sender, gas_object, gas_price)
+                .call_unstaking(stake_ref)
+                .build(),
+        )
+        .await;
+    wallet.execute_transaction_must_succeed(unstake_tx).await;
 
-    let package_id = execution_result.get_new_package_obj().unwrap().0;
+    test_cluster.wait_for_indexing().await;
 
-    // Test out the specified coin type.
-    // Parse the coin type so we have the same string representation as the used by fullnode.
-    let coin_type = rtd_types::parse_rtd_struct_tag(&format!("{}::my_coin::MY_COIN", package_id))
-        .unwrap()
-        .to_string();
-    let response = test_cluster
+    // Query both IDs. The withdrawn stake should be omitted; the kept one should still come
+    // back.
+    let get_by_id_response = test_cluster
         .execute_jsonrpc(
-            "rtdx_getBalance".to_string(),
-            json!({ "owner": owner_address.to_string().as_str(), "coinType": coin_type}),
+            "rtdx_getStakesByIds".to_string(),
+            json!({ "staked_rtd_ids": [withdrawn_stake_id, kept_stake_id] }),
         )
         .await
         .unwrap();
 
-    assert_eq!(response["result"]["totalBalance"], "1230");
-    assert_eq!(response["result"]["coinType"], coin_type);
+    let returned_ids: Vec<&str> = get_by_id_response["result"]
+        .as_array()
+        .expect("result should be an array")
+        .iter()
+        .flat_map(|delegated| {
+            delegated["stakes"]
+                .as_array()
+                .expect("stakes should be an array")
+                .iter()
+                .map(|s| s["stakedRtdId"].as_str().expect("missing stakedRtdId"))
+        })
+        .collect();
 
-    // Test out the default coin type.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtdx_getBalance".to_string(),
-            json!({ "owner": owner_address.to_string().as_str()}),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response["result"]["coinType"], "0x2::rtd::RTD");
-
-    // Test out the invalid coin type.
-    let response = test_cluster
-        .execute_jsonrpc(
-            "rtdx_getBalance".to_string(),
-            json!({ "owner": owner_address.to_string().as_str(), "coinType": "invalid_coin_type"}),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response["error"]["code"], -32602);
-    assert!(
-        response["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Invalid struct type: invalid_coin_type")
+    assert_eq!(
+        returned_ids,
+        vec![kept_stake_id.to_string().as_str()],
+        "expected only the kept stake to be returned, got {get_by_id_response}",
     );
 
-    // Test out the invalid address.
-    let response = test_cluster
+    // getStakes(owner) should also reflect the withdrawal — only the kept stake remains
+    // listed against this owner.
+    let get_stakes_response = test_cluster
         .execute_jsonrpc(
-            "rtdx_getBalance".to_string(),
-            json!({ "owner": "invalid_address", "coinType": coin_type}),
+            "rtdx_getStakes".to_string(),
+            json!({ "owner": stake_owner }),
         )
         .await
         .unwrap();
-    assert_eq!(response["error"]["code"], -32602);
-    assert!(
-        response["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Invalid params")
+    let owner_returned_ids: Vec<&str> = get_stakes_response["result"]
+        .as_array()
+        .expect("result should be an array")
+        .iter()
+        .flat_map(|delegated| {
+            delegated["stakes"]
+                .as_array()
+                .expect("stakes should be an array")
+                .iter()
+                .map(|s| s["stakedRtdId"].as_str().expect("missing stakedRtdId"))
+        })
+        .collect();
+    assert_eq!(
+        owner_returned_ids,
+        vec![kept_stake_id.to_string().as_str()],
+        "expected only the kept stake from getStakes(owner), got {get_stakes_response}",
     );
 }

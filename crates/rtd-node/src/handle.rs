@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//! RtdNodeHandle wraps RtdNode in a way rtdtable for access by test code.
+//! RtdNodeHandle wraps RtdNode in a way suitable for access by test code.
 //!
 //! When starting a RtdNode directly, in a test (as opposed to using Swarm), the node may be
 //! running inside of a simulator node. It is therefore a mistake to do something like:
@@ -76,10 +76,6 @@ impl RtdNodeHandle {
 
     pub fn shutdown_on_drop(&mut self) {
         self.shutdown_on_drop = true;
-    }
-
-    pub fn release_for_testing(&mut self) {
-        self.node.take();
     }
 }
 

@@ -1,10 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use rtd_types::multiaddr::Multiaddr;
 use std::net::SocketAddr;
 #[cfg(msim)]
 use std::sync::{Arc, atomic::AtomicI16};
-use rtd_types::multiaddr::Multiaddr;
 
 /// A singleton struct to manage IP addresses and ports for simtest.
 /// This allows us to generate unique IP addresses and ports for each node in simtest.
@@ -40,11 +40,12 @@ impl SimAddressManager {
 
 #[cfg(msim)]
 fn get_sim_address_manager() -> Arc<SimAddressManager> {
-    thread_local! {
-        // Uses Arc so that we could return a clone of the thread local singleton.
-        static SIM_ADDRESS_MANAGER: Arc<SimAddressManager> = Arc::new(SimAddressManager::new());
-    }
-    SIM_ADDRESS_MANAGER.with(|s| s.clone())
+    // Uses Arc so that we could return a clone of the process-global singleton.
+    static SIM_ADDRESS_MANAGER: std::sync::OnceLock<Arc<SimAddressManager>> =
+        std::sync::OnceLock::new();
+    SIM_ADDRESS_MANAGER
+        .get_or_init(|| Arc::new(SimAddressManager::new()))
+        .clone()
 }
 
 /// In simtest, we generate a new unique IP each time this function is called.
@@ -93,11 +94,12 @@ pub fn get_available_port(host: &str) -> u16 {
 
 #[cfg(not(msim))]
 fn get_ephemeral_port(host: &str) -> std::io::Result<u16> {
-    use std::net::{TcpListener, TcpStream};
+    use std::net::{TcpListener, TcpStream, UdpSocket};
 
     // Request a random available port from the OS
     let listener = TcpListener::bind((host, 0))?;
     let addr = listener.local_addr()?;
+    let _udp_socket = UdpSocket::bind(addr)?;
 
     // Create and accept a connection (which we'll promptly drop) in order to force the port
     // into the TIME_WAIT state, ensuring that the port will be reserved from some limited
@@ -110,7 +112,7 @@ fn get_ephemeral_port(host: &str) -> std::io::Result<u16> {
 
 /// Returns a new unique TCP address for the given host, by finding a new available port.
 pub fn new_tcp_address_for_testing(host: &str) -> Multiaddr {
-    format!("/ip4/{}/tcp/{}/http", host, get_available_port(host))
+    format!("/ip4/{}/tcp/{}/https", host, get_available_port(host))
         .parse()
         .unwrap()
 }
@@ -147,9 +149,9 @@ pub fn new_local_udp_address_for_testing() -> Multiaddr {
 }
 
 pub fn new_deterministic_tcp_address_for_testing(host: &str, port: u16) -> Multiaddr {
-    format!("/ip4/{host}/tcp/{port}/http").parse().unwrap()
+    format!("/ip4/{host}/tcp/{port}/https").parse().unwrap()
 }
 
 pub fn new_deterministic_udp_address_for_testing(host: &str, port: u16) -> Multiaddr {
-    format!("/ip4/{host}/udp/{port}/http").parse().unwrap()
+    format!("/ip4/{host}/udp/{port}/https").parse().unwrap()
 }

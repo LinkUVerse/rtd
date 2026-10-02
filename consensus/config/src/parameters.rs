@@ -3,7 +3,10 @@
 
 use std::{path::PathBuf, time::Duration};
 
+use linku_network::Multiaddr;
 use serde::{Deserialize, Serialize};
+
+use crate::NetworkPublicKey;
 
 /// Operational configurations of a consensus authority.
 ///
@@ -92,9 +95,32 @@ pub struct Parameters {
     #[serde(default = "Parameters::default_commit_sync_batches_ahead")]
     pub commit_sync_batches_ahead: usize,
 
+    // Base per-request timeout for commit sync fetches. The actual timeout grows progressively
+    // with a multiplier to allow larger commit batches to finish downloading.
+    #[serde(default = "Parameters::default_commit_sync_request_timeout")]
+    pub commit_sync_request_timeout: Duration,
+
+    // Timeout for the connectivity probe against a peer before committing to a full fetch.
+    // Should be short to quickly skip unreachable peers.
+    #[serde(default = "Parameters::default_commit_sync_probe_timeout")]
+    pub commit_sync_probe_timeout: Duration,
+
     /// Tonic network settings.
     #[serde(default = "TonicParameters::default")]
     pub tonic: TonicParameters,
+
+    /// Observer node settings.
+    #[serde(default = "ObserverParameters::default")]
+    pub observer: ObserverParameters,
+
+    /// Internal consensus parameters.
+    #[serde(default = "InternalParameters::default")]
+    pub internal: InternalParameters,
+
+    /// Override for the address to listen on. When set, this is used instead of
+    /// deriving from the committee address.
+    #[serde(skip)]
+    pub listen_address_override: Option<Multiaddr>,
 }
 
 impl Parameters {
@@ -183,6 +209,14 @@ impl Parameters {
         }
     }
 
+    pub(crate) fn default_commit_sync_request_timeout() -> Duration {
+        Duration::from_secs(10)
+    }
+
+    pub(crate) fn default_commit_sync_probe_timeout() -> Duration {
+        Duration::from_secs(2)
+    }
+
     pub(crate) fn default_commit_sync_batches_ahead() -> usize {
         // This is set to be a multiple of default commit_sync_parallel_fetches to allow fetching ahead,
         // while keeping the total number of inflight fetches and unprocessed fetched commits limited.
@@ -209,9 +243,48 @@ impl Default for Parameters {
             commit_sync_parallel_fetches: Parameters::default_commit_sync_parallel_fetches(),
             commit_sync_batch_size: Parameters::default_commit_sync_batch_size(),
             commit_sync_batches_ahead: Parameters::default_commit_sync_batches_ahead(),
+            commit_sync_request_timeout: Parameters::default_commit_sync_request_timeout(),
+            commit_sync_probe_timeout: Parameters::default_commit_sync_probe_timeout(),
             tonic: TonicParameters::default(),
+            observer: ObserverParameters::default(),
+            internal: InternalParameters::default(),
+            listen_address_override: None,
         }
     }
+}
+
+/// Represents a peer observer node with its network key and address.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PeerRecord {
+    /// Network public key of the peer observer node (hex-encoded).
+    #[serde(
+        serialize_with = "serialize_public_key_as_hex",
+        deserialize_with = "deserialize_public_key_from_hex"
+    )]
+    pub public_key: NetworkPublicKey,
+    /// Multi-address of the peer observer node.
+    pub address: Multiaddr,
+}
+
+fn serialize_public_key_as_hex<S>(key: &NetworkPublicKey, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use fastcrypto::encoding::Encoding;
+    let hex_str = fastcrypto::encoding::Hex::encode(key.to_bytes());
+    serializer.serialize_str(&hex_str)
+}
+
+fn deserialize_public_key_from_hex<'de, D>(deserializer: D) -> Result<NetworkPublicKey, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use fastcrypto::{encoding::Encoding, traits::ToFromBytes};
+    let hex_str = String::deserialize(deserializer)?;
+    let bytes = fastcrypto::encoding::Hex::decode(&hex_str).map_err(serde::de::Error::custom)?;
+    let inner_key = fastcrypto::ed25519::Ed25519PublicKey::from_bytes(bytes.as_ref())
+        .map_err(serde::de::Error::custom)?;
+    Ok(NetworkPublicKey::new(inner_key))
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -268,6 +341,94 @@ impl Default for TonicParameters {
             connection_buffer_size: TonicParameters::default_connection_buffer_size(),
             excessive_message_size: TonicParameters::default_excessive_message_size(),
             message_size_limit: TonicParameters::default_message_size_limit(),
+        }
+    }
+}
+
+/// Observer node configuration parameters.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ObserverParameters {
+    /// Port for the observer server. If configured, then the node will run the observer server on this port.
+    ///
+    /// If unspecified, this will default to `None`.
+    #[serde(default = "ObserverParameters::default_server_port")]
+    pub server_port: Option<u16>,
+
+    /// Allowlist of observer public keys (hex encoded). If empty, all observers are allowed.
+    /// If non-empty, only observers with these public keys will be allowed to connect.
+    ///
+    /// If unspecified, this will default to an empty Vec (no allowlist, all observers allowed).
+    #[serde(default = "ObserverParameters::default_allowlist")]
+    pub allowlist: Vec<String>,
+
+    /// Whether the observer server buffers accepted blocks and releases them to observers only
+    /// once a quorum of blocks for their round has been gathered (or the release timeout
+    /// expires). When disabled, blocks are served to observers as soon as they are accepted.
+    ///
+    /// If unspecified, this will default to `true`.
+    #[serde(default = "ObserverParameters::default_quorum_release")]
+    pub quorum_release: bool,
+
+    /// List of observer peers to connect to when acting as an observer client.
+    /// Each record contains the network public key and multi-address of a peer observer server.
+    ///
+    /// If unspecified, this will default to an empty Vec.
+    #[serde(default = "ObserverParameters::default_peers")]
+    pub peers: Vec<PeerRecord>,
+}
+
+impl ObserverParameters {
+    pub fn is_server_enabled(&self) -> bool {
+        self.server_port.is_some()
+    }
+
+    fn default_server_port() -> Option<u16> {
+        None
+    }
+
+    fn default_allowlist() -> Vec<String> {
+        Vec::new()
+    }
+
+    fn default_quorum_release() -> bool {
+        true
+    }
+
+    fn default_peers() -> Vec<PeerRecord> {
+        Vec::new()
+    }
+}
+
+impl Default for ObserverParameters {
+    fn default() -> Self {
+        Self {
+            server_port: ObserverParameters::default_server_port(),
+            allowlist: ObserverParameters::default_allowlist(),
+            quorum_release: ObserverParameters::default_quorum_release(),
+            peers: ObserverParameters::default_peers(),
+        }
+    }
+}
+
+/// Internal parameters unrelated to operating a consensus node in the real world.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct InternalParameters {
+    /// Whether to skip equivocation validation, when testing with equivocators.
+    #[serde(default = "InternalParameters::default_skip_equivocation_validation")]
+    pub skip_equivocation_validation: bool,
+}
+
+impl InternalParameters {
+    fn default_skip_equivocation_validation() -> bool {
+        false
+    }
+}
+
+impl Default for InternalParameters {
+    fn default() -> Self {
+        Self {
+            skip_equivocation_validation: InternalParameters::default_skip_equivocation_validation(
+            ),
         }
     }
 }

@@ -1,0 +1,30 @@
+---
+title: Accounts and Custody
+sidebar_label: Accounts and Custody
+description: Upstream Sui DeepBook Predict account model; no RTD account package is verified.
+keywords:
+  - deepbook predict
+  - account wrapper
+  - custody
+  - upstream design
+---
+
+This page describes an upstream Sui account model for planning a DeepBook Predict port. **No RTD Predict account package, account registry, or quote coin type is verified.** Former Mainnet and Testnet package IDs and USDC types were inherited from another chain and have been removed.
+
+## Lifecycle {#lifecycle}
+
+The source model uses an account wrapper that holds coin balances and an application data area for positions. An account registry provides deterministic account discovery and authorization for applications. A port must check how an owner creates and shares the wrapper, whether a second creation is rejected, and which ID each transaction function expects.
+
+## Authorization {#auth}
+
+Trading and withdrawal require account authorization. Some maintenance actions may use application authorization rather than an owner signature. These permissions must be reviewed with the chosen source revision: an application being present in the registry does not mean it is authorized on RTD, and possession of a session key may authorize more than a single Predict position.
+
+## Balances and custody {#quote-balances}
+
+Deposits and withdrawals are generic account operations in the upstream design; Predict itself chooses a specific quote coin. For RTD that coin type must be selected and deployed first. An upstream Sui USDC type cannot be used as RTD collateral merely because its symbol matches. A client should verify the coin's exact type, decimals, and custody behavior on the target chain.
+
+## Positions {#predict-data}
+
+Predict positions live under the account's application data and are keyed by market and order identity. An application must preserve the distinction between an account wrapper ID used in transactions and any derived account identity used by events or read services. Generate and test those derivations against a deployed RTD package before publishing an SDK flow.
+
+See [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) for deployment status and [Design](/onchain-finance/deepbook/deepbook-predict/design) for the broader flow.

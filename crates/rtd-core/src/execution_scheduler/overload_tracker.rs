@@ -2,11 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use parking_lot::RwLock;
-use std::{
-    cmp::Reverse,
-    collections::{BinaryHeap, HashMap, hash_map::Entry},
-    time::Duration,
-};
 use rtd_config::node::AuthorityOverloadConfig;
 use rtd_types::{
     base_types::FullObjectID,
@@ -15,6 +10,11 @@ use rtd_types::{
     fp_bail, fp_ensure,
     message_envelope::Message,
     transaction::{SenderSignedData, TransactionDataAPI},
+};
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap, hash_map::Entry},
+    time::Duration,
 };
 use tokio::time::Instant;
 use tracing::info;

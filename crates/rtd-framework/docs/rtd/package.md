@@ -35,6 +35,8 @@ Functions for operating on Move packages from within Move:
 -  [Function `make_immutable`](#rtd_package_make_immutable)
 -  [Function `authorize_upgrade`](#rtd_package_authorize_upgrade)
 -  [Function `commit_upgrade`](#rtd_package_commit_upgrade)
+-  [Function `original_package_id`](#rtd_package_original_package_id)
+-  [Function `original_package_id_impl`](#rtd_package_original_package_id_impl)
 -  [Function `restrict`](#rtd_package_restrict)
 
 
@@ -153,7 +155,7 @@ depend against).
 
 An <code><a href="../rtd/package.md#rtd_package_UpgradeCap">UpgradeCap</a></code> can only issue one ticket at a time, to prevent races
 between concurrent updates or a change in its upgrade policy after
-isrtdng a ticket, so the ticket is a "Hot Potato" to preserve forward
+issuing a ticket, so the ticket is a "Hot Potato" to preserve forward
 progress.
 
 
@@ -287,6 +289,28 @@ Trying to commit an upgrade to the wrong <code><a href="../rtd/package.md#rtd_pa
 
 
 <pre><code><b>const</b> <a href="../rtd/package.md#rtd_package_EWrongUpgradeCap">EWrongUpgradeCap</a>: u64 = 4;
+</code></pre>
+
+
+
+<a name="rtd_package_EUpgradeInProgress"></a>
+
+Trying to read the current package ID from the <code><a href="../rtd/package.md#rtd_package_UpgradeCap">UpgradeCap</a></code>
+while an upgrade is in progress.
+
+
+<pre><code><b>const</b> <a href="../rtd/package.md#rtd_package_EUpgradeInProgress">EUpgradeInProgress</a>: u64 = 5;
+</code></pre>
+
+
+
+<a name="rtd_package_EInvalidPackageVersion"></a>
+
+Invalid package version in the <code><a href="../rtd/package.md#rtd_package_UpgradeCap">UpgradeCap</a></code>, or there was a mismatch
+between the package ID and version supplied (in the native).
+
+
+<pre><code><b>const</b> <a href="../rtd/package.md#rtd_package_EInvalidPackageVersion">EInvalidPackageVersion</a>: u64 = 6;
 </code></pre>
 
 
@@ -704,13 +728,13 @@ package.  This ticket only authorizes an upgrade to a package
 that matches this digest.  A package's contents are identified
 by two things:
 
-- modules: [[u8]]       a list of the package's module contents
-- deps:    [[u8; 32]]   a list of 32 byte ObjectIDs of the
-package's transitive dependencies
+ - modules: [[u8]]       a list of the package's module contents
+ - deps:    [[u8; 32]]   a list of 32 byte ObjectIDs of the
+                         package's transitive dependencies
 
 A package's digest is calculated as:
 
-sha3_256(sort(modules ++ deps))
+  sha3_256(sort(modules ++ deps))
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/package.md#rtd_package_ticket_digest">ticket_digest</a>(ticket: &<a href="../rtd/package.md#rtd_package_UpgradeTicket">rtd::package::UpgradeTicket</a>): &vector&lt;u8&gt;
@@ -944,6 +968,58 @@ the upgrade.
     cap.<a href="../rtd/package.md#rtd_package">package</a> = <a href="../rtd/package.md#rtd_package">package</a>;
     cap.<a href="../rtd/package.md#rtd_package_version">version</a> = cap.<a href="../rtd/package.md#rtd_package_version">version</a> + 1;
 }
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_package_original_package_id"></a>
+
+## Function `original_package_id`
+
+The original (first-version) ID of the package that this cap authorizes upgrades for.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd/package.md#rtd_package_original_package_id">original_package_id</a>(cap: &<a href="../rtd/package.md#rtd_package_UpgradeCap">rtd::package::UpgradeCap</a>): <a href="../rtd/object.md#rtd_object_ID">rtd::object::ID</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd/package.md#rtd_package_original_package_id">original_package_id</a>(cap: &<a href="../rtd/package.md#rtd_package_UpgradeCap">UpgradeCap</a>): ID {
+    <b>let</b> latest = cap.<a href="../rtd/package.md#rtd_package_upgrade_package">upgrade_package</a>();
+    <b>assert</b>!(latest.to_address() != @0x0, <a href="../rtd/package.md#rtd_package_EUpgradeInProgress">EUpgradeInProgress</a>);
+    <b>assert</b>!(cap.<a href="../rtd/package.md#rtd_package_version">version</a> &gt; 0, <a href="../rtd/package.md#rtd_package_EInvalidPackageVersion">EInvalidPackageVersion</a>);
+    <a href="../rtd/object.md#rtd_object_id_from_address">object::id_from_address</a>(<a href="../rtd/package.md#rtd_package_original_package_id_impl">original_package_id_impl</a>(latest.to_address(), cap.<a href="../rtd/package.md#rtd_package_version">version</a>))
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_package_original_package_id_impl"></a>
+
+## Function `original_package_id_impl`
+
+Returns the original package id for the given <code>package_id</code> that must be <code><a href="../rtd/package.md#rtd_package_version">version</a></code> of the package.
+If <code>package_id</code>'s version is not <code><a href="../rtd/package.md#rtd_package_version">version</a></code>, <code><a href="../rtd/package.md#rtd_package_EInvalidPackageVersion">EInvalidPackageVersion</a></code> will be raised.
+
+
+<pre><code><b>fun</b> <a href="../rtd/package.md#rtd_package_original_package_id_impl">original_package_id_impl</a>(package_id: <b>address</b>, <a href="../rtd/package.md#rtd_package_version">version</a>: u64): <b>address</b>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="../rtd/package.md#rtd_package_original_package_id_impl">original_package_id_impl</a>(package_id: <b>address</b>, <a href="../rtd/package.md#rtd_package_version">version</a>: u64): <b>address</b>;
 </code></pre>
 
 

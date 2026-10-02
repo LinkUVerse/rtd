@@ -1,6 +1,0 @@
----
-source: crates/rtd-display/src/v2/parser.rs
-expression: "strands(r#\"{foo.0[bar].1.baz}\"#)"
----
-{ foo.0[bar].1.baz
-}

@@ -10,8 +10,8 @@ use crate::{
     command_line::{DEFAULT_OUTPUT_DIR, MOVE_COMPILED_INTERFACES_DIR},
     compiled_unit::{self, AnnotatedCompiledUnit},
     diagnostics::{
-        codes::Severity,
-        warning_filters::{WarningFilter, WarningFiltersBuilder},
+        codes::{DiagnosticsID, Severity},
+        filter::{FilterName, FilterScope},
         *,
     },
     editions::Edition,
@@ -30,6 +30,7 @@ use crate::{
     typing::{self, visitor::TypingVisitorObj},
     unit_test,
 };
+use indexmap::IndexMap;
 use move_command_line_common::files::{
     DEBUG_INFO_EXTENSION, MOVE_COMPILED_EXTENSION, MOVE_EXTENSION, extension_equals,
     find_filenames_and_keep_specified,
@@ -38,6 +39,7 @@ use move_core_types::language_storage::ModuleId as CompiledModuleId;
 use move_proc_macros::growing_stack;
 use move_symbol_pool::Symbol;
 use std::{
+    any::{Any, TypeId},
     collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     io::{Read, Write},
@@ -62,10 +64,12 @@ pub struct Compiler {
     pre_compiled_lib: Option<Arc<PreCompiledProgramInfo>>,
     compiled_module_named_address_mapping: BTreeMap<CompiledModuleId, String>,
     flags: Flags,
-    visitors: Vec<Visitor>,
-    /// Predefined filter for compiler warnings.
-    warning_filter: Option<WarningFiltersBuilder>,
-    known_warning_filters: Vec<(/* Prefix */ Option<Symbol>, Vec<WarningFilter>)>,
+    visitors: IndexMap<TypeId, Visitor>,
+    warning_filter: Option<FilterScope>,
+    known_warning_filters: Vec<(
+        /* Prefix */ Option<Symbol>,
+        Vec<(FilterName, Vec<DiagnosticsID>)>,
+    )>,
     package_configs: BTreeMap<Symbol, PackageConfig>,
     default_config: Option<PackageConfig>,
     /// Root path of the virtual file system.
@@ -115,8 +119,6 @@ pub struct PreCompiledModuleInfo {
     /// information about the module from `TypingProgramInfo` used in to extract
     /// various information needed throughout the compilation process
     pub info: ModuleInfo,
-    /// for transactional test runner in move-transactional-test-runner/src/framework.rs
-    pub compiled_unit: Option<AnnotatedCompiledUnit>,
 }
 pub enum Visitor {
     TypingVisitor(TypingVisitorObj),
@@ -201,7 +203,7 @@ impl Compiler {
             pre_compiled_lib: None,
             compiled_module_named_address_mapping: BTreeMap::new(),
             flags: Flags::empty(),
-            visitors: vec![],
+            visitors: IndexMap::new(),
             warning_filter: None,
             known_warning_filters: vec![],
             package_configs,
@@ -273,27 +275,30 @@ impl Compiler {
     }
 
     pub fn add_visitor(mut self, pass: impl Into<Visitor>) -> Self {
-        self.visitors.push(pass.into());
+        let visitor = pass.into();
+        // De-dup by concrete visitor type. First occurrence wins.
+        self.visitors.entry(visitor.type_id()).or_insert(visitor);
         self
     }
 
     pub fn add_visitors(mut self, passes: impl IntoIterator<Item = Visitor>) -> Self {
-        self.visitors.extend(passes);
+        for visitor in passes {
+            // De-dup by concrete visitor type. First occurrence wins.
+            self.visitors.entry(visitor.type_id()).or_insert(visitor);
+        }
         self
     }
 
-    pub fn set_warning_filter(mut self, filter: Option<WarningFiltersBuilder>) -> Self {
+    pub fn set_warning_filter(mut self, filter: Option<FilterScope>) -> Self {
         assert!(self.warning_filter.is_none());
         self.warning_filter = filter;
         self
     }
 
-    /// `prefix` is None for the default 'allow'.
-    /// Some(prefix) for a custom set of warnings, e.g. 'allow(lint(_))'.
     pub fn add_custom_known_filters(
         mut self,
         prefix: Option<impl Into<Symbol>>,
-        filters: Vec<WarningFilter>,
+        filters: Vec<(FilterName, Vec<DiagnosticsID>)>,
     ) -> Self {
         self.known_warning_filters
             .push((prefix.map(|s| s.into()), filters));
@@ -315,6 +320,12 @@ impl Compiler {
     pub fn set_files_to_compile(mut self, files: Option<BTreeSet<PathBuf>>) -> Self {
         assert!(self.files_to_compile.is_none());
         self.files_to_compile = files;
+        self
+    }
+
+    /// Removes the specified file paths from the compiler's target list.
+    pub fn filter_dep_package_targets(mut self, files_to_remove: &BTreeSet<Symbol>) -> Self {
+        self.targets.retain(|t| !files_to_remove.contains(&t.path));
         self
     }
 
@@ -389,7 +400,7 @@ impl Compiler {
         )?;
         let mut compilation_env = CompilationEnv::new(
             flags,
-            visitors,
+            visitors.into_values().collect(),
             save_hooks,
             warning_filter,
             package_configs,
@@ -397,7 +408,7 @@ impl Compiler {
             files_to_compile,
         );
         for (prefix, filters) in known_warning_filters {
-            compilation_env.add_custom_known_filters(prefix, filters)?;
+            compilation_env.add_custom_known_filters(prefix, filters);
         }
 
         let (source_text, pprog) = parse_program(&compilation_env, maps, targets, deps)?;
@@ -452,8 +463,8 @@ impl Compiler {
     }
 
     pub fn check_and_report(self) -> anyhow::Result<MappedFiles> {
-        let (files, res) = self.check()?;
-        unwrap_or_report_diagnostics(&files, res);
+        let (files, units_res) = self.build()?;
+        let _units = unwrap_or_report_diagnostics(&files, units_res);
         Ok(files)
     }
 
@@ -473,8 +484,7 @@ impl Compiler {
 
     pub fn build_and_report(self) -> anyhow::Result<(MappedFiles, Vec<AnnotatedCompiledUnit>)> {
         let (files, units_res) = self.build()?;
-        let (units, warnings) = unwrap_or_report_diagnostics(&files, units_res);
-        report_warnings(&files, warnings);
+        let units = unwrap_or_report_diagnostics(&files, units_res);
         Ok((files, units))
     }
 }
@@ -587,8 +597,8 @@ macro_rules! ast_stepped_compilers {
                 }
 
                 pub fn check_and_report(self, files: &MappedFiles)  {
-                    let errors_result = self.check().map_err(|(_, diags)| diags);
-                    unwrap_or_report_diagnostics(&files, errors_result);
+                    let units_result = self.build().map_err(|(_, diags)| diags);
+                    let _units = unwrap_or_report_diagnostics(&files, units_result);
                 }
 
                 pub fn build_and_report(
@@ -596,9 +606,7 @@ macro_rules! ast_stepped_compilers {
                     files: &MappedFiles,
                 ) -> Vec<AnnotatedCompiledUnit> {
                     let units_result = self.build().map_err(|(_, diags)| diags);
-                    let (units, warnings) = unwrap_or_report_diagnostics(&files, units_result);
-                    report_warnings(&files, warnings);
-                    units
+                    unwrap_or_report_diagnostics(&files, units_result)
                 }
             }
         )*
@@ -666,6 +674,31 @@ impl PreCompiledProgramInfo {
         }
         mapped_files
     }
+
+    /// Returns the set of file paths containing the specified modules.
+    pub fn get_file_paths_for_modules(
+        &self,
+        modules: &BTreeSet<E::ModuleIdent>,
+    ) -> BTreeSet<Symbol> {
+        self.0
+            .iter()
+            .filter(|(k, _)| modules.contains(k))
+            .map(|(_, v)| v.file_name)
+            .collect()
+    }
+
+    /// Returns a new `PreCompiledProgramInfo` with all modules from the specified
+    /// file paths removed. Since a file may contain multiple modules, this removes
+    /// all modules from each excluded file, not just specific modules.
+    pub fn filter_modules_on_paths(&self, paths_to_exclude: &BTreeSet<Symbol>) -> Self {
+        PreCompiledProgramInfo(
+            self.0
+                .iter()
+                .filter(|(_, v)| !paths_to_exclude.contains(&v.file_name))
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+        )
+    }
 }
 
 // Implement IntoIterator for references to PreCompiledProgramInfo
@@ -690,17 +723,12 @@ impl IntoIterator for PreCompiledProgramInfo {
     }
 }
 
-/// Given a set of dependencies, pre-compile them and save all data needed to compile
-/// against these dependencies without having to recompile them again. You can pass
-/// already pre-compiled transitive dependencies to avoid re-compiling them
-/// (`pre_compiled_program_opt` parameter). You can also obtain pre-compile a set of
-/// dependencies without the actual compiled modules in cases where these are not needed
-/// (`interface_only` parameter).
+/// Collect type and macro information for dependencies without generating bytecode.
+/// Pass previously compiled dependencies in `pre_compiled_program_opt` to reuse their metadata.
 pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol>>(
     targets: Vec<PackagePaths<Paths, NamedAddress>>,
     interface_files_dir_opt: Option<String>,
     pre_compiled_program_opt: Option<Arc<PreCompiledProgramInfo>>,
-    interface_only: bool,
     flags: Flags,
     vfs_root: Option<VfsPath>,
 ) -> anyhow::Result<Result<PreCompiledProgramInfo, (MappedFiles, Diagnostics)>> {
@@ -709,11 +737,6 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
         SaveFlag::ModuleNameAddresses,
         SaveFlag::MacroDefinitions,
     ]);
-    let files_to_compile = if interface_only {
-        Some(BTreeSet::new())
-    } else {
-        None
-    };
     let (files, pprog_and_comments_res) = Compiler::from_package_paths(
         vfs_root,
         targets,
@@ -722,7 +745,7 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
     .set_interface_files_dir_opt(interface_files_dir_opt)
     .set_flags(flags)
     .set_pre_compiled_program_opt(pre_compiled_program_opt.clone())
-    .set_files_to_compile(files_to_compile)
+    .set_files_to_compile(Some(BTreeSet::new()))
     .add_save_hook(&hook)
     .run::<PASS_PARSER>()?;
 
@@ -741,14 +764,9 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
         PASS_COMPILATION,
     ) {
         Err((_pass, errors)) => Ok(Err((files, errors))),
-        Ok(PassResult::Compilation(compiled, _)) => {
+        Ok(PassResult::Compilation(_, _)) => {
             let program_info = hook.take_typing_info();
             let mut macro_definitions = hook.take_macro_definitions();
-
-            let mut compiled_units_by_module = compiled
-                .into_iter()
-                .map(|unit| (unit.module_ident(), unit))
-                .collect::<BTreeMap<_, _>>();
 
             // compute a set of already pre-compiled module identifiers (for modules
             // passed in `pre_compiled_program_opt` parameter) for efficient lookup
@@ -780,14 +798,6 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
 
                      let macro_definitions = macro_definitions.remove(&mod_ident);
 
-                     let compiled_unit = if interface_only {
-                        None
-                     } else {
-                        Some(compiled_units_by_module
-                        .remove(&mod_ident)
-                        .ok_or_else(|| anyhow::anyhow!("compiled unit not found for module: {:?}", mod_ident))?)
-                     };
-
                      Ok((
                          mod_ident,
                          Arc::new(PreCompiledModuleInfo {
@@ -795,7 +805,6 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
                              file_content,
                              macro_definitions,
                              info: typing_module_info.clone(),
-                             compiled_unit,
                          }),
                      ))
                  })
@@ -1188,4 +1197,15 @@ fn run(
         }
     }
     rec(compilation_env, pre_compiled_lib, cur, until)
+}
+
+impl Visitor {
+    /// Returns the `TypeId` of the underlying visitor
+    fn type_id(&self) -> TypeId {
+        match self {
+            Visitor::TypingVisitor(v) => Any::type_id(&**v),
+            Visitor::CFGIRVisitor(v) => Any::type_id(&**v),
+            Visitor::AbsIntVisitor(v) => Any::type_id(&**v),
+        }
+    }
 }

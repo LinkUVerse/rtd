@@ -4,39 +4,43 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as IoWrite;
 use std::net::SocketAddr;
-use std::{fmt::Write, fs::read_dir, path::PathBuf, str, thread, time::Duration};
+use std::{fs::read_dir, path::PathBuf, str, thread, time::Duration};
 
 use std::env;
-#[cfg(not(msim))]
 use std::str::FromStr;
 
 use expect_test::expect;
 use fastcrypto::encoding::{Base64, Encoding};
+use futures::TryStreamExt;
+use move_bytecode_verifier_meter::Scope;
 use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
-use serde_json::json;
 use rtd::client_commands::{
-    GasDataArgs, PaymentArgs, PublishArgs, TestPublishArgs, TxProcessingArgs,
+    GasDataArgs, PaymentArgs, PublishArgs, TestPublishArgs, TxProcessingArgs, UpgradeArgs,
 };
 use rtd::client_ptb::ptb::PTB;
 use rtd::rtd_commands::RpcArgs;
 use rtd_keys::key_identity::KeyIdentity;
-use rtd_protocol_config::ProtocolConfig;
-use rtd_sdk::RtdClient;
+use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
+use rtd_rpc_api::Client;
 use rtd_test_transaction_builder::batch_make_transfer_transactions;
-use rtd_types::object::Owner;
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use rtd_types::TypeTag;
+use rtd_types::coin::Coin;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::GAS;
+use rtd_types::object::{Object, Owner};
 use rtd_types::transaction::{
     CallArg, TEST_ONLY_GAS_UNIT_FOR_GENERIC, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS,
     TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TEST_ONLY_GAS_UNIT_FOR_SPLIT_COIN,
-    TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData, TransactionDataAPI, TransactionKind,
+    TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData, TransactionDataAPI, TransactionExpiration,
+    TransactionKind,
 };
+use serde_json::json;
 use tokio::time::sleep;
 
-use move_package_alt::schema::{Environment, ParsedPublishedFile};
 use linku_common::random_util::TempDir;
 use linku_common::tempdir;
-use std::fs::OpenOptions;
-use std::path::Path;
-use std::{fs, io};
+use move_package_alt::schema::{Environment, ParsedPublishedFile};
 use rtd::{
     client_commands::{
         RtdClientCommandResult, RtdClientCommands, SwitchResponse, estimate_gas_budget,
@@ -44,16 +48,11 @@ use rtd::{
     rtd_commands::{RtdCommand, parse_host_port},
 };
 use rtd_config::{
-    PersistedConfig, RTD_CLIENT_CONFIG, RTD_FULLNODE_CONFIG, RTD_GENESIS_FILENAME,
+    Config, PersistedConfig, RTD_CLIENT_CONFIG, RTD_FULLNODE_CONFIG, RTD_GENESIS_FILENAME,
     RTD_KEYSTORE_ALIASES_FILENAME, RTD_KEYSTORE_FILENAME, RTD_NETWORK_CONFIG,
 };
 use rtd_json::RtdJsonValue;
-use rtd_json_rpc_types::{
-    OwnedObjectRef, RtdExecutionStatus, RtdObjectData, RtdObjectDataFilter, RtdObjectDataOptions,
-    RtdObjectResponse, RtdObjectResponseQuery, RtdRawData, RtdTransactionBlockDataAPI,
-    RtdTransactionBlockEffects, RtdTransactionBlockEffectsAPI,
-};
-use rtd_keys::keystore::AccountKeystore;
+use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
 use rtd_macros::sim_test;
 use rtd_move_build::BuildConfig;
 use rtd_package_alt::RtdFlavor;
@@ -63,18 +62,20 @@ use rtd_swarm_config::genesis_config::{AccountConfig, GenesisConfig};
 use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{
-    Ed25519RtdSignature, Secp256k1RtdSignature, SignatureScheme, RtdKeyPair, RtdSignatureInner,
+    Ed25519RtdSignature, RtdKeyPair, RtdSignatureInner, Secp256k1RtdSignature, SignatureScheme,
 };
-use rtd_types::error::RtdObjectResponseError;
 use rtd_types::move_package::{MovePackage, UpgradeInfo};
 use rtd_types::{base_types::ObjectID, crypto::get_key_pair, gas_coin::GasCoin};
+use std::fs::OpenOptions;
+use std::path::Path;
+use std::{fs, io};
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 const TEST_DATA_DIR: &str = "tests/data/";
 
 struct TreeShakingTest {
     test_cluster: TestCluster,
-    client: RtdClient,
+    client: Client,
     rgp: u64,
     gas_obj_id: ObjectID,
     temp_dir: TempDir,
@@ -88,25 +89,14 @@ impl TreeShakingTest {
         let rgp = test_cluster.get_reference_gas_price().await;
         let address = test_cluster.get_address_0();
         let context = &mut test_cluster.wallet;
-        let client = context.get_client().await?;
+        let client = context.grpc_client()?;
 
         let object_refs = client
-            .read_api()
-            .get_owned_objects(
-                address,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::new()
-                        .with_type()
-                        .with_owner()
-                        .with_previous_transaction(),
-                )),
-                None,
-                None,
-            )
+            .get_owned_objects(address, None, None, None)
             .await?
-            .data;
+            .items;
 
-        let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+        let gas_obj_id = object_refs.first().unwrap().id();
 
         // Setup temp directory with test data
         let temp_dir = tempfile::Builder::new().prefix("tree_shaking").tempdir()?;
@@ -133,7 +123,7 @@ impl TreeShakingTest {
         published_at_id: &ObjectID,
         upgrade_cap: &ObjectID,
     ) -> Result<(), anyhow::Error> {
-        let chain_id = self.client.read_api().get_chain_identifier().await?;
+        let chain_id = self.client.get_chain_identifier().await?;
         let content = format!(
             r#"# Generated by Move
 # This file contains metadata about published versions of this package in different environments
@@ -225,6 +215,7 @@ upgrade-capability = "{}""#,
         let mut build_config = BuildConfig::new_for_testing();
         build_config.config.environment = Some(environment.name.clone());
         build_config.environment = environment.clone();
+        build_config.config.install_dir = None;
         let compiled_package = build_config.build_async(&package_path).await.unwrap();
 
         let context = self.test_cluster.wallet_mut();
@@ -263,8 +254,9 @@ upgrade-capability = "{}""#,
         upgrade_capability: ObjectID,
     ) -> Result<ObjectID, anyhow::Error> {
         let mut build_config = BuildConfig::new_for_testing().config;
-        build_config.lock_file = Some(self.package_path(package_name).join("Move.lock"));
-        let resp = RtdClientCommands::Upgrade {
+        build_config.install_dir = None;
+
+        let resp = RtdClientCommands::Upgrade(UpgradeArgs {
             package_path: self.package_path(package_name),
             upgrade_capability: Some(upgrade_capability),
             build_config,
@@ -280,7 +272,7 @@ upgrade-capability = "{}""#,
                 ..Default::default()
             },
             processing: TxProcessingArgs::default(),
-        }
+        })
         .execute(self.test_cluster.wallet_mut())
         .await?;
 
@@ -288,15 +280,15 @@ upgrade-capability = "{}""#,
             unreachable!("Invalid response");
         };
 
-        let RtdTransactionBlockEffects::V1(effects) = publish_response.clone().effects.unwrap();
-        assert!(effects.status.is_ok());
+        let effects = publish_response.effects;
+        assert!(effects.status().is_ok());
 
         let package_a_v1 = effects
             .created()
-            .iter()
-            .find(|refe| matches!(refe.owner, Owner::Immutable))
+            .into_iter()
+            .find(|refe| matches!(refe.1, Owner::Immutable))
             .unwrap();
-        Ok(package_a_v1.object_id())
+        Ok(package_a_v1.0.0)
     }
 
     async fn fetch_linkage_table(&self, pkg: ObjectID) -> BTreeMap<ObjectID, UpgradeInfo> {
@@ -317,10 +309,10 @@ async fn test_publish_package(
     pubfile: Option<PathBuf>,
 ) -> Result<(ObjectID, ObjectID), anyhow::Error> {
     let mut build_config = BuildConfig::new_for_testing().config;
-    let move_lock_path = package_path.clone().join("Move.lock");
-    build_config.lock_file = Some(move_lock_path.clone());
+    build_config.install_dir = None;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(pubfile.unwrap_or(package_path.join("localnet.toml")));
 
-    let pubfile_path = pubfile.unwrap_or(package_path.join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path: package_path.clone(),
@@ -337,8 +329,7 @@ async fn test_publish_package(
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(pubfile_path),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
@@ -347,21 +338,20 @@ async fn test_publish_package(
         unreachable!("Invalid response");
     };
 
-    let RtdTransactionBlockEffects::V1(effects) = publish_response.clone().effects.unwrap();
-
-    assert!(effects.status.is_ok());
+    let effects = publish_response.effects;
+    assert!(effects.status().is_ok());
     let package_a = effects
         .created()
-        .iter()
-        .find(|refe| matches!(refe.owner, Owner::Immutable))
+        .into_iter()
+        .find(|refe| matches!(refe.1, Owner::Immutable))
         .unwrap();
     let cap = effects
         .created()
-        .iter()
-        .find(|refe| matches!(refe.owner, Owner::AddressOwner(_)))
+        .into_iter()
+        .find(|refe| matches!(refe.1, Owner::AddressOwner(_)))
         .unwrap();
 
-    Ok((package_a.reference.object_id, cap.reference.object_id))
+    Ok((package_a.0.0, cap.0.0))
 }
 
 async fn publish_package(
@@ -372,8 +362,7 @@ async fn publish_package(
     with_unpublished_dependencies: bool,
 ) -> Result<(ObjectID, ObjectID), anyhow::Error> {
     let mut build_config = BuildConfig::new_for_testing().config;
-    let move_lock_path = package_path.clone().join("Move.lock");
-    build_config.lock_file = Some(move_lock_path.clone());
+    build_config.install_dir = None;
 
     let resp = RtdClientCommands::Publish(PublishArgs {
         package_path: package_path.clone(),
@@ -397,21 +386,20 @@ async fn publish_package(
         unreachable!("Invalid response");
     };
 
-    let RtdTransactionBlockEffects::V1(effects) = publish_response.clone().effects.unwrap();
-
-    assert!(effects.status.is_ok());
+    let effects = publish_response.effects;
+    assert!(effects.status().is_ok());
     let package_a = effects
         .created()
-        .iter()
-        .find(|refe| matches!(refe.owner, Owner::Immutable))
+        .into_iter()
+        .find(|refe| matches!(refe.1, Owner::Immutable))
         .unwrap();
     let cap = effects
         .created()
-        .iter()
-        .find(|refe| matches!(refe.owner, Owner::AddressOwner(_)))
+        .into_iter()
+        .find(|refe| matches!(refe.1, Owner::AddressOwner(_)))
         .unwrap();
 
-    Ok((package_a.reference.object_id, cap.reference.object_id))
+    Ok((package_a.0.0, cap.0.0))
 }
 
 // Recursively copy a directory and all its contents
@@ -430,26 +418,12 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
 }
 
 /// Fetch move packages based on the provided package IDs.
-pub async fn fetch_move_packages(
-    client: &RtdClient,
-    package_ids: Vec<ObjectID>,
-) -> Vec<MovePackage> {
-    let objects = client
-        .read_api()
-        .multi_get_object_with_options(package_ids, RtdObjectDataOptions::bcs_lossless())
-        .await
-        .unwrap();
+pub async fn fetch_move_packages(client: &Client, package_ids: Vec<ObjectID>) -> Vec<MovePackage> {
+    let objects = client.batch_get_objects(&package_ids).await.unwrap();
 
     objects
         .into_iter()
-        .map(|o| {
-            let o = o.into_object().unwrap();
-            let Some(RtdRawData::Package(p)) = o.bcs else {
-                panic!("Expected package");
-            };
-            p.to_move_package(u64::MAX /* safe as this pkg comes from the network */)
-                .unwrap()
-        })
+        .map(|o| o.data.try_as_package().unwrap().to_owned())
         .collect()
 }
 
@@ -579,21 +553,8 @@ async fn test_objects_command() -> Result<(), anyhow::Error> {
     .execute(context)
     .await?
     .print(true);
-    let client = context.get_client().await?;
-    let _object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
-        .await?;
+    let client = context.grpc_client()?;
+    let _object_refs = client.get_owned_objects(address, None, None, None).await?;
 
     Ok(())
 }
@@ -605,31 +566,22 @@ async fn test_ptb_publish_and_complex_arg_resolution() -> Result<(), anyhow::Err
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
-    let chain_id = client.read_api().get_chain_identifier().await.unwrap();
+    let chain_id = client.get_chain_identifier().await.unwrap().to_string();
     let (_tmp, pkg_path) =
         create_temp_dir_with_framework_packages("ptb_complex_args_test_functions", Some(chain_id))?;
 
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path: pkg_path.clone(),
@@ -646,8 +598,7 @@ async fn test_ptb_publish_and_complex_arg_resolution() -> Result<(), anyhow::Err
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await;
@@ -660,19 +611,18 @@ async fn test_ptb_publish_and_complex_arg_resolution() -> Result<(), anyhow::Err
         unreachable!("Invalid response");
     };
 
-    let RtdTransactionBlockEffects::V1(effects) = response.effects.unwrap();
-
-    assert!(effects.status.is_ok());
-    assert_eq!(effects.gas_object().object_id(), gas_obj_id);
+    let effects = response.effects;
+    assert!(effects.status().is_ok());
+    assert_eq!(effects.gas_object().unwrap().0.0, gas_obj_id);
     let package = effects
         .created()
-        .iter()
-        .find(|refe| matches!(refe.owner, Owner::Immutable))
+        .into_iter()
+        .find(|refe| matches!(refe.1, Owner::Immutable))
         .unwrap();
-    let package_id_str = package.reference.object_id;
+    let package_id_str = package.0.0;
 
     let start_call_result = RtdClientCommands::Call {
-        package: package.reference.object_id,
+        package: package.0.0,
         module: "test_module".to_string(),
         function: "new_shared".to_string(),
         type_args: vec![],
@@ -689,10 +639,7 @@ async fn test_ptb_publish_and_complex_arg_resolution() -> Result<(), anyhow::Err
 
     let shared_id_str =
         if let RtdClientCommandResult::TransactionBlock(response) = start_call_result {
-            response.effects.unwrap().created().to_vec()[0]
-                .reference
-                .object_id
-                .to_string()
+            response.effects.created()[0].0.0.to_string()
         } else {
             unreachable!("Invalid response");
         };
@@ -740,9 +687,9 @@ async fn test_ptb_publish_and_complex_arg_resolution() -> Result<(), anyhow::Err
 async fn test_ptb_publish() -> Result<(), anyhow::Error> {
     let mut test_cluster = TestClusterBuilder::new().build().await;
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
 
-    let chain_id = client.read_api().get_chain_identifier().await.unwrap();
+    let chain_id = client.get_chain_identifier().await.unwrap().to_string();
     let (_tmp, pkg_path) = create_temp_dir_with_framework_packages("ptb_publish", Some(chain_id))?;
 
     let publish_ptb_string = format!(
@@ -802,23 +749,15 @@ async fn test_object_info_get_command() -> Result<(), anyhow::Error> {
 
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
 
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let object_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let object_id = object_refs.first().unwrap().id();
 
     RtdClientCommands::Object {
         id: object_id,
@@ -847,34 +786,42 @@ async fn test_gas_command() -> Result<(), anyhow::Error> {
     let context = &mut test_cluster.wallet;
     let alias = context.config.keystore.get_alias(&address).unwrap();
 
-    let client = context.get_client().await?;
-    let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::full_content(),
-            )),
-            None,
-            None,
-        )
-        .await?;
+    let client = context.grpc_client()?;
+    let object_refs = client.get_owned_objects(address, None, None, None).await?;
 
-    let object_id = object_refs
-        .data
-        .first()
-        .unwrap()
-        .object()
-        .unwrap()
-        .object_id;
-    let object_to_send = object_refs.data.get(1).unwrap().object().unwrap().object_id;
+    let object_id = object_refs.items.first().unwrap().id();
+    let object_to_send = object_refs.items.get(1).unwrap().id();
 
-    RtdClientCommands::Gas {
+    let resp = RtdClientCommands::Gas {
         address: Some(KeyIdentity::Address(address)),
     }
     .execute(context)
-    .await?
-    .print(true);
+    .await?;
+
+    let RtdClientCommandResult::Gas(gas) = &resp else {
+        panic!("Expected Gas result");
+    };
+    assert!(!gas.gas_coins.is_empty(), "address should own gas coins");
+    for coin in &gas.gas_coins {
+        assert!(
+            !coin.rtd_balance.is_empty(),
+            "each gas coin should report a RTD value"
+        );
+    }
+
+    // The address balance is reported next to the coins, since it is spendable RTD that no
+    // gas object accounts for.
+    let table = format!("{resp}");
+    assert!(
+        table.contains("address balance"),
+        "gas table should include the address balance row:\n{table}"
+    );
+    assert!(
+        format!("{resp:?}").contains("addressRtdBalance"),
+        "--json output should include the address balance"
+    );
+
+    resp.print(true);
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -914,24 +861,18 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
 
     let address2 = RtdAddress::random_for_testing_only();
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     // publish the object basics package
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address1,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::full_content(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address1, None, None, None)
         .await?
-        .data;
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+        .items;
+    let gas_obj_id = object_refs.first().unwrap().id();
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("move_call_args_linter");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -948,36 +889,26 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
 
     let package = if let RtdClientCommandResult::TransactionBlock(response) = resp {
         assert!(
-            response.status_ok().unwrap(),
+            response.effects.status().is_ok(),
             "Command failed: {:?}",
             response
         );
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
         response
             .effects
-            .unwrap()
             .created()
-            .iter()
-            .find(
-                |OwnedObjectRef {
-                     owner,
-                     reference: _,
-                 }| matches!(owner, Owner::Immutable),
-            )
+            .into_iter()
+            .find(|create| matches!(create.1, Owner::Immutable))
             .unwrap()
-            .reference
-            .object_id
+            .0
+            .0
     } else {
         unreachable!("Invalid response");
     };
@@ -990,22 +921,11 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
     .await?
     .print(true);
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address1,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address1, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Create an object for address1 using Move call
 
@@ -1013,10 +933,10 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
     // Get a gas object
     let coins: Vec<_> = object_refs
         .iter()
-        .filter(|object_ref| object_ref.object().unwrap().is_gas_coin())
+        .filter(|object_ref| object_ref.is_gas_coin())
         .collect();
-    let gas = coins.first().unwrap().object()?.object_id;
-    let obj = coins.get(1).unwrap().object()?.object_id;
+    let gas = coins.first().unwrap().id();
+    let obj = coins.get(1).unwrap().id();
 
     // Create the args
     let args = vec![
@@ -1044,13 +964,7 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
 
     // Get the created object
     let created_obj: ObjectID = if let RtdClientCommandResult::TransactionBlock(resp) = resp {
-        resp.effects
-            .unwrap()
-            .created()
-            .first()
-            .unwrap()
-            .reference
-            .object_id
+        resp.effects.created().first().unwrap().0.0
     } else {
         panic!();
     };
@@ -1195,10 +1109,7 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
     .await?;
 
     if let RtdClientCommandResult::TransactionBlock(txn_response) = result {
-        assert_eq!(
-            txn_response.transaction.unwrap().data.gas_data().price,
-            12345
-        );
+        assert_eq!(txn_response.transaction.gas_data().price, 12345);
     } else {
         panic!("Command failed with unexpected result.")
     };
@@ -1214,32 +1125,23 @@ async fn test_package_publish_command() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
-    let chain_id = client.read_api().get_chain_identifier().await.unwrap();
+    let chain_id = client.get_chain_identifier().await.unwrap().to_string();
     let (_tmp, package_path) =
         create_temp_dir_with_framework_packages("dummy_modules_publish", Some(chain_id))?;
 
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -1256,8 +1158,7 @@ async fn test_package_publish_command() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
@@ -1266,17 +1167,12 @@ async fn test_package_publish_command() -> Result<(), anyhow::Error> {
     resp.print(true);
 
     let obj_ids = if let RtdClientCommandResult::TransactionBlock(response) = resp {
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
         response
             .effects
-            .as_ref()
-            .unwrap()
             .created()
-            .iter()
-            .map(|refe| refe.reference.object_id)
+            .into_iter()
+            .map(|refe| refe.0.0)
             .collect::<Vec<_>>()
     } else {
         unreachable!("Invalid response");
@@ -1290,6 +1186,75 @@ async fn test_package_publish_command() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+/// An unsupported `--protocol-version` must be a normal CLI error, not a panic out of
+/// `ProtocolConfig::get_for_version`.
+#[sim_test]
+async fn test_verify_bytecode_meter_unsupported_protocol_version() -> Result<(), anyhow::Error> {
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let context = &mut test_cluster.wallet;
+
+    let err = RtdClientCommands::VerifyBytecodeMeter {
+        package_path: None,
+        protocol_version: Some(ProtocolVersion::MAX_ALLOWED.as_u64() + 1),
+        module_paths: vec![],
+        build_config: BuildConfig::new_for_testing().config,
+    }
+    .execute(context)
+    .await
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        err.contains("newer than the maximum version"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+#[sim_test]
+async fn test_verify_bytecode_meter_on_package() -> Result<(), anyhow::Error> {
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let context = &mut test_cluster.wallet;
+
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?.to_string();
+    let (_tmp, package_path) =
+        create_temp_dir_with_framework_packages("dummy_modules_publish", Some(chain_id))?;
+
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.install_dir = None;
+
+    let resp = RtdClientCommands::VerifyBytecodeMeter {
+        package_path: Some(package_path),
+        protocol_version: None,
+        module_paths: vec![],
+        build_config,
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::VerifyBytecodeMeter {
+        success,
+        used_ticks,
+        ..
+    } = resp
+    else {
+        unreachable!("Invalid response");
+    };
+
+    assert!(
+        success,
+        "dummy_modules_publish should meter under the limit"
+    );
+    assert!(
+        used_ticks.max_ticks(Scope::Package) > 0,
+        "the package's modules should have been metered"
+    );
+
+    Ok(())
+}
+
 #[sim_test]
 async fn test_package_management_on_publish_command() -> Result<(), anyhow::Error> {
     let mut test_cluster = TestClusterBuilder::new().build().await;
@@ -1297,28 +1262,18 @@ async fn test_package_management_on_publish_command() -> Result<(), anyhow::Erro
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
-    let chain_id = client.read_api().get_chain_identifier().await?;
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?.to_string();
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.install_dir = None;
 
     let (_tmp, pkg_path) =
         create_temp_dir_with_framework_packages("pkg_mgmt_modules_publish", Some(chain_id))?;
@@ -1345,10 +1300,7 @@ async fn test_package_management_on_publish_command() -> Result<(), anyhow::Erro
     // Get Package ID and version
     let (expect_original_id, expect_version, _) =
         if let RtdClientCommandResult::TransactionBlock(response) = resp {
-            assert_eq!(
-                response.effects.as_ref().unwrap().gas_object().object_id(),
-                gas_obj_id
-            );
+            assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
             response
                 .get_new_package_obj()
                 .ok_or_else(|| anyhow::anyhow!("No package object response"))?
@@ -1385,29 +1337,20 @@ async fn test_delete_shared_object() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("sod");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -1424,37 +1367,33 @@ async fn test_delete_shared_object() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
 
     let owned_obj_ids = if let RtdClientCommandResult::TransactionBlock(response) = resp {
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
-        let x = response.effects.unwrap();
-        x.created().to_vec()
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
+        let x = response.effects;
+        x.created()
     } else {
         unreachable!("Invalid response");
     };
 
     // Check the objects
-    for OwnedObjectRef { reference, .. } in &owned_obj_ids {
-        get_parsed_object_assert_existence(reference.object_id, context).await;
+    for (reference, _) in &owned_obj_ids {
+        get_parsed_object_assert_existence(reference.0, context).await;
     }
 
     let package_id = owned_obj_ids
         .into_iter()
-        .find(|OwnedObjectRef { owner, .. }| owner == &Owner::Immutable)
+        .find(|(_, owner)| owner == &Owner::Immutable)
         .expect("Must find published package ID")
-        .reference;
+        .0;
 
     // Start and then receive the object
     let start_call_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "sod".to_string(),
         function: "start".to_string(),
         type_args: vec![],
@@ -1470,15 +1409,13 @@ async fn test_delete_shared_object() -> Result<(), anyhow::Error> {
     .await?;
 
     let shared_id = if let RtdClientCommandResult::TransactionBlock(response) = start_call_result {
-        response.effects.unwrap().created().to_vec()[0]
-            .reference
-            .object_id
+        response.effects.created()[0].0.0
     } else {
         unreachable!("Invalid response");
     };
 
     let delete_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "sod".to_string(),
         function: "delete".to_string(),
         type_args: vec![],
@@ -1494,7 +1431,7 @@ async fn test_delete_shared_object() -> Result<(), anyhow::Error> {
     .await?;
 
     if let RtdClientCommandResult::TransactionBlock(response) = delete_result {
-        assert!(response.effects.unwrap().into_status().is_ok());
+        assert!(response.effects.status().is_ok());
     } else {
         unreachable!("Invalid response");
     };
@@ -1509,29 +1446,20 @@ async fn test_receive_argument() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("tto");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -1548,37 +1476,33 @@ async fn test_receive_argument() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
 
     let owned_obj_ids = if let RtdClientCommandResult::TransactionBlock(response) = resp {
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
-        let x = response.effects.unwrap();
-        x.created().to_vec()
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
+        let x = response.effects;
+        x.created()
     } else {
         unreachable!("Invalid response");
     };
 
     // Check the objects
-    for OwnedObjectRef { reference, .. } in &owned_obj_ids {
-        get_parsed_object_assert_existence(reference.object_id, context).await;
+    for (reference, _) in &owned_obj_ids {
+        get_parsed_object_assert_existence(reference.0, context).await;
     }
 
     let package_id = owned_obj_ids
         .into_iter()
-        .find(|OwnedObjectRef { owner, .. }| owner == &Owner::Immutable)
+        .find(|(_, owner)| owner == &Owner::Immutable)
         .expect("Must find published package ID")
-        .reference;
+        .0;
 
     // Start and then receive the object
     let start_call_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "tto".to_string(),
         function: "start".to_string(),
         type_args: vec![],
@@ -1595,37 +1519,32 @@ async fn test_receive_argument() -> Result<(), anyhow::Error> {
 
     let (parent, child) =
         if let RtdClientCommandResult::TransactionBlock(response) = start_call_result {
-            let created = response.effects.unwrap().created().to_vec();
+            let created = response.effects.created();
             let owners: BTreeSet<ObjectID> = created
                 .iter()
-                .flat_map(|refe| {
-                    refe.owner
-                        .get_address_owner_address()
-                        .ok()
-                        .map(|x| x.into())
-                })
+                .flat_map(|refe| refe.1.get_address_owner_address().ok().map(|x| x.into()))
                 .collect();
             let child = created
                 .iter()
-                .find(|refe| !owners.contains(&refe.reference.object_id))
+                .find(|refe| !owners.contains(&refe.0.0))
                 .unwrap();
             let parent = created
                 .iter()
-                .find(|refe| owners.contains(&refe.reference.object_id))
+                .find(|refe| owners.contains(&refe.0.0))
                 .unwrap();
-            (parent.reference.clone(), child.reference.clone())
+            (parent.0, child.0)
         } else {
             unreachable!("Invalid response");
         };
 
     let receive_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "tto".to_string(),
         function: "receiver".to_string(),
         type_args: vec![],
         args: vec![
-            RtdJsonValue::from_str(&parent.object_id.to_string()).unwrap(),
-            RtdJsonValue::from_str(&child.object_id.to_string()).unwrap(),
+            RtdJsonValue::from_str(&parent.0.to_string()).unwrap(),
+            RtdJsonValue::from_str(&child.0.to_string()).unwrap(),
         ],
         payment: PaymentArgs::default(),
         gas_data: GasDataArgs {
@@ -1638,7 +1557,7 @@ async fn test_receive_argument() -> Result<(), anyhow::Error> {
     .await?;
 
     if let RtdClientCommandResult::TransactionBlock(response) = receive_result {
-        assert!(response.effects.unwrap().into_status().is_ok());
+        assert!(response.effects.status().is_ok());
     } else {
         unreachable!("Invalid response");
     };
@@ -1653,29 +1572,20 @@ async fn test_receive_argument_by_immut_ref() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("tto");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -1692,37 +1602,33 @@ async fn test_receive_argument_by_immut_ref() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
 
     let owned_obj_ids = if let RtdClientCommandResult::TransactionBlock(response) = resp {
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
-        let x = response.effects.unwrap();
-        x.created().to_vec()
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
+        let x = response.effects;
+        x.created()
     } else {
         unreachable!("Invalid response");
     };
 
     // Check the objects
-    for OwnedObjectRef { reference, .. } in &owned_obj_ids {
-        get_parsed_object_assert_existence(reference.object_id, context).await;
+    for (reference, _) in &owned_obj_ids {
+        get_parsed_object_assert_existence(reference.0, context).await;
     }
 
     let package_id = owned_obj_ids
         .into_iter()
-        .find(|OwnedObjectRef { owner, .. }| owner == &Owner::Immutable)
+        .find(|(_, owner)| owner == &Owner::Immutable)
         .expect("Must find published package ID")
-        .reference;
+        .0;
 
     // Start and then receive the object
     let start_call_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "tto".to_string(),
         function: "start".to_string(),
         type_args: vec![],
@@ -1739,37 +1645,32 @@ async fn test_receive_argument_by_immut_ref() -> Result<(), anyhow::Error> {
 
     let (parent, child) =
         if let RtdClientCommandResult::TransactionBlock(response) = start_call_result {
-            let created = response.effects.unwrap().created().to_vec();
+            let created = response.effects.created();
             let owners: BTreeSet<ObjectID> = created
                 .iter()
-                .flat_map(|refe| {
-                    refe.owner
-                        .get_address_owner_address()
-                        .ok()
-                        .map(|x| x.into())
-                })
+                .flat_map(|refe| refe.1.get_address_owner_address().ok().map(|x| x.into()))
                 .collect();
             let child = created
                 .iter()
-                .find(|refe| !owners.contains(&refe.reference.object_id))
+                .find(|refe| !owners.contains(&refe.0.0))
                 .unwrap();
             let parent = created
                 .iter()
-                .find(|refe| owners.contains(&refe.reference.object_id))
+                .find(|refe| owners.contains(&refe.0.0))
                 .unwrap();
-            (parent.reference.clone(), child.reference.clone())
+            (parent.0, child.0)
         } else {
             unreachable!("Invalid response");
         };
 
     let receive_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "tto".to_string(),
         function: "invalid_call_immut_ref".to_string(),
         type_args: vec![],
         args: vec![
-            RtdJsonValue::from_str(&parent.object_id.to_string()).unwrap(),
-            RtdJsonValue::from_str(&child.object_id.to_string()).unwrap(),
+            RtdJsonValue::from_str(&parent.0.to_string()).unwrap(),
+            RtdJsonValue::from_str(&child.0.to_string()).unwrap(),
         ],
         payment: PaymentArgs::default(),
         gas_data: GasDataArgs {
@@ -1782,7 +1683,7 @@ async fn test_receive_argument_by_immut_ref() -> Result<(), anyhow::Error> {
     .await?;
 
     if let RtdClientCommandResult::TransactionBlock(response) = receive_result {
-        assert!(response.effects.unwrap().into_status().is_ok());
+        assert!(response.effects.status().is_ok());
     } else {
         unreachable!("Invalid response");
     };
@@ -1797,29 +1698,20 @@ async fn test_receive_argument_by_mut_ref() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("tto");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -1836,37 +1728,33 @@ async fn test_receive_argument_by_mut_ref() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
 
     let owned_obj_ids = if let RtdClientCommandResult::TransactionBlock(response) = resp {
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
-        let x = response.effects.unwrap();
-        x.created().to_vec()
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
+        let x = response.effects;
+        x.created()
     } else {
         unreachable!("Invalid response");
     };
 
     // Check the objects
-    for OwnedObjectRef { reference, .. } in &owned_obj_ids {
-        get_parsed_object_assert_existence(reference.object_id, context).await;
+    for (reference, _) in &owned_obj_ids {
+        get_parsed_object_assert_existence(reference.0, context).await;
     }
 
     let package_id = owned_obj_ids
         .into_iter()
-        .find(|OwnedObjectRef { owner, .. }| owner == &Owner::Immutable)
+        .find(|(_, owner)| owner == &Owner::Immutable)
         .expect("Must find published package ID")
-        .reference;
+        .0;
 
     // Start and then receive the object
     let start_call_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "tto".to_string(),
         function: "start".to_string(),
         type_args: vec![],
@@ -1883,37 +1771,32 @@ async fn test_receive_argument_by_mut_ref() -> Result<(), anyhow::Error> {
 
     let (parent, child) =
         if let RtdClientCommandResult::TransactionBlock(response) = start_call_result {
-            let created = response.effects.unwrap().created().to_vec();
+            let created = response.effects.created();
             let owners: BTreeSet<ObjectID> = created
                 .iter()
-                .flat_map(|refe| {
-                    refe.owner
-                        .get_address_owner_address()
-                        .ok()
-                        .map(|x| x.into())
-                })
+                .flat_map(|refe| refe.1.get_address_owner_address().ok().map(|x| x.into()))
                 .collect();
             let child = created
                 .iter()
-                .find(|refe| !owners.contains(&refe.reference.object_id))
+                .find(|refe| !owners.contains(&refe.0.0))
                 .unwrap();
             let parent = created
                 .iter()
-                .find(|refe| owners.contains(&refe.reference.object_id))
+                .find(|refe| owners.contains(&refe.0.0))
                 .unwrap();
-            (parent.reference.clone(), child.reference.clone())
+            (parent.0, child.0)
         } else {
             unreachable!("Invalid response");
         };
 
     let receive_result = RtdClientCommands::Call {
-        package: package_id.object_id,
+        package: package_id.0,
         module: "tto".to_string(),
         function: "invalid_call_mut_ref".to_string(),
         type_args: vec![],
         args: vec![
-            RtdJsonValue::from_str(&parent.object_id.to_string()).unwrap(),
-            RtdJsonValue::from_str(&child.object_id.to_string()).unwrap(),
+            RtdJsonValue::from_str(&parent.0.to_string()).unwrap(),
+            RtdJsonValue::from_str(&child.0.to_string()).unwrap(),
         ],
         payment: PaymentArgs::default(),
         gas_data: GasDataArgs {
@@ -1926,7 +1809,7 @@ async fn test_receive_argument_by_mut_ref() -> Result<(), anyhow::Error> {
     .await?;
 
     if let RtdClientCommandResult::TransactionBlock(response) = receive_result {
-        assert!(response.effects.unwrap().into_status().is_ok());
+        assert!(response.effects.status().is_ok());
     } else {
         unreachable!("Invalid response");
     };
@@ -1944,28 +1827,19 @@ async fn test_package_publish_command_with_unpublished_dependency_succeeds()
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object()?.object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("module_publish_with_unpublished_dependency");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -1982,8 +1856,7 @@ async fn test_package_publish_command_with_unpublished_dependency_succeeds()
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
@@ -1992,17 +1865,12 @@ async fn test_package_publish_command_with_unpublished_dependency_succeeds()
     resp.print(true);
 
     let obj_ids = if let RtdClientCommandResult::TransactionBlock(response) = resp {
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
         response
             .effects
-            .as_ref()
-            .unwrap()
             .created()
-            .iter()
-            .map(|refe| refe.reference.object_id)
+            .into_iter()
+            .map(|refe| refe.0.0)
             .collect::<Vec<_>>()
     } else {
         unreachable!("Invalid response");
@@ -2025,28 +1893,19 @@ async fn test_package_publish_command_with_unpublished_dependency_fails()
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("module_publish_with_unpublished_dependency");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let result = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -2063,8 +1922,7 @@ async fn test_package_publish_command_with_unpublished_dependency_fails()
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await;
@@ -2079,56 +1937,6 @@ async fn test_package_publish_command_with_unpublished_dependency_fails()
 }
 
 #[sim_test]
-async fn test_package_publish_command_non_zero_unpublished_dep_fails() -> Result<(), anyhow::Error>
-{
-    let with_unpublished_dependencies = true; // Value under test, incompatible with dependencies that specify non-zero address.
-
-    let mut test_cluster = TestClusterBuilder::new().build().await;
-    let rgp = test_cluster.get_reference_gas_price().await;
-    let address = test_cluster.get_address_0();
-    let context = &mut test_cluster.wallet;
-
-    let client = context.get_client().await?;
-    let object_refs = client
-        .read_api()
-        .get_owned_objects(address, None, None, None)
-        .await?
-        .data;
-
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
-
-    let mut package_path = PathBuf::from(TEST_DATA_DIR);
-    package_path.push("module_publish_with_unpublished_dependency_with_non_zero_address");
-    let build_config = BuildConfig::new_for_testing().config;
-    let result = RtdClientCommands::TestPublish(TestPublishArgs {
-        publish_args: PublishArgs {
-            package_path,
-            build_config,
-            skip_dependency_verification: false,
-            verify_deps: true,
-            with_unpublished_dependencies,
-            payment: PaymentArgs {
-                gas: vec![gas_obj_id],
-            },
-            gas_data: GasDataArgs {
-                gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
-                ..Default::default()
-            },
-            processing: TxProcessingArgs::default(),
-        },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
-    })
-    .execute(context)
-    .await;
-    let err = result.unwrap_err().to_string();
-
-    // errors due to tree shaking wanting to fetch the linkage table of this unpublished pkg
-    assert!(err.contains("Failed to fetch package UnpublishedNonZeroAddress"));
-    Ok(())
-}
-
-#[sim_test]
 async fn test_package_publish_command_failure_invalid() -> Result<(), anyhow::Error> {
     let with_unpublished_dependencies = true; // Invalid packages should fail to publish, even if we allow unpublished dependencies.
 
@@ -2137,28 +1945,19 @@ async fn test_package_publish_command_failure_invalid() -> Result<(), anyhow::Er
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("module_publish_failure_invalid");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let result = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -2175,8 +1974,7 @@ async fn test_package_publish_command_failure_invalid() -> Result<(), anyhow::Er
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await;
@@ -2194,20 +1992,21 @@ async fn test_package_publish_test_flag() -> Result<(), anyhow::Error> {
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
         .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("module_publish_with_nonexistent_dependency");
     let mut build_config: MoveBuildConfig = BuildConfig::new_for_testing().config;
     // this would have been the result of calling `rtd client publish --test`
     build_config.test_mode = true;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
 
     let result = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
@@ -2225,8 +2024,7 @@ async fn test_package_publish_test_flag() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await;
@@ -2234,7 +2032,7 @@ async fn test_package_publish_test_flag() -> Result<(), anyhow::Error> {
     let expect = expect![[r#"
         Err(
             ModulePublishFailure {
-                error: "The `publish` subcommand should not be used with the `--test` flag\n\nCode in published packages must not depend on test code.\nIn order to fix this and publish the package without `--test`, remove any non-test dependencies on test-only code.\nYou can ensure all test-only dependencies have been removed by compiling the package normally with `rtd move build`.",
+                error: "The `publish` or `upgrade` subcommand should not be used with the `--test` flag\n\nCode in published packages must not depend on test code.\nIn order to fix this and publish or upgrade the package without `--test`, remove any non-test dependencies on test-only code.\nYou can ensure all test-only dependencies have been removed by compiling the package normally with `rtd move build`.",
             },
         )
     "#]];
@@ -2249,30 +2047,21 @@ async fn test_package_publish_empty() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("empty");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let result = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
@@ -2289,8 +2078,7 @@ async fn test_package_publish_empty() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await;
@@ -2314,53 +2102,22 @@ async fn test_package_upgrade_command() -> Result<(), anyhow::Error> {
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
-    let chain_id = client.read_api().get_chain_identifier().await.unwrap();
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await.unwrap().to_string();
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let (_tmp, package_path) =
         create_temp_dir_with_framework_packages("dummy_modules_upgrade", Some(chain_id))?;
 
-    let build_config = BuildConfig::new_for_testing().config;
-    let dry_run = RtdClientCommands::Publish(PublishArgs {
-        package_path: package_path.clone(),
-        build_config: build_config.clone(),
-        skip_dependency_verification: false,
-        verify_deps: true,
-        with_unpublished_dependencies: false,
-        payment: PaymentArgs {
-            gas: vec![gas_obj_id],
-        },
-        gas_data: GasDataArgs {
-            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
-            ..Default::default()
-        },
-        processing: TxProcessingArgs {
-            dry_run: true,
-            ..Default::default()
-        },
-    })
-    .execute(context)
-    .await?;
-    assert!(matches!(dry_run, RtdClientCommandResult::DryRun(_)));
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.install_dir = None; // build in-place so that the publish info is recorded
 
     let resp = RtdClientCommands::Publish(PublishArgs {
         package_path: package_path.clone(),
@@ -2387,37 +2144,13 @@ async fn test_package_upgrade_command() -> Result<(), anyhow::Error> {
         unreachable!("Invalid response");
     };
 
-    let RtdTransactionBlockEffects::V1(effects) = response.effects.unwrap();
+    let effects = response.effects;
 
-    assert!(effects.status.is_ok());
-    assert_eq!(effects.gas_object().object_id(), gas_obj_id);
-
-    let dry_run = RtdClientCommands::Upgrade {
-        package_path: package_path.clone(),
-        upgrade_capability: None,
-        build_config: build_config.clone(),
-        skip_verify_compatibility: false,
-        skip_dependency_verification: false,
-        verify_deps: true,
-        with_unpublished_dependencies: false,
-        payment: PaymentArgs {
-            gas: vec![gas_obj_id],
-        },
-        gas_data: GasDataArgs {
-            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
-            ..Default::default()
-        },
-        processing: TxProcessingArgs {
-            dry_run: true,
-            ..Default::default()
-        },
-    }
-    .execute(context)
-    .await?;
-    assert!(matches!(dry_run, RtdClientCommandResult::DryRun(_)));
+    assert!(effects.status().is_ok());
+    assert_eq!(effects.gas_object().unwrap().0.0, gas_obj_id);
 
     // Now run the upgrade
-    let resp = RtdClientCommands::Upgrade {
+    let resp = RtdClientCommands::Upgrade(UpgradeArgs {
         package_path,
         upgrade_capability: None,
         build_config,
@@ -2433,7 +2166,7 @@ async fn test_package_upgrade_command() -> Result<(), anyhow::Error> {
             ..Default::default()
         },
         processing: TxProcessingArgs::default(),
-    }
+    })
     .execute(context)
     .await?;
 
@@ -2442,15 +2175,15 @@ async fn test_package_upgrade_command() -> Result<(), anyhow::Error> {
     let RtdClientCommandResult::TransactionBlock(response) = resp else {
         unreachable!("Invalid upgrade response");
     };
-    let RtdTransactionBlockEffects::V1(effects) = response.effects.unwrap();
+    let effects = response.effects;
 
-    assert!(effects.status.is_ok());
-    assert_eq!(effects.gas_object().object_id(), gas_obj_id);
+    assert!(effects.status().is_ok());
+    assert_eq!(effects.gas_object().unwrap().0.0, gas_obj_id);
 
     let obj_ids = effects
         .created()
-        .iter()
-        .map(|refe| refe.reference.object_id)
+        .into_iter()
+        .map(|refe| refe.0.0)
         .collect::<Vec<_>>();
 
     // Check the objects
@@ -2467,31 +2200,22 @@ async fn test_package_management_on_upgrade_command() -> Result<(), anyhow::Erro
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
-    let chain_id = client.read_api().get_chain_identifier().await?;
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?.to_string();
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     let (_tmp, package_path) =
         create_temp_dir_with_framework_packages("dummy_modules_upgrade", Some(chain_id))?;
 
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.install_dir = None;
+
     let resp = RtdClientCommands::Publish(PublishArgs {
         package_path: package_path.clone(),
         build_config: build_config.clone(),
@@ -2514,13 +2238,13 @@ async fn test_package_management_on_upgrade_command() -> Result<(), anyhow::Erro
         unreachable!("Invalid response");
     };
 
-    let RtdTransactionBlockEffects::V1(effects) = publish_response.clone().effects.unwrap();
+    let effects = &publish_response.effects;
 
-    assert!(effects.status.is_ok());
-    assert_eq!(effects.gas_object().object_id(), gas_obj_id);
+    assert!(effects.status().is_ok());
+    assert_eq!(effects.gas_object().unwrap().0.0, gas_obj_id);
 
     // Now run the upgrade
-    let upgrade_response = RtdClientCommands::Upgrade {
+    let upgrade_response = RtdClientCommands::Upgrade(UpgradeArgs {
         package_path: package_path.to_path_buf(),
         upgrade_capability: None,
         build_config: build_config.clone(),
@@ -2536,7 +2260,7 @@ async fn test_package_management_on_upgrade_command() -> Result<(), anyhow::Erro
             ..Default::default()
         },
         processing: TxProcessingArgs::default(),
-    }
+    })
     .execute(context)
     .await?;
 
@@ -2548,10 +2272,7 @@ async fn test_package_management_on_upgrade_command() -> Result<(), anyhow::Erro
     // Get Upgraded Package ID and version
     let (expect_upgrade_latest_id, expect_upgrade_version, _) =
         if let RtdClientCommandResult::TransactionBlock(response) = upgrade_response {
-            assert_eq!(
-                response.effects.as_ref().unwrap().gas_object().object_id(),
-                gas_obj_id
-            );
+            assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
             response
                 .get_new_package_obj()
                 .ok_or_else(|| anyhow::anyhow!("No package object response"))?
@@ -2584,26 +2305,15 @@ async fn test_native_transfer() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
     let recipient = RtdAddress::random_for_testing_only();
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
-    let obj_id = object_refs.get(1).unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
+    let obj_id = object_refs.get(1).unwrap().id();
 
     let resp = RtdClientCommands::Transfer {
         to: KeyIdentity::Address(recipient),
@@ -2626,33 +2336,14 @@ async fn test_native_transfer() -> Result<(), anyhow::Error> {
     // Get the mutated objects
     let (mut_obj1, mut_obj2) = if let RtdClientCommandResult::TransactionBlock(response) = resp {
         assert!(
-            response.status_ok().unwrap(),
+            response.effects.status().is_ok(),
             "Command failed: {:?}",
             response
         );
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            gas_obj_id
-        );
+        assert_eq!(response.effects.gas_object().unwrap().0.0, gas_obj_id);
         (
-            response
-                .effects
-                .as_ref()
-                .unwrap()
-                .mutated()
-                .first()
-                .unwrap()
-                .reference
-                .object_id,
-            response
-                .effects
-                .as_ref()
-                .unwrap()
-                .mutated()
-                .get(1)
-                .unwrap()
-                .reference
-                .object_id,
+            response.effects.mutated().first().unwrap().0.0,
+            response.effects.mutated().get(1).unwrap().0.0,
         )
     } else {
         panic!()
@@ -2665,12 +2356,8 @@ async fn test_native_transfer() -> Result<(), anyhow::Error> {
     }
     .execute(context)
     .await?;
-    let mut_obj1 = if let RtdClientCommandResult::Object(resp) = resp {
-        if let Some(obj) = resp.data {
-            obj
-        } else {
-            panic!()
-        }
+    let mut_obj1 = if let RtdClientCommandResult::Object(object, _) = dbg!(resp) {
+        object
     } else {
         panic!();
     };
@@ -2681,42 +2368,25 @@ async fn test_native_transfer() -> Result<(), anyhow::Error> {
     }
     .execute(context)
     .await?;
-    let mut_obj2 = if let RtdClientCommandResult::Object(resp2) = resp2 {
-        if let Some(obj) = resp2.data {
-            obj
-        } else {
-            panic!()
-        }
+    let mut_obj2 = if let RtdClientCommandResult::Object(object, _) = resp2 {
+        object
     } else {
         panic!();
     };
 
-    let (gas, obj) = if mut_obj1.owner.clone().unwrap().get_owner_address().unwrap() == address {
+    let (gas, obj) = if mut_obj1.owner.clone().get_owner_address().unwrap() == address {
         (mut_obj1, mut_obj2)
     } else {
         (mut_obj2, mut_obj1)
     };
 
-    assert_eq!(gas.owner.unwrap().get_owner_address().unwrap(), address);
-    assert_eq!(obj.owner.unwrap().get_owner_address().unwrap(), recipient);
+    assert_eq!(gas.owner.get_owner_address().unwrap(), address);
+    assert_eq!(obj.owner.get_owner_address().unwrap(), recipient);
 
-    let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
-        .await?;
+    let object_refs = client.get_owned_objects(address, None, None, None).await?;
 
     // Check log output contains all object ids.
-    let obj_id = object_refs.data.get(1).unwrap().object().unwrap().object_id;
+    let obj_id = object_refs.items.get(1).unwrap().id();
 
     let resp = RtdClientCommands::Transfer {
         to: KeyIdentity::Address(recipient),
@@ -2737,44 +2407,14 @@ async fn test_native_transfer() -> Result<(), anyhow::Error> {
     // Get the mutated objects
     let (_mut_obj1, _mut_obj2) = if let RtdClientCommandResult::TransactionBlock(response) = resp {
         (
-            response
-                .effects
-                .as_ref()
-                .unwrap()
-                .mutated()
-                .first()
-                .unwrap()
-                .reference
-                .object_id,
-            response
-                .effects
-                .as_ref()
-                .unwrap()
-                .mutated()
-                .get(1)
-                .unwrap()
-                .reference
-                .object_id,
+            response.effects.mutated().first().unwrap().0.0,
+            response.effects.mutated().get(1).unwrap().0.0,
         )
     } else {
         panic!()
     };
 
     Ok(())
-}
-
-#[test]
-// Test for issue https://github.com/LinkUVerse/rtd/issues/1078
-fn test_bug_1078() {
-    let read = RtdClientCommandResult::Object(RtdObjectResponse::new_with_error(
-        RtdObjectResponseError::NotExists {
-            object_id: ObjectID::random(),
-        },
-    ));
-    let mut writer = String::new();
-    // fmt ObjectRead should not fail.
-    write!(writer, "{}", read).unwrap();
-    write!(writer, "{:?}", read).unwrap();
 }
 
 #[sim_test]
@@ -2798,22 +2438,10 @@ async fn test_switch_command() -> Result<(), anyhow::Error> {
     };
 
     // Check that we indeed fetched for addr1
-    let client = context.get_client().await?;
-    let mut actual_objs = client
-        .read_api()
-        .get_owned_objects(
-            addr1,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::full_content(),
-            )),
-            None,
-            None,
-        )
-        .await
-        .unwrap()
-        .data;
-    cmd_objs.sort();
-    actual_objs.sort();
+    let client = context.grpc_client()?;
+    let mut actual_objs: Vec<_> = client.list_owned_objects(addr1, None).try_collect().await?;
+    cmd_objs.sort_by_key(|o| o.id());
+    actual_objs.sort_by_key(|o| o.id());
     assert_eq!(cmd_objs, actual_objs);
 
     // Switch the address
@@ -3002,24 +2630,19 @@ async fn test_active_address_command() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn get_gas_value(o: &RtdObjectData) -> u64 {
+fn get_gas_value(o: &Object) -> u64 {
     GasCoin::try_from(o).unwrap().value()
 }
 
-async fn get_object(id: ObjectID, context: &WalletContext) -> Option<RtdObjectData> {
-    let client = context.get_client().await.unwrap();
-    let response = client
-        .read_api()
-        .get_object_with_options(id, RtdObjectDataOptions::full_content())
-        .await
-        .unwrap();
-    response.data
+async fn get_object(id: ObjectID, context: &WalletContext) -> Option<Object> {
+    let mut client = context.grpc_client().unwrap();
+    client.get_object(id).await.ok()
 }
 
 async fn get_parsed_object_assert_existence(
     object_id: ObjectID,
     context: &WalletContext,
-) -> RtdObjectData {
+) -> Object {
     get_object(object_id, context)
         .await
         .expect("Object {object_id} does not exist.")
@@ -3032,27 +2655,16 @@ async fn test_merge_coin() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas = object_refs.first().unwrap().object().unwrap().object_id;
-    let primary_coin = object_refs.get(1).unwrap().object().unwrap().object_id;
-    let coin_to_merge = object_refs.get(2).unwrap().object().unwrap().object_id;
+    let gas = object_refs.first().unwrap().id();
+    let primary_coin = object_refs.get(1).unwrap().id();
+    let coin_to_merge = object_refs.get(2).unwrap().id();
 
     let total_value = get_gas_value(&get_object(primary_coin, context).await.unwrap())
         + get_gas_value(&get_object(coin_to_merge, context).await.unwrap());
@@ -3071,18 +2683,16 @@ async fn test_merge_coin() -> Result<(), anyhow::Error> {
     .execute(context)
     .await?;
     let g = if let RtdClientCommandResult::TransactionBlock(r) = resp {
-        assert!(r.status_ok().unwrap(), "Command failed: {:?}", r);
-        assert_eq!(r.effects.as_ref().unwrap().gas_object().object_id(), gas);
+        assert!(r.effects.status().is_ok(), "Command failed: {:?}", r);
+        assert_eq!(r.effects.gas_object().unwrap().0.0, gas);
         let object_id = r
             .effects
-            .as_ref()
-            .unwrap()
             .mutated_excluding_gas()
             .into_iter()
             .next()
             .unwrap()
-            .reference
-            .object_id;
+            .0
+            .0;
         get_parsed_object_assert_existence(object_id, context).await
     } else {
         panic!("Command failed")
@@ -3094,23 +2704,10 @@ async fn test_merge_coin() -> Result<(), anyhow::Error> {
     // Check that old coin is deleted
     assert_eq!(get_object(coin_to_merge, context).await, None);
 
-    let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
-        .await?;
+    let object_refs = client.get_owned_objects(address, None, None, None).await?;
 
-    let primary_coin = object_refs.data.get(1).unwrap().object()?.object_id;
-    let coin_to_merge = object_refs.data.get(2).unwrap().object()?.object_id;
+    let primary_coin = object_refs.items.get(1).unwrap().id();
+    let coin_to_merge = object_refs.items.get(2).unwrap().id();
 
     let total_value = get_gas_value(&get_object(primary_coin, context).await.unwrap())
         + get_gas_value(&get_object(coin_to_merge, context).await.unwrap());
@@ -3132,14 +2729,12 @@ async fn test_merge_coin() -> Result<(), anyhow::Error> {
     let g = if let RtdClientCommandResult::TransactionBlock(r) = resp {
         let object_id = r
             .effects
-            .as_ref()
-            .unwrap()
             .mutated_excluding_gas()
             .into_iter()
             .next()
             .unwrap()
-            .reference
-            .object_id;
+            .0
+            .0;
         get_parsed_object_assert_existence(object_id, context).await
     } else {
         panic!("Command failed")
@@ -3160,25 +2755,12 @@ async fn test_split_coin() -> Result<(), anyhow::Error> {
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
-    let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
-        .await?;
+    let client = context.grpc_client()?;
+    let object_refs = client.get_owned_objects(address, None, None, None).await?;
 
     // Check log output contains all object ids.
-    let gas = object_refs.data.first().unwrap().object()?.object_id;
-    let mut coin = object_refs.data.get(1).unwrap().object()?.object_id;
+    let gas = object_refs.items.first().unwrap().id();
+    let mut coin = object_refs.items.get(1).unwrap().id();
 
     let orig_value = get_gas_value(&get_object(coin, context).await.unwrap());
 
@@ -3198,25 +2780,21 @@ async fn test_split_coin() -> Result<(), anyhow::Error> {
     .await?;
 
     let (updated_coin, new_coins) = if let RtdClientCommandResult::TransactionBlock(r) = resp {
-        assert!(r.status_ok().unwrap(), "Command failed: {:?}", r);
-        assert_eq!(r.effects.as_ref().unwrap().gas_object().object_id(), gas);
+        assert!(r.effects.status().is_ok(), "Command failed: {:?}", r);
+        assert_eq!(r.effects.gas_object().unwrap().0.0, gas);
         let updated_object_id = r
             .effects
-            .as_ref()
-            .unwrap()
             .mutated_excluding_gas()
             .into_iter()
             .next()
             .unwrap()
-            .reference
-            .object_id;
+            .0
+            .0;
         let updated_obj = get_parsed_object_assert_existence(updated_object_id, context).await;
-        let new_object_refs = r.effects.unwrap().created().to_vec();
+        let new_object_refs = r.effects.created();
         let mut new_objects = Vec::with_capacity(new_object_refs.len());
         for obj_ref in new_object_refs {
-            new_objects.push(
-                get_parsed_object_assert_existence(obj_ref.reference.object_id, context).await,
-            );
+            new_objects.push(get_parsed_object_assert_existence(obj_ref.0.0, context).await);
         }
         (updated_obj, new_objects)
     } else {
@@ -3227,28 +2805,16 @@ async fn test_split_coin() -> Result<(), anyhow::Error> {
     assert_eq!(get_gas_value(&updated_coin) + 1000 + 10, orig_value);
     assert!((get_gas_value(&new_coins[0]) == 1000) || (get_gas_value(&new_coins[0]) == 10));
     assert!((get_gas_value(&new_coins[1]) == 1000) || (get_gas_value(&new_coins[1]) == 10));
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Get another coin
     for c in object_refs {
-        let coin_data = c.into_object().unwrap();
-        if get_gas_value(&get_object(coin_data.object_id, context).await.unwrap()) > 2000 {
-            coin = coin_data.object_id;
+        if get_gas_value(&get_object(c.id(), context).await.unwrap()) > 2000 {
+            coin = c.id();
         }
     }
     let orig_value = get_gas_value(&get_object(coin, context).await.unwrap());
@@ -3269,24 +2835,20 @@ async fn test_split_coin() -> Result<(), anyhow::Error> {
     .await?;
 
     let (updated_coin, new_coins) = if let RtdClientCommandResult::TransactionBlock(r) = resp {
-        assert!(r.status_ok().unwrap(), "Command failed: {:?}", r);
+        assert!(r.effects.status().is_ok(), "Command failed: {:?}", r);
         let updated_object_id = r
             .effects
-            .as_ref()
-            .unwrap()
             .mutated_excluding_gas()
             .into_iter()
             .next()
             .unwrap()
-            .reference
-            .object_id;
+            .0
+            .0;
         let updated_obj = get_parsed_object_assert_existence(updated_object_id, context).await;
-        let new_object_refs = r.effects.unwrap().created().to_vec();
+        let new_object_refs = r.effects.created();
         let mut new_objects = Vec::with_capacity(new_object_refs.len());
         for obj_ref in new_object_refs {
-            new_objects.push(
-                get_parsed_object_assert_existence(obj_ref.reference.object_id, context).await,
-            );
+            new_objects.push(get_parsed_object_assert_existence(obj_ref.0.0, context).await);
         }
         (updated_obj, new_objects)
     } else {
@@ -3302,26 +2864,14 @@ async fn test_split_coin() -> Result<(), anyhow::Error> {
     assert_eq!(get_gas_value(&new_coins[1]), orig_value / 3);
 
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Get another coin
     for c in object_refs {
-        let coin_data = c.into_object().unwrap();
-        if get_gas_value(&get_object(coin_data.object_id, context).await.unwrap()) > 2000 {
-            coin = coin_data.object_id;
+        if get_gas_value(&get_object(c.id(), context).await.unwrap()) > 2000 {
+            coin = c.id();
         }
     }
     let orig_value = get_gas_value(&get_object(coin, context).await.unwrap());
@@ -3342,24 +2892,20 @@ async fn test_split_coin() -> Result<(), anyhow::Error> {
     .await?;
 
     let (updated_coin, new_coins) = if let RtdClientCommandResult::TransactionBlock(r) = resp {
-        assert!(r.status_ok().unwrap(), "Command failed: {:?}", r);
+        assert!(r.effects.status().is_ok(), "Command failed: {:?}", r);
         let updated_object_id = r
             .effects
-            .as_ref()
-            .unwrap()
             .mutated_excluding_gas()
             .into_iter()
             .next()
             .unwrap()
-            .reference
-            .object_id;
+            .0
+            .0;
         let updated_obj = get_parsed_object_assert_existence(updated_object_id, context).await;
-        let new_object_refs = r.effects.unwrap().created().to_vec();
+        let new_object_refs = r.effects.created();
         let mut new_objects = Vec::with_capacity(new_object_refs.len());
         for obj_ref in new_object_refs {
-            new_objects.push(
-                get_parsed_object_assert_existence(obj_ref.reference.object_id, context).await,
-            );
+            new_objects.push(get_parsed_object_assert_existence(obj_ref.0.0, context).await);
         }
         (updated_obj, new_objects)
     } else {
@@ -3417,23 +2963,12 @@ async fn test_serialize_tx() -> Result<(), anyhow::Error> {
     let address1 = test_cluster.get_address_1();
     let context = &mut test_cluster.wallet;
     let alias1 = context.config.keystore.get_alias(&address1).unwrap();
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
-    let coin = object_refs.get(1).unwrap().object().unwrap().object_id;
+        .items;
+    let coin = object_refs.get(1).unwrap().id();
 
     RtdClientCommands::TransferRtd {
         to: KeyIdentity::Address(address1),
@@ -3466,6 +3001,29 @@ async fn test_serialize_tx() -> Result<(), anyhow::Error> {
     }
     .execute(context)
     .await?;
+
+    let skip_signing_tx = RtdClientCommands::TransferRtd {
+        to: KeyIdentity::Address(address1),
+        rtd_coin_object_id: coin,
+        amount: Some(1),
+        gas_data: GasDataArgs {
+            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_TRANSFER),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs {
+            serialize_signed_transaction: true,
+            skip_signing: true,
+            ..Default::default()
+        },
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::SerializedSignedTransaction(sender_signed_data) = skip_signing_tx
+    else {
+        panic!("Expected SerializedSignedTransaction result");
+    };
+    assert!(sender_signed_data.tx_signatures().is_empty());
 
     // use alias for transfer
     RtdClientCommands::TransferRtd {
@@ -3514,20 +3072,20 @@ async fn test_stake_with_none_amount() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let coins = client
-        .coin_read_api()
-        .get_coins(address, None, None, None)
+        .get_owned_objects(address, Some(GasCoin::type_()), None, None)
         .await?
-        .data;
+        .items;
 
     let config_path = test_cluster.swarm.dir().join(RTD_CLIENT_CONFIG);
     let validator_addr = client
-        .governance_api()
-        .get_latest_rtd_system_state()
+        .get_system_state(None)
         .await?
-        .active_validators[0]
-        .rtd_address;
+        .validators()
+        .active_validators()[0]
+        .address()
+        .to_owned();
 
     test_with_rtd_binary(&[
         "client",
@@ -3542,7 +3100,7 @@ async fn test_stake_with_none_amount() -> Result<(), anyhow::Error> {
         "request_add_stake_mul_coin",
         "--args",
         "0x5",
-        &format!("[{}]", coins.first().unwrap().coin_object_id),
+        &format!("[{}]", coins.first().unwrap().id()),
         "[]",
         &validator_addr.to_string(),
         "--gas-budget",
@@ -3550,13 +3108,11 @@ async fn test_stake_with_none_amount() -> Result<(), anyhow::Error> {
     ])
     .await?;
 
-    let stake = client.governance_api().get_stakes(address).await?;
+    let stake = client.list_delegated_stake(address).await?;
 
+    let coin = GasCoin::try_from(coins.first().unwrap()).unwrap();
     assert_eq!(1, stake.len());
-    assert_eq!(
-        coins.first().unwrap().balance,
-        stake.first().unwrap().stakes.first().unwrap().principal
-    );
+    assert_eq!(coin.value(), stake.first().unwrap().principal);
     Ok(())
 }
 
@@ -3566,20 +3122,20 @@ async fn test_stake_with_u64_amount() -> Result<(), anyhow::Error> {
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let coins = client
-        .coin_read_api()
-        .get_coins(address, None, None, None)
+        .get_owned_objects(address, Some(GasCoin::type_()), None, None)
         .await?
-        .data;
+        .items;
 
     let config_path = test_cluster.swarm.dir().join(RTD_CLIENT_CONFIG);
     let validator_addr = client
-        .governance_api()
-        .get_latest_rtd_system_state()
+        .get_system_state(None)
         .await?
-        .active_validators[0]
-        .rtd_address;
+        .validators()
+        .active_validators()[0]
+        .address()
+        .to_owned();
 
     test_with_rtd_binary(&[
         "client",
@@ -3594,7 +3150,7 @@ async fn test_stake_with_u64_amount() -> Result<(), anyhow::Error> {
         "request_add_stake_mul_coin",
         "--args",
         "0x5",
-        &format!("[{}]", coins.first().unwrap().coin_object_id),
+        &format!("[{}]", coins.first().unwrap().id()),
         "[1000000000]",
         &validator_addr.to_string(),
         "--gas-budget",
@@ -3602,16 +3158,14 @@ async fn test_stake_with_u64_amount() -> Result<(), anyhow::Error> {
     ])
     .await?;
 
-    let stake = client.governance_api().get_stakes(address).await?;
+    let stake = client.list_delegated_stake(address).await?;
 
     assert_eq!(1, stake.len());
-    assert_eq!(
-        1000000000,
-        stake.first().unwrap().stakes.first().unwrap().principal
-    );
+    assert_eq!(1000000000, stake.first().unwrap().principal);
     Ok(())
 }
 
+#[allow(deprecated)]
 async fn test_with_rtd_binary(args: &[&str]) -> Result<(), anyhow::Error> {
     let mut cmd = assert_cmd::Command::cargo_bin("rtd").unwrap();
     let args = args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -3631,69 +3185,38 @@ async fn test_get_owned_objects_owned_by_address_and_check_pagination() -> Resul
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
 
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_responses = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new(
-                Some(RtdObjectDataFilter::StructType(GasCoin::type_())),
-                Some(
-                    RtdObjectDataOptions::new()
-                        .with_type()
-                        .with_owner()
-                        .with_previous_transaction(),
-                ),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, Some(GasCoin::type_()), None, None)
         .await?;
 
     // assert that all the objects_returned are owned by the address
-    for resp in &object_responses.data {
-        let obj_owner = resp.object().unwrap().owner.clone().unwrap();
-        assert_eq!(
-            obj_owner.get_owner_address().unwrap().to_string(),
-            address.to_string()
-        )
+    for resp in &object_responses.items {
+        let obj_owner = resp.owner();
+        assert_eq!(obj_owner.get_owner_address().unwrap(), address)
     }
     // assert that has next page is false
-    assert!(!object_responses.has_next_page);
+    assert!(object_responses.next_page_token.is_none());
 
     // Pagination check
     let mut has_next = true;
     let mut cursor = None;
-    let mut response_data: Vec<RtdObjectResponse> = Vec::new();
+    let mut response_data: Vec<Object> = Vec::new();
     while has_next {
-        let object_responses = client
-            .read_api()
-            .get_owned_objects(
-                address,
-                Some(RtdObjectResponseQuery::new(
-                    Some(RtdObjectDataFilter::StructType(GasCoin::type_())),
-                    Some(
-                        RtdObjectDataOptions::new()
-                            .with_type()
-                            .with_owner()
-                            .with_previous_transaction(),
-                    ),
-                )),
-                cursor,
-                Some(1),
-            )
+        let mut object_responses = client
+            .get_owned_objects(address, Some(GasCoin::type_()), Some(1), cursor.clone())
             .await?;
 
-        response_data.push(object_responses.data.first().unwrap().clone());
+        response_data.push(object_responses.items.pop().unwrap());
 
-        if object_responses.has_next_page {
-            cursor = object_responses.next_cursor;
+        if object_responses.next_page_token.is_some() {
+            cursor = object_responses.next_page_token;
         } else {
             has_next = false;
         }
     }
 
-    assert_eq!(&response_data, &object_responses.data);
+    assert_eq!(&response_data, &object_responses.items);
 
     Ok(())
 }
@@ -3735,13 +3258,12 @@ async fn key_identity_test() {
 
 fn assert_dry_run(dry_run: RtdClientCommandResult, object_id: ObjectID, command: &str) {
     if let RtdClientCommandResult::DryRun(response) = dry_run {
-        assert_eq!(
-            *response.effects.status(),
-            RtdExecutionStatus::Success,
+        assert!(
+            response.transaction.effects.status().is_ok(),
             "{command} dry run test effects is not success"
         );
         assert_eq!(
-            response.effects.gas_object().object_id(),
+            response.transaction.effects.gas_object().unwrap().0.0,
             object_id,
             "{command} dry run test failed, gas object used is not the expected one"
         );
@@ -3756,27 +3278,11 @@ async fn test_dry_run() -> Result<(), anyhow::Error> {
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
-    let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::full_content(),
-            )),
-            None,
-            None,
-        )
-        .await?;
+    let client = context.grpc_client()?;
+    let object_refs = client.get_owned_objects(address, None, None, None).await?;
 
-    let object_id = object_refs
-        .data
-        .first()
-        .unwrap()
-        .object()
-        .unwrap()
-        .object_id;
-    let object_to_send = object_refs.data.get(1).unwrap().object().unwrap().object_id;
+    let object_id = object_refs.items.first().unwrap().id();
+    let object_to_send = object_refs.items.get(1).unwrap().id();
 
     // === TRANSFER === //
     let transfer_dry_run = RtdClientCommands::Transfer {
@@ -3837,14 +3343,17 @@ async fn test_dry_run() -> Result<(), anyhow::Error> {
     .await?;
 
     if let RtdClientCommandResult::DryRun(response) = pay_dry_run {
-        assert_eq!(*response.effects.status(), RtdExecutionStatus::Success);
-        assert_ne!(response.effects.gas_object().object_id(), object_id);
+        assert!(response.transaction.effects.status().is_ok());
+        assert_ne!(
+            response.transaction.effects.gas_object().unwrap().0.0,
+            object_id
+        );
     } else {
         panic!("Pay dry run failed");
     }
 
     // specify which gas object to use
-    let gas_coin_id = object_refs.data.last().unwrap().object().unwrap().object_id;
+    let gas_coin_id = object_refs.items.last().unwrap().id();
     let pay_dry_run = RtdClientCommands::Pay {
         input_coins: vec![object_id],
         recipients: vec![KeyIdentity::Address(RtdAddress::random_for_testing_only())],
@@ -3908,7 +3417,7 @@ async fn test_dry_run() -> Result<(), anyhow::Error> {
 
 async fn test_cluster_helper() -> (
     TestCluster,
-    RtdClient,
+    Client,
     u64,
     [ObjectID; 3],
     [KeyIdentity; 2],
@@ -3918,29 +3427,15 @@ async fn test_cluster_helper() -> (
     let rgp = test_cluster.get_reference_gas_price().await;
     let address1 = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await.unwrap();
+    let client = context.grpc_client().unwrap();
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address1,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::full_content(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address1, None, None, None)
         .await
         .unwrap();
 
-    let object_id1 = object_refs
-        .data
-        .first()
-        .unwrap()
-        .object()
-        .unwrap()
-        .object_id;
-    let object_id2 = object_refs.data.get(1).unwrap().object().unwrap().object_id;
-    let object_id3 = object_refs.data.get(2).unwrap().object().unwrap().object_id;
+    let object_id1 = object_refs.items.first().unwrap().id();
+    let object_id2 = object_refs.items.get(1).unwrap().id();
+    let object_id3 = object_refs.items.get(2).unwrap().id();
     let address2 = RtdAddress::random_for_testing_only();
     let address3 = RtdAddress::random_for_testing_only();
     let recipient1 = KeyIdentity::Address(address2);
@@ -4006,54 +3501,22 @@ async fn test_pay() -> Result<(), anyhow::Error> {
     // we also check if the balances are right!
     if let RtdClientCommandResult::TransactionBlock(response) = pay {
         // check tx status
-        assert!(response.status_ok().unwrap());
+        assert!(response.effects.status().is_ok());
         // check gas coin used
+        assert_eq!(response.effects.gas_object().unwrap().0.0, object_id3);
+        let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
         assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            object_id3
+            client.get_balance(address2, &GAS::type_()).await?.balance(),
+            amounts[0]
         );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address2,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
+        let objs_refs = client.get_owned_objects(address3, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
         assert_eq!(
-            client
-                .coin_read_api()
-                .get_balance(address2, None)
-                .await?
-                .total_balance,
-            amounts[0] as u128
-        );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address3,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(response.status_ok().unwrap());
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
-        assert_eq!(
-            client
-                .coin_read_api()
-                .get_balance(address3, None)
-                .await?
-                .total_balance,
-            amounts[1] as u128
+            client.get_balance(address3, &GAS::type_()).await?.balance(),
+            amounts[1]
         );
     } else {
         panic!("Pay test failed");
@@ -4090,54 +3553,22 @@ async fn test_pay_rtd() -> Result<(), anyhow::Error> {
     // and if the gas object used was the first object in the input coins
     // we also check if the balances of each recipient are right!
     if let RtdClientCommandResult::TransactionBlock(response) = pay_rtd {
-        assert!(response.status_ok().unwrap());
+        assert!(response.effects.status().is_ok());
         // check gas coin used
+        assert_eq!(response.effects.gas_object().unwrap().0.0, object_id1);
+        let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
         assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            object_id1
+            client.get_balance(address2, &GAS::type_()).await?.balance(),
+            amounts[0]
         );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address2,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
+        let objs_refs = client.get_owned_objects(address3, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
         assert_eq!(
-            client
-                .coin_read_api()
-                .get_balance(address2, None)
-                .await?
-                .total_balance,
-            amounts[0] as u128
-        );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address3,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(response.status_ok().unwrap());
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
-        assert_eq!(
-            client
-                .coin_read_api()
-                .get_balance(address3, None)
-                .await?
-                .total_balance,
-            amounts[1] as u128
+            client.get_balance(address3, &GAS::type_()).await?.balance(),
+            amounts[1]
         );
     } else {
         panic!("PayRtd test failed");
@@ -4169,27 +3600,945 @@ async fn test_pay_all_rtd() -> Result<(), anyhow::Error> {
     // the recipient, so we check that the recipient has one object, if the tx status is success,
     // and if the gas object used was the first object in the input coins
     if let RtdClientCommandResult::TransactionBlock(response) = pay_all_rtd {
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address2,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(response.status_ok().unwrap());
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
-        assert_eq!(
-            response.effects.unwrap().gas_object().object_id(),
-            object_id1
-        );
+        assert!(response.effects.status().is_ok());
+        let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
+        assert_eq!(response.effects.gas_object().unwrap().0.0, object_id1);
     } else {
         panic!("PayAllRtd test failed");
     }
+
+    Ok(())
+}
+
+#[sim_test]
+async fn test_send_funds_rtd() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let protocol_config = ProtocolConfig::get_for_version(
+        ProtocolVersion::max(),
+        test_cluster.get_chain_identifier().chain(),
+    );
+    if !protocol_config.enable_address_balance_gas_payments() {
+        return Ok(());
+    }
+    let recipient1 = &recipients[0];
+    let address2 = addresses[0];
+    let context = &mut test_cluster.wallet;
+    let amount = 1_000_000_000u64;
+
+    let send_funds = RtdClientCommands::SendFunds {
+        to: recipient1.clone(),
+        amount: Some(amount),
+        all_coins: false,
+        coin_type: None,
+        from_address_balance: false,
+        gas_data: GasDataArgs {
+            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_TRANSFER),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = send_funds else {
+        panic!("SendFunds test failed");
+    };
+    assert!(response.effects.status().is_ok());
+
+    // `send-funds` deposits into the recipient's address balance, not a Coin<T>.
+    let balance = client.get_balance(address2, &GAS::type_()).await?;
+    assert_eq!(balance.address_balance(), amount);
+    assert_eq!(balance.coin_balance(), 0);
+
+    let balance_output = RtdClientCommands::Balance {
+        address: Some(recipient1.clone()),
+        coin_type: None,
+        with_coins: false,
+    }
+    .execute(context)
+    .await?
+    .to_string();
+    assert!(
+        balance_output.contains(&amount.to_string()),
+        "{balance_output}"
+    );
+
+    let balance_with_coins_output = RtdClientCommands::Balance {
+        address: Some(recipient1.clone()),
+        coin_type: None,
+        with_coins: true,
+    }
+    .execute(context)
+    .await?
+    .to_string();
+    assert!(
+        balance_with_coins_output.contains("address balance"),
+        "{balance_with_coins_output}"
+    );
+    assert!(
+        balance_with_coins_output.contains(&amount.to_string()),
+        "{balance_with_coins_output}"
+    );
+
+    Ok(())
+}
+
+/// The `Coin<RTD>` objects owned by `address`.
+async fn rtd_coins(client: &Client, address: RtdAddress) -> Result<Vec<Object>, anyhow::Error> {
+    Ok(client
+        .get_owned_objects(address, Some(GasCoin::type_()), None, None)
+        .await?
+        .items)
+}
+
+/// Deposit `amount` MIST from `context`'s active address into `recipient`'s address balance.
+async fn fund_address_balance(
+    context: &mut WalletContext,
+    recipient: RtdAddress,
+    amount: u64,
+    rgp: u64,
+) -> Result<(), anyhow::Error> {
+    let result = RtdClientCommands::SendFunds {
+        to: KeyIdentity::Address(recipient),
+        amount: Some(amount),
+        all_coins: false,
+        coin_type: None,
+        from_address_balance: false,
+        gas_data: GasDataArgs {
+            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_TRANSFER),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(response.effects.status().is_ok());
+    Ok(())
+}
+
+/// Publish a package from `context`'s active address, letting gas selection do its thing unless
+/// `gas` names coins to pay with explicitly.
+async fn publish_with_gas(
+    context: &mut WalletContext,
+    gas: Vec<ObjectID>,
+) -> Result<rtd_rpc_api::client::ExecutedTransaction, anyhow::Error> {
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.install_dir = None;
+
+    // The package needs an environment matching the cluster it is published to.
+    let chain_id = context.cache_chain_id().await?;
+    let (temp_dir, package_path) =
+        create_temp_dir_with_framework_packages("dummy_modules_publish", Some(chain_id))?;
+
+    let result = RtdClientCommands::Publish(PublishArgs {
+        package_path,
+        build_config,
+        skip_dependency_verification: false,
+        verify_deps: false,
+        with_unpublished_dependencies: false,
+        payment: PaymentArgs { gas },
+        // No budget: exercise estimation as well as selection.
+        gas_data: GasDataArgs::default(),
+        processing: TxProcessingArgs::default(),
+    })
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("Publish did not return a transaction block");
+    };
+    temp_dir.close()?;
+    Ok(response)
+}
+
+/// `send-funds --all-coins` drains every coin object the sender owns into the recipient's address
+/// balance, and leaves the sender's own address balance alone.
+#[sim_test]
+async fn test_send_funds_all_coins() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    // Give the sender an address balance too, so we can tell that `--all-coins` leaves it alone.
+    let kept_in_address_balance = 1_000_000_000u64;
+    fund_address_balance(context, sender, kept_in_address_balance, rgp).await?;
+
+    let coins_before = client.get_balance(sender, &GAS::type_()).await?;
+    assert!(coins_before.coin_balance() > 0);
+    assert_eq!(coins_before.address_balance(), kept_in_address_balance);
+
+    let result = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: None,
+        all_coins: true,
+        coin_type: None,
+        from_address_balance: false,
+        gas_data: GasDataArgs::default(),
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "send-funds --all-coins failed: {:?}",
+        response.effects.status()
+    );
+
+    // Every coin the sender owned is gone, and their address balance is untouched.
+    let sender_after = client.get_balance(sender, &GAS::type_()).await?;
+    assert_eq!(sender_after.coin_balance(), 0);
+    assert_eq!(sender_after.address_balance(), kept_in_address_balance);
+    assert!(rtd_coins(&client, sender).await?.is_empty());
+
+    // The recipient received the coins, less the gas actually charged, in their address balance.
+    let recipient_after = client.get_balance(recipient_address, &GAS::type_()).await?;
+    let gas_used = response.effects.gas_cost_summary().net_gas_usage();
+    assert_eq!(
+        recipient_after.address_balance() as i64,
+        coins_before.coin_balance() as i64 - gas_used
+    );
+    assert_eq!(recipient_after.coin_balance(), 0);
+
+    Ok(())
+}
+
+/// Publish the `trusted_coin` package and mint one `Coin<TRUSTED_COIN>` per entry in `amounts`, all
+/// owned by `context`'s active address. Returns the minted coin's type.
+async fn publish_and_mint_trusted_coin(
+    context: &mut WalletContext,
+    rgp: u64,
+    amounts: &[u64],
+) -> Result<TypeTag, anyhow::Error> {
+    let response = publish_with_gas(context, vec![]).await?;
+    assert!(
+        response.effects.status().is_ok(),
+        "publishing trusted_coin failed: {:?}",
+        response.effects.status()
+    );
+
+    let package_id = *response
+        .effects
+        .published_packages()
+        .first()
+        .expect("trusted_coin package must be published");
+    let coin_type = TypeTag::from_str(&format!("{package_id}::trusted_coin::TRUSTED_COIN"))?;
+
+    // Look the cap up by type: publishing hands the sender an `UpgradeCap` as well, so being owned
+    // by them is not enough to identify it.
+    let treasury_cap_type = TypeTag::from_str(&format!("0x2::coin::TreasuryCap<{coin_type}>"))?;
+    let TypeTag::Struct(treasury_cap_struct) = treasury_cap_type else {
+        panic!("TreasuryCap must be a struct type");
+    };
+    let client = context.grpc_client()?;
+    let treasury_cap = client
+        .get_owned_objects(
+            context.active_address()?,
+            Some(*treasury_cap_struct),
+            None,
+            None,
+        )
+        .await?
+        .items
+        .first()
+        .expect("trusted_coin init must create a treasury cap")
+        .id();
+
+    let sender = context.active_address()?;
+    for amount in amounts {
+        // `trusted_coin::mint` returns the coin rather than transferring it, and `Call` leaves
+        // return values unused, so mint through the framework's entry function instead.
+        let result = RtdClientCommands::Call {
+            package: RTD_FRAMEWORK_PACKAGE_ID,
+            module: "coin".to_string(),
+            function: "mint_and_transfer".to_string(),
+            type_args: vec![coin_type.clone()],
+            args: vec![
+                RtdJsonValue::new(json!(treasury_cap.to_string()))?,
+                RtdJsonValue::new(json!(amount.to_string()))?,
+                RtdJsonValue::new(json!(sender.to_string()))?,
+            ],
+            payment: PaymentArgs::default(),
+            gas_data: GasDataArgs {
+                gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS),
+                ..Default::default()
+            },
+            processing: TxProcessingArgs::default(),
+        }
+        .execute(context)
+        .await?;
+
+        let RtdClientCommandResult::TransactionBlock(response) = result else {
+            panic!("Call did not return a transaction block");
+        };
+        assert!(
+            response.effects.status().is_ok(),
+            "minting TRUSTED_COIN failed: {:?}",
+            response.effects.status()
+        );
+    }
+
+    Ok(coin_type)
+}
+
+/// The `Coin<T>` objects owned by `address`.
+async fn coins_of_type(
+    client: &Client,
+    address: RtdAddress,
+    coin_type: &TypeTag,
+) -> Result<Vec<Object>, anyhow::Error> {
+    Ok(client
+        .get_owned_objects(address, Some(Coin::type_(coin_type.clone())), None, None)
+        .await?
+        .items)
+}
+
+/// `send-funds --all-coins` drains a non-RTD coin type too. Gas is paid in RTD from a separate
+/// source, so unlike the RTD case the recipient receives the full amount with nothing deducted.
+#[sim_test]
+async fn test_send_funds_all_coins_non_rtd() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    let amounts = [1_000u64, 2_000, 3_000];
+    let minted: u64 = amounts.iter().sum();
+    let coin_type = publish_and_mint_trusted_coin(context, rgp, &amounts).await?;
+    let TypeTag::Struct(coin_struct_tag) = &coin_type else {
+        panic!("TRUSTED_COIN must be a struct type");
+    };
+
+    let before = client.get_balance(sender, coin_struct_tag).await?;
+    assert_eq!(before.coin_balance(), minted);
+    assert_eq!(
+        coins_of_type(&client, sender, &coin_type).await?.len(),
+        amounts.len()
+    );
+    let rtd_before = client.get_balance(sender, &GAS::type_()).await?;
+
+    let result = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: None,
+        all_coins: true,
+        coin_type: Some(coin_type.clone()),
+        from_address_balance: false,
+        gas_data: GasDataArgs::default(),
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "send-funds --all-coins failed: {:?}",
+        response.effects.status()
+    );
+
+    // Every TRUSTED_COIN the sender owned is gone.
+    let sender_after = client.get_balance(sender, coin_struct_tag).await?;
+    assert_eq!(sender_after.coin_balance(), 0);
+    assert!(coins_of_type(&client, sender, &coin_type).await?.is_empty());
+
+    // The recipient received the whole minted amount, with no gas deducted from it.
+    let recipient_after = client
+        .get_balance(recipient_address, coin_struct_tag)
+        .await?;
+    assert_eq!(recipient_after.address_balance(), minted);
+    assert_eq!(recipient_after.coin_balance(), 0);
+
+    // The sender paid for the transfer in RTD instead.
+    let rtd_after = client.get_balance(sender, &GAS::type_()).await?;
+    let gas_used = response.effects.gas_cost_summary().net_gas_usage();
+    assert_eq!(
+        rtd_after.coin_balance() as i64 + rtd_after.address_balance() as i64,
+        rtd_before.coin_balance() as i64 + rtd_before.address_balance() as i64 - gas_used
+    );
+
+    Ok(())
+}
+
+/// A sender holding exactly one non-RTD coin has nothing to merge it with, and a `MergeCoins` with
+/// no sources is not a valid command, so `--all-coins` has to skip the merge entirely.
+#[sim_test]
+async fn test_send_funds_all_coins_non_rtd_single_coin() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    let minted = 5_000u64;
+    let coin_type = publish_and_mint_trusted_coin(context, rgp, &[minted]).await?;
+    let TypeTag::Struct(coin_struct_tag) = &coin_type else {
+        panic!("TRUSTED_COIN must be a struct type");
+    };
+    assert_eq!(coins_of_type(&client, sender, &coin_type).await?.len(), 1);
+
+    let result = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: None,
+        all_coins: true,
+        coin_type: Some(coin_type.clone()),
+        from_address_balance: false,
+        gas_data: GasDataArgs::default(),
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "send-funds --all-coins with a single coin failed: {:?}",
+        response.effects.status()
+    );
+
+    assert!(coins_of_type(&client, sender, &coin_type).await?.is_empty());
+    let recipient_after = client
+        .get_balance(recipient_address, coin_struct_tag)
+        .await?;
+    assert_eq!(recipient_after.address_balance(), minted);
+
+    Ok(())
+}
+
+/// `--all-coins` for a non-RTD coin works with a gas sponsor: the sponsor pays RTD gas, which has
+/// nothing to do with the coins being sent. The RTD case still refuses, because there the coins
+/// being sent are the gas payment.
+#[sim_test]
+async fn test_send_funds_all_coins_sponsor() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sponsor = test_cluster.get_address_1();
+    let context = &mut test_cluster.wallet;
+
+    let minted = 7_000u64;
+    let coin_type = publish_and_mint_trusted_coin(context, rgp, &[minted, minted]).await?;
+    let TypeTag::Struct(coin_struct_tag) = &coin_type else {
+        panic!("TRUSTED_COIN must be a struct type");
+    };
+
+    let sponsor_before = client.get_balance(sponsor, &GAS::type_()).await?;
+
+    let result = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: None,
+        all_coins: true,
+        coin_type: Some(coin_type.clone()),
+        from_address_balance: false,
+        gas_data: GasDataArgs {
+            gas_sponsor: Some(sponsor),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "sponsored send-funds --all-coins failed: {:?}",
+        response.effects.status()
+    );
+
+    let recipient_after = client
+        .get_balance(recipient_address, coin_struct_tag)
+        .await?;
+    assert_eq!(recipient_after.address_balance(), minted * 2);
+
+    // The sponsor, not the sender, paid the gas.
+    let sponsor_after = client.get_balance(sponsor, &GAS::type_()).await?;
+    let gas_used = response.effects.gas_cost_summary().net_gas_usage();
+    assert_eq!(
+        sponsor_after.coin_balance() as i64 + sponsor_after.address_balance() as i64,
+        sponsor_before.coin_balance() as i64 + sponsor_before.address_balance() as i64 - gas_used
+    );
+
+    // RTD still cannot be sponsored: there the coins being sent are what pays for gas.
+    let err = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: None,
+        all_coins: true,
+        coin_type: None,
+        from_address_balance: false,
+        gas_data: GasDataArgs {
+            gas_sponsor: Some(sponsor),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await
+    .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("cannot be used with a gas sponsor"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+/// `--from-address-balance` takes the amount out of the sender's address balance even though they
+/// have coins that could cover it. Gas selection then finds that same balance can cover the budget,
+/// so nothing owned is touched at all and the transaction ends up with no owned object inputs.
+#[sim_test]
+async fn test_send_funds_from_address_balance_rtd() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    let funded = 5_000_000_000u64;
+    fund_address_balance(context, sender, funded, rgp).await?;
+
+    let coins_before = rtd_coins(&client, sender).await?;
+    let before = client.get_balance(sender, &GAS::type_()).await?;
+    assert!(!coins_before.is_empty());
+    assert_eq!(before.address_balance(), funded);
+
+    let amount = 1_000_000u64;
+    let result = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: Some(amount),
+        all_coins: false,
+        coin_type: None,
+        from_address_balance: true,
+        gas_data: GasDataArgs::default(),
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "send-funds --from-address-balance failed: {:?}",
+        response.effects.status()
+    );
+
+    // The address balance covered gas as well, so the transaction carries no gas payment. Paying
+    // that way is epoch-scoped, so the fullnode gives it an expiration with a validity window for
+    // replay protection — `Validity` when it can also name the transaction's proposers.
+    assert!(response.transaction.gas_data().payment.is_empty());
+    assert!(matches!(
+        response.transaction.expiration(),
+        TransactionExpiration::ValidDuring { .. } | TransactionExpiration::Validity { .. }
+    ));
+
+    // The sender's coins are untouched: both the amount and the gas came out of address balance.
+    let after = client.get_balance(sender, &GAS::type_()).await?;
+    assert_eq!(rtd_coins(&client, sender).await?.len(), coins_before.len());
+    assert_eq!(after.coin_balance(), before.coin_balance());
+    let gas_used = response.effects.gas_cost_summary().net_gas_usage();
+    assert_eq!(
+        after.address_balance() as i64,
+        funded as i64 - amount as i64 - gas_used
+    );
+
+    let recipient_after = client.get_balance(recipient_address, &GAS::type_()).await?;
+    assert_eq!(recipient_after.address_balance(), amount);
+    assert_eq!(recipient_after.coin_balance(), 0);
+
+    Ok(())
+}
+
+/// `--from-address-balance` works for a non-RTD coin too: the amount comes from the sender's address
+/// balance of that type, and gas from their RTD address balance.
+#[sim_test]
+async fn test_send_funds_from_address_balance_non_rtd() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    let minted = 10_000u64;
+    // These calls are boxed to keep the futures they build off this test's own stack frame: this
+    // test drives enough transactions to otherwise overflow the stack in debug builds.
+    let coin_type = Box::pin(publish_and_mint_trusted_coin(context, rgp, &[minted])).await?;
+    let TypeTag::Struct(coin_struct_tag) = &coin_type else {
+        panic!("TRUSTED_COIN must be a struct type");
+    };
+
+    // Drain the minted coins into the sender's own address balance, so that the transfer below has
+    // a balance of this type to draw on rather than coin objects.
+    let result = Box::pin(
+        RtdClientCommands::SendFunds {
+            to: KeyIdentity::Address(sender),
+            amount: None,
+            all_coins: true,
+            coin_type: Some(coin_type.clone()),
+            from_address_balance: false,
+            gas_data: GasDataArgs::default(),
+            processing: TxProcessingArgs::default(),
+        }
+        .execute(context),
+    )
+    .await?;
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "draining TRUSTED_COIN into the address balance failed: {:?}",
+        response.effects.status()
+    );
+    assert_eq!(
+        client
+            .get_balance(sender, coin_struct_tag)
+            .await?
+            .address_balance(),
+        minted
+    );
+
+    // Gas is always paid in RTD, so the sender needs a RTD address balance for it to come from.
+    Box::pin(fund_address_balance(context, sender, 5_000_000_000, rgp)).await?;
+    let coins_before = rtd_coins(&client, sender).await?;
+
+    let amount = 4_000u64;
+    let result = Box::pin(
+        RtdClientCommands::SendFunds {
+            to: recipient.clone(),
+            amount: Some(amount),
+            all_coins: false,
+            coin_type: Some(coin_type.clone()),
+            from_address_balance: true,
+            gas_data: GasDataArgs::default(),
+            processing: TxProcessingArgs::default(),
+        }
+        .execute(context),
+    )
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "non-RTD send-funds --from-address-balance failed: {:?}",
+        response.effects.status()
+    );
+
+    assert!(response.transaction.gas_data().payment.is_empty());
+    assert_eq!(rtd_coins(&client, sender).await?.len(), coins_before.len());
+    assert_eq!(
+        client
+            .get_balance(recipient_address, coin_struct_tag)
+            .await?
+            .address_balance(),
+        amount
+    );
+    assert_eq!(
+        client
+            .get_balance(sender, coin_struct_tag)
+            .await?
+            .address_balance(),
+        minted - amount
+    );
+
+    Ok(())
+}
+
+/// `--from-address-balance` is about where the funds come from, not about gas. Draining the whole
+/// address balance into the amount leaves nothing to pay gas with, so gas selection falls back to
+/// the sender's coins and the transfer still goes through.
+#[sim_test]
+async fn test_send_funds_from_address_balance_gas_falls_back_to_coins() -> Result<(), anyhow::Error>
+{
+    let (mut test_cluster, client, rgp, _objects, recipients, addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let recipient_address = addresses[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    // Fund the address balance with exactly what is about to be sent, leaving nothing for gas.
+    let funded = 1_000_000u64;
+    fund_address_balance(context, sender, funded, rgp).await?;
+
+    let before = client.get_balance(sender, &GAS::type_()).await?;
+    assert!(
+        before.coin_balance() > 0,
+        "the sender needs coins to fall back to"
+    );
+    assert_eq!(before.address_balance(), funded);
+
+    let result = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: Some(funded),
+        all_coins: false,
+        coin_type: None,
+        from_address_balance: true,
+        // Pin the budget so this exercises gas payment rather than budget estimation.
+        gas_data: GasDataArgs {
+            gas_budget: Some(rgp * TEST_ONLY_GAS_UNIT_FOR_TRANSFER),
+            ..Default::default()
+        },
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await?;
+
+    let RtdClientCommandResult::TransactionBlock(response) = result else {
+        panic!("SendFunds did not return a transaction block");
+    };
+    assert!(
+        response.effects.status().is_ok(),
+        "send-funds --from-address-balance failed: {:?}",
+        response.effects.status()
+    );
+
+    // Gas came from a coin, so the transaction does carry a gas payment this time.
+    assert!(!response.transaction.gas_data().payment.is_empty());
+
+    // The whole address balance still went to the recipient; only gas came out of the coins.
+    let after = client.get_balance(sender, &GAS::type_()).await?;
+    assert_eq!(after.address_balance(), 0);
+    let gas_used = response.effects.gas_cost_summary().net_gas_usage();
+    assert_eq!(
+        after.coin_balance() as i64,
+        before.coin_balance() as i64 - gas_used
+    );
+
+    let recipient_after = client.get_balance(recipient_address, &GAS::type_()).await?;
+    assert_eq!(recipient_after.address_balance(), funded);
+
+    Ok(())
+}
+
+/// `--from-address-balance` fails up front when the address balance cannot cover the amount, rather
+/// than silently sending from coins instead.
+#[sim_test]
+async fn test_send_funds_from_address_balance_insufficient() -> Result<(), anyhow::Error> {
+    let (mut test_cluster, client, rgp, _objects, recipients, _addresses) =
+        test_cluster_helper().await;
+    let recipient = &recipients[0];
+    let sender = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+
+    let funded = 1_000_000u64;
+    fund_address_balance(context, sender, funded, rgp).await?;
+
+    let before = client.get_balance(sender, &GAS::type_()).await?;
+    assert!(
+        before.coin_balance() > funded,
+        "the sender's coins must be able to cover what the address balance cannot"
+    );
+
+    let err = RtdClientCommands::SendFunds {
+        to: recipient.clone(),
+        amount: Some(funded + 1),
+        all_coins: false,
+        coin_type: None,
+        from_address_balance: true,
+        gas_data: GasDataArgs::default(),
+        processing: TxProcessingArgs::default(),
+    }
+    .execute(context)
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("Insufficient address balance"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+/// An address holding only an address balance — no coins at all — can still publish: the fullnode
+/// funds gas from that balance and the transaction carries no gas payment.
+#[sim_test]
+async fn test_publish_with_address_balance_only() -> Result<(), anyhow::Error> {
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let rgp = test_cluster.get_reference_gas_price().await;
+    let context = &mut test_cluster.wallet;
+    let client = context.grpc_client()?;
+
+    // A brand new address owns no objects. Fund only its address balance.
+    let result = RtdClientCommands::NewAddress {
+        key_scheme: SignatureScheme::ED25519,
+        alias: None,
+        derivation_path: None,
+        word_length: None,
+    }
+    .execute(context)
+    .await?;
+    let RtdClientCommandResult::NewAddress(new_address) = result else {
+        panic!("NewAddress did not return an address");
+    };
+    let publisher = new_address.address;
+
+    let funded = 5_000_000_000u64;
+    fund_address_balance(context, publisher, funded, rgp).await?;
+
+    let before = client.get_balance(publisher, &GAS::type_()).await?;
+    assert_eq!(before.coin_balance(), 0);
+    assert_eq!(before.address_balance(), funded);
+
+    context.config.active_address = Some(publisher);
+    let response = publish_with_gas(context, vec![]).await?;
+    assert!(
+        response.effects.status().is_ok(),
+        "publish from address balance failed: {:?}",
+        response.effects.status()
+    );
+
+    // Gas came from the address balance: no gas payment, and the balance paid for it.
+    assert!(response.transaction.gas_data().payment.is_empty());
+    let after = client.get_balance(publisher, &GAS::type_()).await?;
+    assert_eq!(after.coin_balance(), 0);
+    assert_eq!(
+        after.address_balance() as i64,
+        funded as i64 - response.effects.gas_cost_summary().net_gas_usage()
+    );
+
+    Ok(())
+}
+
+/// When an address has both coins and an address balance, a publish (which never touches the gas
+/// coin) is funded from the address balance, leaving the coins alone.
+#[sim_test]
+async fn test_publish_with_coins_and_address_balance() -> Result<(), anyhow::Error> {
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let rgp = test_cluster.get_reference_gas_price().await;
+    let publisher = test_cluster.get_address_1();
+    let context = &mut test_cluster.wallet;
+    let client = context.grpc_client()?;
+
+    let funded = 5_000_000_000u64;
+    fund_address_balance(context, publisher, funded, rgp).await?;
+
+    let coins_before = rtd_coins(&client, publisher).await?;
+    let before = client.get_balance(publisher, &GAS::type_()).await?;
+    assert!(!coins_before.is_empty());
+    assert_eq!(before.address_balance(), funded);
+
+    context.config.active_address = Some(publisher);
+    let response = publish_with_gas(context, vec![]).await?;
+    assert!(
+        response.effects.status().is_ok(),
+        "publish with coins and address balance failed: {:?}",
+        response.effects.status()
+    );
+
+    // The address balance covers the budget, so it pays, and the coins are left as they were.
+    assert!(response.transaction.gas_data().payment.is_empty());
+    let after = client.get_balance(publisher, &GAS::type_()).await?;
+    assert_eq!(after.coin_balance(), before.coin_balance());
+    assert_eq!(
+        rtd_coins(&client, publisher).await?.len(),
+        coins_before.len()
+    );
+    assert!(after.address_balance() < funded);
+
+    Ok(())
+}
+
+/// With no address balance, gas selection falls back to the sender's coins — all of them, which
+/// the validator smashes into a single coin.
+#[sim_test]
+async fn test_publish_with_coins_only() -> Result<(), anyhow::Error> {
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let publisher = test_cluster.get_address_1();
+    let context = &mut test_cluster.wallet;
+    let client = context.grpc_client()?;
+
+    let coins_before = rtd_coins(&client, publisher).await?;
+    assert!(coins_before.len() > 1, "expected several coins to smash");
+    let before = client.get_balance(publisher, &GAS::type_()).await?;
+    assert_eq!(before.address_balance(), 0);
+
+    context.config.active_address = Some(publisher);
+    let response = publish_with_gas(context, vec![]).await?;
+    assert!(
+        response.effects.status().is_ok(),
+        "publish with coins only failed: {:?}",
+        response.effects.status()
+    );
+
+    // All the coins were selected as payment and smashed into one.
+    assert_eq!(
+        response.transaction.gas_data().payment.len(),
+        coins_before.len()
+    );
+    assert_eq!(rtd_coins(&client, publisher).await?.len(), 1);
+    let after = client.get_balance(publisher, &GAS::type_()).await?;
+    assert_eq!(after.address_balance(), 0);
+    assert_eq!(
+        after.coin_balance() as i64,
+        before.coin_balance() as i64 - response.effects.gas_cost_summary().net_gas_usage()
+    );
+
+    Ok(())
+}
+
+/// Naming a gas coin explicitly opts out of gas selection entirely: that coin pays, and the
+/// sender's other coins are untouched.
+#[sim_test]
+async fn test_publish_with_explicit_gas_coin() -> Result<(), anyhow::Error> {
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let rgp = test_cluster.get_reference_gas_price().await;
+    let publisher = test_cluster.get_address_1();
+    let context = &mut test_cluster.wallet;
+    let client = context.grpc_client()?;
+
+    // Give the publisher an address balance as well, to show the named coin still wins.
+    fund_address_balance(context, publisher, 5_000_000_000, rgp).await?;
+
+    let coins_before = rtd_coins(&client, publisher).await?;
+    let gas_coin = coins_before.first().unwrap().id();
+
+    context.config.active_address = Some(publisher);
+    let response = publish_with_gas(context, vec![gas_coin]).await?;
+    assert!(
+        response.effects.status().is_ok(),
+        "publish with an explicit gas coin failed: {:?}",
+        response.effects.status()
+    );
+
+    // Exactly the named coin paid, and nothing else was consumed or smashed.
+    let payment = &response.transaction.gas_data().payment;
+    assert_eq!(payment.len(), 1);
+    assert_eq!(payment[0].0, gas_coin);
+    assert_eq!(response.effects.gas_object().unwrap().0.0, gas_coin);
+    assert_eq!(
+        rtd_coins(&client, publisher).await?.len(),
+        coins_before.len()
+    );
 
     Ok(())
 }
@@ -4235,28 +4584,12 @@ async fn test_transfer() -> Result<(), anyhow::Error> {
     // transfer command will transfer the object_id1 to address2, and use object_id2 as gas
     // we check if object1 is owned by address 2 and if the gas object used is object_id2
     if let RtdClientCommandResult::TransactionBlock(response) = transfer {
-        assert!(response.status_ok().unwrap());
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            object_id2
-        );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address2,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
-        assert_eq!(
-            objs_refs.data.first().unwrap().object().unwrap().object_id,
-            object_id1
-        );
+        assert!(response.effects.status().is_ok());
+        assert_eq!(response.effects.gas_object().unwrap().0.0, object_id2);
+        let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
+        assert_eq!(objs_refs.items.first().unwrap().id(), object_id1);
     } else {
         panic!("Transfer test failed");
     }
@@ -4289,30 +4622,13 @@ async fn test_transfer_rtd() -> Result<(), anyhow::Error> {
     // as gas, and we check if the recipient address received the object, and the expected balance
     // is correct
     if let RtdClientCommandResult::TransactionBlock(response) = transfer_rtd {
-        assert!(response.status_ok().unwrap());
-        assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            object_id1
-        );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address2,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(objs_refs.data.len(), 1);
-        let balance = client
-            .coin_read_api()
-            .get_balance(address2, None)
-            .await?
-            .total_balance;
-        assert_eq!(balance, amount as u128);
+        assert!(response.effects.status().is_ok());
+        assert_eq!(response.effects.gas_object().unwrap().0.0, object_id1);
+        let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
+        assert_eq!(objs_refs.items.len(), 1);
+        let balance = client.get_balance(address2, &GAS::type_()).await?.balance();
+        assert_eq!(balance, amount);
     } else {
         panic!("TransferRtd test failed");
     }
@@ -4330,34 +4646,16 @@ async fn test_transfer_rtd() -> Result<(), anyhow::Error> {
     .execute(context)
     .await?;
     if let RtdClientCommandResult::TransactionBlock(response) = transfer_rtd {
-        assert!(response.status_ok().unwrap());
+        assert!(response.effects.status().is_ok());
+        assert_eq!(response.effects.gas_object().unwrap().0.0, object_id1);
+        let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+        assert!(objs_refs.next_page_token.is_none());
         assert_eq!(
-            response.effects.as_ref().unwrap().gas_object().object_id(),
-            object_id1
-        );
-        let objs_refs = client
-            .read_api()
-            .get_owned_objects(
-                address2,
-                Some(RtdObjectResponseQuery::new_with_options(
-                    RtdObjectDataOptions::full_content(),
-                )),
-                None,
-                None,
-            )
-            .await?;
-        assert!(!objs_refs.has_next_page);
-        assert_eq!(
-            objs_refs.data.len(),
+            objs_refs.items.len(),
             2,
             "Expected to have two coins when calling transfer rtd the 2nd time"
         );
-        assert!(
-            objs_refs
-                .data
-                .iter()
-                .any(|x| x.object().unwrap().object_id == object_id1)
-        );
+        assert!(objs_refs.items.iter().any(|x| x.id() == object_id1));
     } else {
         panic!("TransferRtd test failed");
     }
@@ -4412,28 +4710,12 @@ async fn test_transfer_gas_smash() -> Result<(), anyhow::Error> {
         panic!("Transfer test failed");
     };
 
-    assert!(response.status_ok().unwrap());
-    assert_eq!(
-        response.effects.as_ref().unwrap().gas_object().object_id(),
-        object_id0
-    );
-    let objs_refs = client
-        .read_api()
-        .get_owned_objects(
-            address2,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::full_content(),
-            )),
-            None,
-            None,
-        )
-        .await?;
-    assert!(!objs_refs.has_next_page);
-    assert_eq!(objs_refs.data.len(), 1);
-    assert_eq!(
-        objs_refs.data.first().unwrap().object().unwrap().object_id,
-        object_id2
-    );
+    assert!(response.effects.status().is_ok());
+    assert_eq!(response.effects.gas_object().unwrap().0.0, object_id0);
+    let objs_refs = client.get_owned_objects(address2, None, None, None).await?;
+    assert!(objs_refs.next_page_token.is_none());
+    assert_eq!(objs_refs.items.len(), 1);
+    assert_eq!(objs_refs.items.first().unwrap().id(), object_id2);
 
     Ok(())
 }
@@ -4464,7 +4746,7 @@ async fn test_transfer_sponsored() -> Result<(), anyhow::Error> {
         panic!("Failed to set-up test")
     };
 
-    assert_eq!(response.status_ok(), Some(true));
+    assert!(response.effects.status().is_ok());
 
     // A1 sends 01 back to A0, but sponsored by A0.
     let transfer_back = RtdClientCommands::Transfer {
@@ -4485,13 +4767,11 @@ async fn test_transfer_sponsored() -> Result<(), anyhow::Error> {
         panic!("Failed to run sponsored transfer")
     };
 
-    let Some(tx) = &response.transaction else {
-        panic!("TransactionBlock response should contain a transaction");
-    };
+    let tx = &response.transaction;
 
-    assert_eq!(response.status_ok(), Some(true));
-    assert_eq!(tx.data.gas_data().owner, a0);
-    assert_eq!(tx.data.sender(), &a1);
+    assert!(response.effects.status().is_ok());
+    assert_eq!(tx.gas_data().owner, a0);
+    assert_eq!(tx.sender(), a1);
 
     Ok(())
 }
@@ -4536,23 +4816,17 @@ async fn test_transfer_serialized_data() -> Result<(), anyhow::Error> {
         panic!("Expected TransactionBlock result");
     };
 
-    let Some(effects) = &response.effects else {
-        panic!("TransactionBlock response should contain effects");
-    };
+    let effects = &response.effects;
 
     assert!(effects.status().is_ok());
-    assert_eq!(effects.gas_object().object_id(), o[1]);
+    assert_eq!(effects.gas_object().unwrap().0.0, o[1]);
 
-    let a1_objs = client
-        .read_api()
-        .get_owned_objects(a[1], None, None, None)
-        .await?;
+    let a1_objs = client.get_owned_objects(a[1], None, None, None).await?;
+    assert!(a1_objs.next_page_token.is_none());
 
-    assert!(!a1_objs.has_next_page);
-
-    let page = a1_objs.data;
+    let page = a1_objs.items;
     assert_eq!(page.len(), 1);
-    assert_eq!(page.first().unwrap().object().unwrap().object_id, o[0]);
+    assert_eq!(page.first().unwrap().id(), o[0]);
 
     Ok(())
 }
@@ -4599,23 +4873,17 @@ async fn test_transfer_serialized_kind() -> Result<(), anyhow::Error> {
         panic!("Expected TransactionBlock result");
     };
 
-    let Some(effects) = &response.effects else {
-        panic!("TransactionBlock response should contain effects");
-    };
+    let effects = &response.effects;
 
     assert!(effects.status().is_ok());
-    assert_eq!(effects.gas_object().object_id(), o[1]);
+    assert_eq!(effects.gas_object().unwrap().0.0, o[1]);
 
-    let a1_objs = client
-        .read_api()
-        .get_owned_objects(a[1], None, None, None)
-        .await?;
+    let a1_objs = client.get_owned_objects(a[1], None, None, None).await?;
+    assert!(a1_objs.next_page_token.is_none());
 
-    assert!(!a1_objs.has_next_page);
-
-    let page = a1_objs.data;
+    let page = a1_objs.items;
     assert_eq!(page.len(), 1);
-    assert_eq!(page.first().unwrap().object().unwrap().object_id, o[0]);
+    assert_eq!(page.first().unwrap().id(), o[0]);
 
     Ok(())
 }
@@ -4644,18 +4912,10 @@ async fn test_gas_estimation() -> Result<(), anyhow::Error> {
     .await
     .unwrap();
     if let RtdClientCommandResult::TransactionBlock(response) = transfer_rtd_cmd {
-        assert!(response.status_ok().unwrap());
-        let gas_used = response.effects.as_ref().unwrap().gas_object().object_id();
+        assert!(response.effects.status().is_ok());
+        let gas_used = response.effects.gas_object().unwrap().0.0;
         assert_eq!(gas_used, object_id1);
-        assert!(
-            response
-                .effects
-                .as_ref()
-                .unwrap()
-                .gas_cost_summary()
-                .gas_used()
-                <= gas_estimate.unwrap()
-        );
+        assert!(response.effects.gas_cost_summary().gas_used() <= gas_estimate.unwrap());
     } else {
         panic!("TransferRtd test failed");
     }
@@ -4705,25 +4965,19 @@ async fn test_custom_sender() -> Result<(), anyhow::Error> {
         panic!("Expected TransactionBlock result");
     };
 
-    assert_eq!(response.transaction.unwrap().data.sender(), &custom_sender);
+    assert_eq!(response.transaction.sender(), custom_sender);
 
-    let Some(effects) = &response.effects else {
-        panic!("TransactionBlock response should contain effects");
-    };
+    let effects = &response.effects;
 
     assert!(effects.status().is_ok());
-    assert_eq!(effects.gas_object().object_id(), o[1]);
+    assert_eq!(effects.gas_object().unwrap().0.0, o[1]);
 
-    let a1_objs = client
-        .read_api()
-        .get_owned_objects(a[1], None, None, None)
-        .await?;
+    let a1_objs = client.get_owned_objects(a[1], None, None, None).await?;
+    assert!(a1_objs.next_page_token.is_none());
 
-    assert!(!a1_objs.has_next_page);
-
-    let page = a1_objs.data;
+    let page = a1_objs.items;
     assert_eq!(page.len(), 1);
-    assert_eq!(page.first().unwrap().object().unwrap().object_id, o[0]);
+    assert_eq!(page.first().unwrap().id(), o[0]);
 
     // set sender to another address to which we don't have keys and it should fail
 
@@ -4777,30 +5031,21 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
     let rgp = test_cluster.get_reference_gas_price().await;
     let address = test_cluster.get_address_0();
     let context = &mut test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
     let object_refs = client
-        .read_api()
-        .get_owned_objects(
-            address,
-            Some(RtdObjectResponseQuery::new_with_options(
-                RtdObjectDataOptions::new()
-                    .with_type()
-                    .with_owner()
-                    .with_previous_transaction(),
-            )),
-            None,
-            None,
-        )
+        .get_owned_objects(address, None, None, None)
         .await?
-        .data;
+        .items;
 
     // Check log output contains all object ids.
-    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+    let gas_obj_id = object_refs.first().unwrap().id();
 
     // Provide path to well formed package sources
     let mut package_path = PathBuf::from(TEST_DATA_DIR);
     package_path.push("clever_errors");
-    let build_config = BuildConfig::new_for_testing().config;
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
     let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path: package_path.clone(),
@@ -4817,8 +5062,7 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
             },
             processing: TxProcessingArgs::default(),
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
@@ -4830,14 +5074,14 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
         unreachable!("Invalid response");
     };
 
-    let RtdTransactionBlockEffects::V1(effects) = response.effects.unwrap();
+    let effects = response.effects;
 
-    assert!(effects.status.is_ok());
-    assert_eq!(effects.gas_object().object_id(), gas_obj_id);
+    assert!(effects.status().is_ok());
+    assert_eq!(effects.gas_object().unwrap().0.0, gas_obj_id);
     let package = effects
         .created()
-        .iter()
-        .find(|refe| matches!(refe.owner, Owner::Immutable))
+        .into_iter()
+        .find(|refe| matches!(refe.1, Owner::Immutable))
         .unwrap();
 
     let elide_transaction_digest = |s: String| -> String {
@@ -4850,7 +5094,7 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
 
     // Normal abort
     let non_clever_abort = RtdClientCommands::Call {
-        package: package.reference.object_id,
+        package: package.0.0,
         module: "clever_errors".to_string(),
         function: "aborter".to_string(),
         type_args: vec![],
@@ -4868,7 +5112,7 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
 
     // Line-only abort
     let line_only_abort = RtdClientCommands::Call {
-        package: package.reference.object_id,
+        package: package.0.0,
         module: "clever_errors".to_string(),
         function: "aborter_line_no".to_string(),
         type_args: vec![],
@@ -4886,7 +5130,7 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
 
     // Full clever error with utf-8 string
     let clever_error_utf8 = RtdClientCommands::Call {
-        package: package.reference.object_id,
+        package: package.0.0,
         module: "clever_errors".to_string(),
         function: "clever_aborter".to_string(),
         type_args: vec![],
@@ -4904,7 +5148,7 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
 
     // Full clever error with non-utf-8 string
     let clever_error_non_utf8 = RtdClientCommands::Call {
-        package: package.reference.object_id,
+        package: package.0.0,
         module: "clever_errors".to_string(),
         function: "clever_aborter_not_a_string".to_string(),
         type_args: vec![],
@@ -4968,7 +5212,12 @@ async fn test_parse_host_port() {
 #[sim_test]
 async fn test_tree_shaking_package_with_unpublished_deps() -> Result<(), anyhow::Error> {
     let mut test = TreeShakingTest::new().await.unwrap();
-    let chain_id = test.client.read_api().get_chain_identifier().await.unwrap();
+    let chain_id = test
+        .client
+        .get_chain_identifier()
+        .await
+        .unwrap()
+        .to_string();
     let _ = update_toml_with_localnet_chain_id(&test.package_path("H"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("G"), chain_id.clone());
     // A package and with unpublished deps
@@ -5016,6 +5265,67 @@ async fn test_tree_shaking_package_with_direct_dependency() -> Result<(), anyhow
     assert!(
         linkage_table_b.contains_key(&package_a_id),
         "Package B should depend on A"
+    );
+
+    Ok(())
+}
+
+#[sim_test]
+async fn test_tree_shaking_package_with_duplicate_dependency_names() -> Result<(), anyhow::Error> {
+    let mut test = TreeShakingTest::new().await?;
+
+    // Publish two packages with the same declared package name. The package system disambiguates
+    // them with package graph IDs like `a` and `a_1`; tree shaking needs to use that same key space.
+    let (package_a_id, _) = test.test_publish_package("A", false).await?;
+    let (package_a_alt_id, _) = test.test_publish_package("A_ALT", false).await?;
+
+    // `DuplicateDirect` declares both packages and references both. Tree shaking needs to keep
+    // both package graph IDs, even though both packages have the same declared package name.
+    let (package_duplicate_id, _) = test.test_publish_package("DuplicateDirect", false).await?;
+    let linkage_table = test.fetch_linkage_table(package_duplicate_id).await;
+
+    assert!(
+        linkage_table.contains_key(&package_a_id),
+        "Package DuplicateDirect should depend on A"
+    );
+    assert!(
+        linkage_table.contains_key(&package_a_alt_id),
+        "Package DuplicateDirect should depend on A_ALT"
+    );
+    assert_eq!(
+        linkage_table.len(),
+        2,
+        "Package DuplicateDirect should have exactly two dependencies"
+    );
+
+    Ok(())
+}
+
+#[sim_test]
+async fn test_tree_shaking_package_with_duplicate_dependency_names_drops_unused()
+-> Result<(), anyhow::Error> {
+    let mut test = TreeShakingTest::new().await?;
+
+    // Publish two packages with the same declared package name. `DuplicateSingle` declares both
+    // dependencies but references only A, so A_ALT must be dropped after tree shaking.
+    let (package_a_id, _) = test.test_publish_package("A", false).await?;
+    let (package_a_alt_id, _) = test.test_publish_package("A_ALT", false).await?;
+
+    let (package_duplicate_id, _) = test.test_publish_package("DuplicateSingle", false).await?;
+    let linkage_table = test.fetch_linkage_table(package_duplicate_id).await;
+
+    assert!(
+        linkage_table.contains_key(&package_a_id),
+        "Package DuplicateSingle should depend on A"
+    );
+    assert!(
+        !linkage_table.contains_key(&package_a_alt_id),
+        "Package DuplicateSingle should tree shake the unused A_ALT dependency"
+    );
+    assert_eq!(
+        linkage_table.len(),
+        1,
+        "Package DuplicateSingle should have exactly one dependency"
     );
 
     Ok(())
@@ -5100,7 +5410,7 @@ async fn test_tree_shaking_package_with_transitive_dependencies_and_no_code_refe
 #[sim_test]
 async fn test_tree_shaking_package_deps_on_pkg_upgrade() -> Result<(), anyhow::Error> {
     let mut test = TreeShakingTest::new().await?;
-    let chain_id = test.client.read_api().get_chain_identifier().await?;
+    let chain_id = test.client.get_chain_identifier().await?.to_string();
     let _ = update_toml_with_localnet_chain_id(&test.package_path("A"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("A_v1"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("B_A"), chain_id.clone());
@@ -5166,7 +5476,7 @@ async fn test_tree_shaking_package_deps_on_pkg_upgrade() -> Result<(), anyhow::E
 #[sim_test]
 async fn test_tree_shaking_package_deps_on_pkg_upgrade_1() -> Result<(), anyhow::Error> {
     let mut test = TreeShakingTest::new().await?;
-    let chain_id = test.client.read_api().get_chain_identifier().await?;
+    let chain_id = test.client.get_chain_identifier().await?.to_string();
     let _ = update_toml_with_localnet_chain_id(&test.package_path("A"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("A_v1"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("A_v2"), chain_id.clone());
@@ -5234,7 +5544,7 @@ async fn test_tree_shaking_package_deps_on_pkg_upgrade_1() -> Result<(), anyhow:
 #[sim_test]
 async fn test_tree_shaking_package_deps_on_pkg_upgrade_2() -> Result<(), anyhow::Error> {
     let mut test = TreeShakingTest::new().await?;
-    let chain_id = test.client.read_api().get_chain_identifier().await?;
+    let chain_id = test.client.get_chain_identifier().await?.to_string();
     let _ = update_toml_with_localnet_chain_id(&test.package_path("K"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("K_v2"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("L"), chain_id.clone());
@@ -5276,7 +5586,7 @@ async fn test_tree_shaking_package_deps_on_pkg_upgrade_2() -> Result<(), anyhow:
 #[sim_test]
 async fn test_tree_shaking_package_deps_on_pkg_upgrade_3() -> Result<(), anyhow::Error> {
     let mut test = TreeShakingTest::new().await?;
-    let chain_id = test.client.read_api().get_chain_identifier().await?;
+    let chain_id = test.client.get_chain_identifier().await?.to_string();
     let _ = update_toml_with_localnet_chain_id(&test.package_path("K"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("K_v2"), chain_id.clone());
     let _ = update_toml_with_localnet_chain_id(&test.package_path("L"), chain_id.clone());
@@ -5357,7 +5667,7 @@ async fn test_party_transfer() -> Result<(), anyhow::Error> {
         config
     });
 
-    let (mut test_cluster, client, rgp, objects, recipients, addresses) =
+    let (mut test_cluster, mut client, rgp, objects, recipients, addresses) =
         test_cluster_helper().await;
     let (object_id1, object_id2) = (objects[0], objects[1]);
     let recipient1 = &recipients[0];
@@ -5381,19 +5691,12 @@ async fn test_party_transfer() -> Result<(), anyhow::Error> {
         panic!("PartyTransfer test failed");
     };
 
-    assert!(response.status_ok().unwrap());
-    assert_eq!(
-        response.effects.as_ref().unwrap().gas_object().object_id(),
-        object_id2
-    );
+    assert!(response.effects.status().is_ok());
+    assert_eq!(response.effects.gas_object().unwrap().0.0, object_id2);
 
-    let object_read = client
-        .read_api()
-        .get_object_with_options(object_id1, RtdObjectDataOptions::full_content())
-        .await?;
+    let object = client.get_object(object_id1).await?;
 
-    let object_data = object_read.data.unwrap();
-    let owner = object_data.owner.unwrap();
+    let owner = object.owner();
 
     let Owner::ConsensusAddressOwner {
         owner: owner_addr, ..
@@ -5402,7 +5705,7 @@ async fn test_party_transfer() -> Result<(), anyhow::Error> {
         panic!("Expected ConsensusAddressOwner but got different owner type");
     };
 
-    assert_eq!(owner_addr, address2);
+    assert_eq!(*owner_addr, address2);
     Ok(())
 }
 
@@ -5484,13 +5787,13 @@ fn update_toml_with_localnet_chain_id(package_path: &Path, chain_id: String) -> 
 }
 
 #[tokio::test]
+#[allow(deprecated)] // cargo_bin is deprecated but cargo_bin_cmd! doesn't work with assert_cmd
 async fn test_move_build_dump_bytecode_as_base64() -> Result<(), anyhow::Error> {
     let mut test_cluster = TestClusterBuilder::new().build().await;
     let context = &mut test_cluster.wallet;
     let client_config_path = context.config.path();
-    let client = context.get_client().await?;
     // we need to cache the chain id as it does not get automatically cached in TestClusterBuilder
-    let chain_id = context.cache_chain_id(&client).await?;
+    let chain_id = context.cache_chain_id().await?;
 
     // Create temp directory with the test package and update the Move.toml with localnet chain id
     let (temp_dir, pkg_path) =
@@ -5512,7 +5815,7 @@ async fn test_move_build_dump_bytecode_as_base64() -> Result<(), anyhow::Error> 
 
     // check that the output contains the right output; this was computed with the old CLI before
     // the new pkg system to ensure the new one's output is correct
-    let expected_output = r#"{"modules":["oRzrCwYAAAAKAQAMAgwkAzAyBGIMBW59B+sByAEIswNgBpMEDwqiBAUMpwRLABIBDQIHAhECEwIUAAMCAAECBwEAAAIADAEAAQIBDAEAAQIEDAEAAQQFAgAFBgcAAAoAAQAACwIBAAARAwEAAQwBBgEAAggICQECAgsQEQEAAw4LAQEMAw8PAQEMBBAMDQADBQQHBgoHDgUHBxICCAAHCAUAAwcLBAEIAAMHCAUCCwQBCAAFAgsDAQgACwQBCAABCAYBCwEBCQABCAAHCQACCgIKAgoCCwEBCAYHCAUCCwQBCQALAwEJAAELAwEIAAEJAAEGCAUBBQELBAEIAAIJAAUDBwsEAQkAAwcIBQELAgEJAAELAgEIAARDb2luDENvaW5NZXRhZGF0YQZPcHRpb24MVFJVU1RFRF9DT0lOC1RyZWFzdXJ5Q2FwCVR4Q29udGV4dANVcmwEY29pbg9jcmVhdGVfY3VycmVuY3kLZHVtbXlfZmllbGQEaW5pdARtaW50BG5vbmUGb3B0aW9uFHB1YmxpY19mcmVlemVfb2JqZWN0D3B1YmxpY190cmFuc2ZlcgZzZW5kZXIIdHJhbnNmZXIMdHJ1c3RlZF9jb2luCnR4X2NvbnRleHQDdXJsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCgIIB1RSVVNURUQKAgEAAAIBCQEAAAAABBILADECBwAHAQcBOAAKATgBDAIMAwsCOAILAwsBLhEIOAMCAQEEAAEJCwALAQoCOAQLAi4RCDgFAgIBBAABBAsACwE4AwIA"],"dependencies":["0x0000000000000000000000000000000000000000000000000000000000000001","0x0000000000000000000000000000000000000000000000000000000000000002"],"digest":[116,71,103,38,103,86,151,240,229,223,244,179,42,122,231,174,91,111,66,161,82,255,105,49,217,76,108,41,249,110,214,137]}"#;
+    let expected_output = r#"{"modules":["oRzrCwcAAAUKAQAMAgwkAzAyBGIKBWx9B+kByAEIsQNgBpEEDwqgBAUMpQRHABIBDQIHAhECEwIUAAMCAAECBwEAAAIADAEAAQIBDAEAAQIEDAEAAQQFAgAFBgcAAAoAAQAACwIDAAARBAEAAQwBBwEAAggJCgECAgsREgEAAw4MAQEMAw8QAQEMBBANDgADBgQIBgsHDwUIAggABwgFAAMHCwQBCAADBwgFAQsCAQgAAgsEAQgABQILAwEIAAsEAQgAAQgGAQsBAQkAAQgABwkAAgoCCgIKAgsBAQgGBwgFAgsEAQkACwMBCQABCwMBCAABCQABBggFAQUBCwQBCAACCQAFAwcLBAEJAAMHCAUBCwIBCQAEQ29pbgxDb2luTWV0YWRhdGEGT3B0aW9uDFRSVVNURURfQ09JTgtUcmVhc3VyeUNhcAlUeENvbnRleHQDVXJsBGNvaW4PY3JlYXRlX2N1cnJlbmN5C2R1bW15X2ZpZWxkBGluaXQEbWludARub25lBm9wdGlvbhRwdWJsaWNfZnJlZXplX29iamVjdA9wdWJsaWNfdHJhbnNmZXIGc2VuZGVyCHRyYW5zZmVyDHRydXN0ZWRfY29pbgp0eF9jb250ZXh0A3VybAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgoCCAdUUlVTVEVECgIBAAACAQkBAAAAAAUSCwAxAgcABwEHATgACgE4AQwCDAMLAjgCCwMLAS4RCDgDAgABAQAAAQULAAsBCwI4BAIAAgEAAAEECwALATgDAgAA"],"dependencies":["0x0000000000000000000000000000000000000000000000000000000000000001","0x0000000000000000000000000000000000000000000000000000000000000002"],"digest":[116,82,150,176,36,92,116,24,239,61,148,170,169,128,150,0,194,64,179,205,122,245,16,255,204,213,58,79,119,33,175,72]}"#;
 
     // Simple contains check
     assert!(
@@ -5526,13 +5829,13 @@ async fn test_move_build_dump_bytecode_as_base64() -> Result<(), anyhow::Error> 
 }
 
 #[tokio::test]
+#[allow(deprecated)] // cargo_bin is deprecated but cargo_bin_cmd! doesn't work with assert_cmd
 async fn test_move_build_dump_bytecode_as_base64_with_unpublished_deps() -> Result<(), anyhow::Error>
 {
     let mut test_cluster = TestClusterBuilder::new().build().await;
     let context = &mut test_cluster.wallet;
     let client_config_path = context.config.path();
-    let client = context.get_client().await?;
-    let chain_id = context.cache_chain_id(&client).await?;
+    let chain_id = context.cache_chain_id().await?;
 
     // Create temp directory with the test package
     let (temp_dir, pkg_path) = create_temp_dir_with_framework_packages(
@@ -5589,7 +5892,7 @@ async fn test_move_build_dump_bytecode_as_base64_with_unpublished_deps() -> Resu
     let output = cmd.output().expect("Failed to execute command");
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    let expected_output = r#"{"modules":["oRzrCwYAAAAGAQACAwIFBQcBBwgNCBUgDDUHAAAAAQAAAAAHaW52YWxpZARtYWluAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQAAAECAA==","oRzrCwYAAAAGAQACAwIFBQcBBwgFCA0gDC0HAAAAAAAAAAAEbWFpbgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEEAAABAgA="],"dependencies":[],"digest":[251,6,57,223,220,227,253,129,151,82,18,74,115,140,93,99,17,131,143,75,136,154,202,251,185,60,187,107,11,151,91,34]}"#;
+    let expected_output = r#"{"modules":["oRzrCwcAAAUGAQACAwIFBQcBBwgNCBUgDDUIAAAAAQAAAAAHaW52YWxpZARtYWluAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAECAAA=","oRzrCwcAAAUGAQACAwIFBQcBBwgFCA0gDC0IAAAAAAAAAAAEbWFpbgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAABAgAA"],"dependencies":[],"digest":[144,239,11,201,121,58,146,49,254,206,248,8,194,233,83,49,191,63,21,64,173,113,181,197,135,133,41,87,138,134,17,67]}"#;
     assert!(
         stdout.contains(expected_output),
         "Mismatched ouptut: \nExpected:\n{}\n\nOutput was:\n{}",
@@ -5601,25 +5904,88 @@ async fn test_move_build_dump_bytecode_as_base64_with_unpublished_deps() -> Resu
     Ok(())
 }
 
+#[tokio::test]
+#[allow(deprecated)] // cargo_bin is deprecated but cargo_bin_cmd! doesn't work with assert_cmd
+async fn test_keytool_keystore_path_override() -> Result<(), anyhow::Error> {
+    let temp_dir = tempfile::tempdir()?;
+    let config_dir = temp_dir.path();
+
+    let primary_path = config_dir.join(RTD_KEYSTORE_FILENAME);
+    let mut primary_keystore = FileBasedKeystore::load_or_create(&primary_path)?;
+    let primary_keypair = RtdKeyPair::Ed25519(get_key_pair().1);
+    let primary_address = RtdAddress::from(&primary_keypair.public());
+    primary_keystore.import(None, primary_keypair).await?;
+
+    let secondary_path = config_dir.join("secondary.keystore");
+    let mut secondary_keystore = FileBasedKeystore::load_or_create(&secondary_path)?;
+    let secondary_keypair = RtdKeyPair::Ed25519(get_key_pair().1);
+    let secondary_address = RtdAddress::from(&secondary_keypair.public());
+    secondary_keystore.import(None, secondary_keypair).await?;
+
+    RtdClientConfig::new(Keystore::from(primary_keystore))
+        .save(config_dir.join(RTD_CLIENT_CONFIG))?;
+
+    let output = assert_cmd::Command::cargo_bin("rtd")?
+        .env("RTD_CONFIG_DIR", config_dir)
+        .args([
+            "keytool",
+            "--keystore-path",
+            secondary_path.to_str().unwrap(),
+            "--json",
+            "list",
+        ])
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "keytool failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let listed_keys: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let listed_keys = listed_keys.as_array().unwrap();
+    assert_eq!(listed_keys.len(), 1);
+    assert_eq!(listed_keys[0]["rtdAddress"], secondary_address.to_string());
+    assert_ne!(listed_keys[0]["rtdAddress"], primary_address.to_string());
+
+    Ok(())
+}
+
 #[sim_test]
 async fn test_publish_sender_flag_respected_in_serialized_transaction() -> Result<(), anyhow::Error>
 {
+    // This test verifies that when using --serialize-unsigned-transaction with --sender,
+    // the sender address is correctly used as the UpgradeCap recipient in the PTB.
+    // Previously, the sender was inferred from gas objects BEFORE checking the --sender flag,
+    // causing the UpgradeCap to be transferred to the wrong address.
     let mut test_cluster = TestClusterBuilder::new().build().await;
     let active_address = test_cluster.get_address_0();
+    // Use a different address from the cluster that has gas
     let specified_sender = test_cluster.get_address_1();
     let context = &mut test_cluster.wallet;
 
-    assert_ne!(active_address, specified_sender);
+    // Verify we're using two different addresses
+    assert_ne!(
+        active_address, specified_sender,
+        "Test requires two different addresses"
+    );
 
-    let client = context.get_client().await?;
-    let chain_id = client.read_api().get_chain_identifier().await?;
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?.to_string();
+
+    // Setup package
     let (_tmp, package_path) =
         create_temp_dir_with_framework_packages("dummy_modules_publish", Some(chain_id))?;
 
-    let response = RtdClientCommands::TestPublish(TestPublishArgs {
+    let mut build_config = BuildConfig::new_for_testing().config;
+    build_config.environment = Some("testnet".to_string());
+    build_config.pubfile_path = Some(tempdir()?.path().join("localnet.toml"));
+
+    // Call publish with serialize_unsigned_transaction and a specified sender
+    // The active address is address_0, but we specify address_1 as sender
+    let resp = RtdClientCommands::TestPublish(TestPublishArgs {
         publish_args: PublishArgs {
             package_path,
-            build_config: BuildConfig::new_for_testing().config,
+            build_config,
             skip_dependency_verification: false,
             verify_deps: true,
             with_unpublished_dependencies: false,
@@ -5627,31 +5993,49 @@ async fn test_publish_sender_flag_respected_in_serialized_transaction() -> Resul
             gas_data: GasDataArgs::default(),
             processing: TxProcessingArgs {
                 serialize_unsigned_transaction: true,
-                sender: Some(specified_sender),
+                sender: Some(specified_sender), // Use --sender flag with address_1
                 ..Default::default()
             },
         },
-        build_env: Some("testnet".to_string()),
-        pubfile_path: Some(tempdir()?.path().join("localnet.toml")),
+        publish_unpublished_deps: false,
     })
     .execute(context)
     .await?;
 
-    let RtdClientCommandResult::SerializedUnsignedTransaction(tx_data) = response else {
+    // Extract the transaction data
+    let RtdClientCommandResult::SerializedUnsignedTransaction(tx_data) = resp else {
         panic!("Expected SerializedUnsignedTransaction result");
     };
 
-    assert_eq!(tx_data.sender(), specified_sender);
+    // Verify the transaction sender is the specified sender
+    assert_eq!(
+        tx_data.sender(),
+        specified_sender,
+        "Transaction sender should be the specified sender ({}), not the active address ({})",
+        specified_sender,
+        active_address
+    );
 
+    // Verify the PTB's first input (UpgradeCap recipient) is the specified sender
     let TransactionKind::ProgrammableTransaction(pt) = tx_data.kind() else {
         panic!("Expected ProgrammableTransaction kind");
     };
-    let CallArg::Pure(address_bytes) = &pt.inputs[0] else {
-        panic!("Expected first input to be an address");
-    };
-    let recipient: RtdAddress = bcs::from_bytes(address_bytes)?;
 
-    assert_eq!(recipient, specified_sender);
+    // The first input in a publish transaction is the address that receives the UpgradeCap
+    let first_input = &pt.inputs[0];
+    let CallArg::Pure(addr_bytes) = first_input else {
+        panic!("Expected first input to be Pure (address)");
+    };
+
+    // Decode the address from BCS bytes
+    let recipient: RtdAddress =
+        bcs::from_bytes(addr_bytes).expect("Failed to decode address from PTB input");
+
+    assert_eq!(
+        recipient, specified_sender,
+        "UpgradeCap recipient in PTB should be the specified sender ({}), not active address ({})",
+        specified_sender, active_address
+    );
 
     Ok(())
 }

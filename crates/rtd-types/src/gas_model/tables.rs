@@ -1,18 +1,16 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::BTreeMap;
-
+use super::gas_predicates::{charge_input_as_memory, legacy_charge_native_pops_args};
+use crate::gas_model::units_types::{CostTable, Gas, GasCost};
+use linku_common::debug_fatal;
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 
 use move_core_types::gas_algebra::{AbstractMemorySize, InternalGas};
 
 use move_core_types::vm_status::StatusCode;
 use once_cell::sync::Lazy;
-
-use crate::gas_model::units_types::{CostTable, Gas, GasCost};
-
-use super::gas_predicates::charge_input_as_memory;
+use std::collections::BTreeMap;
 
 /// VM flat fee
 pub const VM_FLAT_FEE: Gas = Gas::new(8_000);
@@ -33,8 +31,6 @@ pub const VEC_SIZE: AbstractMemorySize = AbstractMemorySize::new(8);
 pub const MIN_EXISTS_DATA_SIZE: AbstractMemorySize = AbstractMemorySize::new(100);
 
 pub static ZERO_COST_SCHEDULE: Lazy<CostTable> = Lazy::new(zero_cost_schedule);
-
-pub static INITIAL_COST_SCHEDULE: Lazy<CostTable> = Lazy::new(initial_cost_schedule_v1);
 
 /// The Move VM implementation of state for gas metering.
 ///
@@ -173,7 +169,24 @@ impl GasStatus {
     }
 
     pub fn pop_stack(&mut self, pops: u64) {
-        self.stack_height_current = self.stack_height_current.saturating_sub(pops);
+        // Underflow is expected when charge_native still pops args (legacy
+        // double-pop). Otherwise — i.e., gas_model_version > 11 where the
+        // native-call double-pop fix is in effect — it indicates a real bug.
+        // debug_fatal! panics in debug and logs an error + bumps the
+        // system_invariant_violations metric in release.
+        self.stack_height_current = match self.stack_height_current.checked_sub(pops) {
+            Some(stack_height) => stack_height,
+            None if legacy_charge_native_pops_args(self.gas_model_version) => 0,
+            None => {
+                debug_fatal!(
+                    "stack height underflow: current={}, pops={}. \
+                     This indicates a double-pop or missing push in the gas meter.",
+                    self.stack_height_current,
+                    pops
+                );
+                0
+            }
+        };
     }
 
     pub fn increase_instruction_count(&mut self, amount: u64) -> PartialVMResult<()> {
@@ -218,14 +231,6 @@ impl GasStatus {
         Ok(())
     }
 
-    pub fn decrease_stack_size(&mut self, size_amount: u64) {
-        let new_size = self.stack_size_current.saturating_sub(size_amount);
-        if new_size > self.stack_size_high_water_mark {
-            self.stack_size_high_water_mark = new_size;
-        }
-        self.stack_size_current = new_size;
-    }
-
     /// Given: pushes + pops + increase + decrease in size for an instruction charge for the
     /// execution of the instruction.
     pub fn charge(
@@ -255,7 +260,6 @@ impl GasStatus {
             .total_internal(),
         )?;
 
-        // self.decrease_stack_size(decr_size);
         self.pop_stack(pops);
         Ok(())
     }
@@ -401,7 +405,6 @@ pub fn initial_cost_schedule_v1() -> CostTable {
         (8000, 5),
         (10000, 9),
         (11000, 16),
-        (11500, 29),
         (11500, 50),
     ]
     .into_iter()
@@ -452,7 +455,6 @@ pub fn initial_cost_schedule_v2() -> CostTable {
         (8000, 5),
         (10000, 9),
         (11000, 16),
-        (11500, 29),
         (11500, 50),
         (15000, 150),
         (20000, 250),
@@ -503,7 +505,6 @@ pub fn initial_cost_schedule_v3() -> CostTable {
         (8000, 5),
         (10000, 9),
         (11000, 16),
-        (11500, 29),
         (11500, 50),
         (20000, 100),
     ]
@@ -576,18 +577,5 @@ pub fn initial_cost_schedule_v5() -> CostTable {
         instruction_tiers,
         stack_size_tiers,
         stack_height_tiers,
-    }
-}
-
-// Convert from our representation of gas costs to the type that the MoveVM expects for unit tests.
-// We don't want our gas depending on the MoveVM test utils and we don't want to fix our
-// representation to whatever is there, so instead we perform this translation from our gas units
-// and cost schedule to the one expected by the Move unit tests.
-pub fn initial_cost_schedule_for_unit_tests() -> move_vm_test_utils::gas_schedule::CostTable {
-    let table = initial_cost_schedule_v5();
-    move_vm_test_utils::gas_schedule::CostTable {
-        instruction_tiers: table.instruction_tiers.into_iter().collect(),
-        stack_height_tiers: table.stack_height_tiers.into_iter().collect(),
-        stack_size_tiers: table.stack_size_tiers.into_iter().collect(),
     }
 }

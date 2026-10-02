@@ -6,6 +6,7 @@ mod state;
 
 use super::{
     absint::*,
+    ast::BasicBlock,
     cfg::{CFG, MutForwardCFG, MutReverseCFG, ReverseCFG},
     locals,
 };
@@ -126,7 +127,7 @@ fn exp(state: &mut LivenessState, parent_e: &Exp) {
     match &parent_e.exp.value {
         E::Unit { .. }
         | E::Value(_)
-        | E::Constant(_)
+        | E::Constant(_, _)
         | E::UnresolvedError
         | E::ErrorConstant { .. } => (),
 
@@ -184,7 +185,7 @@ mod last_usage {
     use move_proc_macros::growing_stack;
 
     use crate::{
-        cfgir::{CFGContext, liveness::state::LivenessState},
+        cfgir::{CFGContext, ast::BasicBlock, liveness::state::LivenessState},
         diag,
         hlir::{
             ast::*,
@@ -310,7 +311,7 @@ mod last_usage {
         match &mut parent_e.exp.value {
             E::Unit { .. }
             | E::Value(_)
-            | E::Constant(_)
+            | E::Constant(_, _)
             | E::UnresolvedError
             | E::ErrorConstant { .. } => (),
 

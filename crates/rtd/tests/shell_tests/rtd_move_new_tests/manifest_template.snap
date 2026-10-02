@@ -21,6 +21,6 @@ edition = "2024"         # edition = "legacy" to use legacy (pre-2024) Move
 [dependencies]
 
 # Read more about the package management system options:
-# https://docs.rtd.io/guides/developer/rtd-101/move-package-management
+# docs/content/develop/manage-packages/move-package-management.mdx
 
 ----- stderr -----

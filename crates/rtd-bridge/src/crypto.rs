@@ -5,9 +5,10 @@ use crate::{
     error::{BridgeError, BridgeResult},
     types::{BridgeAction, BridgeCommittee, SignedBridgeAction, VerifiedSignedBridgeAction},
 };
-use ethers::core::k256::ecdsa::VerifyingKey;
-use ethers::core::k256::elliptic_curve::sec1::ToEncodedPoint;
-use ethers::types::Address as EthAddress;
+use alloy::{
+    primitives::Address as EthAddress,
+    signers::k256::{ecdsa::VerifyingKey, elliptic_curve::sec1::ToEncodedPoint},
+};
 use fastcrypto::hash::HashFunction;
 use fastcrypto::{
     encoding::{Encoding, Hex},
@@ -19,10 +20,10 @@ use fastcrypto::{
     traits::{RecoverableSigner, ToFromBytes, VerifyRecoverable},
 };
 use fastcrypto::{hash::Keccak256, traits::KeyPair};
+use rtd_types::{base_types::ConciseableName, message_envelope::VerifiedEnvelope};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::fmt::{Display, Formatter};
-use rtd_types::{base_types::ConciseableName, message_envelope::VerifiedEnvelope};
 use tap::TapFallible;
 pub type BridgeAuthorityKeyPair = Secp256k1KeyPair;
 pub type BridgeAuthorityPublicKey = Secp256k1PublicKey;
@@ -35,7 +36,7 @@ impl BridgeAuthorityPublicKeyBytes {
     pub fn to_eth_address(&self) -> EthAddress {
         // unwrap: the conversion should not fail
         let pubkey = VerifyingKey::from_sec1_bytes(self.as_bytes()).unwrap();
-        let affine: &ethers::core::k256::AffinePoint = pubkey.as_ref();
+        let affine: &alloy::signers::k256::AffinePoint = pubkey.as_ref();
         let encoded = affine.to_encoded_point(false);
         let pubkey = &encoded.as_bytes()[1..];
         assert_eq!(pubkey.len(), 64, "raw public key must be 64 bytes");
@@ -187,15 +188,15 @@ mod tests {
     use crate::test_utils::{get_test_authority_and_key, get_test_rtd_to_eth_bridge_action};
     use crate::types::SignedBridgeAction;
     use crate::types::{BridgeAction, BridgeAuthority, RtdToEthBridgeAction};
-    use ethers::types::Address as EthAddress;
+    use alloy::primitives::Address as EthAddress;
     use fastcrypto::traits::{KeyPair, ToFromBytes};
     use prometheus::Registry;
-    use std::str::FromStr;
-    use std::sync::Arc;
     use rtd_types::base_types::RtdAddress;
     use rtd_types::bridge::{BridgeChainId, TOKEN_ID_ETH};
     use rtd_types::crypto::get_key_pair;
     use rtd_types::digests::TransactionDigest;
+    use std::str::FromStr;
+    use std::sync::Arc;
 
     use super::*;
 

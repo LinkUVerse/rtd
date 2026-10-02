@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --simulator
+//# init --protocol-version 108 --simulator
 
 // Testing various input errors for the RtdNS name resolution:
 // 1. Not enough labels (need at least two)

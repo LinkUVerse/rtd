@@ -6,11 +6,14 @@ processed 7 tasks
 init:
 A: object(0,0)
 
+// Test creating and deleting an object. Both of these operations should show
+// up in object changes.
+
 task 1, lines 9-23:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 4772800,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 4788000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 25-27:
 //# programmable --sender A --inputs @A
@@ -37,8 +40,19 @@ Response: {
   "jsonrpc": "2.0",
   "id": 0,
   "result": {
-    "digest": "4ukxTageudh4AU1Hv25XeNucQcX6R5Gw2BwAC19rkUjt",
+    "digest": "6Cr5KVF9bWDnKZV5f6X3uj7tHVBWvgzb1zMqeKZX5Tkp",
     "objectChanges": [
+      {
+        "type": "created",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0x3376a8209a89a133a491bacb345c6067f2132151b38ea14986fc91cc21c9c26a::M::O",
+        "objectId": "0x9ff1788c1c06353ce13b6882bde78106e90f04dcd8da90f1c5f7baeb196b9a77",
+        "version": "2",
+        "digest": "6EvAhpUhASnBeZsUYU7V5M9z9zUWAeBYfQYfDLMYTDEN"
+      },
       {
         "type": "mutated",
         "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
@@ -46,21 +60,10 @@ Response: {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
         "objectType": "0x2::coin::Coin<0x2::rtd::RTD>",
-        "objectId": "0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
         "version": "2",
         "previousVersion": "1",
-        "digest": "2LSs7zxkU42HhLyqNWnwTGD5yEzzh1yZSaueQ31RJc6A"
-      },
-      {
-        "type": "created",
-        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
-        "owner": {
-          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
-        },
-        "objectType": "0xf827985b0577822cde33d6014436abc7b3a1d13106e97b6939ecf7d466c1310f::M::O",
-        "objectId": "0xc7162cc23503adb20cb79297ed7ce9079f7430cdd57fe901c3c4d8becc36db8d",
-        "version": "2",
-        "digest": "8dXr7d9fBENNdxBX1G3jzb6s8V5QKDWewqUiM4hUNPYq"
+        "digest": "ApGZPTiNVKVBNtvG5LtComPTg8g9n7rNiY7368dRSjaG"
       }
     ],
     "timestampMs": "0",
@@ -74,8 +77,15 @@ Response: {
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "digest": "94ATSaPBkEeiAuZRjV7mBSpWffQuEkJ9RJjdPUH6eEu9",
+    "digest": "AwnqZMkQQbNheVUFF6prNXYt5y6vB8tRdo3DJ8CnKavP",
     "objectChanges": [
+      {
+        "type": "deleted",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "objectType": "0x3376a8209a89a133a491bacb345c6067f2132151b38ea14986fc91cc21c9c26a::M::O",
+        "objectId": "0x9ff1788c1c06353ce13b6882bde78106e90f04dcd8da90f1c5f7baeb196b9a77",
+        "version": "3"
+      },
       {
         "type": "mutated",
         "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
@@ -83,17 +93,10 @@ Response: {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
         "objectType": "0x2::coin::Coin<0x2::rtd::RTD>",
-        "objectId": "0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
         "version": "3",
         "previousVersion": "2",
-        "digest": "GzRuf5gpzWgtRuVwzqfVPZED5fy1Apx2yRdbzUEwewmD"
-      },
-      {
-        "type": "deleted",
-        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
-        "objectType": "0xf827985b0577822cde33d6014436abc7b3a1d13106e97b6939ecf7d466c1310f::M::O",
-        "objectId": "0xc7162cc23503adb20cb79297ed7ce9079f7430cdd57fe901c3c4d8becc36db8d",
-        "version": "3"
+        "digest": "JAcM5kPGTLcpqL9QK7kh2QFFmfKiiAjYQ4kgzt3w9BvP"
       }
     ],
     "timestampMs": "0",

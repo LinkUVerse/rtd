@@ -1,25 +1,20 @@
 [package]
 name = "rtd-sdk"
 version.workspace = true
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
 
 # This needs to be specified, in addition to the same setting
 # in the workspace Cargo.toml.
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(msim)',
-  'cfg(fail_points)',
-] }
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
-clap.workspace = true
-colored.workspace = true
 jsonrpsee.workspace = true
 serde.workspace = true
 serde_with.workspace = true
@@ -43,13 +38,16 @@ shared-crypto.workspace = true
 tracing.workspace = true
 move-core-types.workspace = true
 fastcrypto.workspace = true
+rtd-crypto.workspace = true
+rtd-rpc-api.workspace = true
+rtd-rpc.workspace = true
+rtd-sdk-types.workspace = true
 
 # NOTE: It's important to keep the above dependency list short.
 # This and the rtd-json-rpc-api crate are widely used to develop on Rtd and it's valuable
 # to not have to pull in the entire rtd repo for it.
 
 [dev-dependencies]
-clap.workspace = true
 dirs.workspace = true
 tempfile.workspace = true
 futures-core.workspace = true

@@ -10,7 +10,7 @@ task 1, lines 6-25:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 5411200,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 5426400,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 27:
 //# create-checkpoint
@@ -192,7 +192,9 @@ Response: {
 task 25, lines 135-138:
 //# run-graphql
 Response: {
-  "data": null,
+  "data": {
+    "object": null
+  },
   "errors": [
     {
       "message": "Checkpoint 9 in the future",

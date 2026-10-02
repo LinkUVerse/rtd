@@ -110,8 +110,20 @@ public fun redeem_funds<T>(withdrawal: rtd::funds_accumulator::Withdrawal<Balanc
 }
 
 /// Create a `Withdrawal<Balance<T>>` from an object to withdraw funds from it.
+/// Aborts if `value` exceeds the funds currently available to `obj`.
 public fun withdraw_funds_from_object<T>(obj: &mut UID, value: u64): Withdrawal<Balance<T>> {
     rtd::funds_accumulator::withdraw_from_object(obj, value as u256)
+}
+
+/// Read the value of the funds of type T owned by `address` as of the beginning of
+/// the current consensus commit. Can read either address-owned or object-owned balances.
+public fun settled_funds_value<T>(root: &rtd::accumulator::AccumulatorRoot, address: address): u64 {
+    if (!root.u128_exists<Balance<T>>(address)) {
+        return 0
+    };
+    let val: u128 = root.u128_read<Balance<T>>(address);
+    let val = std::u128::min(std::u64::max_value!() as u128, val);
+    val as u64
 }
 
 // === RTD specific operations ===

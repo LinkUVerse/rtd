@@ -5,6 +5,7 @@
 extern crate core;
 
 pub mod accumulators;
+pub mod admission_queue;
 pub mod authority;
 pub mod authority_aggregator;
 pub mod authority_client;
@@ -12,9 +13,11 @@ pub mod authority_server;
 pub mod checkpoints;
 pub mod congestion_tracker;
 pub mod consensus_adapter;
+pub mod consensus_commit_summary;
 pub mod consensus_handler;
 pub mod consensus_manager;
 pub mod consensus_throughput_calculator;
+pub mod consensus_transaction_pool;
 pub(crate) mod consensus_types;
 pub mod consensus_validator;
 pub mod db_checkpoint_handler;
@@ -23,6 +26,7 @@ pub mod execution_cache;
 mod execution_driver;
 pub mod execution_scheduler;
 mod fallback_fetch;
+pub mod gasless_rate_limiter;
 pub mod global_state_hasher;
 pub mod jsonrpc_index;
 pub mod metrics;
@@ -32,13 +36,16 @@ pub mod module_cache_metrics;
 pub mod mysticeti_adapter;
 pub mod node_readiness;
 pub mod overload_monitor;
-mod par_index_live_object_set;
 pub(crate) mod post_consensus_tx_reorder;
-pub mod quorum_driver;
-pub mod rpc_index;
+pub mod randomness_round_receiver;
+pub mod rpc_store_embed;
+pub mod rpc_store_ingestion_client;
+pub mod rpc_store_restore_source;
+pub mod rpc_store_streaming_client;
+#[cfg(test)]
+mod rpc_store_test_utils;
 pub mod runtime;
 pub mod safe_client;
-mod scoring_decision;
 pub mod signature_verifier;
 mod stake_aggregator;
 mod status_aggregator;
@@ -47,20 +54,23 @@ pub mod streamer;
 pub mod subscription_handler;
 pub mod test_utils;
 pub mod traffic_controller;
+pub mod transaction_deny_config_manager;
 pub mod transaction_driver;
 mod transaction_input_loader;
 pub mod transaction_orchestrator;
 mod transaction_outputs;
 mod transaction_signing_filter;
+pub mod transaction_simulation;
 pub mod validator_client_monitor;
-pub mod validator_tx_finalizer;
-pub mod verify_indexes;
 
 #[cfg(test)]
 #[path = "unit_tests/congestion_control_tests.rs"]
 mod congestion_control_tests;
 #[path = "unit_tests/consensus_test_utils.rs"]
 pub mod consensus_test_utils;
+#[cfg(test)]
+#[path = "unit_tests/double_spend_deferral_tests.rs"]
+mod double_spend_deferral_tests;
 #[cfg(test)]
 #[path = "unit_tests/move_package_publish_tests.rs"]
 mod move_package_publish_tests;

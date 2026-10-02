@@ -12,14 +12,14 @@ use move_binary_format::file_format;
 
 use crate::crypto::bcs_signable_test::{Bar, Foo};
 use crate::crypto::{
-    AccountKeyPair, AuthorityKeyPair, AuthoritySignature, Signature, RtdAuthoritySignature,
-    RtdSignature, get_key_pair, get_key_pair_from_bytes,
+    AccountKeyPair, AuthorityKeyPair, AuthoritySignature, RtdAuthoritySignature, RtdSignature,
+    Signature, get_key_pair, get_key_pair_from_bytes,
 };
 use crate::digests::Digest;
 use crate::id::{ID, UID};
 use crate::{RTD_FRAMEWORK_ADDRESS, gas_coin::GasCoin, object::Object};
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 use rtd_protocol_config::ProtocolConfig;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 
 use super::*;
 

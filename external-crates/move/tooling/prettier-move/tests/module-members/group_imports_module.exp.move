@@ -9,13 +9,8 @@ use a::b::{
     Self as c,
     e as f,
     g as f,
-    h as i
+    h as i,
 };
-use std::ascii::String as ASCII;
-use std::option::{Self as opt, Option};
-use std::string::String;
-use std::type_name::get as type_name_get;
-use std::vector as vec;
 use rtd::balance::{Self, Balance};
 use rtd::coin::{Self, Coin};
 use rtd::dynamic_field as df;
@@ -25,7 +20,12 @@ use rtd::rtd::RTD;
 use rtd::transfer_policy::{
     Self,
     TransferPolicy,
-    TransferRequest
+    TransferRequest,
 };
+use std::ascii::String as ASCII;
+use std::option::{Self as opt, Option};
+use std::string::String;
+use std::type_name::get as type_name_get;
+use std::vector as vec;
 
 public fun do_something() {}

@@ -5,12 +5,12 @@ use anyhow::Context;
 use clap::Parser;
 use prometheus::Registry;
 use rtd_futures::service::Error;
-use rtd_indexer_alt_jsonrpc::{
-    args::{Args, Command},
-    config::RpcLayer,
-    start_rpc,
-};
-use rtd_indexer_alt_metrics::{MetricsService, uptime};
+use rtd_indexer_alt_jsonrpc::args::Args;
+use rtd_indexer_alt_jsonrpc::args::Command;
+use rtd_indexer_alt_jsonrpc::config::RpcLayer;
+use rtd_indexer_alt_jsonrpc::start_rpc;
+use rtd_indexer_alt_metrics::MetricsService;
+use rtd_indexer_alt_metrics::uptime;
 use tokio::fs;
 
 // Define the `GIT_REVISION` const
@@ -42,9 +42,9 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         Command::Rpc {
             database_url,
-            bigtable_instance,
             db_args,
-            bigtable_args,
+            kv_args,
+            consistent_reader_args,
             rpc_args,
             system_package_task_args,
             metrics_args,
@@ -74,9 +74,9 @@ async fn main() -> anyhow::Result<()> {
 
             let s_rpc = start_rpc(
                 Some(database_url),
-                bigtable_instance,
                 db_args,
-                bigtable_args,
+                kv_args,
+                consistent_reader_args,
                 rpc_args,
                 node_args,
                 system_package_task_args,

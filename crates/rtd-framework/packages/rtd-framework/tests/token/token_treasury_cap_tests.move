@@ -3,7 +3,7 @@
 
 #[test_only]
 /// This module implements tests for the TreasuryCap-related functionality such
-/// as spending, "flush"-ing, isrtdng new coins and performing marketplace-like
+/// as spending, "flush"-ing, issuing new coins and performing marketplace-like
 /// operations.
 module rtd::token_treasury_cap_tests;
 

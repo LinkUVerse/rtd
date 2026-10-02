@@ -2,8 +2,8 @@
 version: "3.9"
 services:
   fullnode:
-    # Note: Update the tag to the latest version of linku/rtd-node for mainnet or testnet.
-    image: linku/rtd-node:mainnet-v1.19.1
+    # Build docker/rtd-node/Dockerfile from this checkout and set RTD_NODE_IMAGE.
+    image: ${RTD_NODE_IMAGE:?Set RTD_NODE_IMAGE to an RTD image built from this checkout}
     ports:
     - "8080:8080"
     - "8084:8084/udp"

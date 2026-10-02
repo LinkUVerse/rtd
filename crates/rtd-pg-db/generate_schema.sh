@@ -2,7 +2,7 @@
 # Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Update rtd-indexer's generated src/schema.rs based on the schema after
+# Update rtd-pg-db's generated src/schema.rs based on the schema after
 # running all its migrations on a clean database. Expects the first argument to
 # be a port to run the temporary database on (defaults to 5433).
 

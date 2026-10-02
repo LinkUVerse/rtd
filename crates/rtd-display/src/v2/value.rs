@@ -1,6 +1,5 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-#![allow(unused)]
 
 use std::borrow::Cow;
 use std::fmt::Write as _;
@@ -8,52 +7,71 @@ use std::str;
 
 use async_trait::async_trait;
 use base64::engine::Engine;
-use base64::engine::general_purpose::STANDARD;
-use base64::engine::general_purpose::STANDARD_NO_PAD;
-use base64::engine::general_purpose::URL_SAFE;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::DateTime;
-use chrono::Utc;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::annotated_value as A;
 use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
 use move_core_types::u256::U256;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RESOLVED_UTF8_STR;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::move_ascii_str_layout;
+use rtd_types::base_types::move_utf8_str_layout;
+use rtd_types::base_types::type_name_layout;
+use rtd_types::base_types::url_layout;
+use rtd_types::derived_object::derive_object_id;
+use rtd_types::dynamic_field::DynamicFieldInfo;
+use rtd_types::dynamic_field::derive_dynamic_field_id;
+use rtd_types::id::ID;
+use rtd_types::id::UID;
+use rtd_types::object::rpc_visitor as RV;
+use rtd_types::object::rpc_visitor::Meter as _;
 use serde::Serialize;
 use serde::ser::SerializeSeq as _;
 use serde::ser::SerializeTuple as _;
 use serde::ser::SerializeTupleVariant;
-use rtd_types::MOVE_STDLIB_ADDRESS;
-use rtd_types::base_types::RESOLVED_UTF8_STR;
-use rtd_types::base_types::STD_OPTION_MODULE_NAME;
-use rtd_types::base_types::STD_OPTION_STRUCT_NAME;
-use rtd_types::base_types::move_ascii_str_layout;
-use rtd_types::base_types::move_utf8_str_layout;
-use rtd_types::base_types::url_layout;
-use rtd_types::id::ID;
-use rtd_types::id::UID;
-use rtd_types::object::rpc_visitor as RV;
-use rtd_types::object::rpc_visitor::Writer as _;
 
 use crate::v2::error::FormatError;
 use crate::v2::parser::Base64Modifier;
 use crate::v2::parser::Transform;
-use crate::v2::writer::JsonWriter;
-use crate::v2::writer::StringWriter;
+use crate::v2::writer;
 
-/// Dynamically load objects by their ID. The output should be a `Slice` containing references to
-/// the raw BCS bytes and the corresponding `MoveTypeLayout` for the object. This implies the
-/// `Store` acts as a pool of cached objects.
+/// Dynamically load objects by their ID, returning the object's owned data.
+///
+/// The `Store` trait is responsible only for fetching object data -- lifetime management
+/// and caching are handled by the `Interpreter`. The interpreter can potentially issue racing
+/// requests for the same object, and it is the store's responsibility to handle this correctly
+/// (e.g. by deduplicating in-flight requests).
 #[async_trait]
-pub trait Store<'s> {
-    async fn object(&self, id: AccountAddress) -> anyhow::Result<Option<Slice<'s>>>;
+pub trait Store: Sync {
+    async fn latest(&self, id: AccountAddress)
+    -> anyhow::Result<Option<(MoveTypeLayout, Vec<u8>)>>;
+
+    async fn scoped(
+        &self,
+        id: AccountAddress,
+    ) -> anyhow::Result<Option<(MoveTypeLayout, Vec<u8>)>> {
+        self.latest(id).await
+    }
+}
+
+/// Result of evaluating a single strand of a Display v2 format string.
+#[derive(Clone)]
+pub enum Strand<'s> {
+    Text(&'s str),
+    Value {
+        offset: usize,
+        value: Value<'s>,
+        transform: Option<Transform>,
+    },
 }
 
 /// Value representation used during evaluation by the Display v2 interpreter.
 #[derive(Clone)]
 pub enum Value<'s> {
-    Address(AccountAddress),
+    Address(Address),
     Bool(bool),
     Bytes(Cow<'s, [u8]>),
     Enum(Enum<'s>),
@@ -67,6 +85,15 @@ pub enum Value<'s> {
     U128(u128),
     U256(U256),
     Vector(Vector<'s>),
+}
+
+#[derive(Clone, Copy)]
+pub struct Address {
+    pub(crate) bytes: AccountAddress,
+
+    /// Indicates whether this value came from the parent object being formatted (in which case
+    /// child object reads should be scoped by the parent object's version).
+    pub(crate) scoped: bool,
 }
 
 /// Non-aggregate values that can be formatted during string interpolation.
@@ -90,6 +117,7 @@ pub enum Accessor<'s> {
     Index(Value<'s>),
     DFIndex(Value<'s>),
     DOFIndex(Value<'s>),
+    Derived(Value<'s>),
 }
 
 /// Bytes extracted from the serialized representation of a Move value, along with its layout.
@@ -97,6 +125,21 @@ pub enum Accessor<'s> {
 pub struct Slice<'s> {
     pub(crate) layout: &'s MoveTypeLayout,
     pub(crate) bytes: &'s [u8],
+
+    /// Indicates whether this value came from the parent object being formatted (in which case
+    /// child object reads should be scoped by the parent object's version).
+    pub(crate) scoped: bool,
+}
+
+/// An owned version of `Slice`.
+#[derive(Clone)]
+pub struct OwnedSlice {
+    pub layout: MoveTypeLayout,
+    pub bytes: Vec<u8>,
+
+    /// Indicates whether this value came from the parent object being formatted (in which case
+    /// child object reads should be scoped by the parent object's version).
+    pub scoped: bool,
 }
 
 /// An evaluated vector literal.
@@ -129,66 +172,58 @@ pub enum Fields<'s> {
     Named(Vec<(&'s str, Value<'s>)>),
 }
 
-impl Value<'_> {
-    /// Write out a formatted representation of this value, transformed by `transform`, to the
-    /// provided writer.
-    ///
-    /// This operation can fail if the transform is not supported for this value, or if the output
-    /// is too large. If it succeds, `w` will be modified to include the newly written data.
-    pub(crate) fn format(
-        self,
-        transform: Transform,
-        w: &mut StringWriter<'_>,
-    ) -> Result<(), FormatError> {
-        match transform {
-            Transform::Base64(xmod) => Atom::try_from(self)?.format_as_base64(xmod.engine(), w),
-            Transform::Bcs(xmod) => {
-                let bytes = bcs::to_bytes(&self)?;
-                Ok(write!(w, "{}", xmod.engine().encode(bytes))?)
-            }
-
-            Transform::Hex => Atom::try_from(self)?.format_as_hex(w),
-            Transform::Json => Err(FormatError::TransformInvalid("unexpected 'json' in string")),
-            Transform::Str => Atom::try_from(self)?.format_as_str(w),
-            Transform::Timestamp => Atom::try_from(self)?.format_as_timestamp(w),
-            Transform::Url => Atom::try_from(self)?.format_as_url(w),
+impl Address {
+    pub(crate) fn scoped(bytes: AccountAddress) -> Self {
+        Self {
+            bytes,
+            scoped: true,
         }
     }
 
-    /// Write out a formatted representation of this value as JSON, using the provided writer.
-    ///
-    /// This operation can fail if the output is too large. If it succeeds, `w` will be modified to
-    /// account for the size of the written data, which will be returned.
-    pub(crate) fn format_json(
-        self,
-        mut w: JsonWriter<'_>,
-    ) -> Result<serde_json::Value, FormatError> {
-        match self {
-            Value::Address(a) => w.write_str(a.to_canonical_string(true)),
-            Value::Bool(b) => w.write_bool(b),
-            Value::U8(n) => w.write_number(n as u32),
-            Value::U16(n) => w.write_number(n as u32),
-            Value::U32(n) => w.write_number(n),
-            Value::U64(n) => w.write_str(n.to_string()),
-            Value::U128(n) => w.write_str(n.to_string()),
-            Value::U256(n) => w.write_str(n.to_string()),
-
-            Value::Bytes(bs) => w.write_str(Base64Modifier::EMPTY.engine().encode(&bs)),
-            Value::String(bs) => w.write_str(
-                str::from_utf8(&bs)
-                    .map_err(|_| FormatError::TransformInvalid("expected utf8 bytes"))?
-                    .to_owned(),
-            ),
-
-            Value::Struct(s) => s.format_json(w),
-            Value::Enum(e) => e.format_json(w),
-            Value::Vector(v) => v.format_json(w),
-            Value::Slice(s) => s.format_json(w),
+    pub(crate) fn latest(bytes: AccountAddress) -> Self {
+        Self {
+            bytes,
+            scoped: false,
         }
+    }
+}
+
+impl Value<'_> {
+    /// Treat this value as a dynamic field name, and derive the ID of its `Field<K, V>` object,
+    /// under the given `parent` address.
+    pub fn derive_dynamic_field_id(
+        &self,
+        parent: impl Into<RtdAddress>,
+    ) -> Result<ObjectID, FormatError> {
+        let bytes = bcs::to_bytes(self)?;
+        let type_ = self.type_();
+
+        Ok(derive_dynamic_field_id(parent, &type_, &bytes)?)
+    }
+
+    /// Treat this value as a dynamic object field name, and derive the ID of its `Field<K, V>`
+    /// object, under the given `parent` address.
+    pub fn derive_dynamic_object_field_id(
+        &self,
+        parent: impl Into<RtdAddress>,
+    ) -> Result<ObjectID, FormatError> {
+        let bytes = bcs::to_bytes(self)?;
+        let type_ = DynamicFieldInfo::dynamic_object_field_wrapper(self.type_()).into();
+
+        Ok(derive_dynamic_field_id(parent, &type_, &bytes)?)
+    }
+
+    /// Treat this value as a derived object key and derive the corresponding object ID under the
+    /// given parent address.
+    pub fn derive_object_id(&self, parent: impl Into<RtdAddress>) -> Result<ObjectID, FormatError> {
+        let bytes = bcs::to_bytes(self)?;
+        let type_ = self.type_();
+
+        Ok(derive_object_id(parent, &type_, &bytes)?)
     }
 
     /// The Move type of this value.
-    pub(crate) fn type_(&self) -> TypeTag {
+    pub fn type_(&self) -> TypeTag {
         match self {
             Value::Address(_) => TypeTag::Address,
             Value::Bool(_) => TypeTag::Bool,
@@ -219,6 +254,67 @@ impl Value<'_> {
         }
     }
 
+    /// Write out a formatted representation of this value, transformed by `transform`, to the
+    /// provided writer.
+    ///
+    /// This operation can fail if the transform is not supported for this value, or if the output
+    /// is too large. If it succeds, `w` will be modified to include the newly written data.
+    pub(crate) fn format(
+        self,
+        transform: Transform,
+        w: &mut writer::StringWriter<'_>,
+    ) -> Result<(), FormatError> {
+        match transform {
+            Transform::Base64(xmod) => Atom::try_from(self)?.format_as_base64(xmod.engine(), w),
+            Transform::Bcs(xmod) => {
+                let bytes = bcs::to_bytes(&self)?;
+                Ok(write!(w, "{}", xmod.engine().encode(bytes))?)
+            }
+
+            Transform::Hex => Atom::try_from(self)?.format_as_hex(w),
+            Transform::Json => Err(FormatError::TransformInvalid("unexpected 'json' in string")),
+            Transform::Str => Atom::try_from(self)?.format_as_str(w),
+            Transform::Timestamp => Atom::try_from(self)?.format_as_timestamp(w),
+            Transform::Url => Atom::try_from(self)?.format_as_url(w),
+        }
+    }
+
+    /// Write out a formatted representation of this value as JSON, using the provided meter.
+    ///
+    /// This operation can fail if the output is too large. If it succeeds, `meter` will be
+    /// modified to account for the size of the written data.
+    pub(crate) fn format_json<F: RV::Format>(
+        self,
+        mut meter: writer::Meter<'_>,
+    ) -> Result<F, FormatError> {
+        match self {
+            Value::Address(a) => Ok(F::string(&mut meter, a.bytes.to_canonical_string(true))?),
+            Value::Bool(b) => Ok(F::bool(&mut meter, b)?),
+            Value::U8(n) => Ok(F::number(&mut meter, n as u32)?),
+            Value::U16(n) => Ok(F::number(&mut meter, n as u32)?),
+            Value::U32(n) => Ok(F::number(&mut meter, n)?),
+            Value::U64(n) => Ok(F::string(&mut meter, n.to_string())?),
+            Value::U128(n) => Ok(F::string(&mut meter, n.to_string())?),
+            Value::U256(n) => Ok(F::string(&mut meter, n.to_string())?),
+
+            Value::Bytes(bs) => {
+                let b64 = Base64Modifier::EMPTY.engine().encode(&bs);
+                Ok(F::string(&mut meter, b64)?)
+            }
+
+            Value::String(bs) => {
+                let s = str::from_utf8(&bs)
+                    .map_err(|_| FormatError::TransformInvalid("expected utf8 bytes"))?;
+                Ok(F::string(&mut meter, s.to_owned())?)
+            }
+
+            Value::Struct(s) => s.format_json(meter),
+            Value::Enum(e) => e.format_json(meter),
+            Value::Vector(v) => v.format_json(meter),
+            Value::Slice(s) => s.format_json(meter),
+        }
+    }
+
     /// Attempt to coerce this value into a `u64` if that's possible. This works for any numeric
     /// value that can be represented within 64 bits.
     pub(crate) fn as_u64(&self) -> Option<u64> {
@@ -238,6 +334,7 @@ impl Value<'_> {
             V::Slice(Slice {
                 layout,
                 bytes: data,
+                ..
             }) => match layout {
                 L::U8 => Some(bcs::from_bytes::<u8>(data).ok()?.into()),
                 L::U16 => Some(bcs::from_bytes::<u16>(data).ok()?.into()),
@@ -258,11 +355,23 @@ impl Value<'_> {
             | V::Vector(_) => None,
         }
     }
+
+    /// Annotate the value with a scope status.
+    pub(crate) fn set_scope(&mut self, scope: bool) {
+        match self {
+            Value::Address(a) => a.scoped = scope,
+            Value::Slice(s) => s.scoped = scope,
+
+            // Other value types can't be parents for child object reads, so scope status can be
+            // ignored.
+            _ => (),
+        }
+    }
 }
 
 impl Atom<'_> {
     /// Format the atom as a hexadecimal string.
-    fn format_as_hex(&self, w: &mut StringWriter<'_>) -> Result<(), FormatError> {
+    fn format_as_hex(&self, w: &mut writer::StringWriter<'_>) -> Result<(), FormatError> {
         match self {
             Atom::Bool(b) => write!(w, "{:02x}", *b as u8)?,
             Atom::U8(n) => write!(w, "{n:02x}")?,
@@ -289,7 +398,10 @@ impl Atom<'_> {
     }
 
     /// Format the atom as a string.
-    fn format_as_str(&self, w: &mut StringWriter<'_>) -> Result<(), FormatError> {
+    pub(crate) fn format_as_str(
+        &self,
+        w: &mut writer::StringWriter<'_>,
+    ) -> Result<(), FormatError> {
         match self {
             Atom::Address(a) => write!(w, "{}", a.to_canonical_display(true))?,
             Atom::Bool(b) => write!(w, "{b}")?,
@@ -311,7 +423,7 @@ impl Atom<'_> {
 
     /// Coerce the atom into an `i64`, interpreted as an offset in milliseconds since the Unix
     /// epoch, and format it as an ISO8601 timestamp.
-    fn format_as_timestamp(&self, w: &mut StringWriter<'_>) -> Result<(), FormatError> {
+    fn format_as_timestamp(&self, w: &mut writer::StringWriter<'_>) -> Result<(), FormatError> {
         let ts = self
             .as_i64()
             .and_then(DateTime::from_timestamp_millis)
@@ -324,7 +436,7 @@ impl Atom<'_> {
     }
 
     /// Like string formatting, but percent-encoding reserved URL characters.
-    fn format_as_url(&self, w: &mut StringWriter<'_>) -> Result<(), FormatError> {
+    fn format_as_url(&self, w: &mut writer::StringWriter<'_>) -> Result<(), FormatError> {
         match self {
             Atom::Address(a) => write!(w, "{}", a.to_canonical_display(true))?,
             Atom::Bool(b) => write!(w, "{b}")?,
@@ -353,7 +465,7 @@ impl Atom<'_> {
     fn format_as_base64(
         &self,
         e: &impl Engine,
-        w: &mut StringWriter<'_>,
+        w: &mut writer::StringWriter<'_>,
     ) -> Result<(), FormatError> {
         let base64 = match self {
             Atom::Address(a) => e.encode(a.into_bytes()),
@@ -392,12 +504,11 @@ impl<'s> Accessor<'s> {
     /// as long as their numeric values fit into a `u64`.
     pub(crate) fn as_numeric_index(&self) -> Option<u64> {
         use Accessor as A;
-        use MoveTypeLayout as L;
 
         match self {
             A::Index(value) => value.as_u64(),
             // All other index types don't represent a numeric index.
-            A::DFIndex(_) | A::DOFIndex(_) | A::Field(_) | A::Positional(_) => None,
+            A::DFIndex(_) | A::DOFIndex(_) | A::Derived(_) | A::Field(_) | A::Positional(_) => None,
         }
     }
 
@@ -407,14 +518,85 @@ impl<'s> Accessor<'s> {
         match self {
             A::Field(f) => Some(Cow::Borrowed(*f)),
             A::Positional(i) => Some(Cow::Owned(format!("pos{i}"))),
-            A::Index(_) | A::DFIndex(_) | A::DOFIndex(_) => None,
+            A::Index(_) | A::DFIndex(_) | A::DOFIndex(_) | A::Derived(_) => None,
+        }
+    }
+}
+
+impl OwnedSlice {
+    pub fn new(layout: MoveTypeLayout, bytes: Vec<u8>) -> Self {
+        Self {
+            layout,
+            bytes,
+            scoped: true,
+        }
+    }
+
+    pub(crate) fn as_slice(&self) -> Slice<'_> {
+        Slice {
+            layout: &self.layout,
+            bytes: &self.bytes,
+            scoped: self.scoped,
         }
     }
 }
 
 impl Slice<'_> {
-    fn format_json(self, w: JsonWriter<'_>) -> Result<serde_json::Value, FormatError> {
-        A::MoveValue::visit_deserialize(self.bytes, self.layout, &mut RV::RpcVisitor::new(w))
+    fn format_json<F: RV::Format>(self, meter: writer::Meter<'_>) -> Result<F, FormatError> {
+        Ok(A::MoveValue::visit_deserialize(
+            self.bytes,
+            self.layout,
+            &mut RV::RpcVisitor::new(meter),
+        )?)
+    }
+}
+
+impl Value<'_> {
+    /// Convert this value into an owned slice.
+    ///
+    /// This operation returns `None` if the value contains compound literals (struct, enum, vector
+    /// literals), since their layouts are not guaranteed to be valid.
+    pub fn into_owned_slice(self) -> Option<OwnedSlice> {
+        let scoped = match &self {
+            Value::Slice(s) => s.scoped,
+            Value::Address(a) => a.scoped,
+            _ => false,
+        };
+
+        let layout = self.layout()?;
+        let bytes = bcs::to_bytes(&self).ok()?;
+        Some(OwnedSlice {
+            layout,
+            bytes,
+            scoped,
+        })
+    }
+
+    /// Compute the type layout for this value, if possible.
+    ///
+    /// Returns `None` for compound literals (Struct, Enum, Vector) since we cannot reliably
+    /// compute their layouts without access to the full type information.
+    fn layout(&self) -> Option<MoveTypeLayout> {
+        use MoveTypeLayout as L;
+
+        match self {
+            Value::Slice(s) => Some(s.layout.clone()),
+
+            Value::Address(_) => Some(L::Address),
+            Value::Bool(_) => Some(L::Bool),
+            Value::U8(_) => Some(L::U8),
+            Value::U16(_) => Some(L::U16),
+            Value::U32(_) => Some(L::U32),
+            Value::U64(_) => Some(L::U64),
+            Value::U128(_) => Some(L::U128),
+            Value::U256(_) => Some(L::U256),
+
+            Value::Bytes(_) => Some(L::Vector(Box::new(L::U8))),
+            Value::String(_) => Some(L::Struct(Box::new(move_utf8_str_layout()))),
+
+            // Compound literals: cannot compute layout
+            Value::Enum(_) | Value::Struct(_) | Value::Vector(_) => None,
+        }
     }
 }
 
@@ -423,40 +605,42 @@ impl Vector<'_> {
         TypeTag::Vector(Box::new(self.type_.clone().into_owned()))
     }
 
-    fn format_json(self, mut w: JsonWriter<'_>) -> Result<serde_json::Value, FormatError> {
-        let mut elems = vec![];
-        let mut nested = w.nest()?;
+    fn format_json<F: RV::Format>(self, mut meter: writer::Meter<'_>) -> Result<F, FormatError> {
+        let mut elems = F::Vec::default();
+        let mut nested = meter.nest()?;
         for e in self.elements {
-            let json = e.format_json(nested)?;
-            nested.vec_push_element(&mut elems, json)?;
+            let json = e.format_json(nested.reborrow())?;
+            F::vec_push_element(&mut nested, &mut elems, json)?;
         }
 
-        w.write_vec(elems)
+        Ok(F::vec(&mut meter, elems)?)
     }
 }
 
 impl Struct<'_> {
-    fn format_json(self, mut w: JsonWriter<'_>) -> Result<serde_json::Value, FormatError> {
-        let mut map = serde_json::Map::new();
-        let nested = w.nest()?;
-        self.fields.format_json(nested, &mut map)?;
-        w.write_map(map)
+    fn format_json<F: RV::Format>(self, mut meter: writer::Meter<'_>) -> Result<F, FormatError> {
+        let mut map = F::Map::default();
+        let nested = meter.nest()?;
+        self.fields.format_json::<F>(nested, &mut map)?;
+
+        Ok(F::map(&mut meter, map)?)
     }
 }
 
 impl Enum<'_> {
-    fn format_json(self, mut w: JsonWriter<'_>) -> Result<serde_json::Value, FormatError> {
-        let mut map = serde_json::Map::new();
-        let mut nested = w.nest()?;
+    fn format_json<F: RV::Format>(self, mut meter: writer::Meter<'_>) -> Result<F, FormatError> {
+        let mut map = F::Map::default();
+        let mut nested = meter.nest()?;
 
         let name = match self.variant_name {
-            Some(name) => nested.write_str(name.to_owned())?,
-            None => nested.write_number(self.variant_index as u32)?,
+            Some(name) => F::string(&mut nested, name.to_owned())?,
+            None => F::number(&mut nested, self.variant_index as u32)?,
         };
 
-        nested.map_push_field(&mut map, "@variant".to_owned(), name)?;
-        self.fields.format_json(nested, &mut map)?;
-        w.write_map(map)
+        F::map_push_field(&mut nested, &mut map, "@variant".to_owned(), name)?;
+        self.fields.format_json::<F>(nested, &mut map)?;
+
+        Ok(F::map(&mut meter, map)?)
     }
 }
 
@@ -490,23 +674,23 @@ impl<'s> Fields<'s> {
         }
     }
 
-    fn format_json(
+    fn format_json<F: RV::Format>(
         self,
-        mut w: JsonWriter<'_>,
-        map: &mut serde_json::Map<String, serde_json::Value>,
+        mut meter: writer::Meter<'_>,
+        map: &mut F::Map,
     ) -> Result<(), FormatError> {
         match self {
             Fields::Positional(values) => {
                 for (i, value) in values.into_iter().enumerate() {
-                    let json = value.format_json(w)?;
-                    w.map_push_field(map, format!("pos{i}"), json)?;
+                    let json = value.format_json(meter.reborrow())?;
+                    F::map_push_field(&mut meter, map, format!("pos{i}"), json)?;
                 }
             }
 
             Fields::Named(items) => {
                 for (field, value) in items {
-                    let json = value.format_json(w)?;
-                    w.map_push_field(map, field.to_owned(), json)?;
+                    let json = value.format_json(meter.reborrow())?;
+                    F::map_push_field(&mut meter, map, field.to_owned(), json)?;
                 }
             }
         }
@@ -522,7 +706,7 @@ impl Serialize for Value<'_> {
         S: serde::Serializer,
     {
         match self {
-            Value::Address(a) => a.serialize(serializer),
+            Value::Address(a) => a.bytes.serialize(serializer),
             Value::Bool(b) => b.serialize(serializer),
             Value::Bytes(b) => b.serialize(serializer),
             Value::Enum(e) => e.serialize(serializer),
@@ -647,7 +831,7 @@ impl<'s> TryFrom<Value<'s>> for Atom<'s> {
         use Value as V;
 
         Ok(match value {
-            V::Address(a) => A::Address(a),
+            V::Address(a) => A::Address(a.bytes),
             V::Bool(b) => A::Bool(b),
             V::U8(n) => A::U8(n),
             V::U16(n) => A::U16(n),
@@ -672,7 +856,7 @@ impl<'s> TryFrom<Value<'s>> for Atom<'s> {
                     .into_iter()
                     .map(|e| match e {
                         V::U8(b) => Ok(b),
-                        V::Slice(Slice { layout, bytes }) if layout == &L::U8 => {
+                        V::Slice(Slice { layout, bytes, .. }) if layout == &L::U8 => {
                             Ok(bcs::from_bytes(bytes)?)
                         }
                         _ => Err(FormatError::TransformInvalid("unexpected vector")),
@@ -682,7 +866,7 @@ impl<'s> TryFrom<Value<'s>> for Atom<'s> {
                 A::Bytes(Cow::Owned(bytes?))
             }
 
-            V::Slice(Slice { layout, bytes }) => match layout {
+            V::Slice(Slice { layout, bytes, .. }) => match layout {
                 L::Address => A::Address(bcs::from_bytes(bytes)?),
                 L::Bool => A::Bool(bcs::from_bytes(bytes)?),
                 L::U8 => A::U8(bcs::from_bytes(bytes)?),
@@ -700,6 +884,7 @@ impl<'s> TryFrom<Value<'s>> for Atom<'s> {
                     if [
                         move_ascii_str_layout(),
                         move_utf8_str_layout(),
+                        type_name_layout(),
                         url_layout(),
                     ]
                     .contains(layout.as_ref()) =>
@@ -726,26 +911,30 @@ pub(crate) mod tests {
     use std::str::FromStr;
     use std::sync::atomic::AtomicUsize;
 
+    use itertools::Itertools;
     use move_core_types::annotated_value::MoveEnumLayout;
     use move_core_types::annotated_value::MoveFieldLayout;
     use move_core_types::annotated_value::MoveStructLayout;
     use move_core_types::annotated_value::MoveTypeLayout as L;
     use move_core_types::identifier::Identifier;
-    use serde_json::json;
+    use rtd_types::MOVE_STDLIB_ADDRESS;
     use rtd_types::base_types::STD_ASCII_MODULE_NAME;
     use rtd_types::base_types::STD_ASCII_STRUCT_NAME;
+    use rtd_types::derived_object::derive_object_id;
     use rtd_types::dynamic_field::DynamicFieldInfo;
     use rtd_types::dynamic_field::Field;
     use rtd_types::dynamic_field::derive_dynamic_field_id;
     use rtd_types::id::ID;
     use rtd_types::id::UID;
+    use serde_json::Value as Json;
+    use serde_json::json;
 
     use super::*;
 
     /// Mock Store implementation for testing.
-    #[derive(Default)]
+    #[derive(Default, Clone)]
     pub struct MockStore {
-        data: BTreeMap<AccountAddress, (Vec<u8>, MoveTypeLayout)>,
+        data: BTreeMap<AccountAddress, (MoveTypeLayout, Vec<u8>)>,
     }
 
     impl MockStore {
@@ -764,21 +953,20 @@ pub(crate) mod tests {
             use Identifier as I;
             use MoveFieldLayout as F;
             use MoveStructLayout as S;
-            use MoveTypeLayout as T;
 
             let name_bytes = bcs::to_bytes(&name).unwrap();
             let name_type = TypeTag::from(&name_layout);
             let value_type = TypeTag::from(&value_layout);
             let df_id = derive_dynamic_field_id(parent, &name_type, &name_bytes).unwrap();
 
-            let field_bytes = bcs::to_bytes(&Field {
+            let bytes = bcs::to_bytes(&Field {
                 id: UID::new(df_id),
                 name,
                 value,
             })
             .unwrap();
 
-            let field_layout = L::Struct(Box::new(S {
+            let layout = L::Struct(Box::new(S {
                 type_: DynamicFieldInfo::dynamic_field_type(name_type, value_type),
                 fields: vec![
                     F::new(I::new("id").unwrap(), L::Struct(Box::new(UID::layout()))),
@@ -787,7 +975,7 @@ pub(crate) mod tests {
                 ],
             }));
 
-            self.data.insert(df_id.into(), (field_bytes, field_layout));
+            self.data.insert(df_id.into(), (layout, bytes));
             self
         }
 
@@ -808,7 +996,6 @@ pub(crate) mod tests {
             use Identifier as I;
             use MoveFieldLayout as F;
             use MoveStructLayout as S;
-            use MoveTypeLayout as T;
 
             let name_bytes = bcs::to_bytes(&name).unwrap();
             let value_bytes = bcs::to_bytes(&value).unwrap();
@@ -839,23 +1026,37 @@ pub(crate) mod tests {
                 ],
             }));
 
-            self.data.insert(dof_id.into(), (field_bytes, field_layout));
-            self.data.insert(val_id, (value_bytes, value_layout));
+            self.data.insert(dof_id.into(), (field_layout, field_bytes));
+            self.data.insert(val_id, (value_layout, value_bytes));
+            self
+        }
+
+        /// Add a derived object to the store.
+        pub(crate) fn with_derived_object<N: Serialize, V: Serialize>(
+            mut self,
+            parent: AccountAddress,
+            name: N,
+            name_layout: MoveTypeLayout,
+            value: V,
+            value_layout: MoveTypeLayout,
+        ) -> Self {
+            let name_bytes = bcs::to_bytes(&name).unwrap();
+            let value_bytes = bcs::to_bytes(&value).unwrap();
+            let name_type = TypeTag::from(&name_layout);
+            let id = derive_object_id(parent, &name_type, &name_bytes).unwrap();
+
+            self.data.insert(id.into(), (value_layout, value_bytes));
             self
         }
     }
 
     #[async_trait]
-    impl<'s> Store<'s> for &'s MockStore {
-        async fn object(&self, id: AccountAddress) -> anyhow::Result<Option<Slice<'s>>> {
-            let Some((bytes, layout)) = self.data.get(&id) else {
-                return Ok(None);
-            };
-
-            Ok(Some(Slice {
-                layout,
-                bytes: bytes.as_slice(),
-            }))
+    impl Store for MockStore {
+        async fn latest(
+            &self,
+            id: AccountAddress,
+        ) -> anyhow::Result<Option<(MoveTypeLayout, Vec<u8>)>> {
+            Ok(self.data.get(&id).cloned())
         }
     }
 
@@ -904,12 +1105,29 @@ pub(crate) mod tests {
         )
     }
 
+    pub fn vec_map(key: MoveTypeLayout, value: MoveTypeLayout) -> MoveTypeLayout {
+        let key_type = TypeTag::from(&key);
+        let value_type = TypeTag::from(&value);
+
+        struct_(
+            &format!("0x2::vec_map::VecMap<{key_type}, {value_type}>"),
+            vec![(
+                "contents",
+                vector_(struct_(
+                    &format!("0x2::vec_map::Entry<{key_type}, {value_type}>"),
+                    vec![("key", key), ("value", value)],
+                )),
+            )],
+        )
+    }
+
     #[test]
     fn test_slice_serialize_roundtrip() {
         let bytes = &[0x01, 0x02, 0x03, 0x04];
         let slice = Slice {
             layout: &L::U64,
             bytes,
+            scoped: false,
         };
 
         let serialized = bcs::to_bytes(&slice).unwrap();
@@ -981,7 +1199,7 @@ pub(crate) mod tests {
     fn test_serialize_address() {
         let addr: AccountAddress = "0x1".parse().unwrap();
         assert_eq!(
-            bcs::to_bytes(&Value::Address(addr)).unwrap(),
+            bcs::to_bytes(&Value::Address(Address::latest(addr))).unwrap(),
             bcs::to_bytes(&addr).unwrap()
         );
     }
@@ -1030,7 +1248,7 @@ pub(crate) mod tests {
             fields: Fields::Named(vec![
                 ("x", Value::U32(100)),
                 ("y", Value::U32(200)),
-                ("z", Value::Address(addr)),
+                ("z", Value::Address(Address::latest(addr))),
             ]),
         });
 
@@ -1164,7 +1382,7 @@ pub(crate) mod tests {
             Value::U64(12345678),
             Value::U128(123456),
             Value::U256(U256::from(42u64)),
-            Value::Address("0x42".parse().unwrap()),
+            Value::Address(Address::latest("0x42".parse().unwrap())),
             Value::String(Cow::Borrowed("hello".as_bytes())),
             Value::Bytes(Cow::Borrowed(&[1, 2, 3])),
             Value::Vector(Vector {
@@ -1175,6 +1393,7 @@ pub(crate) mod tests {
                     Value::Slice(Slice {
                         layout: &L::U8,
                         bytes: &[6],
+                        scoped: false,
                     }),
                 ],
             }),
@@ -1194,8 +1413,7 @@ pub(crate) mod tests {
             Atom::Bytes(Cow::Borrowed(&[4, 5, 6])),
         ];
 
-        assert_eq!(values.len(), atoms.len());
-        for (value, expect) in values.into_iter().zip(atoms.into_iter()) {
+        for (value, expect) in values.into_iter().zip_eq(atoms) {
             let actual = Atom::try_from(value).unwrap();
             assert_eq!(actual, expect);
         }
@@ -1212,51 +1430,68 @@ pub(crate) mod tests {
         let u256_bytes = bcs::to_bytes(&U256::from(42u64)).unwrap();
         let addr_bytes = bcs::to_bytes(&AccountAddress::from_str("0x42").unwrap()).unwrap();
         let str_bytes = bcs::to_bytes("hello").unwrap();
+        let type_name_bytes = bcs::to_bytes("0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>").unwrap();
         let vec_bytes = bcs::to_bytes(&vec![1u8, 2, 3]).unwrap();
 
         let str_layout = L::Struct(Box::new(move_utf8_str_layout()));
+        let type_name_layout = L::Struct(Box::new(type_name_layout()));
         let vec_layout = L::Vector(Box::new(L::U8));
 
         let values = vec![
             Value::Slice(Slice {
                 layout: &L::Bool,
                 bytes: &bool_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::U8,
                 bytes: &u8_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::U16,
                 bytes: &u16_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::U32,
                 bytes: &u32_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::U64,
                 bytes: &u64_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::U128,
                 bytes: &u128_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::U256,
                 bytes: &u256_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &L::Address,
                 bytes: &addr_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &str_layout,
                 bytes: &str_bytes,
+                scoped: false,
+            }),
+            Value::Slice(Slice {
+                layout: &type_name_layout,
+                bytes: &type_name_bytes,
+                scoped: false,
             }),
             Value::Slice(Slice {
                 layout: &vec_layout,
                 bytes: &vec_bytes,
+                scoped: false,
             }),
         ];
 
@@ -1270,10 +1505,11 @@ pub(crate) mod tests {
             Atom::U256(U256::from(42u64)),
             Atom::Address(AccountAddress::from_str("0x42").unwrap()),
             Atom::Bytes(Cow::Borrowed("hello".as_bytes())),
+            Atom::Bytes(Cow::Borrowed("0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>".as_bytes())),
             Atom::Bytes(Cow::Borrowed(&[1, 2, 3])),
         ];
 
-        for (value, expect) in values.into_iter().zip(atoms.into_iter()) {
+        for (value, expect) in values.into_iter().zip_eq(atoms) {
             let actual = Atom::try_from(value).unwrap();
             assert_eq!(actual, expect);
         }
@@ -1289,7 +1525,7 @@ pub(crate) mod tests {
             Value::U64(45),
             Value::U128(46),
             Value::U256(U256::from(47u64)),
-            Value::Address("0x48".parse().unwrap()),
+            Value::Address(Address::latest("0x48".parse().unwrap())),
             Value::String(Cow::Borrowed("hello".as_bytes())),
             Value::Bytes(Cow::Borrowed(&[1, 2, 3])),
         ];
@@ -1307,23 +1543,25 @@ pub(crate) mod tests {
             json!("AQID"),
         ];
 
-        assert_eq!(values.len(), json.len());
-        for (value, expect) in values.into_iter().zip(json.into_iter()) {
+        for (value, expect) in values.into_iter().zip_eq(json) {
             let used = AtomicUsize::new(0);
-            let writer = JsonWriter::new(&used, usize::MAX, usize::MAX);
-            let actual = value.format_json(writer).unwrap();
+            let meter = writer::Meter::new(&used, usize::MAX, usize::MAX);
+            let actual = value.format_json::<Json>(meter).unwrap();
             assert_eq!(actual, expect);
         }
     }
 
     #[test]
     fn test_struct_json_formatting() {
-        let literal = Value::Struct(Struct {
+        let lit = Value::Struct(Struct {
             type_: &"0x2::foo::Bar".parse().unwrap(),
             fields: Fields::Named(vec![
                 ("x", Value::U32(100)),
                 ("y", Value::U32(200)),
-                ("z", Value::Address("0x300".parse().unwrap())),
+                (
+                    "z",
+                    Value::Address(Address::latest("0x300".parse().unwrap())),
+                ),
             ]),
         });
 
@@ -1334,6 +1572,7 @@ pub(crate) mod tests {
             ),
             bytes: &bcs::to_bytes(&(100u32, 200u32, "0x300".parse::<AccountAddress>().unwrap()))
                 .unwrap(),
+            scoped: false,
         });
 
         let expect = json!({
@@ -1343,15 +1582,14 @@ pub(crate) mod tests {
         });
 
         let used = AtomicUsize::new(0);
-        let writer = JsonWriter::new(&used, usize::MAX, usize::MAX);
-
-        assert_eq!(expect, literal.format_json(writer).unwrap());
-        assert_eq!(expect, slice.format_json(writer).unwrap());
+        let mut meter = writer::Meter::new(&used, usize::MAX, usize::MAX);
+        assert_eq!(expect, lit.format_json::<Json>(meter.reborrow()).unwrap());
+        assert_eq!(expect, slice.format_json::<Json>(meter.reborrow()).unwrap());
     }
 
     #[test]
     fn test_enum_named_variant_json_formatting() {
-        let literal = Value::Enum(Enum {
+        let lit = Value::Enum(Enum {
             type_: &"0x1::m::E".parse().unwrap(),
             variant_name: Some("A"),
             variant_index: 0,
@@ -1364,6 +1602,7 @@ pub(crate) mod tests {
                 vec![("A", vec![("b", L::U64), ("c", L::Bool)])],
             ),
             bytes: &bcs::to_bytes(&(0u8, 42u64, true)).unwrap(),
+            scoped: false,
         });
 
         let expect = json!({
@@ -1373,10 +1612,9 @@ pub(crate) mod tests {
         });
 
         let used = AtomicUsize::new(0);
-        let writer = JsonWriter::new(&used, usize::MAX, usize::MAX);
-
-        assert_eq!(expect, literal.format_json(writer).unwrap());
-        assert_eq!(expect, slice.format_json(writer).unwrap());
+        let mut meter = writer::Meter::new(&used, usize::MAX, usize::MAX);
+        assert_eq!(expect, lit.format_json::<Json>(meter.reborrow()).unwrap());
+        assert_eq!(expect, slice.format_json::<Json>(meter.reborrow()).unwrap());
     }
 
     #[test]
@@ -1395,7 +1633,7 @@ pub(crate) mod tests {
         });
 
         let used = AtomicUsize::new(0);
-        let writer = JsonWriter::new(&used, usize::MAX, usize::MAX);
-        assert_eq!(expect, literal.format_json(writer).unwrap());
+        let meter = writer::Meter::new(&used, usize::MAX, usize::MAX);
+        assert_eq!(expect, literal.format_json::<Json>(meter).unwrap());
     }
 }

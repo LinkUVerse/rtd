@@ -1,30 +1,38 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+
 use anyhow::Context;
+use itertools::Itertools;
 use prometheus::Registry;
 use reqwest::Client;
-use serde::Deserialize;
-use serde_json::{Value, json};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use rtd_indexer_alt_graphql::{
-    RpcArgs as GraphQlArgs, args::KvArgs as GraphQlKvArgs, config::RpcConfig as GraphQlConfig,
-    start_rpc as start_graphql,
-};
-use rtd_indexer_alt_reader::{
-    consistent_reader::ConsistentReaderArgs, fullnode_client::FullnodeArgs,
-    system_package_task::SystemPackageTaskArgs,
-};
-use rtd_macros::sim_test;
-use rtd_pg_db::{DbArgs, temp::get_available_port};
-use rtd_test_transaction_builder::make_transfer_rtd_transaction;
-use rtd_types::{gas_coin::GasCoin, transaction::SharedObjectMutability};
-
 use rtd_futures::service::Service;
+use rtd_indexer_alt_graphql::RpcArgs as GraphQlArgs;
+use rtd_indexer_alt_graphql::args::SubscriptionArgs;
+use rtd_indexer_alt_graphql::config::RpcConfig as GraphQlConfig;
+use rtd_indexer_alt_graphql::start_rpc as start_graphql;
+use rtd_indexer_alt_reader::consistent_reader::ConsistentReaderArgs;
+use rtd_indexer_alt_reader::fullnode_client::FullnodeArgs;
+use rtd_indexer_alt_reader::kv_loader::KvArgs;
+use rtd_indexer_alt_reader::system_package_task::SystemPackageTaskArgs;
+use rtd_macros::sim_test;
+use rtd_pg_db::DbArgs;
+use rtd_pg_db::temp::get_available_port;
+use rtd_protocol_config::ProtocolConfig;
+use rtd_test_transaction_builder::make_transfer_rtd_transaction;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::gas_coin::GasCoin;
+use rtd_types::transaction::ObjectArg;
+use rtd_types::transaction::SharedObjectMutability;
+use serde::Deserialize;
+use serde_json::Value;
+use serde_json::json;
+use test_cluster::TestCluster;
+use test_cluster::TestClusterBuilder;
 use url::Url;
-
-use rtd_types::{base_types::RtdAddress, transaction::ObjectArg};
-use test_cluster::{TestCluster, TestClusterBuilder};
 
 // Unified struct for all GraphQL transaction effects parsing
 #[derive(Debug, Deserialize)]
@@ -107,6 +115,46 @@ struct GraphQlTestCluster {
 }
 
 impl GraphQlTestCluster {
+    async fn new(validator_cluster: &TestCluster) -> Self {
+        let graphql_port = get_available_port();
+        let graphql_listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), graphql_port);
+
+        let graphql_args = GraphQlArgs {
+            rpc_listen_address: graphql_listen_address,
+            no_ide: true,
+        };
+
+        let fullnode_args = FullnodeArgs::new(validator_cluster.rpc_url().parse().unwrap());
+
+        let kv_args = KvArgs {
+            ledger_grpc_url: Some(validator_cluster.rpc_url().parse().unwrap()),
+            ..Default::default()
+        };
+
+        // Start GraphQL server that connects directly to TestCluster's RPC
+        let service = start_graphql(
+            None, // No database - GraphQL will use fullnode RPC for executeTransaction
+            fullnode_args,
+            DbArgs::default(),
+            kv_args,
+            ConsistentReaderArgs::default(),
+            graphql_args,
+            SystemPackageTaskArgs::default(),
+            SubscriptionArgs::default(),
+            "0.0.0",
+            GraphQlConfig::default(),
+            vec![], // No pipelines since we're not using database
+            &Registry::new(),
+        )
+        .await
+        .expect("Failed to start GraphQL server");
+
+        let url = Url::parse(&format!("http://{graphql_listen_address}/graphql"))
+            .expect("Failed to parse GraphQL URL");
+
+        Self { url, service }
+    }
+
     /// Execute a GraphQL mutation or query
     async fn execute_graphql(&self, query: &str, variables: Value) -> anyhow::Result<Value> {
         let request_body = json!({
@@ -131,58 +179,6 @@ impl GraphQlTestCluster {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ObjectChangeNode {
-    id_created: bool,
-    id_deleted: bool,
-    input_state: Option<ObjectState>,
-    output_state: Option<ObjectState>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ObjectState {
-    version: u64,
-    as_move_object: Option<Value>,
-}
-
-async fn create_graphql_test_cluster(validator_cluster: &TestCluster) -> GraphQlTestCluster {
-    let graphql_port = get_available_port();
-    let graphql_listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), graphql_port);
-
-    let graphql_args = GraphQlArgs {
-        rpc_listen_address: graphql_listen_address,
-        no_ide: true,
-    };
-
-    let fullnode_args = FullnodeArgs {
-        fullnode_rpc_url: Some(validator_cluster.rpc_url().to_string()),
-    };
-
-    // Start GraphQL server that connects directly to TestCluster's RPC
-    let service = start_graphql(
-        None, // No database - GraphQL will use fullnode RPC for executeTransaction
-        fullnode_args,
-        DbArgs::default(),
-        GraphQlKvArgs::default(),
-        ConsistentReaderArgs::default(),
-        graphql_args,
-        SystemPackageTaskArgs::default(),
-        "0.0.0",
-        GraphQlConfig::default(),
-        vec![], // No pipelines since we're not using database
-        &Registry::new(),
-    )
-    .await
-    .expect("Failed to start GraphQL server");
-
-    let url = Url::parse(&format!("http://{}/graphql", graphql_listen_address))
-        .expect("Failed to parse GraphQL URL");
-
-    GraphQlTestCluster { url, service }
-}
-
 #[sim_test]
 async fn test_execute_transaction_mutation_schema() {
     let validator_cluster = TestClusterBuilder::new()
@@ -190,7 +186,7 @@ async fn test_execute_transaction_mutation_schema() {
         .build()
         .await;
 
-    let graphql_cluster = create_graphql_test_cluster(&validator_cluster).await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
 
     // Create a simple transfer transaction for testing
     let recipient = RtdAddress::random_for_testing_only();
@@ -218,7 +214,6 @@ async fn test_execute_transaction_mutation_schema() {
                             }
                         }
                     }
-                    errors
                 }
             }
         "#,
@@ -236,11 +231,9 @@ async fn test_execute_transaction_mutation_schema() {
             .clone(),
     )
     .unwrap();
-    let errors = result.pointer("/data/executeTransaction/errors");
 
     assert_eq!(effects.status, "SUCCESS");
     assert_eq!(effects.checkpoint, None); // ExecutedTransaction has no checkpoint yet
-    assert_eq!(errors, Some(&serde_json::Value::Null));
 
     // Verify transaction data matches original
     let transaction = effects.transaction.unwrap();
@@ -249,8 +242,7 @@ async fn test_execute_transaction_mutation_schema() {
         validator_cluster.get_address_0().to_string()
     );
     assert_eq!(transaction.gas_input.gas_budget, "5000000000");
-    assert_eq!(transaction.signatures.len(), signatures.len());
-    for (returned, original) in transaction.signatures.iter().zip(signatures.iter()) {
+    for (returned, original) in transaction.signatures.iter().zip_eq(signatures.iter()) {
         assert_eq!(returned.signature_bytes, original.encoded());
     }
 }
@@ -261,7 +253,7 @@ async fn test_execute_transaction_input_validation() {
         .with_num_validators(1)
         .build()
         .await;
-    let graphql_cluster = create_graphql_test_cluster(&validator_cluster).await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
 
     // Test invalid Base64 transaction data
     let result = graphql_cluster
@@ -270,7 +262,6 @@ async fn test_execute_transaction_input_validation() {
             mutation($txData: Base64!, $sigs: [Base64!]!) {
                 executeTransaction(transactionDataBcs: $txData, signatures: $sigs) {
                     effects { digest }
-                    errors
                 }
             }
         "#,
@@ -292,7 +283,7 @@ async fn test_execute_transaction_with_events() {
         .enable_fullnode_events()
         .build()
         .await;
-    let graphql_cluster = create_graphql_test_cluster(&validator_cluster).await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
 
     // Publish our test package which emits events in its init function
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/emit_event");
@@ -320,7 +311,6 @@ async fn test_execute_transaction_with_events() {
                             }
                         }
                     }
-                    errors
                 }
             }
         "#,
@@ -338,10 +328,8 @@ async fn test_execute_transaction_with_events() {
             .clone(),
     )
     .unwrap();
-    let errors = result.pointer("/data/executeTransaction/errors");
 
     assert_eq!(effects.status, "SUCCESS");
-    assert_eq!(errors, Some(&serde_json::Value::Null));
 
     let events = effects.events.unwrap();
     assert!(
@@ -369,9 +357,9 @@ async fn test_execute_transaction_grpc_errors() {
         .with_num_validators(1)
         .build()
         .await;
-    let graphql_cluster = create_graphql_test_cluster(&validator_cluster).await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
 
-    // Create signature mismatch scenario: use transaction data from one tx with signatures from another
+    // Create signature mismatch: use transaction data from one tx with signatures from another
     let recipient1 = RtdAddress::random_for_testing_only();
     let recipient2 = RtdAddress::random_for_testing_only();
 
@@ -385,7 +373,6 @@ async fn test_execute_transaction_grpc_errors() {
     let (tx1_bytes, _) = signed_tx1.to_tx_bytes_and_signatures();
     let (_, tx2_signatures) = signed_tx2.to_tx_bytes_and_signatures();
 
-    // This will pass GraphQL validation but fail at gRPC execution due to signature mismatch
     let result = graphql_cluster
         .execute_graphql(
             r#"
@@ -395,7 +382,6 @@ async fn test_execute_transaction_grpc_errors() {
                         digest
                         status
                     }
-                    errors
                 }
             }
         "#,
@@ -405,17 +391,10 @@ async fn test_execute_transaction_grpc_errors() {
             }),
         )
         .await
-        .expect("GraphQL request failed");
-    let effects = result.pointer("/data/executeTransaction/effects");
-    let errors = result.pointer("/data/executeTransaction/errors").unwrap();
+        .unwrap();
 
-    assert_eq!(
-        effects,
-        Some(&serde_json::Value::Null),
-        "Should have null effects on gRPC error"
-    );
-    let error_array = errors.as_array().unwrap();
-    assert!(!error_array.is_empty());
+    // Verify the error response structure with a snapshot
+    insta::assert_json_snapshot!("execute_transaction_grpc_error", &result);
 }
 
 #[sim_test]
@@ -424,7 +403,7 @@ async fn test_execute_transaction_unchanged_consensus_objects() {
         .with_num_validators(1)
         .build()
         .await;
-    let graphql_cluster = create_graphql_test_cluster(&validator_cluster).await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
 
     // Create a read-only transaction that accesses the Clock object
     let mut tx_builder = validator_cluster.test_transaction_builder().await;
@@ -473,7 +452,6 @@ async fn test_execute_transaction_unchanged_consensus_objects() {
                             }
                         }
                     }
-                    errors
                 }
             }
         "#,
@@ -492,11 +470,8 @@ async fn test_execute_transaction_unchanged_consensus_objects() {
             .clone(),
     )
     .unwrap();
-    let errors = result.pointer("/data/executeTransaction/errors");
 
-    // Verify the transaction succeeded
     assert_eq!(effects.status, "SUCCESS");
-    assert_eq!(errors, Some(&serde_json::Value::Null));
 
     // Verify unchanged consensus objects are returned
     let consensus_objects = effects.unchanged_consensus_objects.unwrap();
@@ -517,7 +492,7 @@ async fn test_execute_transaction_unchanged_consensus_objects() {
 #[sim_test]
 async fn test_execute_transaction_object_changes_input_output() {
     let validator_cluster = TestClusterBuilder::new().build().await;
-    let graphql_cluster = create_graphql_test_cluster(&validator_cluster).await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
 
     // Create a transfer transaction that will modify objects
     let recipient = RtdAddress::random_for_testing_only();
@@ -561,7 +536,6 @@ async fn test_execute_transaction_object_changes_input_output() {
                             }
                         }
                     }
-                    errors
                 }
             }
         "#,
@@ -583,6 +557,22 @@ async fn test_execute_transaction_object_changes_input_output() {
 
     // Verify the transaction succeeded
     assert_eq!(effects.status, "SUCCESS");
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ObjectChangeNode {
+        id_created: bool,
+        id_deleted: bool,
+        input_state: Option<ObjectState>,
+        output_state: Option<ObjectState>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ObjectState {
+        version: u64,
+        as_move_object: Option<Value>,
+    }
 
     // Use pointer to navigate to object changes and deserialize directly
     let object_changes_value = result
@@ -640,4 +630,166 @@ async fn test_execute_transaction_object_changes_input_output() {
         .as_str()
         .unwrap();
     assert_eq!(created_type, rtd_coin_type);
+}
+
+#[sim_test]
+async fn test_execute_transaction_effects_json() {
+    // Empty dependencies are omitted from effectsJson, so force the flag on to keep one snapshot
+    // across chain overrides.
+    let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+        config.set_disable_effects_tx_dependencies_for_testing(true);
+        config
+    });
+    let validator_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
+
+    // Create a transfer transaction
+    let recipient = RtdAddress::random_for_testing_only();
+    let signed_tx =
+        make_transfer_rtd_transaction(&validator_cluster.wallet, Some(recipient), Some(1_000_000))
+            .await;
+    let (tx_bytes, signatures) = signed_tx.to_tx_bytes_and_signatures();
+
+    let result = graphql_cluster
+        .execute_graphql(
+            r#"
+            mutation($txData: Base64!, $sigs: [Base64!]!) {
+                executeTransaction(transactionDataBcs: $txData, signatures: $sigs) {
+                    effects {
+                        status
+                        version
+                        effectsJson
+                        balanceChangesJson
+                    }
+                }
+            }
+        "#,
+            json!({
+                "txData": tx_bytes.encoded(),
+                "sigs": signatures.iter().map(|s| s.encoded()).collect::<Vec<_>>()
+            }),
+        )
+        .await
+        .expect("GraphQL request failed");
+
+    // Use redactions to mask dynamic values that change between runs
+    insta::assert_json_snapshot!("execute_transaction_effects_json", result.pointer("/data/executeTransaction"), {
+        // Object IDs and addresses
+        ".**.objectId" => "[object_id]",
+        ".**.address" => "[address]",
+        // Digests (covers transactionDigest, eventsDigest, inputDigest, outputDigest)
+        ".**.digest" => "[digest]",
+        ".**.transactionDigest" => "[digest]",
+        ".**.inputDigest" => "[digest]",
+        ".**.outputDigest" => "[digest]",
+        // BCS values
+        ".**.bcs.value" => "[bcs]",
+        // Sort arrays that may have non-deterministic order
+        ".effects.effectsJson.changedObjects" => insta::sorted_redaction(),
+        ".effects.balanceChangesJson" => insta::sorted_redaction(),
+    });
+}
+
+#[sim_test]
+async fn test_execute_transaction_payload_bypasses_query_limit() {
+    let validator_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
+
+    let mut tx_builder = validator_cluster.test_transaction_builder().await;
+    let payload_size = GraphQlConfig::default().limits.max_query_payload_size;
+    tx_builder
+        .ptb_builder_mut()
+        .pure_bytes(vec![0u8; payload_size as usize], false);
+
+    let tx_data = tx_builder.build();
+    let signed_tx = validator_cluster.sign_transaction(&tx_data).await;
+    let (tx_bytes, signatures) = signed_tx.to_tx_bytes_and_signatures();
+
+    let result = graphql_cluster
+        .execute_graphql(
+            r#"
+            mutation($txData: Base64!, $sigs: [Base64!]!) {
+                executeTransaction(transactionDataBcs: $txData, signatures: $sigs) {
+                    effects { status }
+                }
+            }
+        "#,
+            json!({
+                "txData": tx_bytes.encoded(),
+                "sigs": signatures.iter().map(|s| s.encoded()).collect::<Vec<_>>()
+            }),
+        )
+        .await
+        .expect("GraphQL request failed");
+
+    let effects = result.pointer("/data/executeTransaction/effects");
+    assert!(
+        effects.is_some_and(|effects| !effects.is_null()),
+        "Expected executeTransaction effects in response"
+    );
+    assert!(
+        effects
+            .and_then(|effects| effects.pointer("/status"))
+            .and_then(|status| status.as_str())
+            .is_some(),
+        "Expected executeTransaction status to be populated"
+    );
+}
+
+#[sim_test]
+async fn test_execute_transaction_transaction_json() {
+    let validator_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let graphql_cluster = GraphQlTestCluster::new(&validator_cluster).await;
+
+    // Create a transfer transaction
+    let recipient = RtdAddress::random_for_testing_only();
+    let signed_tx =
+        make_transfer_rtd_transaction(&validator_cluster.wallet, Some(recipient), Some(1_000_000))
+            .await;
+    let (tx_bytes, signatures) = signed_tx.to_tx_bytes_and_signatures();
+
+    let result = graphql_cluster
+        .execute_graphql(
+            r#"
+            mutation($txData: Base64!, $sigs: [Base64!]!) {
+                executeTransaction(transactionDataBcs: $txData, signatures: $sigs) {
+                    effects {
+                        status
+                        transaction {
+                            transactionJson
+                        }
+                    }
+                }
+            }
+        "#,
+            json!({
+                "txData": tx_bytes.encoded(),
+                "sigs": signatures.iter().map(|s| s.encoded()).collect::<Vec<_>>()
+            }),
+        )
+        .await
+        .expect("GraphQL request failed");
+
+    // Use redactions to mask dynamic values that change between runs
+    insta::assert_json_snapshot!("execute_transaction_transaction_json", result.pointer("/data/executeTransaction"), {
+        // Addresses and owners
+        ".**.sender" => "[sender]",
+        ".**.owner" => "[owner]",
+        ".**.objectId" => "[object_id]",
+        // Digests
+        ".**.digest" => "[digest]",
+        // BCS values
+        ".**.bcs.value" => "[bcs]",
+        // Pure values contain dynamic data (recipient address)
+        ".**.pure" => "[pure]",
+    });
 }

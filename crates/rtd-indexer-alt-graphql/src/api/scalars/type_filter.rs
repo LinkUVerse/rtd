@@ -1,14 +1,19 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::fmt;
+use std::str::FromStr;
+
 use async_graphql::*;
 use move_core_types::language_storage::StructTag;
-use std::{fmt, str::FromStr};
-use rtd_types::{
-    TypeTag, parse_rtd_address, parse_rtd_module_id, parse_rtd_struct_tag, parse_rtd_type_tag,
-};
+use rtd_types::TypeTag;
+use rtd_types::parse_rtd_address;
+use rtd_types::parse_rtd_module_id;
+use rtd_types::parse_rtd_struct_tag;
+use rtd_types::parse_rtd_type_tag;
 
-use crate::api::scalars::{impl_string_input, rtd_address::RtdAddress};
+use crate::api::scalars::impl_string_input;
+use crate::api::scalars::rtd_address::RtdAddress;
 
 /// A GraphQL scalar for accepting a type as input (exact type with all type parameters).
 #[derive(Clone, Debug, Eq, PartialEq)]

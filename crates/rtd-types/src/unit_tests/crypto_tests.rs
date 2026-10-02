@@ -11,7 +11,7 @@ fn serde_keypair() {
     let encoded = skp.encode().unwrap();
     assert_eq!(
         encoded,
-        "rtdprivkey1qzdlfxn2qa2lj5uprl8pyhexs02sg2wrhdy7qaq50cqgnffw4c2477kg9h3"
+        "rtdprivkey1qzdlfxn2qa2lj5uprl8pyhexs02sg2wrhdy7qaq50cqgnffw4c247cdptmr"
     );
     let decoded = RtdKeyPair::decode(&encoded).unwrap();
     assert_eq!(skp, decoded);

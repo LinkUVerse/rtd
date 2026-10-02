@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --addresses P=0x0 --accounts A --simulator
+//# init --protocol-version 108 --addresses P=0x0 --accounts A --simulator
 
 //# publish --sender A
 #[allow(deprecated_usage)]
@@ -26,23 +26,48 @@ module P::fake {
       nodes {
         outputState {
           asMoveObject {
-            asCoinMetadata { ...CM }
+            asCoinMetadata {
+              decimals
+              name
+              symbol
+              description
+              iconUrl
+              supply
+              supplyState
+              regulatedState
+              allowGlobalPause
+            }
           }
         }
       }
     }
   }
+}
 
+//# run-graphql
+{
   objects(filter: { type: "0x2::coin::CoinMetadata<@{P}::fake::FAKE>" }) {
     nodes {
       asMoveObject {
-        asCoinMetadata { ...CM }
+        asCoinMetadata {
+          decimals
+          name
+          symbol
+          description
+          iconUrl
+          supply
+          supplyState
+          regulatedState
+          allowGlobalPause
+        }
       }
     }
   }
+}
 
+//# run-graphql
+{
   fake: coinMetadata(coinType: "@{P}::fake::FAKE") { ...CM }
-
   rtd: coinMetadata(coinType: "0x2::rtd::RTD") { ...CM }
 }
 
@@ -58,7 +83,7 @@ fragment CM on CoinMetadata {
   allowGlobalPause
 }
 
-//# programmable --sender A --inputs object(1,2) 100 @A
+//# programmable --sender A --inputs object(1,1) 100 @A
 //> 0: rtd::coin::mint<P::fake::FAKE>(Input(0), Input(1));
 //> TransferObjects([Result(0)], Input(2))
 

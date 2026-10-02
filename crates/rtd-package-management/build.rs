@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use rtd_framework_snapshot::{load_bytecode_snapshot_manifest, manifest_path};
 use std::{env, fs::File};
 use std::{
     io::{BufWriter, Write},
     path::Path,
 };
-use rtd_framework_snapshot::{load_bytecode_snapshot_manifest, manifest_path};
 
 /// Output a file `OUT_DIR/system_packages_version_table.rs` containing the contents of the manifest as a
 /// rust literal of type `[(ProtocolVersion, SystemPackages)]`. This is included as the

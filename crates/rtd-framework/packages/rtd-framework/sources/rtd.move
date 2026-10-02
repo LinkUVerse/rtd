@@ -47,7 +47,7 @@ fun new(ctx: &mut TxContext): Balance<RTD> {
     transfer::public_freeze_object(metadata);
     let mut supply = treasury.treasury_into_supply();
     let total_rtd = supply.increase_supply(TOTAL_SUPPLY_MIST);
-    supply.destroy_supply();
+    let _ = supply.destroy_supply();
     total_rtd
 }
 

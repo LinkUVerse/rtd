@@ -1,9 +1,11 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use bincode::{Decode, Encode};
+use bincode::Decode;
+use bincode::Encode;
 use move_core_types::language_storage::StructTag;
-use rtd_indexer_alt_framework::types::{base_types::ObjectID, object::Object};
+use rtd_indexer_alt_framework::types::base_types::ObjectID;
+use rtd_indexer_alt_framework::types::object::Object;
 
 /// Key for the index that supports fetching objects by their type.
 #[derive(Encode, Decode, PartialEq, Eq)]

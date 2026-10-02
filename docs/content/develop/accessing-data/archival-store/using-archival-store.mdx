@@ -1,0 +1,44 @@
+---
+title: Using an RTD Archival Service
+description: Query old RTD data through an archival service you configure.
+keywords:
+  - RTD
+  - archival service
+  - gRPC
+  - retention
+---
+
+# Using an RTD Archival Service
+
+The source tree includes an Archival Service implementation. RTD has no
+verified public Mainnet, Testnet, or archival endpoint. A service operated for
+Sui does not contain RTD history.
+
+## Querying the service
+
+Ask the operator of your RTD network for its archival gRPC endpoint and
+expected chain ID. Configure your client explicitly:
+
+```sh
+RTD_ARCHIVE_GRPC_ENDPOINT=127.0.0.1:9443
+
+grpcurl -d '{"digest":"BASE58_TX_DIGEST"}' \
+  "$RTD_ARCHIVE_GRPC_ENDPOINT" \
+  rtd.rpc.v2.LedgerService/GetTransaction
+```
+
+Adjust TLS options for the endpoint you operate. The digest must belong to the
+same RTD chain as the service.
+
+## Using the Archival Service as a fallback
+
+A full node may return `NOT_FOUND` for data beyond its retention window. Query
+an independently configured archival service only after confirming its genesis
+digest matches the full node. This fallback does not happen automatically
+inside full node gRPC.
+
+## Running your own instance
+
+See [Archival Stack Setup](/operators/data-management/archival-stack-setup)
+for the components. Supply your own verified checkpoint source, storage,
+credentials, and retention policy; no RTD public source is bundled here.

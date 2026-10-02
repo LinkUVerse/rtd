@@ -1,10 +1,10 @@
-module 0x42::print_stack_trace {
+module 0x7::print_stack_trace {
     use std::debug;
     use 0x7::N;
 
     #[allow(unused_mut_ref)]
     entry fun print_stack_trace() {
-        let mut v = vector::empty();
+        let mut v = vector[];
         vector::push_back(&mut v, true);
         vector::push_back(&mut v, false);
         let r = vector::borrow(&mut v, 1);

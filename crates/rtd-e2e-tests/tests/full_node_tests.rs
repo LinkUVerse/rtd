@@ -1,6 +1,8 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(deprecated)]
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -13,8 +15,8 @@ use rand::rngs::OsRng;
 use rtd_config::node::RunWithRange;
 use rtd_json_rpc_types::{EventFilter, TransactionFilter};
 use rtd_json_rpc_types::{
-    EventPage, RtdEvent, RtdExecutionStatus, RtdTransactionBlockEffectsAPI,
-    RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
+    EventPage, RtdEvent, RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponse,
+    RtdTransactionBlockResponseOptions,
 };
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::*;
@@ -37,11 +39,13 @@ use rtd_types::message_envelope::Message;
 use rtd_types::messages_grpc::TransactionInfoRequest;
 use rtd_types::object::{Object, ObjectRead, Owner, PastObjectRead};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_types::quorum_driver_types::{ExecuteTransactionRequestType, ExecuteTransactionRequestV3};
 use rtd_types::storage::ObjectStore;
 use rtd_types::transaction::{
     CallArg, GasData, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS, TEST_ONLY_GAS_UNIT_FOR_TRANSFER,
     TransactionData, TransactionKind,
+};
+use rtd_types::transaction_driver_types::{
+    ExecuteTransactionRequestType, ExecuteTransactionRequestV3,
 };
 use rtd_types::utils::{
     to_sender_signed_transaction, to_sender_signed_transaction_with_multi_signers,
@@ -58,8 +62,7 @@ async fn test_full_node_follows_txes() -> Result<(), anyhow::Error> {
 
     let context = &mut test_cluster.wallet;
 
-    // TODO: test fails on CI due to flakiness without this. Once https://github.com/LinkUVerse/rtd/pull/7056 is
-    // merged we should be able to root out the flakiness.
+    // Retain this delay until the CI flakiness is resolved.
     sleep(Duration::from_millis(10)).await;
 
     let (transferred_object, _, receiver, digest, _) = transfer_coin(context).await?;
@@ -107,7 +110,7 @@ async fn test_full_node_shared_objects() -> Result<(), anyhow::Error> {
         counter_ref.1,
     )
     .await;
-    let digest = response.digest;
+    let digest = response.transaction.digest();
     handle
         .rtd_node
         .state()
@@ -141,7 +144,7 @@ async fn test_sponsored_transaction() -> Result<(), anyhow::Error> {
     info!("updated obj ref: {:?}", object_ref);
     info!("updated gas ref: {:?}", gas_obj);
 
-    // Construct the sponsored transction
+    // Construct the sponsored transaction
     let pt = {
         let mut builder = ProgrammableTransactionBuilder::new();
         builder
@@ -205,7 +208,7 @@ async fn test_full_node_move_function_index() -> Result<(), anyhow::Error> {
         counter_ref.1,
     )
     .await;
-    let digest = response.digest;
+    let digest = response.transaction.digest();
 
     let txes = node
         .state()
@@ -524,13 +527,11 @@ async fn test_full_node_sync_flood() {
     do_test_full_node_sync_flood().await
 }
 
-#[sim_test(check_determinism)]
-async fn test_full_node_sync_flood_determinism() {
-    do_test_full_node_sync_flood().await
-}
-
 async fn do_test_full_node_sync_flood() {
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .disable_fullnode_pruning()
+        .build()
+        .await;
 
     // Start a new fullnode that is not on the write path
     let fullnode = test_cluster.spawn_new_fullnode().await.rtd_node;
@@ -560,8 +561,8 @@ async fn do_test_full_node_sync_flood() {
                     .unwrap();
 
                 let mut coins = context.gas_objects(sender).await.unwrap();
-                let object_to_split = coins.swap_remove(0).1.object_ref();
-                let gas_obj = coins.swap_remove(0).1.object_ref();
+                let object_to_split = coins.swap_remove(0).1.compute_object_reference();
+                let gas_obj = coins.swap_remove(0).1.compute_object_reference();
                 (sender, object_to_split, gas_obj)
             };
 
@@ -583,7 +584,7 @@ async fn do_test_full_node_sync_flood() {
                     test_cluster.execute_transaction(tx).await
                 };
 
-                owned_tx_digest = Some(res.digest);
+                owned_tx_digest = Some(res.transaction.digest());
 
                 shared_tx_digest = Some(
                     increment_counter(
@@ -595,7 +596,8 @@ async fn do_test_full_node_sync_flood() {
                         counter_ref.1,
                     )
                     .await
-                    .digest,
+                    .transaction
+                    .digest(),
                 );
             }
             tx.send((owned_tx_digest.unwrap(), shared_tx_digest.unwrap()))
@@ -1013,10 +1015,7 @@ async fn test_get_objects_read() -> Result<(), anyhow::Error> {
 
     // Delete the object
     let response = delete_nft(&test_cluster.wallet, recipient, package_id, object_ref_v2).await;
-    assert_eq!(
-        *response.effects.unwrap().status(),
-        RtdExecutionStatus::Success
-    );
+    assert!(response.effects.status().is_ok(),);
     sleep(Duration::from_secs(1)).await;
 
     // Now test get_object_read
@@ -1211,13 +1210,12 @@ async fn test_access_old_object_pruned() {
     let test_cluster = TestClusterBuilder::new().build().await;
     let tx_builder = test_cluster.test_transaction_builder().await;
     let sender = tx_builder.sender();
-    let gas_object = tx_builder.gas_object();
+    let gas_object = tx_builder.gas_object().unwrap();
     let effects = test_cluster
         .sign_and_execute_transaction(&tx_builder.transfer_rtd(None, sender).build())
         .await
-        .effects
-        .unwrap();
-    let new_gas_version = effects.gas_object().reference.version;
+        .effects;
+    let new_gas_version = effects.gas_object().unwrap().0.1;
     test_cluster.trigger_reconfiguration().await;
     // Construct a new transaction that uses the old gas object reference.
     let tx = test_cluster
@@ -1239,10 +1237,7 @@ async fn test_access_old_object_pruned() {
                 let state = node.state();
                 state
                     .database_for_testing()
-                    .prune_objects_and_compact_for_testing(
-                        state.get_checkpoint_store(),
-                        state.rpc_index.as_deref(),
-                    )
+                    .prune_objects_and_compact_for_testing(state.get_checkpoint_store())
                     .await;
                 // Make sure the old version of the object is already pruned.
                 assert!(
@@ -1254,14 +1249,13 @@ async fn test_access_old_object_pruned() {
                 let epoch_store = state.epoch_store_for_testing();
                 assert_eq!(
                     state
-                        .handle_transaction(
+                        .handle_vote_transaction(
                             &epoch_store,
                             epoch_store
                                 .verify_transaction_require_no_aliases(tx.clone())
                                 .unwrap()
                                 .into_tx()
                         )
-                        .await
                         .unwrap_err(),
                     RtdErrorKind::UserInputError {
                         error: UserInputError::ObjectVersionUnavailableForConsumption {
@@ -1313,7 +1307,13 @@ async fn transfer_coin(
         )
         .await;
     let resp = context.execute_transaction_must_succeed(txn).await;
-    Ok((object_to_send.0, sender, receiver, resp.digest, gas_object))
+    Ok((
+        object_to_send.0,
+        sender,
+        receiver,
+        resp.transaction.digest(),
+        gas_object,
+    ))
 }
 
 #[sim_test]
@@ -1429,14 +1429,9 @@ async fn publish_init_events_without_local_execution() {
         .await
         .build();
     let tx = test_cluster.sign_transaction(&tx_data).await;
-    let client = test_cluster.wallet.get_client().await.unwrap();
+    let client = test_cluster.wallet.grpc_client().unwrap();
     let response = client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new().with_events(),
-            Some(ExecuteTransactionRequestType::WaitForEffectsCert),
-        )
+        .execute_transaction_and_wait_for_checkpoint(&tx)
         .await
         .unwrap();
     assert_eq!(response.events.unwrap().data.len(), 1);

@@ -5,13 +5,13 @@ import { fileURLToPath } from "url";
 import path from "path";
 import math from "remark-math";
 import katex from "rehype-katex";
-//import rehypeRawFiles from "./src/rehype/rehype-raw-only.mjs";
-//import rehypeTabsMd from "./src/rehype/rehype-tabs.mjs";
-//import rehypeFixAnchorUrls from "./src/rehype/rehype-fix-anchor-urls.mjs";
+import remarkGlossary from "./src/shared/plugins/remark-glossary.js";
+
 const npm2yarn = require("@docusaurus/remark-plugin-npm2yarn");
 
 const effortRemarkPlugin = require("./src/plugins/effort");
 const betaRemarkPlugin = require("./src/plugins/betatag");
+const graphqlFrontmatterPlugin = require("./src/plugins/graphql-frontmatter");
 
 const lightCodeTheme = require("prism-react-renderer").themes.github;
 const darkCodeTheme = require("prism-react-renderer").themes.nightOwl;
@@ -19,7 +19,7 @@ const darkCodeTheme = require("prism-react-renderer").themes.nightOwl;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SIDEBARS_PATH = fileURLToPath(new URL("./sidebars.js", import.meta.url));
+const SIDEBARS_PATH = fileURLToPath(new URL("../content/sidebars.js", import.meta.url));
 
 require("dotenv").config();
 
@@ -27,56 +27,171 @@ require("dotenv").config();
 const config = {
   title: "Rtd Documentation",
   tagline:
-    "Rtd is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by Move",
+    "Documentation for the RTD source fork and locally operated networks; public RTD services are not launched",
   favicon: "/img/favicon.ico",
   headTags: [
     {
-      tagName: "meta",
+      tagName: "link",
       attributes: {
-        name: "algolia-site-verification",
-        content: "BCA21DA2879818D2",
+        rel: "service-doc",
+        href: "/llms.txt",
+        type: "text/plain",
+        title: "LLM-optimized documentation",
+      },
+    },
+    {
+      tagName: "link",
+      attributes: {
+        rel: "service-doc",
+        href: "/references/rtd-api",
+        title: "Rtd API Reference",
+      },
+    },
+    {
+      tagName: "link",
+      attributes: {
+        rel: "sitemap",
+        href: "/sitemap.xml",
+        type: "application/xml",
       },
     },
   ],
-  // Set the production url of your site here
-  url: "https://docs.rtd.io",
+  // Local preview only. Public RTD documentation has not been deployed.
+  url: "http://localhost:3000",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: "/",
 
   onBrokenLinks: "throw",
-  onBrokenMarkdownLinks: "throw",
+  onBrokenAnchors: "warn",
+  onDuplicateRoutes: 'throw',
 
+  staticDirectories: ["static"],
   markdown: {
     format: "detect",
     mermaid: true,
+    hooks: {
+    onBrokenMarkdownLinks: 'throw',
+    onBrokenMarkdownImages: 'throw',
   },
-  clientModules: [require.resolve("./src/client/pushfeedback-toc.js")],
+  },
+  
+  clientModules: [],
   plugins: [
+    function llmsTxtDirectivePlugin() {
+      return {
+        name: 'llms-txt-directive-plugin',
+        injectHtmlTags() {
+          return {
+            preBodyTags: [
+              {
+                tagName: 'link',
+                attributes: {
+                  rel: 'alternate',
+                  type: 'text/plain',
+                  href: '/llms.txt',
+                  title: 'LLMs.txt',
+                },
+              },
+            ],
+          };
+        },
+      };
+    },
+    function contentNegotiationPlugin() {
+      return {
+        name: 'content-negotiation-plugin',
+        configureWebpack(config, isServer) {
+          if (isServer) return {};
+          const fs = require('fs');
+          const grayMatter = require('gray-matter');
+          const contentDir = path.resolve(__dirname, '../content');
+
+          function cleanForMarkdown(raw) {
+            const { content } = grayMatter(raw);
+            let cleaned = content;
+            cleaned = cleaned.replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, '');
+            cleaned = cleaned.replace(/^\s*export\s+(default\s+)?.*$/gm, '');
+            cleaned = cleaned.replace(/<\/?(?:Cards|Tabs|ToolGrid)\b[^>]*>/g, '');
+            cleaned = cleaned.replace(/<TabItem\b[^>]*label="([^"]*)"[^>]*>([\s\S]*?)<\/TabItem>/g, (_, label, inner) => `\n## ${label.trim()}\n\n${inner.trim()}\n`);
+            cleaned = cleaned.replace(/<Admonition\b[^>]*type="([^"]+)"[^>]*>([\s\S]*?)<\/Admonition>/g, (_, type, inner) => `\n:::${type}\n${inner.trim()}\n:::\n`);
+            cleaned = cleaned.replace(/<details\b[^>]*>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi, (_, s, inner) => `\n**${s.trim()}**\n\n${inner.trim()}\n`);
+            cleaned = cleaned.replace(/<Badge\b[^>]*\btext="([^"]*)"[^>]*\/>/g, '`$1`');
+            cleaned = cleaned.replace(/<Bullet\s*\/>/g, ' ');
+            cleaned = cleaned.replace(/<style>\{`[\s\S]*?`\}<\/style>/g, '');
+            cleaned = cleaned.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+            cleaned = cleaned.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/g, (_, inner) => `\`${inner.replace(/<\/?[a-z][^>]*>/gi, '')}\``);
+            cleaned = cleaned.replace(/<[A-Z][A-Za-z0-9]*\b[^>]*\/>/g, '');
+            for (let i = 0; i < 3; i++) cleaned = cleaned.replace(/<([A-Z][A-Za-z0-9]*)\b[^>]*>([\s\S]*?)<\/\1>/g, '$2');
+            cleaned = cleaned.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+            cleaned = cleaned.replace(/^\s*\{[A-Z][A-Za-z0-9_.]*\}\s*$/gm, '');
+            cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+            return cleaned.trim() + '\n';
+          }
+
+          return {
+            devServer: {
+              setupMiddlewares(middlewares, devServer) {
+                devServer.app.use((req, res, next) => {
+                  const accept = req.headers.accept || '';
+                  if (!accept.includes('text/markdown')) return next();
+
+                  const ext = path.extname(req.path);
+                  if (ext && ext !== '.html') return next();
+
+                  let urlPath = req.path;
+                  if (urlPath.endsWith('/')) urlPath = urlPath.slice(0, -1);
+                  if (!urlPath) urlPath = '';
+
+                  const candidates = [
+                    path.join(contentDir, urlPath + '.mdx'),
+                    path.join(contentDir, urlPath + '.md'),
+                    path.join(contentDir, urlPath, 'index.mdx'),
+                    path.join(contentDir, urlPath, 'index.md'),
+                  ];
+
+                  for (const filePath of candidates) {
+                    if (fs.existsSync(filePath)) {
+                      const raw = fs.readFileSync(filePath, 'utf8');
+                      const markdown = cleanForMarkdown(raw);
+                      const byteLen = Buffer.byteLength(markdown, 'utf8');
+                      res.set({
+                        'Content-Type': 'text/markdown; charset=utf-8',
+                        'Content-Length': String(byteLen),
+                        'Vary': 'Accept',
+                        'Cache-Control': 'no-cache',
+                        'x-markdown-tokens': String(Math.ceil(markdown.length / 4)),
+                      });
+                      return res.send(markdown);
+                    }
+                  }
+                  next();
+                });
+                return middlewares;
+              },
+            },
+          };
+        },
+      };
+    },
+     function aliasPlugin() {
+      return {
+        name: 'custom-aliases',
+        configureWebpack() {
+          return {
+            resolve: {
+              alias: {
+                '@generated-imports': path.resolve(__dirname, '.generated'),
+              },
+            },
+          };
+        },
+      };
+    },
     //require.resolve('./src/plugins/framework'),
     "docusaurus-plugin-copy-page-button",
-    [
-      require.resolve("./src/plugins/plausible"),
-      {
-        domain: "docs.rtd.io",
-        enableInDev: false,
-        trackOutboundLinks: true,
-        hashMode: false,
-        trackLocalhost: false,
-      },
-    ],
-    [
-      "@graphql-markdown/docusaurus",
-      {
-        id: "alpha",
-        schema: "../../crates/rtd-graphql-rpc/schema.graphql",
-        rootPath: "../content", // docs will be generated under rootPath/baseURL
-        baseURL: "references/rtd-api/rtd-graphql/alpha/reference",
-        loaders: {
-          GraphQLFileLoader: "@graphql-tools/graphql-file-loader",
-        },
-      },
-    ],
+    require.resolve("./src/plugins/validate-openrpc"),
+
     function stepHeadingLoader() {
       return {
         name: "step-heading-loader",
@@ -95,7 +210,13 @@ const config = {
                     {
                       loader: path.resolve(
                         __dirname,
-                        "./src/plugins/inject-code/stepLoader.js",
+                        "./src/shared/plugins/inject-code/stepLoader.js",
+                      ),
+                    },
+                    {
+                      loader: path.resolve(
+                        __dirname,
+                        "./src/shared/plugins/inject-code/includeSectionLoader.js",
                       ),
                     },
                   ],
@@ -119,9 +240,13 @@ const config = {
         schema: "../../crates/rtd-indexer-alt-graphql/schema.graphql",
         rootPath: "../content",
         baseURL: "references/rtd-api/rtd-graphql/beta/reference",
+        homepage: false,
         docOptions: {
           frontMatter: {
             isGraphQlBeta: true,
+            pagination_next: null, // disable page navigation next
+            pagination_prev: null, // disable page navigation previous
+            hide_table_of_contents: true, // disable page table of content
           },
         },
         loaders: {
@@ -129,7 +254,7 @@ const config = {
         },
       },
     ],
-    //require.resolve("./src/plugins/tabs-md-client/index.mjs"),
+    //require.resolve("./src/shared/plugins/tabs-md-client/index.mjs"),
     async function myPlugin(context, options) {
       return {
         name: "docusaurus-tailwindcss",
@@ -141,10 +266,8 @@ const config = {
         },
       };
     },
-    path.resolve(__dirname, `./src/plugins/descriptions`),
+    path.resolve(__dirname, `./src/shared/plugins/descriptions`),
     path.resolve(__dirname, `./src/plugins/framework`),
-    path.resolve(__dirname, `./src/plugins/askcookbook`),
-    path.resolve(__dirname, `./src/plugins/protocol`),
   ],
   presets: [
     [
@@ -155,11 +278,10 @@ const config = {
           path: "../content",
           routeBasePath: "/",
           sidebarPath: SIDEBARS_PATH,
-          // the double docs below is a fix for having the path set to ../content
-          editUrl: "https://github.com/LinkUVerse/rtd/tree/main/docs/docs",
           exclude: [
             "**/snippets/**",
             "**/standards/deepbook-ref/**",
+            "**/app-examples/ts-sdk-ref/**",
             "**/app-examples/ts-sdk-ref/**",
           ],
           admonitions: {
@@ -172,9 +294,9 @@ const config = {
             [npm2yarn, { sync: true, converters: ["yarn", "pnpm"] }],
             effortRemarkPlugin,
             betaRemarkPlugin,
+            graphqlFrontmatterPlugin,
+            [remarkGlossary, { glossaryFile: path.resolve(__dirname, "static/glossary.json") }],
           ],
-          //beforeDefaultRehypePlugins: [rehypeFixAnchorUrls],
-          //rehypePlugins: [katex, rehypeRawFiles, rehypeTabsMd],
           rehypePlugins: [katex],
         },
         theme: {
@@ -184,17 +306,14 @@ const config = {
             require.resolve("./src/css/details.css"),
           ],
         },
+        pages: {
+          remarkPlugins: [[remarkGlossary, { glossaryFile: path.resolve(__dirname, "static/glossary.json") }]],
+        },
       },
     ],
   ],
 
-  scripts: [
-    //{ src: "./src/js/tabs-md.js", defer: true },
-    {
-      src: "/js/clarity.js",
-      async: true,
-    },
-  ],
+  scripts: [],
   stylesheets: [
     {
       href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap",
@@ -217,9 +336,43 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       image: "img/rtd-doc-og.png",
+      mermaid: {
+        theme: {
+          light: "base",
+          dark: "base",
+        },
+        options: {
+          themeVariables: {
+            primaryColor: "#000000",
+            primaryTextColor: "#FFFFFF",
+            primaryBorderColor: "#6C7584",
+            secondaryColor: "#6C7584",
+            secondaryTextColor: "#FFFFFF",
+            tertiaryColor: "#298DFF",
+            tertiaryTextColor: "#FFFFFF",
+            lineColor: "#298DFF",
+            background: "#FFFFFF",
+            mainBkg: "#000000",
+            secondBkg: "#6C7584",
+            noteBkgColor: "#E6F1FB",
+            noteTextColor: "#000000",
+            noteBorderColor: "#298DFF",
+            activationBkgColor: "#298DFF",
+            activationBorderColor: "#185FA5",
+            fontSize: "14px",
+            fontFamily: "Inter, sans-serif",
+            signalColor: "#298DFF",
+            signalTextColor: "#298DFF",
+            labelBoxBkgColor: "#000000",
+            labelBoxBorderColor: "#6C7584",
+            labelTextColor: "#FFFFFF",
+            loopTextColor: "#FFFFFF",
+          },
+        },
+      },
       docs: {
         sidebar: {
-          autoCollapseCategories: false,
+          autoCollapseCategories: true,
         },
       },
 
@@ -231,20 +384,87 @@ const config = {
         },
         items: [
           {
-            label: "Guides",
-            to: "guides",
+            type: "dropdown",
+            label: "Getting Started",
+            to: "getting-started",
+            items: [
+              { to: "/skills", label: "Skills" },
+              { type: "doc", docId: "getting-started/rtd-mcp-server", label: "Rtd MCP Server" },
+              { type: "doc", docId: "getting-started/onboarding/index", label: "Hello, World!" },
+              { type: "doc", docId: "getting-started/examples/index", label: "Example Apps" },
+              { type: "doc", docId: "getting-started/tooling", label: "Developer Tools" },
+              { type: "doc", docId: "getting-started/dev-cheat-sheet", label: "Developer Cheat Sheet" },
+              { type: "doc", docId: "getting-started/rtd-for-ethereum", label: "Ethereum -> Rtd" },
+              { type: "doc", docId: "getting-started/rtd-for-solana", label: "Solana -> Rtd" },
+            ],
           },
           {
-            label: "Concepts",
-            to: "concepts",
+            type: "dropdown",
+            label: "Develop",
+            to: "develop",
+            items: [
+              { type: "doc", docId: "develop/rtd-architecture/index", label: "Rtd Architecture" },
+              { type: "doc", docId: "develop/objects/index", label: "Using Objects" },
+              { type: "doc", docId: "develop/write-move/index", label: "Writing Move Packages" },
+              { type: "doc", docId: "develop/publish-upgrade-packages/index", label: "Deploying and Upgrading Packages" },
+              { type: "doc", docId: "develop/manage-packages/index", label: "Managing Packages" },
+              { type: "doc", docId: "develop/testing-debugging/index", label: "Testing and Debugging" },
+              { type: "doc", docId: "develop/transactions/index", label: "Building Transactions" },
+              { type: "doc", docId: "develop/transaction-payment/index", label: "Paying for Transactions" },
+              { type: "doc", docId: "develop/accessing-data/index", label: "Accessing Data" },
+              { type: "doc", docId: "develop/cryptography/index", label: "Cryptography" },
+              { type: "doc", docId: "operators", label: "Node Operators" },
+            ],
           },
           {
-            label: "Standards",
-            to: "standards",
+            type: "dropdown",
+            label: "Onchain Finance",
+            to: "onchain-finance",
+            items: [
+              { type: "doc", docId: "onchain-finance/types-of-assets", label: "Types of Assets" },
+              { type: "doc", docId: "onchain-finance/asset-custody/index", label: "Asset Custody" },
+              { type: "doc", docId: "onchain-finance/fungible-tokens/index", label: "Fungible Tokens" },
+              { type: "doc", docId: "onchain-finance/tokenized-assets/index", label: "Tokenized Assets" },
+              { type: "doc", docId: "onchain-finance/examples-patterns/index", label: "Example Asset Patterns" },
+              { type: "doc", docId: "onchain-finance/closed-loop-token/index", label: "Closed Loop Token" },
+              { type: "doc", docId: "onchain-finance/pas/index", label: "Permissioned Asset Standard" },
+              { type: "doc", docId: "onchain-finance/deepbook/index", label: "DeepBook" },
+              { type: "doc", docId: "onchain-finance/oracles/index", label: "Oracles" },
+              { type: "doc", docId: "onchain-finance/kiosk/index", label: "Kiosk" },
+              { type: "doc", docId: "onchain-finance/payment-kit", label: "Payment Kit" },
+            ],
           },
           {
+            type: "dropdown",
+            label: "Rtd Stack status",
+            to: "rtd-stack",
+            items: [
+              { type: "doc", docId: "rtd-stack/on-chain-primitives/access-time", label: "Onchain Time" },
+              { type: "doc", docId: "rtd-stack/on-chain-primitives/randomness-onchain", label: "Onchain Randomness" },
+              { type: "doc", docId: "rtd-stack/sagat", label: "Sagat" },
+              { type: "doc", docId: "rtd-stack/walrus/index", label: "Walrus status" },
+              { type: "doc", docId: "rtd-stack/seal/rtd-stack-seal", label: "Seal status" },
+              { type: "doc", docId: "rtd-stack/rtdns/index", label: "RtdNS status" },
+              { type: "doc", docId: "rtd-stack/enoki/solitaire", label: "Enoki" },
+              { type: "doc", docId: "rtd-stack/nautilus/index", label: "Nautilus status" },
+              { type: "doc", docId: "rtd-stack/zklogin-integration/index", label: "zkLogin" },
+              { type: "doc", docId: "rtd-stack/suiplay0x1/index", label: "RtdPlay0X1 status" },
+            ],
+          },
+          {
+            type: "dropdown",
             label: "References",
             to: "references",
+            items: [
+              { type: "doc", docId: "references/rtd-api", label: "Rtd RPC" },
+              { type: "doc", docId: "references/cli", label: "Rtd CLI" },
+              { type: "doc", docId: "references/ide/index", label: "IDE Support" },
+              { type: "doc", docId: "references/rtd-sdks", label: "Rtd SDKs" },             
+              { type: "doc", docId: "references/ptb-commands", label: "PTB Commands" },
+              { type: "doc", docId: "references/framework", label: "Move Framework" },
+              { type: "doc", docId: "references/object-display-syntax", label: "Object Display V2 Syntax" },
+              { type: "doc", docId: "references/rtd-glossary", label: "Glossary" },
+            ],
           },
         ],
       },
@@ -252,13 +472,13 @@ const config = {
         logo: {
           alt: "Rtd Logo",
           src: "img/rtd-logo-footer.svg",
-          href: "https://rtd.io",
+          href: "/",
         },
         style: "dark",
-        copyright: `© ${new Date().getFullYear()} Rtd Foundation | Documentation distributed under <a href="https://github.com/LinkUVerse/rtd/blob/main/docs/site/LICENSE">CC BY 4.0</a>`,
+        copyright: `© ${new Date().getFullYear()} Original contributors and RTD contributors | Documentation distributed under CC BY 4.0`,
       },
       codeblock: {
-        showGithubLink: true,
+        showGithubLink: false,
         githubLinkLabel: "View on GitHub",
       },
       prism: {

@@ -1,37 +1,34 @@
-# IDE
+# IDE and agents
 **/.history/
 **/.vscode/
 **/.idea/
 **/CLAUDE-local.md
 **/CLAUDE.local.md
-**/.claude/
+**/.claude/*
+!**/.claude/skills/
+**/.opencode/
+**/.omp/*
 
 # OSX
 .DS_Store
 
 # Rust build directory
 **/target
-target/
-target-codex-debug/
-target-codex-release/
 .pre-commit*
 
 # Move build directory
 build
-!crates/sui-single-node-benchmark/tests/data/package_publish_from_bytecode/package_a/build
-!crates/sui-single-node-benchmark/tests/data/package_publish_from_bytecode/package_b/build
+!crates/rtd-single-node-benchmark/tests/data/package_publish_from_bytecode/package_a/build
+!crates/rtd-single-node-benchmark/tests/data/package_publish_from_bytecode/package_b/build
 storage
 !consensus/core/src/storage
-!crates/sui-types/src/storage
+!crates/rtd-types/src/storage
 
 # Move-related files
 Move.lock
-!crates/sui-framework/packages/move-stdlib/Move.lock
-!crates/sui-framework/packages/sui-framework/Move.lock
-!crates/sui-framework/packages/sui-system/Move.lock
-!crates/sui-framework/packages/deepbook/Move.lock
 .trace
 .coverage_map.mvcov
+traces
 
 # Thumbnails
 ._*
@@ -42,12 +39,14 @@ Move.lock
 
 # Python
 .pyc
+scripts/simtest/__pycache__/**
 
 # Node.js
 node_modules
 .tsbuildinfo
 *.tsbuildinfo
 .turbo
+.pnpm-store/
 
 # App build directories
 dist/
@@ -64,7 +63,7 @@ playwright/.cache/
 
 # logs
 wallet.log.*
-sui.log.*
+rtd.log.*
 .vercel
 npm-debug.log*
 yarn-debug.log*
@@ -75,10 +74,19 @@ yarn-error.log*
 .env
 checkpoints_dir/*
 light_client.yaml
-docs/content/references/sui-api/sui-graphql/*
+docs/content/references/rtd-api/rtd-graphql/*
 docs/content/references/framework/**
 docs/subtrees
 lcov.info
 
 .sparse
 docs/content/documentation.json
+.cache-external-docs/
+
+# Generated external docs (rebuilt at build time by fetch/transform scripts)
+docs/content/rtd-stack/seal/*.mdx
+!docs/content/rtd-stack/seal/rtd-stack-seal.mdx
+docs/content/rtd-stack/messaging/*.mdx
+!docs/content/rtd-stack/messaging/index.mdx
+!docs/content/rtd-stack/messaging/chat-app.mdx
+docs/site/static/rtd-stack/

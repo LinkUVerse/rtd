@@ -284,7 +284,7 @@ async fn test_sampling_time() {
 mod tidehunter_tests {
     use super::*;
     use std::collections::BTreeMap;
-    use typed_store::tidehunter_util::ThConfig;
+    use typed_store::tidehunter_util::{KeyType, ThConfig};
 
     #[derive(DBMapUtils)]
     #[tidehunter]
@@ -297,8 +297,14 @@ mod tidehunter_tests {
     async fn test_tidehunter_map() {
         let primary_path = temp_dir();
         let configs = vec![
-            ("table1".to_string(), ThConfig::new(11, 1, 1)),
-            ("table2".to_string(), ThConfig::new(11, 1, 1)),
+            (
+                "table1".to_string(),
+                ThConfig::new(11, 1, KeyType::uniform(1)),
+            ),
+            (
+                "table2".to_string(),
+                ThConfig::new(11, 1, KeyType::uniform(1)),
+            ),
         ];
         let db = ThTable::open_tables_read_write(
             primary_path.clone(),
@@ -309,27 +315,5 @@ mod tidehunter_tests {
         db.table1.insert(&key, &value).unwrap();
         let result = db.table1.get(&key).unwrap();
         assert_eq!(result, Some(value));
-    }
-
-    #[tokio::test]
-    async fn dropping_tidehunter_tables_removes_their_metrics_registry() {
-        let registry_service = &typed_store::DBMetrics::get().registry_serivce;
-        let before = registry_service.get_all().len();
-
-        {
-            let configs = BTreeMap::from_iter(vec![
-                ("table1".to_string(), ThConfig::new(11, 1, 1)),
-                ("table2".to_string(), ThConfig::new(11, 1, 1)),
-            ]);
-            let _db = ThTable::open_tables_read_write(
-                temp_dir(),
-                MetricConf::new("test_th_registry_cleanup"),
-                configs,
-            );
-
-            assert_eq!(registry_service.get_all().len(), before + 1);
-        }
-
-        assert_eq!(registry_service.get_all().len(), before);
     }
 }

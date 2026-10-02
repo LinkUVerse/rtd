@@ -3,7 +3,7 @@
 
 use crate::committee::EpochId;
 use crate::crypto::{
-    CompressedSignature, PasskeyAuthenticatorAsBytes, PublicKey, SignatureScheme, RtdSignature,
+    CompressedSignature, PasskeyAuthenticatorAsBytes, PublicKey, RtdSignature, SignatureScheme,
     ZkLoginAuthenticatorAsBytes,
 };
 use crate::digests::ZKLoginInputsDigest;
@@ -23,7 +23,7 @@ use fastcrypto::{
 };
 use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId, OIDCProvider};
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
-use im::hashmap::HashMap as ImHashMap;
+use imbl::hashmap::HashMap as ImHashMap;
 use schemars::JsonSchema;
 use serde::Serialize;
 use shared_crypto::intent::IntentMessage;
@@ -35,11 +35,15 @@ pub struct VerifyParams {
     pub oidc_provider_jwks: ImHashMap<JwkId, JWK>,
     pub supported_providers: Vec<OIDCProvider>,
     pub zk_login_env: ZkLoginEnv,
+    // zkLogin circuit verify mode: 0 = v1 circuit only, 1 = v2 circuit with
+    // fallback to v1, 2 = v2 circuit only.
+    pub zklogin_circuit_mode: u64,
     pub verify_legacy_zklogin_address: bool,
     pub accept_zklogin_in_multisig: bool,
     pub accept_passkey_in_multisig: bool,
     pub zklogin_max_epoch_upper_bound_delta: Option<u64>,
     pub additional_multisig_checks: bool,
+    pub validate_zklogin_public_identifier: bool,
 }
 
 impl VerifyParams {
@@ -47,21 +51,25 @@ impl VerifyParams {
         oidc_provider_jwks: ImHashMap<JwkId, JWK>,
         supported_providers: Vec<OIDCProvider>,
         zk_login_env: ZkLoginEnv,
+        zklogin_circuit_mode: u64,
         verify_legacy_zklogin_address: bool,
         accept_zklogin_in_multisig: bool,
         accept_passkey_in_multisig: bool,
         zklogin_max_epoch_upper_bound_delta: Option<u64>,
         additional_multisig_checks: bool,
+        validate_zklogin_public_identifier: bool,
     ) -> Self {
         Self {
             oidc_provider_jwks,
             supported_providers,
             zk_login_env,
+            zklogin_circuit_mode,
             verify_legacy_zklogin_address,
             accept_zklogin_in_multisig,
             accept_passkey_in_multisig,
             zklogin_max_epoch_upper_bound_delta,
             additional_multisig_checks,
+            validate_zklogin_public_identifier,
         }
     }
 }

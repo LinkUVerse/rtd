@@ -49,8 +49,14 @@ const RTD_BRIDGE_ID: address = @0x9;
 /// The hardcoded ID for the Coin Registry Object.
 const RTD_COIN_REGISTRY_OBJECT_ID: address = @0xc;
 
+/// The hardcoded ID for the Display Registry Object.
+const RTD_DISPLAY_REGISTRY_OBJECT_ID: address = @0xd;
+
 /// The hardcoded ID for the AddressAliasState Object.
 const RTD_ADDRESS_ALIAS_STATE_ID: address = @0xa;
+
+/// The hardcoded ID for the singleton ForwardingAddressRegistry object.
+const RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID: address = @0xfa;
 
 /// Sender is not @0x0 the system address.
 const ENotSystemAddress: u64 = 0;
@@ -167,6 +173,18 @@ public(package) fun rtd_coin_registry_address(): address {
     RTD_COIN_REGISTRY_OBJECT_ID
 }
 
+/// Create the `UID` for the singleton `DisplayRegistry` object.
+/// This should only be called once from `display_registry`.
+public(package) fun rtd_display_registry_object_id(): UID {
+    UID {
+        id: ID { bytes: RTD_DISPLAY_REGISTRY_OBJECT_ID },
+    }
+}
+
+public(package) fun rtd_display_registry_address(): address {
+    RTD_DISPLAY_REGISTRY_OBJECT_ID
+}
+
 #[allow(unused_function)]
 /// Create the `UID` for the singleton `Bridge` object.
 /// This should only be called once from `bridge`.
@@ -181,6 +199,14 @@ fun bridge(): UID {
 public(package) fun address_alias_state(): UID {
     UID {
         id: ID { bytes: RTD_ADDRESS_ALIAS_STATE_ID },
+    }
+}
+
+/// Create the `UID` for the singleton `ForwardingAddressRegistry` object.
+/// This should only be called once from `forwarding_address`.
+public(package) fun forwarding_address_registry(): UID {
+    UID {
+        id: ID { bytes: RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID },
     }
 }
 
@@ -252,8 +278,8 @@ public fun id_address<T: key>(obj: &T): address {
 native fun borrow_uid<T: key>(obj: &T): &UID;
 
 /// Generate a new UID specifically used for creating a UID from a hash
-public(package) fun new_uid_from_hash(bytes: address): UID {
-    record_new_uid(bytes);
+public(package) fun new_uid_from_hash(parent: address, bytes: address): UID {
+    record_new_uid_from_hash(parent, bytes);
     UID { id: ID { bytes } }
 }
 
@@ -262,8 +288,9 @@ public(package) fun new_uid_from_hash(bytes: address): UID {
 // helper for delete
 native fun delete_impl(id: address);
 
-// marks newly created UIDs from hash
-native fun record_new_uid(id: address);
+// marks newly created UIDs from hash, tracking the root version of `parent` so that the new UID
+// `bytes` inherits the parent's root version.
+native fun record_new_uid_from_hash(parent: address, bytes: address);
 
 #[test_only]
 /// Return the most recent created object ID.

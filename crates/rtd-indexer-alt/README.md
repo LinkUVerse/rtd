@@ -80,7 +80,7 @@ cargo nextest run                \
 ```
 
 The first package is the indexer's own unit tests, the second is the indexing
-framework's unit tests, and the third is an end-to-end test rtdte that includes
+framework's unit tests, and the third is an end-to-end test suite that includes
 the indexer as well as the RPCs that read from its database.
 
 ## Configuration
@@ -97,11 +97,13 @@ A source of checkpoints is required (exactly one of `--remote-store-url`,
 `--local-ingestion-path`, or `--rpc-api-url`), and a `--config` must be
 supplied (see "Configuration" above for details on generating a configuration
 file).
+RTD has no public Mainnet checkpoint service. Use a local checkpoint directory or
+an explicitly configured RTD endpoint.
 
 ```sh
 cargo run --bin rtd-indexer-alt -- indexer               \
   --database-url {url}                                   \
-  --remote-store-url https://checkpoints.mainnet.rtd.io  \
+  --local-ingestion-path /path/to/rtd/checkpoints      \
   --config indexer_alt_config.toml
 ```
 

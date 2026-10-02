@@ -1,18 +1,22 @@
-FROM rust:1.90-bullseye as build
+FROM rust:1.96.1-bookworm AS build
 
 ARG PROFILE=release
 WORKDIR /work
 
 RUN apt-get update && apt-get install -y cmake clang
 
-COPY .git/ .git/
+# COPYs ordered least- to most-frequently-changing for deeper layer cache hits.
+COPY rust-toolchain.toml ./
+COPY .cargo .cargo
 COPY Cargo.toml Cargo.lock ./
+COPY external-crates external-crates
+COPY rtd-execution rtd-execution
 COPY consensus consensus
 COPY crates crates
-COPY rtd-execution rtd-execution
-COPY external-crates external-crates
 
-RUN cargo build --profile ${PROFILE} --bin rtd-kv-rpc
+# .git/ copied late so per-commit metadata churn doesn't invalidate the COPYs above.
+COPY .git/ .git/
+RUN cargo build --locked --profile ${PROFILE} --bin rtd-kv-rpc
 
 FROM gcr.io/distroless/cc-debian12 as deploy
 

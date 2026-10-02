@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::{Deserialize, Serialize};
 use rtd_types::{
     base_types::{ObjectID, ObjectRef},
     committee::Committee,
@@ -10,6 +9,7 @@ use rtd_types::{
     messages_checkpoint::{CertifiedCheckpointSummary, VerifiedCheckpoint},
     object::Object,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::proof::{
     committee::{CommitteeProof, CommitteeTarget},

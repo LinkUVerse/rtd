@@ -1,10 +1,13 @@
 [package]
 name = "anemo-benchmark"
 version = "0.0.0"
-authors = ["Andrew Schran <aschran@linkulabs.com>", "LinkU Labs <build@linkulabs.com>"]
+authors = ["Andrew Schran", "LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
+
+[lints]
+workspace = true
 
 [dependencies]
 anemo.workspace = true

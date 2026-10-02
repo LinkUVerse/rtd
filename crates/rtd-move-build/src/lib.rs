@@ -5,7 +5,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     io::Write,
     path::Path,
-    str::FromStr,
 };
 
 use fastcrypto::encoding::Base64;
@@ -18,27 +17,23 @@ use move_binary_format::{
 use move_bytecode_utils::{Modules, layout::SerdeLayoutBuilder, module_cache::GetModule};
 use move_compiler::{
     compiled_unit::AnnotatedCompiledModule,
-    diagnostics::{Diagnostics, report_diagnostics_to_buffer, report_warnings},
-    linters::LINT_WARNING_PREFIX,
+    diagnostics::{
+        Diagnostics, codes::DiagnosticOrigin, report_diagnostics_to_buffer, report_warnings,
+    },
     shared::files::MappedFiles,
 };
 use move_core_types::{
     account_address::AccountAddress,
     language_storage::{ModuleId, StructTag},
 };
-use move_package_alt::{
-    compatibility::{legacy_parser::LegacyPackageMetadata, parse_legacy_package_info},
-    flavor::MoveFlavor,
-    package::RootPackage,
-    schema::Environment,
-};
+use move_package_alt::{MoveFlavor, RootPackage, schema::Environment};
 use move_package_alt_compilation::compiled_package::CompiledPackage as MoveCompiledPackage;
 use move_package_alt_compilation::{
     build_config::BuildConfig as MoveBuildConfig, build_plan::BuildPlan,
 };
 use move_symbol_pool::Symbol;
 
-use rtd_package_alt::{RtdFlavor, testnet_environment};
+use rtd_package_alt::{RtdFlavor, local_test_environment};
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::{
     BRIDGE_ADDRESS, DEEPBOOK_ADDRESS, MOVE_STDLIB_ADDRESS, RTD_FRAMEWORK_ADDRESS,
@@ -98,6 +93,8 @@ pub struct BuildConfig {
     /// The environment that compilation is with respect to (e.g., required to resolve
     /// published dependency IDs).
     pub environment: Environment,
+    /// The Rtd flavor instance, providing network-aware system dependency resolution.
+    pub flavor: RtdFlavor,
 }
 
 impl BuildConfig {
@@ -105,7 +102,6 @@ impl BuildConfig {
         let install_dir = linku_common::tempdir().unwrap().keep();
         let config = MoveBuildConfig {
             default_flavor: Some(move_compiler::editions::Flavor::Rtd),
-            lock_file: Some(install_dir.join("Move.lock")),
             install_dir: Some(install_dir),
             silence_warnings: true,
             lint_flag: move_package_alt_compilation::lint_flag::LintFlag::LEVEL_NONE,
@@ -115,7 +111,8 @@ impl BuildConfig {
             config,
             run_bytecode_verifier: true,
             print_diags_to_stderr: false,
-            environment: testnet_environment(),
+            environment: local_test_environment(),
+            flavor: RtdFlavor::for_testing(),
         }
     }
 
@@ -186,12 +183,11 @@ impl BuildConfig {
     }
 
     pub async fn build_async(self, path: &Path) -> anyhow::Result<CompiledPackage> {
-        let mut root_pkg = RootPackage::<RtdFlavor>::load(
-            path.to_path_buf(),
-            self.environment.clone(),
-            self.config.mode_set(),
-        )
-        .await?;
+        let mut root_pkg = self
+            .config
+            .package_loader(path, &self.environment, self.flavor.clone())
+            .load()
+            .await?;
 
         self.internal_build(&mut root_pkg)
     }
@@ -207,11 +203,10 @@ impl BuildConfig {
     /// If we are building the Rtd framework, we skip the check that the addresses should be 0
     pub fn build(self, path: &Path) -> anyhow::Result<CompiledPackage> {
         // we need to block here to compile the package, which requires to fetch dependencies
-        let mut root_pkg = RootPackage::<RtdFlavor>::load_sync(
-            path.to_path_buf(),
-            self.environment.clone(),
-            self.config.mode_set(),
-        )?;
+        let mut root_pkg = self
+            .config
+            .package_loader(path, &self.environment, self.flavor.clone())
+            .load_sync()?;
 
         self.internal_build(&mut root_pkg)
     }
@@ -255,14 +250,21 @@ impl BuildConfig {
 /// There may be additional information that needs to be displayed after diagnostics are reported
 /// (optionally report diagnostics themselves if files argument is provided).
 pub fn decorate_warnings(warning_diags: Diagnostics, files: Option<&MappedFiles>) {
-    let any_linter_warnings = warning_diags.any_with_prefix(LINT_WARNING_PREFIX);
-    let (filtered_diags_num, unique) =
-        warning_diags.filtered_source_diags_with_prefix(LINT_WARNING_PREFIX);
+    let lint_origins = [DiagnosticOrigin::Lint, DiagnosticOrigin::RtdLint];
+    let any_linter_warnings = lint_origins
+        .iter()
+        .any(|origin| warning_diags.any_with_origin(*origin));
+    let (filtered_diags_num, unique) = lint_origins
+        .iter()
+        .map(|origin| warning_diags.filtered_source_diags_with_origin(*origin))
+        .fold((0, 0), |(count, unique), (origin_count, origin_unique)| {
+            (count + origin_count, unique + origin_unique)
+        });
     if let Some(f) = files {
         report_warnings(f, warning_diags);
     }
     if any_linter_warnings {
-        eprintln!("Please report feedback on the linter warnings at https://forums.rtd.io\n");
+        eprintln!("Please report feedback on the linter warnings to the RTD maintainers.\n");
     }
     if filtered_diags_num > 0 {
         eprintln!(
@@ -285,21 +287,21 @@ fn verify_bytecode(package: &MoveCompiledPackage, fn_info: &FnInfoMap) -> RtdRes
         })?;
         rtd_bytecode_verifier::rtd_verify_module_unmetered(m, fn_info, &verifier_config)?;
     }
-    // TODO(https://github.com/LinkUVerse/rtd/issues/69): Run Move linker
+    // TODO: Run Move linker
 
     Ok(())
 }
 
 impl CompiledPackage {
     /// Return all of the bytecode modules in this package (not including direct or transitive deps)
-    /// Note: these are not topologically sorted by dependency--use `get_dependency_sorted_modules` to produce a list of modules rtdtable
+    /// Note: these are not topologically sorted by dependency--use `get_dependency_sorted_modules` to produce a list of modules suitable
     /// for publishing or static analysis
     pub fn get_modules(&self) -> impl Iterator<Item = &CompiledModule> {
         self.package.root_modules().map(|m| &m.unit.module)
     }
 
     /// Return all of the bytecode modules in this package (not including direct or transitive deps)
-    /// Note: these are not topologically sorted by dependency--use `get_dependency_sorted_modules` to produce a list of modules rtdtable
+    /// Note: these are not topologically sorted by dependency--use `get_dependency_sorted_modules` to produce a list of modules suitable
     /// for publishing or static analysis
     pub fn into_modules(self) -> Vec<CompiledModule> {
         self.package
@@ -369,7 +371,11 @@ impl CompiledPackage {
     /// Return the set of Object IDs corresponding to this package's transitive dependencies'
     /// storage package IDs (where to load those packages on-chain).
     pub fn get_dependency_storage_package_ids(&self) -> Vec<ObjectID> {
-        self.dependency_ids.published.values().cloned().collect()
+        self.dependency_ids
+            .published
+            .values()
+            .map(|dep| dep.published_at)
+            .collect()
     }
 
     /// Return a digest of the bytecode modules in this package.
@@ -570,7 +576,11 @@ impl CompiledPackage {
     }
 
     pub fn get_published_dependencies_ids(&self) -> Vec<ObjectID> {
-        self.dependency_ids.published.values().cloned().collect()
+        self.dependency_ids
+            .published
+            .values()
+            .map(|dep| dep.published_at)
+            .collect()
     }
 }
 
@@ -594,21 +604,84 @@ pub enum PublishedAtError {
 
 #[derive(Debug, Clone)]
 pub struct PackageDependencies {
-    /// Set of published dependencies (name and address).
-    pub published: BTreeMap<Symbol, ObjectID>,
-    /// Set of unpublished dependencies (name and address).
-    pub unpublished: BTreeSet<Symbol>,
+    /// Set of published dependencies keyed by package graph ID.
+    pub published: BTreeMap<Symbol, PublishedDependency>,
+    /// Set of unpublished dependencies by package graph ID.
+    pub unpublished: BTreeMap<Symbol, UnpublishedDependency>,
     /// Set of dependencies with invalid `published-at` addresses.
-    pub invalid: BTreeMap<Symbol, String>,
-    /// Set of dependencies that have conflicting `published-at` addresses. The key refers to
-    /// the package, and the tuple refers to the address in the (Move.lock, Move.toml) respectively.
-    pub conflicting: BTreeMap<Symbol, (ObjectID, ObjectID)>,
+    pub invalid: BTreeMap<Symbol, InvalidDependency>,
+    /// Set of dependencies that have conflicting `published-at` addresses.
+    pub conflicting: BTreeMap<Symbol, ConflictingDependency>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PublishedDependency {
+    /// Unique package graph ID used by the compiler and build artifacts.
+    ///
+    /// This may differ from `name` when multiple packages have the same declared package name,
+    /// for example `foo` and `foo_1`.
+    pub id: Symbol,
+    /// Human-readable package name declared by the package.
+    pub name: Symbol,
+    pub published_at: ObjectID,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnpublishedDependency {
+    /// Unique package graph ID used by the compiler and build artifacts.
+    ///
+    /// This may differ from `name` when multiple packages have the same declared package name,
+    /// for example `foo` and `foo_1`.
+    pub id: Symbol,
+    /// Human-readable package name declared by the package.
+    pub name: Symbol,
+}
+
+#[derive(Debug, Clone)]
+pub struct InvalidDependency {
+    /// Unique package graph ID used by the compiler and build artifacts.
+    ///
+    /// This may differ from `name` when multiple packages have the same declared package name,
+    /// for example `foo` and `foo_1`.
+    pub id: Symbol,
+    /// Human-readable package name declared by the package.
+    pub name: Symbol,
+    pub published_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConflictingDependency {
+    /// Unique package graph ID used by the compiler and build artifacts.
+    ///
+    /// This may differ from `name` when multiple packages have the same declared package name,
+    /// for example `foo` and `foo_1`.
+    pub id: Symbol,
+    /// Human-readable package name declared by the package.
+    pub name: Symbol,
+    pub lock_file_address: ObjectID,
+    pub manifest_address: ObjectID,
+}
+
+impl PublishedDependency {
+    pub fn new(id: Symbol, name: Symbol, published_at: ObjectID) -> Self {
+        Self {
+            id,
+            name,
+            published_at,
+        }
+    }
+}
+
+impl UnpublishedDependency {
+    pub fn new(id: Symbol, name: Symbol) -> Self {
+        Self { id, name }
+    }
 }
 
 impl PackageDependencies {
     pub fn new<F: MoveFlavor>(root_pkg: &RootPackage<F>) -> anyhow::Result<Self> {
         let mut published = BTreeMap::new();
-        let mut unpublished = BTreeSet::new();
+        let mut unpublished = BTreeMap::new();
 
         let packages = root_pkg.packages();
 
@@ -616,13 +689,21 @@ impl PackageDependencies {
             if p.is_root() {
                 continue;
             }
+            // The compiler uses package graph IDs as package names, including suffixes for
+            // duplicate declared names, so dependency IDs must use that same key space.
+            let id: Symbol = p.id().as_str().into();
+            let name: Symbol = p.display_name().into();
             if let Some(addresses) = p.published() {
                 published.insert(
-                    p.display_name().into(),
-                    ObjectID::from_address(addresses.published_at.0),
+                    id,
+                    PublishedDependency::new(
+                        id,
+                        name,
+                        ObjectID::from_address(addresses.published_at.0),
+                    ),
                 );
             } else {
-                unpublished.insert(p.display_name().into());
+                unpublished.insert(id, UnpublishedDependency::new(id, name));
             }
         }
 
@@ -633,20 +714,4 @@ impl PackageDependencies {
             conflicting: BTreeMap::new(),
         })
     }
-}
-
-pub fn parse_legacy_pkg_info(package_path: &Path) -> Result<LegacyPackageMetadata, anyhow::Error> {
-    parse_legacy_package_info(package_path)
-}
-
-pub fn published_at_property(package_path: &Path) -> Result<ObjectID, PublishedAtError> {
-    let parsed_manifest =
-        parse_legacy_package_info(package_path).expect("should read the manifest");
-
-    let Some(value) = parsed_manifest.published_at else {
-        return Err(PublishedAtError::NotPresent);
-    };
-
-    ObjectID::from_str(value.as_str())
-        .map_err(|_| PublishedAtError::Invalid(value.as_str().to_owned()))
 }

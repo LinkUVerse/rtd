@@ -6,7 +6,7 @@ use clap::*;
 use move_bytecode_source_map::utils::serialize_to_json_string;
 use move_compiler::compiled_unit::NamedCompiledModule;
 use move_disassembler::disassembler::Disassembler;
-use move_package_alt::flavor::MoveFlavor;
+use move_package_alt::MoveFlavor;
 use move_package_alt_compilation::{
     build_config::BuildConfig, compiled_package::CompiledUnitWithSource, find_env,
 };
@@ -38,9 +38,10 @@ impl Disassemble {
         self,
         path: Option<&Path>,
         config: BuildConfig,
+        flavor: F,
     ) -> anyhow::Result<()> {
         let rerooted_path = reroot_path(path)?;
-        let env = find_env::<F>(&rerooted_path, &config)?;
+        let env = find_env::<F>(&rerooted_path, &config, &flavor)?;
         let Self {
             interactive,
             package_name,
@@ -50,7 +51,7 @@ impl Disassemble {
         } = self;
         // Make sure the package is built
         let package = config
-            .compile_package::<F, _>(&rerooted_path, &env, &mut Vec::new())
+            .compile_package::<F, _>(&rerooted_path, &env, flavor, &mut Vec::new())
             .await?;
         let needle_package = package_name
             .as_deref()

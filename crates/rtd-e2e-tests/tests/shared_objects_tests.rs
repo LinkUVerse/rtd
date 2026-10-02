@@ -4,24 +4,26 @@
 use futures::future::join_all;
 use futures::join;
 use rand::distributions::Distribution;
-use std::net::SocketAddr;
-use std::ops::Deref;
-use std::time::{Duration, SystemTime};
-use rtd_config::node::AuthorityOverloadConfig;
-use rtd_core::consensus_adapter::position_submit_certificate;
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
 use rtd_macros::{register_fail_point_async, sim_test};
+use rtd_protocol_config::ProtocolVersion;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_test_transaction_builder::{
     TestTransactionBuilder, publish_basics_package, publish_basics_package_and_make_counter,
 };
-use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::base_types::{FullObjectRef, ObjectID};
+use rtd_types::crypto::{AccountKeyPair, get_key_pair};
+use rtd_types::effects::{InputConsensusObject, TransactionEffects, TransactionEffectsAPI};
 use rtd_types::event::Event;
-use rtd_types::execution_status::{CommandArgumentError, ExecutionFailureStatus, ExecutionStatus};
-use rtd_types::messages_grpc::{LayoutGenerationOption, ObjectInfoRequest};
+use rtd_types::execution_status::{
+    CommandArgumentError, ExecutionErrorKind, ExecutionFailure, ExecutionStatus,
+};
+use rtd_types::messages_grpc::WaitForEffectsResponse;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
+use std::net::SocketAddr;
+use std::time::{Duration, SystemTime};
 use test_cluster::TestClusterBuilder;
 use tokio::time::sleep;
+use tracing::info;
 
 /// Send a simple shared object transaction to Rtd and ensures the client gets back a response.
 #[sim_test]
@@ -66,14 +68,13 @@ async fn shared_object_deletion() {
     let effects = test_cluster
         .sign_and_execute_transaction(&transaction)
         .await
-        .effects
-        .unwrap();
+        .effects;
 
     assert_eq!(effects.deleted().len(), 1);
-    assert_eq!(effects.shared_objects().len(), 1);
+    assert_eq!(effects.accessed_consensus_objects().len(), 1);
 
     // assert the shared object was deleted
-    let deleted_obj_id = effects.deleted()[0].object_id;
+    let deleted_obj_id = effects.deleted()[0].0;
     assert_eq!(deleted_obj_id, counter_id);
 }
 
@@ -111,18 +112,13 @@ async fn shared_object_deletion_multiple_times() {
             .build();
         let signed = test_cluster.sign_transaction(&transaction).await;
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
-        txs.push(signed);
+        txs.push((signed, client_ip));
     }
 
     // Submit all the deletion transactions to the validators.
-    let validators = test_cluster.get_validator_pubkeys();
-    let submissions = txs.iter().map(|tx| async {
+    let submissions = txs.iter().map(|(tx, client_ip)| async {
         test_cluster
-            .submit_transaction_to_validators(tx.clone(), &validators)
+            .submit_and_execute(tx.clone(), Some(*client_ip))
             .await
             .unwrap();
         *tx.digest()
@@ -164,7 +160,6 @@ async fn shared_object_deletion_multiple_times_cert_racing() {
     let gas_coins = accounts_and_gas[0].1.clone();
 
     // Make a bunch transactions that all want to delete the counter object.
-    let validators = test_cluster.get_validator_pubkeys();
     let mut digests = vec![];
     for coin_ref in gas_coins.into_iter() {
         let transaction = test_cluster
@@ -175,11 +170,7 @@ async fn shared_object_deletion_multiple_times_cert_racing() {
         let signed = test_cluster.sign_transaction(&transaction).await;
         let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
         test_cluster
-            .create_certificate(signed.clone(), Some(client_ip))
-            .await
-            .unwrap();
-        test_cluster
-            .submit_transaction_to_validators(signed.clone(), &validators)
+            .submit_and_execute(signed.clone(), Some(client_ip))
             .await
             .unwrap();
         digests.push(*signed.digest());
@@ -205,7 +196,7 @@ async fn shared_object_deletion_multiple_times_cert_racing() {
 ///
 /// The two execution certs should be immediately executable (because they have a missing
 /// input). Therefore validators may execute them in either order. The injected delay ensures that
-/// we will explore all possible orders, and `submit_transaction_to_validators` verifies that we
+/// we will explore all possible orders, and `submit_and_execute` verifies that we
 /// get the same effects regardless of the order. (checkpoint fork detection will also test this).
 #[sim_test]
 async fn shared_object_deletion_multi_certs() {
@@ -262,24 +253,9 @@ async fn shared_object_deletion_multi_certs() {
     let inc_tx_b_digest = *inc_tx_b.digest();
     let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
 
-    let _ = test_cluster
-        .create_certificate(delete_tx.clone(), Some(client_ip))
-        .await
-        .unwrap();
-    let _ = test_cluster
-        .create_certificate(inc_tx_a.clone(), Some(client_ip))
-        .await
-        .unwrap();
-    let _ = test_cluster
-        .create_certificate(inc_tx_b.clone(), Some(client_ip))
-        .await
-        .unwrap();
-
-    let validators = test_cluster.get_validator_pubkeys();
-
     // delete obj on all validators, await effects
     test_cluster
-        .submit_transaction_to_validators(delete_tx, &validators)
+        .submit_and_execute(delete_tx, Some(client_ip))
         .await
         .unwrap();
 
@@ -287,13 +263,13 @@ async fn shared_object_deletion_multi_certs() {
     join!(
         async {
             test_cluster
-                .submit_transaction_to_validators(inc_tx_a, &validators)
+                .submit_and_execute(inc_tx_a, Some(client_ip))
                 .await
                 .unwrap()
         },
         async {
             test_cluster
-                .submit_transaction_to_validators(inc_tx_b, &validators)
+                .submit_and_execute(inc_tx_b, Some(client_ip))
                 .await
                 .unwrap()
         }
@@ -308,11 +284,248 @@ async fn shared_object_deletion_multi_certs() {
         .await;
 }
 
+fn counter_consensus_access(
+    effects: &TransactionEffects,
+    counter_id: ObjectID,
+) -> InputConsensusObject {
+    effects
+        .accessed_consensus_objects()
+        .into_iter()
+        .find(|object| object.id_and_version().0 == counter_id)
+        .unwrap_or_else(|| {
+            panic!(
+                "transaction {:?} did not access shared counter {counter_id}",
+                effects.transaction_digest()
+            )
+        })
+}
+
+async fn assert_checkpoint_order_with_effects_dependencies(
+    protocol_version: ProtocolVersion,
+    expect_effects_dependencies_disabled: bool,
+) {
+    let test_cluster = TestClusterBuilder::new()
+        .with_protocol_version(protocol_version)
+        .with_accounts(vec![AccountConfig {
+            address: None,
+            gas_amounts: vec![DEFAULT_GAS_AMOUNT; 8],
+        }])
+        .build()
+        .await;
+
+    let dependencies_disabled = test_cluster
+        .all_validator_handles()
+        .into_iter()
+        .next()
+        .expect("cluster has a validator")
+        .with(|node| {
+            node.state()
+                .epoch_store_for_testing()
+                .protocol_config()
+                .disable_effects_tx_dependencies()
+        });
+    assert_eq!(
+        dependencies_disabled, expect_effects_dependencies_disabled,
+        "protocol version {protocol_version:?} did not configure disable_effects_tx_dependencies as expected"
+    );
+
+    let (package, counter) = publish_basics_package_and_make_counter(&test_cluster.wallet).await;
+    let package_id = package.0;
+    let counter_id = counter.0;
+    let counter_initial_shared_version = counter.1;
+    let counter_read_arg = ObjectArg::SharedObject {
+        id: counter_id,
+        initial_shared_version: counter_initial_shared_version,
+        mutability: SharedObjectMutability::Immutable,
+    };
+
+    let accounts_and_gas = test_cluster
+        .wallet
+        .get_all_accounts_and_gas_objects()
+        .await
+        .unwrap();
+    let sender = accounts_and_gas[0].0;
+    let gas = &accounts_and_gas[0].1;
+    let rgp = test_cluster.get_reference_gas_price().await;
+
+    // The soft bundle submits this shared schedule in one consensus request. The failpoint in the
+    // caller delays execution, so the independent transfer can finish in a different order.
+    let read_a = TestTransactionBuilder::new(sender, gas[0], rgp)
+        .move_call(
+            package_id,
+            "counter",
+            "assert_value",
+            vec![
+                CallArg::Object(counter_read_arg),
+                CallArg::Pure(0u64.to_le_bytes().to_vec()),
+            ],
+        )
+        .build();
+    let read_b = TestTransactionBuilder::new(sender, gas[1], rgp)
+        .move_call(
+            package_id,
+            "counter",
+            "assert_value",
+            vec![
+                CallArg::Object(counter_read_arg),
+                CallArg::Pure(0u64.to_le_bytes().to_vec()),
+            ],
+        )
+        .build();
+    let increment = TestTransactionBuilder::new(sender, gas[2], rgp)
+        .call_counter_increment(package_id, counter_id, counter_initial_shared_version)
+        .build();
+    let delete = TestTransactionBuilder::new(sender, gas[3], rgp)
+        .call_counter_delete(package_id, counter_id, counter_initial_shared_version)
+        .build();
+    let independent_transfer = TestTransactionBuilder::new(sender, gas[4], rgp)
+        .transfer_rtd(Some(1), sender)
+        .build();
+
+    let signed_txs = vec![
+        test_cluster.sign_transaction(&read_a).await,
+        test_cluster.sign_transaction(&read_b).await,
+        test_cluster.sign_transaction(&increment).await,
+        test_cluster.sign_transaction(&delete).await,
+        test_cluster.sign_transaction(&independent_transfer).await,
+    ];
+    let expected_digests = signed_txs.iter().map(|tx| *tx.digest()).collect::<Vec<_>>();
+    let effects = test_cluster
+        .execute_signed_txns_in_soft_bundle(&signed_txs)
+        .await
+        .expect("soft bundle should execute");
+    let [
+        (read_a_digest, read_a_effects),
+        (read_b_digest, read_b_effects),
+        (increment_digest, increment_effects),
+        (delete_digest, delete_effects),
+        _,
+    ] = effects.as_slice()
+    else {
+        panic!("soft bundle returned an unexpected number of effects");
+    };
+
+    for effects in [
+        read_a_effects,
+        read_b_effects,
+        increment_effects,
+        delete_effects,
+    ] {
+        assert!(
+            effects.status().is_ok(),
+            "scheduled shared transaction failed: {effects:?}"
+        );
+    }
+    assert_eq!(
+        delete_effects
+            .deleted()
+            .iter()
+            .map(|object| object.0)
+            .collect::<Vec<_>>(),
+        vec![counter_id],
+        "the ordered write must delete the shared counter"
+    );
+
+    let read_a_access = counter_consensus_access(read_a_effects, counter_id);
+    let read_b_access = counter_consensus_access(read_b_effects, counter_id);
+    let increment_access = counter_consensus_access(increment_effects, counter_id);
+    let delete_access = counter_consensus_access(delete_effects, counter_id);
+    assert!(matches!(read_a_access, InputConsensusObject::ReadOnly(_)));
+    assert!(matches!(read_b_access, InputConsensusObject::ReadOnly(_)));
+    assert!(matches!(increment_access, InputConsensusObject::Mutate(_)));
+    assert!(matches!(delete_access, InputConsensusObject::Mutate(_)));
+
+    let read_a_version = read_a_access.id_and_version().1;
+    let read_b_version = read_b_access.id_and_version().1;
+    let increment_version = increment_access.id_and_version().1;
+    let delete_version = delete_access.id_and_version().1;
+    assert_eq!(read_a_version, read_b_version);
+    assert_eq!(
+        increment_version, read_a_version,
+        "read-only accesses must not advance the shared object's assigned version"
+    );
+    assert_eq!(
+        delete_version,
+        increment_effects.lamport_version(),
+        "deletion must read the version written by the preceding increment"
+    );
+
+    // This waits for both checkpoint execution and settlement on the RPC fullnode and every
+    // validator; it also makes a checkpoint-digest disagreement observable below.
+    test_cluster
+        .wait_for_tx_settlement_all_nodes(&expected_digests)
+        .await;
+
+    let checkpoint_positions = test_cluster.fullnode_handle.rtd_node.with(|node| {
+        let state = node.state();
+        [
+            *read_a_digest,
+            *read_b_digest,
+            *increment_digest,
+            *delete_digest,
+        ]
+        .map(|digest| {
+            let sequence = state
+                .epoch_store_for_testing()
+                .get_transaction_checkpoint(&digest)
+                .unwrap()
+                .expect("settled transaction missing from checkpoint");
+            let checkpoint = state
+                .checkpoint_store
+                .get_checkpoint_by_sequence_number(sequence)
+                .unwrap()
+                .expect("settled checkpoint missing from fullnode");
+            let contents = state
+                .checkpoint_store
+                .get_checkpoint_contents(&checkpoint.content_digest)
+                .unwrap()
+                .expect("checkpoint contents missing from fullnode");
+            let index = contents
+                .inner()
+                .digests_iter()
+                .position(|entry| entry.transaction == digest)
+                .expect("transaction missing from its checkpoint contents");
+            (sequence, index)
+        })
+    });
+    assert!(
+        checkpoint_positions[0] < checkpoint_positions[2]
+            && checkpoint_positions[1] < checkpoint_positions[2]
+            && checkpoint_positions[2] < checkpoint_positions[3],
+        "checkpoint order must retain both shared reads before their overwrite and deletion: {checkpoint_positions:?}"
+    );
+}
+
+/// Regression coverage for checkpoint ordering when effects dependencies are absent. The
+/// transaction_execution_delay failpoint allows independent execution to finish out of consensus
+/// order; checkpoint construction and settlement must nevertheless retain the shared schedule.
+#[sim_test]
+async fn shared_checkpoint_order_without_effects_dependencies() {
+    register_fail_point_async("transaction_execution_delay", move || async move {
+        let delay = {
+            let dist = rand::distributions::Uniform::new(0, 1000);
+            let mut rng = rand::thread_rng();
+            dist.sample(&mut rng)
+        };
+        sleep(Duration::from_millis(delay)).await;
+    });
+
+    // Mainnet simulation runs retain the flag-off protocol configuration.
+    let flag_enabled = rtd_types::digests::ChainIdentifier::default().chain()
+        != rtd_protocol_config::Chain::Mainnet;
+    assert_checkpoint_order_with_effects_dependencies(ProtocolVersion::new(138), flag_enabled)
+        .await;
+}
+
 /// End-to-end shared transaction test for a Rtd validator. It does not test the client or wallet,
 /// but tests the end-to-end flow from Rtd to consensus.
 #[sim_test]
 async fn call_shared_object_contract() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    // Preserve coverage of the historical transaction-dependency representation.
+    let test_cluster = TestClusterBuilder::new()
+        .with_protocol_version(rtd_protocol_config::ProtocolVersion::new(136))
+        .build()
+        .await;
     let (package, counter) = publish_basics_package_and_make_counter(&test_cluster.wallet).await;
     let package_id = package.0;
     let counter_id = counter.0;
@@ -353,8 +566,7 @@ async fn call_shared_object_contract() {
         let effects = test_cluster
             .sign_and_execute_transaction(&transaction)
             .await
-            .effects
-            .unwrap();
+            .effects;
         // Check that all reads must depend on the creation of the counter, but not to any previous reads.
         assert!(
             effects
@@ -378,8 +590,7 @@ async fn call_shared_object_contract() {
     let effects = test_cluster
         .sign_and_execute_transaction(&transaction)
         .await
-        .effects
-        .unwrap();
+        .effects;
     let increment_transaction = *effects.transaction_digest();
     assert!(
         effects
@@ -418,12 +629,8 @@ async fn call_shared_object_contract() {
         let effects = test_cluster
             .sign_and_execute_transaction(&transaction)
             .await
-            .effects
-            .unwrap();
+            .effects;
         assert!(effects.dependencies().contains(&increment_transaction));
-        if let Some(prev) = assert_value_mut_transaction {
-            assert!(effects.dependencies().contains(&prev));
-        }
         assert_value_mut_transaction = Some(*effects.transaction_digest());
     }
 
@@ -445,19 +652,17 @@ async fn call_shared_object_contract() {
         .execute_transaction_may_fail(test_cluster.wallet.sign_transaction(&transaction).await)
         .await
         .unwrap()
-        .effects
-        .unwrap();
+        .effects;
     // Transaction fails
     assert_eq!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CommandArgumentError {
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CommandArgumentError {
                 arg_idx: 0,
                 kind: CommandArgumentError::InvalidObjectByMutRef,
             },
             command: Some(0),
-        }
-        .into()
+        })
     );
     assert!(
         effects
@@ -543,104 +748,6 @@ async fn access_clock_object_test() {
     }
 }
 
-#[sim_test]
-async fn shared_object_sync() {
-    let test_cluster = TestClusterBuilder::new()
-        // Set the threshold high enough so it won't be triggered.
-        .with_authority_overload_config(AuthorityOverloadConfig {
-            max_txn_age_in_queue: Duration::from_secs(60),
-            ..Default::default()
-        })
-        .build()
-        .await;
-    let package_id = publish_basics_package(&test_cluster.wallet).await.0;
-
-    // Since we use submit_transaction_to_validators in this test, which does not go through fullnode,
-    // we need to manage gas objects ourselves.
-    let (sender, mut objects) = test_cluster.wallet.get_one_account().await.unwrap();
-    let rgp = test_cluster.get_reference_gas_price().await;
-    // Send a transaction to create a counter, to all but one authority.
-    let create_counter_transaction = test_cluster
-        .wallet
-        .sign_transaction(
-            &TestTransactionBuilder::new(sender, objects.pop().unwrap(), rgp)
-                .call_counter_create(package_id)
-                .build(),
-        )
-        .await;
-    let committee = test_cluster.committee().deref().clone();
-    let validators = test_cluster.get_validator_pubkeys();
-    let (slow_validators, fast_validators): (Vec<_>, Vec<_>) =
-        validators.iter().partition(|name| {
-            position_submit_certificate(&committee, name, create_counter_transaction.digest()) > 0
-        });
-
-    let (effects, _) = test_cluster
-        .submit_transaction_to_validators(create_counter_transaction.clone(), &slow_validators)
-        .await
-        .unwrap();
-    assert!(effects.status().is_ok());
-    let ((counter_id, counter_initial_shared_version, _), _) = effects.created()[0];
-
-    // Check that the counter object exists in at least one of the validators the transaction was
-    // sent to.
-    for validator in test_cluster.swarm.validator_node_handles() {
-        if slow_validators.contains(&validator.state().name) {
-            assert!(
-                validator
-                    .state()
-                    .handle_object_info_request(ObjectInfoRequest::latest_object_info_request(
-                        counter_id,
-                        LayoutGenerationOption::None,
-                    ))
-                    .await
-                    .is_ok()
-            );
-        }
-    }
-
-    // Check that the validator that wasn't sent the transaction is unaware of the counter object
-    for validator in test_cluster.swarm.validator_node_handles() {
-        if fast_validators.contains(&validator.state().name) {
-            assert!(
-                validator
-                    .state()
-                    .handle_object_info_request(ObjectInfoRequest::latest_object_info_request(
-                        counter_id,
-                        LayoutGenerationOption::None,
-                    ))
-                    .await
-                    .is_err()
-            );
-        }
-    }
-
-    // Make a transaction to increment the counter.
-    let increment_counter_transaction = test_cluster
-        .wallet
-        .sign_transaction(
-            &TestTransactionBuilder::new(sender, objects.pop().unwrap(), rgp)
-                .call_counter_increment(package_id, counter_id, counter_initial_shared_version)
-                .build(),
-        )
-        .await;
-
-    // Let's submit the transaction to the original set of validators, except the first.
-    let (effects, _) = test_cluster
-        .submit_transaction_to_validators(increment_counter_transaction.clone(), &validators[1..])
-        .await
-        .unwrap();
-    assert!(effects.status().is_ok());
-
-    // Submit transactions to the out-of-date authority.
-    // It will succeed because we share owned object certificates through narwhal
-    let (effects, _) = test_cluster
-        .submit_transaction_to_validators(increment_counter_transaction, &validators[0..1])
-        .await
-        .unwrap();
-    assert!(effects.status().is_ok());
-}
-
 /// Send a simple shared object transaction to Rtd and ensures the client gets back a response.
 #[sim_test]
 async fn replay_shared_object_transaction() {
@@ -664,11 +771,10 @@ async fn replay_shared_object_transaction() {
         let effects = test_cluster
             .execute_transaction(create_counter_transaction.clone())
             .await
-            .effects
-            .unwrap();
+            .effects;
 
         // Ensure the sequence number of the shared object did not change.
-        let curr = effects.created()[0].reference.version;
+        let curr = effects.created()[0].0.1;
         if let Some(prev) = version {
             assert_eq!(
                 prev, curr,
@@ -677,5 +783,128 @@ async fn replay_shared_object_transaction() {
         }
 
         version = Some(curr);
+    }
+}
+
+/// Test that conflicting owned object transactions in the same consensus commit are handled
+/// correctly via post-consensus lock conflict detection.
+/// The first transaction in consensus order should succeed, and the second should be dropped
+/// with ObjectLockConflict status.
+///
+/// This test uses soft bundle submission to guarantee both transactions end up in the same
+/// consensus commit, ensuring we always test the post-consensus conflict detection path.
+#[sim_test]
+async fn test_conflicting_owned_transactions() {
+    // Create cluster with multiple gas coins for the sender
+    let test_cluster = TestClusterBuilder::new()
+        .with_accounts(vec![AccountConfig {
+            address: None,
+            gas_amounts: vec![DEFAULT_GAS_AMOUNT; 3], // 3 gas coins
+        }])
+        .build()
+        .await;
+
+    let accounts_and_gas = test_cluster
+        .wallet
+        .get_all_accounts_and_gas_objects()
+        .await
+        .unwrap();
+    let sender = accounts_and_gas[0].0;
+    let mut gas_coins: Vec<_> = accounts_and_gas[0].1.clone();
+
+    // The coin we'll try to double-spend (use for both transactions)
+    let contested_coin = gas_coins.pop().unwrap();
+    let gas_coin_1 = gas_coins.pop().unwrap();
+    let gas_coin_2 = gas_coins.pop().unwrap();
+
+    let rgp = test_cluster.get_reference_gas_price().await;
+
+    // Create two recipients
+    let recipient1 = get_key_pair::<AccountKeyPair>().0;
+    let recipient2 = get_key_pair::<AccountKeyPair>().0;
+
+    info!(
+        "Creating two conflicting transactions for coin {:?}",
+        contested_coin.0
+    );
+
+    // Transaction 1: Transfer contested_coin to recipient1
+    let tx1 = TestTransactionBuilder::new(sender, gas_coin_1, rgp)
+        .transfer(FullObjectRef::from_fastpath_ref(contested_coin), recipient1)
+        .build();
+    let signed_tx1 = test_cluster.wallet.sign_transaction(&tx1).await;
+
+    // Transaction 2: Transfer the SAME contested_coin to recipient2
+    let tx2 = TestTransactionBuilder::new(sender, gas_coin_2, rgp)
+        .transfer(FullObjectRef::from_fastpath_ref(contested_coin), recipient2)
+        .build();
+    let signed_tx2 = test_cluster.wallet.sign_transaction(&tx2).await;
+
+    let tx1_digest = *signed_tx1.digest();
+    let tx2_digest = *signed_tx2.digest();
+
+    info!(
+        "Submitting conflicting transactions via soft bundle: tx1={:?}, tx2={:?}",
+        tx1_digest, tx2_digest
+    );
+
+    // Submit both transactions via soft bundle and wait for results
+    let results = test_cluster
+        .execute_soft_bundle_with_conflicts(&[signed_tx1, signed_tx2])
+        .await
+        .expect("soft bundle submission should succeed");
+
+    assert_eq!(results.len(), 2, "Expected 2 results");
+
+    let response1 = &results[0].1;
+    let response2 = &results[1].1;
+
+    info!("tx1 response: {:?}", response1);
+    info!("tx2 response: {:?}", response2);
+
+    // One should be Executed, one should be Rejected
+    let (executed_response, rejected_response) = match (response1, response2) {
+        (WaitForEffectsResponse::Executed { .. }, WaitForEffectsResponse::Rejected { .. }) => {
+            info!("tx1 executed, tx2 rejected");
+            (response1, response2)
+        }
+        (WaitForEffectsResponse::Rejected { .. }, WaitForEffectsResponse::Executed { .. }) => {
+            info!("tx1 rejected, tx2 executed");
+            (response2, response1)
+        }
+        _ => {
+            panic!(
+                "Expected one Executed and one Rejected response, got: tx1={:?}, tx2={:?}",
+                response1, response2
+            );
+        }
+    };
+
+    // Verify the executed transaction succeeded
+    match executed_response {
+        WaitForEffectsResponse::Executed { effects_digest, .. } => {
+            info!("Executed transaction effects digest: {:?}", effects_digest);
+        }
+        _ => unreachable!(),
+    }
+
+    // Verify the rejected transaction has ObjectLockConflict error
+    match rejected_response {
+        WaitForEffectsResponse::Rejected { error } => {
+            let error_str = error
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "no error details".to_string());
+            info!("Rejected transaction error: {}", error_str);
+
+            // The critical assertion: the rejection error should be ObjectLockConflict,
+            // indicating the object is already locked by another transaction in the same commit.
+            assert!(
+                error_str.contains("already locked by a different transaction"),
+                "Expected 'already locked by a different transaction' error, got: {}",
+                error_str
+            );
+        }
+        _ => unreachable!(),
     }
 }

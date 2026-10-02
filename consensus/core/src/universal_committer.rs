@@ -45,11 +45,7 @@ impl UniversalCommitter {
         // Try to decide as many leaders as possible, starting with the highest round.
         let mut leaders = VecDeque::new();
 
-        let last_round = match self
-            .context
-            .protocol_config
-            .mysticeti_num_leaders_per_round()
-        {
+        let last_round = match self.context.protocol_config.num_leaders_per_round() {
             Some(1) => {
                 // Ensure that we don't commit any leaders from the same round as last_decided
                 // until we have full support for multi-leader per round.
@@ -184,12 +180,6 @@ pub(crate) mod universal_committer_builder {
                 number_of_leaders: 1,
                 pipeline: false,
             }
-        }
-
-        #[allow(unused)]
-        pub(crate) fn with_wave_length(mut self, wave_length: Round) -> Self {
-            self.wave_length = wave_length;
-            self
         }
 
         pub(crate) fn with_number_of_leaders(mut self, number_of_leaders: usize) -> Self {

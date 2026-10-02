@@ -8,9 +8,16 @@ include!("../../../generated/rtd.rpc.consistent.v1alpha.rs");
 pub const FILE_DESCRIPTOR_SET: &[u8] =
     include_bytes!("../../../generated/rtd.rpc.consistent.v1alpha.fds.bin");
 
-/// Metadata name used in requests to set the checkpoint to make the request at, and in responses
-/// to indicate the checkpoint at which the response was generated.
-pub const CHECKPOINT_METADATA: &str = "x-rtd-checkpoint";
+/// Metadata name used in requests to set the checkpoint to make the request at.
+///
+/// Mirrors fullnode gRPC header naming in `rtd-rpc`.
+pub const CHECKPOINT_HEIGHT_METADATA: &str = "x-rtd-checkpoint-height";
+
+/// Metadata name used in responses to indicate the minimum checkpoint currently retained by
+/// consistent store.
+///
+/// Mirrors fullnode gRPC header naming in `rtd-rpc`.
+pub const LOWEST_AVAILABLE_CHECKPOINT_METADATA: &str = "x-rtd-lowest-available-checkpoint";
 
 #[cfg(test)]
 mod tests {

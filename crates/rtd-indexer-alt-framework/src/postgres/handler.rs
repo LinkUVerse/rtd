@@ -25,12 +25,14 @@
 //! To fully decouple, we'd need to move all postgres-specific code (including IndexerCluster) to
 //! rtd-pg-db, which would be a much larger breaking change. Consider this for a future refactor.
 //!
-//! See: <https://github.com/LinkUVerse/rtd/pull/24055#issuecomment-3471278182>
 
 use async_trait::async_trait;
 
-use super::{Connection, Db, FieldCount};
-use crate::pipeline::{Processor, concurrent};
+use crate::pipeline::Processor;
+use crate::pipeline::concurrent;
+use crate::postgres::Connection;
+use crate::postgres::Db;
+use crate::postgres::FieldCount;
 
 /// Postgres-specific handler trait for concurrent indexing pipelines.
 ///
@@ -68,10 +70,9 @@ pub trait Handler: Processor<Value: FieldCount> {
 /// Calculate the maximum number of rows that can be inserted in a single batch,
 /// given the number of fields per row.
 const fn max_chunk_rows<T: FieldCount>() -> usize {
-    if T::FIELD_COUNT == 0 {
-        i16::MAX as usize
-    } else {
-        i16::MAX as usize / T::FIELD_COUNT
+    match (i16::MAX as usize).checked_div(T::FIELD_COUNT) {
+        Some(rows) => rows,
+        None => i16::MAX as usize,
     }
 }
 
@@ -80,7 +81,7 @@ const fn max_chunk_rows<T: FieldCount>() -> usize {
 #[async_trait]
 impl<H> concurrent::Handler for H
 where
-    H: Handler + Send + Sync + 'static,
+    H: Handler,
     H::Value: FieldCount + Send + Sync,
 {
     type Store = Db;

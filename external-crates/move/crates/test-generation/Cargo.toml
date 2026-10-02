@@ -19,15 +19,11 @@ getrandom.workspace = true
 crossbeam-channel.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-once_cell.workspace = true
 
 move-bytecode-verifier.workspace = true
 move-core-types.workspace = true
 move-vm-runtime.workspace = true
-move-vm-test-utils.workspace = true
-move-vm-types.workspace = true
 module-generation.workspace = true
 move-binary-format.workspace = true
 move-stdlib.workspace = true
-move-stdlib-natives.workspace = true
 move-compiler.workspace = true

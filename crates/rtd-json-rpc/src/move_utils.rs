@@ -11,8 +11,6 @@ use jsonrpsee::core::RpcResult;
 use mockall::automock;
 use move_binary_format::{binary_config::BinaryConfig, normalized};
 use move_core_types::identifier::Identifier;
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use rtd_core::authority::AuthorityState;
 use rtd_json_rpc_api::{MoveUtilsOpenRpc, MoveUtilsServer};
 use rtd_json_rpc_types::{
@@ -23,6 +21,8 @@ use rtd_open_rpc::Module;
 use rtd_types::base_types::ObjectID;
 use rtd_types::move_package::normalize_modules;
 use rtd_types::object::{Data, ObjectRead};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use tap::TapFallible;
 use tracing::{error, instrument, warn};
 

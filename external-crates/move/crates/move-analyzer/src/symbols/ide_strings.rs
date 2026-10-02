@@ -12,11 +12,12 @@ use move_compiler::{
     expansion::{
         ast::{self as E, AbilitySet, ModuleIdent_, Value, Value_, Visibility},
         name_validation::{
-            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES,
+            IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES, IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES,
             ModuleMemberKind,
         },
     },
     naming::ast::{Type, TypeInner, TypeName_},
+    parser::ast::Ability_,
     shared::{Identifier, Name},
     typing::ast::{Exp, ExpListItem, SequenceItem, SequenceItem_, UnannotatedExp_},
 };
@@ -118,7 +119,8 @@ pub fn type_to_ide_string(sp!(_, t): &Type, verbose: bool) -> String {
                     )
                 }
             }
-            TypeName_::ModuleType(sp!(_, mod_ident), datatype_name) => {
+            TypeName_::ModuleType(mod_ident, datatype_name) => {
+                let mod_ident = &mod_ident.value;
                 let type_args = if ss.is_empty() {
                     "".to_string()
                 } else {
@@ -398,13 +400,22 @@ pub fn abilities_to_ide_string(abilities: &AbilitySet) -> String {
     } else {
         format!(
             " has {}",
-            abilities
-                .iter()
-                .map(|a| format!("{a}"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            ordered_ability_strings_for_ide(abilities).join(", ")
         )
     }
+}
+
+/// Returns ability names in the canonical order used for IDE hover display.
+fn ordered_ability_strings_for_ide(abilities: &AbilitySet) -> Vec<&'static str> {
+    [
+        (Ability_::Key, Ability_::KEY),
+        (Ability_::Copy, Ability_::COPY),
+        (Ability_::Drop, Ability_::DROP),
+        (Ability_::Store, Ability_::STORE),
+    ]
+    .into_iter()
+    .filter_map(|(ability, name)| abilities.has_ability_(ability).then_some(name))
+    .collect()
 }
 
 pub fn variant_to_ide_string(variants: &[VariantInfo]) -> String {

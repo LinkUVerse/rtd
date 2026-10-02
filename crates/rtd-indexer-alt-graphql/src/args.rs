@@ -4,10 +4,9 @@
 use std::path::PathBuf;
 
 use rtd_indexer_alt_metrics::MetricsArgs;
-use rtd_indexer_alt_reader::bigtable_reader::BigtableArgs;
 use rtd_indexer_alt_reader::consistent_reader::ConsistentReaderArgs;
 use rtd_indexer_alt_reader::fullnode_client::FullnodeArgs;
-use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcArgs;
+use rtd_indexer_alt_reader::kv_loader::KvArgs;
 use rtd_indexer_alt_reader::pg_reader::db::DbArgs;
 use rtd_indexer_alt_reader::system_package_task::SystemPackageTaskArgs;
 use tonic::transport::Uri;
@@ -15,44 +14,13 @@ use url::Url;
 
 use crate::RpcArgs;
 
-/// Arguments for configuring KV store access (either Bigtable or Ledger gRPC).
-///
-/// These options are mutually exclusive - only one KV store source can be configured at a time.
+/// Arguments for configuring GraphQL streaming subscriptions.
 #[derive(clap::Args, Debug, Clone, Default)]
-#[group(required = false)]
-pub struct KvArgs {
-    /// Bigtable instance ID to make KV store requests to.
-    #[arg(long, group = "kv_source")]
-    pub bigtable_instance: Option<String>,
-
-    /// App profile ID to use for Bigtable client. If not provided, the default profile will be used.
+pub struct SubscriptionArgs {
+    /// gRPC URL of a configured fullnode to stream checkpoints from. When set, the instance enables GraphQL
+    /// subscriptions. When not set, subscriptions are not available.
     #[arg(long)]
-    pub bigtable_app_profile_id: Option<String>,
-
-    /// gRPC endpoint URL for the ledger service (e.g., archive.mainnet.rtd.io)
-    #[arg(long, group = "kv_source")]
-    pub ledger_grpc_url: Option<Uri>,
-
-    /// Time spent waiting for a request to the kv store to complete, in milliseconds.
-    #[arg(long)]
-    pub kv_statement_timeout_ms: Option<u64>,
-}
-
-impl KvArgs {
-    /// Extract BigtableArgs from KvArgs
-    pub fn bigtable_args(&self) -> BigtableArgs {
-        BigtableArgs {
-            bigtable_statement_timeout_ms: self.kv_statement_timeout_ms,
-            bigtable_app_profile_id: self.bigtable_app_profile_id.clone(),
-        }
-    }
-
-    /// Extract LedgerGrpcArgs from KvArgs
-    pub fn ledger_grpc_args(&self) -> LedgerGrpcArgs {
-        LedgerGrpcArgs {
-            ledger_grpc_statement_timeout_ms: self.kv_statement_timeout_ms,
-        }
-    }
+    pub checkpoint_stream_url: Option<Uri>,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -103,6 +71,9 @@ pub enum Command {
         /// identify the pipelines that the RPC will monitor for watermark purposes.
         #[arg(long, action = clap::ArgAction::Append)]
         indexer_config: Vec<PathBuf>,
+
+        #[command(flatten)]
+        subscription_args: SubscriptionArgs,
     },
 
     /// Output the contents of the default configuration to STDOUT.

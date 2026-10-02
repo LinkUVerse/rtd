@@ -8,7 +8,8 @@ This document is focused on using Validator Tool.
 
 ## Preparation
 
-1. Make sure you have completed all the [prerequisites](https://docs.rtd.io/devnet/build/install).
+1. Install Rust and Cargo, then follow the build commands in the repository
+   [README](../README.md). RTD has no public documentation site yet.
 
 2. Build the `rtd` binary, which you will need for the genesis ceremony. This step can be done on any machine you like. It does not have to be done on the machine on which you will run the validator.
 
@@ -37,7 +38,8 @@ This document is focused on using Validator Tool.
       b. `active_address` is correct in `client.yaml`.
       b. `rtd.keystore` contains your account key pair.
 
-    If at this point you can't find where `client.yaml` or `rtd.keystore` is or have other questions, read [Rtd Client CLI tutorial](https://docs.rtd.io/devnet/build/cli-client).
+    If you cannot find `client.yaml` or `rtd.keystore`, inspect your local
+    Rtd client configuration and run `$RTD_BINARY client --help`.
 
 ``` bash
 $RTD_BINARY client

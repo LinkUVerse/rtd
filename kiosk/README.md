@@ -1,3 +1,3 @@
 # Kiosk App
 
-The code has been moved to a separate repository. Please, go to [LinkUVerse/apps](https://github.com/LinkUVerse/apps) for the source code for Kiosk Package.
+The Kiosk application is not included in this repository. The retained TypeScript SDK package is in the sibling `rtd-ts-sdk/packages/kiosk` directory.

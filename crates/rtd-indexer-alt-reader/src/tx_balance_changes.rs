@@ -1,17 +1,21 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
+use std::collections::HashMap;
 
 use async_graphql::dataloader::Loader;
-use diesel::{ExpressionMethods, JoinOnDsl, QueryDsl, SelectableHelper};
-use rtd_indexer_alt_schema::{
-    schema::{tx_balance_changes, tx_digests},
-    transactions::StoredTxBalanceChange,
-};
+use diesel::ExpressionMethods;
+use diesel::JoinOnDsl;
+use diesel::QueryDsl;
+use diesel::SelectableHelper;
+use rtd_indexer_alt_schema::schema::tx_balance_changes;
+use rtd_indexer_alt_schema::schema::tx_digests;
+use rtd_indexer_alt_schema::transactions::StoredTxBalanceChange;
 use rtd_types::digests::TransactionDigest;
 
-use crate::{error::Error, pg_reader::PgReader};
+use crate::error::Error;
+use crate::pg_reader::PgReader;
 
 /// Key for fetching a transaction's balance changes by digest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

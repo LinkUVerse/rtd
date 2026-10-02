@@ -119,12 +119,7 @@ export default function ExecuteTransaction() {
 					<Card key={digest}>
 						<CardHeader>
 							<CardTitle>Rtd Transaction Digest</CardTitle>
-							<CardDescription>
-								View TX Digest on{' '}
-								<a className="text-blue-500" href={`https://rtdexplorer.com/txblock/${digest}`}>
-									Rtd Explorer
-								</a>
-							</CardDescription>
+							<CardDescription>Transaction submitted to the selected RTD network.</CardDescription>
 						</CardHeader>
 						<CardContent>
 							<div className="flex flex-col gap-2">

@@ -22,6 +22,8 @@ use rtd_indexer_alt_schema::MIGRATIONS;
 use tokio::fs;
 use tracing::info;
 
+mod writer_lease;
+
 // Define the `GIT_REVISION` const
 bin_version::git_revision!();
 
@@ -52,6 +54,7 @@ async fn main() -> Result<()> {
             indexer_args,
             metrics_args,
             config,
+            require_exclusive_writer,
         } => {
             let is_bounded = indexer_args.last_checkpoint.is_some();
 
@@ -67,6 +70,18 @@ async fn main() -> Result<()> {
                 .registry()
                 .register(uptime(VERSION)?)
                 .context("Failed to register uptime metric.")?;
+
+            // Hold the PostgreSQL session lock throughout setup, ingestion and graceful
+            // shutdown. A competing process must not run migrations or ingest first.
+            let mut exclusive_writer = if require_exclusive_writer {
+                Some(writer_lease::acquire(database_url.clone(), db_args.clone()).await?)
+            } else {
+                None
+            };
+            let mut db_args = db_args;
+            db_args.writer_epoch = exclusive_writer
+                .as_ref()
+                .map(writer_lease::WriterLease::epoch);
 
             let indexer = tokio::select! {
                 _ = terminate() => {
@@ -85,12 +100,34 @@ async fn main() -> Result<()> {
                 ) => {
                     indexer?
                 }
+
+                error = writer_lease::fail_if_ended(exclusive_writer.as_mut()) => {
+                    return Err(error).context("Exclusive Alt writer lock failed during setup");
+                }
             };
 
-            let s_indexer = indexer.run().await?;
-            let s_metrics = metrics.run().await?;
+            let (s_indexer, s_metrics) = tokio::select! {
+                result = async {
+                    let s_indexer = indexer.run().await?;
+                    let s_metrics = metrics.run().await?;
+                    Ok::<_, anyhow::Error>((s_indexer, s_metrics))
+                } => result?,
+                error = writer_lease::fail_if_ended(exclusive_writer.as_mut()) => {
+                    return Err(error).context("Exclusive Alt writer lock failed during startup");
+                }
+            };
 
-            match s_indexer.attach(s_metrics).main().await {
+            let service_result = tokio::select! {
+                result = s_indexer.attach(s_metrics).main() => result,
+                error = writer_lease::fail_if_ended(exclusive_writer.as_mut()) => {
+                    tracing::error!("Exclusive Alt writer lock lost: {error:#}");
+                    std::process::exit(2);
+                }
+            };
+            // The service has stopped all writer tasks before releasing its lock.
+            drop(exclusive_writer);
+
+            match service_result {
                 Ok(()) => {}
                 Err(Error::Terminated) => {
                     if is_bounded {

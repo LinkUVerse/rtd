@@ -4,11 +4,15 @@
 pub use checked::*;
 #[rtd_macros::with_checked_arithmetic]
 mod checked {
+    use move_vm_runtime::natives::extensions::NativeExtensions;
+    use move_vm_runtime::natives::functions::{NativeFunctionTable, NativeFunctions};
+    use move_vm_runtime::runtime::MoveRuntime;
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::{collections::BTreeMap, sync::Arc};
 
     use anyhow::Result;
+    use linku_common::debug_fatal;
     use move_binary_format::file_format::CompiledModule;
     use move_bytecode_verifier::verify_module_with_config_metered;
     use move_bytecode_verifier_meter::{Meter, Scope};
@@ -17,81 +21,95 @@ mod checked {
         runtime::{VMConfig, VMRuntimeLimitsConfig},
         verifier::VerifierConfig,
     };
-    use move_vm_runtime::{
-        move_vm::MoveVM, native_extensions::NativeContextExtensions,
-        native_functions::NativeFunctionTable,
-    };
-    use linku_common::debug_fatal;
     use rtd_move_natives::{object_runtime, transaction_context::TransactionContext};
     use rtd_types::error::RtdErrorKind;
     use rtd_types::metrics::BytecodeVerifierMetrics;
     use rtd_verifier::check_for_verifier_timeout;
     use tracing::instrument;
 
-    use rtd_move_natives::{NativesCostTable, object_runtime::ObjectRuntime};
+    use rtd_move_natives::{
+        NativesCostTable, object_runtime::ObjectRuntime, scratch::ScratchRuntime,
+    };
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::{
         base_types::*,
-        error::ExecutionError,
-        error::{ExecutionErrorKind, RtdError},
-        metrics::LimitsMetrics,
-        storage::ChildObjectResolver,
+        error::{ExecutionError, RtdError},
+        execution_status::ExecutionErrorKind,
+        metrics::ExecutionMetrics,
+        storage::RuntimeObjectResolver,
     };
     use rtd_verifier::verifier::rtd_verify_module_metered_check_timeout_only;
 
-    pub fn new_move_vm(
+    pub fn new_move_runtime(
         natives: NativeFunctionTable,
         protocol_config: &ProtocolConfig,
-    ) -> Result<MoveVM, RtdError> {
-        MoveVM::new_with_config(
-            natives,
-            VMConfig {
-                verifier: protocol_config.verifier_config(/* signing_limits */ None),
-                max_binary_format_version: protocol_config.move_binary_format_version(),
-                runtime_limits_config: VMRuntimeLimitsConfig {
-                    vector_len_max: protocol_config.max_move_vector_len(),
-                    max_value_nest_depth: protocol_config.max_move_value_depth_as_option(),
-                    hardened_otw_check: protocol_config.hardened_otw_check(),
-                },
-                enable_invariant_violation_check_in_swap_loc: !protocol_config
-                    .disable_invariant_violation_check_in_swap_loc(),
-                check_no_extraneous_bytes_during_deserialization: protocol_config
-                    .no_extraneous_module_bytes(),
-                // Don't augment errors with execution state on-chain
-                error_execution_state: false,
-                binary_config: protocol_config.binary_config(None),
-                rethrow_serialization_type_layout_errors: protocol_config
-                    .rethrow_serialization_type_layout_errors(),
-                max_type_to_layout_nodes: protocol_config.max_type_to_layout_nodes_as_option(),
-                variant_nodes: protocol_config.variant_nodes(),
-                deprecate_global_storage_ops_during_deserialization: protocol_config
-                    .deprecate_global_storage_ops_during_deserialization(),
+    ) -> Result<MoveRuntime, RtdError> {
+        let native_functions =
+            NativeFunctions::new(natives).map_err(|_| RtdErrorKind::ExecutionInvariantViolation)?;
+        Ok(MoveRuntime::new(
+            native_functions,
+            vm_config(protocol_config),
+        ))
+    }
+
+    pub fn vm_config(protocol_config: &ProtocolConfig) -> VMConfig {
+        VMConfig {
+            verifier: protocol_config.verifier_config(/* signing_limits */ None),
+            max_binary_format_version: protocol_config.move_binary_format_version(),
+            runtime_limits_config: VMRuntimeLimitsConfig {
+                vector_len_max: protocol_config.max_move_vector_len(),
+                max_value_nest_depth: protocol_config.max_move_value_depth_as_option(),
+                hardened_otw_check: protocol_config.hardened_otw_check(),
+                package_arena_size: protocol_config.package_arena_size_in_bytes_as_option(),
             },
-        )
-        .map_err(|_| RtdErrorKind::ExecutionInvariantViolation.into())
+            enable_invariant_violation_check_in_swap_loc: !protocol_config
+                .disable_invariant_violation_check_in_swap_loc(),
+            check_no_extraneous_bytes_during_deserialization: protocol_config
+                .no_extraneous_module_bytes(),
+            // Don't augment errors with execution state on-chain
+            error_execution_state: false,
+            binary_config: protocol_config.binary_config(None),
+            rethrow_serialization_type_layout_errors: protocol_config
+                .rethrow_serialization_type_layout_errors(),
+            max_type_to_layout_nodes: protocol_config.max_type_to_layout_nodes_as_option(),
+            variant_nodes: protocol_config.variant_nodes(),
+            deprecate_global_storage_ops_during_deserialization: protocol_config
+                .deprecate_global_storage_ops_during_deserialization(),
+            normalize_depth_formula: protocol_config.normalize_depth_formula(),
+            charge_ld_const_abstract_size: protocol_config.charge_ld_const_abstract_size(),
+        }
     }
 
     pub fn new_native_extensions<'r>(
-        child_resolver: &'r dyn ChildObjectResolver,
+        child_resolver: &'r dyn RuntimeObjectResolver,
+        object_funds_resolver: &'r dyn rtd_types::storage::ObjectFundsResolver,
         input_objects: BTreeMap<ObjectID, object_runtime::InputObject>,
         is_metered: bool,
         protocol_config: &'r ProtocolConfig,
-        metrics: Arc<LimitsMetrics>,
+        metrics: Arc<ExecutionMetrics>,
         tx_context: Rc<RefCell<TxContext>>,
-    ) -> NativeContextExtensions<'r> {
+    ) -> Result<NativeExtensions<'r>, ExecutionError> {
         let current_epoch_id: EpochId = tx_context.borrow().epoch();
-        let mut extensions = NativeContextExtensions::default();
-        extensions.add(ObjectRuntime::new(
+        let extensions = NativeExtensions::default();
+        let mut exts = extensions.try_borrow_mut().map_err(|_| {
+            make_invariant_violation!(
+                "Failed to mutably borrow native extensions to populate them right after creating them"
+            )
+        })?;
+        exts.add(ObjectRuntime::new(
             child_resolver,
+            object_funds_resolver,
             input_objects,
             is_metered,
             protocol_config,
             metrics,
             current_epoch_id,
         ));
-        extensions.add(NativesCostTable::from_protocol_config(protocol_config));
-        extensions.add(TransactionContext::new(tx_context));
-        extensions
+        exts.add(NativesCostTable::from_protocol_config(protocol_config));
+        exts.add(ScratchRuntime::new(protocol_config));
+        exts.add(TransactionContext::new(tx_context));
+        drop(exts);
+        Ok(extensions)
     }
 
     /// Given a list of `modules` and an `object_id`, mutate each module's self ID (which must be

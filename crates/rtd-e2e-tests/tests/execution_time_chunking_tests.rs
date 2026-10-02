@@ -2,26 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::identifier::Identifier;
-use std::num::NonZeroU32;
-use std::time::Duration;
 use rtd_config::node::ExecutionTimeObserverConfig;
 use rtd_core::authority::execution_time_estimator::{
     EXTRA_FIELD_EXECUTION_TIME_ESTIMATES_CHUNK_COUNT_KEY, EXTRA_FIELD_EXECUTION_TIME_ESTIMATES_KEY,
 };
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::sim_test;
 use rtd_protocol_config::{
     ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
 };
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::dynamic_field::get_dynamic_field_from_store;
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::execution::ExecutionTimeObservationChunkKey;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rtd_system_state;
 use rtd_types::transaction::{
     SharedObjectMutability, StoredExecutionTimeObservations, TransactionData,
 };
+use std::num::NonZeroU32;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 async fn setup_test_cluster_with_chunking() -> TestCluster {
@@ -185,7 +185,7 @@ async fn create_shared_counter(
         .pop()
         .expect("No gas objects available")
         .1
-        .object_ref();
+        .compute_object_reference();
 
     let mut ptb = ProgrammableTransactionBuilder::new();
     ptb.programmable_move_call(
@@ -209,17 +209,12 @@ async fn create_shared_counter(
 
     let created_obj = response
         .effects
-        .unwrap()
         .created()
-        .iter()
-        .find(|obj| obj.owner.is_shared())
-        .unwrap()
-        .clone();
+        .into_iter()
+        .find(|obj| obj.1.is_shared())
+        .unwrap();
 
-    (
-        created_obj.reference.object_id,
-        created_obj.reference.version,
-    )
+    (created_obj.0.0, created_obj.0.1)
 }
 
 async fn send_transactions(
@@ -240,7 +235,7 @@ async fn send_transactions(
             .pop()
             .expect("No gas objects available")
             .1
-            .object_ref();
+            .compute_object_reference();
 
         let mut ptb = ProgrammableTransactionBuilder::new();
 
@@ -278,7 +273,7 @@ async fn send_transactions(
 
         let res = test_cluster.execute_transaction(signed_tx).await;
         assert_eq!(
-            res.effects.unwrap().executed_epoch(),
+            res.effects.executed_epoch(),
             0,
             "all txns to execute in epoch 0"
         );

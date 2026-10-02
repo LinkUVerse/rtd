@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --simulator --accounts A
+//# init --protocol-version 108 --simulator --accounts A
 
 //# run-jsonrpc
 {
@@ -31,7 +31,7 @@
   "params": []
 }
 
-//# programmable --sender A --inputs object(0x5) object(2,1)
+//# programmable --sender A --inputs object(0x5) object(2,0)
 //> 0: rtd_system::rtd_system::request_withdraw_stake(Input(0), Input(1))
 
 //# create-checkpoint

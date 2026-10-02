@@ -1,38 +1,47 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use anyhow::Context as _;
-use diesel::prelude::*;
-use diesel::sql_types::Bool;
 use futures::future;
-use jsonrpsee::{core::RpcResult, http_client::HttpClient, proc_macros::rpc};
-use move_core_types::language_storage::{StructTag, TypeTag};
-use serde::{Deserialize, Serialize};
-use rtd_indexer_alt_reader::coin_metadata::CoinMetadataKey;
-use rtd_indexer_alt_schema::objects::StoredCoinOwnerKind;
-use rtd_indexer_alt_schema::schema::coin_balance_buckets;
-use rtd_json_rpc_types::{Balance, Coin, Page as PageResponse, RtdCoinMetadata};
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
+use linku_common::ZipDebugEqIteratorExt;
+use move_core_types::language_storage::StructTag;
+use move_core_types::language_storage::TypeTag;
+use rtd_indexer_alt_consistent_store::ObjectByOwnerKey;
+use rtd_indexer_alt_reader::consistent_reader::proto::Balance as ProtoBalance;
+use rtd_indexer_alt_reader::consistent_reader::proto::owner::OwnerKind;
+use rtd_json_rpc_types::Balance;
+use rtd_json_rpc_types::Coin;
+use rtd_json_rpc_types::Page as PageResponse;
+use rtd_json_rpc_types::RtdCoinMetadata;
 use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
-use rtd_sql_macro::sql;
+use rtd_types::RTD_FRAMEWORK_ADDRESS;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::coin::COIN_METADATA_STRUCT_NAME;
+use rtd_types::coin::COIN_MODULE_NAME;
+use rtd_types::coin::COIN_STRUCT_NAME;
 use rtd_types::coin::CoinMetadata;
 use rtd_types::coin_registry::Currency;
+use rtd_types::gas_coin::GAS;
 use rtd_types::object::Object;
-use rtd_types::{
-    base_types::{ObjectID, RtdAddress},
-    gas_coin::GAS,
-};
+use rtd_types::object::Owner;
 
-use crate::{
-    context::Context,
-    data::load_live,
-    error::{InternalContext, RpcError, client_error_to_error_object, invalid_params},
-    paginate::{BcsCursor, Cursor as _, Page},
-};
-
-use super::rpc_module::RpcModule;
+use crate::api::rpc_module::RpcModule;
+use crate::context::Context;
+use crate::data::AddressBalanceCoin;
+use crate::data::load_live;
+use crate::error::InternalContext;
+use crate::error::RpcError;
+use crate::error::invalid_params;
+use crate::paginate::BcsCursor;
+use crate::paginate::Cursor as _;
+use crate::paginate::Page;
 
 #[open_rpc(namespace = "rtdx", tag = "Coin API")]
 #[rpc(server, namespace = "rtdx")]
@@ -61,12 +70,7 @@ trait CoinsApi {
         /// type name for the coin (e.g., 0x168da5bf1f48dafc111b0a488fa454aca95e0b5e::usdc::USDC)
         coin_type: String,
     ) -> RpcResult<Option<RtdCoinMetadata>>;
-}
 
-/// Delegation Coin API for endpoints that are delegated to FN RPC
-#[open_rpc(namespace = "rtdx", tag = "Delegation Coin API")]
-#[rpc(server, client, namespace = "rtdx")]
-trait DelegationCoinsApi {
     /// Return the total coin balance for all coin types, owned by the address owner.
     #[method(name = "getAllBalances")]
     async fn get_all_balances(
@@ -88,7 +92,6 @@ trait DelegationCoinsApi {
 }
 
 pub(crate) struct Coins(pub Context);
-pub(crate) struct DelegationCoins(HttpClient);
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
@@ -99,21 +102,7 @@ pub(crate) enum Error {
     BadType(String, anyhow::Error),
 }
 
-#[derive(Queryable, Debug, Serialize, Deserialize)]
-#[diesel(table_name = coin_balance_buckets)]
-struct BalanceCursor {
-    object_id: Vec<u8>,
-    cp_sequence_number: u64,
-    coin_balance_bucket: u64,
-}
-
-type Cursor = BcsCursor<BalanceCursor>;
-
-impl DelegationCoins {
-    pub(crate) fn new(client: HttpClient) -> Self {
-        Self(client)
-    }
-}
+type Cursor = BcsCursor<Vec<u8>>;
 
 #[async_trait::async_trait]
 impl CoinsApiServer for Coins {
@@ -124,11 +113,18 @@ impl CoinsApiServer for Coins {
         cursor: Option<String>,
         limit: Option<usize>,
     ) -> RpcResult<PageResponse<Coin, String>> {
-        let coin_type_tag = if let Some(coin_type) = coin_type {
-            rtd_types::parse_rtd_type_tag(&coin_type)
+        let inner = if let Some(coin_type) = coin_type {
+            TypeTag::from_str(&coin_type)
                 .map_err(|e| invalid_params(Error::BadType(coin_type, e)))?
         } else {
             GAS::type_tag()
+        };
+
+        let object_type = StructTag {
+            address: RTD_FRAMEWORK_ADDRESS,
+            module: COIN_MODULE_NAME.to_owned(),
+            name: COIN_STRUCT_NAME.to_owned(),
+            type_params: vec![inner.clone()],
         };
 
         let Self(ctx) = self;
@@ -142,22 +138,96 @@ impl CoinsApiServer for Coins {
             None,
         )?;
 
-        // We get all the qualified coin ids first.
-        let coin_id_page = filter_coins(ctx, owner, Some(coin_type_tag), Some(page)).await?;
+        let consistent_reader = ctx.consistent_reader();
 
-        let coin_futures = coin_id_page.data.iter().map(|id| coin_response(ctx, *id));
-
-        let coins = future::join_all(coin_futures)
+        // Coin balances are stored as bitwise negation, so iterating in regular (forward) order
+        // yields highest balances first.
+        let results = consistent_reader
+            .list_owned_objects(
+                None, /* checkpoint */
+                OwnerKind::Address,
+                Some(owner.to_string()),
+                Some(object_type.to_canonical_string(/* with_prefix */ true)),
+                Some(page.limit as u32),
+                page.cursor.as_ref().map(|c| c.0.clone()),
+                None,
+                true,
+            )
             .await
+            .context("Failed to list owned coin objects")
+            .map_err(RpcError::<Error>::from)?;
+
+        let coin_ids: Vec<_> = results
+            .results
+            .iter()
+            .map(|obj_ref| obj_ref.value.0)
+            .collect();
+
+        let coin_futures = coin_ids.iter().map(|id| coin_response(ctx, *id));
+
+        // Fetch real coins and address balance coin concurrently.
+        let (coin_results, address_balance_coin) = tokio::join!(
+            future::join_all(coin_futures),
+            AddressBalanceCoin::by_owner(ctx, owner, inner),
+        );
+
+        let address_balance_coin = address_balance_coin
+            .context("Failed to get address balance coin")
+            .map_err(RpcError::<Error>::from)?
+            .map(AddressBalanceCoin::into_coin)
+            .transpose()
+            .context("Failed to render address balance coin")
+            .map_err(RpcError::<Error>::from)?;
+
+        let mut has_next_page = results.has_next_page;
+
+        // Pair each coin with its cursor token so we can derive the final cursor from
+        // whichever coin ends up last on the page.
+        let mut coins: Vec<(Coin, Vec<u8>)> = coin_results
             .into_iter()
-            .zip(coin_id_page.data)
+            .zip_debug_eq(&coin_ids)
             .map(|(r, id)| r.with_internal_context(|| format!("Failed to get object {id}")))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .zip_debug_eq(results.results.into_iter().map(|e| e.token))
+            .collect();
+
+        if let Some(ab_coin) = address_balance_coin {
+            let ab_token = ObjectByOwnerKey::from_coin_parts(
+                &Owner::AddressOwner(owner),
+                object_type.clone(),
+                ab_coin.balance,
+                ab_coin.coin_object_id,
+            )
+            .encode();
+
+            let include_ab_coin = page
+                .cursor
+                .as_ref()
+                .is_none_or(|cursor| ab_token > cursor.0);
+
+            if include_ab_coin {
+                let pos = coins.partition_point(|(_, t)| t < &ab_token);
+                coins.insert(pos, (ab_coin, ab_token));
+            }
+        }
+
+        has_next_page = has_next_page || coins.len() > page.limit as usize;
+        coins.truncate(page.limit as usize);
+
+        let next_cursor = coins
+            .last()
+            .map(|(_, token)| BcsCursor(token.clone()).encode())
+            .transpose()
+            .context("Failed to encode cursor")
+            .map_err(RpcError::<Error>::from)?;
+
+        let data = coins.into_iter().map(|(coin, _)| coin).collect();
 
         Ok(PageResponse {
-            data: coins,
-            next_cursor: coin_id_page.next_cursor,
-            has_next_page: coin_id_page.has_next_page,
+            data,
+            next_cursor,
+            has_next_page,
         })
     }
 
@@ -180,17 +250,41 @@ impl CoinsApiServer for Coins {
 
         Ok(None)
     }
-}
 
-#[async_trait::async_trait]
-impl DelegationCoinsApiServer for DelegationCoins {
     async fn get_all_balances(&self, owner: RtdAddress) -> RpcResult<Vec<Balance>> {
-        let Self(client) = self;
+        let Self(ctx) = self;
+        let consistent_reader = ctx.consistent_reader();
+        let config = &ctx.config().coins;
 
-        client
-            .get_all_balances(owner)
-            .await
-            .map_err(client_error_to_error_object)
+        let mut all_balances = Vec::new();
+        let mut after_token: Option<Vec<u8>> = None;
+
+        loop {
+            let page = consistent_reader
+                .list_balances(
+                    None,
+                    owner.to_string(),
+                    Some(config.max_page_size as u32),
+                    after_token.clone(),
+                    None,
+                    true,
+                )
+                .await
+                .context("Failed to get all balances")
+                .map_err(RpcError::<Error>::from)?;
+
+            for edge in &page.results {
+                all_balances.push(try_from_proto(edge.value.clone())?);
+            }
+
+            if page.has_next_page {
+                after_token = page.results.last().map(|edge| edge.token.clone());
+            } else {
+                break;
+            }
+        }
+
+        Ok(all_balances)
     }
 
     async fn get_balance(
@@ -198,12 +292,27 @@ impl DelegationCoinsApiServer for DelegationCoins {
         owner: RtdAddress,
         coin_type: Option<String>,
     ) -> RpcResult<Balance> {
-        let Self(client) = self;
+        let Self(ctx) = self;
+        let consistent_reader = ctx.consistent_reader();
 
-        client
-            .get_balance(owner, coin_type)
+        let inner_coin_type = if let Some(coin_type) = coin_type {
+            TypeTag::from_str(&coin_type)
+                .map_err(|e| invalid_params(Error::BadType(coin_type, e)))?
+        } else {
+            GAS::type_tag()
+        };
+
+        let response = consistent_reader
+            .get_balance(
+                None,
+                owner.to_string(),
+                inner_coin_type.to_canonical_string(/* with_prefix */ true),
+            )
             .await
-            .map_err(client_error_to_error_object)
+            .context("Failed to get balance")
+            .map_err(RpcError::<Error>::from)?;
+
+        Ok(try_from_proto(response)?)
     }
 }
 
@@ -217,130 +326,20 @@ impl RpcModule for Coins {
     }
 }
 
-impl RpcModule for DelegationCoins {
-    fn schema(&self) -> Module {
-        DelegationCoinsApiOpenRpc::module_doc()
-    }
-
-    fn into_impl(self) -> jsonrpsee::RpcModule<Self> {
-        self.into_rpc()
-    }
-}
-
-async fn filter_coins(
-    ctx: &Context,
-    owner: RtdAddress,
-    coin_type_tag: Option<TypeTag>,
-    page: Option<Page<Cursor>>,
-) -> Result<PageResponse<ObjectID, String>, RpcError<Error>> {
-    use coin_balance_buckets::dsl as cb;
-
-    let mut conn = ctx
-        .pg_reader()
-        .connect()
-        .await
-        .context("Failed to connect to database")?;
-
-    // We use two aliases of coin_balance_buckets to make the query more readable.
-    let (candidates, newer) = diesel::alias!(
-        coin_balance_buckets as candidates,
-        coin_balance_buckets as newer
-    );
-
-    // Macros to make the query more readable.
-    macro_rules! candidates {
-        ($field:ident) => {
-            candidates.field(cb::$field)
-        };
-    }
-
-    macro_rules! newer {
-        ($field:ident) => {
-            newer.field(cb::$field)
-        };
-    }
-
-    // Construct the basic query first to filter by owner, not deleted and newest rows.
-    let mut query = candidates
-        .select((
-            candidates!(object_id),
-            candidates!(cp_sequence_number),
-            candidates!(coin_balance_bucket).assume_not_null(),
-        ))
-        .left_join(
-            newer.on(candidates!(object_id)
-                .eq(newer!(object_id))
-                .and(candidates!(cp_sequence_number).lt(newer!(cp_sequence_number)))),
-        )
-        .filter(newer!(object_id).is_null())
-        .filter(candidates!(owner_kind).eq(StoredCoinOwnerKind::Fastpath))
-        .filter(candidates!(owner_id).eq(owner.to_vec()))
-        .into_boxed();
-
-    if let Some(coin_type_tag) = coin_type_tag {
-        let serialized_coin_type =
-            bcs::to_bytes(&coin_type_tag).context("Failed to serialize coin type tag")?;
-        query = query.filter(candidates!(coin_type).eq(serialized_coin_type));
-    }
-
-    let (cursor, limit) = page.map_or((None, None), |p| (p.cursor, Some(p.limit)));
-
-    // If the cursor is specified, we filter by it.
-    if let Some(c) = cursor {
-        query = query.filter(sql!(as Bool,
-            "(candidates.coin_balance_bucket, candidates.cp_sequence_number, candidates.object_id) < ({SmallInt}, {BigInt}, {Bytea})",
-            c.coin_balance_bucket as i16,
-            c.cp_sequence_number as i64,
-            c.object_id.clone(),
-        ));
-    }
-
-    // Finally we order by coin_balance_bucket, then by cp_sequence_number, and then by object_id.
-    query = query
-        .order_by(candidates!(coin_balance_bucket).desc())
-        .then_order_by(candidates!(cp_sequence_number).desc())
-        .then_order_by(candidates!(object_id).desc());
-
-    if let Some(limit) = limit {
-        query = query.limit(limit + 1);
-    }
-
-    let mut buckets: Vec<(Vec<u8>, i64, i16)> =
-        conn.results(query).await.context("Failed to query coins")?;
-
-    let mut has_next_page = false;
-
-    if let Some(limit) = limit {
-        // Now gather pagination info.
-        has_next_page = buckets.len() > limit as usize;
-        if has_next_page {
-            buckets.truncate(limit as usize);
-        }
-    }
-
-    let next_cursor = buckets
-        .last()
-        .map(|(object_id, cp_sequence_number, coin_balance_bucket)| {
-            BcsCursor(BalanceCursor {
-                object_id: object_id.clone(),
-                cp_sequence_number: *cp_sequence_number as u64,
-                coin_balance_bucket: *coin_balance_bucket as u64,
-            })
-            .encode()
-        })
-        .transpose()
-        .context("Failed to encode cursor")?;
-
-    let ids = buckets
-        .iter()
-        .map(|(object_id, _, _)| ObjectID::from_bytes(object_id))
-        .collect::<Result<Vec<_>, _>>()
-        .context("Failed to parse object id")?;
-
-    Ok(PageResponse {
-        data: ids,
-        next_cursor,
-        has_next_page,
+fn try_from_proto(proto: ProtoBalance) -> Result<Balance, RpcError<Error>> {
+    let coin_type: TypeTag = proto
+        .coin_type
+        .context("coin type missing")?
+        .parse()
+        .context("invalid coin type")?;
+    Ok(Balance {
+        coin_type: coin_type.to_canonical_string(/* with_prefix */ true),
+        total_balance: proto.total_balance.unwrap_or(0) as u128,
+        // The Consistent Store does not track coin object counts, so the rpc will
+        // always return 1.
+        coin_object_count: 1,
+        locked_balance: HashMap::new(),
+        funds_in_address_balance: proto.address_balance.unwrap_or(0) as u128,
     })
 }
 
@@ -389,23 +388,41 @@ async fn coin_registry_response(
     Ok(Some(currency.into()))
 }
 
+/// Given the inner coin type, i.e 0x2::rtd::RTD, load the CoinMetadata object.
 async fn coin_metadata_response(
     ctx: &Context,
     coin_type: &str,
 ) -> Result<Option<RtdCoinMetadata>, RpcError<Error>> {
-    let coin_type = StructTag::from_str(coin_type)
+    let inner = TypeTag::from_str(coin_type)
         .map_err(|e| invalid_params(Error::BadType(coin_type.to_owned(), e)))?;
 
-    let Some(stored) = ctx
-        .pg_loader()
-        .load_one(CoinMetadataKey(coin_type))
+    let object_type = StructTag {
+        address: RTD_FRAMEWORK_ADDRESS,
+        module: COIN_MODULE_NAME.to_owned(),
+        name: COIN_METADATA_STRUCT_NAME.to_owned(),
+        type_params: vec![inner],
+    };
+
+    let Some(obj_ref) = ctx
+        .consistent_reader()
+        .list_objects_by_type(
+            None,
+            object_type.to_canonical_string(/* with_prefix */ true),
+            Some(1),
+            None,
+            None,
+            false,
+        )
         .await
-        .context("Failed to load info for CoinMetadata")?
+        .context("Failed to load object reference for CoinMetadata")?
+        .results
+        .into_iter()
+        .next()
     else {
         return Ok(None);
     };
 
-    let id = ObjectID::from_bytes(&stored.object_id).context("Failed to parse ObjectID")?;
+    let id = obj_ref.value.0;
 
     let Some(object) = load_live(ctx, id)
         .await

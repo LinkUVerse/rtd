@@ -1,11 +1,11 @@
 ---
-source: crates/move-compiler/tests/move_check_testrtdte.rs
+source: crates/move-compiler/tests/move_check_testsuite.rs
 info:
   flavor: rtd
   edition: legacy
   lint: false
 ---
-error[Rtd E02007]: invalid object declaration
+error[ESC02007]: invalid object declaration
   ┌─ tests/rtd_mode/struct_with_key/key_struct_id_field_incorrect_struct_name.move:6:9
   │
 5 │     struct S has key {

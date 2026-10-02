@@ -1,12 +1,50 @@
 ---
 title: Rtd Move CLI
-description: The Rtd CLI move command provides commands for working with Move source code directly from a terminal or console.
-keywords: [ rtd move, rtd move help, move, move reference, move commands, rtd move commands, use move cli, cli move, create a move project, interact with move project, move project, move project cli ]
+description: >-
+  The Rtd CLI move command provides commands for working with Move source code
+  directly from a terminal or console.
+keywords:
+  - rtd move
+  - rtd move help
+  - move
+  - move reference
+  - move commands
+  - rtd move commands
+  - use move cli
+  - cli move
+  - create a move project
+  - interact with move project
+  - move project
+  - move project cli
+goal:
+  description: 'Reader can look up move cli command syntax, flags, and usage examples'
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - pattern: '```'
+      min: 1
+      label: Has command examples
+    - pattern: 'rtd '
+      min: 2
+      label: Shows CLI command usage
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Rtd Move CLI in Rtd?
+  - What are the available rtd move cli commands?
+  - What flags does rtd move cli support?
+answer: >-
+  The Rtd CLI move command provides commands for working with Move source code
+  directly from a terminal or console.
 ---
 
 The Rtd CLI `move` command provides several commands for working with Move source code. A typical usage of `rtd move` is to compile and test the Move code, or to generate a new Move project by using `rtd move new project_name`, which creates the needed directories and the `Move.toml` file.
 
-<ImportContent source="cli-check-install.mdx" mode="snippet" />
+<ImportContent source="cli-check-install" mode="snippet" />
 
 ## Commands
 
@@ -14,7 +52,7 @@ The Rtd CLI `move` command provides several commands for working with Move sourc
 $ rtd move --help
 ```
 
-<ImportContent source="console-output/rtd-move-help.mdx" mode="snippet" />
+<ImportContent source="console-output/rtd-move-help" mode="snippet" />
 
 ## Examples
 
@@ -32,7 +70,8 @@ $ ls -l smart_contract_test
 ```
 ```sh
 Move.toml
-Sources
+sources
+tests
 ```
 Display the contents of Move.toml file.
 
@@ -43,13 +82,9 @@ $ cat smart_contract_test/Move.toml
 ```sh
 [package]
 name = "smart_contract_test"
-version = "0.0.1"
+edition = "2024"
 
 [dependencies]
-Rtd = { git = "https://github.com/LinkUVerse/rtd.git", subdir = "crates/rtd-framework/packages/rtd-framework", rev = "framework/testnet" }
-
-[addresses]
-smart_contract_test = "0x0"
 ```
 
 ### Build a Move project
@@ -60,7 +95,6 @@ Use `rtd move build` at the root of your Move project to build the package.
 $ rtd move build
 ```
 ```sh
-UPDATING GIT DEPENDENCY https://github.com/LinkUVerse/rtd.git
 INCLUDING DEPENDENCY Rtd
 INCLUDING DEPENDENCY MoveStdlib
 BUILDING smart_contract_test
@@ -74,7 +108,6 @@ Use `rtd move test` to run the tests in a Move package.
 $ rtd move test
 ```
 ```sh
-UPDATING GIT DEPENDENCY https://github.com/LinkUVerse/rtd.git
 INCLUDING DEPENDENCY Rtd
 INCLUDING DEPENDENCY MoveStdlib
 BUILDING smart_contract_test
@@ -82,15 +115,15 @@ Running Move unit tests
 Test result: OK. Total tests: 0; passed: 0; failed: 0
 ```
 
+### Lint a Move project
+
+Use `rtd move lint` to run the Move linter on a package and check for potential issues. The linter runs both generic Move lints and Rtd-specific object-model lints.
+
+```sh
+$ rtd move lint
+```
+
 ### Get test coverage for a module
-
-
-:::caution
-
-This command currently only works on debug builds of the CLI.  Please build the CLI from source to use it.
-
-:::
-
 
 This example uses [`first_package`](https://github.com/LinkUVerse/rtd/tree/main/examples/move/first_package) Move package.
 
@@ -127,4 +160,4 @@ Each command has its own help section. For example:
 $ rtd move build --help
 ```
 
-<ImportContent source="console-output/rtd-move-build-help.mdx" mode="snippet" />
+<ImportContent source="console-output/rtd-move-build-help" mode="snippet" />

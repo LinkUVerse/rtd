@@ -2,45 +2,71 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeMap, path::Path};
-
 use crate::{
-    framework::{CompiledState, MaybeNamedCompiledModule, MoveTestAdapter, run_test_impl},
-    tasks::{EmptyCommand, InitCommand, SyntaxChoice, TaskInput},
+    framework::{
+        CompiledState, MaybeNamedCompiledModule, MoveTestAdapter, PreCompiledDeps, run_test_impl,
+    },
+    tasks::{InitCommand, SyntaxChoice, TaskInput, parse_qualified_module_access},
 };
-use anyhow::{Error, Result, anyhow};
+
+use anyhow::{Error, Result, anyhow, bail};
 use async_trait::async_trait;
 use clap::Parser;
 use move_binary_format::{
     CompiledModule,
     errors::{Location, VMError, VMResult},
+    file_format::{
+        CodeOffset, EnumDefinitionIndex, FieldHandleIndex, LocalIndex, MemberCount, VariantTag,
+    },
 };
-use move_command_line_common::files::verify_and_create_named_address_mapping;
+use move_bytecode_source_map::source_map::FunctionSourceMap;
+use move_bytecode_verifier::{absint::FunctionContext, regex_reference_safety};
+use move_bytecode_verifier_meter::dummy::DummyMeter;
+use move_command_line_common::{
+    files::verify_and_create_named_address_mapping, testing::InstaOptions,
+};
 use move_compiler::{PreCompiledProgramInfo, editions::Edition, shared::PackagePaths};
-use move_core_types::parsing::address::ParsedAddress;
 use move_core_types::{
     account_address::AccountAddress,
-    identifier::IdentStr,
+    identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, TypeTag},
+    parsing::address::ParsedAddress,
+    resolver::ModuleResolver,
     runtime_value::MoveValue,
 };
+use move_regex_borrow_graph::references::Ref;
 use move_stdlib::named_addresses as move_stdlib_named_addresses;
-use move_symbol_pool::Symbol;
-use move_vm_config::runtime::VMConfig;
+use move_vm_config::{runtime::VMConfig, verifier::VerifierConfig};
 use move_vm_runtime::{
-    move_vm::MoveVM,
-    session::{SerializedReturnValues, Session},
+    dev_utils::{
+        gas_schedule::{self, GasStatus},
+        in_memory_test_adapter::InMemoryTestAdapter,
+        storage::{InMemoryStorage, StoredPackage},
+        vm_arguments::ValueFrame,
+        vm_test_adapter::VMTestAdapter,
+    },
+    execution::vm::MoveVM,
+    natives::move_stdlib::{GasParameters, stdlib_native_functions},
+    runtime::MoveRuntime,
+    shared::{gas::GasMeter, linkage_context::LinkageContext},
 };
-use move_vm_test_utils::{InMemoryStorage, gas_schedule::GasStatus};
-use once_cell::sync::Lazy;
-use std::sync::Arc;
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    sync::{Arc, LazyLock},
+};
+
+pub static SWITCH_TO_REGEX_REFERENCE_SAFETY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
 const STD_ADDR: AccountAddress = AccountAddress::ONE;
 
-struct SimpleVMTestAdapter {
+struct SimpleRuntimeTestAdapter {
     compiled_state: CompiledState,
-    storage: InMemoryStorage,
     default_syntax: SyntaxChoice,
+    // NB: We can reuse the in-memory test adapter from the vm runtime tests
+    adapter: InMemoryTestAdapter,
+    // storage: InMemoryStorage,
+    // vm: VirtualMachine,
 }
 
 #[derive(Debug, Parser)]
@@ -49,13 +75,110 @@ pub struct AdapterInitArgs {
     pub edition: Option<Edition>,
 }
 
+#[derive(Debug, Parser, Default)]
+pub struct PublishLinkageArgs {
+    #[arg(long = "location")]
+    pub location: Option<AccountAddress>,
+    #[clap(flatten)]
+    pub linkage: Linkage,
+}
+
+#[derive(Debug, Clone, Parser, Default)]
+pub struct Linkage {
+    #[arg(long = "linkage", value_parser = parse_linkage, num_args(1..))]
+    pub linkage: Vec<(AccountAddress, AccountAddress)>,
+    #[arg(long = "type-origin", value_parser = parse_type_origin, num_args(1..))]
+    pub type_origin: Vec<((AccountAddress, Identifier, Identifier), AccountAddress)>,
+}
+
+impl Linkage {
+    pub fn overlay(&self, mut existing_linkage: LinkageContext) -> VMResult<LinkageContext> {
+        for (original_id, version_id) in self.linkage.iter() {
+            existing_linkage
+                .add_entry(*original_id, *version_id)
+                .map_err(|err| err.finish(Location::Undefined))?;
+        }
+        Ok(existing_linkage)
+    }
+}
+
+impl PublishLinkageArgs {
+    pub fn overlay(&self, existing_linkage: LinkageContext) -> VMResult<LinkageContext> {
+        self.linkage.overlay(existing_linkage)
+    }
+
+    pub fn resolve_publication_location(
+        &self,
+        sender: AccountAddress,
+        linkage: &LinkageContext,
+    ) -> AccountAddress {
+        // 1. Use location if specified; otherwise
+        // 2. Use the sender address (remapped if it exists in the linkage table); otherwise
+        // 3. Use the sender address
+        self.location.unwrap_or(
+            linkage
+                .linkage_table()
+                .get(&sender)
+                .copied()
+                .unwrap_or(sender),
+        )
+    }
+}
+
+fn parse_linkage(s: &str) -> Result<(AccountAddress, AccountAddress)> {
+    let parts: Vec<_> = s.split("=>").collect::<Vec<_>>();
+    if parts.len() != 2 {
+        return Err(anyhow!("Invalid linkage format. Expected 'addr1=>addr2'"));
+    }
+    let addr1 = AccountAddress::from_hex_literal(parts[0])?;
+    let addr2 = AccountAddress::from_hex_literal(parts[1])?;
+    Ok((addr1, addr2))
+}
+
+fn parse_type_origin(
+    s: &str,
+) -> Result<((AccountAddress, Identifier, Identifier), AccountAddress)> {
+    let parts: Vec<_> = s.split("=>").collect::<Vec<_>>();
+    if parts.len() != 2 {
+        return Err(anyhow!(
+            "Invalid type origin format. Expected 'addr1::name::name=>addr2'"
+        ));
+    }
+    let (addr1, mname, tname) = {
+        let tparts: Vec<_> = parts[0].split("::").collect::<Vec<_>>();
+        if tparts.len() != 3 {
+            return Err(anyhow!(
+                "Invalid type origin format. Expected 'addr1::name::name=>addr2'"
+            ));
+        }
+        (
+            AccountAddress::from_hex_literal(tparts[0])?,
+            Identifier::new(tparts[1])?,
+            Identifier::new(tparts[2])?,
+        )
+    };
+    let addr2 = AccountAddress::from_hex_literal(parts[1])?;
+    Ok(((addr1, mname, tname), addr2))
+}
+
+#[derive(Debug, Parser)]
+pub enum Subcommand {
+    ViewAbstractState(ViewAbstractStateCommand),
+}
+
+#[derive(Debug, Parser)]
+pub struct ViewAbstractStateCommand {
+    #[clap(name = "NAME", value_parser = parse_qualified_module_access)]
+    pub name: (ParsedAddress, Identifier, Identifier),
+}
+
 #[async_trait]
-impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
+impl MoveTestAdapter<'_> for SimpleRuntimeTestAdapter {
     type ExtraInitArgs = AdapterInitArgs;
-    type ExtraPublishArgs = EmptyCommand;
+    type ExtraPublishArgs = PublishLinkageArgs;
     type ExtraValueArgs = ();
-    type ExtraRunArgs = EmptyCommand;
-    type Subcommand = EmptyCommand;
+    type ExtraRunArgs = Linkage;
+    type Subcommand = Subcommand;
 
     fn compiled_state(&mut self) -> &mut CompiledState {
         &mut self.compiled_state
@@ -67,10 +190,13 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
 
     async fn init(
         default_syntax: SyntaxChoice,
-        pre_compiled_deps: Option<Arc<PreCompiledProgramInfo>>,
+        pre_compiled_deps: Option<PreCompiledDeps>,
         task_opt: Option<TaskInput<(InitCommand, Self::ExtraInitArgs)>>,
         _path: &Path,
     ) -> (Self, Option<String>) {
+        println!("---- INITIALIZING -------------------------------------------------------------");
+        let pre_compiled_deps = pre_compiled_deps.map(|deps| Arc::clone(LazyLock::force(deps)));
+        println!("grabbing init arguments");
         let (additional_mapping, compiler_edition) = match task_opt.map(|t| t.command) {
             Some((InitCommand { named_addresses }, AdapterInitArgs { edition })) => {
                 let addresses = verify_and_create_named_address_mapping(named_addresses).unwrap();
@@ -79,7 +205,10 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
             }
             None => (BTreeMap::new(), Edition::LEGACY),
         };
+        let switch_to_regex_reference_safety =
+            SWITCH_TO_REGEX_REFERENCE_SAFETY.get().copied().unwrap();
 
+        println!("generating named address map");
         let mut named_address_mapping = move_stdlib_named_addresses();
         for (name, addr) in additional_mapping {
             if named_address_mapping.contains_key(&name) {
@@ -90,53 +219,46 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
             }
             named_address_mapping.insert(name, addr);
         }
+        println!("creating VM");
+        let native_functions =
+            stdlib_native_functions(STD_ADDR, GasParameters::zeros(), /* silent */ false)
+                .map_err(|e| e.finish(Location::Undefined))
+                .expect("Failed to initialize natives");
+        let vm_config = test_vm_config(switch_to_regex_reference_safety);
+        let runtime = MoveRuntime::new(native_functions, vm_config);
+        println!("creating adapter");
         let mut adapter = Self {
             compiled_state: CompiledState::new(
                 named_address_mapping,
                 pre_compiled_deps,
+                MOVE_STDLIB_COMPILED.iter().cloned(),
                 None,
                 Some(compiler_edition),
                 None,
             ),
             default_syntax,
-            storage: InMemoryStorage::new(),
+            adapter: InMemoryTestAdapter::new_with_runtime(runtime),
         };
 
+        println!("doing initial publish");
         adapter
-            .perform_session_action(
-                None,
-                |session, gas_status| {
-                    for module in &*MOVE_STDLIB_COMPILED {
-                        let mut module_bytes = vec![];
-                        module
-                            .serialize_with_version(module.version, &mut module_bytes)
-                            .unwrap();
-
-                        let id = module.self_id();
-                        let sender = *id.address();
-                        session
-                            .publish_module(module_bytes, sender, gas_status)
-                            .unwrap();
-                    }
-                    Ok(())
-                },
-                VMConfig::default(),
-            )
+            .perform_action(None, |inner_adapter, _gas_status| {
+                let move_stdlib = MOVE_STDLIB_COMPILED.clone();
+                let sender = *move_stdlib.first().unwrap().self_id().address();
+                println!("generating stdlib linkage");
+                let linkage_context = LinkageContext::new(BTreeMap::from([(sender, sender)]))?;
+                println!("calling stdlib publish with address {sender:?}");
+                let pkg = StoredPackage::from_module_for_testing_with_linkage(
+                    sender,
+                    linkage_context,
+                    move_stdlib,
+                )
+                .unwrap();
+                let pkg = pkg.into_serialized_package();
+                inner_adapter.publish_package(sender, pkg).unwrap();
+                Ok(())
+            })
             .unwrap();
-        let mut addr_to_name_mapping = BTreeMap::new();
-        for (name, addr) in move_stdlib_named_addresses() {
-            let prev = addr_to_name_mapping.insert(addr, Symbol::from(name));
-            assert!(prev.is_none());
-        }
-        for module in MOVE_STDLIB_COMPILED
-            .iter()
-            .filter(|module| !adapter.compiled_state.is_precompiled_dep(&module.self_id()))
-            .collect::<Vec<_>>()
-        {
-            adapter
-                .compiled_state
-                .add_and_generate_interface_file(module.clone());
-        }
         (adapter, None)
     }
 
@@ -144,26 +266,127 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
         &mut self,
         modules: Vec<MaybeNamedCompiledModule>,
         gas_budget: Option<u64>,
-        _extra_args: Self::ExtraPublishArgs,
+        extra_args: Self::ExtraPublishArgs,
     ) -> Result<(Option<String>, Vec<MaybeNamedCompiledModule>)> {
-        let all_bytes = modules
+        println!("---- PUBLISHING MODULE --------------------------------------------------------");
+        let pub_modules = modules
             .iter()
-            .map(|m| {
-                let mut module_bytes = vec![];
-                m.module
-                    .serialize_with_version(m.module.version, &mut module_bytes)?;
-                Ok(module_bytes)
-            })
-            .collect::<Result<_>>()?;
-
-        let id = modules.first().unwrap().module.self_id();
+            .map(|module| module.module.clone())
+            .collect::<Vec<_>>();
+        println!("collecting ID");
+        let id = pub_modules.first().unwrap().self_id();
+        println!("computing sender");
         let sender = *id.address();
-        match self.perform_session_action(
-            gas_budget,
-            |session, gas_status| session.publish_module_bundle(all_bytes, sender, gas_status),
-            VMConfig::default(),
-        ) {
+        println!("performing publish for {sender}");
+        println!("generating linkage");
+        let linkage_context = extra_args.overlay(self.adapter.generate_linkage_context(
+            sender,
+            sender,
+            &pub_modules,
+        )?)?;
+        let storage_id = extra_args.resolve_publication_location(sender, &linkage_context);
+        println!("linkage: {linkage_context:#?}");
+        println!("publication location: {storage_id}");
+        println!("doing publish");
+        let pkg = StoredPackage::from_module_for_testing_with_linkage(
+            storage_id,
+            linkage_context,
+            pub_modules.clone(),
+        )?;
+        let pkg = pkg.into_serialized_package();
+        let original_id = pkg.original_id;
+        let publish_result = self.perform_action(gas_budget, |inner_adapter, _gas_status| {
+            inner_adapter.publish_package(original_id, pkg)?;
+            println!("done");
+            Ok(())
+        });
+        match publish_result {
             Ok(()) => Ok((None, modules)),
+            Err(e) => Err(anyhow!(
+                "Unable to publish module '{}'. Got VMError: {}",
+                id,
+                format_vm_error(&e)
+            )),
+        }
+    }
+
+    async fn publish_modules_with_calls(
+        &mut self,
+        modules: Vec<MaybeNamedCompiledModule>,
+        calls: Vec<(ModuleId, Identifier, Vec<MoveValue>)>,
+        signers: Vec<ParsedAddress>,
+        gas_budget: Option<u64>,
+        extra_args: Self::ExtraPublishArgs,
+    ) -> Result<(
+        Option<String>,
+        Vec<MaybeNamedCompiledModule>,
+        Vec<ValueFrame>,
+    )> {
+        println!("---- PUBLISHING MODULE WITH CALLS ---------------------------------------------");
+        let pub_modules = modules
+            .iter()
+            .map(|module| module.module.clone())
+            .collect::<Vec<_>>();
+        println!("collecting ID");
+        let id = pub_modules.first().unwrap().self_id();
+        println!("computing sender");
+        let sender = *id.address();
+        println!("performing publish for {sender}");
+        println!("generating linkage");
+        let linkage_context = extra_args.overlay(self.adapter.generate_linkage_context(
+            sender,
+            sender,
+            &pub_modules,
+        )?)?;
+        let storage_id = extra_args.resolve_publication_location(sender, &linkage_context);
+        println!("linkage: {linkage_context:#?}");
+        println!("publication location: {storage_id}");
+        let mut gas_meter = Self::make_gas_status(gas_budget);
+        println!("doing verification");
+        let pkg = StoredPackage::from_module_for_testing_with_linkage(
+            storage_id,
+            linkage_context,
+            pub_modules.clone(),
+        )?;
+        let pkg = pkg.into_serialized_package();
+        let original_id = pkg.original_id;
+        let (verif_pkg, mut publish_vm) = self
+            .perform_action_with_gas(&mut gas_meter, |inner_adapter, _gas_status| {
+                inner_adapter.verify_package(original_id, pkg)
+            })?;
+        println!("doing calls");
+        let signers: Vec<_> = signers
+            .into_iter()
+            .map(|addr| self.compiled_state().resolve_address(&addr))
+            .collect();
+        let call_results = calls
+            .into_iter()
+            .map(|(module, function, txn_args)| {
+                println!("calling {module}::{function}");
+                call_vm_function(
+                    &mut publish_vm,
+                    &module,
+                    &function,
+                    vec![],
+                    signers.clone(),
+                    txn_args,
+                    &mut gas_meter,
+                )
+                .map_err(|e| {
+                    anyhow!(
+                        "Function execution failed with VMError: {}",
+                        format_vm_error(&e)
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        println!("doing publish");
+        let publish_result = self
+            .perform_action_with_gas(&mut gas_meter, |inner_adapter, _gas_status| {
+                inner_adapter.publish_verified_package(sender, verif_pkg)
+            });
+        match publish_result {
+            Ok(()) => Ok((None, modules, call_results)),
             Err(e) => Err(anyhow!(
                 "Unable to publish module '{}'. Got VMError: {}",
                 id,
@@ -180,38 +403,34 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
         signers: Vec<ParsedAddress>,
         txn_args: Vec<MoveValue>,
         gas_budget: Option<u64>,
-        _extra_args: Self::ExtraRunArgs,
-    ) -> Result<(Option<String>, SerializedReturnValues)> {
+        extra_args: Self::ExtraRunArgs,
+    ) -> Result<(Option<String>, ValueFrame)> {
+        println!("---- CALLING FUNCTION ---------------------------------------------------------");
         let signers: Vec<_> = signers
             .into_iter()
             .map(|addr| self.compiled_state().resolve_address(&addr))
             .collect();
-
-        let args = txn_args
-            .iter()
-            .map(|arg| arg.simple_serialize().unwrap())
-            .collect::<Vec<_>>();
-        // TODO rethink testing signer args
-        let args = signers
-            .iter()
-            .map(|a| MoveValue::Signer(*a).simple_serialize().unwrap())
-            .chain(args)
-            .collect();
         let serialized_return_values = self
-            .perform_session_action(
-                gas_budget,
-                |session, gas_status| {
-                    let type_args: Vec<_> = type_arg_tags
-                        .into_iter()
-                        .map(|tag| session.load_type(&tag))
-                        .collect::<VMResult<_>>()?;
+            .perform_action(gas_budget, |inner_adapter, gas_status| {
+                let original_id = *module.address();
+                // TODO: If there are linkage directives, respect them here.
+                println!("generating linkage");
+                let mut linkage =
+                    extra_args.overlay(inner_adapter.get_linkage_context(original_id)?)?;
+                linkage.add_type_arg_addresses_reflexive(&type_arg_tags);
 
-                    session.execute_function_bypass_visibility(
-                        module, function, type_args, args, gas_status, None,
-                    )
-                },
-                test_vm_config(),
-            )
+                println!("generating vm instance");
+                let mut vm_instance = inner_adapter.make_vm(linkage)?;
+                call_vm_function(
+                    &mut vm_instance,
+                    module,
+                    function,
+                    type_arg_tags,
+                    signers,
+                    txn_args,
+                    gas_status,
+                )
+            })
             .map_err(|e| {
                 anyhow!(
                     "Function execution failed with VMError: {}",
@@ -221,12 +440,120 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
         Ok((None, serialized_return_values))
     }
 
-    #[allow(clippy::diverging_sub_expression)]
     async fn handle_subcommand(
         &mut self,
-        _: TaskInput<Self::Subcommand>,
+        task: TaskInput<Self::Subcommand>,
     ) -> Result<Option<String>> {
-        unimplemented!()
+        let TaskInput {
+            command,
+            name: _,
+            number: _,
+            start_line: _,
+            command_lines_stop: _,
+            stop_line: _,
+            data: _,
+            task_text: _,
+            unattached_comments_before: _,
+            unattached_comments_after: _,
+        } = task;
+        match command {
+            Subcommand::ViewAbstractState(view_abstract_state_command) => {
+                let vm_config = self.adapter.vm_config();
+                if !vm_config.verifier.switch_to_regex_reference_safety {
+                    return Ok(Some(
+                        "view-abstract-state subcommand is only available with regex \
+                         reference safety"
+                            .to_string(),
+                    ));
+                }
+                let ViewAbstractStateCommand {
+                    name: (raw_addr, module, function),
+                } = view_abstract_state_command;
+                let addr = self.compiled_state().resolve_address(&raw_addr);
+                let module_id = ModuleId::new(addr, module);
+                let Some(module) = self
+                    .adapter
+                    .storage()
+                    .get_module(&module_id)
+                    .ok()
+                    .flatten()
+                    .and_then(|bytes| {
+                        CompiledModule::deserialize_with_config(&bytes, &vm_config.binary_config)
+                            .ok()
+                    })
+                else {
+                    bail!("Module '{}' not found", module_id);
+                };
+                let Some((fdef_idx, fdef)) = module.find_function_def_by_name(function.as_str())
+                else {
+                    bail!(
+                        "Function '{}' not found in module '{}'",
+                        function,
+                        module_id
+                    );
+                };
+                let fhandle = module.function_handle_at(fdef.function);
+                let Some(code) = &fdef.code else {
+                    return Err(anyhow!(
+                        "Cannot analyze native function '{module_id}::{function}'",
+                    ));
+                };
+                let function_context = FunctionContext::new(&module, fdef_idx, code, fhandle);
+
+                let verifier_config = &vm_config.verifier;
+                let states =
+                    move_bytecode_verifier::regex_reference_safety::verify_and_return_states(
+                        verifier_config,
+                        &module,
+                        &function_context,
+                        &mut DummyMeter,
+                    )?;
+
+                // Create a dummy source map for the module to get local/field names
+                let Some(source_map) = self.compiled_state.source_map(&module_id) else {
+                    bail!("Source map not found for module '{}'", module_id);
+                };
+                let Ok(function_source_map) = source_map.get_function_source_map(fdef_idx) else {
+                    bail!(
+                        "Function source map not found for function '{}::{}'",
+                        module_id,
+                        function
+                    )
+                };
+
+                // Serialize each state
+                let mut serializer =
+                    SourceMapRegexStateSerializer::new(&module, function_source_map);
+                let label_for_offset: BTreeMap<CodeOffset, String> = function_source_map
+                    .labels
+                    .iter()
+                    .map(|(label, offset)| (*offset, label.0.to_string()))
+                    .collect();
+                let serializable_states: BTreeMap<_, _> = states
+                    .into_iter()
+                    .map(|(offset, state)| {
+                        let is_ir = self.compiled_state.syntax_choice(&module_id)
+                            == Some(&SyntaxChoice::IR);
+                        // IR syntax ==> blocks has a label
+                        // All IR blocks must have a label
+                        debug_assert!(
+                            !is_ir || label_for_offset.contains_key(&offset),
+                            "IR source should have a label for every block offset, \
+                             but offset {offset} has no label"
+                        );
+                        let key = label_for_offset
+                            .get(&offset)
+                            .cloned()
+                            .unwrap_or_else(|| offset.to_string());
+                        (key, state.pre.to_serializable(&mut serializer))
+                    })
+                    .collect();
+
+                let json = serde_json::to_string_pretty(&serializable_states)
+                    .map_err(|e| anyhow!("Failed to serialize states: {}", e))?;
+                Ok(Some(json))
+            }
+        }
     }
 
     async fn process_error(&self, err: Error) -> Error {
@@ -237,7 +564,13 @@ impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
 pub fn format_vm_error(e: &VMError) -> String {
     let location_string = match e.location() {
         Location::Undefined => "undefined".to_owned(),
+        Location::Package(id) => format!("0x{}", id.short_str_lossless()),
         Location::Module(id) => format!("0x{}::{}", id.address().short_str_lossless(), id.name()),
+    };
+    let message = if let Some(msg) = e.message() {
+        format!("\n    message: {:?},", msg)
+    } else {
+        "".to_string()
     };
     format!(
         "{{
@@ -245,7 +578,7 @@ pub fn format_vm_error(e: &VMError) -> String {
     sub_status: {sub_status:?},
     location: {location_string},
     indices: {indices:?},
-    offsets: {offsets:?},
+    offsets: {offsets:?},{message}
 }}",
         major_status = e.major_status(),
         sub_status = e.sub_status(),
@@ -253,49 +586,94 @@ pub fn format_vm_error(e: &VMError) -> String {
         // TODO maybe include source map info?
         indices = e.indices(),
         offsets = e.offsets(),
+        message = message,
     )
 }
 
-impl SimpleVMTestAdapter {
-    fn perform_session_action<Ret>(
+impl SimpleRuntimeTestAdapter {
+    fn perform_action<Ret>(
         &mut self,
         gas_budget: Option<u64>,
-        f: impl FnOnce(&mut Session<&InMemoryStorage>, &mut GasStatus) -> VMResult<Ret>,
-        vm_config: VMConfig,
+        f: impl FnOnce(&mut dyn VMTestAdapter<InMemoryStorage>, &mut GasStatus) -> VMResult<Ret>,
     ) -> VMResult<Ret> {
-        // start session
-        let vm = MoveVM::new_with_config(
-            move_stdlib_natives::all_natives(
-                STD_ADDR,
-                // TODO: come up with a rtdtable gas schedule
-                move_stdlib_natives::GasParameters::zeros(),
-                /* silent */ false,
-            ),
-            vm_config,
-        )
-        .unwrap();
-        let (mut session, mut gas_status) = {
-            let gas_status = move_cli::sandbox::utils::get_gas_status(
-                &move_vm_test_utils::gas_schedule::INITIAL_COST_SCHEDULE,
-                gas_budget,
-            )
-            .unwrap();
-            let session = vm.new_session(&self.storage);
-            (session, gas_status)
-        };
+        let mut gas_status = Self::make_gas_status(gas_budget);
+        self.perform_action_with_gas(&mut gas_status, f)
+    }
 
+    fn make_gas_status<'gas>(gas_budget: Option<u64>) -> GasStatus<'gas> {
+        println!("creating gas_status");
+        move_cli::sandbox::utils::get_gas_status(&gas_schedule::INITIAL_COST_SCHEDULE, gas_budget)
+            .unwrap()
+    }
+
+    fn perform_action_with_gas<Ret>(
+        &mut self,
+        gas_status: &mut GasStatus,
+        f: impl FnOnce(&mut dyn VMTestAdapter<InMemoryStorage>, &mut GasStatus) -> VMResult<Ret>,
+    ) -> VMResult<Ret> {
         // perform op
-        let res = f(&mut session, &mut gas_status)?;
-
-        // save changeset
-        // TODO support events
-        let changeset = session.finish().0?;
-        self.storage.apply(changeset).unwrap();
+        println!("performing operation");
+        let res = f(&mut self.adapter, gas_status)?;
         Ok(res)
     }
 }
 
-pub static PRECOMPILED_MOVE_STDLIB: Lazy<PreCompiledProgramInfo> = Lazy::new(|| {
+fn test_vm_config(switch_to_regex_reference_safety: bool) -> VMConfig {
+    VMConfig {
+        enable_invariant_violation_check_in_swap_loc: false,
+        deprecate_global_storage_ops_during_deserialization: true,
+        binary_config: move_binary_format::binary_config::BinaryConfig::legacy_with_flags(
+            /* check_no_extraneous_bytes */ true, /* deprecate_global_storage_ops */ true,
+        ),
+        verifier: VerifierConfig {
+            switch_to_regex_reference_safety,
+            ..VerifierConfig::default()
+        },
+
+        ..VMConfig::new_for_test(/* allow_unpublishable_code_execution */ false, None)
+    }
+}
+
+fn call_vm_function(
+    vm_instance: &mut MoveVM<'_>,
+    module: &ModuleId,
+    function: &IdentStr,
+    type_arg_tags: Vec<TypeTag>,
+    signers: Vec<AccountAddress>,
+    txn_args: Vec<MoveValue>,
+    gas_meter: &mut impl GasMeter,
+) -> VMResult<ValueFrame> {
+    println!("Creating type arguments");
+    let type_args: Vec<_> = type_arg_tags
+        .into_iter()
+        .map(|tag| vm_instance.load_type(&tag))
+        .collect::<VMResult<_>>()?;
+
+    println!("Creating args");
+
+    let args = signers
+        .into_iter()
+        .map(MoveValue::Signer)
+        .chain(txn_args)
+        .map(|arg| arg.simple_serialize().unwrap())
+        .collect::<Vec<_>>();
+
+    println!("Doing call");
+    let result = ValueFrame::serialized_call(
+        vm_instance,
+        module,
+        function,
+        type_args,
+        args,
+        gas_meter,
+        None,
+        true, /* bypass_declared_entry_check */
+    );
+    println!("Done calling");
+    result
+}
+
+pub static MOVE_STDLIB_PROGRAM_INFO: LazyLock<Arc<PreCompiledProgramInfo>> = LazyLock::new(|| {
     let program_res = move_compiler::construct_pre_compiled_lib(
         vec![PackagePaths {
             name: None,
@@ -304,13 +682,12 @@ pub static PRECOMPILED_MOVE_STDLIB: Lazy<PreCompiledProgramInfo> = Lazy::new(|| 
         }],
         None,
         None,
-        false,
         move_compiler::Flags::empty(),
         None,
     )
     .unwrap();
     match program_res {
-        Ok(modules_info) => modules_info,
+        Ok(modules_info) => Arc::new(modules_info),
         Err((files, errors)) => {
             eprintln!("!!!Standard library failed to compile!!!");
             move_compiler::diagnostics::report_diagnostics(&files, errors)
@@ -318,7 +695,7 @@ pub static PRECOMPILED_MOVE_STDLIB: Lazy<PreCompiledProgramInfo> = Lazy::new(|| 
     }
 });
 
-static MOVE_STDLIB_COMPILED: Lazy<Vec<CompiledModule>> = Lazy::new(|| {
+static MOVE_STDLIB_COMPILED: LazyLock<Vec<CompiledModule>> = LazyLock::new(|| {
     let (files, units_res) = move_compiler::Compiler::from_files(
         None,
         move_stdlib::source_files(),
@@ -343,19 +720,99 @@ static MOVE_STDLIB_COMPILED: Lazy<Vec<CompiledModule>> = Lazy::new(|| {
     }
 });
 
-fn test_vm_config() -> VMConfig {
-    VMConfig {
-        enable_invariant_violation_check_in_swap_loc: false,
-        ..Default::default()
-    }
+#[tokio::main]
+pub async fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    SWITCH_TO_REGEX_REFERENCE_SAFETY.set(false).unwrap();
+    run_test_impl::<SimpleRuntimeTestAdapter>(path, Some(&MOVE_STDLIB_PROGRAM_INFO), None).await
 }
 
 #[tokio::main]
-pub async fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    run_test_impl::<SimpleVMTestAdapter>(
-        path,
-        Some(Arc::new(PRECOMPILED_MOVE_STDLIB.clone())),
-        None,
-    )
-    .await
+pub async fn run_test_with_regex_reference_safety(
+    path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    SWITCH_TO_REGEX_REFERENCE_SAFETY.set(true).unwrap();
+    let mut options = InstaOptions::new();
+    if path
+        .components()
+        .any(|c| c.as_os_str() == "reference_safety")
+    {
+        options.suffix("regex");
+    }
+    run_test_impl::<SimpleRuntimeTestAdapter>(path, Some(&MOVE_STDLIB_PROGRAM_INFO), Some(options))
+        .await
+}
+
+//**************************************************************************************************
+// StateSerializer Implementation
+//**************************************************************************************************
+
+pub struct SourceMapRegexStateSerializer<'a> {
+    module: &'a CompiledModule,
+    function_source_map: &'a FunctionSourceMap,
+}
+
+impl<'a> SourceMapRegexStateSerializer<'a> {
+    pub fn new(module: &'a CompiledModule, function_source_map: &'a FunctionSourceMap) -> Self {
+        Self {
+            module,
+            function_source_map,
+        }
+    }
+}
+
+impl regex_reference_safety::serializable_state::StateSerializer
+    for SourceMapRegexStateSerializer<'_>
+{
+    fn local_root(&mut self, _: Ref) -> String {
+        "ROOT".to_owned()
+    }
+
+    fn ref_(&mut self, idx: LocalIndex, _: Ref) -> String {
+        format!("r#{}", self.local(idx))
+    }
+
+    fn local(&mut self, idx: LocalIndex) -> String {
+        self.function_source_map
+            .get_parameter_or_local_name(idx as u64)
+            .map(|(name, _)| name)
+            .unwrap_or_else(|| format!("local#{}", idx))
+    }
+
+    fn label_local(&mut self, idx: LocalIndex) -> String {
+        self.function_source_map
+            .get_parameter_or_local_name(idx as u64)
+            .map(|(name, _)| name)
+            .unwrap_or_else(|| format!("local#{}", idx))
+    }
+
+    fn label_field(&mut self, idx: FieldHandleIndex) -> String {
+        let field_handle = self.module.field_handle_at(idx);
+        let struct_def = self.module.struct_def_at(field_handle.owner);
+        let struct_handle = self.module.datatype_handle_at(struct_def.struct_handle);
+        let struct_name = self.module.identifier_at(struct_handle.name);
+        let field_name = struct_def
+            .field(field_handle.field as usize)
+            .map(|field_def| self.module.identifier_at(field_def.name).to_string())
+            .unwrap_or_else(|| format!("field#{}", field_handle.field));
+        format!("{}.{}", struct_name, field_name)
+    }
+
+    fn label_variant_field(
+        &mut self,
+        enum_def_idx: EnumDefinitionIndex,
+        tag: VariantTag,
+        field_idx: MemberCount,
+    ) -> String {
+        let enum_def = self.module.enum_def_at(enum_def_idx);
+        let enum_handle = self.module.datatype_handle_at(enum_def.enum_handle);
+        let enum_name = self.module.identifier_at(enum_handle.name);
+        let variant_def = self.module.variant_def_at(enum_def_idx, tag);
+        let variant_name = self.module.identifier_at(variant_def.variant_name);
+        let field_name = variant_def
+            .fields
+            .get(field_idx as usize)
+            .map(|field_def| self.module.identifier_at(field_def.name).to_string())
+            .unwrap_or_else(|| format!("field#{}", field_idx));
+        format!("{}::{}.{}", enum_name, variant_name, field_name)
+    }
 }

@@ -1,0 +1,15 @@
+---
+title: "Oracle Safety for High-Stakes Consumers"
+sidebar_label: Oracle Safety
+description: Oracle integration status and requirements for RTD.
+keywords:
+  - RTD
+  - oracle safety
+---
+# Oracle Safety for High-Stakes Consumers
+
+Oracle prices originate outside a blockchain and need an independently verified feed contract and update service before a Move application can consume them. This RTD fork has **no verified Pyth or Switchboard deployment**, feed ID, price object, oracle SDK, or public RTD Testnet integration. RTD has not launched a public Mainnet.
+
+The former examples and observed prices on this page were inherited from upstream Sui material. They must not be treated as RTD feeds, prices, contract addresses, or transaction results. In particular, a Sui `SUI/USD` price is not an `RTD/USD` price.
+
+For a future RTD oracle integration, confirm provider support for the actual RTD chain ID, deploy the required contracts, verify signed updates and their object IDs on that chain, and test freshness, confidence, replay protection, failure behavior, and transaction outcomes. See [RTD networks](/develop/rtd-architecture/networks).

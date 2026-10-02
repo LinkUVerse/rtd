@@ -1,15 +1,15 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
 use rtd_json_rpc_types::RtdMoveNormalizedFunction;
 use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
 use rtd_types::base_types::ObjectID;
 
+use crate::api::rpc_module::RpcModule;
 use crate::context::Context;
-
-use super::rpc_module::RpcModule;
 
 mod error;
 mod response;

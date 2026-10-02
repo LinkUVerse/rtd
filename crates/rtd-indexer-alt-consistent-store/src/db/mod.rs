@@ -2,22 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 #![allow(dead_code)]
 
-use std::{
-    cmp,
-    collections::BTreeMap,
-    marker,
-    ops::{Bound, RangeBounds, RangeInclusive},
-    path::Path,
-    sync::{Arc, RwLock},
-};
+use std::cmp;
+use std::collections::BTreeMap;
+use std::marker;
+use std::ops::Bound;
+use std::ops::RangeBounds;
+use std::ops::RangeInclusive;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use anyhow::Context;
 use bincode::Encode;
-use rocksdb::{AsColumnFamilyRef, properties};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use rocksdb::AsColumnFamilyRef;
+use rocksdb::properties;
 use rtd_indexer_alt_framework::store::CommitterWatermark;
+use serde::Deserialize;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
-use self::error::Error;
+use crate::db::error::Error;
 
 pub(crate) mod config;
 pub(crate) mod error;
@@ -30,6 +34,10 @@ const WATERMARK_CF: &str = "$watermark";
 
 /// Name of the column family the database adds, to track restoration progress.
 const RESTORE_CF: &str = "$restore";
+
+/// Name of the column family the database adds, to record the chain_id that each pipeline has
+/// been indexing data for.
+const CHAIN_ID_CF: &str = "$chain_id";
 
 // Constants for periodic metrics reporting
 const METRICS_ERROR: i64 = -1;
@@ -111,6 +119,11 @@ struct Inner {
     #[covariant]
     restore_cf: Arc<rocksdb::BoundColumnFamily<'this>>,
 
+    /// ColumnFamily in `db` that per-pipeline chain_ids are written to.
+    #[borrows(db)]
+    #[covariant]
+    chain_id_cf: Arc<rocksdb::BoundColumnFamily<'this>>,
+
     /// Snapshots from `db`, ordered by checkpoint sequence number, along with their watermarks.
     #[borrows()]
     #[covariant]
@@ -163,18 +176,20 @@ impl Db {
     /// Open the database at `path`, with the given `capacity` for snapshots.
     ///
     /// `options` are passed to RocksDB to configure the database, and `cfs` denotes the column
-    /// families to open. The database will inject its own column family for watermarks, and set
-    /// the option to create missing column families.
+    /// families to open. The database will inject its own column families for internal bookkeeping
+    /// (watermarks, restore progress, chain ID), and set the option to create missing column
+    /// families.
     pub(crate) fn open<'c>(
         path: impl AsRef<Path>,
         mut options: rocksdb::Options,
         capacity: usize,
         cfs: impl IntoIterator<Item = (&'c str, rocksdb::Options)>,
     ) -> Result<Self, Error> {
-        // Add a column family for watermarks, which are managed by the database.
+        // Add column families managed by the database.
         let mut cfs: Vec<_> = cfs.into_iter().collect();
         cfs.push((WATERMARK_CF, rocksdb::Options::default()));
         cfs.push((RESTORE_CF, rocksdb::Options::default()));
+        cfs.push((CHAIN_ID_CF, rocksdb::Options::default()));
         options.create_missing_column_families(true);
 
         let db = rocksdb::DB::open_cf_with_opts(&options, path, cfs)?;
@@ -183,6 +198,7 @@ impl Db {
             db,
             |db| db.cf_handle(WATERMARK_CF).context("WATERMARK_CF not found"),
             |db| db.cf_handle(RESTORE_CF).context("RESTORE_CF not found"),
+            |db| db.cf_handle(CHAIN_ID_CF).context("CHAIN_ID_CF not found"),
             BTreeMap::new(),
         )?;
 
@@ -355,6 +371,67 @@ impl Db {
             Ok(Some(
                 bcs::from_bytes(&watermark).context("Failed to deserialize watermark")?,
             ))
+        })
+    }
+
+    /// Check whether `pipeline` can accept data for the chain identified by `chain_id`.
+    ///
+    /// On the first call for a pipeline this records the chain_id and returns `true`. On
+    /// subsequent calls it returns `true` only if `chain_id` matches the previously recorded
+    /// value. This guards against pointing the indexer at a database that was previously
+    /// populated with data from a different chain.
+    pub(crate) fn accepts_chain_id(
+        &self,
+        pipeline: &str,
+        chain_id: [u8; 32],
+    ) -> Result<bool, Error> {
+        self.0.read().expect("poisoned").with(|f| {
+            let p = key::encode(pipeline.as_bytes());
+
+            match f.db.get_pinned_cf(f.chain_id_cf, &p)? {
+                Some(existing) => {
+                    let stored_len = existing.len();
+                    let stored: [u8; 32] = existing.as_ref().try_into().map_err(|_| {
+                        Error::Internal(anyhow::anyhow!(
+                            "stored chain_id for pipeline {pipeline:?} has wrong length: {stored_len}",
+                        ))
+                    })?;
+                    Ok(stored == chain_id)
+                }
+                None => {
+                    let mut batch = rocksdb::WriteBatch::default();
+                    batch.put_cf(f.chain_id_cf, &p, chain_id);
+                    f.db.write_opt(batch, &sync_write_options())?;
+                    Ok(true)
+                }
+            }
+        })
+    }
+
+    /// Return the chain ID only when every required pipeline has recorded the
+    /// same identity. A partially restored or mixed-chain store is unready.
+    pub(crate) fn common_chain_id(&self, pipelines: &[&str]) -> Result<Option<[u8; 32]>, Error> {
+        self.0.read().expect("poisoned").with(|f| {
+            let mut common = None;
+            for pipeline in pipelines {
+                let key = key::encode(pipeline.as_bytes());
+                let Some(stored) = f.db.get_pinned_cf(f.chain_id_cf, &key)? else {
+                    return Ok(None);
+                };
+                let chain_id: [u8; 32] = stored.as_ref().try_into().map_err(|_| {
+                    Error::Internal(anyhow::anyhow!(
+                        "stored chain_id for pipeline {pipeline:?} has wrong length: {}",
+                        stored.len()
+                    ))
+                })?;
+                if common.is_some_and(|existing| existing != chain_id) {
+                    return Err(Error::Internal(anyhow::anyhow!(
+                        "consistent pipelines have different chain IDs"
+                    )));
+                }
+                common = Some(chain_id);
+            }
+            Ok(common)
         })
     }
 
@@ -782,18 +859,6 @@ impl From<CommitterWatermark> for Watermark {
     }
 }
 
-/// Retrieves a RocksDB property from db and maps it to a metric value.
-fn cf_property_int_to_metric(
-    db: &rocksdb::DB,
-    cf: &impl AsColumnFamilyRef,
-    property_name: &std::ffi::CStr,
-) -> i64 {
-    match db.property_int_value_cf(cf, property_name) {
-        Ok(Some(value)) => value.min(i64::MAX as u64) as i64,
-        Ok(None) | Err(_) => METRICS_ERROR,
-    }
-}
-
 impl Default for RocksMetrics {
     fn default() -> Self {
         Self {
@@ -813,6 +878,18 @@ impl Default for RocksMetrics {
             num_running_compactions: METRICS_ERROR,
             num_running_flushes: METRICS_ERROR,
         }
+    }
+}
+
+/// Retrieves a RocksDB property from db and maps it to a metric value.
+fn cf_property_int_to_metric(
+    db: &rocksdb::DB,
+    cf: &impl AsColumnFamilyRef,
+    property_name: &std::ffi::CStr,
+) -> i64 {
+    match db.property_int_value_cf(cf, property_name) {
+        Ok(Some(value)) => value.min(i64::MAX as u64) as i64,
+        Ok(None) | Err(_) => METRICS_ERROR,
     }
 }
 
@@ -1111,8 +1188,39 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_common_chain_id_requires_all_pipelines_and_survives_reopen() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        let pipelines = [
+            "address_balances",
+            "balances",
+            "object_by_owner",
+            "object_by_type",
+        ];
+        let chain_id = [7u8; 32];
+
+        {
+            let db = Db::open(&path, opts(), 4, cfs()).unwrap();
+            assert_eq!(db.common_chain_id(&pipelines).unwrap(), None);
+            for pipeline in &pipelines[..3] {
+                assert!(db.accepts_chain_id(pipeline, chain_id).unwrap());
+            }
+            assert_eq!(db.common_chain_id(&pipelines).unwrap(), None);
+            assert!(db.accepts_chain_id(pipelines[3], chain_id).unwrap());
+            assert_eq!(db.common_chain_id(&pipelines).unwrap(), Some(chain_id));
+        }
+
+        let db = Db::open(&path, opts(), 4, cfs()).unwrap();
+        assert_eq!(db.common_chain_id(&pipelines).unwrap(), Some(chain_id));
+        assert!(!db.accepts_chain_id(pipelines[3], [8u8; 32]).unwrap());
+        assert!(db.accepts_chain_id("unexpected", [8u8; 32]).unwrap());
+        assert!(db.common_chain_id(&[pipelines[0], "unexpected"]).is_err());
+    }
+
+    #[test]
     fn test_forward_iteration() {
-        use Bound::{Excluded as E, Unbounded as U};
+        use Bound::Excluded as E;
+        use Bound::Unbounded as U;
 
         let d = tempfile::tempdir().unwrap();
         let db = Db::open(d.path().join("db"), opts(), 4, cfs()).unwrap();
@@ -1408,7 +1516,8 @@ pub(crate) mod tests {
 
     #[test]
     fn test_reverse_iteration() {
-        use Bound::{Excluded as E, Unbounded as U};
+        use Bound::Excluded as E;
+        use Bound::Unbounded as U;
 
         let d = tempfile::tempdir().unwrap();
         let db = Db::open(d.path().join("db"), opts(), 4, cfs()).unwrap();
@@ -1714,5 +1823,68 @@ pub(crate) mod tests {
         // But for the other pipelines, it's possible to resume restore.
         db.restore_at("tess", wm(10)).unwrap();
         db.restore_at("tesu", wm(30)).unwrap();
+    }
+
+    #[test]
+    fn test_forward_skip() {
+        use Bound::Unbounded as U;
+
+        let d = tempfile::tempdir().unwrap();
+        let db = Db::open(d.path().join("db"), opts(), 4, cfs()).unwrap();
+        let cf = db.cf("test").unwrap();
+
+        // Insert keys: 0, 2, 4, 6, 8 with values 1, 3, 5, 7, 9
+        let mut batch = rocksdb::WriteBatch::default();
+        for i in (0u64..10).step_by(2) {
+            batch.put_cf(&cf, key::encode(&i), bcs::to_bytes(&(i + 1)).unwrap());
+        }
+        db.write("test", wm(0), batch).unwrap();
+        db.take_snapshot(wm(0));
+
+        let mut iter: iter::FwdIter<u64, u64> = db.iter(0, &cf, (U::<u64>, U)).unwrap();
+        // let mut iter = db.iter(0, &cf, (U::<u64>, U::<u64>)).unwrap();
+
+        // Skip past prefix that covers keys 4, 6 (e.g., skip to first key >= 7)
+        // This tests the skip primitive
+        iter.skip_past(key::encode(&7u64));
+
+        // Should land on 8
+        let (k, v) = iter.next().unwrap().unwrap();
+        assert_eq!((k, v), (8, 9));
+
+        // Skip past end
+        let mut iter: iter::FwdIter<u64, u64> = db.iter(0, &cf, (U::<u64>, U)).unwrap();
+        iter.skip_past(key::encode(&100u64));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_reverse_skip() {
+        use Bound::Unbounded as U;
+
+        let d = tempfile::tempdir().unwrap();
+        let db = Db::open(d.path().join("db"), opts(), 4, cfs()).unwrap();
+        let cf = db.cf("test").unwrap();
+
+        // Insert keys: 1, 3, 5, 7, 9 with values 2, 4, 6, 8, 10
+        let mut batch = rocksdb::WriteBatch::default();
+        for i in (1u64..10).step_by(2) {
+            batch.put_cf(&cf, key::encode(&i), bcs::to_bytes(&(i + 1)).unwrap());
+        }
+        db.write("test", wm(0), batch).unwrap();
+        db.take_snapshot(wm(0));
+
+        // Create iterator, seek to start
+        let mut iter: iter::RevIter<u64, u64> = db.iter_rev(0, &cf, (U::<u64>, U)).unwrap();
+
+        // Skip to last key before 6
+        iter.skip_past(key::encode(&6u64));
+        let (k, v) = iter.next().unwrap().unwrap();
+        assert_eq!((k, v), (5, 6));
+
+        // Reset and skip past end
+        let mut iter: iter::RevIter<u64, u64> = db.iter_rev(0, &cf, (U::<u64>, U)).unwrap();
+        iter.skip_past(key::encode(&0u64));
+        assert!(iter.next().is_none());
     }
 }

@@ -4,13 +4,14 @@
 use super::*;
 use crate::authority::authority_tests::init_state_with_ids_and_object_basics;
 use bcs;
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_types::{
     base_types::FullObjectRef, execution_status::ExecutionStatus,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     utils::to_sender_signed_transaction,
 };
 
-use authority_tests::send_and_confirm_transaction;
+use authority_tests::submit_and_execute;
 use move_core_types::{account_address::AccountAddress, ident_str};
 use rtd_types::{
     crypto::{AccountKeyPair, get_key_pair},
@@ -27,7 +28,9 @@ async fn test_batch_transaction_ok() -> anyhow::Result<()> {
     const TOTAL: usize = N + 1;
     let all_ids = (0..TOTAL).map(|_| ObjectID::random()).collect::<Vec<_>>();
     let (authority_state, package) = init_state_with_ids_and_object_basics(
-        [sender; TOTAL].into_iter().zip(all_ids.clone().into_iter()),
+        [sender; TOTAL]
+            .into_iter()
+            .zip_debug_eq(all_ids.clone().into_iter()),
     )
     .await;
     let rgp = authority_state.reference_gas_price_for_testing()?;
@@ -39,7 +42,6 @@ async fn test_batch_transaction_ok() -> anyhow::Result<()> {
                 FullObjectRef::from_fastpath_ref(
                     authority_state
                         .get_object(obj_id)
-                        .await
                         .unwrap()
                         .compute_object_reference(),
                 ),
@@ -65,7 +67,6 @@ async fn test_batch_transaction_ok() -> anyhow::Result<()> {
         vec![
             authority_state
                 .get_object(&all_ids[N])
-                .await
                 .unwrap()
                 .compute_object_reference(),
         ],
@@ -75,7 +76,7 @@ async fn test_batch_transaction_ok() -> anyhow::Result<()> {
     );
 
     let tx = to_sender_signed_transaction(data, &sender_key);
-    let response = send_and_confirm_transaction(&authority_state, tx).await?;
+    let response = submit_and_execute(&authority_state, tx).await?;
     let effects = response.1.into_data();
     assert_eq!(effects.status(), &ExecutionStatus::Success);
     assert_eq!(
@@ -111,7 +112,9 @@ async fn test_batch_transaction_last_one_fail() -> anyhow::Result<()> {
     const TOTAL: usize = N + 1;
     let all_ids = (0..TOTAL).map(|_| ObjectID::random()).collect::<Vec<_>>();
     let (authority_state, package) = init_state_with_ids_and_object_basics(
-        [sender; TOTAL].into_iter().zip(all_ids.clone().into_iter()),
+        [sender; TOTAL]
+            .into_iter()
+            .zip_debug_eq(all_ids.clone().into_iter()),
     )
     .await;
     let rgp = authority_state.reference_gas_price_for_testing()?;
@@ -123,7 +126,6 @@ async fn test_batch_transaction_last_one_fail() -> anyhow::Result<()> {
                 FullObjectRef::from_fastpath_ref(
                     authority_state
                         .get_object(obj_id)
-                        .await
                         .unwrap()
                         .compute_object_reference(),
                 ),
@@ -144,7 +146,6 @@ async fn test_batch_transaction_last_one_fail() -> anyhow::Result<()> {
         vec![
             authority_state
                 .get_object(&all_ids[N])
-                .await
                 .unwrap()
                 .compute_object_reference(),
         ],
@@ -155,7 +156,7 @@ async fn test_batch_transaction_last_one_fail() -> anyhow::Result<()> {
 
     let tx = to_sender_signed_transaction(data, &sender_key);
 
-    let response = send_and_confirm_transaction(&authority_state, tx).await?.1;
+    let response = submit_and_execute(&authority_state, tx).await?.1;
     let effects = response.into_data();
     assert!(effects.status().is_err());
     assert_eq!(
@@ -179,9 +180,7 @@ async fn test_batch_insufficient_gas_balance() -> anyhow::Result<()> {
         sender,
         49999, // We need 50000
     );
-    authority_state
-        .insert_genesis_object(gas_object.clone())
-        .await;
+    authority_state.insert_genesis_object(gas_object.clone());
 
     const N: usize = 10;
     let mut builder = ProgrammableTransactionBuilder::new();
@@ -208,7 +207,7 @@ async fn test_batch_insufficient_gas_balance() -> anyhow::Result<()> {
     );
 
     let tx = to_sender_signed_transaction(data, &sender_key);
-    let response = send_and_confirm_transaction(&authority_state, tx).await;
+    let response = submit_and_execute(&authority_state, tx).await;
 
     assert!(matches!(
         UserInputError::try_from(response.unwrap_err()).unwrap(),

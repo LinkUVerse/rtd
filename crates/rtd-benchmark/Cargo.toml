@@ -1,7 +1,7 @@
 [package]
 name = "rtd-benchmark"
 version = "0.0.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -32,31 +32,33 @@ tokio-util.workspace = true
 rtd-core.workspace = true
 rtd-config.workspace = true
 rtd-network.workspace = true
-rtd-storage.workspace = true
 rtd-types.workspace = true
-rtd-sdk.workspace = true
 rtd-keys.workspace = true
-rtd-json-rpc-types.workspace = true
 rtd-protocol-config.workspace = true
 rtd-test-transaction-builder.workspace = true
 rtd-swarm-config.workspace = true
 rtd-surfer.workspace = true
 telemetry-subscribers.workspace = true
-roaring.workspace = true
 regex.workspace = true
-fastcrypto-zkp.workspace = true
+derive_more.workspace = true
+rtd-rpc.workspace = true
+rtd-rpc-api.workspace = true
 
 move-core-types.workspace = true
 linku-metrics.workspace = true
 test-cluster.workspace = true
 sysinfo.workspace = true
+linku-common.workspace = true
 
 rtd-move-build.workspace = true
 
 [target.'cfg(msim)'.dependencies]
+consensus-config.workspace = true
+prost.workspace = true
 rtd-framework.workspace = true
 rtd-framework-snapshot.workspace = true
 rtd-macros.workspace = true
+rtd-rpc.workspace = true
 rtd-simulator.workspace = true
 typed-store.workspace = true
-linku-common.workspace = true
+zstd.workspace = true

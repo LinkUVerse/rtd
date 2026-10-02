@@ -9,11 +9,11 @@ use crate::committee::{Committee, CommitteeWithNetworkMetadata, NetworkMetadata,
 use crate::crypto::{AuthorityPublicKey, NetworkPublicKey};
 use crate::multiaddr::Multiaddr;
 use anemo::PeerId;
-use anemo::types::{PeerAffinity, PeerInfo};
 use consensus_config::{Authority, Committee as ConsensusCommittee};
-use serde::{Deserialize, Serialize};
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_protocol_config::ProtocolVersion;
-use tracing::{error, warn};
+use serde::{Deserialize, Serialize};
+use tracing::error;
 
 #[enum_dispatch]
 pub trait EpochStartSystemStateTrait {
@@ -27,7 +27,8 @@ pub trait EpochStartSystemStateTrait {
     fn get_rtd_committee(&self) -> Committee;
     fn get_rtd_committee_with_network_metadata(&self) -> CommitteeWithNetworkMetadata;
     fn get_consensus_committee(&self) -> ConsensusCommittee;
-    fn get_validator_as_p2p_peers(&self, excluding_self: AuthorityName) -> Vec<PeerInfo>;
+    fn get_validator_as_p2p_peers(&self, excluding_self: AuthorityName)
+    -> Vec<(PeerId, Multiaddr)>;
     fn get_authority_names_to_peer_ids(&self) -> HashMap<AuthorityName, PeerId>;
     fn get_authority_names_to_hostnames(&self) -> HashMap<AuthorityName, String>;
 }
@@ -186,8 +187,8 @@ impl EpochStartSystemStateTrait for EpochStartSystemStateV1 {
                 // TODO(mysticeti): Add EpochStartValidatorInfoV2 with new field for mysticeti address.
                 address: validator.narwhal_primary_address.clone(),
                 hostname: validator.hostname.clone(),
-                authority_key: consensus_config::AuthorityPublicKey::new(
-                    validator.protocol_pubkey.clone(),
+                authority_name: consensus_config::AuthorityName::from_bytes(
+                    validator.protocol_pubkey.as_ref(),
                 ),
                 protocol_key: consensus_config::ProtocolPublicKey::new(
                     validator.narwhal_worker_pubkey.clone(),
@@ -200,14 +201,14 @@ impl EpochStartSystemStateTrait for EpochStartSystemStateV1 {
 
         // Sort the authorities by their protocol (public) key in ascending order, same as the order
         // in the Rtd committee returned from get_rtd_committee().
-        authorities.sort_by(|a1, a2| a1.authority_key.cmp(&a2.authority_key));
+        authorities.sort_by(|a1, a2| a1.authority_name.cmp(&a2.authority_name));
 
         for ((i, mysticeti_authority), rtd_authority_name) in authorities
             .iter()
             .enumerate()
-            .zip(self.get_rtd_committee().names())
+            .zip_debug_eq(self.get_rtd_committee().names())
         {
-            if rtd_authority_name.0 != mysticeti_authority.authority_key.to_bytes() {
+            if rtd_authority_name.0 != mysticeti_authority.authority_name.to_bytes() {
                 error!(
                     "Mismatched authority order between Rtd and Mysticeti! Index {}, Mysticeti authority {:?}\nRtd authority name {}",
                     i, mysticeti_authority, rtd_authority_name
@@ -218,28 +219,16 @@ impl EpochStartSystemStateTrait for EpochStartSystemStateV1 {
         ConsensusCommittee::new(self.epoch as consensus_config::Epoch, authorities)
     }
 
-    fn get_validator_as_p2p_peers(&self, excluding_self: AuthorityName) -> Vec<PeerInfo> {
+    fn get_validator_as_p2p_peers(
+        &self,
+        excluding_self: AuthorityName,
+    ) -> Vec<(PeerId, Multiaddr)> {
         self.active_validators
             .iter()
             .filter(|validator| validator.authority_name() != excluding_self)
             .map(|validator| {
-                let address = validator
-                    .p2p_address
-                    .to_anemo_address()
-                    .into_iter()
-                    .collect::<Vec<_>>();
                 let peer_id = PeerId(validator.narwhal_network_pubkey.0.to_bytes());
-                if address.is_empty() {
-                    warn!(
-                        ?peer_id,
-                        "Peer has invalid p2p address: {}", &validator.p2p_address
-                    );
-                }
-                PeerInfo {
-                    peer_id,
-                    affinity: PeerAffinity::High,
-                    address,
-                }
+                (peer_id, validator.p2p_address.clone())
             })
             .collect()
     }
@@ -359,7 +348,7 @@ mod test {
                 .unwrap();
 
             assert_eq!(
-                consensus_authority.authority_key.to_bytes(),
+                consensus_authority.authority_name.to_bytes(),
                 rtd_authority_name.0,
                 "LinkU & RTD committee member of same index correspond to different public key"
             );

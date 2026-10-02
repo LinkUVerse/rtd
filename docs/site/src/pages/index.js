@@ -4,170 +4,146 @@
 import React from "react";
 
 import Layout from "@theme/Layout";
-import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
 import styles from "./index.module.css";
 
 export default function Home() {
-  const HomeCard = (props) => {
-    const { title, children } = props;
-    return (
-      <div className={`p-px col-span-3 w-[350px]`}>
-        <div className={styles.card}>
-          {title && <h4 className="h4 text-white">{title}</h4>}
-          <div className={styles.cardLinksContainer}>{children}</div>
-        </div>
+  const developerResources = [
+    {
+      title: "Getting Started",
+      description:
+        "Install the Rtd toolchain, set up a wallet, and publish your first Move package.",
+      to: "/getting-started",
+    },
+    {
+      title: "Rtd Agent Skills",
+      description: "Check the status of RTD-specific agent skills before use.",
+      to: "/skills",
+    },
+    {
+      title: "Develop",
+      description:
+        "Write and upgrade Move packages, work with objects, and query onchain data.",
+      to: "/develop",
+    },
+    {
+      title: "Onchain Finance",
+      description:
+        "Explore Move asset patterns and the status of inherited finance integrations.",
+      to: "/onchain-finance",
+    },
+    {
+      title: "Rtd Stack",
+      description:
+        "Review source capabilities and the deployment status of external services.",
+      to: "/rtd-stack",
+    },
+    {
+      title: "References",
+      description:
+        "Look up the CLI, SDKs, Move framework, and network API references.",
+      to: "/references",
+    },
+  ];
+
+  const useCases = [
+    {
+      title: "DeepBook",
+      description:
+        "Review the inherited DeepBook design; no RTD market is deployed.",
+      to: "/onchain-finance/deepbook",
+    },
+    {
+      title: "Walrus",
+      description:
+        "Review upstream storage concepts; RTD integration has not been verified.",
+      to: "/rtd-stack/walrus",
+    },
+    {
+      title: "zkLogin",
+      description:
+        "Review identity features and provider requirements before integration.",
+      to: "/rtd-stack/zklogin-integration/zklogin",
+    },
+    {
+      title: "Digital Assets",
+      description:
+        "Build NFTs and composable digital collectibles with the object model.",
+      to: "/onchain-finance/types-of-assets",
+    },
+  ];
+
+  const nodeOperators = [
+    {
+      title: "Run a Rtd Full Node",
+      description: "Run a full node to sync the network and serve onchain data.",
+      to: "/operators/full-node/rtd-full-node",
+    },
+    {
+      title: "Validators",
+      description: "Set up and operate a validator to help secure the network.",
+      to: "/operators/validator",
+    },
+    {
+      title: "Data Management",
+      description:
+        "Set up archival storage and indexing services for onchain data.",
+      to: "/operators/data-management",
+    },
+  ];
+
+  const ResourceCard = ({ title, description, to }) => (
+    <Link to={to} className={styles.resourceCard}>
+      <h3 className={styles.resourceCardTitle}>{title}</h3>
+      <p className={styles.resourceCardDesc}>{description}</p>
+      <span className={styles.resourceCardArrow} aria-hidden="true">
+        →
+      </span>
+    </Link>
+  );
+
+  const Section = ({ heading, items }) => (
+    <section className={styles.homeSection}>
+      <h2 className={styles.homeSectionHeading}>{heading}</h2>
+      <div className="flex flex-row flex-wrap justify-center gap-2">
+        {items.map((item) => (
+          <ResourceCard key={item.title} {...item} />
+        ))}
       </div>
-    );
-  };
-  const HomeCardCTA = (props) => {
-    const { children } = props;
-    return (
-      <div className={`p-px col-span-3 w-[350px]`}>
-        <div className={styles.cardCTA}>
-          <div className={styles.cardLinksContainer}>{children}</div>
-        </div>
-      </div>
-    );
-  };
+    </section>
+  );
 
   return (
     <>
-      <Head>
-        <meta
-          name="google-site-verification"
-          content="nOyG5Cxvr3m94VHwQFHHaK_5BR6EyAYJ_4oPxYBptPs"
-        />
-      </Head>
       <Layout>
-      <div 
+        <div
           className="overflow-hidden min-h-screen flex flex-col bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundColor: '#000000',
-          }}
+          style={{ backgroundColor: "#000000" }}
         >
           <div className="w-full mt-8 mb-4 mx-auto">
             <div className={styles.heroText}>
               <h1 className="h1 center-text text-white">Rtd Documentation</h1>
-              <h2 className="h2 center-text h3" style={{ color: '#89919F' }}>
-                Discover the power of Rtd through examples, guides, and concepts
-              </h2>
+              <p
+                className="center-text"
+                style={{
+                  color: "#89919F",
+                  maxWidth: "720px",
+                  margin: "0 auto",
+                  fontSize: "1.1rem",
+                  lineHeight: "1.6",
+                }}
+              >
+                RTD is a fork of the Sui source code built around Move. These
+                guides cover source capabilities and locally operated networks.
+                RTD has not launched a public Mainnet; check each integration’s
+                deployment status before using its examples.
+              </p>
             </div>
           </div>
-          <div className="flex flex-row flex-wrap justify-center gap-2 max-w-[1066px] mx-auto pb-16 py-4">
-            <HomeCard title="Developers">
-              <Link
-                className={`${styles.cardLink} plausible-event-name=homepage+start+button`}
-                to="./guides/developer/getting-started/rtd-install"
-              >
-                Getting Started
-              </Link>
-              <Link className={styles.cardLink} to="./guides/developer/rtd-101">
-                Rtd Developer Basics
-              </Link>
-              <Link
-                className={styles.cardLink}
-                to="./concepts/rtd-move-concepts"
-              >
-                Move
-              </Link>
-            </HomeCard>
-            <HomeCard title="Validators and Node operators">
-              <Link
-                className={styles.cardLink}
-                to="./guides/operator/validator/validator-config"
-              >
-                Validator Configuration
-              </Link>
-              <Link
-                className={styles.cardLink}
-                to="./guides/operator/rtd-full-node"
-              >
-                Run a Rtd Full Node
-                <span className="block bg-auto bg-[url(../static/img/index/right-arrow.svg)]"></span>
-              </Link>
-              <Link
-                className={styles.cardLink}
-                to="./guides/operator/bridge-node-configuration"
-              >
-                Rtd Bridge Node Configuration
-              </Link>
-            </HomeCard>
-            <HomeCard title="About Rtd">
-              <Link className={styles.cardLink} to="./concepts/tokenomics">
-                Tokenomics
-              </Link>
-              <Link className={styles.cardLink} to="./concepts/cryptography">
-                Cryptography
-              </Link>
-              <Link className={styles.cardLink} to="standards">
-                Standards
-              </Link>
-            </HomeCard>
-            <HomeCard title="References" aux>
-              <Link
-                className={styles.cardLink}
-                to="https://sdk.linkulabs.com/dapp-kit?ref=blog.rtd.io"
-              >
-                Rtd dApp Kit
-              </Link>
-              <Link className={styles.cardLink} to="/references/rtd-api">
-                Rtd API
-              </Link>
-              <Link
-                className={styles.cardLink}
-                to="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-framework/docs"
-              >
-                Rtd Framework
-              </Link>
-              <Link
-                className={styles.cardLink}
-                to="https://github.com/LinkUVerse/rtd/tree/main/crates/rtd-sdk"
-              >
-                Rust SDK
-              </Link>
-            </HomeCard>
-            <HomeCard title="Resources" aux>
-              <Link
-                className={styles.cardLink}
-                to="https://rtd.directory/?_project_type=api%2Cdeveloper-tools%2Cinfrastructure%2Csdk"
-              >
-                Rtd Ecosystem
-              </Link>
-              <Link className={styles.cardLink} to="/references/awesome-rtd">
-                Awesome Rtd
-              </Link>
-              <Link className={styles.cardLink} to="https://blog.rtd.io/">
-                Rtd blog
-              </Link>
-              <Link
-                className={styles.cardLink}
-                to="guides/developer/dev-cheat-sheet"
-              >
-                Rtd Developer Cheat Sheet
-              </Link>
-            </HomeCard>
-            <HomeCardCTA>
-              <Link
-                className={styles.cardCTALink}
-                to="/guides/developer/getting-started/hello-world"
-              >
-                <span>Build your dApp on Rtd</span>
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 11 11"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M6.01312 0.5L5.05102 1.45391L8.39164 4.80332L0 4.80332L0 6.19668L8.39164 6.19668L5.05102 9.54073L6.01312 10.5L11 5.5L6.01312 0.5Z"
-                    fill="#298DFF"
-                  />
-                </svg>
-              </Link>
-            </HomeCardCTA>
-          </div>
+
+          <Section heading="Developer Resources" items={developerResources} />
+          <Section heading="Use Cases" items={useCases} />
+          <Section heading="Node Operators" items={nodeOperators} />
         </div>
       </Layout>
     </>

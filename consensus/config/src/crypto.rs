@@ -12,7 +12,8 @@
 //! so will result in a ton of compilation errors, and worse: it will not make sense!
 
 use fastcrypto::{
-    bls12381, ed25519,
+    ed25519,
+    encoding::{Base64, Encoding as _},
     error::FastCryptoError,
     hash::{Blake2b256, HashFunction},
     traits::{KeyPair as _, Signer as _, ToFromBytes as _, VerifyingKey as _},
@@ -132,37 +133,61 @@ impl ProtocolKeySignature {
     }
 }
 
-/// Authority key represents the identity of an authority. It is only used for identity sanity
-/// checks and not used for verification.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct AuthorityPublicKey(bls12381::min_sig::BLS12381PublicKey);
-pub struct AuthorityKeyPair(bls12381::min_sig::BLS12381KeyPair);
+/// Authority name is a raw bytes identity for an authority, matching `AuthorityName`
+/// on the Rtd side. It is only used for identity sanity checks and not for cryptographic
+/// verification, so its length is not tied to any particular signature scheme: the bytes are
+/// whatever the Rtd side derives the authority's identity from (a BLS12381 public key today).
+/// Any expectation about the length belongs to the code constructing the committee.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AuthorityName(Vec<u8>);
 
-impl AuthorityPublicKey {
-    pub fn new(key: bls12381::min_sig::BLS12381PublicKey) -> Self {
-        Self(key)
+impl AuthorityName {
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self(bytes.into())
     }
 
-    pub fn inner(&self) -> &bls12381::min_sig::BLS12381PublicKey {
-        &self.0
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
     }
 
     pub fn to_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
-impl AuthorityKeyPair {
-    pub fn new(keypair: bls12381::min_sig::BLS12381KeyPair) -> Self {
-        Self(keypair)
+impl std::fmt::Debug for AuthorityName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AuthorityName({})", Base64::encode(&self.0))
     }
+}
 
-    pub fn generate<R: rand::Rng + fastcrypto::traits::AllowedRng>(rng: &mut R) -> Self {
-        Self(bls12381::min_sig::BLS12381KeyPair::generate(rng))
+impl Serialize for AuthorityName {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&Base64::encode(&self.0))
+        } else {
+            serializer.serialize_bytes(&self.0)
+        }
     }
+}
 
-    pub fn public(&self) -> AuthorityPublicKey {
-        AuthorityPublicKey(self.0.public().clone())
+impl<'de> Deserialize<'de> for AuthorityName {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let bytes = if deserializer.is_human_readable() {
+            let s = String::deserialize(deserializer)?;
+            Base64::decode(&s).map_err(serde::de::Error::custom)?
+        } else {
+            <Vec<u8>>::deserialize(deserializer)?
+        };
+        Ok(Self(bytes))
     }
 }
 
@@ -170,3 +195,62 @@ impl AuthorityKeyPair {
 pub type DefaultHashFunction = Blake2b256;
 pub const DIGEST_LENGTH: usize = DefaultHashFunction::OUTPUT_SIZE;
 pub const INTENT_MESSAGE_LENGTH: usize = INTENT_PREFIX_LENGTH + DIGEST_LENGTH;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authority_name_from_bytes_preserves_variable_length_inputs() {
+        for len in [32, 48] {
+            let bytes: Vec<u8> = (0..len).collect();
+            let name = AuthorityName::from_bytes(&bytes);
+
+            assert_eq!(name.to_bytes(), bytes.as_slice());
+        }
+    }
+
+    #[test]
+    fn authority_name_roundtrips_at_any_length() {
+        for len in [0usize, 1, 32, 48, 96, 1024] {
+            let name = AuthorityName::new(vec![len as u8; len]);
+            assert_eq!(name.len(), len);
+            assert_eq!(name.is_empty(), len == 0);
+
+            let binary = bcs::to_bytes(&name).unwrap();
+            assert_eq!(bcs::from_bytes::<AuthorityName>(&binary).unwrap(), name);
+
+            let json = serde_json::to_string(&name).unwrap();
+            assert_eq!(serde_json::from_str::<AuthorityName>(&json).unwrap(), name);
+        }
+    }
+
+    /// The 96 byte BLS12381 encoding must stay byte-identical to what the previous fixed-length
+    /// `AuthorityName` produced, so committees serialized by either version interoperate.
+    #[test]
+    fn authority_name_binary_encoding_is_length_prefixed_bytes() {
+        let name = AuthorityName::new([7u8; 96]);
+        let mut expected = vec![96u8];
+        expected.extend_from_slice(&[7u8; 96]);
+        assert_eq!(bcs::to_bytes(&name).unwrap(), expected);
+    }
+
+    /// Committee ordering relies on `Ord`, which must stay lexicographic across mixed lengths.
+    #[test]
+    fn authority_name_orders_lexicographically() {
+        let mut names = vec![
+            AuthorityName::new(vec![2u8]),
+            AuthorityName::new(vec![1u8, 1u8]),
+            AuthorityName::new(vec![1u8]),
+        ];
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                AuthorityName::new(vec![1u8]),
+                AuthorityName::new(vec![1u8, 1u8]),
+                AuthorityName::new(vec![2u8]),
+            ]
+        );
+    }
+}

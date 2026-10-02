@@ -1,0 +1,6 @@
+---
+source: crates/rtd-open-rpc/tests/generate-spec.rs
+expression: content.into_bytes()
+extension: json
+snapshot_kind: binary
+---

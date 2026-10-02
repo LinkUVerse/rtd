@@ -28,20 +28,19 @@ Set active environment to testnet
 ---
 keystore:
   File: "./rtd.keystore"
-external_keys: ~
+external_keys:
+  External: "./external.keystore"
 envs:
   - alias: testnet
-    rpc: "https://fullnode.testnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
-    chain_id: 4c78adac
   - alias: mainnet
-    rpc: "https://fullnode.mainnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
-    chain_id: 35834a8a
   - alias: devnet
-    rpc: "https://fullnode.devnet.rtd.io:443"
+    rpc: ""
     ws: ~
     basic_auth: ~
   - alias: local

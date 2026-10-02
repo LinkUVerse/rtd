@@ -223,6 +223,9 @@ pub mod anemo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::anemo::rpc::codec::{
+        Codec as AnemoCodec, Decoder as AnemoDecoder, Encoder as AnemoEncoder,
+    };
 
     fn snappy_compress(raw: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
@@ -233,13 +236,80 @@ mod tests {
     }
 
     #[test]
-    fn bounded_snappy_decompression_respects_output_limit() {
+    fn anemo_roundtrip() {
+        let mut codec: anemo::BcsSnappyCodec<Vec<u64>, Vec<u64>> = anemo::BcsSnappyCodec::default();
+        let value = vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let encoded = codec.encoder().encode(value.clone()).unwrap();
+        let decoded = codec.decoder().decode(encoded).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn bounded_helper_respects_output_limit() {
+        // With `max_allowed` set below the stream's decompressed size,
+        // `decompress_snappy_bounded` returns exactly `max_allowed` bytes.
         let raw = vec![0u8; 2 * 1024 * 1024];
         let compressed = snappy_compress(&raw);
         let limit = 1024u64;
-        let output = decompress_snappy_bounded(&compressed[..], limit).unwrap();
+        let out = decompress_snappy_bounded(&compressed[..], limit).unwrap();
+        assert_eq!(out.len() as u64, limit);
+        assert!((out.len() as u64) < raw.len() as u64);
+    }
 
-        assert_eq!(output.len() as u64, limit);
-        assert!((output.len() as u64) < raw.len() as u64);
+    // Tonic-variant round trip via a bespoke HttpBody. Building a real
+    // `DecodeBuf` requires tonic's internal API, so we drive the decoder
+    // through `tonic::codec::Streaming::new_request`, which is the path used
+    // by the gRPC server. This exercises the real `BcsSnappyDecoder::decode`.
+    mod tonic_via_streaming {
+        use super::super::*;
+        use super::snappy_compress;
+        use bytes::{BufMut, Bytes, BytesMut};
+        use futures::StreamExt;
+        use http_body::{Body as HttpBody, Frame};
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+
+        /// Minimal HttpBody yielding a single gRPC-framed payload. gRPC length-
+        /// prefixed frames are `[compression:u8][length:u32 BE][payload]`.
+        struct OneFrameBody(Option<Bytes>);
+
+        impl OneFrameBody {
+            fn new(payload: Bytes) -> Self {
+                let mut framed = BytesMut::with_capacity(5 + payload.len());
+                framed.put_u8(0);
+                framed.put_u32(payload.len() as u32);
+                framed.put_slice(&payload);
+                Self(Some(framed.freeze()))
+            }
+        }
+
+        impl HttpBody for OneFrameBody {
+            type Data = Bytes;
+            type Error = std::convert::Infallible;
+
+            fn poll_frame(
+                mut self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+                Poll::Ready(self.0.take().map(|b| Ok(Frame::data(b))))
+            }
+
+            fn is_end_stream(&self) -> bool {
+                self.0.is_none()
+            }
+        }
+
+        #[tokio::test]
+        async fn tonic_roundtrip() {
+            let mut codec: BcsSnappyCodec<Vec<u64>, Vec<u64>> = BcsSnappyCodec::default();
+            let value = vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+            let raw = bcs::to_bytes(&value).unwrap();
+            let compressed = snappy_compress(&raw);
+            let body = OneFrameBody::new(Bytes::from(compressed));
+            let mut stream =
+                tonic::codec::Streaming::new_request(codec.decoder(), body, None, None);
+            let decoded = stream.next().await.unwrap().unwrap();
+            assert_eq!(decoded, value);
+        }
     }
 }

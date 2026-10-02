@@ -247,7 +247,7 @@ Returns true iff there is an value associated with the key <code>k: K</code> in 
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/object_bag.md#rtd_object_bag_contains">contains</a>&lt;K: <b>copy</b> + drop + store&gt;(<a href="../rtd/bag.md#rtd_bag">bag</a>: &<a href="../rtd/object_bag.md#rtd_object_bag_ObjectBag">ObjectBag</a>, k: K): bool {
-    ofield::exists_&lt;K&gt;(&<a href="../rtd/bag.md#rtd_bag">bag</a>.id, k)
+    ofield::exists&lt;K&gt;(&<a href="../rtd/bag.md#rtd_bag">bag</a>.id, k)
 }
 </code></pre>
 

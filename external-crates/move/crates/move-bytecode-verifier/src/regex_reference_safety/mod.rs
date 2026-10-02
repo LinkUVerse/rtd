@@ -7,24 +7,27 @@
 //! - accesses to mutable references are safe
 //! - accesses to global storage references are safe
 
-mod abstract_state;
+pub mod abstract_state;
+pub mod serializable_state;
 
 use crate::absint::{FunctionContext, TransferFunctions, analyze_function};
 use crate::regex_reference_safety::abstract_state::STEP_BASE_COST;
 use abstract_state::{AbstractState, AbstractValue};
+use move_abstract_interpreter::absint::BlockInvariant;
 use move_abstract_stack::{AbsStackError, AbstractStack};
 use move_binary_format::{
     CompiledModule,
-    errors::{PartialVMError, PartialVMResult},
+    errors::PartialVMResult,
     file_format::{
         Bytecode, CodeOffset, FunctionHandle, StructDefinition, StructFieldInformation,
         VariantDefinition,
     },
-    safe_assert, safe_unwrap, safe_unwrap_err,
+    partial_vm_error_with_debug_message, safe_assert, safe_unwrap,
 };
 use move_bytecode_verifier_meter::{Meter, Scope};
 use move_core_types::vm_status::StatusCode;
 use move_vm_config::verifier::VerifierConfig;
+use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 
 use self::abstract_state::ValueKind;
@@ -51,12 +54,12 @@ impl<'a> ReferenceSafetyAnalysis<'a> {
     }
 
     fn push(&mut self, v: AbstractValue) -> PartialVMResult<()> {
-        safe_unwrap_err!(self.stack.push(v));
+        safe_unwrap!(self.stack.push(v));
         Ok(())
     }
 
     fn push_n(&mut self, v: AbstractValue, n: u64) -> PartialVMResult<()> {
-        safe_unwrap_err!(self.stack.push_n(v, n));
+        safe_unwrap!(self.stack.push_n(v, n));
         Ok(())
     }
 }
@@ -67,7 +70,17 @@ pub fn verify(
     function_context: &FunctionContext,
     meter: &mut (impl Meter + ?Sized),
 ) -> PartialVMResult<()> {
-    let initial_state = AbstractState::new(function_context)?;
+    verify_and_return_states(config, module, function_context, meter)?;
+    Ok(())
+}
+
+pub fn verify_and_return_states(
+    config: &VerifierConfig,
+    module: &CompiledModule,
+    function_context: &FunctionContext,
+    meter: &mut (impl Meter + ?Sized),
+) -> PartialVMResult<BTreeMap<CodeOffset, BlockInvariant<AbstractState>>> {
+    let initial_state = AbstractState::new(function_context, meter)?;
 
     let mut verifier = ReferenceSafetyAnalysis::new(config, module, function_context);
     analyze_function(function_context, meter, &mut verifier, initial_state)
@@ -87,7 +100,7 @@ fn call(
         .map(|_| verifier.stack.pop())
         .rev()
         .collect::<Result<Vec<AbstractValue>, AbsStackError>>();
-    let arguments = safe_unwrap_err!(arguments_opt);
+    let arguments = safe_unwrap!(arguments_opt);
 
     let return_ = verifier.module.signature_at(function_handle.return_);
     let return_kinds = ValueKind::for_signature(return_);
@@ -116,7 +129,7 @@ fn pack_struct(
     struct_def: &StructDefinition,
 ) -> PartialVMResult<()> {
     for _ in 0..num_fields(struct_def) {
-        safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref())
+        safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref())
     }
     // TODO maybe call state.value_for
     verifier.push(AbstractValue::NonReference)?;
@@ -127,7 +140,7 @@ fn unpack_struct(
     verifier: &mut ReferenceSafetyAnalysis,
     struct_def: &StructDefinition,
 ) -> PartialVMResult<()> {
-    safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
+    safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
     // TODO maybe call state.value_for
     verifier.push_n(AbstractValue::NonReference, num_fields(struct_def) as u64)?;
     Ok(())
@@ -138,7 +151,7 @@ fn pack_enum_variant(
     variant_def: &VariantDefinition,
 ) -> PartialVMResult<()> {
     for _ in 0..variant_def.fields.len() {
-        safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref())
+        safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref())
     }
     // TODO maybe call state.value_for
     verifier.push(AbstractValue::NonReference)?;
@@ -149,7 +162,7 @@ fn unpack_enum_variant(
     verifier: &mut ReferenceSafetyAnalysis,
     variant_def: &VariantDefinition,
 ) -> PartialVMResult<()> {
-    safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
+    safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
     // TODO maybe call state.value_for
     verifier.push_n(AbstractValue::NonReference, variant_def.fields.len() as u64)?;
     Ok(())
@@ -165,7 +178,7 @@ fn execute_inner(
     meter.add(Scope::Function, STEP_BASE_COST)?;
 
     match bytecode {
-        Bytecode::Pop => state.release_value(safe_unwrap_err!(verifier.stack.pop()))?,
+        Bytecode::Pop => state.release_value(safe_unwrap!(verifier.stack.pop()), meter)?,
 
         Bytecode::CopyLoc(local) => {
             let value = state.copy_loc(offset, *local, meter)?;
@@ -175,32 +188,29 @@ fn execute_inner(
             let value = state.move_loc(offset, *local, meter)?;
             verifier.push(value)?
         }
-        Bytecode::StLoc(local) => state.st_loc(
-            offset,
-            *local,
-            safe_unwrap_err!(verifier.stack.pop()),
-            meter,
-        )?,
+        Bytecode::StLoc(local) => {
+            state.st_loc(offset, *local, safe_unwrap!(verifier.stack.pop()), meter)?
+        }
 
         Bytecode::FreezeRef => {
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             let frozen = state.freeze_ref(offset, r, meter)?;
             verifier.push(frozen)?
         }
         Bytecode::Eq | Bytecode::Neq => {
-            let v1 = safe_unwrap_err!(verifier.stack.pop());
-            let v2 = safe_unwrap_err!(verifier.stack.pop());
-            let value = state.comparison(offset, v1, v2)?;
+            let v1 = safe_unwrap!(verifier.stack.pop());
+            let v2 = safe_unwrap!(verifier.stack.pop());
+            let value = state.comparison(offset, v1, v2, meter)?;
             verifier.push(value)?
         }
         Bytecode::ReadRef => {
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
-            let value = state.read_ref(offset, r)?;
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
+            let value = state.read_ref(offset, r, meter)?;
             verifier.push(value)?
         }
         Bytecode::WriteRef => {
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
-            let val_operand = safe_unwrap_err!(verifier.stack.pop());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
+            let val_operand = safe_unwrap!(verifier.stack.pop());
             safe_assert!(val_operand.is_non_ref());
             state.write_ref(offset, r, meter)?
         }
@@ -214,24 +224,24 @@ fn execute_inner(
             verifier.push(value)?
         }
         Bytecode::MutBorrowField(field_handle_index) => {
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             let value = state.borrow_field(offset, true, r, *field_handle_index, meter)?;
             verifier.push(value)?
         }
         Bytecode::MutBorrowFieldGeneric(field_inst_index) => {
             let field_inst = verifier.module.field_instantiation_at(*field_inst_index);
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             let value = state.borrow_field(offset, true, r, field_inst.handle, meter)?;
             verifier.push(value)?
         }
         Bytecode::ImmBorrowField(field_handle_index) => {
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             let value = state.borrow_field(offset, false, r, *field_handle_index, meter)?;
             verifier.push(value)?
         }
         Bytecode::ImmBorrowFieldGeneric(field_inst_index) => {
             let field_inst = verifier.module.field_instantiation_at(*field_inst_index);
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             let value = state.borrow_field(offset, false, r, field_inst.handle, meter)?;
             verifier.push(value)?
         }
@@ -249,7 +259,7 @@ fn execute_inner(
         Bytecode::Ret => {
             let mut return_values = vec![];
             for _ in 0..verifier.function_context.return_().len() {
-                return_values.push(safe_unwrap_err!(verifier.stack.pop()));
+                return_values.push(safe_unwrap!(verifier.stack.pop()));
             }
             return_values.reverse();
 
@@ -265,17 +275,17 @@ fn execute_inner(
         | Bytecode::CastU128
         | Bytecode::CastU256
         | Bytecode::Not => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
             verifier.push(AbstractValue::NonReference)?
         }
 
         Bytecode::BrTrue(_) | Bytecode::BrFalse(_) => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
         }
 
         Bytecode::Abort => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            state.abort()
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            state.abort()?
         }
         Bytecode::LdTrue
         | Bytecode::LdFalse
@@ -303,8 +313,8 @@ fn execute_inner(
         | Bytecode::Gt
         | Bytecode::Le
         | Bytecode::Ge => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
             // TODO maybe call state.value_for
             verifier.push(AbstractValue::NonReference)?
         }
@@ -331,7 +341,7 @@ fn execute_inner(
         Bytecode::VecPack(_, num) => {
             if let Some(num_to_pop) = NonZeroU64::new(*num) {
                 let result = verifier.stack.pop_eq_n(num_to_pop);
-                let abs_value = safe_unwrap_err!(result);
+                let abs_value = safe_unwrap!(result);
                 safe_assert!(abs_value.is_non_ref());
             }
 
@@ -339,17 +349,18 @@ fn execute_inner(
         }
 
         Bytecode::VecLen(_) => {
-            let vec_ref = safe_unwrap_err!(verifier.stack.pop());
+            let vec_ref = safe_unwrap!(verifier.stack.pop());
             state.vector_op(offset, vec_ref, false, meter)?;
             verifier.push(AbstractValue::NonReference)?;
         }
 
         Bytecode::VecImmBorrow(_) => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            let vec_ref = safe_unwrap_err!(verifier.stack.pop());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            let vec_ref = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
+            let imm_vec_ref = state.freeze_ref(offset, vec_ref, meter)?;
             let values = state.call(
                 offset,
-                vec![vec_ref],
+                vec![imm_vec_ref],
                 &[ValueKind::Reference(false)],
                 meter,
                 StatusCode::VEC_BORROW_ELEMENT_EXISTS_MUTABLE_BORROW_ERROR, // should not be hit
@@ -360,8 +371,8 @@ fn execute_inner(
             }
         }
         Bytecode::VecMutBorrow(_) => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            let vec_ref = safe_unwrap_err!(verifier.stack.pop());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            let vec_ref = safe_unwrap!(verifier.stack.pop());
             let values = state.call(
                 offset,
                 vec![vec_ref],
@@ -376,28 +387,28 @@ fn execute_inner(
         }
 
         Bytecode::VecPushBack(_) => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            let vec_ref = safe_unwrap_err!(verifier.stack.pop());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            let vec_ref = safe_unwrap!(verifier.stack.pop());
             state.vector_op(offset, vec_ref, true, meter)?;
         }
 
         Bytecode::VecPopBack(_) => {
-            let vec_ref = safe_unwrap_err!(verifier.stack.pop());
+            let vec_ref = safe_unwrap!(verifier.stack.pop());
             state.vector_op(offset, vec_ref, true, meter)?;
 
             verifier.push(AbstractValue::NonReference)?
         }
 
         Bytecode::VecUnpack(_, num) => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
 
             verifier.push_n(AbstractValue::NonReference, *num)?
         }
 
         Bytecode::VecSwap(_) => {
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            safe_assert!(safe_unwrap_err!(verifier.stack.pop()).is_non_ref());
-            let vec_ref = safe_unwrap_err!(verifier.stack.pop());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            safe_assert!(safe_unwrap!(verifier.stack.pop()).is_non_ref());
+            let vec_ref = safe_unwrap!(verifier.stack.pop());
             state.vector_op(offset, vec_ref, true, meter)?;
         }
         Bytecode::PackVariant(vidx) => {
@@ -431,7 +442,7 @@ fn execute_inner(
             let variant_def = verifier
                 .module
                 .variant_def_at(handle.enum_def, handle.variant);
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             for val in state
                 .unpack_enum_variant_ref(
                     offset,
@@ -452,7 +463,7 @@ fn execute_inner(
             let variant_def = verifier
                 .module
                 .variant_def_at(handle.enum_def, handle.variant);
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             for val in state
                 .unpack_enum_variant_ref(
                     offset,
@@ -472,7 +483,7 @@ fn execute_inner(
             let handle = verifier.module.variant_instantiation_handle_at(*vidx);
             let enum_def = verifier.module.enum_instantiation_at(handle.enum_def);
             let variant_def = verifier.module.variant_def_at(enum_def.def, handle.variant);
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             for val in state
                 .unpack_enum_variant_ref(
                     offset,
@@ -492,7 +503,7 @@ fn execute_inner(
             let handle = verifier.module.variant_instantiation_handle_at(*vidx);
             let enum_def = verifier.module.enum_instantiation_at(handle.enum_def);
             let variant_def = verifier.module.variant_def_at(enum_def.def, handle.variant);
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
             for val in state
                 .unpack_enum_variant_ref(
                     offset,
@@ -509,8 +520,8 @@ fn execute_inner(
             }
         }
         Bytecode::VariantSwitch(_) => {
-            let r = safe_unwrap!(safe_unwrap_err!(verifier.stack.pop()).to_ref());
-            state.read_ref(offset, r)?;
+            let r = safe_unwrap!(safe_unwrap!(verifier.stack.pop()).to_ref());
+            state.read_ref(offset, r, meter)?;
         }
 
         Bytecode::ExistsDeprecated(_)
@@ -524,10 +535,10 @@ fn execute_inner(
         | Bytecode::ImmBorrowGlobalDeprecated(_)
         | Bytecode::ImmBorrowGlobalGenericDeprecated(_) => {
             safe_assert!(!verifier.config.deprecate_global_storage_ops);
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message("Unsupported deprecated bytecode".to_string()),
-            );
+            return Err(partial_vm_error_with_debug_message!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "Unsupported deprecated bytecode".to_string()
+            ));
         }
     };
     Ok(())

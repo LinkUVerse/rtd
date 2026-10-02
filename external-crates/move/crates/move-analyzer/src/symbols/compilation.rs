@@ -5,13 +5,15 @@
 //! to a represenatation that can be used for computing symbols.
 
 use crate::{
-    compiler_info::{CompilerAnalysisInfo, CompilerAutocompleteInfo, process_ide_annotations},
+    compiler_info::{CompilerAnalysisInfo, CompilerAutocompleteInfo, process_ide_info},
     diagnostics::{lsp_diagnostics, lsp_empty_diagnostics},
     symbols::{
         def_info::DefInfo,
-        mod_defs::ModuleDefs,
+        mod_defs::{ModuleDefs, ModuleParsingInfo},
+        mod_extensions::collect_extensions_info,
         use_def::{UseDefMap, UseLoc},
     },
+    utils::canonicalize_path,
 };
 
 use anyhow::Result;
@@ -24,7 +26,6 @@ use std::{
     sync::{Arc, Mutex},
     vec,
 };
-use tempfile::tempdir;
 use vfs::{
     VfsPath,
     impls::{memory::MemoryFS, overlay::OverlayFS, physical::PhysicalFS},
@@ -39,12 +40,15 @@ use move_compiler::{
     expansion::ast::ModuleIdent,
     linters::LintLevel,
     parser::ast as P,
-    shared::{PackagePaths, files::MappedFiles, unique_map::UniqueMap},
+    shared::{
+        Identifier, NamedAddressMap, NamedAddressMaps, PackagePaths, files::MappedFiles,
+        unique_map::UniqueMap,
+    },
     typing::ast::ModuleDefinition,
 };
 use move_ir_types::location::Loc;
 
-use move_package_alt::{flavor::MoveFlavor, package::RootPackage};
+use move_package_alt::{MoveFlavor, RootPackage};
 use move_package_alt_compilation::{
     build_config::BuildConfig,
     build_plan::BuildPlan,
@@ -72,6 +76,7 @@ pub struct CachedPackages {
 /// Information about parsed definitions
 #[derive(Clone)]
 pub struct ParsedDefinitions {
+    pub named_address_maps: NamedAddressMaps,
     pub source_definitions: Vec<P::PackageDefinition>,
     pub lib_definitions: Vec<P::PackageDefinition>,
 }
@@ -100,11 +105,11 @@ pub struct CompiledPkgInfo {
     /// Maped files
     pub mapped_files: MappedFiles,
     /// Edition of the compiler
-    pub edition: Option<Edition>,
+    pub edition: Edition,
     /// Compiler analysis info
     pub compiler_analysis_info: CompilerAnalysisInfo,
     /// Compiler autocomplete info
-    pub compiler_autocomplete_info: Option<CompilerAutocompleteInfo>,
+    pub compiler_autocomplete_info: Option<Arc<CompilerAutocompleteInfo>>,
     /// IDE diagnostics related to the package
     pub lsp_diags: Arc<BTreeMap<PathBuf, Vec<Diagnostic>>>,
 }
@@ -129,8 +134,6 @@ pub struct CachedPkgInfo {
     pub file_paths: Arc<BTreeMap<FileHash, PathBuf>>,
     /// A mapping from file paths to file hashes for user code
     pub user_file_hashes: Arc<BTreeMap<PathBuf, FileHash>>,
-    /// Edition of the compiler used to build this package
-    pub edition: Option<Edition>,
     /// Compiler analysis info (cached)
     pub compiler_analysis_info: CompilerAnalysisInfo,
     /// IDE diagnostics related to the package
@@ -162,6 +165,9 @@ pub struct SymbolsComputationData {
     /// Outermost definitions in a module (structs, consts, functions), keyed on a ModuleIdent
     /// string
     pub mod_outer_defs: BTreeMap<String, ModuleDefs>,
+    /// Per-module parsing data, keyed by file hash
+    /// and then by module location within that file
+    pub mod_parsing_info: BTreeMap<FileHash, BTreeMap<Loc, ModuleParsingInfo>>,
     /// A UseDefMap for a given file
     pub use_defs: BTreeMap<FileHash, UseDefMap>,
     /// Uses (references) for a definition at a given location
@@ -176,18 +182,38 @@ pub struct SymbolsComputationData {
 /// Mapped files and associated (meta) data
 #[derive(Clone)]
 struct MappedFilesData {
+    /// Mapped files
     files: MappedFiles,
+    /// Hash of all dependency files
     deps_hash: String,
+    /// Hashes of individual dependency files
     dep_hashes: Vec<FileHash>,
+    /// Paths of individual dependency packages
     dep_pkg_paths: BTreeMap<Symbol, PathBuf>,
+    /// Root package source files (for extension detection)
+    root_source_files: Vec<Symbol>,
+    /// Root package named addresses (for extension detection)
+    root_named_addresses: Arc<NamedAddressMap>,
+    /// Root package edition (for extension detection)
+    root_edition: Edition,
 }
 
-/// Result of caching dependencies (used internally)
+/// Result of caching dependencies (used internally).
+/// This struct passes data from the caching block to the compiler driver closure.
 #[derive(Clone)]
 struct CachingResult {
+    /// Cached package info needed for analysis
     pkg_deps: Option<AnalyzedPkgInfo>,
-    edition: Option<Edition>,
+    /// Compiler analysis info
     compiler_analysis_info: CompilerAnalysisInfo,
+    /// Source dependencies (package name -> PackagePaths)
+    src_deps: BTreeMap<Symbol, PackagePaths>,
+    /// Dependency files that should be compiled fully instead of using pre-compiled libs
+    dep_files_to_compile_fully: BTreeSet<Symbol>,
+    /// Packages containing files to compile fully (kept in dependencies)
+    packages_to_keep: BTreeSet<Symbol>,
+    /// User files containing extended modules that need full compilation
+    user_files_to_compile_fully: BTreeSet<PathBuf>,
 }
 
 impl CachedPackages {
@@ -249,6 +275,7 @@ impl SymbolsComputationData {
     pub fn new() -> Self {
         Self {
             mod_outer_defs: BTreeMap::new(),
+            mod_parsing_info: BTreeMap::new(),
             use_defs: BTreeMap::new(),
             references: BTreeMap::new(),
             def_info: BTreeMap::new(),
@@ -263,12 +290,18 @@ impl MappedFilesData {
         deps_hash: String,
         dep_hashes: Vec<FileHash>,
         dep_pkg_paths: BTreeMap<Symbol, PathBuf>,
+        root_source_files: Vec<Symbol>,
+        root_named_addresses: Arc<NamedAddressMap>,
+        root_edition: Edition,
     ) -> Self {
         Self {
             files,
             deps_hash,
             dep_hashes,
             dep_pkg_paths,
+            root_source_files,
+            root_named_addresses,
+            root_edition,
         }
     }
 }
@@ -276,22 +309,78 @@ impl MappedFilesData {
 impl CachingResult {
     pub fn new(
         pkg_deps: Option<AnalyzedPkgInfo>,
-        edition: Option<Edition>,
         compiler_analysis_info: CompilerAnalysisInfo,
+        src_deps: BTreeMap<Symbol, PackagePaths>,
+        dep_files_to_compile_fully: BTreeSet<Symbol>,
+        packages_to_keep: BTreeSet<Symbol>,
+        user_files_to_compile_fully: BTreeSet<PathBuf>,
     ) -> Self {
         Self {
             pkg_deps,
-            edition,
             compiler_analysis_info,
+            src_deps,
+            dep_files_to_compile_fully,
+            packages_to_keep,
+            user_files_to_compile_fully,
         }
     }
 
     pub fn empty() -> Self {
         Self {
             pkg_deps: None,
-            edition: None,
             compiler_analysis_info: CompilerAnalysisInfo::new(),
+            src_deps: BTreeMap::new(),
+            dep_files_to_compile_fully: BTreeSet::new(),
+            packages_to_keep: BTreeSet::new(),
+            user_files_to_compile_fully: BTreeSet::new(),
         }
+    }
+
+    /// Returns pre-compiled program info with modules filtered out for files
+    /// that need full compilation. Returns the original pre-compiled info
+    /// unchanged when no filtering is needed.
+    fn get_filtered_precompiled(&self) -> Option<Arc<PreCompiledProgramInfo>> {
+        self.pkg_deps.as_ref().map(|d| {
+            if self.dep_files_to_compile_fully.is_empty() {
+                d.program_deps.clone()
+            } else {
+                Arc::new(
+                    d.program_deps
+                        .filter_modules_on_paths(&self.dep_files_to_compile_fully),
+                )
+            }
+        })
+    }
+
+    /// Returns file paths to exclude from compiler targets. These are files
+    /// from kept packages that don't need full compilation. Returns an empty
+    /// set when no filtering is needed.
+    fn get_files_to_exclude_from_targets(&self) -> BTreeSet<Symbol> {
+        self.packages_to_keep
+            .iter()
+            .flat_map(|package| {
+                let all_package_files: BTreeSet<Symbol> = self
+                    .src_deps
+                    .get(package)
+                    .map(|pp| pp.paths.iter().map(|p| Symbol::from(p.as_str())).collect())
+                    .unwrap_or_default();
+                all_package_files
+                    .difference(&self.dep_files_to_compile_fully)
+                    .copied()
+                    .collect::<BTreeSet<_>>()
+            })
+            .collect()
+    }
+
+    /// Returns all files (dependency + user) that need full compilation as PathBuf.
+    fn get_all_files_to_compile_fully(&self) -> BTreeSet<PathBuf> {
+        let mut all_files: BTreeSet<PathBuf> = self
+            .dep_files_to_compile_fully
+            .iter()
+            .map(|s| PathBuf::from(s.as_str()))
+            .collect();
+        all_files.extend(self.user_files_to_compile_fully.clone());
+        all_files
     }
 }
 
@@ -303,16 +392,15 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
     ide_files_root: VfsPath,
     pkg_path: &Path,
     lint: LintLevel,
+    move_flavor: Arc<F>,
     flavor: Option<Flavor>,
     cursor_file_opt: Option<&PathBuf>,
 ) -> Result<(Option<CompiledPkgInfo>, BTreeMap<PathBuf, Vec<Diagnostic>>)> {
-    let cached_deps_exist = has_precompiled_deps(pkg_path, packages_info.clone());
     let build_config = move_package_alt_compilation::build_config::BuildConfig {
         test_mode: true,
-        install_dir: Some(tempdir().unwrap().path().to_path_buf()),
         default_flavor: flavor,
         lint_flag: lint.into(),
-        force_lock_file: cached_deps_exist,
+        allow_dirty: true,
         ..Default::default()
     };
 
@@ -325,7 +413,7 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
     ]));
 
     let manifest_file = overlay_fs_root
-        .join(pkg_path.to_string_lossy())
+        .join(&pkg_path.to_string_lossy())
         .and_then(|p| p.join(MANIFEST_FILE_NAME))
         .and_then(|p| p.open_file());
 
@@ -337,7 +425,7 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
         None
     };
 
-    let root_pkg = load_root_pkg::<F>(&build_config, pkg_path)?;
+    let root_pkg = load_root_pkg(&build_config, pkg_path, move_flavor)?;
     let root_pkg_name = Symbol::from(root_pkg.name().to_string());
     // the package's transitive dependencies
     let mut dependencies: Vec<_> = root_pkg
@@ -368,12 +456,23 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
     let mut compiler_autocomplete_info_opt = None;
 
     let compiler_flags = compiler_flags(&build_config);
-    let (mut caching_result, other_diags) = if let Ok(deps_package_paths) =
+    let (caching_result, other_diags) = if let Ok(deps_package_paths) =
         make_deps_for_compiler(&mut Vec::new(), dependencies.clone(), &build_config)
     {
         let src_deps: BTreeMap<Symbol, PackagePaths> = deps_package_paths
             .into_iter()
             .filter_map(|p| p.name.as_ref().map(|(n, _)| (*n, p.clone())))
+            .collect();
+
+        // Map from file paths to package names (used for incremental dep compilation)
+        let file_to_package: BTreeMap<Symbol, Symbol> = src_deps
+            .iter()
+            .flat_map(|(pkg_name, pkg_paths)| {
+                pkg_paths
+                    .paths
+                    .iter()
+                    .map(move |path| (Symbol::from(path.as_str()), *pkg_name))
+            })
             .collect();
 
         let mut cached_packages = packages_info.lock().unwrap();
@@ -383,7 +482,7 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
             Some(Some(d)) => {
                 let mut hasher = Sha256::new();
                 d.dep_hashes.iter().for_each(|h| {
-                    hasher.update(h.0);
+                    hasher.update(h.to_bytes());
                 });
                 let deps_hash = hasher_to_hash_string(hasher);
                 if manifest_hash.is_some()
@@ -417,12 +516,32 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
 
         let caching_result = match cached_pkg_info_opt {
             Some(cached_pkg_info) => {
-                // remove dependencies that are already included in the cached package info to
-                // avoid recompiling them
+                // Detect all extended modules (both dependency and user-space)
+                let extended = collect_extensions_info(
+                    &mapped_files_data.root_source_files,
+                    &overlay_fs_root,
+                    mapped_files_data.root_edition,
+                    mapped_files_data.root_named_addresses.clone(),
+                    &cached_pkg_info.deps,
+                );
+
+                // Get file paths for extended dependency modules
+                let dep_files_to_compile_fully = cached_pkg_info
+                    .deps
+                    .get_file_paths_for_modules(&extended.extended_dep_modules);
+
+                // Compute packages containing files to compile fully
+                let packages_to_keep: BTreeSet<Symbol> = dep_files_to_compile_fully
+                    .iter()
+                    .filter_map(|f| file_to_package.get(f).copied())
+                    .collect();
+
+                // Remove dependencies that are already included in the cached package info,
+                // EXCEPT those in packages_to_keep (which need full compilation).
                 dependencies.retain(|d| {
-                    !cached_pkg_info
-                        .dep_names
-                        .contains(&Symbol::from(d.id().to_string()))
+                    let pkg_symbol = Symbol::from(d.id().to_string());
+                    !cached_pkg_info.dep_names.contains(&pkg_symbol)
+                        || packages_to_keep.contains(&pkg_symbol)
                 });
 
                 let deps = cached_pkg_info.deps.clone();
@@ -436,10 +555,17 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
                     cached_pkg_info.dep_hashes.clone(),
                 );
 
+                // Combine extended module files and extension files for full compilation
+                let mut user_files_to_compile = extended.extended_user_files;
+                user_files_to_compile.extend(extended.extension_files);
+
                 CachingResult::new(
                     Some(analyzed_pkg_info),
-                    cached_pkg_info.edition,
                     cached_pkg_info.compiler_analysis_info.clone(),
+                    src_deps.clone(),
+                    dep_files_to_compile_fully,
+                    packages_to_keep,
+                    user_files_to_compile,
                 )
             }
             None => {
@@ -454,19 +580,43 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
                     .collect();
                 if let Some((program_deps, dep_names)) = compute_pre_compiled_dep_data(
                     &mut cached_packages.compiled_dep_pkgs,
-                    mapped_files_data.dep_pkg_paths,
-                    src_deps,
+                    mapped_files_data.dep_pkg_paths.clone(),
+                    src_deps.clone(),
                     root_pkg_name,
                     &sorted_deps,
                     compiler_flags,
                     overlay_fs_root.clone(),
                 ) {
+                    // Detect all extended modules (both dependency and user-space)
+                    let extended = collect_extensions_info(
+                        &mapped_files_data.root_source_files,
+                        &overlay_fs_root,
+                        mapped_files_data.root_edition,
+                        mapped_files_data.root_named_addresses.clone(),
+                        &program_deps,
+                    );
+
+                    let dep_files_to_compile_fully =
+                        program_deps.get_file_paths_for_modules(&extended.extended_dep_modules);
+                    let packages_to_keep: BTreeSet<Symbol> = dep_files_to_compile_fully
+                        .iter()
+                        .filter_map(|f| file_to_package.get(f).copied())
+                        .collect();
+
                     let analyzed_pkg_info = AnalyzedPkgInfo::new_precompiled_only(
                         program_deps,
                         dep_names,
                         mapped_files_data.dep_hashes.clone(),
                     );
-                    CachingResult::new(Some(analyzed_pkg_info), None, CompilerAnalysisInfo::new())
+                    // On first compilation, user_files is empty since full compilation happens anyway
+                    CachingResult::new(
+                        Some(analyzed_pkg_info),
+                        CompilerAnalysisInfo::new(),
+                        src_deps,
+                        dep_files_to_compile_fully,
+                        packages_to_keep,
+                        BTreeSet::new(),
+                    )
                 } else {
                     CachingResult::empty()
                 }
@@ -507,6 +657,10 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
                 modified_files.insert(cursor_file.clone());
             }
 
+            // Add user files that contain extended modules to ensure their function bodies
+            // are preserved during compilation
+            modified_files.extend(caching_result.user_files_to_compile_fully.clone());
+
             (false, modified_files)
         } else {
             (true, BTreeSet::new())
@@ -527,19 +681,39 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
             dependencies.into_iter().map(|x| x.id()).cloned().collect(),
             &mut std::io::sink(),
             |compiler| {
-                let compiler = compiler.set_ide_mode();
-                // extract expansion AST
+                // Set up compiler with optional filtering for incremental dependency compilation
                 let (files, compilation_result) = compiler
-                    .set_pre_compiled_program_opt(
-                        caching_result
-                            .pkg_deps
-                            .as_ref()
-                            .map(|d| d.program_deps.clone()),
-                    )
+                    .set_ide_mode()
+                    .filter_dep_package_targets(&caching_result.get_files_to_exclude_from_targets())
+                    .set_pre_compiled_program_opt(caching_result.get_filtered_precompiled())
                     .set_files_to_compile(if full_compilation {
                         None
                     } else {
-                        Some(files_to_compile.clone())
+                        // Include both modified user files and files containing extended modules
+                        // (both dependency and user-space) to ensure function bodies are preserved
+                        let mut all_files = files_to_compile.clone();
+                        all_files.extend(caching_result.get_all_files_to_compile_fully());
+                        // Compiler uses VFS paths created by joining canonicalized paths
+                        // to the VFS root. We are dealing with canonicalized paths here as well
+                        // as the compiler, so we need to convert them to VFS path format the same
+                        // way to make sure that the compiler will recognize them.
+                        let vfs_files: BTreeSet<PathBuf> = all_files
+                            .iter()
+                            .filter_map(|p| {
+                                let lossy = p.to_string_lossy();
+                                match overlay_fs_root.join(&*lossy) {
+                                    Ok(vfs_path) => Some(PathBuf::from(vfs_path.as_str())),
+                                    Err(e) => {
+                                        eprintln!(
+                                            "Could not create virtual file system path for {}: {}",
+                                            lossy, e
+                                        );
+                                        None
+                                    }
+                                }
+                            })
+                            .collect();
+                        Some(vfs_files)
                     })
                     .run::<PASS_PARSER>()?;
                 let compiler = match compilation_result {
@@ -570,24 +744,23 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
                 let (compiler, typed_program) = compiler.into_ast();
                 typed_ast = Some(typed_program.clone());
                 let (analysis_info, autocomplete_info) =
-                    process_ide_annotations(compiler.compilation_env().ide_information().clone());
+                    process_ide_info(compiler.compilation_env().ide_information().clone());
                 // Don't update caching_result here - will be merged in conditional below
                 compiler_analysis_info_opt = Some(analysis_info);
 
                 // Filter autocomplete info based on cursor file
                 // - If cursor_file_opt is None: no autocomplete needed, use empty info
                 // - If cursor_file_opt is Some: only keep autocomplete info for that file
-                compiler_autocomplete_info_opt = Some(if let Some(cursor_file) = cursor_file_opt {
-                    filter_autocomplete_for_file(
-                        autocomplete_info,
-                        cursor_file,
-                        mapped_files_data.files.file_name_mapping(),
-                    )
-                } else {
-                    CompilerAutocompleteInfo::new()
-                });
-                caching_result.edition =
-                    Some(compiler.compilation_env().edition(Some(root_pkg_name)));
+                compiler_autocomplete_info_opt =
+                    Some(Arc::new(if let Some(cursor_file) = cursor_file_opt {
+                        filter_autocomplete_for_file(
+                            autocomplete_info,
+                            cursor_file,
+                            mapped_files_data.files.file_name_mapping(),
+                        )
+                    } else {
+                        CompilerAutocompleteInfo::new()
+                    }));
                 // compile to CFGIR for accurate diags
                 eprintln!("compiling to CFGIR");
                 let compilation_result = compiler.at_typing(typed_program).run::<PASS_CFGIR>();
@@ -626,6 +799,7 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
     let (parsed_definitions, typed_modules, compiler_analysis_info) = if full_compilation {
         let parsed_program = parsed_ast.unwrap();
         let parsed_definitions = ParsedDefinitions {
+            named_address_maps: parsed_program.named_address_maps,
             source_definitions: parsed_program.source_definitions,
             lib_definitions: parsed_program.lib_definitions,
         };
@@ -641,6 +815,12 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
         // no compilation happened, so we get everything from the cache, and
         // the unwraps are safe because the cache is guaranteed to exist (otherwise
         // compilation would have happened)
+        if let Some(Some(cached)) = packages_info.lock().unwrap().pkg_info.get(pkg_path) {
+            // Restore diagnostics from cache so that they can be propeerly
+            // displayed even if no compilation happened (e.g., upon first
+            // opening a package).
+            lsp_diags = (*cached.lsp_diags).clone();
+        }
         let cached_info = caching_result.pkg_deps.clone().unwrap();
         let compiled_program = cached_info.program.unwrap();
         (
@@ -681,6 +861,7 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
         merge_diagnostics_for_file(&mut ide_diags, f, dvec);
     }
 
+    let root_edition = mapped_files_data.root_edition;
     let compiled_pkg_info = CompiledPkgInfo {
         path: pkg_path.into(),
         manifest_hash,
@@ -691,7 +872,7 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
             typed_modules,
         },
         mapped_files: mapped_files_data.files,
-        edition: caching_result.edition,
+        edition: root_edition,
         compiler_analysis_info,
         compiler_autocomplete_info: compiler_autocomplete_info_opt,
         lsp_diags: Arc::new(lsp_diags),
@@ -751,7 +932,6 @@ fn compute_pre_compiled_dep_data(
             Some(Arc::new(PreCompiledProgramInfo::new(
                 pre_compiled_modules.clone(),
             ))),
-            true,
             compiler_flags.clone(),
             Some(vfs_root.clone()),
         )
@@ -810,11 +990,6 @@ fn merge_diagnostics_for_file(
     }
 }
 
-fn has_precompiled_deps(pkg_path: &Path, pkg_dependencies: Arc<Mutex<CachedPackages>>) -> bool {
-    let pkg_deps = pkg_dependencies.lock().unwrap();
-    pkg_deps.pkg_info.contains_key(pkg_path)
-}
-
 fn compute_mapped_files<F: MoveFlavor>(
     root_pkg: &RootPackage<F>,
     build_config: &BuildConfig,
@@ -824,14 +999,29 @@ fn compute_mapped_files<F: MoveFlavor>(
     let mut hasher = Sha256::new();
     let mut dep_hashes = vec![];
     let mut dep_pkg_paths = BTreeMap::new();
+    let mut root_source_files = Vec::new();
+
+    // Compute root package info once (for extension detection)
+    let root_named_addresses = Arc::new(
+        root_pkg
+            .package_info()
+            .named_addresses()
+            .map(|addrs| build_config.addresses_for_config(addrs).inner)
+            .unwrap_or_default(),
+    );
+    let root_edition = root_pkg
+        .package_info()
+        .edition()
+        .or(build_config.default_edition)
+        .unwrap_or(Edition::LEGACY);
 
     for rpkg in root_pkg.packages() {
         for f in get_sources(rpkg.path(), build_config).unwrap() {
             let is_dep = !rpkg.is_root();
             // dunce does a better job of canonicalization on Windows
-            let fname = dunce::canonicalize(f.as_str())
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| f.to_string());
+            let fname = canonicalize_path(PathBuf::from(f.as_str()))
+                .to_string_lossy()
+                .to_string();
             let mut contents = String::new();
             // there is a fair number of unwraps here but if we can't read the files
             // that by all accounts should be in the file system, then there is not much
@@ -841,9 +1031,12 @@ fn compute_mapped_files<F: MoveFlavor>(
             let _ = vfs_file.read_to_string(&mut contents);
             let fhash = FileHash::new(&contents);
             if is_dep {
-                hasher.update(fhash.0);
+                hasher.update(fhash.to_bytes());
                 dep_hashes.push(fhash);
                 dep_pkg_paths.insert(rpkg.id().clone().into(), rpkg.path().path().to_path_buf());
+            } else {
+                // Collect root source files for extension detection
+                root_source_files.push(Symbol::from(fname.as_str()));
             }
             // write to top layer of the overlay file system so that the content
             // is immutable for the duration of compilation and symbolication
@@ -859,6 +1052,9 @@ fn compute_mapped_files<F: MoveFlavor>(
         hasher_to_hash_string(hasher),
         dep_hashes,
         dep_pkg_paths,
+        root_source_files,
+        root_named_addresses,
+        root_edition,
     ))
 }
 
@@ -891,30 +1087,43 @@ fn merge_user_programs(
         if pkg_modified {
             unmodified_definitions.push(pkg_def);
         } else {
-            // find cached package definition with the same hash
-            // and update its named address map index
-            let pkg_hash = match &pkg_def.def {
+            // Update ALL cached package definitions from the same file. All modules in
+            // a file share the same NamedAddressMapIndex, so we update all of them.
+            let pkg_file_hash = match &pkg_def.def {
                 P::Definition::Module(mdef) => mdef.loc.file_hash(),
                 P::Definition::Address(adef) => adef.loc.file_hash(),
             };
-            let cached_pkg_def =
+            for cached_pkg_def in
                 unmodified_definitions
                     .iter_mut()
-                    .find(|pkg_def| match &pkg_def.def {
-                        P::Definition::Module(mdef) => mdef.loc.file_hash() == pkg_hash,
-                        P::Definition::Address(adef) => adef.loc.file_hash() == pkg_hash,
-                    });
-            if let Some(cached_pkg_def) = cached_pkg_def {
+                    .filter(|cached_def| match &cached_def.def {
+                        P::Definition::Module(mdef) => mdef.loc.file_hash() == pkg_file_hash,
+                        P::Definition::Address(adef) => adef.loc.file_hash() == pkg_file_hash,
+                    })
+            {
                 cached_pkg_def.named_address_map = pkg_def.named_address_map;
             }
         }
     }
 
-    // unraps are safe as this function only called when cached compiled program exists
+    // unwraps are safe as this function only called when cached compiled program exists
     let cached_info = cached_info_opt.unwrap();
     let compiled_program_cached = cached_info.program.unwrap();
     let file_paths_cached = cached_info.file_paths;
-    let mut result_parsed_definitions = compiled_program_cached.parsed_definitions.clone();
+
+    // Use new named_address_maps directly. Cached packages get their indices updated
+    // via process_new_parsed_pkg to point to maps in the new NamedAddressMaps.
+    let mut result_parsed_definitions = ParsedDefinitions {
+        named_address_maps: parsed_program_new.named_address_maps.clone(),
+        source_definitions: compiled_program_cached
+            .parsed_definitions
+            .source_definitions
+            .clone(),
+        lib_definitions: compiled_program_cached
+            .parsed_definitions
+            .lib_definitions
+            .clone(),
+    };
     let mut result_typed_modules = compiled_program_cached.typed_modules.clone();
     // remove modules from user code that belong to modified files
     result_parsed_definitions
@@ -980,6 +1189,9 @@ fn merge_compiler_analysis_info(
 
     // Remove entries from modified files
     result.macro_info.retain(|loc, _| !is_modified(loc));
+    result
+        .macro_function_bodies
+        .retain(|(_, function_name), _| !is_modified(&function_name.loc()));
     result.expanded_lambdas.retain(|loc| !is_modified(loc));
     result.ellipsis_binders.retain(|loc| !is_modified(loc));
     result.string_values.retain(|loc, _| !is_modified(loc));
@@ -987,7 +1199,16 @@ fn merge_compiler_analysis_info(
     // Add new entries - no additional filtering needed
     // as incremental compilation produced these
     // only for modified files
-    result.macro_info.extend(new_info.macro_info);
+    for (loc, mut entries) in new_info.macro_info {
+        result
+            .macro_info
+            .entry(loc)
+            .or_default()
+            .append(&mut entries);
+    }
+    result
+        .macro_function_bodies
+        .extend(new_info.macro_function_bodies);
     result.expanded_lambdas.extend(new_info.expanded_lambdas);
     result.ellipsis_binders.extend(new_info.ellipsis_binders);
     result.string_values.extend(new_info.string_values);
@@ -1067,17 +1288,10 @@ fn is_typed_mod_modified(
         return true;
     }
 
-    // TODO: Module extensions are not fully supported yet. This check prevents a crash but
-    // doesn't provide full IDE support for extension members.
-    //
     // When both the extended module and extension are in user space, extension members get
     // inlined into the extended module during expansion. If only the extension file is modified,
     // the extended module's definition location (checked above) appears unchanged. Without
     // checking member locations, we'd use stale cached data with incorrect file hashes.
-    //
-    // This is NOT a problem when the extended module is a dependency (pre-compiled lib) because
-    // extensions cannot be applied to pre-compiled modules - they lack the expansion-level AST
-    // needed for inlining.
     let is_member_modified = |loc: &Loc| -> bool {
         let Some(member_file_path) = file_paths.get(&loc.file_hash()) else {
             eprintln!(
@@ -1132,10 +1346,12 @@ fn is_parsed_pkg_modified(
 fn load_root_pkg<F: MoveFlavor>(
     build_config: &BuildConfig,
     path: &Path,
+    flavor: Arc<F>,
 ) -> anyhow::Result<RootPackage<F>> {
-    let env = find_env::<F>(path, build_config)?;
-    let mut root_pkg =
-        RootPackage::<F>::load_sync(path.to_path_buf(), env, build_config.mode_set())?;
+    let env = find_env(path, build_config, &*flavor)?;
+    let mut root_pkg = build_config
+        .package_loader(path, &env, flavor)
+        .load_sync()?;
 
     root_pkg.save_lockfile_to_disk()?;
 

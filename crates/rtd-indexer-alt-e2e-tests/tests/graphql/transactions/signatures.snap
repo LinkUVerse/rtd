@@ -26,33 +26,48 @@ task 3, line 14:
 //# create-checkpoint
 Checkpoint created: 1
 
-task 4, lines 16-24:
+task 4, lines 16-31:
 //# run-graphql
 Response: {
   "data": {
     "singleSig": {
-      "digest": "54hQH5EDiV52i4wDp5KgjbwGMBfQWZmc7Zh73u3vY1LK",
+      "digest": "CyAJhcCwLWKPgC5nSq3S6HdQXVVTpHQbPmvJ9vMAjucN",
       "signatures": [
         {
-          "signatureBytes": "ADxBVYxMQQJmf2f3SHzLbRePRNFYiVov7X9z58xQ7VviIE/OmN5JtJs3lpE4LMvOmT54xLfcGGvt99T/g/CeAwh/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
+          "signatureBytes": "AEUKV1e6cbL7ifRzinCYQRWPbNF13yHfKQmRsUFHKQeDEe9tz1UT2mWMgcfd3g5A6qGNAHEWYk0WCGLBAp/tCwF/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA==",
+          "scheme": {
+            "__typename": "Ed25519Signature",
+            "signature": "RQpXV7pxsvuJ9HOKcJhBFY9s0XXfId8pCZGxQUcpB4MR723PVRPaZYyBx93eDkDqoY0AcRZiTRYIYsECn+0LAQ==",
+            "publicKey": "f1FGOut22I3Jt15jclCyIMSc9beWfb8Xwfn6fFlKCSg="
+          }
         }
       ]
     }
   }
 }
 
-task 5, lines 26-34:
+task 5, lines 33-48:
 //# run-graphql
 Response: {
   "data": {
     "multiSig": {
-      "digest": "2WR8XNBnXp1sEnJZ5JDvdWhsLgWPLD2X3DRSPVNRqXgm",
+      "digest": "4xPfyfwZpbSZmKQKzDCSstYyUsdw5r56DiMhv6qnjTHP",
       "signatures": [
         {
-          "signatureBytes": "AJ5bHadta61dW8WGzqhlRV6KoTbWbWrF/AAOp4ijq0hvUpnXy+bYX0HW5n2pn5D2Y34/Eay7wTkAz7YLSNh8egRjShJ/h11TzB1kNRDs/tZZYOUuR7hLdy4MWvdZMWHaqw=="
+          "signatureBytes": "AEtUv/bGJKipHDk0LZDr2weheFJVwx1mj7EF0FqKUwD3+HkGCG66iubZ1xMgIOjU7sv9SqyfmcBWnzkJDrOrEQ1jShJ/h11TzB1kNRDs/tZZYOUuR7hLdy4MWvdZMWHaqw==",
+          "scheme": {
+            "__typename": "Ed25519Signature",
+            "signature": "S1S/9sYkqKkcOTQtkOvbB6F4UlXDHWaPsQXQWopTAPf4eQYIbrqK5tnXEyAg6NTuy/1KrJ+ZwFafOQkOs6sRDQ==",
+            "publicKey": "Y0oSf4ddU8wdZDUQ7P7WWWDlLke4S3cuDFr3WTFh2qs="
+          }
         },
         {
-          "signatureBytes": "AAqtyIIHh7KtUbjbNyxlGtNh/6AL+bkdA/4wk13AyHI62g8bLnA3ekAdEdYrNQ2Pe9Mlhq85rvd/JByIZII6HAiea9+AYO7cFrl2UiI8mqgOfdypWEBHOeWh8bAaRfXLzA=="
+          "signatureBytes": "AGsnmMpRg7LZI+aMYfCBmuHCNiEQliIIF58Tnd3Amq2Jh6zu6iv9euQ6wvTw7rgLKC2bhJjVlh6TS4die7thzwWea9+AYO7cFrl2UiI8mqgOfdypWEBHOeWh8bAaRfXLzA==",
+          "scheme": {
+            "__typename": "Ed25519Signature",
+            "signature": "ayeYylGDstkj5oxh8IGa4cI2IRCWIggXnxOd3cCarYmHrO7qK/165DrC9PDuuAsoLZuEmNWWHpNLh2J7u2HPBQ==",
+            "publicKey": "nmvfgGDu3Ba5dlIiPJqoDn3cqVhARznlofGwGkX1y8w="
+          }
         }
       ]
     }

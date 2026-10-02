@@ -1,0 +1,48 @@
+---
+title: Kiosk
+description: >-
+  Explore the Kiosk Move modules in the RTD framework source and the requirements
+  for using them on an RTD network.
+keywords:
+  - kiosk apps
+  - basic kiosk apps
+  - permissioned kiosk apps
+  - UID access through uid_mut
+  - uid_mut
+  - 'kiosk::uid_mut_as_owner'
+  - Kiosk Apps API
+  - kiosk extension
+  - kiosk
+pagination_prev: null
+goal:
+  description: >-
+    Introduce Kiosk and list available subtopics.
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Kiosk in Rtd?
+  - What topics does Kiosk cover?
+  - How does kiosk work on Rtd?
+answer: >-
+  The RTD framework source contains Kiosk and Kiosk extension Move modules.
+  This documentation does not establish a deployed RTD marketplace or app.
+---
+
+The RTD framework source contains `kiosk.move` and `kiosk_extension.move`, plus
+Move tests for their core behavior. These modules can support commerce patterns
+on an RTD network that deploys the matching framework.
+
+No public RTD Kiosk marketplace, hosted app, or third-party integration has been
+verified. The child pages retain inherited design guidance; review package IDs,
+SDK examples, and actual transactions on your own RTD chain before use.
+
+import DocCardList from '@theme/DocCardList';
+
+<DocCardList />

@@ -6,10 +6,9 @@ use crate::{
         authority_per_epoch_store::CertLockGuard, shared_object_version_manager::AssignedVersions,
     },
     execution_cache::ObjectCacheRead,
+    transaction_simulation::SimulationInputLoader,
 };
-use itertools::izip;
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use linku_common::{ZipDebugEqIteratorExt, izip_debug_eq};
 use rtd_types::{
     base_types::{EpochId, FullObjectID, ObjectRef, TransactionDigest},
     error::{RtdError, RtdResult, UserInputError},
@@ -19,6 +18,8 @@ use rtd_types::{
         ReceivingObjectReadResult, ReceivingObjectReadResultKind, ReceivingObjects, TransactionKey,
     },
 };
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use tracing::instrument;
 
 pub(crate) struct TransactionInputLoader {
@@ -104,7 +105,7 @@ impl TransactionInputLoader {
             .cache
             .multi_get_objects_with_more_accurate_error_return(&object_refs)?;
         assert_eq!(objects.len(), object_refs.len());
-        for (index, object) in fetch_indices.into_iter().zip(objects.into_iter()) {
+        for (index, object) in fetch_indices.into_iter().zip_debug_eq(objects.into_iter()) {
             input_results[index] = Some(ObjectReadResult {
                 input_object_kind: input_object_kinds[index],
                 object: ObjectReadResultKind::Object(object),
@@ -205,7 +206,7 @@ impl TransactionInputLoader {
 
         assert!(objects.len() == object_keys.len() && objects.len() == fetches.len());
 
-        for (object, key, (index, input)) in izip!(
+        for (object, key, (index, input)) in izip_debug_eq!(
             objects.into_iter(),
             object_keys.into_iter(),
             fetches.into_iter()
@@ -256,6 +257,18 @@ impl TransactionInputLoader {
             .map(Option::unwrap)
             .collect::<Vec<_>>()
             .into())
+    }
+}
+
+impl SimulationInputLoader for TransactionInputLoader {
+    fn read_objects_for_simulation(
+        &self,
+        _transaction_digest: &TransactionDigest,
+        input_object_kinds: &[InputObjectKind],
+        receiving_object_refs: &[ObjectRef],
+        epoch_id: EpochId,
+    ) -> RtdResult<(InputObjects, ReceivingObjects)> {
+        self.read_objects_for_signing(None, input_object_kinds, receiving_object_refs, epoch_id)
     }
 }
 

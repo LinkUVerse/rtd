@@ -1,6 +1,5 @@
 packages:
-  - 'dapps/**'
-  - 'examples/**'
+  # The retained JavaScript workspace only builds the Move formatter.
+  # Inherited dapps/examples use the pre-fork SDK API and must be migrated
+  # before they can be added back to installation and build jobs.
   - 'external-crates/move/tooling/prettier-move'
-  - '!**/dist/**'
-  - '!**/.next/**'

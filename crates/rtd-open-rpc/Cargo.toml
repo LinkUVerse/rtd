@@ -1,7 +1,7 @@
 [package]
 name = "rtd-open-rpc"
 version.workspace = true
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -18,9 +18,6 @@ versions.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
-clap.workspace = true
-pretty_assertions.workspace = true
-tokio = { workspace = true, features = ["full"] }
 fastcrypto.workspace = true
 rtd-json-rpc.workspace = true
 rtd-json-rpc-api.workspace = true
@@ -29,10 +26,5 @@ rtd-json.workspace = true
 rtd-types.workspace = true
 rtd-protocol-config.workspace = true
 rand.workspace = true
-
+insta.workspace = true
 move-core-types.workspace = true
-
-[[example]]
-name = "generate-json-rpc-spec"
-path = "src/generate_json_rpc_spec.rs"
-test = false

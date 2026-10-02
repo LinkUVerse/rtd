@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{client_commands::estimate_gas_budget_from_gas_cost, displays::Pretty};
-use std::fmt::{Display, Formatter};
 use rtd_json_rpc_types::{
     DryRunTransactionBlockResponse, ObjectChange, RtdTransactionBlockDataAPI,
     RtdTransactionBlockEffectsAPI,
 };
+use std::fmt::{Display, Formatter};
 use tabled::{
     builder::Builder as TableBuilder,
     settings::{Panel as TablePanel, Style as TableStyle, style::HorizontalLine},
 };
+
 impl Display for Pretty<'_, DryRunTransactionBlockResponse> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Pretty(response) = self;

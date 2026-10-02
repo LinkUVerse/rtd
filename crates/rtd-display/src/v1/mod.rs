@@ -15,11 +15,11 @@ use rtd_types::collection_types::Entry;
 use rtd_types::collection_types::VecMap;
 use rtd_types::object::bounded_visitor::BoundedVisitor;
 
-use self::parser::Parser;
-use self::parser::Strand;
+use crate::v1::parser::Parser;
+use crate::v1::parser::Strand;
 
-pub(crate) mod lexer;
-pub(crate) mod parser;
+mod lexer;
+mod parser;
 
 /// Format strings extracted from a `Display` object or `DisplayVersionUpdated` event on-chain.
 pub struct Format<'s> {

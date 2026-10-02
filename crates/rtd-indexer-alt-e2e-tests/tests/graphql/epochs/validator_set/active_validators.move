@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --accounts A --simulator
+//# init --protocol-version 108 --accounts A --simulator
 
 //# run-graphql
 {
@@ -15,68 +15,35 @@
          startCursor
          endCursor
         }
+
         nodes {
-          address
-          balance(coinType: "0x2::rtd::RTD") {
-            totalBalance
+          contents {
+            json
+
+            address: extract(path: "metadata.rtd_address") {
+              asAddress {
+                balances {
+                  nodes {
+                    coinType { repr }
+                    totalBalance
+                  }
+                }
+
+                objects {
+                  nodes {
+                    contents {
+                      type { repr }
+                      json
+                    }
+                  }
+                }
+              }
+            }
           }
-          balances {
-            __typename
-          }
-          # todo DVX-1697 populate defaultRtdnsName
-          defaultRtdnsName
-          multiGetBalances(keys: ["0x2::rtd::RTD"]) {
-            totalBalance
-          }
-          objects {
-            __typename
-          }
-          credentials { ...VC }
-          # todo DVX-1697 populate nextEpochCredentials
-          nextEpochCredentials { ...VC }
-          name
-          # todo DVX-1697 populate description
-          description
-          # todo DVX-1697 populate imageUrl
-          imageUrl
-          # todo DVX-1697 populate projectUrl
-          projectUrl
-          operationCap {
-            address
-          }
-          stakingPoolId
-          stakingPoolActivationEpoch
-          stakingPoolRtdBalance
-          # todo DVX-1697 populate rewardsPool
-          rewardsPool
-          poolTokenBalance
-          # todo DVX-1697 populate pendingStake
-          pendingStake
-          # todo DVX-1697 populate pendingTotalRtdWithdraw
-          pendingTotalRtdWithdraw
-          # todo DVX-1697 populate pendingPoolTokenWithdraw
-          pendingPoolTokenWithdraw
-          votingPower
-          gasPrice
-          commissionRate
-          nextEpochStake
-          nextEpochGasPrice
-          nextEpochCommissionRate
-          # todo DVX-1697 populate atRisk
+
           atRisk
         }
       }
     }
   }
-}
-
-fragment VC on ValidatorCredentials {
-  protocolPubKey
-  networkPubKey
-  workerPubKey
-  proofOfPossession
-  netAddress
-  p2PAddress
-  primaryAddress
-  workerAddress
 }

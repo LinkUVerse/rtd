@@ -1,13 +1,15 @@
 [package]
 name = "rtd-transaction-checks"
 version = "0.1.0"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
-once_cell.workspace = true
 rtd-macros.workspace = true
 rtd-config.workspace = true
 rtd-protocol-config.workspace = true

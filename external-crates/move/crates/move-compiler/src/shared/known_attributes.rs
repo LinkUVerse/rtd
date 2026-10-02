@@ -3,17 +3,16 @@
 
 use crate::{
     expansion::ast::{Address, ModuleAccess, ModuleIdent, Value},
-    shared::Name,
-    shared::{AstDebug, TName, ast_debug::AstWriter, unique_map::UniqueMap},
+    shared::{
+        AstDebug, Name, TName, ast_debug::AstWriter, unique_map::UniqueMap, unique_set::UniqueSet,
+    },
 };
 
 use move_core_types::vm_status::StatusCode;
 use move_ir_types::location::*;
 use move_symbol_pool::Symbol;
-use once_cell::sync::Lazy;
-use std::{collections::BTreeSet, fmt};
 
-use super::unique_set::UniqueSet;
+use std::{collections::BTreeSet, fmt, sync::LazyLock};
 
 // -------------------------------------------------------------------------------------------------
 // Types
@@ -39,8 +38,11 @@ pub enum AttributeKind_ {
     Allow,
     BytecodeInstruction,
     DefinesPrimitive,
+    Deny,
     Deprecation,
     Error,
+    Expect,
+    Warn,
     ExpectedFailure,
     External,
     LintAllow,
@@ -75,6 +77,15 @@ pub struct DeprecationAttribute {
 pub enum DiagnosticAttribute {
     Allow {
         allow_set: BTreeSet<(Option<Name>, Name)>,
+    },
+    Deny {
+        deny_set: BTreeSet<(Option<Name>, Name)>,
+    },
+    Expect {
+        expect_set: BTreeSet<(Option<Name>, Name)>,
+    },
+    Warn {
+        warn_set: BTreeSet<(Option<Name>, Name)>,
     },
     LintAllow {
         allow_set: BTreeSet<Name>,
@@ -199,8 +210,11 @@ impl AttributeKind_ {
             }
             AttributeKind_::Allow => DiagnosticAttribute::ALLOW,
             AttributeKind_::DefinesPrimitive => DefinesPrimitiveAttribute::DEFINES_PRIM,
+            AttributeKind_::Deny => DiagnosticAttribute::DENY,
             AttributeKind_::Deprecation => DeprecationAttribute::DEPRECATED,
             AttributeKind_::Error => ErrorAttribute::ERROR,
+            AttributeKind_::Expect => DiagnosticAttribute::EXPECT,
+            AttributeKind_::Warn => DiagnosticAttribute::WARN,
             AttributeKind_::ExpectedFailure => TestingAttribute::EXPECTED_FAILURE,
             AttributeKind_::External => ExternalAttribute::EXTERNAL,
             AttributeKind_::Mode => ModeAttribute::MODE,
@@ -264,8 +278,8 @@ impl BytecodeInstructionAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static BYTECODE_INSTRUCTION_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| IntoIterator::into_iter([AttributePosition::Function]).collect());
+        static BYTECODE_INSTRUCTION_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| IntoIterator::into_iter([AttributePosition::Function]).collect());
         &BYTECODE_INSTRUCTION_POSITIONS
     }
 
@@ -282,8 +296,8 @@ impl DefinesPrimitiveAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static DEFINES_PRIM_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| IntoIterator::into_iter([AttributePosition::Module]).collect());
+        static DEFINES_PRIM_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| IntoIterator::into_iter([AttributePosition::Module]).collect());
         &DEFINES_PRIM_POSITIONS
     }
 
@@ -301,7 +315,7 @@ impl DeprecationAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static DEPRECATION_POSITIONS: Lazy<BTreeSet<AttributePosition>> = Lazy::new(|| {
+        static DEPRECATION_POSITIONS: LazyLock<BTreeSet<AttributePosition>> = LazyLock::new(|| {
             BTreeSet::from([
                 AttributePosition::Constant,
                 AttributePosition::Module,
@@ -318,7 +332,7 @@ impl DeprecationAttribute {
     }
 }
 
-pub static DEPRECATED_EXPECTED_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
+pub static DEPRECATED_EXPECTED_KEYS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
     let mut keys = BTreeSet::new();
     keys.insert(DeprecationAttribute::NOTE.to_string());
     keys
@@ -326,6 +340,9 @@ pub static DEPRECATED_EXPECTED_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
 
 impl DiagnosticAttribute {
     pub const ALLOW: &'static str = "allow";
+    pub const DENY: &'static str = "deny";
+    pub const EXPECT: &'static str = "expect";
+    pub const WARN: &'static str = "warn";
     pub const LINT_ALLOW: &'static str = "lint_allow";
     pub const LINT: &'static str = "lint";
     pub const LINT_SYMBOL: Symbol = symbol!("lint");
@@ -333,26 +350,33 @@ impl DiagnosticAttribute {
     pub const fn name(&self) -> &str {
         match self {
             DiagnosticAttribute::Allow { .. } => Self::ALLOW,
+            DiagnosticAttribute::Deny { .. } => Self::DENY,
+            DiagnosticAttribute::Expect { .. } => Self::EXPECT,
+            DiagnosticAttribute::Warn { .. } => Self::WARN,
             DiagnosticAttribute::LintAllow { .. } => Self::LINT_ALLOW,
         }
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static ALLOW_WARNING_POSITIONS: Lazy<BTreeSet<AttributePosition>> = Lazy::new(|| {
-            BTreeSet::from([
-                AttributePosition::Module,
-                AttributePosition::Constant,
-                AttributePosition::Struct,
-                AttributePosition::Enum,
-                AttributePosition::Function,
-            ])
-        });
+        static ALLOW_WARNING_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| {
+                BTreeSet::from([
+                    AttributePosition::Module,
+                    AttributePosition::Constant,
+                    AttributePosition::Struct,
+                    AttributePosition::Enum,
+                    AttributePosition::Function,
+                ])
+            });
         &ALLOW_WARNING_POSITIONS
     }
 
     pub fn attribute_kind(&self) -> AttributeKind_ {
         match self {
             DiagnosticAttribute::Allow { .. } => AttributeKind_::Allow,
+            DiagnosticAttribute::Deny { .. } => AttributeKind_::Deny,
+            DiagnosticAttribute::Expect { .. } => AttributeKind_::Expect,
+            DiagnosticAttribute::Warn { .. } => AttributeKind_::Warn,
             DiagnosticAttribute::LintAllow { .. } => AttributeKind_::LintAllow,
         }
     }
@@ -367,8 +391,8 @@ impl ErrorAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static ERROR_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| BTreeSet::from([AttributePosition::Constant]));
+        static ERROR_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| BTreeSet::from([AttributePosition::Constant]));
         &ERROR_POSITIONS
     }
 
@@ -377,7 +401,7 @@ impl ErrorAttribute {
     }
 }
 
-pub static ERROR_EXPECTED_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
+pub static ERROR_EXPECTED_KEYS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
     let mut keys = BTreeSet::new();
     keys.insert(ErrorAttribute::CODE.to_string());
     keys
@@ -391,8 +415,8 @@ impl ExternalAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static DEFINES_PRIM_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| AttributePosition::ALL.iter().copied().collect());
+        static DEFINES_PRIM_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| AttributePosition::ALL.iter().copied().collect());
         &DEFINES_PRIM_POSITIONS
     }
 
@@ -424,7 +448,7 @@ impl ModeAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static MODE_POSITIONS: Lazy<BTreeSet<AttributePosition>> = Lazy::new(|| {
+        static MODE_POSITIONS: LazyLock<BTreeSet<AttributePosition>> = LazyLock::new(|| {
             BTreeSet::from([
                 AttributePosition::AddressBlock,
                 AttributePosition::Module,
@@ -455,8 +479,8 @@ impl SyntaxAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static ALLOW_WARNING_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| BTreeSet::from([AttributePosition::Function]));
+        static ALLOW_WARNING_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| BTreeSet::from([AttributePosition::Function]));
         &ALLOW_WARNING_POSITIONS
     }
 
@@ -495,10 +519,10 @@ impl TestingAttribute {
     }
 
     pub fn expected_positions(&self) -> &'static BTreeSet<AttributePosition> {
-        static TEST_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| BTreeSet::from([AttributePosition::Function]));
-        static EXPECTED_FAILURE_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
-            Lazy::new(|| BTreeSet::from([AttributePosition::Function]));
+        static TEST_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| BTreeSet::from([AttributePosition::Function]));
+        static EXPECTED_FAILURE_POSITIONS: LazyLock<BTreeSet<AttributePosition>> =
+            LazyLock::new(|| BTreeSet::from([AttributePosition::Function]));
         match self {
             TestingAttribute::Test | TestingAttribute::RandTest => &TEST_POSITIONS,
             TestingAttribute::ExpectedFailure { .. } => &EXPECTED_FAILURE_POSITIONS,
@@ -530,7 +554,7 @@ impl TestingAttribute {
     }
 }
 
-static EXPECTED_FAILURE_KINDS: Lazy<BTreeSet<String>> = Lazy::new(|| {
+static EXPECTED_FAILURE_KINDS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
     let mut keys = BTreeSet::new();
     keys.insert(TestingAttribute::ARITHMETIC_ERROR_NAME.to_string());
     keys.insert(TestingAttribute::VECTOR_ERROR_NAME.to_string());
@@ -540,7 +564,7 @@ static EXPECTED_FAILURE_KINDS: Lazy<BTreeSet<String>> = Lazy::new(|| {
     keys
 });
 
-static EXPECTED_FAILURE_NAME_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
+static EXPECTED_FAILURE_NAME_KEYS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
     let mut keys = BTreeSet::new();
     keys.insert(TestingAttribute::ARITHMETIC_ERROR_NAME.to_string());
     keys.insert(TestingAttribute::VECTOR_ERROR_NAME.to_string());
@@ -548,7 +572,7 @@ static EXPECTED_FAILURE_NAME_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
     keys
 });
 
-static EXPECTED_FAILURE_ASSIGNED_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
+static EXPECTED_FAILURE_ASSIGNED_KEYS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
     let mut keys = BTreeSet::new();
     keys.insert(TestingAttribute::ABORT_CODE_NAME.to_string());
     keys.insert(TestingAttribute::MAJOR_STATUS_NAME.to_string());
@@ -557,7 +581,7 @@ static EXPECTED_FAILURE_ASSIGNED_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
     keys
 });
 
-static EXPECTED_FAILURE_ALL_KEYS: Lazy<BTreeSet<String>> = Lazy::new(|| {
+static EXPECTED_FAILURE_ALL_KEYS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
     let mut keys = BTreeSet::new();
     for key in EXPECTED_FAILURE_NAME_KEYS.iter() {
         keys.insert(key.to_string());
@@ -763,28 +787,45 @@ impl AstDebug for ModeAttribute {
 
 impl AstDebug for DiagnosticAttribute {
     fn ast_debug(&self, w: &mut AstWriter) {
+        fn print_diag_list(
+            w: &mut AstWriter,
+            first: &mut bool,
+            deny_set: &BTreeSet<(Option<Spanned<Symbol>>, Spanned<Symbol>)>,
+        ) {
+            for (prefix, name) in deny_set {
+                if !*first {
+                    w.write(", ");
+                }
+                *first = false;
+                match prefix {
+                    Some(pref) => {
+                        w.write(pref.to_string());
+                        w.write("(");
+                        w.write(name.to_string());
+                        w.write(")");
+                    }
+                    None => {
+                        w.write(name.to_string());
+                    }
+                }
+            }
+        }
+
         w.write(self.name());
         w.write("(");
         let mut first = true;
         match self {
             DiagnosticAttribute::Allow { allow_set } => {
-                for (prefix, name) in allow_set {
-                    if !first {
-                        w.write(", ");
-                    }
-                    first = false;
-                    match prefix {
-                        Some(pref) => {
-                            w.write(pref.to_string());
-                            w.write("(");
-                            w.write(name.to_string());
-                            w.write(")");
-                        }
-                        None => {
-                            w.write(name.to_string());
-                        }
-                    }
-                }
+                print_diag_list(w, &mut first, allow_set);
+            }
+            DiagnosticAttribute::Deny { deny_set } => {
+                print_diag_list(w, &mut first, deny_set);
+            }
+            DiagnosticAttribute::Expect { expect_set } => {
+                print_diag_list(w, &mut first, expect_set);
+            }
+            DiagnosticAttribute::Warn { warn_set } => {
+                print_diag_list(w, &mut first, warn_set);
             }
             DiagnosticAttribute::LintAllow { allow_set } => {
                 for name in allow_set {

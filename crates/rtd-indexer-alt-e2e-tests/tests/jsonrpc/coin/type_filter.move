@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --addresses Test=0x0 --accounts A B --simulator --objects-snapshot-min-checkpoint-lag 2
+//# init --protocol-version 108 --addresses Test=0x0 --accounts A B --simulator --consistent-range 2
 
 //# publish --sender A
 #[allow(deprecated_usage)]
@@ -45,7 +45,7 @@ module Test::fake {
   "params": ["@{A}", "@{Test}::fake::FAKE"]
 }
 
-//# transfer-object 1,1 --sender A --recipient B
+//# transfer-object 1,3 --sender A --recipient B
 
 //# create-checkpoint
 

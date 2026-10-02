@@ -68,13 +68,6 @@ impl<M: MetricsCallbackProvider> ServerBuilder<M> {
     }
 
     pub async fn bind(self, addr: &Multiaddr, tls_config: Option<ServerConfig>) -> Result<Server> {
-        let http_config = self
-            .config
-            .http_config()
-            // Temporarily continue allowing clients to connection without TLS even when the server
-            // is configured with a tls_config
-            .allow_insecure(true);
-
         let request_timeout = self
             .config
             .request_timeout
@@ -88,7 +81,7 @@ impl<M: MetricsCallbackProvider> ServerBuilder<M> {
 
         fn add_path_to_request_header<T>(request: &Request<T>) -> Option<HeaderValue> {
             let path = request.uri().path();
-            Some(HeaderValue::from_str(path).unwrap())
+            HeaderValue::from_str(path).ok()
         }
 
         let limiting_layers = ServiceBuilder::new()
@@ -122,10 +115,10 @@ impl<M: MetricsCallbackProvider> ServerBuilder<M> {
             .layer(request_metrics)
             .layer(PropagateHeaderLayer::new(GRPC_ENDPOINT_PATH_HEADER.clone()))
             .layer_fn(move |service| {
-                linku_network::grpc_timeout::GrpcTimeout::new(service, request_timeout)
+                rtd_http::middleware::grpc_timeout::GrpcTimeout::new(service, Some(request_timeout))
             });
 
-        let mut builder = rtd_http::Builder::new().config(http_config);
+        let mut builder = rtd_http::Builder::new().config(self.config.http_config());
 
         if let Some(tls_config) = tls_config {
             builder = builder.tls_config(tls_config);
@@ -294,7 +287,7 @@ mod test {
             metrics_called: Arc::new(Mutex::new(false)),
         };
 
-        let address: Multiaddr = "/ip4/127.0.0.1/tcp/0/http".parse().unwrap();
+        let address: Multiaddr = "/ip4/127.0.0.1/tcp/0/https".parse().unwrap();
         let config = Config::new();
         let keypair = Ed25519KeyPair::generate(&mut rand::thread_rng());
 
@@ -370,7 +363,7 @@ mod test {
             metrics_called: Arc::new(Mutex::new(false)),
         };
 
-        let address: Multiaddr = "/ip4/127.0.0.1/tcp/0/http".parse().unwrap();
+        let address: Multiaddr = "/ip4/127.0.0.1/tcp/0/https".parse().unwrap();
         let config = Config::new();
         let keypair = Ed25519KeyPair::generate(&mut rand::thread_rng());
 
@@ -455,19 +448,19 @@ mod test {
 
     #[tokio::test]
     async fn dns() {
-        let address: Multiaddr = "/dns/localhost/tcp/0/http".parse().unwrap();
+        let address: Multiaddr = "/dns/localhost/tcp/0/https".parse().unwrap();
         test_multiaddr(address).await;
     }
 
     #[tokio::test]
     async fn ip4() {
-        let address: Multiaddr = "/ip4/127.0.0.1/tcp/0/http".parse().unwrap();
+        let address: Multiaddr = "/ip4/127.0.0.1/tcp/0/https".parse().unwrap();
         test_multiaddr(address).await;
     }
 
     #[tokio::test]
     async fn ip6() {
-        let address: Multiaddr = "/ip6/::1/tcp/0/http".parse().unwrap();
+        let address: Multiaddr = "/ip6/::1/tcp/0/https".parse().unwrap();
         test_multiaddr(address).await;
     }
 }

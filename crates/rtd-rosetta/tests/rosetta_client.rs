@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
+use prost_types::FieldMask;
 use rtd_config::local_ip_utils;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_keys::keystore::Keystore;
@@ -21,16 +22,31 @@ use rtd_rosetta::types::{
     ConstructionCombineResponse, ConstructionMetadataRequest, ConstructionMetadataResponse,
     ConstructionPayloadsRequest, ConstructionPayloadsResponse, ConstructionPreprocessRequest,
     ConstructionPreprocessResponse, ConstructionSubmitRequest, Currencies, NetworkIdentifier,
-    PreprocessMetadata, Signature, SignatureType, SubAccount, SubAccountType, RtdEnv,
+    PreprocessMetadata, RtdEnv, Signature, SignatureType, SubAccount, SubAccountType,
     TransactionIdentifierResponse,
 };
 use rtd_rosetta::{RosettaOfflineServer, RosettaOnlineServer};
 use rtd_rpc::client::Client as GrpcClient;
+use rtd_rpc::field::FieldMaskUtil;
+use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::RtdSignature;
+use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
 
-pub async fn start_rosetta_test_server(client: GrpcClient) -> (RosettaClient, Vec<JoinHandle<()>>) {
-    let online_server = RosettaOnlineServer::new(RtdEnv::LocalNet, client);
+pub async fn start_rosetta_test_server(
+    mut client: GrpcClient,
+) -> (RosettaClient, Vec<JoinHandle<()>>) {
+    let request = GetCheckpointRequest::by_sequence_number(0)
+        .with_read_mask(FieldMask::from_paths(["digest"]));
+    let response = client
+        .ledger_client()
+        .get_checkpoint(request)
+        .await
+        .expect("Failed to fetch genesis checkpoint");
+    let digest = CheckpointDigest::from_str(response.into_inner().checkpoint().digest())
+        .expect("Failed to parse genesis checkpoint digest");
+    let chain_id = ChainIdentifier::from(digest);
+    let online_server = RosettaOnlineServer::new(RtdEnv::LocalNet, client, chain_id);
     let offline_server = RosettaOfflineServer::new(RtdEnv::LocalNet);
     let local_ip = local_ip_utils::localhost_for_testing();
     let port = local_ip_utils::get_available_port(&local_ip);
@@ -231,6 +247,7 @@ impl RosettaClient {
         resps
     }
 
+    #[allow(dead_code)]
     pub async fn get_balance(
         &self,
         network_identifier: NetworkIdentifier,

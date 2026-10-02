@@ -1,16 +1,16 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
 use rtd_macros::*;
 use rtd_test_transaction_builder::publish_package;
 use rtd_types::RTD_FRAMEWORK_ADDRESS;
 use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::effects::{TransactionEffects, TransactionEvents};
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::object::{OBJECT_START_VERSION, Owner};
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
+use std::path::PathBuf;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 #[sim_test]
@@ -28,7 +28,7 @@ async fn objects_transitioning_to_shared_remember_their_previous_version() {
     let (counter, _) = env.increment_owned_counter(counter).await;
     assert_ne!(counter.1, OBJECT_START_VERSION);
 
-    let ExecutionFailureStatus::MoveAbort(location, code) =
+    let ExecutionErrorKind::MoveAbort(location, code) =
         env.share_counter(counter).await.unwrap_err()
     else {
         panic!()
@@ -44,7 +44,7 @@ async fn shared_object_owner_doesnt_change_on_write() {
     let (counter, _) = env.create_counter().await;
 
     let (inc_counter, _) = env.increment_owned_counter(counter).await;
-    let ExecutionFailureStatus::MoveAbort(location, code) =
+    let ExecutionErrorKind::MoveAbort(location, code) =
         env.share_counter(inc_counter).await.unwrap_err()
     else {
         panic!()
@@ -60,7 +60,7 @@ async fn initial_shared_version_mismatch_start_version() {
     let (counter, _) = env.create_counter().await;
 
     let (counter, _) = env.increment_owned_counter(counter).await;
-    let ExecutionFailureStatus::MoveAbort(location, code) =
+    let ExecutionErrorKind::MoveAbort(location, code) =
         env.share_counter(counter).await.unwrap_err()
     else {
         panic!()
@@ -75,7 +75,7 @@ async fn initial_shared_version_mismatch_current_version() {
     let env = TestEnvironment::new().await;
     let (counter, _) = env.create_counter().await;
 
-    let ExecutionFailureStatus::MoveAbort(location, code) =
+    let ExecutionErrorKind::MoveAbort(location, code) =
         env.share_counter(counter).await.unwrap_err()
     else {
         panic!()
@@ -179,7 +179,7 @@ impl TestEnvironment {
     async fn share_counter(
         &self,
         counter: ObjectRef,
-    ) -> Result<(ObjectRef, Owner), ExecutionFailureStatus> {
+    ) -> Result<(ObjectRef, Owner), ExecutionErrorKind> {
         let (fx, _) = self
             .move_call(
                 "share_counter",
@@ -188,7 +188,7 @@ impl TestEnvironment {
             .await
             .unwrap();
 
-        if let ExecutionStatus::Failure { error, .. } = fx.status() {
+        if let ExecutionStatus::Failure(ExecutionFailure { error, .. }) = fx.status() {
             return Err(error.clone());
         }
 

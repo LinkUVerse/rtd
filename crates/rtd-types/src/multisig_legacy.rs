@@ -6,9 +6,9 @@ use crate::{
     digests::ZKLoginInputsDigest,
     error::RtdErrorKind,
     multisig::{MultiSig, MultiSigPublicKey},
+    rtd_serde::RtdBitmap,
     signature::{AuthenticatorTrait, GenericSignature, VerifyParams},
     signature_verification::VerifiedDigestCache,
-    rtd_serde::RtdBitmap,
 };
 pub use enum_dispatch::enum_dispatch;
 use fastcrypto::{
@@ -16,6 +16,7 @@ use fastcrypto::{
     error::FastCryptoError,
     traits::{EncodeDecodeBase64, ToFromBytes},
 };
+use linku_common::ZipDebugEqIteratorExt;
 use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
 use schemars::JsonSchema;
@@ -311,7 +312,7 @@ impl MultiSigPublicKeyLegacy {
             .into());
         }
         Ok(MultiSigPublicKeyLegacy {
-            pk_map: pks.into_iter().zip(weights).collect(),
+            pk_map: pks.into_iter().zip_debug_eq(weights).collect(),
             threshold,
         })
     }

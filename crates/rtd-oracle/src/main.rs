@@ -3,11 +3,11 @@
 
 use clap::Parser;
 use linku_metrics::start_prometheus_server;
-use std::path::PathBuf;
-use std::time::Duration;
 use rtd_config::Config;
 use rtd_oracle::{OracleNode, config::OracleNodeConfig};
 use rtd_sdk::wallet_context::WalletContext;
+use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Parser)]
 #[clap(rename_all = "kebab-case")]

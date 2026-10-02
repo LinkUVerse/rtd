@@ -4,6 +4,7 @@
 use self::rtd_system_state_inner_v1::{RtdSystemStateInnerV1, ValidatorV1};
 use self::rtd_system_state_summary::{RtdSystemStateSummary, RtdValidatorSummary};
 use crate::base_types::ObjectID;
+use crate::collection_types::Bag;
 use crate::committee::CommitteeWithNetworkMetadata;
 use crate::dynamic_field::{
     Field, get_dynamic_field_from_store, get_dynamic_field_object_from_store,
@@ -11,18 +12,18 @@ use crate::dynamic_field::{
 use crate::error::{RtdError, RtdErrorKind};
 use crate::gas::GasCostSummary;
 use crate::object::{MoveObject, Object};
-use crate::storage::ObjectStore;
 use crate::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
 use crate::rtd_system_state::rtd_system_state_inner_v2::RtdSystemStateInnerV2;
+use crate::storage::ObjectStore;
 use crate::versioned::Versioned;
 use crate::{MoveTypeTagTrait, RTD_SYSTEM_ADDRESS, RTD_SYSTEM_STATE_OBJECT_ID, id::UID};
 use anyhow::Result;
 use enum_dispatch::enum_dispatch;
 use move_core_types::{ident_str, identifier::IdentStr, language_storage::StructTag};
+use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 
 pub mod epoch_start_rtd_system_state;
 pub mod mock;
@@ -41,6 +42,11 @@ use self::simtest_rtd_system_state_inner::{
 const RTD_SYSTEM_STATE_WRAPPER_STRUCT_NAME: &IdentStr = ident_str!("RtdSystemState");
 
 pub const RTD_SYSTEM_MODULE_NAME: &IdentStr = ident_str!("rtd_system");
+pub const RTD_SYSTEM_STATE_INNER_MODULE_NAME: &IdentStr = ident_str!("rtd_system_state_inner");
+pub const RTD_SYSTEM_STATE_INNER_V1_STRUCT_NAME: &IdentStr = ident_str!("RtdSystemStateInner");
+pub const RTD_SYSTEM_STATE_INNER_V2_STRUCT_NAME: &IdentStr = ident_str!("RtdSystemStateInnerV2");
+pub const VALIDATOR_MODULE_NAME: &IdentStr = ident_str!("validator");
+pub const VALIDATOR_STRUCT_NAME: &IdentStr = ident_str!("Validator");
 pub const ADVANCE_EPOCH_FUNCTION_NAME: &IdentStr = ident_str!("advance_epoch");
 pub const ADVANCE_EPOCH_SAFE_MODE_FUNCTION_NAME: &IdentStr = ident_str!("advance_epoch_safe_mode");
 
@@ -52,7 +58,7 @@ pub const RTD_SYSTEM_STATE_SIM_TEST_SHALLOW_V2: u64 = 18446744073709551606; // u
 pub const RTD_SYSTEM_STATE_SIM_TEST_DEEP_V2: u64 = 18446744073709551607; // u64::MAX - 8
 
 /// Rust version of the Move rtd::rtd_system::RtdSystemState type
-/// This repreents the object with 0x5 ID.
+/// This represents the object with 0x5 ID.
 /// In Rust, this type should be rarely used since it's just a thin
 /// wrapper used to access the inner object.
 /// Within this module, we use it to determine the current version of the system state inner object type,
@@ -173,6 +179,7 @@ pub trait RtdSystemStateTrait {
     fn system_state_version(&self) -> u64;
     fn epoch_start_timestamp_ms(&self) -> u64;
     fn epoch_duration_ms(&self) -> u64;
+    fn extra_fields(&self) -> &Bag;
     fn safe_mode(&self) -> bool;
     fn safe_mode_gas_cost_summary(&self) -> GasCostSummary;
     fn advance_epoch_safe_mode(&mut self, params: &AdvanceEpochParams);
@@ -451,21 +458,17 @@ pub struct AdvanceEpochParams {
 
 #[cfg(msim)]
 pub mod advance_epoch_result_injection {
+    use crate::error::ExecutionErrorTrait;
     use crate::{
-        committee::EpochId,
-        error::{ExecutionError, ExecutionErrorKind},
-        execution::ResultWithTimings,
+        committee::EpochId, error::ExecutionError, execution::ResultWithTimings,
+        execution_status::ExecutionErrorKind,
     };
-    use std::cell::RefCell;
-
-    thread_local! {
-        /// Override the result of advance_epoch in the range [start, end).
-        static OVERRIDE: RefCell<Option<(EpochId, EpochId)>>  = RefCell::new(None);
-    }
+    /// Override the result of advance_epoch in the range [start, end).
+    static OVERRIDE: std::sync::Mutex<Option<(EpochId, EpochId)>> = std::sync::Mutex::new(None);
 
     /// Override the result of advance_epoch transaction if new epoch is in the provided range [start, end).
     pub fn set_override(value: Option<(EpochId, EpochId)>) {
-        OVERRIDE.with(|o| *o.borrow_mut() = value);
+        *OVERRIDE.lock().unwrap() = value;
     }
 
     /// This function is used to modify the result of advance_epoch transaction for testing.
@@ -474,10 +477,28 @@ pub mod advance_epoch_result_injection {
         result: ResultWithTimings<(), ExecutionError>,
         current_epoch: EpochId,
     ) -> ResultWithTimings<(), ExecutionError> {
-        if let Some((start, end)) = OVERRIDE.with(|o| *o.borrow()) {
+        if let Some((start, end)) = *OVERRIDE.lock().unwrap() {
             if current_epoch >= start && current_epoch < end {
                 return Err((
                     ExecutionError::new(ExecutionErrorKind::FunctionNotFound, None),
+                    vec![],
+                ));
+            }
+        }
+        result
+    }
+
+    /// This function is used to modify the result of advance_epoch transaction for testing.
+    /// If the override is set, the result will be an execution error, otherwise the original result will be returned.
+    pub fn maybe_modify_result_for<E: ExecutionErrorTrait>(
+        result: ResultWithTimings<(), E>,
+        current_epoch: EpochId,
+    ) -> ResultWithTimings<(), E> {
+        if let Some((start, end)) = *OVERRIDE.lock().unwrap() {
+            if current_epoch >= start && current_epoch < end {
+                return Err((
+                    // TODO use E constructor
+                    ExecutionError::new(ExecutionErrorKind::FunctionNotFound, None).into(),
                     vec![],
                 ));
             }
@@ -490,7 +511,7 @@ pub mod advance_epoch_result_injection {
         result: Result<(), ExecutionError>,
         current_epoch: EpochId,
     ) -> Result<(), ExecutionError> {
-        if let Some((start, end)) = OVERRIDE.with(|o| *o.borrow()) {
+        if let Some((start, end)) = *OVERRIDE.lock().unwrap() {
             if current_epoch >= start && current_epoch < end {
                 return Err(ExecutionError::new(
                     ExecutionErrorKind::FunctionNotFound,

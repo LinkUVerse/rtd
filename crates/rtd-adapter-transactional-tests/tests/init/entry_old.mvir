@@ -1,19 +1,19 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // init with entry used to be allowed
 
-//# init --addresses test=0x0 v2=0x0 --protocol-version 6 --accounts A
+//# init --addresses test=0x0 v2=0x0 --protocol-version 6 --file-format 6 --accounts A
 
 //# publish --sender A --upgradeable
-module 0x0.m {
-    import 0x2.tx_context;
-    entry init(ctx: &mut tx_context.TxContext) {
+mvir 0x0::m {
+    import 0x2::tx_context;
+    entry fun init(ctx: &mut tx_context::TxContext) {
         label l0:
         return;
     }
 
-    public foo() {
+    public fun foo() {
         label l0:
         return;
     }
@@ -31,7 +31,7 @@ module 0x0.m {
 
 // //# upgrade --package test  --sender A --upgrade-capability 1,1
 // module v2::m {
-//     use sui::tx_context::TxContext;
+//     use rtd::tx_context::TxContext;
 //     fun init(_: &mut TxContext) {
 //     }
 

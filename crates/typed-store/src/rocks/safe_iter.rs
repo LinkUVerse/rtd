@@ -6,6 +6,9 @@ use bincode::Options;
 use prometheus::{Histogram, HistogramTimer};
 use rocksdb::{DBWithThreadMode, Direction, MultiThreaded};
 
+#[cfg(not(test))]
+use linku_common::debug_fatal;
+
 use crate::metrics::{DBMetrics, RocksDBPerfContext};
 
 use super::TypedStoreError;
@@ -78,12 +81,25 @@ impl<K: DeserializeOwned, V: DeserializeOwned> Iterator for SafeIter<'_, K, V> {
                 .expect("Valid iterator failed to get value");
             self.bytes_scanned_counter += raw_key.len() + raw_value.len();
             self.keys_returned_counter += 1;
+
             let key = config.deserialize(raw_key);
             let value = bcs::from_bytes(raw_value);
+
             match self.direction {
                 Direction::Forward => self.db_iter.next(),
                 Direction::Reverse => self.db_iter.prev(),
             }
+
+            #[cfg(not(test))]
+            {
+                if let Err(e) = &key {
+                    debug_fatal!("Failed to deserialize key in cf {}: {e}", self.cf_name);
+                }
+                if let Err(e) = &value {
+                    debug_fatal!("Failed to deserialize value in cf {}: {e}", self.cf_name);
+                }
+            }
+
             match (key, value) {
                 (Ok(key), Ok(value)) => Some(Ok((key, value))),
                 (Err(e), _) => Some(Err(TypedStoreError::SerializationError(format!(

@@ -1,0 +1,676 @@
+---
+title: GraphQL and General-Purpose Indexer
+description: >-
+  Set up an indexer, consistent store, and GraphQL against an RTD network you operate.
+keywords:
+  - indexer
+  - consistent store
+  - graphql
+  - setup
+goal:
+  description: >-
+    Operator understands how to run the indexer, consistent store, and GraphQL
+    against a local or privately operated RTD network
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+        - keywords
+      label: Has required frontmatter fields
+    - min_words: 300
+      label: Needs more operational depth
+    - pattern: '```'
+      min: 1
+      label: Has configuration or command examples
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - How do I set up the Rtd GraphQL and indexer stack?
+  - What infrastructure do I need for the general-purpose indexer?
+  - Which RTD data sources must I operate before running the indexer?
+answer: >-
+  RTD has no public Mainnet, Testnet, checkpoint bucket, snapshot service, or
+  archival endpoint. Point each component at data from the same RTD genesis
+  and chain ID; see the source requirements below.
+---
+
+<ImportContent source="indexer-graphql" mode="snippet" />
+
+See [Rtd Data Access](/develop/accessing-data/data-serving) for more information on how the stack serves application queries.
+
+:::caution
+
+RTD has no public Mainnet or Testnet and provides no hosted checkpoint, snapshot, archival, or fullnode endpoint. The commands below are templates for a local or operator-owned network. Fill in URLs and bucket names only after verifying their genesis digest and chain ID. A future RTD Mainnet will not expose JSON-RPC; use the supported gRPC interfaces for this stack.
+
+:::
+
+## Fullnode and checkpoint sources
+
+Run a fullnode with gRPC enabled for the same RTD network as the indexer. Set `FULLNODE_GRPC_URL` to that node's reachable gRPC address. Verify its checkpoint retention before choosing a start checkpoint. There is no RTD public-good endpoint or verified third-party [RPC provider](/develop/accessing-data/rpc-providers).
+
+## Operator-owned checkpoint buckets {#checkpoint-buckets}
+
+For a backfill beyond fullnode retention, first populate your own full-retention, verified **published** bucket in self-hosted MinIO from the same RTD chain. [Available Data Stores](/operators/data-management/available-data-stores) describes the source contract; it does not provide a bucket. The S3 flag uses MinIO's open protocol and must never fall back to Amazon or another managed cloud endpoint. Configure a private endpoint and scoped read-only credentials:
+
+```sh
+$ export AWS_ENDPOINT=https://YOUR_PRIVATE_MINIO
+$ export AWS_ACCESS_KEY_ID=<PUBLISHED_BUCKET_READ_ONLY_KEY>
+$ export AWS_SECRET_ACCESS_KEY=<PUBLISHED_BUCKET_READ_ONLY_SECRET>
+$ export AWS_DEFAULT_REGION=<MINIO_REGION>
+```
+
+Load these values from a self-hosted secret manager; do not paste real secrets into a shell history, process argument or Git. Production TLS must be enabled, and the source must expose only checkpoints independently verified and promoted from a separate staging bucket. A watermark file inside the writer's bucket is not a read barrier.
+
+## Indexer setup
+
+The indexer consists of multiple pipelines that each read, transform, and write checkpoint data to various Postgres tables. Multiple instances of the indexer can run in parallel, each configured by its own TOML file.
+
+#### Hardware requirements
+
+- **CPU:** 2 cores per instance
+- **Memory:** 4GB per instance
+
+Treat these as starting points and measure the resources needed for your own RTD chain and pipeline configuration.
+
+#### Storage requirements
+The general-purpose indexer writes to Postgres. Size the database from the actual checkpoint volume, enabled pipelines, and retention of your RTD network. In particular, unprunable `obj_versions` and `tx_balance_changes` accumulate for the life of the chain. The inherited Sui storage measurements are not RTD capacity estimates. Monitor table and index sizes with `pg_total_relation_size` during a representative backfill, then reserve growth and recovery headroom.
+
+### Run `rtd-indexer-alt`
+
+Run 1 indexer process for each configuration file and assign every co-located process a unique metrics address. If your fullnode retains all checkpoints you need, ingest directly from its gRPC endpoint using the [steady-state command](#phase-2-steady-state). Otherwise, first backfill from a full-retention checkpoint bucket that you operate, then stop the backfill process and resume from its watermarks with fullnode gRPC.
+
+#### Phase 1: backfill
+
+Unprunable pipelines must start at genesis. This example requires an existing, verified MinIO published bucket:
+
+```sh
+$ rtd-indexer-alt indexer \
+    --config <CONFIG_FILE> \
+    --database-url <DATABASE_URL> \
+    --remote-store-s3 <YOUR_RTD_PUBLISHED_MINIO_BUCKET> \
+    --metrics-address <UNIQUE_METRICS_ADDRESS>
+```
+
+Prunable pipelines can start at a checkpoint based on their retention period:
+
+```sh
+$ rtd-indexer-alt indexer \
+    --config <CONFIG_FILE> \
+    --database-url <DATABASE_URL> \
+    --remote-store-s3 <YOUR_RTD_PUBLISHED_MINIO_BUCKET> \
+    --first-checkpoint <CHECKPOINT_NUMBER> \
+    --metrics-address <UNIQUE_METRICS_ADDRESS>
+```
+
+For prunable pipelines, choose `first-checkpoint` from actual checkpoint timestamps and the retention policy of your RTD chain. A fixed conversion from days to checkpoint count is unreliable because checkpoint cadence varies. Record the chosen height and confirm the source still contains it.
+
+| **CLI parameter** | **Description** |
+| --- | --- |
+| `<CONFIG_FILE>` | Path to indexer configuration file. |
+| `<DATABASE_URL>` | Postgres database connection string. |
+| `<YOUR_RTD_PUBLISHED_MINIO_BUCKET>` | Name of the self-hosted, verified, read-only published MinIO bucket for this RTD chain. |
+| `<CHECKPOINT_NUMBER>` | For prunable pipelines only, the checkpoint at which indexing starts. |
+| `<UNIQUE_METRICS_ADDRESS>` | Prometheus bind address unique to this process, for example `127.0.0.1:9284` when the local fullnode already uses `9184`. |
+
+#### Examples
+
+Set `RTD_PUBLISHED_MINIO_BUCKET` to the name of your verified RTD checkpoint bucket before using these examples.
+
+**Unprunable pipeline from genesis:**
+
+```sh
+$ rtd-indexer-alt indexer \
+    --config unpruned.toml \
+    --database-url postgres://username:password@localhost:5432/database \
+    --remote-store-s3 "$RTD_PUBLISHED_MINIO_BUCKET" \
+    --metrics-address 127.0.0.1:9284
+```
+
+**Prunable pipeline starting at a verified retained checkpoint (illustrative height):**
+
+```sh
+$ rtd-indexer-alt indexer \
+    --config events.toml \
+    --database-url postgres://username:password@localhost:5432/database \
+    --remote-store-s3 "$RTD_PUBLISHED_MINIO_BUCKET" \
+    --first-checkpoint 5000 \
+    --metrics-address 127.0.0.1:9287
+```
+
+#### Phase 2: steady state
+
+After a backfill process reaches the network tip, stop it and restart the same configuration against your RTD fullnode gRPC endpoint. Existing pipelines resume from their committed watermarks. Use `--rpc-api-url` for polling and `--streaming-url` for low-latency checkpoint streaming. The same command can start a new indexer if the fullnode still serves its required starting checkpoint:
+
+```sh
+$ export FULLNODE_GRPC_URL=http://127.0.0.1:9000
+
+$ rtd-indexer-alt indexer \
+    --config events.toml \
+    --database-url postgres://username:password@localhost:5432/database \
+    --rpc-api-url "$FULLNODE_GRPC_URL" \
+    --streaming-url "$FULLNODE_GRPC_URL" \
+    --metrics-address 127.0.0.1:9287
+```
+
+Replace the sample URL with the actual gRPC listener address of your own fullnode. If recovery requires checkpoints outside its retention, stop the process, recover from your own full-retention MinIO published bucket, and then switch back to fullnode gRPC. Do not add Google billing headers or cloud credentials.
+
+:::info
+
+There is no public RTD checkpoint store. Do not copy inherited Sui hostnames or placeholder addresses into a running indexer. See [Checkpoint Data Sources](/develop/accessing-data/custom-indexer/indexer-data-integration#checkpoint-data-sources) for the supported source types; verify each one against your chain ID.
+
+:::
+
+### Run config recommendations {#indexer-run-config}
+
+Use the TOML files below; they are grouped by pipeline speed. All pipelines in an instance are limited by the slowest pipeline in that instance so these files each contain pipelines that run at approximately the same speed.
+
+You can include an optional `[ingestion]` section in each TOML file to tune checkpoint ingestion. The `min-cohort-boundary` setting controls how the indexer groups pipelines into ingestion cohorts based on their distance from the tip. The default is `25000` checkpoints. A higher value prevents nearly caught-up pipelines from being fragmented into many small cohorts. You do not need to set this for most deployments.
+
+```toml
+[ingestion]
+min-cohort-boundary = 25000
+```
+
+:::info
+The example configurations linked below use a fixed concurrency of 20 for simplicity, but this leads to longer backfill times.
+When backfilling a pipeline, consider setting the `ingest-concurrency` to a higher initial concurrency, such as `{ kind = "adaptive", initial = 200, min = 50, max = 2000 }`. The indexer automatically adjusts concurrency based on current load and performance.
+Once caught up to network tip, you can manually set the max concurrency to a lower value after measuring your own workload.
+:::
+
+<table>
+	<thead>
+		<tr>
+			<th>Config TOML</th>
+			<th>Type</th>
+			<th>Description</th>
+			<th>Pipelines</th>
+			<th>Backfill time</th>
+			<th>Data retention</th>
+			<th>Start checkpoint</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>`events.toml`</td>
+			<td>**Prunable**</td>
+			<td>Lightweight event tables.</td>
+			<td>
+				<ul className="pl-4">
+					<li>`ev_emit_mod`</li>
+					<li>`ev_struct_inst`</li>
+				</ul>
+			</td>
+			<td>Measure locally</td>
+			<td>Configurable (for example, 30 or 90 days)</td>
+			<td>Based on retention period</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`events.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/events.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+		<tr>
+			<td>`obj_versions.toml`</td>
+			<td>**Unprunable**</td>
+			<td>Object versions table containing complete object version to checkpoint mappings.</td>
+			<td>`obj_versions`</td>
+			<td>Measure locally</td>
+			<td>Must retain all data</td>
+			<td>Genesis (checkpoint 0)</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`obj_versions.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/obj_versions.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+		<tr>
+			<td>`tx_affected_addresses.toml`</td>
+			<td>**Prunable**</td>
+			<td>Midweight transaction table.</td>
+			<td>`tx_affected_addresses`</td>
+			<td>Measure locally</td>
+			<td>Configurable (for example, 30 or 90 days)</td>
+			<td>Based on retention period</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`tx_affected_addresses.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/tx_affected_addresses.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+		<tr>
+			<td>`tx_affected_objects.toml`</td>
+			<td>**Prunable**</td>
+			<td>Midweight transaction table.</td>
+			<td>`tx_affected_objects`</td>
+			<td>Measure locally</td>
+			<td>Configurable (for example, 30 or 90 days)</td>
+			<td>Based on retention period</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`tx_affected_objects.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/tx_affected_objects.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+		<tr>
+			<td>`tx_calls.toml`</td>
+			<td>**Prunable**</td>
+			<td>Midweight transaction table.</td>
+			<td>`tx_calls`</td>
+			<td>Measure locally</td>
+			<td>Configurable (for example, 30 or 90 days)</td>
+			<td>Based on retention period</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`tx_calls.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/tx_calls.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+		<tr>
+			<td>`tx_kinds.toml`</td>
+			<td>**Prunable**</td>
+			<td>Midweight transaction table.</td>
+			<td>`tx_kinds`</td>
+			<td>Measure locally</td>
+			<td>Configurable (for example, 30 or 90 days)</td>
+			<td>Based on retention period</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`tx_kinds.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/tx_kinds.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+		<tr>
+			<td>`unpruned.toml`</td>
+			<td>**Unprunable**</td>
+			<td>Foundational reference data that other queries depend on.</td>
+			<td>
+				<ul className="pl-4">
+					<li>`cp_sequence_numbers`</li>
+					<li>`kv_epoch_ends`</li>
+					<li>`kv_epoch_starts`</li>
+					<li>`kv_feature_flags`</li>
+					<li>`kv_packages`</li>
+					<li>`kv_protocol_configs`</li>
+					<li>`sum_displays`</li>
+					<li>`tx_balance_changes`</li>
+					<li>`tx_digests`</li>
+				</ul>
+			</td>
+			<td>Measure locally</td>
+			<td>Must retain all data</td>
+			<td>Genesis (checkpoint 0)</td>
+		</tr>
+		<tr>
+			<td colspan={7}>
+				<details>
+					<summary>`unpruned.toml`</summary>
+					<ImportContent source="examples/prod-config/indexer/unpruned.toml" mode="code" />
+				</details>
+			</td>
+		</tr>
+	</tbody>
+</table>
+
+## Consistent store setup
+
+The consistent store maintains live ownership and balance indexes in its own RocksDB database and exposes checkpoint-consistent reads over gRPC. It does not use the Postgres `DATABASE_URL` and does not replace the General-purpose Indexer. Keep its database path on persistent local SSD storage.
+
+All 4 pipelines run in 1 process. Their watermarks are independent from the Postgres indexer's watermarks, and throughput is limited by the slowest consistent-store pipeline.
+
+#### Hardware requirements
+
+- **CPU:** 8 cores
+- **Memory:** 32GB
+
+### Restore from a formal snapshot
+
+Without a restore, a new consistent store must process checkpoints from genesis. Restore only if your operator has created a formal snapshot for the same RTD chain. RTD does not provide a public formal snapshot. On a fresh local chain, start from an empty RocksDB path and ingest from genesis with the [fullnode gRPC run command](#run-and-catch-up-with-fullnode-grpc).
+
+The restore command reads from two distinct sources:
+
+1. Exactly 1 formal snapshot source, such as `--http`, `--gcs`, `--azure`, `--s3`, or `--local`.
+1. A required `--remote-store-url`. The restorer uses this store to map the snapshot epoch to its ending checkpoint and fetch that checkpoint; it is not the post-restore catch-up source.
+
+The checkpoint HTTP store supplied to `--remote-store-url` must be operated by you, contain the snapshot epoch's end-of-epoch checkpoint, and match the snapshot's RTD chain ID. The following is a template and cannot run until both stores exist:
+
+```sh
+$ export CONSISTENT_STORE_PATH=/path/to/consistent-store
+$ export RTD_CHECKPOINT_HTTP_URL=http://your-checkpoint-store.internal
+$ mkdir -p "$(dirname "$CONSISTENT_STORE_PATH")"
+
+$ rtd-indexer-alt-consistent-store restore \
+    --database-path "$CONSISTENT_STORE_PATH" \
+    --local /path/to/your/formal-snapshot \
+    --remote-store-url "$RTD_CHECKPOINT_HTTP_URL" \
+    --object-file-concurrency 5 \
+    --pipeline address_balances \
+    --pipeline balances \
+    --pipeline object_by_owner \
+    --pipeline object_by_type \
+    --config consistent-store.toml \
+    --metrics-address 127.0.0.1:9186
+```
+
+| **CLI parameter** | **Description** |
+| --- | --- |
+| `--database-path` | Empty path where the RocksDB database is created. |
+| `--http`, `--gcs`, `--azure`, `--s3`, or `--local` | Formal snapshot source operated by you. Specify exactly one. See [snapshot setup](/operators/snapshots). |
+| `--remote-store-url` | Your HTTP checkpoint store, used to read the epoch mapping and selected end-of-epoch checkpoint during restore. |
+| `--object-file-concurrency` | Number of formal-snapshot object files to download concurrently. |
+| `--pipeline` | Runtime pipeline name to restore. Repeat once for each required pipeline. |
+| `--config` | Consistent-store TOML configuration. Only its RocksDB settings are used during restore. |
+
+Each `--pipeline` is required because restore materializes only explicitly selected pipelines. Let the command exit successfully before starting `run`.
+
+Use a formal snapshot whose end-of-epoch checkpoint remains available in your checkpoint store. If that checkpoint is missing, restore cannot complete; choose a snapshot with a retained checkpoint or repair the store.
+
+### Run and catch up with fullnode gRPC
+
+After restore completes, start the combined consistent-store indexer and gRPC service. The polling client catches up after the restored watermark, and streaming supplies new checkpoints at the network tip. Use your own RTD fullnode gRPC endpoint. For a new local chain with all checkpoints retained, the same command can start from genesis without a restore:
+
+```sh
+$ export CONSISTENT_STORE_PATH=/path/to/consistent-store
+$ export FULLNODE_GRPC_URL=http://127.0.0.1:9000
+
+$ rtd-indexer-alt-consistent-store run \
+    --database-path "$CONSISTENT_STORE_PATH" \
+    --rpc-api-url "$FULLNODE_GRPC_URL" \
+    --streaming-url "$FULLNODE_GRPC_URL" \
+    --rpc-listen-address 127.0.0.1:7001 \
+    --metrics-address 127.0.0.1:9186 \
+    --config consistent-store.toml
+```
+
+Wait for the service to report `SERVING` and for every pipeline watermark to approach the network tip before routing GraphQL traffic to it. Only 1 process can open a given RocksDB path. Back up the RocksDB path separately from Postgres, and stop the consistent-store process before taking a filesystem-level copy.
+
+If a successfully restored watermark is older than the fullnode's retention window and you operate a full-retention MinIO published bucket, use that bucket for the catch-up phase:
+
+```sh
+$ rtd-indexer-alt-consistent-store run \
+    --database-path "$CONSISTENT_STORE_PATH" \
+    --remote-store-s3 "$RTD_PUBLISHED_MINIO_BUCKET" \
+    --rpc-listen-address 127.0.0.1:7001 \
+    --metrics-address 127.0.0.1:9186 \
+    --config consistent-store.toml
+```
+
+Do not route traffic to this temporary catch-up process. After it reaches the network tip, stop it and restart with fullnode gRPC.
+
+To build a consistent store without a formal snapshot, process from checkpoint 0 using either your fullnode (if it retains genesis) or your full-retention MinIO published bucket. Do not set `--first-checkpoint` to a later checkpoint, because doing so produces incomplete ownership and balance state. Keep every source on the same RTD network and use a separate RocksDB path per network.
+
+### Run config recommendations
+
+The CLI runtime pipeline names use underscores, while the corresponding TOML keys use hyphens:
+
+| **Runtime pipeline (`--pipeline`)** | **TOML key** | **Description** |
+| --- | --- | --- |
+| `address_balances` | `address-balances` | Address balance accumulator state. |
+| `balances` | `balances` | Coin balance state. |
+| `object_by_owner` | `object-by-owner` | Live objects indexed by owner. |
+| `object_by_type` | `object-by-type` | Live objects indexed by type. |
+
+Restore time depends on snapshot size, source bandwidth, and local storage. All pipeline state must be retained.
+
+<details>
+	<summary>`consistent-store.toml`</summary>
+	<ImportContent source="examples/prod-config/consistent_store.toml" mode="code" />
+</details>
+
+## GraphQL RPC server setup
+
+GraphQL RPC server reads data from the general-purpose indexer's database (Postgres), the consistent store, and the [archival service](/develop/accessing-data/archival-store).
+
+<Tabs className="tabsHeadingCentered--small">
+<TabItem value="prereq" label="Prerequisites">
+
+- [x] Ensure that **all unprunable indexer pipelines** (`obj_versions.toml` and `unpruned.toml`) have fully caught up to the network tip before starting the GraphQL RPC server. The GraphQL service only operates normally once these pipelines are complete.
+
+</TabItem>
+</Tabs>
+
+#### Hardware requirements
+
+- **CPU:** 2 cores per instance
+- **Memory:** 4GB per instance
+
+Scale the number of nodes based on the desired read throughput requirements of your client applications.
+
+### GraphQL RPC server dependencies
+
+The GraphQL RPC server relies on multiple backend services to fulfill different types of queries:
+- Archival service (`--ledger-grpc-url`) provides historical data for most queries involving checkpoints, objects, and transactions.
+- Consistent store (`--consistent-store-url`) serves live data for queries related to current object and balance ownership.
+- Postgres database (`--database-url`) is the primary store for most queries, except for direct object and transaction lookups handled by the Archival service.
+- Fullnode gRPC (`--fullnode-rpc-url`) powers transaction simulation and execution.
+
+Set the appropriate service URLs in your run command based on the query types your GraphQL RPC server needs to support.
+
+### Run `rtd-indexer-alt-graphql`
+
+:::info
+
+RTD has no public archival service. Deploy your own archival service against the same RTD genesis and chain ID before enabling queries that require `LedgerService`.
+
+:::
+
+Use the following command to run a GraphQL RPC server node:
+
+```sh
+$ rtd-indexer-alt-graphql rpc \
+    --config <PATH_TO_GRAPHQL_CONFIG_FILE> \
+    --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_1> \
+    --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_2> \
+    --indexer-config <PATH_TO_INDEXER_CONFIG_FILE_3> \
+    --ledger-grpc-url <LEDGER_GRPC_URL> \
+    --consistent-store-url <CONSISTENT_STORE_URL> \
+    --database-url <DATABASE_URL> \
+    --fullnode-rpc-url <FULLNODE_GRPC_URL> \
+    --rpc-listen-address <RPC_LISTEN_ADDRESS> \
+    --metrics-address <METRICS_ADDRESS>
+```
+
+Multiple `--indexer-config` parameters can be provided, one for each general-purpose indexer instance.
+
+| **CLI parameter** | **Description** |
+| --- | --- |
+| `PATH_TO_GRAPHQL_CONFIG_FILE` | Path to the optional GraphQL RPC server configuration file. |
+| `PATH_TO_INDEXER_CONFIG_FILE` | Path to a General-purpose Indexer configuration file; repeat for each group of pipelines. |
+| `LEDGER_GRPC_URL` | Archival Service `LedgerService` gRPC URL. |
+| `CONSISTENT_STORE_URL` | [Consistent store](#consistent-store-setup) gRPC URL. Use `http://` unless you explicitly configured its TLS listener. |
+| `DATABASE_URL` | Postgres database connection string. |
+| `FULLNODE_GRPC_URL` | Your RTD fullnode gRPC URL, used for transaction simulation and execution. |
+| `RPC_LISTEN_ADDRESS` | GraphQL bind address, for example `127.0.0.1:7000`. |
+| `METRICS_ADDRESS` | Prometheus bind address unique to this process, for example `127.0.0.1:9185`. |
+
+Example:
+
+```sh
+$ export FULLNODE_GRPC_URL=http://127.0.0.1:9000
+$ export LEDGER_GRPC_URL=http://your-ledger-service.internal:port
+
+$ rtd-indexer-alt-graphql rpc \
+    --config graphql.toml \
+    --indexer-config events.toml \
+    --indexer-config obj_versions.toml \
+    --indexer-config tx_affected_addresses.toml \
+    --indexer-config tx_affected_objects.toml \
+    --indexer-config tx_calls.toml \
+    --indexer-config tx_kinds.toml \
+    --indexer-config unpruned.toml \
+    --ledger-grpc-url "$LEDGER_GRPC_URL" \
+    --consistent-store-url http://127.0.0.1:7001 \
+    --database-url postgres://username:password@localhost:5432/database \
+    --fullnode-rpc-url "$FULLNODE_GRPC_URL" \
+    --rpc-listen-address 127.0.0.1:7000 \
+    --metrics-address 127.0.0.1:9185
+```
+
+The `LEDGER_GRPC_URL` above is a placeholder. Start your own archival `LedgerService` and set it to the service's actual listener. After all dependencies are running, GraphQL is available at `http://127.0.0.1:7000/graphql`, its health check is at `http://127.0.0.1:7000/health`, and Prometheus metrics are at `http://127.0.0.1:9185/metrics`. Assign a different metrics address to every co-located indexer process; all 3 binaries otherwise default to **port 9184**.
+
+### Generating configuration
+
+You can run the GraphQL RPC server without a configuration file, which uses default values. To customize settings, generate a configuration file using the following command and edit it as needed:
+
+```sh
+$ rtd-indexer-alt-graphql generate-config > <PATH_TO_GRAPHQL_CONFIG_FILE>
+```
+
+This produces output similar to the following:
+
+<details>
+	<summary>`graphql.toml`</summary>
+	<ImportContent source="examples/prod-config/graphql.toml" mode="code" />
+</details>
+
+## Indexer/GraphQL Postgres-compatible database setup
+
+Both the indexer and GraphQL server require a Postgres-compatible database shared between them.
+
+The upstream throughput measurements are not RTD performance guarantees. Benchmark against your own checkpoint cadence, query mix, and retention window before selecting a database size.
+
+### AlloyDB Omni
+
+AlloyDB Omni recommends 8GB RAM per vCPU. See the [AlloyDB Omni hardware requirements](https://docs.cloud.google.com/alloydb/omni/containers/current/docs/plan-installation#hardware) for details. Allocating less than this results in the database closing indexer and GraphQL connections during load testing.
+
+#### Hardware requirements
+
+- **CPU:** 6 cores
+- **Memory:** 48GB
+
+### Vanilla Postgres
+
+You can also use a standard Postgres installation.
+
+#### Hardware requirements
+
+- **CPU:** 6 cores
+- **Memory:** 48GB
+
+## Watermark debugging
+
+The indexer tracks progress for each pipeline using watermark records in the `watermarks` table. Each record stores the last successfully processed checkpoint for that pipeline. Use these queries to diagnose indexer health:
+
+### Check pipeline progress
+
+Query the `watermarks` table to see the current checkpoint for each pipeline:
+
+```sql
+SELECT pipeline, checkpoint_hi_inclusive, epoch_hi_inclusive
+FROM watermarks
+ORDER BY pipeline;
+```
+
+If a pipeline's `checkpoint_hi_inclusive` is significantly behind the network tip, that pipeline is lagging. Compare against the current RTD network checkpoint from its configured gRPC endpoint or through `curl -s http://localhost:9284/metrics | grep watermark_checkpoint` (adjust the port to your indexer metrics listener). The [`watermark_checkpoint` metric](https://github.com/LinkUVerse/rtd/blob/main/crates/rtd-indexer-alt-framework/src/metrics.rs) tracks each pipeline's current position; `watermark_checkpoint_in_db` shows the last position persisted to the database.
+
+If you also run the GraphQL RPC server, its health endpoint (for example, `http://localhost:7000/health`) reports lag broken down by data source and pipeline.
+
+### Diagnose a stalled pipeline
+
+A stalled watermark is the starting point for most indexer investigations. Narrow the cause to one of three categories before taking action:
+
+**Checkpoints not being downloaded (upstream):** The ingestion layer cannot fetch new checkpoints from the data source. Check network connectivity to your gRPC endpoint or self-hosted MinIO bucket. Verify the fullnode or checkpoint store is healthy and serving the expected checkpoint range. The `ingested_checkpoint_timestamp_lag` Prometheus metric shows how far behind the ingestion layer is.
+
+**Pipeline processing error:** The pipeline fetched checkpoints but fails to transform or process them. Check the indexer logs filtered by the pipeline name for error messages. Common causes include schema mismatches after a protocol upgrade or unexpected data in a specific checkpoint.
+
+**Commits not going through (downstream):** The pipeline processed checkpoints but cannot write results to the database. Check Postgres connectivity, disk space, and lock contention. Long-running autovacuum on the pipeline's target table can block writes. Query `pg_stat_activity` for active vacuum processes on that table.
+
+### The `cp_sequence_numbers` pipeline
+
+The `cp_sequence_numbers` pipeline maps checkpoint sequence numbers to their transaction ranges. The GraphQL RPC server depends on this pipeline to translate checkpoint-based queries into transaction lookups. If this pipeline is missing or lagging:
+
+- GraphQL queries that filter by checkpoint range return incomplete or empty results.
+- The GraphQL server logs warnings about missing checkpoint data.
+
+To fix, ensure `cp_sequence_numbers` is included in your indexer's pipeline list. If you did not include it during initial setup, follow the [adding a new pipeline](#adding-a-new-pipeline) procedure to add it.
+
+### Indexer troubleshooting
+
+The following table lists common starting points for investigation. Most symptoms can result from multiple confounding factors, so treat these as initial hypotheses rather than definitive diagnoses.
+
+| Symptom | Common cause | Suggested mitigation |
+|---|---|---|
+| All pipelines stalled at the same checkpoint | Postgres connection lost or disk full | Check Postgres connectivity and disk space. Restart the indexer after fixing. |
+| One pipeline lagging, others current | Pipeline-specific error (schema mismatch, data issue) | Check indexer logs for that pipeline. If corrupted, [re-index from a checkpoint](#re-indexing-from-a-different-checkpoint). |
+| GraphQL returns empty results for valid queries | `cp_sequence_numbers` pipeline missing or lagging | Add the pipeline or wait for it to catch up. |
+| Watermark not advancing after restart | Pipeline resuming from its last committed watermark, which is expected behavior | Investigate using the three categories above (upstream, processing, downstream). Only delete the watermark record as a last resort (see [re-indexing](#re-indexing-from-a-different-checkpoint)). |
+| Postgres table bloat after enabling pruning | Dead rows accumulating faster than autovacuum | Apply the [autovacuum tuning settings](#reducing-indexer-pipeline-table-and-index-bloat). |
+
+## Adding a new pipeline
+
+Adding a new pipeline to an existing indexer currently requires these steps:
+
+1. Start a new pipeline in its own indexer instance, optionally with the `--first-checkpoint <checkpoint>` flag set if you want to start from a checkpoint after genesis.
+   * The `--first-checkpoint` flag is only respected if no watermark record exists for the pipeline (the pipeline has not run before). You must manually remove the watermark record if you want to run the pipeline with a different value of `--first-checkpoint`, or it is ignored.
+2. After the new pipeline catches up to the tip of the network, you can optionally merge it into another indexer instance.
+
+## Re-indexing from a different checkpoint
+
+Once the pipeline starts indexing data and the indexer starts recording watermarks, future runs of the pipeline ignore the `--first-checkpoint` flag and always resume from the last recorded checkpoint.
+
+To restart and index from a different initial checkpoint, delete the watermark record for that pipeline. Delete the existing data for that pipeline as well to avoid any data inconsistencies.
+
+Use the following template for the general-purpose indexer to write to Postgres.
+```sql
+BEGIN;
+
+-- One statement per pipeline to re-index
+TRUNCATE TABLE ev_emit_mod;
+
+
+DELETE FROM watermarks
+WHERE pipeline IN (
+-- List all pipelines to re-index
+  'ev_emit_mod'
+);
+
+SELECT * FROM WATERMARKS; -- Verify that the watermark record(s) have been deleted
+
+-- Verify that the tables have been cleared
+
+COMMIT;
+```
+
+## Reducing indexer pipeline table and index bloat
+
+Bloat occurs when dead rows from deletes accumulate faster than autovacuum can reclaim them. This happens in two cases:
+
+- You enable pruning on a previously unpruned pipeline.
+- You reduce the retention period on an already-pruned pipeline.
+
+The following inherited settings illustrate one 32-vCPU, 256 GiB Postgres configuration. They have not been validated as RTD defaults; tune from your own write rate, table bloat, and query latency:
+
+| Parameter | Value |
+|-----------|-------|
+| `autovacuum_max_workers` | `8` |
+| `autovacuum_vacuum_cost_limit` | `8000` |
+| `autovacuum_vacuum_scale_factor` | `0.01` |
+| `maintenance_work_mem` | `13GB` |
+| `max_parallel_maintenance_workers` | `4` |
+
+While autovacuum enables reusing dead rows for future inserts, it does not return reclaimed disk space to the operating system. The on-disk footprint remains until you compact tables and indexes using one of the following tools:
+
+| Tool          | Type      | `ACCESS EXCLUSIVE` locking            | Schedulable | Link                                                    |
+|---------------|-----------|---------------------------------------|-------------|---------------------------------------------------------|
+| `VACUUM FULL` | Built-in  | Entire operation                      | No          | [PostgreSQL VACUUM documentation](https://www.postgresql.org/docs/current/sql-vacuum.html) |
+| pg_repack     | Extension | Briefly during initial and final step | No          | [pg_repack documentation](https://reorg.github.io/pg_repack/)                      |
+| pg_squeeze    | Extension | Briefly during final step             | Yes         | [pg_squeeze on GitHub](https://github.com/cybertec-postgresql/pg_squeeze)       |

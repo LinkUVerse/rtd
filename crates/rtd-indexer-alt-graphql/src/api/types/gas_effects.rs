@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_graphql::SimpleObject;
-use rtd_types::effects::{TransactionEffects as NativeTransactionEffects, TransactionEffectsAPI};
+use rtd_types::effects::TransactionEffects as NativeTransactionEffects;
+use rtd_types::effects::TransactionEffectsAPI;
 
-use crate::{api::types::gas::GasCostSummary, scope::Scope};
-
-use super::object::Object;
+use crate::api::types::gas::GasCostSummary;
+use crate::api::types::object::Object;
+use crate::scope::Scope;
 
 /// Effects related to gas (costs incurred and the identity of the smashed gas object returned).
 #[derive(SimpleObject)]
@@ -19,8 +20,9 @@ pub(crate) struct GasEffects {
 
 impl GasEffects {
     pub(crate) fn from_effects(scope: Scope, effects: &NativeTransactionEffects) -> Self {
-        let ((id, version, digest), _owner) = effects.gas_object();
-        let gas_object = Some(Object::with_ref(&scope, id.into(), version, digest));
+        let gas_object = effects.gas_object().map(|((id, version, digest), _owner)| {
+            Object::with_ref(&scope, id.into(), version, digest)
+        });
         let gas_summary = Some(effects.gas_cost_summary().clone().into());
 
         Self {

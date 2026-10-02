@@ -1,0 +1,35 @@
+---
+title: Developer Tools
+description: Developer tools present in the RTD fork source and their deployment status.
+keywords:
+  - developer tools
+  - RTD CLI
+  - Move
+  - SDK
+  - indexer
+questions:
+  - What developer tools can I verify in the RTD source?
+  - Are Sui ecosystem tools already integrated with RTD?
+answer: >-
+  The RTD CLI, Move tooling, SDK source, and indexer components are available in
+  the fork source. No third-party Sui tool, public wallet, RPC provider,
+  explorer, oracle, or hosted service is verified as an RTD integration.
+---
+
+This page lists source components that can be inspected and built for RTD. It does not certify a hosted service, published package, or third-party integration. Check the exact revision and network genesis before deploying any tool.
+
+| Tool | Verified source | What to check |
+| --- | --- | --- |
+| RTD CLI and Move tools | This repository's `crates/rtd` and `external-crates/move` directories | Build the `rtd` binary from the target revision; run `rtd --version`, `rtd move build`, and `rtd move test`. |
+| RTD node | This repository's `crates/rtd-node` and `crates/rtd-config` directories | Confirm genesis, peer configuration, and chain ID for the network you operate. |
+| RTD TypeScript SDK | `rtd-ts-sdk` source repository | Inspect package manifests, including `rtd-typescript`, `rtd-dapp-kit-react`, and `rtd-wallet-standard`; test against your RTD endpoint. |
+| RTD Rust SDK | `rtd-rust-sdk` source repository | Build its workspace and test its client against your RTD endpoint. |
+| RTD indexer and GraphQL components | This repository's `crates/rtd-indexer-alt*` and `crates/rtd-graphql-rpc` directories | Deploy with data from the same RTD chain, then verify checkpoint and query results. |
+
+See [CLI reference](/references/cli), [SDKs](/references/rtd-sdks), [local network](/getting-started/onboarding/local-network), and [data stores](/operators/data-management/available-data-stores).
+
+## Third-party services
+
+Slush, Sui wallet extensions, SuiPlay, Sui explorers, Sui faucets, Sui Name Service, SuiLink, oracle networks, and ecosystem indexers are upstream Sui services or third-party projects. Renaming their URLs or display names does not create an RTD deployment or prove network compatibility. Use them only after the provider confirms RTD chain support and an integration test covers signing, submission, indexing, and chain identification as applicable.
+
+RTD has no verified public Mainnet, Testnet, RPC provider, faucet, explorer, wallet distribution, or third-party tooling catalog. Future RTD Mainnet will not expose JSON-RPC. The repository file `docs/RTD_PUBLICATION_GATE.md` records the requirements before public service details may be published.

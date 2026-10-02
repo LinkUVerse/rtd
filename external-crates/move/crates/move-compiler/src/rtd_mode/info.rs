@@ -7,17 +7,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    diagnostics::warning_filters::WarningFilters,
+    diagnostics::filter::FilterScope,
     expansion::ast::{Fields, ModuleIdent},
     naming::ast as N,
     parser::ast::{Ability_, DatatypeName, DocComment, Field},
-    shared::{
-        program_info::{DatatypeKind, TypingProgramInfo},
-        unique_map::UniqueMap,
-    },
     rtd_mode::{
         OBJECT_MODULE_NAME, RTD_ADDR_VALUE, TRANSFER_FUNCTION_NAME, TRANSFER_MODULE_NAME,
         UID_TYPE_NAME,
+    },
+    shared::{
+        program_info::{DatatypeKind, TypingProgramInfo},
+        unique_map::UniqueMap,
     },
     typing::{ast as T, visitor::TypingVisitorContext},
 };
@@ -151,11 +151,11 @@ fn all_uid_holders(
                     .filter(|(_t, is_phantom)| *is_phantom)
                     .map(|(t, _is_phantom)| visit_ty(info, visited, uid_holders, t))
                     .fold(None, merge_uid_holder_opt);
-                let tn_holder = if let N::TypeName_::ModuleType(m, n) = tn.value {
-                    visit_decl(info, visited, uid_holders, m, n);
+                let tn_holder = if let N::TypeName_::ModuleType(m, n) = &tn.value {
+                    visit_decl(info, visited, uid_holders, *m.as_ref(), *n);
                     uid_holders
-                        .get(&m)
-                        .and_then(|m_uid_holders| m_uid_holders.get(&n).copied())
+                        .get(m)
+                        .and_then(|m_uid_holders| m_uid_holders.get(n).copied())
                 } else {
                     None
                 };
@@ -279,7 +279,7 @@ fn add_private_transfers(
         transferred: &'a mut BTreeMap<ModuleIdent, BTreeMap<DatatypeName, TransferKind>>,
     }
     impl TypingVisitorContext for TransferVisitor<'_> {
-        fn push_warning_filter_scope(&mut self, _: WarningFilters) {
+        fn push_warning_filter_scope(&mut self, _: FilterScope) {
             unreachable!("no warning filters in function bodies")
         }
 

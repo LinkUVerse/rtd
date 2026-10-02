@@ -1,18 +1,11 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use alloy::primitives::Address as EthAddress;
+use alloy::providers::Provider;
 use clap::*;
-use ethers::providers::Middleware;
-use ethers::types::Address as EthAddress;
 use fastcrypto::encoding::{Encoding, Hex};
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentMessage;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::str::from_utf8;
-use std::sync::Arc;
-use std::time::Duration;
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_bridge::client::bridge_authority_aggregator::BridgeAuthorityAggregator;
 use rtd_bridge::crypto::{BridgeAuthorityPublicKey, BridgeAuthorityPublicKeyBytes};
 use rtd_bridge::eth_transaction_builder::build_eth_transaction;
@@ -20,6 +13,7 @@ use rtd_bridge::metrics::BridgeMetrics;
 use rtd_bridge::rtd_client::RtdBridgeClient;
 use rtd_bridge::rtd_transaction_builder::build_rtd_transaction;
 use rtd_bridge::types::BridgeActionType;
+use rtd_bridge::utils::get_eth_provider;
 use rtd_bridge::utils::{EthBridgeContracts, get_eth_contracts};
 use rtd_bridge::utils::{
     examine_key, generate_bridge_authority_key_and_write_to_file,
@@ -30,7 +24,7 @@ use rtd_bridge_cli::{
     SEPOLIA_BRIDGE_PROXY_ADDR, make_action, select_contract_address,
 };
 use rtd_config::Config;
-use rtd_sdk::RtdClientBuilder;
+use rtd_rpc_api::Client;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::bridge::BridgeChainId;
 use rtd_types::bridge::{MoveTypeCommitteeMember, MoveTypeCommitteeMemberRegistration};
@@ -39,6 +33,14 @@ use rtd_types::crypto::AuthorityPublicKeyBytes;
 use rtd_types::crypto::Signature;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::transaction::Transaction;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentMessage;
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::str::FromStr;
+use std::str::from_utf8;
+use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -162,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
 
             // Handle eth side
             // TODO assert chain id returned from rpc matches chain_id
-            let eth_signer_client = config.eth_signer();
+            let eth_signer_provider = config.eth_signer_provider();
             // Create BridgeAction
             let eth_action = make_action(chain_id, &cmd);
             println!("Action to execute on Eth: {:?}", eth_action);
@@ -177,21 +179,24 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             let contract_address = select_contract_address(&config, &cmd);
-            let tx = build_eth_transaction(
-                contract_address,
-                eth_signer_client.clone(),
-                certified_action,
-            )
-            .await
-            .expect("Failed to build eth transaction");
+            let tx = build_eth_transaction(contract_address, certified_action)
+                .await
+                .expect("Failed to build eth transaction");
             println!("sending Eth tx: {:?}", tx);
-            match tx.send().await {
-                Ok(tx_hash) => {
-                    println!("Transaction sent with hash: {:?}", tx_hash);
+            let tx_receipt_result = eth_signer_provider
+                .send_transaction(tx)
+                .await?
+                .get_receipt()
+                .await;
+            match tx_receipt_result {
+                Ok(tx_receipt) => {
+                    println!(
+                        "Transaction sent with hash: {:?}",
+                        tx_receipt.transaction_hash
+                    );
                 }
                 Err(err) => {
-                    let revert = err.as_revert();
-                    println!("Transaction reverted: {:?}", revert);
+                    println!("Transaction reverted: {:?}", err);
                 }
             };
 
@@ -211,19 +216,15 @@ async fn main() -> anyhow::Result<()> {
                     "Network or bridge proxy address must be provided"
                 )),
             }?;
-            let provider = Arc::new(
-                ethers::prelude::Provider::<ethers::providers::Http>::try_from(eth_rpc_url)
-                    .unwrap()
-                    .interval(std::time::Duration::from_millis(2000)),
-            );
-            let chain_id = provider.get_chainid().await?;
+            let eth_provider = get_eth_provider(&eth_rpc_url)?;
+            let chain_id = eth_provider.get_chain_id().await?;
             let EthBridgeContracts {
                 bridge,
                 committee,
                 limiter,
                 vault,
                 config,
-            } = get_eth_contracts(bridge_proxy, &provider).await?;
+            } = get_eth_contracts(bridge_proxy, eth_provider.clone()).await?;
             let message_type = BridgeActionType::EvmContractUpgrade as u8;
             let bridge_upgrade_next_nonce: u64 = bridge.nonces(message_type).call().await?;
             let committee_upgrade_next_nonce: u64 = committee.nonces(message_type).call().await?;
@@ -256,12 +257,12 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
 
             let print = OutputEthBridge {
-                chain_id: chain_id.as_u64(),
-                bridge_proxy: bridge.address(),
-                committee_proxy: committee.address(),
-                limiter_proxy: limiter.address(),
-                config_proxy: config.address(),
-                vault: vault.address(),
+                chain_id,
+                bridge_proxy: *bridge.address(),
+                committee_proxy: *committee.address(),
+                limiter_proxy: *limiter.address(),
+                config_proxy: *config.address(),
+                vault: *vault.address(),
                 nonces: Nonces {
                     token_transfer: token_transfer_next_nonce,
                     blocklist_update: blocklist_update_nonce,
@@ -287,17 +288,15 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to get bridge summary: {:?}", e))?;
             let move_type_bridge_committee = bridge_summary.committee;
-            let rtd_client = RtdClientBuilder::default().build(rtd_rpc_url).await?;
+            let rtd_client = Client::new(rtd_rpc_url)?;
             let stakes = rtd_client
-                .governance_api()
-                .get_committee_info(None)
+                .get_committee(None)
                 .await?
-                .validators
+                .voting_rights
                 .into_iter()
                 .collect::<HashMap<_, _>>();
             let names = rtd_client
-                .governance_api()
-                .get_latest_rtd_system_state()
+                .get_system_state_summary(None)
                 .await?
                 .active_validators
                 .into_iter()
@@ -373,10 +372,9 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to get bridge summary: {:?}", e))?;
             let move_type_bridge_committee = bridge_summary.committee;
-            let rtd_client = RtdClientBuilder::default().build(rtd_rpc_url).await?;
+            let rtd_client = Client::new(rtd_rpc_url)?;
             let names = rtd_client
-                .governance_api()
-                .get_latest_rtd_system_state()
+                .get_system_state_summary(None)
                 .await?
                 .active_validators
                 .into_iter()
@@ -455,7 +453,7 @@ async fn main() -> anyhow::Result<()> {
             };
             let mut total_online_stake = 0;
             for ((name, rtd_address, pubkey, eth_address, url, stake, blocklisted), ping_resp) in
-                authorities.into_iter().zip(ping_tasks_resp)
+                authorities.into_iter().zip_debug_eq(ping_tasks_resp)
             {
                 let pubkey = if hex {
                     Hex::encode(pubkey.as_bytes())

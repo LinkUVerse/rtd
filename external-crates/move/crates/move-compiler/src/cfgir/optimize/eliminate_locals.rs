@@ -5,11 +5,12 @@
 use crate::{
     cfgir::{cfg::MutForwardCFG, remove_no_ops},
     diagnostics::DiagnosticReporter,
-    expansion::ast::Mutability,
+    expansion::ast::{ModuleIdent, Mutability},
     hlir::ast::{FunctionSignature, SingleType, Value, Var},
-    parser,
+    parser::ast::ConstantName,
     shared::unique_map::UniqueMap,
 };
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 /// returns true if anything changed
@@ -17,7 +18,7 @@ pub fn optimize(
     _reporter: &DiagnosticReporter,
     signature: &FunctionSignature,
     _locals: &UniqueMap<Var, (Mutability, SingleType)>,
-    _constants: &UniqueMap<parser::ast::ConstantName, Value>,
+    _constants: &BTreeMap<(ModuleIdent, ConstantName), Value>,
     cfg: &mut MutForwardCFG,
 ) -> bool {
     let changed = remove_no_ops::optimize(cfg);
@@ -163,7 +164,7 @@ mod count {
         match &parent_e.exp.value {
             E::Unit { .. }
             | E::Value(_)
-            | E::Constant(_)
+            | E::Constant(_, _)
             | E::UnresolvedError
             | E::ErrorConstant { .. } => (),
 
@@ -225,10 +226,12 @@ mod count {
             | E::ModuleCall(_)
             | E::Move { .. }
             | E::Borrow(_, _, _, _) => false,
+            // The `Cast` can abort. If the cast is "pure", it will be dealt with
+            // by folding first
+            E::Cast(_, _) => false,
 
-            E::Unit { .. } | E::Value(_) | E::Constant(_) => true,
+            E::Unit { .. } | E::Value(_) | E::Constant(_, _) => true,
 
-            E::Cast(e, _) => can_subst_exp_single(e),
             E::UnaryExp(op, e) => can_subst_exp_unary(op) && can_subst_exp_single(e),
             E::BinopExp(e1, op, e2) => {
                 can_subst_exp_binary(op) && can_subst_exp_single(e1) && can_subst_exp_single(e2)
@@ -375,7 +378,7 @@ mod eliminate {
 
             E::Unit { .. }
             | E::Value(_)
-            | E::Constant(_)
+            | E::Constant(_, _)
             | E::UnresolvedError
             | E::ErrorConstant { .. }
             | E::BorrowLocal(_, _) => (),

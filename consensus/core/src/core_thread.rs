@@ -1,14 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    collections::BTreeSet,
-    fmt::Debug,
-    sync::{
-        Arc,
-        atomic::{AtomicU32, Ordering},
-    },
-};
+use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
 use consensus_types::block::{BlockRef, Round};
@@ -22,7 +15,7 @@ use tokio::sync::{oneshot, watch};
 use tracing::warn;
 
 use crate::{
-    BlockAPI as _,
+    CommitIndex,
     block::VerifiedBlock,
     commit::CertifiedCommits,
     context::Context,
@@ -30,6 +23,7 @@ use crate::{
     core_thread::CoreError::Shutdown,
     dag_state::DagState,
     error::{ConsensusError, ConsensusResult},
+    task::join_and_propagate_panic,
 };
 
 const CORE_THREAD_COMMANDS_CHANNEL_SIZE: usize = 2000;
@@ -83,9 +77,6 @@ pub trait CoreThreadDispatcher: Sync + Send + 'static {
     fn set_propagation_delay(&self, delay: Round) -> Result<(), CoreError>;
 
     fn set_last_known_proposed_round(&self, round: Round) -> Result<(), CoreError>;
-
-    /// Returns the highest round received for each authority by Core.
-    fn highest_received_rounds(&self) -> Vec<Round>;
 }
 
 pub(crate) struct CoreThreadHandle {
@@ -97,7 +88,7 @@ impl CoreThreadHandle {
     pub async fn stop(self) {
         // drop the sender, that will force all the other weak senders to not able to upgrade.
         drop(self.sender);
-        self.join_handle.await.ok();
+        join_and_propagate_panic(self.join_handle).await;
     }
 }
 
@@ -106,12 +97,22 @@ struct CoreThread {
     receiver: Receiver<CoreThreadCommand>,
     rx_propagation_delay: watch::Receiver<Round>,
     rx_last_known_proposed_round: watch::Receiver<Round>,
+    rx_durable_commit: watch::Receiver<CommitIndex>,
     context: Arc<Context>,
 }
 
 impl CoreThread {
     pub async fn run(mut self) -> ConsensusResult<()> {
+        let result = self.run_inner().await;
+        self.core.stop().await;
+        result
+    }
+
+    async fn run_inner(&mut self) -> ConsensusResult<()> {
         tracing::debug!("Started core thread");
+
+        // Durable progress may have arrived between Core recovery and this receiver starting.
+        self.core.on_durable_commit_progress()?;
 
         loop {
             tokio::select! {
@@ -151,8 +152,8 @@ impl CoreThread {
                     let _scope = monitored_scope("CoreThread::loop::set_last_known_proposed_round");
                     let round = *self.rx_last_known_proposed_round.borrow();
                     self.core.set_last_known_proposed_round(round);
-                    // Select the threshold clock round instead of constraining proposals to the
-                    // synced round: local persisted proposals may already be at a higher round.
+                    // `round` arg is meant to avoid proposing below already proposed round.
+                    // Passing Round::MAX to select the threshold clock round for proposing.
                     self.core.new_block(Round::MAX, true)?;
                 }
                 _ = self.rx_propagation_delay.changed() => {
@@ -168,6 +169,10 @@ impl CoreThread {
                         self.core.new_block(Round::MAX, true)?;
                     }
                 }
+                result = self.rx_durable_commit.changed() => {
+                    result.expect("commit consumer durable-progress sender cannot be dropped while Core is running");
+                    self.core.on_durable_commit_progress()?;
+                }
             }
         }
 
@@ -181,39 +186,28 @@ pub(crate) struct ChannelCoreThreadDispatcher {
     sender: WeakSender<CoreThreadCommand>,
     tx_propagation_delay: Arc<watch::Sender<Round>>,
     tx_last_known_proposed_round: Arc<watch::Sender<Round>>,
-    highest_received_rounds: Arc<Vec<AtomicU32>>,
 }
 
 impl ChannelCoreThreadDispatcher {
     pub(crate) fn start(
         context: Arc<Context>,
-        dag_state: &RwLock<DagState>,
+        _dag_state: &RwLock<DagState>,
         core: Core,
     ) -> (Self, CoreThreadHandle) {
-        // Initialize highest received rounds.
-        let highest_received_rounds = {
-            let dag_state = dag_state.read();
-
-            context
-                .committee
-                .authorities()
-                .map(|(index, _)| {
-                    AtomicU32::new(dag_state.get_last_block_for_authority(index).round())
-                })
-                .collect()
-        };
-
         let (sender, receiver) =
             channel("consensus_core_commands", CORE_THREAD_COMMANDS_CHANNEL_SIZE);
         let (tx_propagation_delay, mut rx_propagation_delay) = watch::channel(0);
         let (tx_last_known_proposed_round, mut rx_last_known_proposed_round) = watch::channel(0);
         rx_propagation_delay.mark_unchanged();
         rx_last_known_proposed_round.mark_unchanged();
+        let mut rx_durable_commit = core.subscribe_highest_durable_commit();
+        rx_durable_commit.mark_unchanged();
         let core_thread = CoreThread {
             core,
             receiver,
             rx_propagation_delay,
             rx_last_known_proposed_round,
+            rx_durable_commit,
             context: context.clone(),
         };
 
@@ -235,7 +229,6 @@ impl ChannelCoreThreadDispatcher {
             sender: sender.downgrade(),
             tx_propagation_delay: Arc::new(tx_propagation_delay),
             tx_last_known_proposed_round: Arc::new(tx_last_known_proposed_round),
-            highest_received_rounds: Arc::new(highest_received_rounds),
         };
         let handle = CoreThreadHandle {
             join_handle,
@@ -263,11 +256,8 @@ impl CoreThreadDispatcher for ChannelCoreThreadDispatcher {
         &self,
         blocks: Vec<VerifiedBlock>,
     ) -> Result<BTreeSet<BlockRef>, CoreError> {
-        for block in &blocks {
-            self.highest_received_rounds[block.author()].fetch_max(block.round(), Ordering::AcqRel);
-        }
         let (sender, receiver) = oneshot::channel();
-        self.send(CoreThreadCommand::AddBlocks(blocks.clone(), sender))
+        self.send(CoreThreadCommand::AddBlocks(blocks, sender))
             .await;
         let missing_block_refs = receiver.await.map_err(|e| Shutdown(e.to_string()))?;
 
@@ -279,11 +269,8 @@ impl CoreThreadDispatcher for ChannelCoreThreadDispatcher {
         block_refs: Vec<BlockRef>,
     ) -> Result<BTreeSet<BlockRef>, CoreError> {
         let (sender, receiver) = oneshot::channel();
-        self.send(CoreThreadCommand::CheckBlockRefs(
-            block_refs.clone(),
-            sender,
-        ))
-        .await;
+        self.send(CoreThreadCommand::CheckBlockRefs(block_refs, sender))
+            .await;
         let missing_block_refs = receiver.await.map_err(|e| Shutdown(e.to_string()))?;
 
         Ok(missing_block_refs)
@@ -293,12 +280,6 @@ impl CoreThreadDispatcher for ChannelCoreThreadDispatcher {
         &self,
         commits: CertifiedCommits,
     ) -> Result<BTreeSet<BlockRef>, CoreError> {
-        for commit in commits.commits() {
-            for block in commit.blocks() {
-                self.highest_received_rounds[block.author()]
-                    .fetch_max(block.round(), Ordering::AcqRel);
-            }
-        }
         let (sender, receiver) = oneshot::channel();
         self.send(CoreThreadCommand::AddCertifiedCommits(commits, sender))
             .await;
@@ -329,13 +310,6 @@ impl CoreThreadDispatcher for ChannelCoreThreadDispatcher {
         self.tx_last_known_proposed_round
             .send(round)
             .map_err(|e| Shutdown(e.to_string()))
-    }
-
-    fn highest_received_rounds(&self) -> Vec<Round> {
-        self.highest_received_rounds
-            .iter()
-            .map(|round| round.load(Ordering::Relaxed))
-            .collect()
     }
 }
 
@@ -415,20 +389,19 @@ impl CoreThreadDispatcher for MockCoreThreadDispatcher {
         last_known_proposed_round.push(round);
         Ok(())
     }
-
-    fn highest_received_rounds(&self) -> Vec<Round> {
-        todo!()
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use linku_metrics::monitored_mpsc;
+    use std::time::Duration;
+
     use parking_lot::RwLock;
+    use tokio::time::timeout;
 
     use super::*;
     use crate::{
         CommitConsumerArgs,
+        block::{BlockAPI, TestBlock, genesis_blocks},
         block_manager::BlockManager,
         block_verifier::NoopBlockVerifier,
         commit_observer::CommitObserver,
@@ -436,10 +409,10 @@ mod test {
         core::CoreSignals,
         dag_state::DagState,
         leader_schedule::LeaderSchedule,
-        round_tracker::PeerRoundTracker,
-        storage::mem_store::MemStore,
-        transaction::{TransactionClient, TransactionConsumer},
-        transaction_certifier::TransactionCertifier,
+        round_tracker::RoundTracker,
+        storage::{Store, WriteBatch, mem_store::MemStore},
+        transaction::{TransactionClient, TransactionConsumer, TransactionConsumerPool},
+        transaction_vote_tracker::TransactionVoteTracker,
     };
 
     #[tokio::test]
@@ -450,42 +423,38 @@ mod test {
         let store = Arc::new(MemStore::new());
         let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store.clone())));
         let block_manager = BlockManager::new(context.clone(), dag_state.clone());
-        let (_transaction_client, tx_receiver) = TransactionClient::new(context.clone());
-        let transaction_consumer = TransactionConsumer::new(tx_receiver, context.clone());
-        let (blocks_sender, _blocks_receiver) =
-            monitored_mpsc::unbounded_channel("consensus_block_output");
-        let transaction_certifier = TransactionCertifier::new(
+        let (_transaction_client, tx_receiver, priority_tx_receiver) =
+            TransactionClient::new(context.clone());
+        let transaction_pool = Arc::new(TransactionConsumerPool::new(TransactionConsumer::new(
+            tx_receiver,
+            priority_tx_receiver,
+            context.clone(),
+        )));
+        let transaction_vote_tracker = TransactionVoteTracker::new(
             context.clone(),
             Arc::new(NoopBlockVerifier {}),
             dag_state.clone(),
-            blocks_sender,
         );
         let (signals, signal_receivers) = CoreSignals::new(context.clone());
         let _block_receiver = signal_receivers.block_broadcast_receiver();
-        let (commit_consumer, _commit_receiver, _transaction_receiver) =
-            CommitConsumerArgs::new(0, 0);
-        let leader_schedule = Arc::new(LeaderSchedule::from_store(
-            context.clone(),
-            dag_state.clone(),
-        ));
+        let (commit_consumer, _commit_receiver) = CommitConsumerArgs::new(0, 0);
         let commit_observer = CommitObserver::new(
             context.clone(),
             commit_consumer,
             dag_state.clone(),
-            transaction_certifier.clone(),
-            leader_schedule.clone(),
+            transaction_vote_tracker.clone(),
         )
         .await;
         let leader_schedule = Arc::new(LeaderSchedule::from_store(
             context.clone(),
             dag_state.clone(),
         ));
-        let round_tracker = Arc::new(RwLock::new(PeerRoundTracker::new(context.clone())));
-        let core = Core::new(
+        let round_tracker = Arc::new(RwLock::new(RoundTracker::new(context.clone(), vec![])));
+        let core = Core::new_validator(
             context.clone(),
             leader_schedule,
-            transaction_consumer,
-            transaction_certifier,
+            transaction_pool,
+            transaction_vote_tracker,
             block_manager,
             commit_observer,
             signals,
@@ -512,5 +481,119 @@ mod test {
         // Try to send some commands
         assert!(dispatcher_1.add_blocks(vec![]).await.is_err());
         assert!(dispatcher_2.add_blocks(vec![]).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_last_known_sync_wakes_threshold_clock_round() {
+        telemetry_subscribers::init_for_testing();
+        let (context, mut key_pairs) = Context::new_for_test(4);
+        let context = Arc::new(context);
+        let store = Arc::new(MemStore::new());
+
+        let mut last_round_blocks = genesis_blocks(&context);
+        let mut all_blocks = last_round_blocks.clone();
+        for round in 1..=2 {
+            let mut this_round_blocks = Vec::new();
+            for (index, _authority) in context.committee.authorities() {
+                let block = VerifiedBlock::new_for_test(
+                    TestBlock::new(round, index.value() as u32)
+                        .set_ancestors(last_round_blocks.iter().map(|b| b.reference()).collect())
+                        .build(),
+                );
+                this_round_blocks.push(block);
+            }
+            all_blocks.extend(this_round_blocks.clone());
+            last_round_blocks = this_round_blocks;
+        }
+        store
+            .write(WriteBatch::default().blocks(all_blocks))
+            .expect("Storage error");
+
+        let dag_state = Arc::new(RwLock::new(DagState::new(context.clone(), store)));
+        assert_eq!(
+            dag_state.read().get_last_proposed_block().unwrap().round(),
+            2
+        );
+        assert_eq!(dag_state.read().threshold_clock_round(), 3);
+
+        let block_manager = BlockManager::new(context.clone(), dag_state.clone());
+        let (_transaction_client, tx_receiver, priority_tx_receiver) =
+            TransactionClient::new(context.clone());
+        let transaction_pool = Arc::new(TransactionConsumerPool::new(TransactionConsumer::new(
+            tx_receiver,
+            priority_tx_receiver,
+            context.clone(),
+        )));
+        let transaction_vote_tracker = TransactionVoteTracker::new(
+            context.clone(),
+            Arc::new(NoopBlockVerifier {}),
+            dag_state.clone(),
+        );
+        transaction_vote_tracker.recover_blocks_after_round(dag_state.read().gc_round());
+        let (signals, signal_receivers) = CoreSignals::new(context.clone());
+        let mut block_receiver = signal_receivers.block_broadcast_receiver();
+        let (commit_consumer, _commit_receiver) = CommitConsumerArgs::new(0, 0);
+        let commit_observer = CommitObserver::new(
+            context.clone(),
+            commit_consumer,
+            dag_state.clone(),
+            transaction_vote_tracker.clone(),
+        )
+        .await;
+        let leader_schedule = Arc::new(LeaderSchedule::from_store(
+            context.clone(),
+            dag_state.clone(),
+        ));
+        let round_tracker = Arc::new(RwLock::new(RoundTracker::new(context.clone(), vec![])));
+        let core = Core::new_validator(
+            context.clone(),
+            leader_schedule,
+            transaction_pool,
+            transaction_vote_tracker,
+            block_manager,
+            commit_observer,
+            signals,
+            key_pairs.remove(context.own_index.value()).1,
+            dag_state.clone(),
+            true,
+            round_tracker,
+        );
+
+        let (core_dispatcher, handle) =
+            ChannelCoreThreadDispatcher::start(context, &dag_state, core);
+
+        let recovered_block = timeout(Duration::from_secs(5), block_receiver.recv())
+            .await
+            .expect("timed out waiting for recovered block")
+            .expect("block broadcast closed");
+        assert_eq!(recovered_block.block.round(), 2);
+
+        assert!(
+            timeout(Duration::from_millis(100), block_receiver.recv())
+                .await
+                .is_err(),
+            "round 3 must not be proposed before last-known sync completes"
+        );
+
+        core_dispatcher
+            .set_last_known_proposed_round(1)
+            .expect("core thread should be running");
+
+        let proposed_block = timeout(Duration::from_secs(5), async {
+            loop {
+                let block = block_receiver.recv().await.expect("block broadcast closed");
+                if block.block.round() == 3 {
+                    return block;
+                }
+            }
+        })
+        .await
+        .expect("timed out waiting for threshold-clock proposal");
+        assert_eq!(
+            proposed_block.block.author(),
+            core_dispatcher.context.own_index
+        );
+
+        handle.stop().await;
     }
 }

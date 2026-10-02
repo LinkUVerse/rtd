@@ -3,11 +3,15 @@
 
 use std::str::FromStr;
 
-use bincode::{Encode, enc::Encoder, error::EncodeError, serde::BorrowCompat};
+use bincode::Encode;
+use bincode::enc::Encoder;
+use bincode::error::EncodeError;
+use bincode::serde::BorrowCompat;
 use move_core_types::language_storage::StructTag;
-use rtd_indexer_alt_framework::types::{
-    base_types::RtdAddress, parse_rtd_address, parse_rtd_module_id, parse_rtd_struct_tag,
-};
+use rtd_indexer_alt_framework::types::base_types::RtdAddress;
+use rtd_indexer_alt_framework::types::parse_rtd_address;
+use rtd_indexer_alt_framework::types::parse_rtd_module_id;
+use rtd_indexer_alt_framework::types::parse_rtd_struct_tag;
 
 /// Structured form of a type filter that could be just a package, a module, an uninstantiated
 /// type, or a fully qualified type with generics.

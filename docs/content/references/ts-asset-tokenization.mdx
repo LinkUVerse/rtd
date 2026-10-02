@@ -1,0 +1,19 @@
+---
+title: Asset Tokenization Reference
+description: Status of tokenized asset example material in the RTD fork.
+keywords:
+  - asset tokenization
+  - Move
+  - NFT
+questions:
+  - Does RTD include the tokenized_asset module?
+  - Where should I inspect asset-related Move code?
+answer: >-
+  The tokenized_asset module described by an upstream example is not present in
+  the current RTD source tree. Use the actual RTD framework and examples as
+  references, and test any ported module on your own RTD network.
+---
+
+The `tokenized_asset` module previously described on this page is not present in the current RTD framework or examples. Its structs and function signatures must not be treated as an RTD API. The source tree does contain general object, coin, transfer, and Kiosk Move modules in `crates/rtd-framework/packages/rtd-framework/sources` and example packages in `examples/move`.
+
+A tokenization application requires its own reviewed Move package. Define supply, minting and burning authority, metadata, and transfer policy in that package; build and test it using `rtd move build` and `rtd move test`. Publish only to a network with a verified RTD genesis, then use the returned package ID. No upstream Sui package ID or third-party token registry is implied to exist on RTD. See [Move concepts](/develop/write-move/rtd-move-concepts) and [framework source](/references/framework).

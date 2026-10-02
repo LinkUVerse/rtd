@@ -354,17 +354,18 @@ def cut_command(f):
     return [
         *["./target/debug/cut", "--feature", f],
         *[repo_root()],
-        *["-d", f"rtd-execution/latest:rtd-execution/{f}:-latest"],
-        *["-d", f"external-crates/move:external-crates/move/move-execution/{f}"],
+        *[
+            "-d",
+            f"rtd-execution/latest:rtd-execution/historical-versions/{f}:-latest",
+        ],
+        *["-d", f"external-crates/move:external-crates/move/historical-versions/{f}"],
         *["-p", "rtd-adapter-latest"],
         *["-p", "rtd-move-natives-latest"],
         *["-p", "rtd-verifier-latest"],
         *["-p", "move-abstract-interpreter"],
         *["-p", "move-bytecode-verifier"],
-        *["-p", "move-stdlib-natives"],
         *["-p", "move-vm-runtime"],
         *["-p", "bytecode-verifier-tests"],
-        *["-p", "move-vm-types"],
     ]
 
 
@@ -373,10 +374,11 @@ def cut_directories(f):
     rtd_base = Path() / "rtd-execution"
     external = Path() / "external-crates"
 
+    rtd_cut = rtd_base / f if f == "latest" else rtd_base / "historical-versions" / f
     crates = [
-        rtd_base / f / "rtd-adapter",
-        rtd_base / f / "rtd-move-natives",
-        rtd_base / f / "rtd-verifier",
+        rtd_cut / "rtd-adapter",
+        rtd_cut / "rtd-move-natives",
+        rtd_cut / "rtd-verifier",
     ]
 
     if f == "latest":
@@ -384,21 +386,17 @@ def cut_directories(f):
             [
                 external / "move" / "crates" / "move-abstract-interpreter",
                 external / "move" / "crates" / "move-bytecode-verifier",
-                external / "move" / "crates" / "move-stdlib-natives",
                 external / "move" / "crates" / "move-vm-runtime",
                 external / "move" / "crates" / "bytecode-verifier-tests",
-                external / "move" / "crates" / "move-vm-types",
             ]
         )
     else:
         crates.extend(
             [
-                external / "move" / "move-execution" / f / "crates" / "move-abstract-interpreter",
-                external / "move" / "move-execution" / f / "crates" / "move-bytecode-verifier",
-                external / "move" / "move-execution" / f / "crates" / "move-stdlib-natives",
-                external / "move" / "move-execution" / f / "crates" / "move-vm-runtime",
-                external / "move" / "move-execution" / f / "crates" / "bytecode-verifier-tests",
-                external / "move" / "move-execution" / f / "crates" / "move-vm-types",
+                external / "move" / "historical-versions" / f / "crates" / "move-abstract-interpreter",
+                external / "move" / "historical-versions" / f / "crates" / "move-bytecode-verifier",
+                external / "move" / "historical-versions" / f / "crates" / "move-vm-runtime",
+                external / "move" / "historical-versions" / f / "crates" / "bytecode-verifier-tests",
             ]
         )
 

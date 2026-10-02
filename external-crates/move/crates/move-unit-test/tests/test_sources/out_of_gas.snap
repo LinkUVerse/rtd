@@ -1,5 +1,5 @@
 ---
-source: crates/move-unit-test/tests/move_unit_test_testrtdte.rs
+source: crates/move-unit-test/tests/move_unit_test_testsuite.rs
 ---
 Running Move unit tests
 [ FAIL    ] 0x42::m::t0
@@ -16,7 +16,7 @@ Failures in 0x42::m:
 
 
 ┌── t1 ──────
-│ error[E11001]: test failure
+│ error[EC11001]: test failure
 │    ┌─ out_of_gas.move:10:5
 │    │
 │  9 │ fun t1() {
@@ -29,7 +29,7 @@ Failures in 0x42::m:
 
 
 ┌── t2 ──────
-│ error[E11001]: test failure
+│ error[EC11001]: test failure
 │    ┌─ out_of_gas.move:16:7
 │    │
 │ 15 │ fun t2() {

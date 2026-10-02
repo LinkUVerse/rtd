@@ -8,18 +8,18 @@ use crate::retry_with_max_elapsed_time;
 use crate::types::IsBridgePaused;
 use arc_swap::ArcSwap;
 use linku_metrics::spawn_logged_monitored_task;
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_json_rpc_types::RtdExecutionStatus;
 use rtd_types::TypeTag;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::{
     base_types::{ObjectID, ObjectRef, RtdAddress},
-    crypto::{Signature, RtdKeyPair},
+    crypto::{RtdKeyPair, Signature},
     digests::TransactionDigest,
     gas_coin::GasCoin,
     object::Owner,
     transaction::Transaction,
 };
+use shared_crypto::intent::{Intent, IntentMessage};
 
 use crate::events::{
     TokenTransferAlreadyApproved, TokenTransferAlreadyClaimed, TokenTransferApproved,
@@ -29,9 +29,9 @@ use crate::metrics::BridgeMetrics;
 use crate::{
     client::bridge_authority_aggregator::BridgeAuthorityAggregator,
     error::BridgeError,
-    storage::BridgeOrchestratorTables,
     rtd_client::{ExecuteTransactionResult, RtdClient, RtdClientInner},
     rtd_transaction_builder::build_rtd_transaction,
+    storage::BridgeOrchestratorTables,
     types::{BridgeAction, BridgeActionStatus, VerifiedCertifiedBridgeAction},
 };
 use std::collections::HashMap;
@@ -234,9 +234,7 @@ where
     async fn handle_signing_task(
         semaphore: &Arc<Semaphore>,
         auth_agg: &Arc<ArcSwap<BridgeAuthorityAggregator>>,
-        signing_queue_sender: &linku_metrics::metered_channel::Sender<
-            BridgeActionExecutionWrapper,
-        >,
+        signing_queue_sender: &linku_metrics::metered_channel::Sender<BridgeActionExecutionWrapper>,
         execution_queue_sender: &linku_metrics::metered_channel::Sender<
             CertifiedBridgeActionExecutionWrapper,
         >,
@@ -343,7 +341,9 @@ where
         match &action {
             BridgeAction::RtdToEthBridgeAction(_)
             | BridgeAction::RtdToEthTokenTransfer(_)
-            | BridgeAction::EthToRtdBridgeAction(_) => (),
+            | BridgeAction::RtdToEthTokenTransferV2(_)
+            | BridgeAction::EthToRtdBridgeAction(_)
+            | BridgeAction::EthToRtdTokenTransferV2(_) => (),
             _ => unreachable!("Non token transfer action should not reach here"),
         };
 
@@ -490,12 +490,52 @@ where
         let tx_data = match build_rtd_transaction(
             *rtd_address,
             &gas_object_ref,
-            ceriticate_clone,
+            ceriticate_clone.clone(),
             *bridge_object_arg,
             rtd_token_type_tags.load().as_ref(),
             rgp,
         ) {
             Ok(tx_data) => tx_data,
+            Err(BridgeError::UnknownTokenId(token_id)) => {
+                // Token not found in local cache - it might be newly registered.
+                // Refresh token map from chain and retry.
+                info!(
+                    "Unknown token_id {}, refreshing token map from chain and retrying",
+                    token_id
+                );
+                match rtd_client.get_token_id_map().await {
+                    Ok(new_token_map) => {
+                        rtd_token_type_tags.store(Arc::new(new_token_map));
+                        // Retry building transaction with refreshed token map
+                        match build_rtd_transaction(
+                            *rtd_address,
+                            &gas_object_ref,
+                            ceriticate_clone,
+                            *bridge_object_arg,
+                            rtd_token_type_tags.load().as_ref(),
+                            rgp,
+                        ) {
+                            Ok(tx_data) => tx_data,
+                            Err(err) => {
+                                metrics.err_build_rtd_transaction.inc();
+                                error!(
+                                    "Manual intervention is required. Failed to build transaction after token map refresh for action {:?}: {:?}",
+                                    action, err
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        metrics.err_build_rtd_transaction.inc();
+                        error!(
+                            "Manual intervention is required. Failed to refresh token map: {:?}",
+                            e
+                        );
+                        return;
+                    }
+                }
+            }
             Err(err) => {
                 metrics.err_build_rtd_transaction.inc();
                 error!(
@@ -600,20 +640,26 @@ where
                 relevant_events.iter().for_each(|e| {
                     if e.type_ == *TokenTransferClaimed.get().unwrap() {
                         match action {
-                            BridgeAction::EthToRtdBridgeAction(_) => {
+                            BridgeAction::EthToRtdBridgeAction(_)
+                            | BridgeAction::EthToRtdTokenTransferV2(_) => {
                                 metrics.eth_rtd_token_transfer_claimed.inc();
                             }
-                            BridgeAction::RtdToEthBridgeAction(_) => {
+                            BridgeAction::RtdToEthBridgeAction(_)
+                            | BridgeAction::RtdToEthTokenTransfer(_)
+                            | BridgeAction::RtdToEthTokenTransferV2(_) => {
                                 metrics.rtd_eth_token_transfer_claimed.inc();
                             }
                             _ => error!("Unexpected action type for claimed event: {:?}", action),
                         }
                     } else if e.type_ == *TokenTransferApproved.get().unwrap() {
                         match action {
-                            BridgeAction::EthToRtdBridgeAction(_) => {
+                            BridgeAction::EthToRtdBridgeAction(_)
+                            | BridgeAction::EthToRtdTokenTransferV2(_) => {
                                 metrics.eth_rtd_token_transfer_approved.inc();
                             }
-                            BridgeAction::RtdToEthBridgeAction(_) => {
+                            BridgeAction::RtdToEthBridgeAction(_)
+                            | BridgeAction::RtdToEthTokenTransfer(_)
+                            | BridgeAction::RtdToEthTokenTransferV2(_) => {
                                 metrics.rtd_eth_token_transfer_approved.inc();
                             }
                             _ => error!("Unexpected action type for approved event: {:?}", action),
@@ -680,22 +726,23 @@ mod tests {
     use crate::test_utils::DUMMY_MUTALBE_BRIDGE_OBJECT_ARG;
     use crate::types::BRIDGE_PAUSED;
     use fastcrypto::traits::KeyPair;
+    use linku_common::ZipDebugEqIteratorExt;
     use prometheus::Registry;
-    use std::collections::{BTreeMap, HashMap};
-    use std::str::FromStr;
     use rtd_json_rpc_types::RtdEvent;
     use rtd_types::TypeTag;
     use rtd_types::crypto::get_key_pair;
     use rtd_types::gas_coin::GasCoin;
     use rtd_types::{base_types::random_object_ref, transaction::TransactionData};
+    use std::collections::{BTreeMap, HashMap};
+    use std::str::FromStr;
 
     use crate::{
         crypto::{
             BridgeAuthorityKeyPair, BridgeAuthorityPublicKeyBytes,
             BridgeAuthorityRecoverableSignature,
         },
-        server::mock_handler::BridgeRequestMockHandler,
         rtd_mock_client::RtdMockClient,
+        server::mock_handler::BridgeRequestMockHandler,
         test_utils::{
             get_test_authorities_and_run_mock_bridge_server, get_test_eth_to_rtd_bridge_action,
             get_test_rtd_to_eth_bridge_action, sign_action_with_key,
@@ -1400,7 +1447,7 @@ mod tests {
     ) -> BTreeMap<BridgeAuthorityPublicKeyBytes, BridgeAuthorityRecoverableSignature> {
         assert_eq!(mocks.len(), secrets.len());
         let mut signed_actions = BTreeMap::new();
-        for (mock, secret) in mocks.iter().zip(secrets.iter()) {
+        for (mock, secret) in mocks.iter().zip_debug_eq(secrets.iter()) {
             let signed_action = sign_action_with_key(action, secret);
             mock.add_rtd_event_response(
                 rtd_tx_digest,

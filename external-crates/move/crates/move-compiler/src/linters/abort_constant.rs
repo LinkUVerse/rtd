@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::PreCompiledProgramInfo;
 use crate::diagnostics::DiagnosticReporter;
-use crate::diagnostics::warning_filters::WarningFilters;
+use crate::diagnostics::filter::FilterScope;
 use crate::linters::StyleCodes;
 use crate::{
     cfgir::{
@@ -66,7 +66,7 @@ impl Context<'_> {
 }
 
 impl CFGIRVisitorContext for Context<'_> {
-    fn push_warning_filter_scope(&mut self, filters: WarningFilters) {
+    fn push_warning_filter_scope(&mut self, filters: FilterScope) {
         self.reporter.push_warning_filter_scope(filters)
     }
 
@@ -86,7 +86,7 @@ impl Context<'_> {
     fn check_named_constant(&mut self, arg_exp: &H::Exp, loc: Loc) {
         let is_constant = matches!(
             &arg_exp.exp.value,
-            H::UnannotatedExp_::Constant(_) | H::UnannotatedExp_::ErrorConstant { .. },
+            H::UnannotatedExp_::Constant(_, _) | H::UnannotatedExp_::ErrorConstant { .. },
         );
 
         if !is_constant {

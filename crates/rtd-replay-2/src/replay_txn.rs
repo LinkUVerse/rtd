@@ -17,12 +17,10 @@ use crate::{
 };
 use anyhow::{Context, Error, Result, anyhow, bail};
 use move_trace_format::format::MoveTraceBuilder;
-use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
-use std::time::Instant;
 use rtd_data_store::{
     EpochStore, ObjectKey, ObjectStore, ReadDataStore, TransactionStore, VersionQuery,
 };
-use rtd_types::{TypeTag, base_types::SequenceNumber};
+use rtd_types::TypeTag;
 use rtd_types::{
     base_types::{ObjectID, RtdAddress},
     digests::TransactionDigest,
@@ -36,9 +34,12 @@ use rtd_types::{
     },
 };
 use rtd_types::{
+    execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus},
     gas::RtdGasStatusAPI,
     transaction::{InputObjectKind, ObjectReadResult, ObjectReadResultKind},
 };
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
+use std::time::Instant;
 use tracing::{debug, error, info_span, trace, warn};
 
 pub type ObjectVersion = u64;
@@ -128,6 +129,28 @@ pub(crate) async fn replay_transaction<S: ReadDataStore>(
         }
     };
 
+    // If the on-chain effects show an early execution error (transaction never entered the VM),
+    // skip replay — there is nothing to re-execute.
+    // Record data and effects.
+    if is_early_execution_error(replay_txn.effects.status()) {
+        warn!(
+            tx_digest = %tx_digest,
+            status = ?replay_txn.effects.status(),
+            "Transaction had early execution error on-chain; skipping replay execution",
+        );
+        artifact_manager
+            .member(Artifact::TransactionData)
+            .serialize_artifact(&replay_txn.txn_data)
+            .transpose()?
+            .unwrap();
+        artifact_manager
+            .member(Artifact::TransactionEffects)
+            .serialize_artifact(&replay_txn.effects)
+            .transpose()?
+            .unwrap();
+        return Ok(0);
+    }
+
     // replay the transaction
     let mut trace_builder_opt = trace.then(MoveTraceBuilder::new);
 
@@ -158,12 +181,6 @@ pub(crate) async fn replay_transaction<S: ReadDataStore>(
     artifact_manager
         .member(Artifact::TransactionData)
         .serialize_artifact(&context_and_effects.txn_data)
-        .transpose()?
-        .unwrap();
-
-    artifact_manager
-        .member(Artifact::TransactionEffects)
-        .serialize_artifact(&context_and_effects.execution_effects)
         .transpose()?
         .unwrap();
 
@@ -336,8 +353,6 @@ impl ReplayTransaction {
     // This is currently called from `execute_transaction_to_effects` but it could
     // be computed for a `ReplayTransaction` and cached.
     pub fn get_input_objects_for_replay(&self) -> Result<InputObjects, anyhow::Error> {
-        let _deleted_shared_info_map: BTreeMap<ObjectID, (TransactionDigest, SequenceNumber)> =
-            BTreeMap::new();
         let mut resolved_input_objs = vec![];
         let input_objects_kind = self.txn_data.input_objects().context(format!(
             "Failed to get input objects from transaction {}",
@@ -650,20 +665,27 @@ fn get_input_ids(txn_data: &TransactionData) -> Result<BTreeSet<ObjectKey>, Erro
 // Get the input shared objects and unchanged consensus objects from the transaction effects
 fn get_effects_ids(effects: &TransactionEffects) -> Result<BTreeSet<ObjectKey>, Error> {
     let mut object_keys = effects
-        .input_consensus_objects()
+        .accessed_consensus_objects()
         .iter()
-        .map(|input_consensus_object| match input_consensus_object {
-            InputConsensusObject::MutateConsensusStreamEnded(object_id, version)
-            | InputConsensusObject::ReadConsensusStreamEnded(object_id, version)
-            | InputConsensusObject::Cancelled(object_id, version) => ObjectKey {
-                object_id: *object_id,
-                version_query: VersionQuery::Version(version.value()),
-            },
+        .filter_map(|input_consensus_object| match input_consensus_object {
             InputConsensusObject::Mutate((object_id, version, _digest))
-            | InputConsensusObject::ReadOnly((object_id, version, _digest)) => ObjectKey {
+            | InputConsensusObject::ReadOnly((object_id, version, _digest)) => Some(ObjectKey {
                 object_id: *object_id,
                 version_query: VersionQuery::Version(version.value()),
-            },
+            }),
+            // Stream-ended and cancelled inputs have no object to load: the version
+            // is the consensus-assigned version at which the object does not exist,
+            // or a cancellation sentinel (e.g. SequenceNumber::CONGESTED). These
+            // transactions are early execution errors and are never re-executed.
+            InputConsensusObject::MutateConsensusStreamEnded(..)
+            | InputConsensusObject::ReadConsensusStreamEnded(..)
+            | InputConsensusObject::Cancelled(..) => {
+                trace!(
+                    "Ignored `InputConsensusObject`: {:?}",
+                    input_consensus_object
+                );
+                None
+            }
         })
         .collect::<BTreeSet<_>>();
     effects
@@ -708,5 +730,23 @@ fn packages_from_type_tag(typ: &TypeTag, packages: &mut BTreeSet<ObjectID>) {
         | TypeTag::U16
         | TypeTag::U32
         | TypeTag::U256 => (),
+    }
+}
+
+/// Returns true if the given execution status represents an early execution error
+/// (i.e., the transaction was predetermined to fail and the Move VM was never invoked).
+// REVIEW: there does not seem to be a predicate for this condition in core code.
+//         So this may be a bit of a brittle function, but it's replay anyway....
+fn is_early_execution_error(status: &ExecutionStatus) -> bool {
+    match status {
+        ExecutionStatus::Failure(ExecutionFailure { error, .. }) => matches!(
+            error,
+            ExecutionErrorKind::CertificateDenied
+                | ExecutionErrorKind::InputObjectDeleted
+                | ExecutionErrorKind::ExecutionCancelledDueToSharedObjectCongestion { .. }
+                | ExecutionErrorKind::ExecutionCancelledDueToRandomnessUnavailable
+                | ExecutionErrorKind::InsufficientFundsForWithdraw
+        ),
+        ExecutionStatus::Success => false,
     }
 }

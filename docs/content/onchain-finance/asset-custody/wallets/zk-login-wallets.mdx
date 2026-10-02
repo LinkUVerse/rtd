@@ -1,0 +1,11 @@
+---
+title: zkLogin wallets
+description: Local integration requirements for RTD zkLogin signatures.
+keywords:
+  - RTD
+  - zk login wallets
+---
+
+The RTD source fork retains zkLogin cryptographic and transaction primitives. This does not imply that an RTD OAuth application, public prover, hosted salt service, social wallet, or Enoki service has been launched. No public RTD Mainnet exists.
+
+To build a zkLogin wallet on a specific RTD network, configure a trusted OAuth issuer and client ID, run or explicitly select a prover and salt service, verify the returned proof and address against that network, and test signed transactions end to end. The SDK does not generate proofs by itself. Never send RTD keys or credentials to upstream Sui services on the assumption that they support RTD. See [wallets](/onchain-finance/asset-custody/wallets) and [RTD networks](/develop/rtd-architecture/networks).

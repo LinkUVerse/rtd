@@ -4,12 +4,28 @@
 //! Module for conversions from rtd-core types to rpc protos
 
 use crate::crypto::RtdSignature;
+use nonempty::NonEmpty;
 
 fn ms_to_timestamp(ms: u64) -> prost_types::Timestamp {
     prost_types::Timestamp {
         seconds: (ms / 1000) as _,
         nanos: ((ms % 1000) * 1_000_000) as _,
     }
+}
+
+fn timestamp_to_ms(timestamp: &prost_types::Timestamp) -> Result<u64, &'static str> {
+    let seconds: u64 = timestamp
+        .seconds
+        .try_into()
+        .map_err(|_| "invalid timestamp: negative seconds")?;
+    let nanos: u64 = timestamp
+        .nanos
+        .try_into()
+        .map_err(|_| "invalid timestamp: negative nanos")?;
+    seconds
+        .checked_mul(1000)
+        .and_then(|ms| ms.checked_add(nanos / 1_000_000))
+        .ok_or("invalid timestamp: out of range")
 }
 use crate::message_envelope::Message as _;
 use fastcrypto::traits::ToFromBytes;
@@ -74,12 +90,43 @@ impl Merge<&crate::full_checkpoint_content::ExecutedTransaction> for ExecutedTra
         source: &crate::full_checkpoint_content::ExecutedTransaction,
         mask: &FieldMaskTree,
     ) {
-        if mask.contains(ExecutedTransaction::DIGEST_FIELD) {
-            self.digest = Some(source.transaction.digest().to_string());
+        use crate::effects::TransactionEffectsAPI;
+
+        let transaction_mask = mask.subtree(ExecutedTransaction::TRANSACTION_FIELD);
+        let top_level_digest_selected = mask.contains(ExecutedTransaction::DIGEST_FIELD);
+        let nested_digest_selected = transaction_mask
+            .as_ref()
+            .is_some_and(|submask| submask.contains(Transaction::DIGEST_FIELD.name));
+        let (top_level_digest_string, nested_digest_string) =
+            match (top_level_digest_selected, nested_digest_selected) {
+                (false, false) => (None, None),
+                (true, false) => (
+                    Some(source.effects.transaction_digest().base58_encode()),
+                    None,
+                ),
+                (false, true) => (
+                    None,
+                    Some(source.effects.transaction_digest().base58_encode()),
+                ),
+                (true, true) => {
+                    let digest_string = source.effects.transaction_digest().base58_encode();
+                    (Some(digest_string.clone()), Some(digest_string))
+                }
+            };
+
+        if top_level_digest_selected {
+            self.digest = top_level_digest_string;
         }
 
-        if let Some(submask) = mask.subtree(ExecutedTransaction::TRANSACTION_FIELD) {
-            self.transaction = Some(Transaction::merge_from(&source.transaction, &submask));
+        if let Some(submask) = transaction_mask {
+            let mut transaction = Transaction::default();
+            merge_transaction_data(
+                &mut transaction,
+                &source.transaction,
+                nested_digest_string,
+                &submask,
+            );
+            self.transaction = Some(transaction);
         }
 
         if let Some(submask) = mask.subtree(ExecutedTransaction::SIGNATURES_FIELD) {
@@ -142,6 +189,8 @@ impl TryFrom<&Checkpoint> for crate::full_checkpoint_content::Checkpoint {
             .map(|(_, user_signatures)| user_signatures)
             .collect();
 
+        #[allow(clippy::disallowed_methods)]
+        // Intentional zip: transactions field may be partially populated via field masks
         let transactions = checkpoint
             .transactions()
             .iter()
@@ -962,6 +1011,175 @@ impl From<crate::rtd_system_state::rtd_system_state_inner_v1::ValidatorV1> for V
     }
 }
 
+impl TryFrom<&SystemState>
+    for crate::rtd_system_state::rtd_system_state_summary::RtdSystemStateSummary
+{
+    type Error = TryFromProtoError;
+
+    fn try_from(s: &SystemState) -> Result<Self, Self::Error> {
+        Ok(Self {
+            epoch: s.epoch(),
+            protocol_version: s.protocol_version(),
+            system_state_version: s.version(),
+            storage_fund_total_object_storage_rebates: s
+                .storage_fund()
+                .total_object_storage_rebates(),
+            storage_fund_non_refundable_balance: s.storage_fund().non_refundable_balance(),
+            reference_gas_price: s.reference_gas_price(),
+            safe_mode: s.safe_mode(),
+            safe_mode_storage_rewards: s.safe_mode_storage_rewards(),
+            safe_mode_computation_rewards: s.safe_mode_computation_rewards(),
+            safe_mode_storage_rebates: s.safe_mode_storage_rebates(),
+            safe_mode_non_refundable_storage_fee: s.safe_mode_non_refundable_storage_fee(),
+            epoch_start_timestamp_ms: s.epoch_start_timestamp_ms(),
+            epoch_duration_ms: s.parameters().epoch_duration_ms(),
+            stake_subsidy_start_epoch: s.parameters().stake_subsidy_start_epoch(),
+            max_validator_count: s.parameters().max_validator_count(),
+            min_validator_joining_stake: s.parameters().min_validator_joining_stake(),
+            validator_low_stake_threshold: s.parameters().validator_low_stake_threshold(),
+            validator_very_low_stake_threshold: s.parameters().validator_very_low_stake_threshold(),
+            validator_low_stake_grace_period: s.parameters().validator_low_stake_grace_period(),
+            stake_subsidy_balance: s.stake_subsidy().balance(),
+            stake_subsidy_distribution_counter: s.stake_subsidy().distribution_counter(),
+            stake_subsidy_current_distribution_amount: s
+                .stake_subsidy()
+                .current_distribution_amount(),
+            stake_subsidy_period_length: s.stake_subsidy().stake_subsidy_period_length(),
+            stake_subsidy_decrease_rate: s.stake_subsidy().stake_subsidy_decrease_rate() as u16,
+            total_stake: s.validators().total_stake(),
+            active_validators: s
+                .validators()
+                .active_validators()
+                .iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+            pending_active_validators_id: s
+                .validators()
+                .pending_active_validators()
+                .id()
+                .parse()
+                .map_err(|e| {
+                TryFromProtoError::invalid("pending_active_validators_id", e)
+            })?,
+            pending_active_validators_size: s.validators().pending_active_validators().size(),
+            pending_removals: s.validators().pending_removals().to_vec(),
+            staking_pool_mappings_id: s
+                .validators()
+                .staking_pool_mappings()
+                .id()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("staking_pool_mappings_id", e))?,
+            staking_pool_mappings_size: s.validators().staking_pool_mappings().size(),
+            inactive_pools_id: s
+                .validators()
+                .inactive_validators()
+                .id()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("inactive_pools_id", e))?,
+            inactive_pools_size: s.validators().inactive_validators().size(),
+            validator_candidates_id: s
+                .validators()
+                .validator_candidates()
+                .id()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("validator_candidates", e))?,
+            validator_candidates_size: s.validators().validator_candidates().size(),
+            at_risk_validators: s
+                .validators()
+                .at_risk_validators()
+                .iter()
+                .map(|(address, epoch)| {
+                    address
+                        .parse()
+                        .map(|address| (address, *epoch))
+                        .map_err(|e| TryFromProtoError::invalid("at_risk_validators", e))
+                })
+                .collect::<Result<_, _>>()?,
+            validator_report_records: s
+                .validator_report_records()
+                .iter()
+                .map(|record| {
+                    let reported = record.reported().parse()?;
+                    let reporters = record
+                        .reporters()
+                        .iter()
+                        .map(|address| address.parse())
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok((reported, reporters))
+                })
+                .collect::<Result<_, anyhow::Error>>()
+                .map_err(|e| TryFromProtoError::invalid("validator_report_records", e))?,
+        })
+    }
+}
+
+impl TryFrom<&Validator>
+    for crate::rtd_system_state::rtd_system_state_summary::RtdValidatorSummary
+{
+    type Error = TryFromProtoError;
+
+    fn try_from(v: &Validator) -> Result<Self, Self::Error> {
+        Ok(Self {
+            rtd_address: v
+                .address()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("address", e))?,
+            protocol_pubkey_bytes: v.protocol_public_key().into(),
+            network_pubkey_bytes: v.network_public_key().into(),
+            worker_pubkey_bytes: v.worker_public_key().into(),
+            proof_of_possession_bytes: v.proof_of_possession().into(),
+            name: v.name().into(),
+            description: v.description().into(),
+            image_url: v.image_url().into(),
+            project_url: v.project_url().into(),
+            net_address: v.network_address().into(),
+            p2p_address: v.p2p_address().into(),
+            primary_address: v.primary_address().into(),
+            worker_address: v.worker_address().into(),
+            next_epoch_protocol_pubkey_bytes: v
+                .next_epoch_protocol_public_key_opt()
+                .map(Into::into),
+            next_epoch_proof_of_possession: v.next_epoch_proof_of_possession_opt().map(Into::into),
+            next_epoch_network_pubkey_bytes: v.next_epoch_network_public_key_opt().map(Into::into),
+            next_epoch_worker_pubkey_bytes: v.next_epoch_worker_public_key_opt().map(Into::into),
+            next_epoch_net_address: v.next_epoch_network_address_opt().map(Into::into),
+            next_epoch_p2p_address: v.next_epoch_p2p_address_opt().map(Into::into),
+            next_epoch_primary_address: v.next_epoch_primary_address_opt().map(Into::into),
+            next_epoch_worker_address: v.next_epoch_worker_address_opt().map(Into::into),
+            voting_power: v.voting_power(),
+            operation_cap_id: v
+                .operation_cap_id()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("operation_cap_id", e))?,
+            gas_price: v.gas_price(),
+            commission_rate: v.commission_rate(),
+            next_epoch_stake: v.next_epoch_stake(),
+            next_epoch_gas_price: v.next_epoch_gas_price(),
+            next_epoch_commission_rate: v.next_epoch_commission_rate(),
+            staking_pool_id: v
+                .staking_pool()
+                .id()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("staking_pool_id", e))?,
+            staking_pool_activation_epoch: v.staking_pool().activation_epoch_opt(),
+            staking_pool_deactivation_epoch: v.staking_pool().deactivation_epoch_opt(),
+            staking_pool_rtd_balance: v.staking_pool().rtd_balance(),
+            rewards_pool: v.staking_pool().rewards_pool(),
+            pool_token_balance: v.staking_pool().pool_token_balance(),
+            pending_stake: v.staking_pool().pending_stake(),
+            pending_total_rtd_withdraw: v.staking_pool().pending_total_rtd_withdraw(),
+            pending_pool_token_withdraw: v.staking_pool().pending_pool_token_withdraw(),
+            exchange_rates_id: v
+                .staking_pool()
+                .exchange_rates()
+                .id()
+                .parse()
+                .map_err(|e| TryFromProtoError::invalid("exchange_rates_id", e))?,
+            exchange_rates_size: v.staking_pool().exchange_rates().size(),
+        })
+    }
+}
+
 //
 // ExecutionStatus
 //
@@ -973,7 +1191,9 @@ impl From<crate::execution_status::ExecutionStatus> for ExecutionStatus {
             crate::execution_status::ExecutionStatus::Success => {
                 message.success = Some(true);
             }
-            crate::execution_status::ExecutionStatus::Failure { error, command } => {
+            crate::execution_status::ExecutionStatus::Failure(
+                crate::execution_status::ExecutionFailure { error, command },
+            ) => {
                 let description = if let Some(command) = command {
                     format!("{error:?} in command {command}")
                 } else {
@@ -1010,9 +1230,9 @@ fn index_error(index: u32, secondary_idx: Option<u32>) -> IndexError {
     message
 }
 
-impl From<crate::execution_status::ExecutionFailureStatus> for ExecutionError {
-    fn from(value: crate::execution_status::ExecutionFailureStatus) -> Self {
-        use crate::execution_status::ExecutionFailureStatus as E;
+impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
+    fn from(value: crate::execution_status::ExecutionErrorKind) -> Self {
+        use crate::execution_status::ExecutionErrorKind as E;
         use execution_error::ErrorDetails;
         use execution_error::ExecutionErrorKind;
 
@@ -1260,6 +1480,7 @@ impl From<crate::execution_status::CommandArgumentError> for CommandArgumentErro
                 CommandArgumentErrorKind::CannotWriteToExtendedReference
             }
             E::InvalidReferenceArgument => CommandArgumentErrorKind::InvalidReferenceArgument,
+            E::InvalidTxContext => CommandArgumentErrorKind::InvalidTxContext,
         };
 
         message.set_kind(kind);
@@ -1399,6 +1620,24 @@ impl From<crate::committee::Committee> for ValidatorCommittee {
             })
             .collect();
         message
+    }
+}
+
+impl TryFrom<&ValidatorCommittee> for crate::committee::Committee {
+    type Error = TryFromProtoError;
+
+    fn try_from(s: &ValidatorCommittee) -> Result<Self, Self::Error> {
+        let members = s
+            .members()
+            .iter()
+            .map(|member| {
+                let public_key =
+                    crate::crypto::AuthorityPublicKeyBytes::from_bytes(member.public_key())
+                        .map_err(|e| TryFromProtoError::invalid("public_key", e))?;
+                Ok((public_key, member.weight()))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self::new(s.epoch(), members))
     }
 }
 
@@ -1976,6 +2215,8 @@ impl From<crate::object::Owner> for Owner {
                 message.address = Some(owner.to_string());
                 OwnerKind::ConsensusAddress
             }
+            // TODO(Party WIP)
+            O::Party { .. } => todo!("Party WIP"),
         };
 
         message.set_kind(kind);
@@ -1995,37 +2236,47 @@ impl From<crate::transaction::TransactionData> for Transaction {
 
 impl Merge<&crate::transaction::TransactionData> for Transaction {
     fn merge(&mut self, source: &crate::transaction::TransactionData, mask: &FieldMaskTree) {
-        if mask.contains(Self::BCS_FIELD.name) {
-            let mut bcs = Bcs::serialize(&source).unwrap();
-            bcs.name = Some("TransactionData".to_owned());
-            self.bcs = Some(bcs);
-        }
+        merge_transaction_data(self, source, None, mask);
+    }
+}
 
-        if mask.contains(Self::DIGEST_FIELD.name) {
-            self.digest = Some(source.digest().to_string());
-        }
+fn merge_transaction_data(
+    message: &mut Transaction,
+    source: &crate::transaction::TransactionData,
+    precomputed_digest_string: Option<String>,
+    mask: &FieldMaskTree,
+) {
+    if mask.contains(Transaction::BCS_FIELD.name) {
+        let mut bcs = Bcs::serialize(&source).unwrap();
+        bcs.name = Some("TransactionData".to_owned());
+        message.bcs = Some(bcs);
+    }
 
-        if mask.contains(Self::VERSION_FIELD.name) {
-            self.version = Some(1);
-        }
+    if mask.contains(Transaction::DIGEST_FIELD.name) {
+        message.digest =
+            Some(precomputed_digest_string.unwrap_or_else(|| source.digest().base58_encode()));
+    }
 
-        let crate::transaction::TransactionData::V1(source) = source;
+    if mask.contains(Transaction::VERSION_FIELD.name) {
+        message.version = Some(1);
+    }
 
-        if mask.contains(Self::KIND_FIELD.name) {
-            self.kind = Some(source.kind.clone().into());
-        }
+    let crate::transaction::TransactionData::V1(source) = source;
 
-        if mask.contains(Self::SENDER_FIELD.name) {
-            self.sender = Some(source.sender.to_string());
-        }
+    if mask.contains(Transaction::KIND_FIELD.name) {
+        message.kind = Some(source.kind.clone().into());
+    }
 
-        if mask.contains(Self::GAS_PAYMENT_FIELD.name) {
-            self.gas_payment = Some((&source.gas_data).into());
-        }
+    if mask.contains(Transaction::SENDER_FIELD.name) {
+        message.sender = Some(source.sender.to_string());
+    }
 
-        if mask.contains(Self::EXPIRATION_FIELD.name) {
-            self.expiration = Some(source.expiration.into());
-        }
+    if mask.contains(Transaction::GAS_PAYMENT_FIELD.name) {
+        message.gas_payment = Some((&source.gas_data).into());
+    }
+
+    if mask.contains(Transaction::EXPIRATION_FIELD.name) {
+        message.expiration = Some(source.expiration.clone().into());
     }
 }
 
@@ -2082,6 +2333,30 @@ impl From<crate::transaction::TransactionExpiration> for TransactionExpiration {
 
                 TransactionExpirationKind::ValidDuring
             }
+            E::Validity {
+                min_epoch,
+                max_epoch,
+                min_timestamp,
+                max_timestamp,
+                chain,
+                nonce,
+                allowed_proposers,
+            } => {
+                message.epoch = max_epoch;
+                message.min_epoch = min_epoch;
+                message.min_timestamp = min_timestamp.map(ms_to_timestamp);
+                message.max_timestamp = max_timestamp.map(ms_to_timestamp);
+                message.set_chain(rtd_sdk_types::Digest::new(*chain.as_bytes()));
+                message.set_nonce(nonce);
+                if let Some(allowed) = allowed_proposers {
+                    let mut proposers = AllowedProposers::default();
+                    proposers.set_epoch(allowed.epoch);
+                    proposers.proposers = allowed.proposers.into();
+                    message.set_allowed_proposers(proposers);
+                }
+
+                TransactionExpirationKind::Validity
+            }
         };
 
         message.set_kind(kind);
@@ -2098,6 +2373,66 @@ impl TryFrom<&TransactionExpiration> for crate::transaction::TransactionExpirati
         Ok(match value.kind() {
             TransactionExpirationKind::None => Self::None,
             TransactionExpirationKind::Epoch => Self::Epoch(value.epoch()),
+            kind @ (TransactionExpirationKind::ValidDuring
+            | TransactionExpirationKind::Validity) => {
+                let chain_str = value
+                    .chain
+                    .as_deref()
+                    .ok_or("ValidDuring expiration is missing chain")?;
+                let chain_digest: rtd_sdk_types::Digest = chain_str
+                    .parse()
+                    .map_err(|_| "ValidDuring expiration has invalid chain digest")?;
+                let chain = crate::digests::ChainIdentifier::from(
+                    crate::digests::CheckpointDigest::new(chain_digest.into_inner()),
+                );
+                let nonce = value
+                    .nonce
+                    .ok_or("ValidDuring expiration is missing nonce")?;
+                let min_timestamp = value
+                    .min_timestamp
+                    .as_ref()
+                    .map(timestamp_to_ms)
+                    .transpose()?;
+                let max_timestamp = value
+                    .max_timestamp
+                    .as_ref()
+                    .map(timestamp_to_ms)
+                    .transpose()?;
+                let min_epoch = value.min_epoch;
+                let max_epoch = value.epoch;
+
+                if kind == TransactionExpirationKind::ValidDuring {
+                    Self::ValidDuring {
+                        min_epoch,
+                        max_epoch,
+                        min_timestamp,
+                        max_timestamp,
+                        chain,
+                        nonce,
+                    }
+                } else {
+                    let allowed_proposers = value
+                        .allowed_proposers
+                        .as_ref()
+                        .map(|allowed| -> Result<_, Self::Error> {
+                            Ok(crate::transaction::AllowedProposers {
+                                epoch: allowed.epoch(),
+                                proposers: NonEmpty::from_vec(allowed.proposers.clone())
+                                    .ok_or("allowed_proposers must not be empty")?,
+                            })
+                        })
+                        .transpose()?;
+                    Self::Validity {
+                        min_epoch,
+                        max_epoch,
+                        min_timestamp,
+                        max_timestamp,
+                        chain,
+                        nonce,
+                        allowed_proposers,
+                    }
+                }
+            }
             TransactionExpirationKind::Unknown | _ => {
                 return Err("unknown TransactionExpirationKind");
             }
@@ -2148,10 +2483,9 @@ impl From<crate::transaction::TransactionKind> for TransactionKind {
             K::ConsensusCommitPrologueV4(prologue) => message
                 .with_consensus_commit_prologue(prologue)
                 .with_kind(Kind::ConsensusCommitPrologueV4),
-            K::ProgrammableSystemTransaction(_) => message,
-            // TODO support ProgrammableSystemTransaction
-            // .with_programmable_transaction(ptb)
-            // .with_kind(Kind::ProgrammableSystemTransaction),
+            K::ProgrammableSystemTransaction(ptb) => message
+                .with_programmable_transaction(ptb)
+                .with_kind(Kind::ProgrammableSystemTransaction),
         }
     }
 }
@@ -2423,6 +2757,12 @@ impl From<crate::transaction::EndOfEpochTransactionKind> for EndOfEpochTransacti
             K::CoinRegistryCreate => message.with_kind(Kind::CoinRegistryCreate),
             K::DisplayRegistryCreate => message.with_kind(Kind::DisplayRegistryCreate),
             K::AddressAliasStateCreate => message.with_kind(Kind::AddressAliasStateCreate),
+            K::ForwardingAddressRegistryCreate => {
+                message.with_kind(Kind::ForwardingAddressRegistryCreate)
+            }
+            K::WriteAccumulatorStorageCost(storage_cost) => message
+                .with_kind(Kind::WriteAccumulatorStorageCost)
+                .with_storage_cost(storage_cost.storage_cost),
         }
     }
 }
@@ -2591,15 +2931,20 @@ impl From<crate::transaction::FundsWithdrawalArg> for FundsWithdrawal {
         let mut message = Self::default();
 
         message.amount = match value.reservation {
-            crate::transaction::Reservation::EntireBalance => None,
             crate::transaction::Reservation::MaxAmountU64(amount) => Some(amount),
         };
         let crate::transaction::WithdrawalTypeArg::Balance(coin_type) = value.type_arg;
         message.coin_type = Some(coin_type.to_canonical_string(true));
-        message.set_source(match value.withdraw_from {
+        let source = match value.withdraw_from {
             crate::transaction::WithdrawFrom::Sender => Source::Sender,
             crate::transaction::WithdrawFrom::Sponsor => Source::Sponsor,
-        });
+            crate::transaction::WithdrawFrom::SenderAllowance { funder, allowance } => {
+                message.funder = Some(funder.to_string());
+                message.allowance = Some(allowance.to_string());
+                Source::SenderAllowance
+            }
+        };
+        message.set_source(source);
 
         message
     }
@@ -2790,6 +3135,10 @@ impl Merge<&crate::effects::TransactionEffectsV1> for TransactionEffects {
                 .collect();
         }
 
+        if mask.contains(Self::LAMPORT_VERSION_FIELD.name) {
+            self.lamport_version = Some(value.lamport_version().value());
+        }
+
         if mask.contains(Self::CHANGED_OBJECTS_FIELD.name)
             || mask.contains(Self::UNCHANGED_CONSENSUS_OBJECTS_FIELD.name)
             || mask.contains(Self::GAS_OBJECT_FIELD.name)
@@ -2908,8 +3257,10 @@ impl Merge<&crate::effects::TransactionEffectsV1> for TransactionEffects {
                 }
             }
 
-            if mask.contains(Self::GAS_OBJECT_FIELD.name) {
-                let gas_object_id = value.gas_object().0.0.to_canonical_string(true);
+            if mask.contains(Self::GAS_OBJECT_FIELD.name)
+                && let Some(((gas_id, _, _), _)) = value.gas_object()
+            {
+                let gas_object_id = gas_id.to_canonical_string(true);
                 self.gas_object = changed_objects
                     .iter()
                     .find(|object| object.object_id() == gas_object_id)
@@ -3095,7 +3446,7 @@ impl From<crate::effects::AccumulatorWriteV1> for AccumulatorWrite {
             crate::effects::AccumulatorOperation::Split => AccumulatorOperation::Split,
         });
         match value.value {
-            crate::effects::AccumulatorValue::Integer(value) => message.set_value(value),
+            crate::effects::AccumulatorValue::Integer(value) => message.set_integer_value(value),
             //TODO unsupported value types
             crate::effects::AccumulatorValue::IntegerTuple(_, _)
             | crate::effects::AccumulatorValue::EventDigest(_) => {}
@@ -3324,5 +3675,20 @@ impl TryFrom<&ObjectSet> for crate::full_checkpoint_content::ObjectSet {
         }
 
         Ok(objects)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::effects::TransactionEffectsAPI;
+
+    #[test]
+    fn transaction_effects_v1_proto_includes_lamport_version() {
+        let effects = crate::effects::TransactionEffectsV1::default();
+        let lamport_version = effects.lamport_version().value();
+        let proto: rtd_rpc::proto::rtd::rpc::v2::TransactionEffects =
+            crate::effects::TransactionEffects::V1(effects).into();
+
+        assert_eq!(proto.lamport_version, Some(lamport_version));
     }
 }

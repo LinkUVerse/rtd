@@ -17,6 +17,7 @@ A module for accumulating funds, i.e. Balance-like types.
 -  [Function `withdraw_impl`](#rtd_funds_accumulator_withdraw_impl)
 -  [Function `add_to_accumulator_address`](#rtd_funds_accumulator_add_to_accumulator_address)
 -  [Function `withdraw_from_accumulator_address`](#rtd_funds_accumulator_withdraw_from_accumulator_address)
+-  [Function `reserve_object_funds_for_withdrawal`](#rtd_funds_accumulator_reserve_object_funds_for_withdrawal)
 -  [Function `create_withdrawal`](#rtd_funds_accumulator_create_withdrawal)
 
 
@@ -121,6 +122,27 @@ Attempted to withdraw funds from an object when the feature flag is not enabled.
 
 <pre><code>#[error]
 <b>const</b> <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_EObjectFundsWithdrawNotEnabled">EObjectFundsWithdrawNotEnabled</a>: vector&lt;u8&gt; = b"Object funds withdraw is not enabled";
+</code></pre>
+
+
+
+<a name="rtd_funds_accumulator_EAccumulatorTypeTooLarge"></a>
+
+The accumulator type is too large to be used with the funds accumulator.
+
+
+<pre><code><b>const</b> <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_EAccumulatorTypeTooLarge">EAccumulatorTypeTooLarge</a>: u64 = 4;
+</code></pre>
+
+
+
+<a name="rtd_funds_accumulator_EObjectFundsInsufficient"></a>
+
+Attempted to withdraw more funds than are currently available to an object.
+
+
+<pre><code>#[error]
+<b>const</b> <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_EObjectFundsInsufficient">EObjectFundsInsufficient</a>: vector&lt;u8&gt; = b"Object <b>has</b> insufficient funds";
 </code></pre>
 
 
@@ -280,6 +302,7 @@ Aborts with <code><a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_EOv
         <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_EObjectFundsWithdrawNotEnabled">EObjectFundsWithdrawNotEnabled</a>,
     );
     <b>let</b> owner = obj.to_address();
+    <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_reserve_object_funds_for_withdrawal">reserve_object_funds_for_withdrawal</a>&lt;T&gt;(owner, limit);
     <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_Withdrawal">Withdrawal</a> { owner, limit }
 }
 </code></pre>
@@ -380,6 +403,28 @@ Aborts with <code><a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_EOv
     owner: <b>address</b>,
     value: u256,
 ): T;
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_funds_accumulator_reserve_object_funds_for_withdrawal"></a>
+
+## Function `reserve_object_funds_for_withdrawal`
+
+
+
+<pre><code><b>fun</b> <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_reserve_object_funds_for_withdrawal">reserve_object_funds_for_withdrawal</a>&lt;T: store&gt;(owner: <b>address</b>, limit: u256)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="../rtd/funds_accumulator.md#rtd_funds_accumulator_reserve_object_funds_for_withdrawal">reserve_object_funds_for_withdrawal</a>&lt;T: store&gt;(owner: <b>address</b>, limit: u256);
 </code></pre>
 
 

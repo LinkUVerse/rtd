@@ -13,23 +13,25 @@ use crate::crypto::{
 use crate::digests::{CheckpointArtifactsDigest, Digest, ObjectDigest};
 use crate::effects::{TestEffectsBuilder, TransactionEffects, TransactionEffectsAPI};
 use crate::error::RtdResult;
-use crate::full_checkpoint_content::CheckpointData;
+use crate::full_checkpoint_content::{Checkpoint, CheckpointData};
 use crate::gas::GasCostSummary;
 use crate::global_state_hash::GlobalStateHash;
 use crate::message_envelope::{Envelope, Message, TrustedEnvelope, VerifiedEnvelope};
-use crate::signature::GenericSignature;
 use crate::rtd_serde::AsProtocolVersion;
 use crate::rtd_serde::BigInt;
 use crate::rtd_serde::Readable;
+use crate::signature::GenericSignature;
 use crate::transaction::{Transaction, TransactionData};
 use crate::{base_types::AuthorityName, committee::Committee, error::RtdErrorKind};
 use anyhow::Result;
 use fastcrypto::hash::Blake2b256;
 use fastcrypto::hash::MultisetHash;
 use fastcrypto::merkle::MerkleTree;
+use linku_common::ZipDebugEqIteratorExt;
 use linku_metrics::histogram::Histogram as LinkUHistogram;
 use once_cell::sync::OnceCell;
 use prometheus::Histogram;
+use rtd_protocol_config::ProtocolConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -38,7 +40,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::slice::Iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use rtd_protocol_config::ProtocolConfig;
 use tap::TapFallible;
 use tracing::warn;
 
@@ -259,6 +260,18 @@ impl From<&[TransactionEffects]> for CheckpointArtifacts {
 impl From<&CheckpointData> for CheckpointArtifacts {
     fn from(checkpoint_data: &CheckpointData) -> Self {
         let effects = checkpoint_data
+            .transactions
+            .iter()
+            .map(|tx| &tx.effects)
+            .collect::<Vec<_>>();
+
+        Self::from(effects.as_slice())
+    }
+}
+
+impl From<&Checkpoint> for CheckpointArtifacts {
+    fn from(checkpoint: &Checkpoint) -> Self {
+        let effects = checkpoint
             .transactions
             .iter()
             .map(|tx| &tx.effects)
@@ -644,7 +657,7 @@ impl CheckpointContents {
             digest: Default::default(),
             transactions: effects
                 .iter()
-                .zip(signatures)
+                .zip_debug_eq(signatures)
                 .map(|(e, s)| CheckpointTransactionContents {
                     digest: e.execution_digests(),
                     user_signatures: s,
@@ -725,7 +738,7 @@ impl CheckpointContents {
             ..
         } = self.into_v1();
 
-        transactions.into_iter().zip(user_signatures)
+        transactions.into_iter().zip_debug_eq(user_signatures)
     }
 
     /// Return an iterator that enumerates the transactions in the contents.
@@ -738,9 +751,9 @@ impl CheckpointContents {
     ) -> impl Iterator<Item = (u64, &ExecutionDigests)> {
         let start = ckpt.network_total_transactions - self.size() as u64;
 
-        (0u64..)
-            .zip(self.iter())
-            .map(move |(i, digests)| (i + start, digests))
+        self.iter()
+            .enumerate()
+            .map(move |(i, digests)| (i as u64 + start, digests))
     }
 
     pub fn into_inner(self) -> Vec<ExecutionDigests> {
@@ -845,13 +858,16 @@ impl CheckpointContentsView<'_> {
             Self::V1 {
                 transactions,
                 user_signatures,
-            } => itertools::Either::Left(transactions.iter().zip(user_signatures.iter()).map(
-                |(digests, signatures)| {
-                    let signatures_iter =
-                        itertools::Either::Left(signatures.iter().map(|s| (s, None)));
-                    (digests, signatures_iter)
-                },
-            )),
+            } => itertools::Either::Left(
+                transactions
+                    .iter()
+                    .zip_debug_eq(user_signatures.iter())
+                    .map(|(digests, signatures)| {
+                        let signatures_iter =
+                            itertools::Either::Left(signatures.iter().map(|s| (s, None)));
+                        (digests, signatures_iter)
+                    }),
+            ),
             Self::V2(v) => itertools::Either::Right(v.iter().map(|t| {
                 (
                     &t.digest,
@@ -875,10 +891,7 @@ impl std::ops::Index<usize> for CheckpointContentsView<'_> {
 
 /// Same as CheckpointContents, but contains full contents of all transactions, effects,
 /// and user signatures associated with the checkpoint.
-// NOTE: This data structure is used for state sync of checkpoints. Therefore we attempt
-// to estimate its size in CheckpointBuilder in order to limit the maximum serialized
-// size of a checkpoint sent over the network. If this struct is modified,
-// CheckpointBuilder::split_checkpoint_chunks should also be updated accordingly.
+// NOTE: This data structure is used for state sync of checkpoints.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VersionedFullCheckpointContents {
     V1(FullCheckpointContents),
@@ -986,7 +999,7 @@ impl FullCheckpointContentsV2 {
             transactions: self
                 .transactions
                 .iter()
-                .zip(&self.user_signatures)
+                .zip_debug_eq(&self.user_signatures)
                 .map(|(tx, sigs)| CheckpointTransactionContents {
                     digest: tx.digests(),
                     user_signatures: sigs.clone(),
@@ -1001,7 +1014,7 @@ impl FullCheckpointContentsV2 {
             transactions: self
                 .transactions
                 .into_iter()
-                .zip(self.user_signatures)
+                .zip_debug_eq(self.user_signatures)
                 .map(|(tx, sigs)| CheckpointTransactionContents {
                     digest: tx.digests(),
                     user_signatures: sigs,

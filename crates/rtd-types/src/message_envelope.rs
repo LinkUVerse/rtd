@@ -4,13 +4,12 @@
 use crate::base_types::AuthorityName;
 use crate::committee::{Committee, EpochId};
 use crate::crypto::{
-    AuthorityKeyPair, AuthorityQuorumSignInfo, AuthoritySignInfo, AuthoritySignInfoTrait,
-    AuthoritySignature, AuthorityStrongQuorumSignInfo, EmptySignInfo, Signer,
+    AuthorityKeyPair, AuthorityQuorumSignInfo, AuthoritySignInfo, AuthoritySignature,
+    AuthorityStrongQuorumSignInfo, EmptySignInfo, Signer,
 };
 use crate::error::RtdResult;
 use crate::executable_transaction::CertificateProof;
 use crate::messages_checkpoint::CheckpointSequenceNumber;
-use crate::transaction::SenderSignedData;
 use fastcrypto::traits::KeyPair;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -169,16 +168,6 @@ where
 
     pub fn epoch(&self) -> EpochId {
         self.auth_signature.epoch
-    }
-}
-
-impl Envelope<SenderSignedData, AuthoritySignInfo> {
-    pub fn verify_committee_sigs_only(&self, committee: &Committee) -> RtdResult {
-        self.auth_signature.verify_secure(
-            self.data(),
-            Intent::rtd_app(IntentScope::SenderSignedTransaction),
-            committee,
-        )
     }
 }
 
@@ -432,23 +421,6 @@ impl<T: Message> VerifiedEnvelope<T, CertificateProof> {
             digest,
             data,
             auth_signature: CertificateProof::new_system(epoch),
-        })
-    }
-
-    pub fn new_from_quorum_execution(
-        transaction: VerifiedEnvelope<T, EmptySignInfo>,
-        epoch: EpochId,
-    ) -> Self {
-        let inner = transaction.into_inner();
-        let Envelope {
-            digest,
-            data,
-            auth_signature: _,
-        } = inner;
-        VerifiedEnvelope::new_unchecked(Envelope {
-            digest,
-            data,
-            auth_signature: CertificateProof::QuorumExecuted(epoch),
         })
     }
 

@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_graphql::Object;
-use rtd_types::effects::{IDOperation, ObjectChange as NativeObjectChange};
+use rtd_types::effects::IDOperation;
+use rtd_types::effects::ObjectChange as NativeObjectChange;
 
-use crate::{api::scalars::rtd_address::RtdAddress, scope::Scope};
-
-use super::object::Object;
+use crate::api::scalars::rtd_address::RtdAddress;
+use crate::api::types::object::Object;
+use crate::scope::Scope;
 
 pub(crate) struct ObjectChange {
     pub(crate) scope: Scope,

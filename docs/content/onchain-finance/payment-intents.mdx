@@ -1,0 +1,11 @@
+---
+title: Payment intents
+description: Current RTD support and deployment requirements.
+keywords:
+  - RTD
+  - payment intents
+---
+
+# Payment intents
+
+A payment intent is an application-level instruction to construct a signed transaction. RTD does not provide a deployed intent registry or verified integrations with the upstream Sui exchanges and lending pools used by earlier examples. To implement an intent, resolve recipient and coin type against the actual RTD network, quote only services that explicitly support that chain, present the exact effects for approval, and confirm the transaction digest on that same chain. Never assume upstream Sui USDC, swap routes, yield pools, prices, or account balances exist on RTD.

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
-use std::path::PathBuf;
 use rtd_macros::sim_test;
 use rtd_move_build::BuildConfig;
 use rtd_rpc::Client;
@@ -15,11 +14,15 @@ use rtd_sdk_types::TypeTag;
 use rtd_types::Identifier;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{CallArg, ObjectArg, TransactionData, TransactionKind};
+use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[sim_test]
 async fn test_indexing_with_tto() {
-    let cluster = TestClusterBuilder::new().build().await;
+    let cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(cluster.rpc_url().to_owned()).unwrap();
     let address = cluster.get_address_0();
@@ -277,7 +280,10 @@ async fn test_indexing_with_tto() {
 
 #[sim_test]
 async fn test_filter_by_type() {
-    let cluster = TestClusterBuilder::new().build().await;
+    let cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let rtd = "0x2::coin::Coin<0x2::rtd::RTD>"
         .parse::<TypeTag>()
@@ -529,7 +535,10 @@ async fn test_filter_by_type() {
 
 #[sim_test]
 async fn test_reverse_sorted_coins_by_balance() {
-    let cluster = TestClusterBuilder::new().build().await;
+    let cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
 
     let mut client = Client::new(cluster.rpc_url().to_owned()).unwrap();
 

@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use reqwest::Client;
-use serde_json::{Value, json};
 use rtd_indexer_alt_e2e_tests::FullCluster;
 use rtd_indexer_alt_graphql::extensions::logging::REQUEST_ID_HEADER;
+use serde_json::Value;
+use serde_json::json;
 
 struct TestResult {
     request_id: String,

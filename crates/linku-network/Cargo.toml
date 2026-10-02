@@ -3,26 +3,30 @@ name = "linku-network"
 version = "0.2.0"
 license = "Apache-2.0"
 edition = "2024"
-authors = ["Brandon Williams <brandon@linkulabs.com>"]
+authors = ["Brandon Williams"]
 description = "LinkU's network tooling"
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 anemo.workspace = true
 anemo-tower.workspace = true
 anyhow.workspace = true
-async-stream.workspace = true
+base64.workspace = true
 bcs.workspace = true
 bytes.workspace = true
 dashmap.workspace = true
 eyre.workspace = true
-fastcrypto.workspace = true
 futures.workspace = true
 http.workspace = true
 http-body.workspace = true
 linku-metrics.workspace = true
 multiaddr.workspace = true
+pin-project-lite.workspace = true
 prometheus.workspace = true
+prost-reflect.workspace = true
 quinn-proto.workspace = true
 rand.workspace = true
 serde.workspace = true
@@ -31,16 +35,18 @@ snap.workspace = true
 hyper-rustls.workspace = true
 hyper-util.workspace = true
 rustls.workspace = true
+rtd-macros.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "macros"] }
 tokio-rustls.workspace = true
-tokio-stream.workspace = true
 tonic.workspace = true
-tonic-health.workspace = true
 tower.workspace = true
 tower-http.workspace = true
-pin-project-lite = "0.2.13"
 tracing.workspace = true
 rtd-http.workspace = true
 
 [dev-dependencies]
+http-body-util.workspace = true
+prost.workspace = true
 rtd-tls.workspace = true
+tonic-health.workspace = true
+tracing-subscriber.workspace = true

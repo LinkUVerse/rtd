@@ -2,22 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::authority::AuthorityState;
-use crate::authority::authority_tests::{init_state_with_committee, send_and_confirm_transaction};
+use crate::authority::authority_tests::{init_state_with_committee, submit_and_execute};
 use crate::authority::test_authority_builder::TestAuthorityBuilder;
-use futures::future::join_all;
-use std::collections::HashMap;
-use std::sync::Arc;
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
 use rtd_types::crypto::AccountKeyPair;
 use rtd_types::effects::{SignedTransactionEffects, TransactionEffectsAPI};
 use rtd_types::error::{RtdErrorKind, UserInputError};
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::object::Object;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::TransactionData;
 use rtd_types::utils::to_sender_signed_transaction;
 use rtd_types::{base_types::dbg_addr, crypto::get_key_pair, error::RtdError};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_pay_rtd_failure_empty_recipients() {
@@ -81,10 +80,10 @@ async fn test_pay_rtd_failure_insufficient_total_balance_one_input_coin() {
 
     assert_eq!(
         res.txn_result.as_ref().unwrap().status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::InsufficientCoinBalance,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::InsufficientCoinBalance,
             command: Some(0) // SplitCoins is the first command in the implementation of pay
-        },
+        }),
     );
 }
 
@@ -134,10 +133,10 @@ async fn test_pay_rtd_failure_insufficient_total_balance_multiple_input_coins() 
     .await;
     assert_eq!(
         res.txn_result.as_ref().unwrap().status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::InsufficientCoinBalance,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::InsufficientCoinBalance,
             command: Some(0) // SplitCoins is the first command in the implementation of pay
-        },
+        }),
     );
 }
 
@@ -169,21 +168,9 @@ async fn test_pay_rtd_success_one_input_coin() -> anyhow::Result<()> {
     let created_obj_id1 = effects.created()[0].0.0;
     let created_obj_id2 = effects.created()[1].0.0;
     let created_obj_id3 = effects.created()[2].0.0;
-    let created_obj1 = res
-        .authority_state
-        .get_object(&created_obj_id1)
-        .await
-        .unwrap();
-    let created_obj2 = res
-        .authority_state
-        .get_object(&created_obj_id2)
-        .await
-        .unwrap();
-    let created_obj3 = res
-        .authority_state
-        .get_object(&created_obj_id3)
-        .await
-        .unwrap();
+    let created_obj1 = res.authority_state.get_object(&created_obj_id1).unwrap();
+    let created_obj2 = res.authority_state.get_object(&created_obj_id2).unwrap();
+    let created_obj3 = res.authority_state.get_object(&created_obj_id3).unwrap();
 
     let addr1 = effects.created()[0].1.get_owner_address()?;
     let addr2 = effects.created()[1].1.get_owner_address()?;
@@ -209,7 +196,7 @@ async fn test_pay_rtd_success_one_input_coin() -> anyhow::Result<()> {
         sender
     );
     let gas_used = effects.gas_cost_summary().net_gas_usage() as u64;
-    let gas_object = res.authority_state.get_object(&object_id).await.unwrap();
+    let gas_object = res.authority_state.get_object(&object_id).unwrap();
     assert_eq!(
         GasCoin::try_from(&gas_object)?.value(),
         coin_amount - 100 - 200 - 300 - gas_used,
@@ -248,16 +235,8 @@ async fn test_pay_rtd_success_multiple_input_coins() -> anyhow::Result<()> {
     assert_eq!(effects.created().len(), 2);
     let created_obj_id1 = effects.created()[0].0.0;
     let created_obj_id2 = effects.created()[1].0.0;
-    let created_obj1 = res
-        .authority_state
-        .get_object(&created_obj_id1)
-        .await
-        .unwrap();
-    let created_obj2 = res
-        .authority_state
-        .get_object(&created_obj_id2)
-        .await
-        .unwrap();
+    let created_obj1 = res.authority_state.get_object(&created_obj_id1).unwrap();
+    let created_obj2 = res.authority_state.get_object(&created_obj_id2).unwrap();
     let addr1 = effects.created()[0].1.get_owner_address()?;
     let addr2 = effects.created()[1].1.get_owner_address()?;
     let coin_val1 = *recipient_amount_map
@@ -276,7 +255,7 @@ async fn test_pay_rtd_success_multiple_input_coins() -> anyhow::Result<()> {
         sender
     );
     let gas_used = effects.gas_cost_summary().net_gas_usage() as u64;
-    let gas_object = res.authority_state.get_object(&object_id1).await.unwrap();
+    let gas_object = res.authority_state.get_object(&object_id1).unwrap();
     assert_eq!(
         GasCoin::try_from(&gas_object)?.value(),
         5002000 - 500 - 1500 - gas_used,
@@ -345,7 +324,7 @@ async fn test_pay_all_rtd_success_one_input_coin() -> anyhow::Result<()> {
     );
 
     let gas_used = effects.gas_cost_summary().gas_used();
-    let gas_object = res.authority_state.get_object(&object_id).await.unwrap();
+    let gas_object = res.authority_state.get_object(&object_id).unwrap();
     assert_eq!(GasCoin::try_from(&gas_object)?.value(), 3000000 - gas_used,);
     Ok(())
 }
@@ -380,7 +359,7 @@ async fn test_pay_all_rtd_success_multiple_input_coins() -> anyhow::Result<()> {
     );
 
     let gas_used = effects.gas_cost_summary().gas_used();
-    let gas_object = res.authority_state.get_object(&object_id1).await.unwrap();
+    let gas_object = res.authority_state.get_object(&object_id1).unwrap();
     assert_eq!(GasCoin::try_from(&gas_object)?.value(), 3002000 - gas_used,);
     Ok(())
 }
@@ -404,11 +383,9 @@ async fn execute_pay_rtd(
         .iter()
         .map(|coin_obj| coin_obj.compute_object_reference())
         .collect();
-    let handles: Vec<_> = input_coin_objects
-        .into_iter()
-        .map(|obj| authority_state.insert_genesis_object(obj))
-        .collect();
-    join_all(handles).await;
+    for obj in input_coin_objects {
+        authority_state.insert_genesis_object(obj);
+    }
     let rgp = authority_state.reference_gas_price_for_testing().unwrap();
 
     let mut builder = ProgrammableTransactionBuilder::new();
@@ -416,7 +393,7 @@ async fn execute_pay_rtd(
     let pt = builder.finish();
     let data = TransactionData::new_programmable(sender, input_coin_refs, pt, gas_budget, rgp);
     let tx = to_sender_signed_transaction(data, &sender_key);
-    let txn_result = send_and_confirm_transaction(&authority_state, tx)
+    let txn_result = submit_and_execute(&authority_state, tx)
         .await
         .map(|(_, effects)| effects);
 
@@ -466,7 +443,7 @@ async fn execute_pay_all_rtd(
     let pt = builder.finish();
     let data = TransactionData::new_programmable(sender, input_coins, pt, gas_budget, rgp);
     let tx = to_sender_signed_transaction(data, &sender_key);
-    let txn_result = send_and_confirm_transaction(&authority_state, tx)
+    let txn_result = submit_and_execute(&authority_state, tx)
         .await
         .map(|(_, effects)| effects);
     PayRtdTransactionBlockExecutionResult {

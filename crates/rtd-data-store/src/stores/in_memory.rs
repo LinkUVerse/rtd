@@ -29,18 +29,18 @@ use crate::{
     node::Node,
 };
 use anyhow::{Error, Result};
+use rtd_types::{
+    base_types::ObjectID,
+    committee::ProtocolVersion,
+    object::Object,
+    supported_protocol_versions::{Chain, ProtocolConfig},
+};
 use std::{
     collections::BTreeMap,
     sync::{
         RwLock,
         atomic::{AtomicU64, Ordering},
     },
-};
-use rtd_types::{
-    base_types::ObjectID,
-    committee::ProtocolVersion,
-    object::Object,
-    supported_protocol_versions::{Chain, ProtocolConfig},
 };
 
 /// In-memory store implementing the data store interfaces.
@@ -268,12 +268,12 @@ impl ObjectStore for InMemoryStore {
                         .get(&(key.object_id, *max_version))
                         .copied();
                     let res = actual_version.and_then(|actual_version| {
-                        inner
+                        let obj = inner
                             .object_cache
                             .get(&key.object_id)
                             .and_then(|versions_map| versions_map.get(&actual_version))
-                            .cloned()
-                            .map(|obj| (obj, actual_version))
+                            .cloned()?;
+                        Some((obj, actual_version))
                     });
                     (
                         res,
@@ -287,12 +287,12 @@ impl ObjectStore for InMemoryStore {
                         .get(&(key.object_id, *checkpoint))
                         .copied();
                     let res = actual_version.and_then(|actual_version| {
-                        inner
+                        let obj = inner
                             .object_cache
                             .get(&key.object_id)
                             .and_then(|versions_map| versions_map.get(&actual_version))
-                            .cloned()
-                            .map(|obj| (obj, actual_version))
+                            .cloned()?;
+                        Some((obj, actual_version))
                     });
                     (
                         res,

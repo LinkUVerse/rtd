@@ -18,14 +18,14 @@ task 2, lines 10-15:
 //# publish
 created: object(2,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 3572000,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 3579600,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 3, line 17:
 //# run test::gas_test::simple_function --sender A
 mutated: object(0,0)
 gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
-task 4, lines 19-21:
+task 4, line 19:
 //# create-checkpoint
 Checkpoint created: 1
 
@@ -40,9 +40,9 @@ Response: {
     "transferTransaction": {
       "gasEffects": {
         "gasObject": {
-          "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+          "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
           "version": 2,
-          "digest": "5oZq28MSbMZczmoEx7NppwgfS39saKEDR5kPUGJL3xhR"
+          "digest": "De36UvKrpvdw1jtse1H68znGwYpghPSA6ALYgNpLCVke"
         },
         "gasSummary": {
           "computationCost": 1000000,
@@ -62,9 +62,9 @@ Response: {
     "functionCallTransaction": {
       "gasEffects": {
         "gasObject": {
-          "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+          "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
           "version": 3,
-          "digest": "CarkTNvzXbUZPij4ebGttPTGtMwugEjXavBgjQLzABiC"
+          "digest": "8c5T9j8ekFPRjcp5d5w1mzAWAZSsXq7yjfv87BYimDTM"
         },
         "gasSummary": {
           "computationCost": 1000000,
@@ -83,11 +83,7 @@ Response: {
   "data": {
     "functionCallTransaction": {
       "gasEffects": {
-        "gasObject": {
-          "address": "0x0000000000000000000000000000000000000000000000000000000000000000",
-          "version": 0,
-          "digest": "11111111111111111111111111111111"
-        },
+        "gasObject": null,
         "gasSummary": {
           "computationCost": 0,
           "storageCost": 0,

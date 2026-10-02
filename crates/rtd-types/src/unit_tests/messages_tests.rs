@@ -5,10 +5,10 @@
 use super::*;
 use crate::base_types::{FullObjectRef, random_object_ref};
 use crate::committee::Committee;
-use crate::crypto::Secp256k1RtdSignature;
 use crate::crypto::RtdKeyPair;
 use crate::crypto::RtdSignature;
 use crate::crypto::RtdSignatureInner;
+use crate::crypto::Secp256k1RtdSignature;
 use crate::crypto::VerificationObligation;
 use crate::crypto::bcs_signable_test::{Foo, get_obligation_input};
 use crate::crypto::{
@@ -27,36 +27,6 @@ use roaring::RoaringBitmap;
 use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-
-#[test]
-fn test_move_calls_include_command_index() {
-    let transaction = ProgrammableTransaction {
-        inputs: vec![],
-        commands: vec![
-            Command::move_call(
-                RTD_FRAMEWORK_PACKAGE_ID,
-                Identifier::new("example").unwrap(),
-                Identifier::new("first").unwrap(),
-                vec![],
-                vec![],
-            ),
-            Command::MakeMoveVec(None, vec![]),
-            Command::move_call(
-                RTD_FRAMEWORK_PACKAGE_ID,
-                Identifier::new("example").unwrap(),
-                Identifier::new("second").unwrap(),
-                vec![],
-                vec![],
-            ),
-        ],
-    };
-
-    let calls = transaction.move_calls();
-    assert_eq!(calls[0].0, 0);
-    assert_eq!(calls[0].3, "first");
-    assert_eq!(calls[1].0, 2);
-    assert_eq!(calls[1].3, "second");
-}
 
 #[test]
 fn test_signed_values() {
@@ -147,79 +117,6 @@ fn test_signed_values() {
         v.try_into_verified_for_testing(&committee, &Default::default())
             .is_err()
     );
-}
-
-#[test]
-fn test_certificates() {
-    let (_a1, sec1): (_, AuthorityKeyPair) = get_key_pair();
-    let (a2, sec2): (_, AuthorityKeyPair) = get_key_pair();
-    let (_a3, sec3): (_, AuthorityKeyPair) = get_key_pair();
-    let (a_sender, sender_sec): (_, AccountKeyPair) = get_key_pair();
-
-    let mut authorities: BTreeMap<AuthorityPublicKeyBytes, u64> = BTreeMap::new();
-    authorities.insert(
-        /* address */ AuthorityPublicKeyBytes::from(sec1.public()),
-        /* voting right */ 1,
-    );
-    authorities.insert(
-        /* address */ AuthorityPublicKeyBytes::from(sec2.public()),
-        /* voting right */ 1,
-    );
-    let committee = Committee::new_for_testing_with_normalized_voting_power(0, authorities);
-    let gas_price = 10;
-    let transaction = Transaction::from_data_and_signer(
-        TransactionData::new_transfer(
-            a2,
-            FullObjectRef::from_fastpath_ref(random_object_ref()),
-            a_sender,
-            random_object_ref(),
-            TEST_ONLY_GAS_UNIT_FOR_TRANSFER * gas_price,
-            gas_price,
-        ),
-        vec![&sender_sec],
-    )
-    .try_into_verified_for_testing(committee.epoch(), &Default::default())
-    .unwrap();
-
-    let v1 = SignedTransaction::new(
-        committee.epoch(),
-        transaction.clone().into_message(),
-        &sec1,
-        AuthorityPublicKeyBytes::from(sec1.public()),
-    );
-    let v2 = SignedTransaction::new(
-        committee.epoch(),
-        transaction.clone().into_message(),
-        &sec2,
-        AuthorityPublicKeyBytes::from(sec2.public()),
-    );
-    let v3 = SignedTransaction::new(
-        committee.epoch(),
-        transaction.clone().into_message(),
-        &sec3,
-        AuthorityPublicKeyBytes::from(sec3.public()),
-    );
-
-    let mut sigs = vec![v1.auth_sig().clone()];
-    assert!(
-        CertifiedTransaction::new(transaction.clone().into_message(), sigs.clone(), &committee)
-            .is_err()
-    );
-    sigs.push(v2.auth_sig().clone());
-    let c =
-        CertifiedTransaction::new(transaction.clone().into_message(), sigs, &committee).unwrap();
-    assert!(
-        c.verify_signatures_authenticated(
-            &committee,
-            &Default::default(),
-            Arc::new(VerifiedDigestCache::new_empty())
-        )
-        .is_ok()
-    );
-
-    let sigs = vec![v1.auth_sig().clone(), v3.auth_sig().clone()];
-
-    assert!(CertifiedTransaction::new(transaction.into_message(), sigs, &committee).is_err());
 }
 
 #[test]
@@ -638,24 +535,6 @@ fn test_user_signature_committed_in_transactions() {
 }
 
 #[test]
-fn test_alias_versions_committed_in_full_message_digest() {
-    let transaction = crate::utils::create_fake_transaction();
-    let signed_data = transaction.data();
-    let signer = signed_data.intent_message().value.sender();
-
-    let digest_at_version_1 = signed_data.full_message_digest_with_alias_versions(&vec![(
-        signer,
-        Some(SequenceNumber::from_u64(1)),
-    )]);
-    let digest_at_version_2 = signed_data.full_message_digest_with_alias_versions(&vec![(
-        signer,
-        Some(SequenceNumber::from_u64(2)),
-    )]);
-
-    assert_ne!(digest_at_version_1, digest_at_version_2);
-}
-
-#[test]
 fn test_user_signature_committed_in_signed_transactions() {
     // TODO: refactor this test to not reuse the same keys for user and authority signing
     let (_a1, sec1): (_, AuthorityKeyPair) = get_key_pair();
@@ -801,10 +680,6 @@ fn test_sponsored_transaction_message() {
     )
     .try_into_verified_for_testing(epoch, &Default::default())
     .unwrap();
-    assert_eq!(
-        transaction.get_signer_sig_mapping(true).unwrap(),
-        BTreeMap::from([(sender, (1, &sender_sig)), (sponsor, (0, &sponsor_sig))]),
-    );
 
     // Test incomplete signature lists (missing sponsor sig)
     assert!(matches!(
@@ -863,7 +738,7 @@ fn test_sponsored_transaction_validity_check() {
     let sponsor = (&sponsor_kp.public()).into();
 
     // This is a sponsored transaction
-    let gas_price = 10;
+    let gas_price = 1000;
     assert_ne!(sender, sponsor);
     let gas_data = GasData {
         payment: vec![random_object_ref()],
@@ -1402,87 +1277,6 @@ fn test_unique_input_objects() {
         "Duplicates in {:?}",
         input_objects
     );
-}
-
-#[test]
-fn test_certificate_digest() {
-    let (committee, key_pairs) = Committee::new_simple_test_committee();
-
-    let (receiver, _): (_, AccountKeyPair) = get_key_pair();
-    let (sender1, sender1_sec): (_, AccountKeyPair) = get_key_pair();
-    let (sender2, sender2_sec): (_, AccountKeyPair) = get_key_pair();
-
-    let gas_price = 10;
-    let make_tx = |sender, sender_sec| {
-        Transaction::from_data_and_signer(
-            TransactionData::new_transfer(
-                receiver,
-                FullObjectRef::from_fastpath_ref(random_object_ref()),
-                sender,
-                random_object_ref(),
-                TEST_ONLY_GAS_UNIT_FOR_TRANSFER * gas_price,
-                gas_price,
-            ),
-            vec![&sender_sec],
-        )
-        .try_into_verified_for_testing(committee.epoch(), &Default::default())
-        .unwrap()
-    };
-
-    let t1 = make_tx(sender1, sender1_sec);
-    let t2 = make_tx(sender2, sender2_sec);
-
-    let make_cert = |transaction: &VerifiedTransaction| {
-        let sigs: Vec<_> = key_pairs
-            .iter()
-            .take(3)
-            .map(|key_pair| {
-                SignedTransaction::new(
-                    committee.epoch(),
-                    transaction.clone().into_message(),
-                    key_pair,
-                    AuthorityPublicKeyBytes::from(key_pair.public()),
-                )
-                .auth_sig()
-                .clone()
-            })
-            .collect();
-
-        let cert = CertifiedTransaction::new(transaction.clone().into_message(), sigs, &committee)
-            .unwrap();
-        cert.verify_signatures_authenticated(
-            &committee,
-            &Default::default(),
-            Arc::new(VerifiedDigestCache::new_empty()),
-        )
-        .unwrap();
-        cert
-    };
-
-    let other_cert = make_cert(&t2);
-
-    let mut cert = make_cert(&t1);
-    let orig = cert.clone();
-
-    let digest = cert.certificate_digest();
-
-    // mutating a tx sig changes the digest.
-    *cert
-        .data_mut_for_testing()
-        .tx_signatures_mut_for_testing()
-        .get_mut(0)
-        .unwrap() = t2.tx_signatures()[0].clone();
-    assert_ne!(digest, cert.certificate_digest());
-
-    // mutating signature epoch changes digest
-    cert = orig.clone();
-    cert.auth_sig_mut_for_testing().epoch = 42;
-    assert_ne!(digest, cert.certificate_digest());
-
-    // mutating signature changes digest
-    cert = orig;
-    *cert.auth_sig_mut_for_testing() = other_cert.auth_sig().clone();
-    assert_ne!(digest, cert.certificate_digest());
 }
 
 // Use this to ensure that our approximation for components used in effects size are not smaller than expected

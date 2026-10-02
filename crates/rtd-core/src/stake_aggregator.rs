@@ -1,18 +1,18 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::Serialize;
-use shared_crypto::intent::Intent;
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::hash::Hash;
-use std::sync::Arc;
 use rtd_types::base_types::AuthorityName;
 use rtd_types::base_types::ConciseableName;
 use rtd_types::committee::{Committee, CommitteeTrait, StakeUnit};
 use rtd_types::crypto::{AuthorityQuorumSignInfo, AuthoritySignInfo, AuthoritySignInfoTrait};
 use rtd_types::error::{RtdError, RtdErrorKind, RtdResult};
 use rtd_types::message_envelope::{Envelope, Message};
+use serde::Serialize;
+use shared_crypto::intent::Intent;
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hash;
+use std::sync::Arc;
 use tracing::warn;
 use typed_store::TypedStoreError;
 
@@ -113,6 +113,7 @@ impl<S: Clone + Eq, const STRENGTH: bool> StakeAggregator<S, STRENGTH> {
         self.total_votes >= self.committee.threshold::<STRENGTH>()
     }
 
+    #[cfg(test)]
     pub fn validator_sig_count(&self) -> usize {
         self.data.len()
     }
@@ -179,7 +180,8 @@ impl<const STRENGTH: bool> StakeAggregator<AuthoritySignInfo, STRENGTH> {
                                         bad_authorities.push(*name);
                                     }
                                 }
-                                // Evicting invalid signatures can leave a valid quorum.
+                                // After evicting invalid sigs, the remaining valid sigs may
+                                // still constitute a quorum on their own.
                                 if self.total_votes >= self.committee.threshold::<STRENGTH>() {
                                     match AuthorityQuorumSignInfo::<STRENGTH>::new_from_auth_sign_infos(
                                         self.data.values().cloned().collect(),
@@ -248,10 +250,6 @@ impl<K, V, const STRENGTH: bool> MultiStakeAggregator<K, V, STRENGTH> {
         }
     }
 
-    pub fn unique_key_count(&self) -> usize {
-        self.stake_maps.len()
-    }
-
     pub fn total_votes(&self) -> StakeUnit {
         let mut voted_authorities = HashSet::new();
         self.stake_maps.values().for_each(|(_, stake_aggregator)| {
@@ -263,6 +261,11 @@ impl<K, V, const STRENGTH: bool> MultiStakeAggregator<K, V, STRENGTH> {
             .iter()
             .map(|k| self.committee.weight(k))
             .sum()
+    }
+
+    #[cfg(test)]
+    pub fn unique_key_count(&self) -> usize {
+        self.stake_maps.len()
     }
 }
 
@@ -661,42 +664,53 @@ mod stake_aggregator_insert_tests {
         }
     }
 
+    /// Regression test for a bug where evicting a bad sig after batch verification failure
+    /// incorrectly returns NotEnoughVotes even when the remaining valid sigs form a quorum.
+    ///
+    /// Scenario: insert a bad sig (weight < Q), then a valid sig (weight > Q).
+    /// Batch verification fails; bad sig is evicted; valid sig alone has weight > Q.
+    /// The expected result is QuorumReached, but the bug causes NotEnoughVotes.
     #[test]
-    fn quorum_is_retained_after_bad_signature_eviction() {
+    fn test_quorum_not_lost_after_bad_sig_eviction() {
+        // Two-validator committee: auth0 has ~7000 weight (> QUORUM_THRESHOLD 6667),
+        // auth1 has ~3000 weight. So auth0 alone can form a strong quorum.
         let (committee, key_pairs) =
             Committee::new_simple_test_committee_with_normalized_voting_power(vec![7, 3]);
         let committee = Arc::new(committee);
+        // committee.names() is sorted by AuthorityName (== public key bytes),
+        // matching the sort applied to key_pairs in the constructor above.
         let authorities: Vec<_> = committee.names().copied().collect();
-        let (majority_authority, majority_key) = (authorities[0], &key_pairs[0]);
-        let (minority_authority, minority_key) = (authorities[1], &key_pairs[1]);
+        let (auth0, key0) = (authorities[0], &key_pairs[0]);
+        let (auth1, key1) = (authorities[1], &key_pairs[1]);
 
-        let mut aggregator: StakeAggregator<AuthoritySignInfo, true> =
-            StakeAggregator::new(committee);
-        let message = TestMessage {
+        let mut agg: StakeAggregator<AuthoritySignInfo, true> =
+            StakeAggregator::new(committee.clone());
+
+        let msg = TestMessage {
             value: "real".to_string(),
         };
-        let bad_message = TestMessage {
+        let msg_bad = TestMessage {
             value: "wrong".to_string(),
         };
 
-        let bad_envelope = Envelope::<TestMessage, AuthoritySignInfo>::new(
-            0,
-            bad_message,
-            minority_key,
-            minority_authority,
-        );
-        assert!(matches!(
-            aggregator.insert(bad_envelope),
-            InsertResult::NotEnoughVotes { .. }
-        ));
+        // auth1 signs the wrong message. Its sig will be stored but will fail
+        // verify_secure when checked against `msg` during individual verification.
+        let envelope_bad = Envelope::<TestMessage, AuthoritySignInfo>::new(0, msg_bad, key1, auth1);
+        let result = agg.insert(envelope_bad);
+        // auth1 weight (~3000) < QUORUM_THRESHOLD (6667): no quorum yet.
+        assert!(matches!(result, InsertResult::NotEnoughVotes { .. }));
 
-        let valid_envelope = Envelope::<TestMessage, AuthoritySignInfo>::new(
-            0,
-            message,
-            majority_key,
-            majority_authority,
+        // auth0 signs the real message. Total stored weight is ~10000 >= quorum,
+        // so insert triggers the batch verification path. The batch fails because
+        // auth1's sig was for msg_bad. Individual verification evicts auth1.
+        // After eviction, auth0's weight alone (~7000) still exceeds the threshold,
+        // so the result must be QuorumReached.
+        let envelope_good = Envelope::<TestMessage, AuthoritySignInfo>::new(0, msg, key0, auth0);
+        let result = agg.insert(envelope_good);
+        assert!(
+            result.is_quorum_reached(),
+            "valid sig with weight > quorum threshold must yield QuorumReached after bad sig is evicted"
         );
-        assert!(aggregator.insert(valid_envelope).is_quorum_reached());
     }
 }
 

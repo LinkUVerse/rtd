@@ -3,20 +3,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod codes;
-pub mod warning_filters;
+pub mod filter;
 
 use crate::{
     Flags,
     command_line::COLOR_MODE_ENV_VAR,
     diagnostics::{
-        codes::{Category, DiagnosticCode, DiagnosticInfo, DiagnosticsID, Severity},
-        warning_filters::{FilterName, FilterPrefix, WarningFilters, WarningFiltersScope},
+        codes::{
+            Category, DiagnosticCode, DiagnosticInfo, DiagnosticOrigin, DiagnosticsID, Severity,
+        },
+        filter::{FilterName, FilterPrefix, FilterResult, FilterScope, FilterStack},
     },
     shared::{
         files::{ByteSpan, FileByteSpan, FileId, MappedFiles},
-        format_allow_attr,
         ide::{IDEAnnotation, IDEInfo},
-        known_attributes,
     },
 };
 use codespan_reporting::{
@@ -49,8 +49,15 @@ pub struct DiagnosticReporter<'env> {
     known_filter_names: &'env BTreeMap<DiagnosticsID, (FilterPrefix, FilterName)>,
     diags: Arc<RwLock<Diagnostics>>,
     ide_information: Arc<RwLock<IDEInfo>>,
-    warning_filters_scope: WarningFiltersScope,
+    filter_stack: FilterStack,
 }
+
+/// A reporter restricted to internal compiler errors. Passes that should not produce any
+/// user-facing diagnostics (e.g. `to_bytecode`) carry this instead of a full
+/// [`DiagnosticReporter`] so that only `Severity::Bug` diagnostics (`ice!`, `ice_assert!`, and
+/// other `Bug` codes) can be reported through it.
+#[derive(Clone, Debug)]
+pub struct IceReporter<'env>(DiagnosticReporter<'env>);
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Default)]
 pub struct Diagnostics {
@@ -61,7 +68,6 @@ pub struct Diagnostics {
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Default)]
 struct Diagnostics_ {
     diagnostics: Vec<Diagnostic>,
-    // diagnostics filtered in source code
     filtered_source_diagnostics: Vec<Diagnostic>,
     severity_count: BTreeMap<Severity, usize>,
 }
@@ -151,9 +157,17 @@ pub fn unwrap_or_report_pass_diagnostics<T, Pass>(
     }
 }
 
-pub fn unwrap_or_report_diagnostics<T>(files: &MappedFiles, res: Result<T, Diagnostics>) -> T {
+/// Unwraps the result and reports the diagnostics if the result is an error.
+/// Warnings are reported even in Ok case.
+pub fn unwrap_or_report_diagnostics<T>(
+    files: &MappedFiles,
+    res: Result<(T, Diagnostics), Diagnostics>,
+) -> T {
     match res {
-        Ok(t) => t,
+        Ok((t, warnings)) => {
+            report_warnings(files, warnings);
+            t
+        }
         Err(diags) => {
             assert!(!diags.is_empty());
             report_diagnostics(files, diags)
@@ -369,48 +383,47 @@ pub fn report_migration_to_buffer(files: &MappedFiles, diags: Diagnostics) -> Ve
 //**************************************************************************************************
 
 impl<'env> DiagnosticReporter<'env> {
-    pub const fn new(
+    pub fn new(
         flags: &'env Flags,
         known_filter_names: &'env BTreeMap<DiagnosticsID, (FilterPrefix, FilterName)>,
         diags: Arc<RwLock<Diagnostics>>,
         ide_information: Arc<RwLock<IDEInfo>>,
-        warning_filters_scope: WarningFiltersScope,
+        filter_stack: FilterStack,
     ) -> Self {
         Self {
             flags,
             known_filter_names,
             diags,
             ide_information,
-            warning_filters_scope,
+            filter_stack,
         }
     }
 
-    /// Creates a dummy reporter -- this can be passed in anywhere a reporter is expected, but will
-    /// not actually report the diagnostics or IDE information. This can be useful to speculatively
-    /// look up information in, e.g., exapsnion or name resolution.
+    /// Creates a dummy reporter that will not actually report diagnostics or IDE
+    /// information. Useful for speculative lookups in expansion or name resolution.
     pub fn dummy_reporter(
         flags: &'env Flags,
         known_filter_names: &'env BTreeMap<DiagnosticsID, (FilterPrefix, FilterName)>,
-        warning_filters_scope: WarningFiltersScope,
+        filter_stack: FilterStack,
     ) -> Self {
         Self {
             flags,
             known_filter_names,
             diags: Arc::new(RwLock::new(Diagnostics::new())),
             ide_information: Arc::new(RwLock::new(IDEInfo::new())),
-            warning_filters_scope,
+            filter_stack,
         }
     }
 
-    pub fn push_warning_filter_scope(&mut self, filters: WarningFilters) {
-        self.warning_filters_scope.push(filters)
+    pub fn push_warning_filter_scope(&mut self, scope: FilterScope) {
+        self.filter_stack.push(scope)
     }
 
     pub fn pop_warning_filter_scope(&mut self) {
-        self.warning_filters_scope.pop()
+        self.filter_stack.pop()
     }
 
-    pub fn add_diag(&self, mut diag: Diagnostic) {
+    pub fn add_diag(&self, diag: Diagnostic) {
         if diag.info().severity() <= Severity::NonblockingError
             && self
                 .diags
@@ -426,27 +439,20 @@ impl<'env> DiagnosticReporter<'env> {
             return;
         }
 
-        if !self.warning_filters_scope.is_filtered(&diag) {
-            // add help to suppress warning, if applicable
-            // TODO do we want a centralized place for tips like this?
-            if diag.info().severity() == Severity::Warning {
-                if let Some((prefix, name)) = self.known_filter_names.get(&diag.info().id()) {
-                    let help = format!(
-                        "This warning can be suppressed with '#[{}({})]' \
-                         applied to the 'module' or module member ('const', 'fun', or 'struct')",
-                        known_attributes::DiagnosticAttribute::ALLOW,
-                        format_allow_attr(*prefix, *name),
-                    );
-                    diag.add_note(help)
-                }
-                if self.flags.warnings_are_errors() {
-                    diag = diag.set_severity(Severity::NonblockingError)
-                }
+        let warnings_are_errors = self.flags.warnings_are_errors();
+        // Let the warning filter decide what to do with the diagnostic, and act accordingly.
+        // If the diagnostic is a warning and warnings are errors, set that, too.
+        match self.filter_stack.filter(diag, self.known_filter_names) {
+            FilterResult::Filtered(d) => self.diags.write().unwrap().add_source_filtered(d),
+            FilterResult::Discarded => (),
+            FilterResult::Emit(d) => {
+                let d = if d.info().severity() == Severity::Warning && warnings_are_errors {
+                    d.set_severity(Severity::NonblockingError)
+                } else {
+                    d
+                };
+                self.diags.write().unwrap().add(d)
             }
-            self.diags.write().unwrap().add(diag)
-        } else if !self.warning_filters_scope.is_filtered_for_dependency() {
-            // unwrap above is safe as the filter has been used (thus it must exist)
-            self.diags.write().unwrap().add_source_filtered(diag)
         }
     }
 
@@ -479,6 +485,28 @@ impl<'env> DiagnosticReporter<'env> {
 
     pub fn is_empty(&self) -> bool {
         self.diags.read().unwrap().is_empty()
+    }
+}
+
+impl<'env> IceReporter<'env> {
+    pub fn new(reporter: DiagnosticReporter<'env>) -> Self {
+        Self(reporter)
+    }
+
+    /// Adds an internal compiler error (`Severity::Bug`) diagnostic. Reporting any other severity
+    /// through this reporter is itself an internal invariant violation, and raises an additional
+    /// ICE alongside the original diagnostic.
+    pub fn add_diag(&self, diag: Diagnostic) {
+        if diag.info().severity() != Severity::Bug {
+            self.0.add_diag(crate::ice!((
+                diag.primary_loc(),
+                format!(
+                    "non-ICE diagnostic '{}' reported through an ICE-only reporter",
+                    diag.info().message()
+                )
+            )));
+        }
+        self.0.add_diag(diag)
     }
 }
 
@@ -660,7 +688,7 @@ impl Diagnostics {
         inner.diagnostics.retain(f);
     }
 
-    pub fn any_with_prefix(&self, prefix: &str) -> bool {
+    pub fn any_with_origin(&self, origin: DiagnosticOrigin) -> bool {
         let Self {
             diags: Some(inner),
             format: _,
@@ -668,10 +696,7 @@ impl Diagnostics {
         else {
             return false;
         };
-        inner
-            .diagnostics
-            .iter()
-            .any(|d| d.info.external_prefix() == Some(prefix))
+        inner.diagnostics.iter().any(|d| d.info.origin() == origin)
     }
 
     /// Returns true if any diagnostic in the Syntax category have already been recorded.
@@ -690,8 +715,8 @@ impl Diagnostics {
     }
 
     /// Returns the number of diags filtered in source (user) code (not in the dependencies) that
-    /// have a given prefix and how many different unique lints were filtered.
-    pub fn filtered_source_diags_with_prefix(&self, prefix: &str) -> (usize, usize) {
+    /// have a given origin and how many different unique lints were filtered.
+    pub fn filtered_source_diags_with_origin(&self, origin: DiagnosticOrigin) -> (usize, usize) {
         let Self {
             diags: Some(inner),
             format: _,
@@ -702,7 +727,7 @@ impl Diagnostics {
         let mut filtered_diags_num = 0;
         let mut unique = HashSet::new();
         inner.filtered_source_diagnostics.iter().for_each(|d| {
-            if d.info.external_prefix() == Some(prefix) {
+            if d.info.origin() == origin {
                 filtered_diags_num += 1;
                 unique.insert((d.info.category(), d.info.code()));
             }
@@ -747,6 +772,10 @@ impl Diagnostic {
     pub fn set_code(mut self, code: impl Into<DiagnosticInfo>) -> Self {
         self.info = code.into();
         self
+    }
+
+    pub(crate) fn severity(&self) -> Severity {
+        self.info.severity()
     }
 
     pub(crate) fn set_severity(mut self, severity: Severity) -> Self {

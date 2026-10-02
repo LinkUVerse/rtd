@@ -4,8 +4,8 @@
 use crate::ErrorReason;
 use crate::Result;
 use crate::RpcService;
+use crate::error::EpochNotFoundError;
 use prost_types::FieldMask;
-use rtd_protocol_config::ProtocolConfigValue;
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
@@ -16,8 +16,9 @@ use rtd_rpc::proto::rtd::rpc::v2::GetEpochResponse;
 use rtd_rpc::proto::rtd::rpc::v2::ProtocolConfig;
 use rtd_rpc::proto::timestamp_ms_to_proto;
 use rtd_sdk_types::EpochId;
+use rtd_types::rtd_system_state::RtdSystemStateTrait;
 
-pub const READ_MASK_DEFAULT: &str = "epoch,first_checkpoint,last_checkpoint,start,end,reference_gas_price,protocol_config.protocol_version";
+pub const READ_MASK_DEFAULT: &str = crate::read_mask_defaults::EPOCH;
 
 #[tracing::instrument(skip(service))]
 pub fn get_epoch(service: &RpcService, request: GetEpochRequest) -> Result<GetEpochResponse> {
@@ -35,47 +36,85 @@ pub fn get_epoch(service: &RpcService, request: GetEpochRequest) -> Result<GetEp
 
     let mut message = Epoch::default();
 
-    let current_epoch = service.reader.inner().get_latest_checkpoint()?.epoch();
+    let current_system_state = service.reader.get_system_state()?;
+    let current_epoch = current_system_state.epoch();
+
     let epoch = request.epoch.unwrap_or(current_epoch);
 
-    let mut system_state =
-        if epoch == current_epoch && read_mask.contains(Epoch::SYSTEM_STATE_FIELD.name) {
-            Some(service.reader.get_system_state()?)
-        } else {
-            None
-        };
-
-    if read_mask.contains(Epoch::EPOCH_FIELD.name) {
-        message.epoch = Some(epoch);
-    }
-
-    if let Some(epoch_info) = service
+    // Fetch epoch info, if indexing is available.
+    let mut epoch_info = service
         .reader
         .inner()
         .indexes()
-        .and_then(|indexes| indexes.get_epoch_info(epoch).ok().flatten())
-    {
-        if read_mask.contains(Epoch::FIRST_CHECKPOINT_FIELD.name) {
+        .map(|indexes| indexes.get_epoch_info(epoch))
+        .transpose()?
+        .flatten();
+
+    if epoch != current_epoch && epoch_info.is_none() {
+        return Err(EpochNotFoundError::new(epoch).into());
+    }
+
+    if read_mask.contains(Epoch::EPOCH_FIELD.name) {
+        message.set_epoch(epoch);
+    }
+
+    let system_state = if epoch == current_epoch {
+        Some(current_system_state)
+    } else {
+        epoch_info
+            .as_mut()
+            .and_then(|info| info.system_state.take())
+    };
+
+    if let Some(system_state) = system_state {
+        if let Some(submask) = read_mask.subtree(Epoch::PROTOCOL_CONFIG_FIELD) {
+            let chain = service.reader.inner().get_chain_identifier()?.chain();
+            let config = get_protocol_config(system_state.protocol_version(), chain)?;
+
+            message.set_protocol_config(ProtocolConfig::merge_from(config, &submask));
+        }
+
+        if read_mask.contains(Epoch::START_FIELD) {
+            message.set_start(timestamp_ms_to_proto(
+                system_state.epoch_start_timestamp_ms(),
+            ));
+        }
+
+        if read_mask.contains(Epoch::REFERENCE_GAS_PRICE_FIELD) {
+            message.set_reference_gas_price(system_state.reference_gas_price());
+        }
+
+        if read_mask.contains(Epoch::SYSTEM_STATE_FIELD) {
+            message.system_state = Some(Box::new(system_state.into()));
+        }
+    }
+
+    if let Some(epoch_info) = epoch_info {
+        if read_mask.contains(Epoch::FIRST_CHECKPOINT_FIELD) {
             message.first_checkpoint = epoch_info.start_checkpoint;
         }
 
-        if read_mask.contains(Epoch::LAST_CHECKPOINT_FIELD.name) {
+        if read_mask.contains(Epoch::LAST_CHECKPOINT_FIELD) {
             message.last_checkpoint = epoch_info.end_checkpoint;
         }
 
-        if read_mask.contains(Epoch::START_FIELD.name) {
+        if read_mask.contains(Epoch::START_FIELD) && message.start.is_none() {
             message.start = epoch_info.start_timestamp_ms.map(timestamp_ms_to_proto);
         }
 
-        if read_mask.contains(Epoch::END_FIELD.name) {
+        if read_mask.contains(Epoch::END_FIELD) {
             message.end = epoch_info.end_timestamp_ms.map(timestamp_ms_to_proto);
         }
 
-        if read_mask.contains(Epoch::REFERENCE_GAS_PRICE_FIELD.name) {
+        if read_mask.contains(Epoch::REFERENCE_GAS_PRICE_FIELD.name)
+            && message.reference_gas_price.is_none()
+        {
             message.reference_gas_price = epoch_info.reference_gas_price;
         }
 
-        if let Some(submask) = read_mask.subtree(Epoch::PROTOCOL_CONFIG_FIELD.name) {
+        if let Some(submask) = read_mask.subtree(Epoch::PROTOCOL_CONFIG_FIELD.name)
+            && message.protocol_config.is_none()
+        {
             let chain = service.reader.inner().get_chain_identifier()?.chain();
             let protocol_config = epoch_info
                 .protocol_version
@@ -85,18 +124,6 @@ pub fn get_epoch(service: &RpcService, request: GetEpochRequest) -> Result<GetEp
             message.protocol_config =
                 protocol_config.map(|config| ProtocolConfig::merge_from(config, &submask));
         }
-
-        // If we're not loading the current epoch then grab the indexed snapshot of the system
-        // state at the start of the epoch.
-        if system_state.is_none() {
-            system_state = epoch_info.system_state;
-        }
-    }
-
-    if let Some(system_state) = system_state
-        && read_mask.contains(Epoch::SYSTEM_STATE_FIELD.name)
-    {
-        message.system_state = Some(Box::new(system_state.into()));
     }
 
     if read_mask.contains(Epoch::COMMITTEE_FIELD.name) {
@@ -173,26 +200,64 @@ fn get_protocol_config(
 }
 
 pub fn protocol_config_to_proto(config: rtd_protocol_config::ProtocolConfig) -> ProtocolConfig {
-    let protocol_version = config.version.as_u64();
-    let attributes = config
-        .attr_map()
-        .into_iter()
-        .filter_map(|(k, maybe_v)| {
-            maybe_v.map(move |v| {
-                let v = match v {
-                    ProtocolConfigValue::u16(x) => x.to_string(),
-                    ProtocolConfigValue::u32(y) => y.to_string(),
-                    ProtocolConfigValue::u64(z) => z.to_string(),
-                    ProtocolConfigValue::bool(b) => b.to_string(),
-                };
-                (k, v)
-            })
-        })
-        .collect();
-    let feature_flags = config.feature_map().into_iter().collect();
+    use prost_types::value::Kind;
+
     let mut message = ProtocolConfig::default();
-    message.protocol_version = Some(protocol_version);
-    message.feature_flags = feature_flags;
-    message.attributes = attributes;
+    message.set_protocol_version(config.version.as_u64());
+
+    // Set deprecated feature flags to the exact feature_map the protocol config gives us
+    message.set_feature_flags(config.feature_map());
+
+    // Load configs (today this is just the `attributes`), rendered to a `Value`. Render emits
+    // explicit `NullValue`s for fields unset at this protocol version; filter them out so the
+    // public `configs` map only carries values that are actually configured.
+    let mut configs = config
+        .render::<prost_types::Value>(&mut linku_common::rpc_format::Unmetered)
+        .expect("render to prost Value should succeed")
+        .into_iter()
+        // filter out NULLs
+        .filter(|(_, v)| !matches!(v.kind, None | Some(Kind::NullValue(_))))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    // For backwards compatibility, render attributes to strings, complex types are json
+    // stringified
+    message.set_attributes(
+        configs
+            .iter()
+            .filter_map(|(k, v)| match &v.kind {
+                Some(Kind::NullValue(_)) => None,
+                Some(Kind::NumberValue(n)) => Some((k.to_owned(), n.to_string())),
+                Some(Kind::StringValue(s)) => Some((k.to_owned(), s.to_owned())),
+                Some(Kind::BoolValue(b)) => Some((k.to_owned(), b.to_string())),
+                Some(Kind::StructValue(s)) => Some((
+                    k.to_owned(),
+                    serde_json::to_string(&rtd_rpc::_serde::StructSerializer(s)).unwrap(),
+                )),
+                Some(Kind::ListValue(list)) => Some((
+                    k.to_owned(),
+                    serde_json::to_string(&rtd_rpc::_serde::ListValueSerializer(list)).unwrap(),
+                )),
+                None => None,
+            })
+            .collect(),
+    );
+
+    // Convert feature flags to a `Value` then merge with other attributes
+    for (k, v) in config
+        .feature_map()
+        .into_iter()
+        .map(|(key, value)| (key, prost_types::Value::from(value)))
+    {
+        let old = configs.insert(k, v);
+
+        debug_assert!(
+            old.is_none(),
+            "feature flags and attributes can't have keys which are the same"
+        );
+    }
+
+    // Set the joined set of attributes and feature flags
+    message.set_configs(configs);
+
     message
 }

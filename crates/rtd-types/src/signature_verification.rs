@@ -56,6 +56,7 @@ impl<D: Hash + Eq + Copy, V: Clone> VerifiedDigestCache<D, V> {
         }
     }
 
+    /// Returns the cached value for the given digest, if present.
     pub fn get_cached(&self, digest: &D) -> Option<V> {
         let inner = self.inner.read();
         if let Some(value) = inner.peek(digest) {
@@ -124,7 +125,8 @@ impl<D: Hash + Eq + Copy> VerifiedDigestCache<D, ()> {
 }
 
 /// Does crypto validation for a transaction which may be user-provided, or may be from a checkpoint.
-/// Returns the signature index used to verify each required signer, in signer order.
+/// Returns the signature index (into `tx_signatures`) used to verify each required signer,
+/// in the same order as `required_signers`.
 pub fn verify_sender_signed_data_message_signatures(
     txn: &SenderSignedData,
     current_epoch: EpochId,
@@ -146,13 +148,17 @@ pub fn verify_sender_signed_data_message_signatures(
         .into()
     );
 
-    // 2. System transactions do not require valid signatures.
+    // 2. System transactions do not require valid signatures. User-submitted transactions are
+    // verified not to be system transactions before this point.
     if intent_message.value.is_system_tx() {
+        // System tx are defined to use all of the dummy signatures provided.
         return Ok((0..required_signers.len() as u8).collect());
     }
 
     // 3. Each signer must provide a signature from one of the set of allowed aliases.
+    // Use index mapping to track which signature index satisfies each required signer.
     let sig_mapping = txn.get_signer_sig_mapping(verify_params.verify_legacy_zklogin_address)?;
+
     let mut signer_to_sig_index = Vec::with_capacity(required_signers.len());
     for signer in required_signers.iter() {
         let alias_set = aliased_addresses
@@ -160,9 +166,11 @@ pub fn verify_sender_signed_data_message_signatures(
             .find(|(addr, _)| *addr == *signer)
             .map(|(_, aliases)| aliases.clone())
             .unwrap_or(NonEmpty::new(*signer));
+
+        // Find the signature that matches any alias for this signer.
         let Some(sig_index) = alias_set
             .iter()
-            .find_map(|alias| sig_mapping.get(alias).map(|(index, _)| *index))
+            .find_map(|alias| sig_mapping.get(alias).map(|(idx, _)| *idx))
         else {
             return Err(RtdErrorKind::SignerSignatureAbsent {
                 expected: alias_set

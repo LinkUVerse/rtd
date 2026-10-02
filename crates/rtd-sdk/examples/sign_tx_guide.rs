@@ -14,7 +14,6 @@ use fastcrypto::{
     traits::{EncodeDecodeBase64, KeyPair},
 };
 use rand::{SeedableRng, rngs::StdRng};
-use shared_crypto::intent::{Intent, IntentMessage};
 use rtd_sdk::{
     RtdClientBuilder,
     rpc_types::RtdTransactionBlockResponseOptions,
@@ -23,17 +22,18 @@ use rtd_sdk::{
         transaction::TransactionData,
     },
 };
-use rtd_types::crypto::Signer;
 use rtd_types::crypto::RtdSignature;
+use rtd_types::crypto::Signer;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::signature::GenericSignature;
 use rtd_types::{
     base_types::RtdAddress,
     crypto::{RtdKeyPair, get_key_pair_from_rng},
 };
+use shared_crypto::intent::{Intent, IntentMessage};
 
 /// This example walks through the Rust SDK use case described in
-/// https://github.com/LinkUVerse/rtd/blob/main/docs/content/guides/developer/rtd-101/sign-and-send-txn.mdx
+/// https://github.com/LinkUVerse/rtd/blob/main/docs/content/develop/transactions/transaction-auth/auth-overview.mdx
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // set up rtd client for the desired network.
@@ -82,15 +82,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // import a keypair from a Bech32 encoded 33-byte `flag || private key`.
     // this is the format of a private key exported from Rtd Wallet or rtd.keystore.
     let _skp_import_with_flag_0 = RtdKeyPair::decode(
-        "rtdprivkey1qzdlfxn2qa2lj5uprl8pyhexs02sg2wrhdy7qaq50cqgnffw4c2477kg9h3",
+        "rtdprivkey1qzdlfxn2qa2lj5uprl8pyhexs02sg2wrhdy7qaq50cqgnffw4c247cdptmr",
     )
     .map_err(|_| anyhow!("Invalid Bech32"))?;
     let _skp_import_with_flag_1 = RtdKeyPair::decode(
-        "rtdprivkey1qqesr6xhua2dkt840v9yefely578q5ad90znnpmhhgpekfvwtxke6ef2xyg",
+        "rtdprivkey1qqesr6xhua2dkt840v9yefely578q5ad90znnpmhhgpekfvwtxke6ljrgg6",
     )
     .map_err(|_| anyhow!("Invalid Bech32"))?;
     let _skp_import_with_flag_2 = RtdKeyPair::decode(
-        "rtdprivkey1qprzkcs823gcrk7n4hy8pzhntdxakpqk32qwjg9f2wyc3myj78egvtw3ecr",
+        "rtdprivkey1qprzkcs823gcrk7n4hy8pzhntdxakpqk32qwjg9f2wyc3myj78egvd4ch53",
     )
     .map_err(|_| anyhow!("Invalid Bech32"))?;
 

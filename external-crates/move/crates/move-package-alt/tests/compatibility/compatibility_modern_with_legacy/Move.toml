@@ -6,8 +6,8 @@ authors = ["Move Team"]
 flavor = "vanilla"
 
 [environments]
-mainnet = "35834a8a"
-testnet = "4c78adac"
+mainnet = "01020304"
+testnet = "05060708"
 
 [dependencies]
 b = { local = "../compatibility_b" }

@@ -5,6 +5,11 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use dashmap::{DashMap, DashSet};
 use futures::future::join_all;
+use rtd_json_rpc_types::{
+    RtdExecutionStatus, RtdObjectDataOptions, RtdTransactionBlockDataAPI,
+    RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
+};
+use rtd_types::digests::TransactionDigest;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use shared_crypto::intent::{Intent, IntentMessage};
@@ -13,11 +18,6 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use rtd_json_rpc_types::{
-    RtdExecutionStatus, RtdObjectDataOptions, RtdTransactionBlockDataAPI,
-    RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
-};
-use rtd_types::digests::TransactionDigest;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{debug, info};
@@ -25,9 +25,9 @@ use tracing::{debug, info};
 use crate::load_test::LoadTestConfig;
 use rtd_sdk::{RtdClient, RtdClientBuilder};
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
-use rtd_types::crypto::{AccountKeyPair, EncodeDecodeBase64, Signature, RtdKeyPair, get_key_pair};
-use rtd_types::quorum_driver_types::ExecuteTransactionRequestType;
+use rtd_types::crypto::{AccountKeyPair, EncodeDecodeBase64, RtdKeyPair, Signature, get_key_pair};
 use rtd_types::transaction::{Transaction, TransactionData};
+use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
 
 use crate::payload::checkpoint_utils::get_latest_checkpoint_stats;
 use crate::payload::validation::chunk_entities;
@@ -309,11 +309,11 @@ impl Processor for RpcCommandProcessor {
                 .with_repeat_n_times(*repeat_n_times)
         });
 
-        let coins_and_keys = if config.signer_info.is_some() {
+        let coins_and_keys = if let Some(signer_info) = &config.signer_info {
             Some(
                 prepare_new_signer_and_coins(
                     clients.first().unwrap(),
-                    config.signer_info.as_ref().unwrap(),
+                    signer_info,
                     config.num_threads * config.num_chunks_per_thread,
                     config.max_repeat as u64 + 1,
                 )

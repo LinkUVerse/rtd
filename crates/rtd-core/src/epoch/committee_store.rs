@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use rtd_types::base_types::ObjectID;
 use rtd_types::committee::{Committee, EpochId};
 use rtd_types::error::{RtdErrorKind, RtdResult};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use typed_store::rocks::{DBMap, DBOptions, MetricConf, default_db_options};
 use typed_store::rocksdb::Options;
 
@@ -119,6 +119,20 @@ impl CommitteeStore {
                 .map(|c| Committee::clone(&*c))?,
             None => self.get_latest_committee()?,
         })
+    }
+
+    /// List epoch→committee pairs starting at `start` epoch, up to `limit`.
+    pub fn list_epochs(
+        &self,
+        start: Option<EpochId>,
+        limit: usize,
+    ) -> RtdResult<Vec<(EpochId, Committee)>> {
+        self.tables
+            .committee_map
+            .safe_iter_with_bounds(start, None)
+            .take(limit)
+            .map(|r| r.map_err(Into::into))
+            .collect()
     }
 
     pub fn checkpoint_db(&self, path: &Path) -> RtdResult {

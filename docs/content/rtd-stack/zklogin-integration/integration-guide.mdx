@@ -1,0 +1,21 @@
+---
+title: "zkLogin Integration Guide"
+description: zkLogin integration requires RTD-specific prover, salt, OAuth, and network configuration.
+keywords: ["RTD", "zkLogin Integration Guide", "deployment status"]
+---
+
+:::caution RTD integration status
+
+The RTD fork contains zkLogin protocol code, but this example was inherited
+from Sui and has not been validated end to end on an RTD network. No RTD
+public prover, salt service, Enoki service, or Mainnet/Testnet endpoint
+is available. Sui service URLs and package IDs must not be used as RTD
+configuration. RTD has not launched Mainnet.
+
+:::
+
+To publish a usable integration guide, first configure trusted OAuth/JWK
+providers, deploy or select a verified prover and salt service, connect
+to an actual RTD node, and run an end-to-end signing and execution test.
+See the [zkLogin technical reference](/rtd-stack/zklogin-integration/zklogin)
+for the protocol inherited by the fork.

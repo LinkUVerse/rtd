@@ -3,14 +3,11 @@
 
 import React from "react";
 import Content from "@theme-original/DocSidebar/Desktop/Content";
-import SidebarIframe from "@site/src/components/SidebarIframe";
 
 export default function ContentWrapper(props) {
   const wrapperRef = React.useRef(null);
   const scrollRef = React.useRef(null);
-  const footerRef = React.useRef(null);
   const contentRef = React.useRef(null);
-  const [footerHeight, setFooterHeight] = React.useState(0);
   const [showShadow, setShowShadow] = React.useState(false);
 
   React.useEffect(() => {
@@ -19,20 +16,6 @@ export default function ContentWrapper(props) {
 
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
-
-    // Measure footer and pad scroll container so content doesn't hide behind it
-    const measureFooter = () => {
-      const footerH = footerRef.current ? footerRef.current.offsetHeight : 0;
-      setFooterHeight(footerH);
-      // Our gradient overlay is h-4 (1rem = 16px). Subtract it so the last item can sit just under the fade,
-      // not leave extra empty space.
-      const GRADIENT_PX = 16;
-      const effectivePad = Math.max(footerH - GRADIENT_PX, 0);
-      scrollEl.style.paddingBottom = effectivePad ? `${effectivePad}px` : "";
-    };
-    measureFooter();
-    const footerRO = new ResizeObserver(measureFooter);
-    if (footerRef.current) footerRO.observe(footerRef.current);
 
     const atBottom = (el, pad = 1) =>
       el.scrollTop + el.clientHeight >= el.scrollHeight - pad;
@@ -65,7 +48,6 @@ export default function ContentWrapper(props) {
       scrollEl.removeEventListener("scroll", onScroll);
       ro.disconnect();
       mo.disconnect();
-      footerRO.disconnect();
       if (contentRO) contentRO.disconnect();
     };
   }, []);
@@ -88,23 +70,6 @@ export default function ContentWrapper(props) {
         />
       </div>
 
-      {/* Bottom fixed actions */}
-      <div
-        ref={footerRef}
-        className="shrink-0 p-2 z-10 bg-[var(--ifm-background-color)] border-t border-black/10 dark:border-white/10"
-      >
-        <SidebarIframe
-          url="https://cal.com/forms/08983b87-8001-4df6-896a-0d7b60acfd79"
-          label="Book Office Hours"
-          icon="🗳️"
-        />
-        <SidebarIframe
-          url="https://discord.gg/rtd"
-          label="Join Discord"
-          icon="💬"
-          openInNewTab={true}
-        />
-      </div>
     </div>
   );
 }

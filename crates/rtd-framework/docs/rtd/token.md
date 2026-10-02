@@ -18,7 +18,7 @@ Abilities:   store              key + store           key
 ```
 
 The Token system allows for fine-grained control over the actions performed
-on the token. And hence it is highly rtdtable for applications that require
+on the token. And hence it is highly suitable for applications that require
 control over the currency which a simple open-loop system can't provide.
 
 
@@ -77,7 +77,6 @@ control over the currency which a simple open-loop system can't provide.
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -109,6 +108,7 @@ control over the currency which a simple open-loop system can't provide.
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -1274,7 +1274,7 @@ checking the type of the <code>Config</code>.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/token.md#rtd_token_has_rule_config">has_rule_config</a>&lt;T, Rule&gt;(self: &<a href="../rtd/token.md#rtd_token_TokenPolicy">TokenPolicy</a>&lt;T&gt;): bool {
-    df::exists_&lt;<a href="../rtd/token.md#rtd_token_RuleKey">RuleKey</a>&lt;Rule&gt;&gt;(&self.id, <a href="../rtd/token.md#rtd_token_key">key</a>&lt;Rule&gt;())
+    df::exists&lt;<a href="../rtd/token.md#rtd_token_RuleKey">RuleKey</a>&lt;Rule&gt;&gt;(&self.id, <a href="../rtd/token.md#rtd_token_key">key</a>&lt;Rule&gt;())
 }
 </code></pre>
 

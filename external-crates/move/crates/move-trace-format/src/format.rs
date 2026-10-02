@@ -3,11 +3,12 @@
 
 // IDEA: Post trace analysis -- report when values are dropped.
 
-use crate::interface::{NopTracer, Tracer, Writer};
+use crate::interface::{EventFilter, Tracer, Writer};
+use crate::tracers::nop::NopTracer;
 use crate::value::SerializableMoveValue;
 use move_binary_format::{
-    file_format::{Bytecode, FunctionDefinitionIndex as BinaryFunctionDefinitionIndex},
-    file_format_common::instruction_opcode,
+    file_format::FunctionDefinitionIndex as BinaryFunctionDefinitionIndex,
+    file_format_common::Opcodes,
 };
 use move_core_types::{
     account_address::AccountAddress,
@@ -160,7 +161,7 @@ pub struct DataLoad {
 
 /// A TraceEvent is a single event in the Move VM, external events can also be interleaved in the
 /// trace. MoveVM events, are well structured, and can be a frame event or an instruction event.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TraceEvent {
     OpenFrame {
         frame: Box<Frame>,
@@ -178,7 +179,7 @@ pub enum TraceEvent {
         instruction: Box<String>,
     },
     Effect(Box<Effect>),
-    External(Box<serde_json::Value>),
+    External(Box<serde_json::value::RawValue>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -267,9 +268,12 @@ impl BufferedEventStream {
         }
     }
 
+    pub fn increment_event_count(&mut self) {
+        self.event_count += 1;
+    }
+
     pub fn push(&mut self, event: TraceEvent) {
         self.sender.send(event).unwrap();
-        self.event_count += 1;
     }
 
     pub fn finish(self) -> Vec<u8> {
@@ -285,6 +289,10 @@ impl MoveTrace {
             version: TRACE_VERSION,
             buf: BufferedEventStream::new(),
         }
+    }
+
+    pub fn increment_event_count(&mut self) {
+        self.buf.increment_event_count();
     }
 
     pub fn push_event(&mut self, event: TraceEvent) {
@@ -317,6 +325,16 @@ impl MoveTraceBuilder {
             tracer,
             trace: MoveTrace::new(),
         }
+    }
+
+    /// Get the instruction filter for the given instruction and program counter. This is used to
+    /// determine whether the tracer wants to receive effect events for this instruction.
+    pub fn instruction_filter<I: Into<Opcodes>>(
+        &self,
+        instruction: I,
+        pc: u16,
+    ) -> Option<EventFilter> {
+        self.tracer.instruction_filter(&instruction.into(), pc)
     }
 
     /// Consume the `MoveTraceBuilder` and return the `MoveTrace` that has been built by it.
@@ -369,20 +387,23 @@ impl MoveTraceBuilder {
     }
 
     /// Record an `Instruction` event in the trace along with the effects of the instruction.
-    pub fn instruction(
+    pub fn instruction<T: Into<Opcodes>>(
         &mut self,
-        instruction: &Bytecode,
+        instruction: T,
         type_parameters: Vec<TypeTag>,
         effects: Vec<Effect>,
         gas_left: u64,
         pc: u16,
     ) {
+        let opcode: Opcodes = instruction.into();
+
         self.push_event(TraceEvent::Instruction {
             type_parameters,
             pc,
             gas_left,
-            instruction: Box::new(format!("{:?}", instruction_opcode(instruction))),
+            instruction: Box::new(format!("{:?}", opcode)),
         });
+
         for effect in effects {
             self.push_event(TraceEvent::Effect(Box::new(effect)));
         }
@@ -393,11 +414,15 @@ impl MoveTraceBuilder {
         self.push_event(TraceEvent::Effect(Box::new(effect)));
     }
 
-    // All events pushed to the trace are first pushed, and then the tracer is notified of the
-    // event.
+    // All events are first sent to the event API. If the event specifies that the event should be
+    // kept then it is also pushed to the trace to be saved.
     pub fn push_event(&mut self, event: TraceEvent) {
-        self.trace.push_event(event.clone());
-        self.tracer.notify(&event, Writer(&mut self.trace));
+        // Even if the event is not kept, we still increment the event count so that the trace
+        // reflects the number of events that were processed.
+        self.trace.increment_event_count();
+        if self.tracer.notify(&event, Writer(&mut self.trace)) {
+            self.trace.push_event(event);
+        }
     }
 }
 
@@ -526,10 +551,13 @@ impl<R: std::io::Read> Iterator for MoveTraceReader<'_, R> {
 fn emit_trace() {
     let mut builder = MoveTraceBuilder::new();
     for i in 0..10 {
-        builder.push_event(TraceEvent::External(Box::new(serde_json::json!({
-            "event": "external",
-            "data": i,
-        }))));
+        builder.push_event(TraceEvent::External(
+            serde_json::value::to_raw_value(&serde_json::json!({
+                "event": "external",
+                "data": i,
+            }))
+            .unwrap(),
+        ));
     }
 
     let bytes = builder.into_trace().into_compressed_json_bytes();
@@ -541,6 +569,7 @@ fn emit_trace() {
         let TraceEvent::External(event) = event else {
             panic!("unexpected event: {:?}", event);
         };
+        let event: serde_json::Value = serde_json::from_str(event.get()).unwrap();
         assert_eq!(event.get("data").unwrap().as_u64().unwrap(), i as u64);
     }
 }
@@ -596,4 +625,26 @@ fn large_numeric_values_in_trace() {
             _ => panic!("expected RuntimeValue, got: {:?}", value),
         }
     }
+}
+
+// `Writer::push` -- the generic hook tracers use to add external events -- should handle an integer
+// larger than `u64::MAX`, preserving its exact value in the trace.
+#[test]
+fn external_event_with_large_integer() {
+    let mut trace = MoveTrace::new();
+    Writer(&mut trace).push(SerializableMoveValue::U128(u128::MAX));
+
+    let bytes = trace.into_compressed_json_bytes();
+    let reader = MoveTraceReader::new(std::io::Cursor::new(bytes)).unwrap();
+
+    let expected = u128::MAX.to_string();
+    let mut saw_external = false;
+    for event in reader {
+        let TraceEvent::External(event) = event.unwrap() else {
+            panic!("expected an external event");
+        };
+        assert!(event.get().contains(expected.as_str()));
+        saw_external = true;
+    }
+    assert!(saw_external, "expected to read back the external event");
 }

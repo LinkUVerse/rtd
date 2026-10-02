@@ -9,6 +9,7 @@ use crate::config::BenchmarkConfig;
 use anyhow::{Context as _, Result};
 use dashmap::DashMap;
 use phf::phf_map;
+use rtd_futures::stream::TrySpawnStreamExt;
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -16,7 +17,6 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use rtd_futures::stream::TrySpawnStreamExt;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
@@ -229,7 +229,7 @@ pub async fn run_queries(
             }
         }
 
-        let result = futures::stream::iter(requests.into_iter())
+        let result = futures::stream::iter(requests)
             .try_for_each_spawned(concurrency, |mut request_line| {
                 let client = client.clone();
                 let endpoint = endpoint.clone();

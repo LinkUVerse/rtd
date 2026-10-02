@@ -1,17 +1,19 @@
 [package]
 name = "rtd-package-dump"
 version.workspace = true
-authors = ["LinkU Labs <build@linkulabs.com"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow.workspace = true
 bcs.workspace = true
 cynic.workspace = true
 fastcrypto.workspace = true
-move-core-types.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

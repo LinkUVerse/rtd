@@ -1,0 +1,13 @@
+---
+title: Self-custodial wallets
+description: Key custody and local wallet use with RTD.
+keywords:
+  - RTD
+  - self custody
+---
+
+A self-custodial RTD wallet keeps signing keys under the user's control. The RTD CLI can generate and manage local keys for development. Back up the key material securely before funding an address, confirm the actual chain ID, and check the transaction details before signing.
+
+The forked TypeScript SDK provides signing and wallet integration primitives. Browser or hardware wallets still require an independently verified RTD-compatible application. This repository does not establish a Ledger RTD app, Ledger Live RTD support, or a public Slush wallet connected to RTD. Do not move RTD assets using a Sui-only hardware or browser wallet.
+
+For local development, use the [RTD CLI setup](/getting-started/onboarding/configure-rtd-client) and the [Wallet Standard](/onchain-finance/asset-custody/wallets/wallet-standard) interfaces after testing the wallet against the actual network.

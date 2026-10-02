@@ -49,13 +49,43 @@ fun test_diff() {
 }
 
 #[test]
-fun test_divide_and_round_up() {
-    integer_tests::test_divide_and_round_up!(MAX, CASES);
+fun test_mul_div() {
+    integer_tests::test_mul_div!<u32, u64>(MAX, CASES);
 }
 
-#[test, expected_failure(arithmetic_error, location = std::u8)]
-fun test_divide_and_round_up_error() {
-    1u8.divide_and_round_up(0);
+#[test]
+fun test_mul_div_ceil() {
+    integer_tests::test_mul_div_ceil!<u32, u64>(MAX, CASES);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u32)]
+fun test_mul_div_div_by_zero() {
+    1u32.mul_div(1, 0);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u32)]
+fun test_mul_div_ceil_div_by_zero() {
+    1u32.mul_div_ceil(1, 0);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u32)]
+fun test_mul_div_overflow() {
+    MAX.mul_div(MAX, 1);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u32)]
+fun test_mul_div_ceil_overflow() {
+    MAX.mul_div_ceil(MAX, 1);
+}
+
+#[test, allow(deprecated_usage)]
+fun test_div_ceil() {
+    integer_tests::test_div_ceil!(MAX, CASES);
+}
+
+#[test, expected_failure(arithmetic_error, location = std::u32)]
+fun test_div_ceil_error() {
+    1u32.div_ceil(0);
 }
 
 #[test]
@@ -100,4 +130,64 @@ fun test_to_string() {
 #[test]
 fun test_dos() {
     integer_tests::test_dos!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_add() {
+    integer_tests::test_checked_add!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_sub() {
+    integer_tests::test_checked_sub!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_mul() {
+    integer_tests::test_checked_mul!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_div() {
+    integer_tests::test_checked_div!(MAX, CASES);
+}
+
+#[test]
+fun test_saturating_add() {
+    integer_tests::test_saturating_add!(MAX, CASES);
+}
+
+#[test]
+fun test_saturating_sub() {
+    integer_tests::test_saturating_sub!(MAX, CASES);
+}
+
+#[test]
+fun test_saturating_mul() {
+    integer_tests::test_saturating_mul!(MAX, CASES);
+}
+
+#[test]
+fun test_checked_shl() {
+    integer_tests::test_checked_shl!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_checked_shr() {
+    integer_tests::test_checked_shr!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_lossless_shl() {
+    integer_tests::test_lossless_shl!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_lossless_shr() {
+    integer_tests::test_lossless_shr!(MAX, BIT_SIZE);
+}
+
+#[test]
+fun test_lossless_div() {
+    integer_tests::test_lossless_div!(MAX, CASES);
 }

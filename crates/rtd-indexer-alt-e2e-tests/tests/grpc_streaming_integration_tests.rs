@@ -7,20 +7,21 @@ use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
 use prometheus::Registry;
 use rtd_field_count::FieldCount;
-use rtd_indexer_alt_framework::{
-    Indexer, IndexerArgs,
-    ingestion::{
-        ClientArgs, IngestionConfig, ingestion_client::IngestionClientArgs,
-        streaming_client::StreamingClientArgs,
-    },
-    pipeline::{
-        Processor,
-        concurrent::{self, BatchStatus, ConcurrentConfig},
-    },
-};
-use rtd_pg_db::{Db, DbArgs};
+use rtd_indexer_alt_framework::Indexer;
+use rtd_indexer_alt_framework::IndexerArgs;
+use rtd_indexer_alt_framework::ingestion::ClientArgs;
+use rtd_indexer_alt_framework::ingestion::IngestionConfig;
+use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientArgs;
+use rtd_indexer_alt_framework::ingestion::streaming_client::StreamingClientArgs;
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::pipeline::concurrent::BatchStatus;
+use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
+use rtd_indexer_alt_framework::pipeline::concurrent::{self};
+use rtd_pg_db::Db;
+use rtd_pg_db::DbArgs;
 use rtd_test_transaction_builder::TestTransactionBuilder;
-use rtd_types::{full_checkpoint_content::Checkpoint, transaction::TransactionDataAPI};
+use rtd_types::full_checkpoint_content::Checkpoint;
+use rtd_types::transaction::TransactionDataAPI;
 use tempfile::tempdir;
 use test_cluster::TestClusterBuilder;
 
@@ -100,14 +101,18 @@ async fn transfer_coin(
         .gas_for_owner_budget(sender, 5000, Default::default())
         .await
         .unwrap();
-    let gas_obj = gas_objs.1.object_ref();
+    let gas_obj = gas_objs.1.compute_object_reference();
 
     let tx_data = TestTransactionBuilder::new(sender, gas_obj, 1000)
         .transfer_rtd(Some(1000), sender)
         .build();
     let tx = wallet.sign_transaction(&tx_data).await;
 
-    wallet.execute_transaction_must_succeed(tx).await.digest
+    wallet
+        .execute_transaction_must_succeed(tx)
+        .await
+        .transaction
+        .digest()
 }
 
 #[tokio::test]

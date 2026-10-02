@@ -1,5 +1,8 @@
 [package]
 name = "modern_using_legacy_name"
 
+[environments]
+testnet = "01234567"
+
 [dependencies]
 DeepBook = { git = "bar", rev = "any" }

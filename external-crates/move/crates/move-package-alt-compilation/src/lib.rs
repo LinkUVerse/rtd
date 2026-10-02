@@ -91,16 +91,18 @@ use anyhow::bail;
 use build_config::BuildConfig;
 pub use compilation::compile_from_root_package;
 pub use compilation::compile_package;
-use move_package_alt::flavor::MoveFlavor;
-use move_package_alt::package::RootPackage;
-use move_package_alt::schema::Environment;
+use move_package_alt::{MoveFlavor, RootPackage, schema::Environment};
 use std::path::Path;
 
 /// If no environment is passed, it will use the default implicit environment. If an environment
 /// is passed, it will try to find it in the list of available environments, and error if it cannot
 /// be found.
-pub fn find_env<F: MoveFlavor>(path: &Path, config: &BuildConfig) -> anyhow::Result<Environment> {
-    let envs = RootPackage::<F>::environments(path)?;
+pub fn find_env<F: MoveFlavor>(
+    path: &Path,
+    config: &BuildConfig,
+    flavor: &F,
+) -> anyhow::Result<Environment> {
+    let envs = RootPackage::<F>::environments(path, flavor)?;
     let env = if let Some(ref e) = config.environment {
         if let Some(env) = envs.get(e) {
             Environment::new(e.to_string(), env.to_string())

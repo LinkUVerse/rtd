@@ -41,15 +41,18 @@ if [ -z "$INSTA_UPDATE" ]; then
     export INSTA_UPDATE
 fi
 
-UPDATE=1 cargo test -p rtd-framework --test build-system-packages
-cd "$ROOT/crates/rtd-protocol-config" && cargo insta test
-cd "$ROOT/crates/rtd-swarm-config" && cargo insta test
-cd "$ROOT/crates/rtd-open-rpc" && cargo run --example generate-json-rpc-spec -- record
-cd "$ROOT/crates/rtd-core" && cargo insta test -- snapshot_tests
-cd "$ROOT/crates/rtd-core" && cargo run --example generate-format -- print > tests/staged/rtd.yaml
-cd "$ROOT/crates/rtd-graphql-rpc" && cargo insta test -- snapshot_tests
-cd "$ROOT/crates/rtd-graphql-rpc" && cargo insta test -- test_schema_sdl_export
-cd "$ROOT/crates/rtd-graphql-rpc" && cargo insta test --features staging -- test_schema_sdl_export
-cd "$ROOT/crates/rtd-indexer-alt-graphql" && cargo insta test -- test_schema_sdl_export
-cd "$ROOT/crates/rtd-indexer-alt-graphql" && cargo insta test --features staging -- test_schema_sdl_export
+# This technically should be pulling from `.config/insta.yaml`, but we set the test runner again
+# here to be safe and explicit.
+INSTA=(cargo insta test --test-runner nextest)
+
+cd "$ROOT"
+UPDATE=1 cargo nextest run -p rtd-framework --test build-system-packages
+"${INSTA[@]}" \
+    -p rtd-protocol-config \
+    -p rtd-swarm-config \
+    -p rtd-open-rpc \
+    -p rtd-types
+"${INSTA[@]}" -p rtd-core -- snapshot_tests
+"${INSTA[@]}" -p rtd-indexer-alt-graphql -- test_schema_sdl_export
+"${INSTA[@]}" --features staging -p rtd-indexer-alt-graphql -- test_schema_sdl_export
 exit 0

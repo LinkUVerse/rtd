@@ -1,0 +1,11 @@
+---
+title: Payments
+description: Current RTD support and deployment requirements.
+keywords:
+  - RTD
+  - payments
+---
+
+# Payments
+
+The RTD source fork provides transaction, coin, address-balance, and gas-sponsorship primitives for building payments on a specifically identified RTD network. A payment application must verify the transaction digest, chain ID, recipient, coin type, exact amount, and final status before crediting a user. The source fork does not establish a public RTD Mainnet, supported stablecoin issuer, deployed Payment Kit, or upstream Sui exchange integration. The protocol gasless token allowlist is empty, so ordinary users need gas or a separately configured sponsor. See [payment model](/onchain-finance/choose-payments-model), [address balances](/onchain-finance/asset-custody/address-balances), and [sponsored transactions](/develop/transaction-payment/sponsor-txn).

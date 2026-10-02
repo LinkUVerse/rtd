@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//# init --protocol-version 70 --accounts A --simulator
+//# init --protocol-version 108 --accounts A --simulator
 
 //# programmable --sender A --inputs @A
 //> 0: rtd::bag::new();
@@ -45,9 +45,11 @@
 { # Successfully fetch a dynamic field with primitive value
   object(address: "@{obj_1_0}") {
     address
-    dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+    ser: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+    lit: dynamicField(name: { literal: "42u64" }) { ...DF }
     asMoveObject {
-      dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+      ser: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+      lit: dynamicField(name: { literal: "42u64" }) { ...DF }
     }
   }
 }
@@ -69,9 +71,11 @@ fragment DF on DynamicField {
 { # Successfully fetch a dynamic field with object value (wrapped)
   object(address: "@{obj_1_0}") {
     address
-      dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+    ser: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+    lit: dynamicField(name: { literal: "43u64" }) { ...DF }
     asMoveObject {
-      dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+      ser: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+      lit: dynamicField(name: { literal: "43u64" }) { ...DF }
     }
   }
 }
@@ -93,9 +97,11 @@ fragment DF on DynamicField {
 { # Successfully fetch a dynamic object field
   object(address: "@{obj_2_0}") {
     address
-    dynamicObjectField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DOF }
+    ser: dynamicObjectField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DOF }
+    lit: dynamicObjectField(name: { literal: "44u64" }) { ...DOF }
     asMoveObject {
-      dynamicObjectField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DOF }
+      ser: dynamicObjectField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DOF }
+      lit: dynamicObjectField(name: { literal: "44u64" }) { ...DOF }
     }
   }
 }
@@ -201,14 +207,22 @@ fragment asDF on Object {
     nodes {
       version
 
-      df42: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
-      df43: dynamicField(name: { type: "u64", bcs: "@{cursor_1}" }) { ...DF }
-      df45: dynamicField(name: { type: "u64", bcs: "@{cursor_2}" }) { ...DF }
+      ser42: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+      ser43: dynamicField(name: { type: "u64", bcs: "@{cursor_1}" }) { ...DF }
+      ser45: dynamicField(name: { type: "u64", bcs: "@{cursor_2}" }) { ...DF }
+
+      lit42: dynamicField(name: { literal: "42u64" }) { ...DF }
+      lit43: dynamicField(name: { literal: "43u64" }) { ...DF }
+      lit45: dynamicField(name: { literal: "45u64" }) { ...DF }
 
       asMoveObject {
-        df42: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
-        df43: dynamicField(name: { type: "u64", bcs: "@{cursor_1}" }) { ...DF }
-        df45: dynamicField(name: { type: "u64", bcs: "@{cursor_2}" }) { ...DF }
+        ser42: dynamicField(name: { type: "u64", bcs: "@{cursor_0}" }) { ...DF }
+        ser43: dynamicField(name: { type: "u64", bcs: "@{cursor_1}" }) { ...DF }
+        ser45: dynamicField(name: { type: "u64", bcs: "@{cursor_2}" }) { ...DF }
+
+        lit42: dynamicField(name: { literal: "42u64" }) { ...DF }
+        lit43: dynamicField(name: { literal: "43u64" }) { ...DF }
+        lit45: dynamicField(name: { literal: "45u64" }) { ...DF }
       }
     }
   }
@@ -243,4 +257,62 @@ fragment Parent on Object {
 fragment DF on DynamicField {
   name { json }
   value { ... on MoveValue { json } }
+}
+
+//# programmable --sender A --inputs object(1,0) 42u64 1000u64
+//> 0: rtd::bag::remove<u64, u64>(Input(0), Input(1));
+//> 1: rtd::bag::add<u64, u64>(Input(0), Input(1), Input(2));
+
+//# create-checkpoint
+
+//# run-graphql --cursors bcs(42u64)
+{ # Fetch dynamic fields directly from their parent/name keys
+  multiGetDynamicFields(keys: [
+    { parent: "@{obj_1_0}", name: { literal: "43u64" } },
+    { parent: "@{obj_1_0}", name: { type: "u64", bcs: "@{cursor_0}" } },
+    { parent: "@{obj_2_0}", name: { literal: "43u64" } },
+    { parent: "@{obj_1_0}", name: { literal: "46u64" } },
+    { parent: "@{obj_1_0}", name: { literal: "42u64" } },
+    { parent: "@{obj_1_0}", name: { literal: "42u64" } },
+    { parent: "@{obj_1_0}", name: { literal: "42u64" }, atCheckpoint: 1 },
+    { parent: "@{obj_1_0}", name: { literal: "42u64" }, version: 7 },
+    { parent: "@{obj_1_0}", name: { literal: "42u64" }, rootVersion: 7 },
+  ]) { ...RootField }
+}
+
+fragment RootField on DynamicField {
+  name { json }
+  value { ... on MoveValue { json } }
+}
+
+//# programmable --sender A --inputs object(2,0) 44u64 50u64
+//> 0: rtd::object_bag::remove<u64, rtd::coin::Coin<rtd::rtd::RTD>>(Input(0), Input(1));
+//> 1: SplitCoins(Gas, [Input(2)]);
+//> 2: rtd::coin::join<rtd::rtd::RTD>(Result(0), Result(1));
+//> 3: rtd::object_bag::add<u64, rtd::coin::Coin<rtd::rtd::RTD>>(Input(0), Input(1), Result(0));
+
+//# create-checkpoint
+
+//# run-graphql --cursors bcs(44u64)
+{ # Fetch dynamic object fields directly from their parent/name keys
+  multiGetDynamicObjectFields(keys: [
+    { parent: "@{obj_2_0}", name: { literal: "44u64" } },
+    { parent: "@{obj_2_0}", name: { type: "u64", bcs: "@{cursor_0}" } },
+    { parent: "@{obj_1_0}", name: { literal: "44u64" } },
+    { parent: "@{obj_2_0}", name: { literal: "46u64" } },
+    { parent: "@{obj_2_0}", name: { literal: "44u64" } },
+    { parent: "@{obj_2_0}", name: { literal: "44u64" }, atCheckpoint: 2 },
+    { parent: "@{obj_2_0}", name: { literal: "44u64" }, version: 9 },
+    { parent: "@{obj_2_0}", name: { literal: "44u64" }, rootVersion: 9 },
+  ]) { ...RootObjectField }
+}
+
+fragment RootObjectField on DynamicField {
+  name { json }
+  value {
+    ... on MoveObject {
+      address
+      contents { json }
+    }
+  }
 }

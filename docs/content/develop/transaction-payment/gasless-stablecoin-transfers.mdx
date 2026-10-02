@@ -1,0 +1,11 @@
+---
+title: Gasless stablecoin transfers
+description: Current RTD support and deployment requirements.
+keywords:
+  - RTD
+  - gasless stablecoin transfers
+---
+
+# Gasless stablecoin transfers
+
+The RTD protocol retains the upstream gasless transaction feature, but its configured token allowlist is **empty** in this fork. No RTD stablecoin type is currently documented as eligible, and RTD has no public Mainnet. Previously listed Sui token package IDs were not RTD assets. A transfer is gasless only if the actual network protocol configuration enables the feature and allowlists the exact deployed RTD coin type with its threshold. Operators must publish and test that configuration before any wallet offers zero-fee transfer. Until then, fund the sender with RTD gas or use a verified sponsored transaction. See [gas strategies](/develop/transaction-payment) and [RTD networks](/develop/rtd-architecture/networks).

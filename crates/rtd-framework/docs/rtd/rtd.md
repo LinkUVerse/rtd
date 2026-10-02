@@ -13,7 +13,6 @@ It has 9 decimals, and the smallest unit (10^-9) is called "mist".
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -45,6 +44,7 @@ It has 9 decimals, and the smallest unit (10^-9) is called "mist".
 <b>use</b> <a href="../std/option.md#std_option">std::option</a>;
 <b>use</b> <a href="../std/string.md#std_string">std::string</a>;
 <b>use</b> <a href="../std/type_name.md#std_type_name">std::type_name</a>;
+<b>use</b> <a href="../std/u128.md#std_u128">std::u128</a>;
 <b>use</b> <a href="../std/vector.md#std_vector">std::vector</a>;
 </code></pre>
 
@@ -160,7 +160,7 @@ This should be called only once during genesis creation.
     <a href="../rtd/transfer.md#rtd_transfer_public_freeze_object">transfer::public_freeze_object</a>(metadata);
     <b>let</b> <b>mut</b> supply = treasury.treasury_into_supply();
     <b>let</b> total_rtd = supply.increase_supply(<a href="../rtd/rtd.md#rtd_rtd_TOTAL_SUPPLY_MIST">TOTAL_SUPPLY_MIST</a>);
-    supply.destroy_supply();
+    <b>let</b> _ = supply.destroy_supply();
     total_rtd
 }
 </code></pre>

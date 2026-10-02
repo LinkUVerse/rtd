@@ -6,6 +6,12 @@ processed 13 tasks
 init:
 A: object(0,0), B: object(0,1)
 
+// 1. Show the owner of an object owned by one address
+// 2. ...owned by another address
+// 3. ...shared
+// 4. ...frozen
+// 5. ...owned by an object
+
 task 1, lines 12-14:
 //# programmable --sender A --inputs 42 @A
 //> 0: SplitCoins(Gas, [Input(0)]);
@@ -65,9 +71,9 @@ Response: {
   "result": {
     "status": "VersionFound",
     "details": {
-      "objectId": "0xc442f9431f789a6c80078a63e707de84c7815c3150e08f1e44be256bd05a2b81",
+      "objectId": "0x2b45c877619aa19b093c8e436ff065ba8f882c04534721552d170bd3574f97c1",
       "version": "2",
-      "digest": "4wV3VBJGNaMCv9zfjSna8c4as6EkuYoqTHHjueS6S745",
+      "digest": "DUsCGumpLnJUEX9HhQfpD9HrYypJq9TBjXAnqmMh9jnG",
       "owner": {
         "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
       }
@@ -83,9 +89,9 @@ Response: {
   "result": {
     "status": "VersionFound",
     "details": {
-      "objectId": "0xf2945213c986e35d59aae258ef1b094e81ead5cc982b0d1519625bf3f81bee68",
+      "objectId": "0xb0080f6bb05ec93de38001b6352d85bc90a05f96bf4bb14ef64b4dad22a687d3",
       "version": "3",
-      "digest": "9wMLcUMLvkbqNFyoPtUJ1GPuVuXVqpLA3GP2DHL2SyL6",
+      "digest": "Gn6NDFjgrpgc8nS7MV2sidZbMDTHE4chiuuCQouPsAab",
       "owner": {
         "AddressOwner": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a"
       }
@@ -101,9 +107,9 @@ Response: {
   "result": {
     "status": "VersionFound",
     "details": {
-      "objectId": "0x0918a1917bda4d05f1cb4db824532a63476c57d65c548930406fe02051f22819",
+      "objectId": "0xc04e8cac453a633355f7fa9f0c3f856f9e4d0f7f0c4a61a1185fd62349c14c20",
       "version": "4",
-      "digest": "8pirmp97ym3pzSCabaPsoPYVPbKYQHfnPqEbCyk32Au2",
+      "digest": "Gp7up1k5e1WdPKpV7dAiERGcxSc9V11Cxb2tvFcuAeYu",
       "owner": {
         "Shared": {
           "initial_shared_version": 4
@@ -121,9 +127,9 @@ Response: {
   "result": {
     "status": "VersionFound",
     "details": {
-      "objectId": "0xf079987ab8a34791ae4dd8b2d2a9af3485496a49b382b22239c4ca43902fe18a",
+      "objectId": "0xe43f06f936d9f52b3999c14f60daa630116be1fb67750d7a5d5da97e3ac3a9fc",
       "version": "5",
-      "digest": "EEF6GF5DCZRZ4zxsubwzaQhYWysCdGJ63sLRLE15d9F",
+      "digest": "6L4cbahowTqxkcW49yY4LxfCabVD5p8QZYKUMohVUVRE",
       "owner": "Immutable"
     }
   }
@@ -137,11 +143,11 @@ Response: {
   "result": {
     "status": "VersionFound",
     "details": {
-      "objectId": "0x0dfe3bf8505600c374ecc59e9580d3504a37a14f65b53084ef86c5861f39cc3f",
+      "objectId": "0x2cec6fbe57bc1c7a2fe7e6ce92929076c811ec3b12e4939f845eafd9cb5da3ee",
       "version": "7",
-      "digest": "9rcnz8P9Eie7KZPUjTWnmTzyUxsBMaJcb9G3ncuG4BiC",
+      "digest": "HvSg4kpbKBiEjT9MwDycCppLqqCmCywRLUigertmRxZM",
       "owner": {
-        "ObjectOwner": "0x2867eee076a7f41efb3dc507f27531c26319dfbf0c9a6d92f6d1fd0f8d9bdeeb"
+        "ObjectOwner": "0xc987b8f272fca32c0494b44925bb98cf7a027bd817e0e2d56d8e6ca0d0a3b952"
       }
     }
   }

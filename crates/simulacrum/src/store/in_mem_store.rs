@@ -3,13 +3,14 @@
 
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
+use move_core_types::account_address::AccountAddress;
+use move_core_types::resolver::SerializedPackage;
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
-use std::collections::{BTreeMap, HashMap};
 use rtd_config::genesis;
 use rtd_types::error::RtdErrorKind;
 use rtd_types::storage::{PackageObject, get_module, load_package_object_from_object_store};
 use rtd_types::{
-    base_types::{AuthorityName, ObjectID, SequenceNumber, RtdAddress},
+    base_types::{AuthorityName, ObjectID, RtdAddress, SequenceNumber},
     committee::{Committee, EpochId},
     crypto::{AccountKeyPair, AuthorityKeyPair},
     digests::{ObjectDigest, TransactionDigest},
@@ -20,9 +21,10 @@ use rtd_types::{
         VerifiedCheckpoint,
     },
     object::{Object, Owner},
-    storage::{BackingPackageStore, ChildObjectResolver, ObjectStore, ParentSync},
+    storage::{BackingPackageStore, ObjectStore, ParentSync, RuntimeObjectResolver},
     transaction::VerifiedTransaction,
 };
+use std::collections::{BTreeMap, HashMap};
 
 use super::SimulatorStore;
 
@@ -226,7 +228,7 @@ impl BackingPackageStore for InMemoryStore {
     }
 }
 
-impl ChildObjectResolver for InMemoryStore {
+impl RuntimeObjectResolver for InMemoryStore {
     fn read_child_object(
         &self,
         parent: &ObjectID,
@@ -298,6 +300,31 @@ impl ModuleResolver for InMemoryStore {
 
     fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Self::Error> {
         get_module(self, module_id)
+    }
+
+    fn get_packages_static<const N: usize>(
+        &self,
+        ids: [AccountAddress; N],
+    ) -> Result<[Option<SerializedPackage>; N], Self::Error> {
+        let mut packages = [const { None }; N];
+        for (i, id) in ids.iter().enumerate() {
+            packages[i] = load_package_object_from_object_store(self, &ObjectID::from(*id))?
+                .map(|pkg| pkg.move_package().into_serialized_move_package())
+                .transpose()?;
+        }
+        Ok(packages)
+    }
+
+    fn get_packages<'a>(
+        &self,
+        ids: impl ExactSizeIterator<Item = &'a AccountAddress>,
+    ) -> Result<Vec<Option<SerializedPackage>>, Self::Error> {
+        ids.map(|id| {
+            let pkg = load_package_object_from_object_store(self, &ObjectID::from(*id))?;
+            pkg.map(|pkg| pkg.move_package().into_serialized_move_package())
+                .transpose()
+        })
+        .collect()
     }
 }
 

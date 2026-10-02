@@ -11,11 +11,11 @@ use jsonrpsee::RpcModule;
 use jsonrpsee::core::RpcResult;
 use move_core_types::language_storage::{StructTag, TypeTag};
 use rtd_core::jsonrpc_index::TotalBalance;
+use rtd_core::node_readiness::FullnodeReadiness;
 use tap::TapFallible;
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 use rtd_core::authority::AuthorityState;
-use rtd_core::node_readiness::FullnodeReadiness;
 use rtd_json_rpc_api::{CoinReadApiOpenRpc, CoinReadApiServer, JsonRpcMetrics, cap_page_limit};
 use rtd_json_rpc_types::Balance;
 use rtd_json_rpc_types::{CoinPage, RtdCoinMetadata};
@@ -29,7 +29,6 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::gas_coin::{GAS, TOTAL_SUPPLY_MIST};
 use rtd_types::object::Object;
 use rtd_types::parse_rtd_struct_tag;
-use rtd_types::quorum_driver_types::QuorumDriverError;
 use rtd_types::storage::ObjectStore;
 
 #[cfg(test)]
@@ -79,26 +78,20 @@ impl CoinReadApi {
         metrics: Arc<JsonRpcMetrics>,
         readiness: Arc<FullnodeReadiness>,
     ) -> Self {
-        Self {
-            internal: Box::new(CoinReadInternalImpl::new(
-                state,
-                transaction_kv_store,
-                metrics,
-            )),
-            readiness: Some(readiness),
-        }
+        let mut api = Self::new(state, transaction_kv_store, metrics);
+        api.readiness = Some(readiness);
+        api
     }
 
     fn ensure_ready(&self) -> RpcResult<()> {
         if let Some(readiness) = &self.readiness {
-            readiness
-                .ensure_ready()
-                .map_err(|error| -> jsonrpsee::types::ErrorObjectOwned {
-                    Error::QuorumDriverError(QuorumDriverError::FullnodeCatchingUp {
-                        details: error.to_string(),
-                    })
-                    .into()
-                })?;
+            readiness.ensure_ready().map_err(|error| {
+                jsonrpsee::types::ErrorObject::owned(
+                    rtd_json_rpc_api::TRANSIENT_ERROR_CODE,
+                    error.to_string(),
+                    None::<()>,
+                )
+            })?;
         }
         Ok(())
     }
@@ -256,6 +249,7 @@ impl CoinReadApiServer for CoinReadApi {
                 total_balance: balance.balance as u128,
                 // note: LockedCoin is deprecated
                 locked_balance: Default::default(),
+                funds_in_address_balance: balance.address_balance as u128,
             })
         })
     }
@@ -276,6 +270,7 @@ impl CoinReadApiServer for CoinReadApi {
                         total_balance: balance.balance as u128,
                         // note: LockedCoin is deprecated
                         locked_balance: Default::default(),
+                        funds_in_address_balance: balance.address_balance as u128,
                     }
                 })
                 .collect())
@@ -564,8 +559,6 @@ mod tests {
     use move_core_types::account_address::AccountAddress;
     use move_core_types::language_storage::StructTag;
     use rtd_core::checkpoints::CheckpointStore;
-    use rtd_core::node_readiness::FullnodeReadiness;
-    use rtd_json_rpc_api::TRANSIENT_ERROR_CODE;
     use rtd_json_rpc_types::Coin;
     use rtd_storage::key_value_store::{
         KVStoreCheckpointData, KVStoreTransactionData, TransactionKeyValueStoreTrait,
@@ -674,7 +667,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_eq!(error.code(), TRANSIENT_ERROR_CODE);
+        assert_eq!(error.code(), rtd_json_rpc_api::TRANSIENT_ERROR_CODE);
     }
 
     fn get_test_package_id() -> ObjectID {
@@ -1030,7 +1023,7 @@ mod tests {
             let expected = expect!["-32602"];
             expected.assert_eq(&error_object.code().to_string());
             let expected = expect![
-                "Invalid struct type: 0x2::invalid::struct::tag. Got error: Expected end of token stream. Got: ::"
+                "Invalid datatype: 0x2::invalid::struct::tag. Got error: Expected end of token stream. Got: ::"
             ];
             expected.assert_eq(error_object.message());
         }
@@ -1050,7 +1043,7 @@ mod tests {
             let expected = expect!["-32602"];
             expected.assert_eq(&error_object.code().to_string());
             let expected =
-                expect!["Invalid struct type: 0x2::rtd:🤵. Got error: unrecognized token: :🤵"];
+                expect!["Invalid datatype: 0x2::rtd:🤵. Got error: unrecognized token: :🤵"];
             expected.assert_eq(error_object.message());
         }
 
@@ -1264,6 +1257,7 @@ mod tests {
                     Ok(TotalBalance {
                         balance: 7,
                         num_coins: 9,
+                        address_balance: 0,
                     })
                 });
             let coin_read_api = CoinReadApi::new_for_tests(Arc::new(mock_state), None);
@@ -1277,7 +1271,8 @@ mod tests {
                     coin_type: gas_coin.coin_type,
                     coin_object_count: 9,
                     total_balance: 7,
-                    locked_balance: Default::default()
+                    locked_balance: Default::default(),
+                    funds_in_address_balance: 0,
                 }
             );
         }
@@ -1298,6 +1293,7 @@ mod tests {
                     Ok(TotalBalance {
                         balance: 10,
                         num_coins: 11,
+                        address_balance: 0,
                     })
                 });
             let coin_read_api = CoinReadApi::new_for_tests(Arc::new(mock_state), None);
@@ -1313,7 +1309,8 @@ mod tests {
                     coin_type: coin.coin_type,
                     coin_object_count: 11,
                     total_balance: 10,
-                    locked_balance: Default::default()
+                    locked_balance: Default::default(),
+                    funds_in_address_balance: 0,
                 }
             );
         }
@@ -1334,7 +1331,7 @@ mod tests {
             let expected = expect!["-32602"];
             expected.assert_eq(&error_object.code().to_string());
             let expected = expect![
-                "Invalid struct type: 0x2::invalid::struct::tag. Got error: Expected end of token stream. Got: ::"
+                "Invalid datatype: 0x2::invalid::struct::tag. Got error: Expected end of token stream. Got: ::"
             ];
             expected.assert_eq(error_object.message());
         }
@@ -1416,6 +1413,7 @@ mod tests {
                         TotalBalance {
                             balance: 7,
                             num_coins: 9,
+                            address_balance: 0,
                         },
                     );
                     hash_map.insert(
@@ -1423,6 +1421,7 @@ mod tests {
                         TotalBalance {
                             balance: 10,
                             num_coins: 11,
+                            address_balance: 0,
                         },
                     );
                     Ok(Arc::new(hash_map))
@@ -1437,12 +1436,14 @@ mod tests {
                     coin_object_count: 9,
                     total_balance: 7,
                     locked_balance: Default::default(),
+                    funds_in_address_balance: 0,
                 },
                 Balance {
                     coin_type: usdc_coin.coin_type,
                     coin_object_count: 11,
                     total_balance: 10,
                     locked_balance: Default::default(),
+                    funds_in_address_balance: 0,
                 },
             ];
             // This is because the underlying result is a hashmap, so order is not guaranteed

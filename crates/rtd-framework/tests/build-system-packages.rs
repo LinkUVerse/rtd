@@ -8,31 +8,44 @@ use move_compiler::editions::{Edition, Flavor};
 use move_package_alt_compilation::{
     build_config::BuildConfig as MoveBuildConfig, lint_flag::LintFlag,
 };
+use rtd_framework::BuiltInFramework;
+use rtd_move_build::BuildConfig;
+use rtd_package_alt::{RtdFlavor, local_test_environment};
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
 use std::{
     collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
 };
-use rtd_move_build::BuildConfig;
-use rtd_package_alt::mainnet_environment;
 
 const CRATE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const COMPILED_PACKAGES_DIR: &str = "packages_compiled";
 const DOCS_DIR: &str = "docs";
 const PUBLISHED_API_FILE: &str = "published_api.txt";
 
+#[test]
+fn built_in_native_coin_uses_rtd_module_and_type() {
+    let framework = BuiltInFramework::get_package_by_id(&RTD_FRAMEWORK_PACKAGE_ID);
+    let modules = framework.modules();
+    let native_coin = modules
+        .iter()
+        .find(|module| module.self_id().name().as_str() == "rtd")
+        .expect("0x2::rtd must be present in the compiled system package");
+    assert!(native_coin.struct_defs().iter().any(|definition| {
+        let handle = native_coin.datatype_handle_at(definition.struct_handle);
+        native_coin.identifier_at(handle.name).as_str() == "RTD"
+    }));
+    assert!(
+        modules
+            .iter()
+            .all(|module| module.self_id().name().as_str() != "sui")
+    );
+}
+
 #[tokio::test]
 async fn build_system_packages() {
     let tempdir = tempfile::tempdir().unwrap();
-    let out_dir = if std::env::var_os("UPDATE").is_some() {
-        let crate_root = Path::new(CRATE_ROOT);
-        let _ = std::fs::remove_dir_all(crate_root.join(COMPILED_PACKAGES_DIR));
-        let _ = std::fs::remove_dir_all(crate_root.join(DOCS_DIR));
-        let _ = std::fs::remove_file(crate_root.join(PUBLISHED_API_FILE));
-        crate_root
-    } else {
-        tempdir.path()
-    };
+    let out_dir = tempdir.path();
 
     std::fs::create_dir_all(out_dir.join(COMPILED_PACKAGES_DIR)).unwrap();
     std::fs::create_dir_all(out_dir.join(DOCS_DIR)).unwrap();
@@ -62,7 +75,29 @@ async fn build_system_packages() {
         out_dir,
     )
     .await;
-    check_diff(Path::new(CRATE_ROOT), out_dir)
+
+    let crate_root = Path::new(CRATE_ROOT);
+    if std::env::var_os("UPDATE").is_some() {
+        for dir in [COMPILED_PACKAGES_DIR, DOCS_DIR] {
+            let p = crate_root.join(dir);
+            if p.exists() {
+                std::fs::remove_dir_all(&p).unwrap();
+            }
+        }
+        let api_file = crate_root.join(PUBLISHED_API_FILE);
+        if api_file.exists() {
+            std::fs::remove_file(&api_file).unwrap();
+        }
+        let copy_opts = CopyOptions::new().overwrite(true);
+        fs_extra::dir::copy(out_dir.join(COMPILED_PACKAGES_DIR), crate_root, &copy_opts).unwrap();
+        fs_extra::dir::copy(out_dir.join(DOCS_DIR), crate_root, &copy_opts).unwrap();
+        std::fs::copy(
+            out_dir.join(PUBLISHED_API_FILE),
+            crate_root.join(PUBLISHED_API_FILE),
+        )
+        .unwrap();
+    }
+    check_diff(crate_root, out_dir)
 }
 
 // Verify that checked-in values are the same as the generated ones
@@ -141,7 +176,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
+        flavor: RtdFlavor::for_testing(),
     }
     .build_async(stdlib_path)
     .await
@@ -150,7 +186,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
+        flavor: RtdFlavor::for_testing(),
     }
     .build_async(rtd_framework_path)
     .await
@@ -159,7 +196,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
+        flavor: RtdFlavor::for_testing(),
     }
     .build_async(rtd_system_path)
     .await
@@ -168,7 +206,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
+        flavor: RtdFlavor::for_testing(),
     }
     .build_async(deepbook_path)
     .await
@@ -177,7 +216,8 @@ async fn build_packages_with_move_config(
         config,
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
+        flavor: RtdFlavor::for_testing(),
     }
     .build_async(bridge_path)
     .await
@@ -287,9 +327,10 @@ fn serialize_modules_to_file<'a>(
     file: &Path,
 ) -> Result<Vec<String>> {
     let mut serialized_modules = Vec::new();
-    let mut members = vec![];
+    let mut members = BTreeMap::new();
     for module in modules {
         let module_name = module.self_id().short_str_lossless();
+        let members = members.entry(module_name.clone()).or_insert_with(Vec::new);
         for def in module.struct_defs() {
             let sh = module.datatype_handle_at(def.struct_handle);
             let sn = module.identifier_at(sh.name);
@@ -310,6 +351,13 @@ fn serialize_modules_to_file<'a>(
                 Visibility::Friend => "public(package) ",
                 Visibility::Private => "",
             };
+
+            // Disallow init functions in system packages
+            if def.visibility == Visibility::Private && fn_.as_str() == "init" {
+                anyhow::bail!(
+                    "Module {module_name} has a private init function. This is not allowed in system pacakges."
+                );
+            }
             let entry = if def.is_entry { "entry " } else { "" };
             members.push(format!("{fn_}\n\t{viz}{entry}fun\n\t{module_name}"));
         }
@@ -327,5 +375,5 @@ fn serialize_modules_to_file<'a>(
 
     fs::write(file, binary)?;
 
-    Ok(members)
+    Ok(members.into_values().flatten().collect())
 }

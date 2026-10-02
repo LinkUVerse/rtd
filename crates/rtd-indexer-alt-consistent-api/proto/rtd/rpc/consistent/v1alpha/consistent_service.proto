@@ -48,6 +48,11 @@ message AvailableRangeResponse {
   // Accessible checkpoints in the available range are evenly spaced out
   // `stride` checkpoints apart.
   optional uint64 stride = 200;
+
+  // Full 32-byte genesis checkpoint digest shared by every indexed pipeline.
+  // Missing or inconsistent pipeline identities must not be admitted by a read
+  // router. This is advisory identity evidence, not checkpoint certification.
+  optional bytes chain_id = 201;
 }
 
 message BatchGetBalancesRequest { repeated GetBalanceRequest requests = 1; }
@@ -134,15 +139,17 @@ message ListOwnedObjectsRequest {
   // Required. The owner kind and address.
   optional Owner owner = 1;
 
-  // Optional type filter to limit the types of objects listed.
+  // Optional type filter to limit or exclude the types of objects listed.
   //
-  // Accepts filters by the type's package, module, fully-qualified name, or a
-  // type instantiation:
+  // Accepts filters by the type's package, module, fully-qualified name, or a type instantiation:
   //
   //  - `0x2`
   //  - `0x2::coin`
   //  - `0x2::coin::Coin`
   //  - `0x2::coin::Coin<0x2::rtd::RTD>`
+  //
+  // When preceded by an `!`, objects of the type prefix will be excluded from the returned
+  // response.
   optional string object_type = 2;
 
   // The maximum number of entries to return. The service may return fewer than
@@ -221,9 +228,16 @@ message Balance {
   // `0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD`.
   optional string coin_type = 2;
 
-  /// The total balance for coins of this type, owned by one address,
-  // denominated in its smallest unit.
-  optional uint64 balance = 3;
+  // The sum total of the accumulator balance and coins of this type,
+  // owned by one address, denominated in its smallest unit.
+  optional uint64 total_balance = 3;
+
+  // Total balance of the coin type as tracked by the accumulator object
+  // for the address.
+  optional uint64 address_balance = 4;
+
+  // Total balance for coins of this type owned by the address.
+  optional uint64 coin_balance = 5;
 
   // Pagination cursor pointing to this balance entry, if this Balance is part
   // of a paginated response.

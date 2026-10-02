@@ -1,30 +1,29 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use async_graphql::Object;
-use fastcrypto::encoding::{Base64, Encoding};
 use std::fmt::Write;
-use rtd_package_resolver::{CleverError, ErrorConstants};
-use rtd_types::{
-    execution_status::{
-        ExecutionFailureStatus, ExecutionStatus as NativeExecutionStatus, MoveLocation,
-    },
-    transaction::ProgrammableTransaction,
-};
+
+use async_graphql::Object;
+use fastcrypto::encoding::Base64;
+use fastcrypto::encoding::Encoding;
+use rtd_package_resolver::CleverError;
+use rtd_package_resolver::ErrorConstants;
+use rtd_types::execution_status::ExecutionErrorKind;
+use rtd_types::execution_status::MoveLocation;
+use rtd_types::execution_status::{ExecutionFailure, ExecutionStatus as NativeExecutionStatus};
+use rtd_types::transaction::ProgrammableTransaction;
 use tokio::sync::OnceCell;
 
-use crate::{
-    api::{
-        scalars::big_int::BigInt,
-        types::{move_function::MoveFunction, move_module::MoveModule, move_package::MovePackage},
-    },
-    error::RpcError,
-    scope::Scope,
-};
+use crate::api::scalars::big_int::BigInt;
+use crate::api::types::move_function::MoveFunction;
+use crate::api::types::move_module::MoveModule;
+use crate::api::types::move_package::MovePackage;
+use crate::error::RpcError;
+use crate::scope::Scope;
 
 #[derive(Clone)]
 pub(crate) struct ExecutionError {
-    native: ExecutionFailureStatus,
+    native: ExecutionErrorKind,
     command: Option<usize>,
     clever: OnceCell<Option<CleverError>>,
     scope: Scope,
@@ -42,7 +41,7 @@ impl ExecutionError {
         // CleverError for consistency and to amortize the expensive resolution cost across multiple
         // fields (identifier, constant, etc.) that are commonly queried together in GraphQL.
 
-        let ExecutionFailureStatus::MoveAbort(_, raw_code) = &self.native else {
+        let ExecutionErrorKind::MoveAbort(_, raw_code) = &self.native else {
             return None;
         };
 
@@ -62,14 +61,14 @@ impl ExecutionError {
     }
 
     /// The instruction offset in the Move bytecode where the error occurred. Populated for Move aborts and primitive runtime errors.
-    async fn instruction_offset(&self) -> Result<Option<u16>, RpcError> {
-        match &self.native {
-            ExecutionFailureStatus::MoveAbort(location, _) => Ok(Some(location.instruction)),
-            ExecutionFailureStatus::MovePrimitiveRuntimeError(location_opt) => {
-                Ok(location_opt.0.as_ref().map(|loc| loc.instruction))
+    async fn instruction_offset(&self) -> Option<Result<u16, RpcError>> {
+        Some(Ok(match &self.native {
+            ExecutionErrorKind::MoveAbort(location, _) => location.instruction,
+            ExecutionErrorKind::MovePrimitiveRuntimeError(location_opt) => {
+                location_opt.0.as_ref()?.instruction
             }
-            _ => Ok(None),
-        }
+            _ => return None,
+        }))
     }
 
     /// The error's name. Only populated for clever errors.
@@ -95,10 +94,8 @@ impl ExecutionError {
     /// The module that the abort originated from. Only populated for Move aborts and primitive runtime errors.
     async fn module(&self) -> Option<MoveModule> {
         let location = match &self.native {
-            ExecutionFailureStatus::MoveAbort(location, _) => Some(location),
-            ExecutionFailureStatus::MovePrimitiveRuntimeError(location_opt) => {
-                location_opt.0.as_ref()
-            }
+            ExecutionErrorKind::MoveAbort(location, _) => Some(location),
+            ExecutionErrorKind::MovePrimitiveRuntimeError(location_opt) => location_opt.0.as_ref(),
             _ => None,
         }?;
 
@@ -113,10 +110,8 @@ impl ExecutionError {
     /// The function that the abort originated from. Only populated for Move aborts and primitive runtime errors that have function name information.
     async fn function(&self) -> Option<MoveFunction> {
         let location = match &self.native {
-            ExecutionFailureStatus::MoveAbort(location, _) => Some(location),
-            ExecutionFailureStatus::MovePrimitiveRuntimeError(location_opt) => {
-                location_opt.0.as_ref()
-            }
+            ExecutionErrorKind::MoveAbort(location, _) => Some(location),
+            ExecutionErrorKind::MovePrimitiveRuntimeError(location_opt) => location_opt.0.as_ref(),
             _ => None,
         }?;
 
@@ -150,12 +145,12 @@ impl ExecutionError {
         status: &NativeExecutionStatus,
         programmable_tx: Option<&ProgrammableTransaction>,
     ) -> Result<Option<Self>, RpcError> {
-        let NativeExecutionStatus::Failure { error, command } = status else {
+        let NativeExecutionStatus::Failure(ExecutionFailure { error, command }) = status else {
             return Ok(None);
         };
 
         // Clone the error so we can modify it in-place
-        let mut native_error: ExecutionFailureStatus = error.clone();
+        let mut native_error: ExecutionErrorKind = error.clone();
 
         // Resolve the module ID for Move aborts to ensure we use the correct package version
         // when resolving clever errors later. This is only necessary before version 48.
@@ -176,7 +171,7 @@ impl ExecutionError {
     /// Since protocol version 48, the Rtd protocol layer automatically resolves module ID, which makes
     /// clever error resolution available. Before version 48, this will return None.
     async fn clever_error(&self) -> &Option<CleverError> {
-        let ExecutionFailureStatus::MoveAbort(location, raw_code) = &self.native else {
+        let ExecutionErrorKind::MoveAbort(location, raw_code) = &self.native else {
             // Not a Move abort, no clever error possible
             static NONE: Option<CleverError> = None;
             return &NONE;
@@ -215,7 +210,7 @@ impl ExecutionError {
                 write!(msg, "Error in {command}{suffix} command, ")?;
 
                 // Handle Move aborts with detailed formatting. Otherwise, just append the error.
-                let ExecutionFailureStatus::MoveAbort(loc, code) = &self.native else {
+                let ExecutionErrorKind::MoveAbort(loc, code) = &self.native else {
                     write!(msg, "{}", self.native)?;
                     return Ok(msg);
                 };
@@ -293,7 +288,7 @@ impl ExecutionError {
 /// return LinkageNotFound (expected) and this function becomes a no-op.
 async fn resolve_module_id_for_move_abort(
     scope: &Scope,
-    native_error: &mut ExecutionFailureStatus,
+    native_error: &mut ExecutionErrorKind,
     command: Option<usize>,
     programmable_tx: Option<&ProgrammableTransaction>,
 ) -> Result<(), anyhow::Error> {
@@ -302,10 +297,11 @@ async fn resolve_module_id_for_move_abort(
 
     // Only resolve for Move aborts that have location information
     let module = match native_error {
-        ExecutionFailureStatus::MoveAbort(MoveLocation { module, .. }, _) => module,
-        ExecutionFailureStatus::MovePrimitiveRuntimeError(MoveLocationOpt(Some(
-            MoveLocation { module, .. },
-        ))) => module,
+        ExecutionErrorKind::MoveAbort(MoveLocation { module, .. }, _) => module,
+        ExecutionErrorKind::MovePrimitiveRuntimeError(MoveLocationOpt(Some(MoveLocation {
+            module,
+            ..
+        }))) => module,
         _ => return Ok(()),
     };
 

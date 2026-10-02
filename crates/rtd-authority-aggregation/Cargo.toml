@@ -1,10 +1,13 @@
 [package]
 name = "rtd-authority-aggregation"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 version = "0.1.0"
 edition = "2024"
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 rtd-types.workspace = true

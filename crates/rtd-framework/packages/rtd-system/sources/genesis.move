@@ -9,7 +9,6 @@ use rtd_system::stake_subsidy;
 use rtd_system::rtd_system;
 use rtd_system::rtd_system_state_inner;
 use rtd_system::validator::{Self, Validator};
-use rtd_system::validator_set;
 
 public struct GenesisValidatorMetadata has copy, drop {
     name: vector<u8>,
@@ -63,6 +62,8 @@ public struct TokenAllocation {
 const ENotCalledAtGenesis: u64 = 0;
 /// The `create` function was called with duplicate validators.
 const EDuplicateValidator: u64 = 1;
+/// The validator address is not in the validator set.
+const ENotAValidator: u64 = 2;
 
 #[allow(unused_function)]
 /// This function will be explicitly called once at genesis.
@@ -80,7 +81,7 @@ fun create(
     assert!(ctx.epoch() == 0, ENotCalledAtGenesis);
 
     // Create all the `Validator` structs
-    let mut validators = vector[];
+    let mut validators = vector<Validator>[];
     genesis_validators.do!(|genesis_validator| {
         let GenesisValidatorMetadata {
             name,
@@ -121,7 +122,7 @@ fun create(
 
         // Ensure that each validator is unique
         assert!(
-            !validator_set::is_duplicate_validator(&validators, &validator),
+            validators.all!(|v| v.rtd_address() != rtd_address && !v.is_duplicate(&validator)),
             EDuplicateValidator,
         );
 
@@ -185,9 +186,11 @@ fun allocate_tokens(
             let allocation_balance = rtd_supply.split(amount_mist);
             if (staked_with_validator.is_some()) {
                 let validator_address = staked_with_validator.destroy_some();
-                let validator = validator_set::get_validator_mut(validators, validator_address);
+                let validator_idx = validators
+                    .find_index!(|v| v.rtd_address() == validator_address)
+                    .destroy_or!(abort ENotAValidator);
 
-                validator.request_add_stake_at_genesis(
+                validators[validator_idx].request_add_stake_at_genesis(
                     allocation_balance,
                     recipient_address,
                     ctx,

@@ -16,10 +16,10 @@ use rtd_rpc::proto::rtd::rpc::v2::GetObjectResponse;
 use rtd_rpc::proto::rtd::rpc::v2::GetObjectResult;
 use rtd_rpc::proto::rtd::rpc::v2::Object;
 use rtd_sdk_types::Address;
+use rtd_types::full_checkpoint_content::ObjectSet;
 
 pub const MAX_BATCH_REQUESTS: usize = 1000;
-
-pub const READ_MASK_DEFAULT: &str = "object_id,version,digest";
+pub const READ_MASK_DEFAULT: &str = crate::read_mask_defaults::OBJECT;
 
 type ValidationResult = Result<(Vec<(Address, Option<u64>)>, FieldMaskTree), RpcError>;
 
@@ -85,7 +85,12 @@ pub fn batch_get_objects(
         ..
     }: BatchGetObjectsRequest,
 ) -> Result<BatchGetObjectsResponse, RpcError> {
-    super::validate_batch_size(requests.len(), MAX_BATCH_REQUESTS)?;
+    if requests.len() > MAX_BATCH_REQUESTS {
+        return Err(RpcError::new(
+            tonic::Code::InvalidArgument,
+            format!("number of batch requests exceed limit of {MAX_BATCH_REQUESTS}"),
+        ));
+    }
 
     let requests = requests
         .into_iter()
@@ -124,5 +129,5 @@ fn get_object_impl(
             .ok_or_else(|| ObjectNotFoundError::new(object_id))?
     };
 
-    Ok(service.render_object_to_proto(&object, read_mask))
+    Ok(service.render_object_to_proto(&object, read_mask, &ObjectSet::default()))
 }

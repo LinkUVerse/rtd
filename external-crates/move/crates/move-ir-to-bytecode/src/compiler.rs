@@ -152,7 +152,7 @@ struct FunctionFrame {
     local_types: Signature,
     // i64 to allow the bytecode verifier to catch errors of
     // - negative stack sizes
-    // - excessivley large stack sizes
+    // - excessively large stack sizes
     // The max stack depth of the file_format is set as u16.
     // Theoretically, we could use a BigInt here, but that is probably overkill for any testing
     max_stack_depth: i64,
@@ -487,14 +487,25 @@ pub fn compile_module<'a>(
 }
 
 fn set_module_version(module: &mut CompiledModule, version: Option<u32>) {
-    // If a version override is provide always respect that no matter what.
+    // If a version override is provided always respect that no matter what.
     if let Some(version) = version.or_else(get_bytecode_version_from_env) {
         module.version = version;
         return;
     }
+    module.version = select_version(module);
+}
 
-    // Leave this const, and the const assertion here as a reminder to update this code if the
-    // version changes
+/// Selects the bytecode version to use for a compiled module when no explicit version override
+/// is provided. This is the place to decide whether a new version should be the universal
+/// default or should be gated behind feature detection on the compiled module.
+///
+/// When `VERSION_MAX` is bumped, the const assertion below will fail, forcing you to come here
+/// and decide: should the new version be emitted for all modules, or only for modules that use
+/// new features? To gate it, add a `uses_version_N_features` check (following the pattern of the
+/// version 7 check below) and return `PRE_MAX_VERSION` for modules that don't need it.
+fn select_version(module: &CompiledModule) -> u32 {
+    // Leave this const and the const assertion here as a reminder to update this code if the
+    // version changes.
     #[allow(clippy::assertions_on_constants)]
     const PRE_MAX_VERSION: u32 = {
         assert!(
@@ -503,21 +514,20 @@ fn set_module_version(module: &mut CompiledModule, version: Option<u32>) {
         );
         VERSION_MAX - 1
     };
-    let version = if module.enum_defs.is_empty()
-        && module.enum_def_instantiations.is_empty()
-        && module.variant_handles.is_empty()
-        && module.variant_instantiation_handles.is_empty()
-        && module.function_defs.iter().all(|f| {
-            f.code
-                .as_ref()
-                .map(|c| c.jump_tables.is_empty())
-                .unwrap_or(true)
-        }) {
-        PRE_MAX_VERSION
-    } else {
-        VERSION_MAX
-    };
-    module.version = version;
+    let _ = PRE_MAX_VERSION;
+
+    // Version 7 introduced enums. Previously this was gated so that only modules using enum
+    // features would get version 7, but version 7 is now the universal default.
+    let _uses_version_7_features = !module.enum_defs.is_empty()
+        || !module.enum_def_instantiations.is_empty()
+        || !module.variant_handles.is_empty()
+        || !module.variant_instantiation_handles.is_empty()
+        || module
+            .function_defs
+            .iter()
+            .any(|f| f.code.as_ref().is_some_and(|c| !c.jump_tables.is_empty()));
+
+    VERSION_MAX
 }
 
 // Note: DO NOT try to recover from this function as it zeros out the `outer_contexts` dependencies
@@ -1027,6 +1037,12 @@ fn compile_blocks(
             block.value,
         )?;
     }
+    let fdef_idx = context.current_function_definition_index();
+    for (label, offset) in &label_to_index {
+        context
+            .source_map
+            .add_label_mapping(fdef_idx, label.clone(), *offset)?;
+    }
     let fake_to_actual = context.build_index_remapping(label_to_index);
     remap_branch_offsets(&mut code, &mut jump_tables, &fake_to_actual);
     Ok((code, jump_tables))
@@ -1152,6 +1168,22 @@ fn compile_statement(
                 let st_loc = Bytecode::StLoc(loc_idx);
                 push_instr!(field_.loc, st_loc);
             }
+        }
+        Statement_::VecUnpack(ty, num, lvalues, e) => {
+            // Evaluate the vector expression first (pushes the vector).
+            compile_expression(context, function_frame, code, *e)?;
+
+            let tokens = compile_types(context, function_frame.type_parameters(), &[ty])?;
+            let type_actuals_id = context.signature_index(Signature(tokens))?;
+            push_instr!(statement.loc, Bytecode::VecUnpack(type_actuals_id, num));
+
+            function_frame.pop()?; // pop the vector
+            for _ in 0..num {
+                function_frame.push()?; // each unpacked element
+            }
+
+            // Bind each unpacked value to its LValue (LIFO via compile_lvalues).
+            compile_lvalues(context, function_frame, code, lvalues)?;
         }
         Statement_::UnpackVariant(name, variant_name, tys, bindings, e, unpack_type) => {
             let tokens = Signature(compile_types(
@@ -1284,6 +1316,11 @@ fn compile_expression(
             push_instr!(exp.loc, load_loc);
             function_frame.push()?;
         }
+        Exp_::Constant(name) => {
+            let idx = context.named_constant_index(&name)?;
+            push_instr!(exp.loc, Bytecode::LdConst(idx));
+            function_frame.push()?;
+        }
         Exp_::BorrowLocal(is_mutable, v) => {
             let loc_idx = function_frame.get_local(&v.value)?;
             if is_mutable {
@@ -1377,6 +1414,21 @@ fn compile_expression(
                 function_frame.pop()?;
             }
             function_frame.push()?;
+        }
+        Exp_::VecPack(ty, num, args) => {
+            // Evaluate the args expression first; the args are expected to
+            // push exactly `num` values onto the stack (typically an
+            // ExprList of `num` expressions).
+            compile_expression(context, function_frame, code, *args)?;
+
+            let tokens = compile_types(context, function_frame.type_parameters(), &[ty])?;
+            let type_actuals_id = context.signature_index(Signature(tokens))?;
+            push_instr!(exp.loc, Bytecode::VecPack(type_actuals_id, num));
+
+            for _ in 0..num {
+                function_frame.pop()?;
+            }
+            function_frame.push()?; // push the resulting vector
         }
         Exp_::UnaryExp(op, e) => {
             compile_expression(context, function_frame, code, *e)?;
@@ -1563,16 +1615,6 @@ fn compile_call(
     match call.value {
         FunctionCall_::Builtin(function) => {
             match function {
-                Builtin::VecPack(tys, num) => {
-                    let tokens = compile_types(context, function_frame.type_parameters(), &tys)?;
-                    let type_actuals_id = context.signature_index(Signature(tokens))?;
-                    push_instr!(call.loc, Bytecode::VecPack(type_actuals_id, num));
-
-                    for _ in 0..num {
-                        function_frame.pop()?;
-                    }
-                    function_frame.push()?; // push the return value
-                }
                 Builtin::VecLen(tys) => {
                     let tokens = compile_types(context, function_frame.type_parameters(), &tys)?;
                     let type_actuals_id = context.signature_index(Signature(tokens))?;
@@ -1614,16 +1656,6 @@ fn compile_call(
 
                     function_frame.pop()?; // pop the vector ref
                     function_frame.push()?; // push the value
-                }
-                Builtin::VecUnpack(tys, num) => {
-                    let tokens = compile_types(context, function_frame.type_parameters(), &tys)?;
-                    let type_actuals_id = context.signature_index(Signature(tokens))?;
-                    push_instr!(call.loc, Bytecode::VecUnpack(type_actuals_id, num));
-
-                    function_frame.pop()?; // pop the vector ref
-                    for _ in 0..num {
-                        function_frame.push()?;
-                    }
                 }
                 Builtin::VecSwap(tys) => {
                     let tokens = compile_types(context, function_frame.type_parameters(), &tys)?;
@@ -1719,7 +1751,7 @@ fn type_to_constant_type_layout(ty: Type) -> Result<MoveTypeLayout> {
             bail!("Type parameters are not supported in constant type layouts")
         }
         Type_::Datatype(_ident, _tys) => {
-            bail!("TODO Structs are not *yet* supported in constant type layouts")
+            bail!("Datatypes are not supported in constant type layouts")
         }
     })
 }
@@ -1776,6 +1808,12 @@ fn compile_function_body_bytecode(
             &mut jump_tables,
             block,
         )?;
+    }
+    let fdef_idx = context.current_function_definition_index();
+    for (label, offset) in &label_to_index {
+        context
+            .source_map
+            .add_label_mapping(fdef_idx, label.clone(), *offset)?;
     }
     let fake_to_actual = context.build_index_remapping(label_to_index);
     remap_branch_offsets(&mut code, &mut jump_tables, &fake_to_actual);

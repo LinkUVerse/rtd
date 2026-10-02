@@ -3,11 +3,11 @@
 
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
 use rtd_types::base_types::ObjectID;
 use rtd_types::error::{RtdErrorKind, RtdResult, UserInputError};
 use rtd_types::storage::{ObjectStore, PackageObject};
+use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 pub struct PackageObjectCache {
     cache: RwLock<LruCache<ObjectID, PackageObject>>,

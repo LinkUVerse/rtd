@@ -1,0 +1,28 @@
+---
+title: Sessions
+description: Upstream Sui delegated session design; no RTD Predict session deployment is verified.
+keywords:
+  - deepbook predict
+  - delegated sessions
+  - upstream design
+---
+
+This page is an upstream Sui source design reference. **No RTD Predict session package, session configuration object, account authorization, or public network integration is verified.** Former package IDs and claims about differing Mainnet and Testnet authorizations have been removed.
+
+## Authority model {#authority-model}
+
+The design allows an account owner to authorize a session key for a limited period. A session may execute predefined account or trading wrappers while the grant remains valid. The exact scope, expiry check, and revocation behavior must be audited against the ported source. Treat any session private key as authority over every action its grant permits, not just one transaction in an example.
+
+## Session lifecycle {#lifecycle}
+
+An application creates a grant, signs eligible transactions with the session key, and revokes or lets the grant expire. It should query the grant's current state before relying on it, and it should test that revocation and expiry stop new calls. An event log alone may not report a timeout because no transaction necessarily runs at the expiry moment.
+
+## Predict wrappers {#predict-wrappers}
+
+Wrappers may call mint and redemption functions using account authorization provided by the session package. The Predict contract still enforces its own market, price, pause, and timing rules. A port must verify that the wrapper passes the correct bounds and account object to the deployed Predict package.
+
+## DeepBook spot wrappers {#spot-wrappers}
+
+Spot-market wrappers need their own app authorization and package bindings. The earlier claim that these worked on one RTD public network but not another was inherited from upstream deployments and is not an RTD fact. Test the authorization on the actual RTD registry before exposing a spot wrapper.
+
+See [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information) for current RTD status.

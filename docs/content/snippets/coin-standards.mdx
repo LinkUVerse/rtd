@@ -4,7 +4,7 @@ Use the `coin::deny_list_v2_add` function to add the provided address to the den
 
 <ImportContent source="crates/rtd-framework/packages/rtd-framework/sources/coin.move" mode="code" fun="deny_list_v2_add" noComments />
 
-When using this function, you provide the `DenyList` object (`0x403`), the `DenyCap` you receive on coin creation, the address to add to the list, and the transaction context. After using this function, the address you provide is unable to use your coin by the next epoch.
+When using this function, you provide the `DenyList` object (`0x403`), the `DenyCapV2` you receive on coin creation, the address to add to the list, and the transaction context. After using this function, the address you provide is unable to use your coin by the next epoch.
 
 ### Remove address from deny list
 
@@ -16,7 +16,7 @@ When using this function, you provide the `DenyList` object (`0x403`), the `Deny
 
 ### Using an SDK
 
-You can use either the TypeScript or Rust SDK to manipulate the addresses held in the `DenyList` for your coin. The following examples are based on the [regulated coin sample](https://github.com/LinkUVerse/regulated-coin-sample).
+You can use either the TypeScript or Rust SDK to manipulate the addresses held in the `DenyList` for your coin. The following snippets illustrate transaction construction; the local `examples/move/coin/sources/regcoin_new.move` module shows the corresponding Move calls. Replace placeholders with object IDs and types from your own deployed currency.
 
 <Tabs groupId="sdk-language">
 

@@ -2,11 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use insta::assert_json_snapshot;
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::PathBuf};
-use strum_macros::Display;
-use strum_macros::EnumString;
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_test_transaction_builder::publish_basics_package_and_make_counter;
@@ -15,6 +10,7 @@ use rtd_types::base_types::{FullObjectRef, ObjectRef, RtdAddress};
 use rtd_types::coin::PAY_JOIN_FUNC_NAME;
 use rtd_types::coin::PAY_MODULE_NAME;
 use rtd_types::coin::PAY_SPLIT_VEC_FUNC_NAME;
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::gas_coin::GAS;
 use rtd_types::transaction::SharedObjectMutability;
 use rtd_types::transaction::TransactionData;
@@ -22,6 +18,10 @@ use rtd_types::{
     gas::GasCostSummary,
     transaction::{CallArg, ObjectArg},
 };
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, path::PathBuf};
+use strum_macros::Display;
+use strum_macros::EnumString;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 #[derive(
@@ -243,7 +243,6 @@ async fn run_actual_costs()
             .sign_and_execute_transaction(&tx)
             .await
             .effects
-            .unwrap()
             .gas_cost_summary()
             .clone();
 

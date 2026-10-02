@@ -25,8 +25,8 @@ use super::container::Container;
 pub struct Node {
     container: Mutex<Option<Container>>,
     config: Mutex<NodeConfig>,
-    startup_target: Mutex<Option<u64>>,
     runtime_type: RuntimeType,
+    startup_target: Mutex<Option<u64>>,
 }
 
 impl Node {
@@ -40,8 +40,8 @@ impl Node {
         Self {
             container: Default::default(),
             config: config.into(),
-            startup_target: Default::default(),
             runtime_type: RuntimeType::SingleThreaded,
+            startup_target: Mutex::new(None),
         }
     }
 
@@ -62,8 +62,9 @@ impl Node {
     pub async fn spawn(&self) -> Result<()> {
         info!(name =% self.name().concise(), "starting in-memory node");
         let config = self.config().clone();
-        // A target injected by Swarm::launch gates only that coordinated network startup. A
-        // later standalone node restart must derive readiness from its own persisted state.
+        // A target injected by Swarm::launch gates only that coordinated
+        // network startup. A later standalone restart derives readiness from
+        // the node's own persisted checkpoint.
         let startup_target = self.startup_target.lock().unwrap().take();
         *self.container.lock().unwrap() =
             Some(Container::spawn(config, self.runtime_type, startup_target).await);
@@ -143,14 +144,6 @@ impl Node {
                         self.name().concise()
                     )
                 })?;
-        } else if let Some(readiness) = self
-            .get_node_handle()
-            .and_then(|handle| handle.with(|node| node.fullnode_readiness().cloned()))
-        {
-            readiness
-                .ensure_ready()
-                .map_err(anyhow::Error::new)
-                .map_err(HealthCheckError::Failure)?;
         }
 
         Ok(())

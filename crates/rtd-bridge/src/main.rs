@@ -4,15 +4,15 @@
 use clap::Parser;
 use fastcrypto::traits::KeyPair;
 use linku_metrics::start_prometheus_server;
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
-};
 use rtd_bridge::config::BridgeNodeConfig;
 use rtd_bridge::node::run_bridge_node;
 use rtd_bridge::server::BridgeNodePublicMetadata;
 use rtd_config::Config;
 use rtd_metrics_push_client::start_metrics_push_task;
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::PathBuf,
+};
 use tracing::info;
 
 // Define the `GIT_REVISION` and `VERSION` consts

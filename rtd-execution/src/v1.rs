@@ -17,10 +17,11 @@ use rtd_types::{
     effects::TransactionEffects,
     error::{ExecutionError, RtdError, RtdResult},
     execution::{ExecutionResult, TypeLayoutStore},
+    execution_status::ExecutionFailure,
     gas::RtdGasStatus,
     inner_temporary_store::InnerTemporaryStore,
     layout_resolver::LayoutResolver,
-    metrics::{BytecodeVerifierMetrics, LimitsMetrics},
+    metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
 };
 
@@ -66,15 +67,18 @@ impl executor::Executor for Executor {
         &self,
         store: &dyn BackingStore,
         protocol_config: &ProtocolConfig,
-        metrics: Arc<LimitsMetrics>,
+        metrics: Arc<ExecutionMetrics>,
         enable_expensive_checks: bool,
         execution_params: ExecutionOrEarlyError,
         epoch_id: &EpochId,
         epoch_timestamp_ms: u64,
         input_objects: CheckedInputObjects,
+        _system_object_versions: rtd_types::base_types::SystemObjectVersions,
+        _unsettled_object_funds: &dyn rtd_types::accumulator_root::UnsettledObjectFundsRead,
         gas: GasData,
         gas_status: RtdGasStatus,
         transaction_kind: TransactionKind,
+        _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
         transaction_digest: TransactionDigest,
         _trace_builder_opt: &mut Option<MoveTraceBuilder>,
@@ -83,7 +87,7 @@ impl executor::Executor for Executor {
         RtdGasStatus,
         TransactionEffects,
         Vec<ExecutionTiming>,
-        Result<(), ExecutionError>,
+        Result<(), ExecutionFailure>,
     ) {
         let gas_coins = gas.payment;
         let (inner_temp_store, gas_status, effects, result) =
@@ -103,23 +107,34 @@ impl executor::Executor for Executor {
                 enable_expensive_checks,
                 execution_params,
             );
+        if let Err(error) = &result {
+            log_execution_error(transaction_digest, error);
+        }
         // note: old versions do not report timings.
-        (inner_temp_store, gas_status, effects, vec![], result)
+        (
+            inner_temp_store,
+            gas_status,
+            effects,
+            vec![],
+            result.map_err(ExecutionFailure::from),
+        )
     }
 
     fn dev_inspect_transaction(
         &self,
         store: &dyn BackingStore,
         protocol_config: &ProtocolConfig,
-        metrics: Arc<LimitsMetrics>,
+        metrics: Arc<ExecutionMetrics>,
         enable_expensive_checks: bool,
         execution_params: ExecutionOrEarlyError,
         epoch_id: &EpochId,
         epoch_timestamp_ms: u64,
         input_objects: CheckedInputObjects,
+        _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         gas: GasData,
         gas_status: RtdGasStatus,
         transaction_kind: TransactionKind,
+        _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
         transaction_digest: TransactionDigest,
         skip_all_checks: bool,
@@ -130,7 +145,7 @@ impl executor::Executor for Executor {
         Result<Vec<ExecutionResult>, ExecutionError>,
     ) {
         let gas_coins = gas.payment;
-        if skip_all_checks {
+        let (inner_temp_store, gas_status, effects, result) = if skip_all_checks {
             execute_transaction_to_effects::<execution_mode::DevInspect<true>>(
                 store,
                 input_objects,
@@ -164,14 +179,68 @@ impl executor::Executor for Executor {
                 enable_expensive_checks,
                 execution_params,
             )
+        };
+        if let Err(error) = &result {
+            log_execution_error(transaction_digest, error);
         }
+        (inner_temp_store, gas_status, effects, result)
+    }
+
+    fn execute_transaction_to_effects_and_execution_error(
+        &self,
+        store: &dyn BackingStore,
+        protocol_config: &ProtocolConfig,
+        metrics: Arc<ExecutionMetrics>,
+        enable_expensive_checks: bool,
+        execution_params: ExecutionOrEarlyError,
+        epoch_id: &EpochId,
+        epoch_timestamp_ms: u64,
+        input_objects: CheckedInputObjects,
+        _system_object_versions: rtd_types::base_types::SystemObjectVersions,
+        _unsettled_object_funds: &dyn rtd_types::accumulator_root::UnsettledObjectFundsRead,
+        gas: GasData,
+        gas_status: RtdGasStatus,
+        transaction_kind: TransactionKind,
+        _rewritten_inputs: Option<Vec<bool>>,
+        transaction_signer: RtdAddress,
+        transaction_digest: TransactionDigest,
+        _trace_builder_opt: &mut Option<MoveTraceBuilder>,
+    ) -> (
+        InnerTemporaryStore,
+        RtdGasStatus,
+        TransactionEffects,
+        Vec<ExecutionTiming>,
+        Result<(), ExecutionError>,
+    ) {
+        let gas_coins = gas.payment;
+        let (inner_temp_store, gas_status, effects, result) =
+            execute_transaction_to_effects::<execution_mode::Normal>(
+                store,
+                input_objects,
+                gas_coins,
+                gas_status,
+                transaction_kind,
+                transaction_signer,
+                transaction_digest,
+                &self.0,
+                epoch_id,
+                epoch_timestamp_ms,
+                protocol_config,
+                metrics,
+                enable_expensive_checks,
+                execution_params,
+            );
+        if let Err(error) = &result {
+            log_execution_error(transaction_digest, error);
+        }
+        (inner_temp_store, gas_status, effects, vec![], result)
     }
 
     fn update_genesis_state(
         &self,
         store: &dyn BackingStore,
         protocol_config: &ProtocolConfig,
-        metrics: Arc<LimitsMetrics>,
+        metrics: Arc<ExecutionMetrics>,
         epoch_id: EpochId,
         epoch_timestamp_ms: u64,
         transaction_digest: &TransactionDigest,
@@ -204,6 +273,7 @@ impl executor::Executor for Executor {
 
     fn type_layout_resolver<'r, 'vm: 'r, 'store: 'r>(
         &'vm self,
+        _protocol_config: &ProtocolConfig,
         store: Box<dyn TypeLayoutStore + 'store>,
     ) -> Box<dyn LayoutResolver + 'r> {
         Box::new(TypeLayoutResolver::new(&self.0, store))
@@ -226,5 +296,37 @@ impl verifier::Verifier for Verifier<'_> {
         meter: &mut dyn Meter,
     ) -> RtdResult<()> {
         run_metered_move_bytecode_verifier(modules, &self.config, meter, self.metrics)
+    }
+}
+
+fn log_execution_error(transaction_digest: TransactionDigest, error: &ExecutionError) {
+    use rtd_types::execution_status::ExecutionErrorKind as K;
+
+    match error.kind() {
+        K::InvariantViolation | K::VMInvariantViolation => {
+            tracing::error!(
+                kind = ?error.kind(),
+                tx_digest = ?transaction_digest,
+                "INVARIANT VIOLATION! Source: {:?}",
+                error.source(),
+            );
+        }
+        K::RtdMoveVerificationError | K::VMVerificationOrDeserializationError => {
+            tracing::debug!(
+                kind = ?error.kind(),
+                tx_digest = ?transaction_digest,
+                "Verification Error. Source: {:?}",
+                error.source(),
+            );
+        }
+        K::PublishUpgradeMissingDependency | K::PublishUpgradeDependencyDowngrade => {
+            tracing::debug!(
+                kind = ?error.kind(),
+                tx_digest = ?transaction_digest,
+                "Publish/Upgrade Error. Source: {:?}",
+                error.source(),
+            );
+        }
+        _ => (),
     }
 }

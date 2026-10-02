@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::StructTag;
+use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+use rtd_types::object::Owner;
+use rtd_types::rtd_serde::RtdStructTag;
+use rtd_types::rtd_serde::SequenceNumber as AsSequenceNumber;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::fmt::{Display, Formatter, Result};
-use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
-use rtd_types::object::Owner;
-use rtd_types::rtd_serde::SequenceNumber as AsSequenceNumber;
-use rtd_types::rtd_serde::RtdStructTag;
 
 /// ObjectChange are derived from the object mutations in the TransactionEffect to provide richer object information.
 #[serde_as]

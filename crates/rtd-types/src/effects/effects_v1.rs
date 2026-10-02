@@ -3,11 +3,13 @@
 
 use crate::accumulator_event::AccumulatorEvent;
 use crate::base_types::{
-    EpochId, ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest, random_object_ref,
+    EpochId, ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest, random_object_ref,
 };
 use crate::digests::{ObjectDigest, TransactionEventsDigest};
 use crate::effects::{InputConsensusObject, TransactionEffectsAPI, UnchangedConsensusKind};
-use crate::execution_status::{ExecutionFailureStatus, ExecutionStatus, MoveLocation};
+use crate::execution_status::{
+    ExecutionErrorKind, ExecutionFailure, ExecutionStatus, MoveLocation,
+};
 use crate::gas::GasCostSummary;
 use crate::object::Owner;
 use serde::{Deserialize, Serialize};
@@ -155,10 +157,10 @@ impl TransactionEffectsAPI for TransactionEffectsV1 {
     }
 
     fn move_abort(&self) -> Option<(MoveLocation, u64)> {
-        let ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::MoveAbort(move_location, code),
+        let ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::MoveAbort(move_location, code),
             ..
-        } = self.status()
+        }) = self.status()
         else {
             return None;
         };
@@ -173,7 +175,7 @@ impl TransactionEffectsAPI for TransactionEffectsV1 {
         unimplemented!("Only supposed by v2 and above");
     }
 
-    fn input_consensus_objects(&self) -> Vec<InputConsensusObject> {
+    fn accessed_consensus_objects(&self) -> Vec<InputConsensusObject> {
         let modified: HashSet<_> = self.modified_at_versions.iter().map(|(r, _)| r).collect();
         self.shared_objects
             .iter()
@@ -308,8 +310,8 @@ impl TransactionEffectsAPI for TransactionEffectsV1 {
         vec![]
     }
 
-    fn gas_object(&self) -> (ObjectRef, Owner) {
-        self.gas_object.clone()
+    fn gas_object(&self) -> Option<(ObjectRef, Owner)> {
+        Some(self.gas_object.clone())
     }
     fn events_digest(&self) -> Option<&TransactionEventsDigest> {
         self.events_digest.as_ref()
@@ -328,7 +330,7 @@ impl TransactionEffectsAPI for TransactionEffectsV1 {
     }
 
     fn unchanged_consensus_objects(&self) -> Vec<(ObjectID, UnchangedConsensusKind)> {
-        self.input_consensus_objects()
+        self.accessed_consensus_objects()
             .iter()
             .filter_map(|o| match o {
                 // In effects v1, the only unchanged consensus objects are read-only shared objects.

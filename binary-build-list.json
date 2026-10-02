@@ -4,18 +4,15 @@
         "rtd-node",
         "rtd-tool",
         "rtd-faucet",
-        "rtd-data-ingestion",
         "rtd-bridge",
         "rtd-bridge-cli",
-        "rtd-graphql-rpc",
-        "rtd-test-validator",
+        "rtd-fork",
         "move-analyzer"
     ],
     "internal_binaries": [
         "stress",
         "rtd-proxy",
         "rtd-metric-checker",
-        "rtd-analytics-indexer",
-        "rtd-security-watchdog"
+        "rtd-analytics-indexer"
 	]
 }

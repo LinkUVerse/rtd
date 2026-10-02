@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use linku_common::ZipDebugEqIteratorExt;
 use move_binary_format::{
     CompiledModule,
     compatibility::{self, Compatibility, InclusionCheck},
@@ -75,7 +76,7 @@ fn check_all_compatibilities(
         .map(|compat| {
             let compatibility_checks: Vec<_> = base
                 .iter()
-                .zip(upgraded.iter())
+                .zip_debug_eq(upgraded.iter())
                 .map(|(base, upgraded)| {
                     format!(
                         "{}::{}:\n\tbase->upgrade: {}\n\tupgrade->base: {}",
@@ -101,7 +102,7 @@ fn check_all_compatibilities(
         .map(|compat| {
             let compatibility_checks: Vec<_> = base
                 .iter()
-                .zip(upgraded.iter())
+                .zip_debug_eq(upgraded.iter())
                 .map(|(base, upgraded)| {
                     format!(
                         "{}::{}:\n\tbase->upgrade: {}\n\tupgrade->base: {}",
@@ -127,4 +128,15 @@ fn check_all_compatibilities(
     Ok(())
 }
 
+#[cfg(not(msim))]
 datatest_stable::harness!(run_test, TEST_DIR, r".*\.package$");
+
+// These tests only compile Move packages and compare them, with no network or
+// timing behavior for the simulator to perturb, so running them under msim only
+// costs time. Expose an empty harness so nextest still sees a well-formed binary.
+#[cfg(msim)]
+fn main() {
+    // Referenced so the otherwise-unused test fn does not trip dead-code warnings.
+    let _ = (run_test, TEST_DIR);
+    datatest_stable::runner(&[]);
+}

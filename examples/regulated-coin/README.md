@@ -1,1 +1,1 @@
-This example is based on the code in the following repo: https://github.com/LinkUVerse/regulated-coin-sample
+This inherited Move example has not been verified as an RTD deployment. There is no maintained RTD fork repository for it. Compile and test the package against this fork before using it; see [example status](../RTD_FORK_STATUS.md).

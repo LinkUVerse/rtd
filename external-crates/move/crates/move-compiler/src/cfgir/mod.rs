@@ -12,6 +12,7 @@ mod remove_no_ops;
 pub(crate) mod translate;
 pub mod visitor;
 
+pub(crate) mod constants;
 mod optimize;
 
 use crate::{
@@ -24,7 +25,7 @@ use crate::{
 use cfg::*;
 use move_ir_types::location::Loc;
 use move_symbol_pool::Symbol;
-use optimize::optimize;
+use optimize::{optimize, report_always_erroring_operations};
 use std::{collections::BTreeSet, sync::Arc};
 
 pub struct CFGContext<'a> {

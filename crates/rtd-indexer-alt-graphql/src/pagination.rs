@@ -1,17 +1,27 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::ops::Range;
 
-use async_graphql::{
-    OutputType,
-    connection::{Connection, CursorType, Edge},
-    registry::MetaField,
-};
+use anyhow::Context as _;
+use async_graphql::Object;
+use async_graphql::OutputType;
+use async_graphql::TypeName;
+use async_graphql::connection::Connection;
+use async_graphql::connection::CursorType;
+use async_graphql::connection::Edge;
+use async_graphql::connection::EmptyFields;
+use async_graphql::connection::PageInfo;
+use async_graphql::registry::MetaField;
+use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::StreamPage;
 use rtd_pg_db::query::Query;
+use rtd_rpc_cursor::CursorToken;
 use rtd_sql_macro::query;
 
 use crate::api::scalars::cursor::JsonCursor;
+use crate::error::RpcError;
 
 /// Configuration for page size limits, specifying a max multi-get size, as well as a default and
 /// max page size for each paginated fields. Page limits can be customized for specific fields,
@@ -56,6 +66,13 @@ pub(crate) struct Page<C> {
 pub(crate) enum End {
     Front,
     Back,
+}
+
+/// Connection for fields served by a gRPC stream. Unlike the stock `Connection`, pages may be
+/// partially filled, with `PageInfo` cursors decoupled from the edge list.
+pub(crate) struct StreamConnection<N: OutputType> {
+    pub edges: Vec<Edge<String, N, EmptyFields>>,
+    pub page_info: PageInfo,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -178,6 +195,30 @@ impl<C> Page<C> {
 }
 
 impl Page<JsonCursor<usize>> {
+    /// Translate the cursors of this Page into a range of indices, in [0, total).
+    ///
+    /// Returns `None` if the cursors are inconsistent, otherwise returns Some(lo..hi) where `lo`
+    /// and `hi` are the inclusive lower and exclusive upper bounds of the range of indices
+    /// corresponding to the cursors for this page.
+    pub(crate) fn range(&self, total: usize) -> Option<Range<usize>> {
+        let mut lo = self.after().map_or(0, |a| a.saturating_add(1)).min(total);
+        let mut hi = self.before().map_or(total, |b| **b).min(total);
+
+        if hi <= lo {
+            return None;
+        }
+
+        if (hi - lo) > self.limit() {
+            if self.is_from_front() {
+                hi = lo + self.limit();
+            } else {
+                lo = hi - self.limit();
+            }
+        }
+
+        Some(lo..hi)
+    }
+
     /// Treat the cursors of this Page as indices into a range [0, total).
     ///
     /// Returns a connection where the cursors correspond to a sub-range of indices and the
@@ -187,23 +228,14 @@ impl Page<JsonCursor<usize>> {
         total: usize,
         node: impl Fn(usize) -> Result<N, E>,
     ) -> Result<Connection<String, N>, E> {
-        let mut lo = self.after().map_or(0, |a| a.saturating_add(1)).min(total);
-        let mut hi = self.before().map_or(total, |b| **b).min(total);
         let mut conn = Connection::new(false, false);
-
-        if hi <= lo {
+        let Some(range) = self.range(total) else {
             return Ok(conn);
-        } else if (hi - lo) > self.limit() {
-            if self.is_from_front() {
-                hi = lo + self.limit();
-            } else {
-                lo = hi - self.limit();
-            }
-        }
+        };
 
-        conn.has_previous_page = 0 < lo;
-        conn.has_next_page = hi < total;
-        for i in lo..hi {
+        conn.has_previous_page = 0 < range.start;
+        conn.has_next_page = range.end < total;
+        for i in range {
             conn.edges
                 .push(Edge::new(JsonCursor::new(i).encode_cursor(), node(i)?));
         }
@@ -311,6 +343,119 @@ impl<C: CursorType + Eq + PartialEq + Clone> Page<C> {
         }
 
         Ok(conn)
+    }
+}
+
+impl<C> Page<C>
+where
+    C: CursorType + TryFrom<CursorToken, Error = anyhow::Error>,
+{
+    /// Translate a `StreamPage` into a `StreamConnection`. The server is expected to have already
+    /// applied page bounds and limit.
+    ///
+    /// `node` converts one stream payload into the connection's node type; cursors are minted
+    /// here, from the server's per-item tokens. Edges are returned in ascending order (the stream
+    /// emits descending order when paginating from the back).
+    pub(crate) fn paginate_stream_results<T, N: OutputType>(
+        &self,
+        result: StreamPage<T>,
+        node: impl Fn(&T) -> Result<N, RpcError>,
+    ) -> Result<StreamConnection<N>, RpcError> {
+        let more = result.has_more();
+        let start = result.first_cursor().cloned();
+        let end = result.last_cursor().cloned();
+        let mut items = result.items;
+
+        let (has_previous_page, has_next_page, start, end) = if self.is_from_front() {
+            (self.after().is_some(), more, start, end)
+        } else {
+            items.reverse();
+            (more, self.before().is_some(), end, start)
+        };
+
+        let mut edges = Vec::with_capacity(items.len());
+        for item in items {
+            edges.push(Edge::new(
+                Self::encode_stream_cursor(&item.cursor)?,
+                node(&item.payload)?,
+            ));
+        }
+
+        Ok(StreamConnection {
+            edges,
+            page_info: PageInfo {
+                has_previous_page,
+                has_next_page,
+                start_cursor: start.map(|b| Self::encode_stream_cursor(&b)).transpose()?,
+                end_cursor: end.map(|b| Self::encode_stream_cursor(&b)).transpose()?,
+            },
+        })
+    }
+
+    /// Re-encode a server-minted cursor (raw encoded `CursorToken` bytes from the gRPC stream) as a
+    /// GraphQL cursor string in this page's cursor format.
+    fn encode_stream_cursor(bytes: &[u8]) -> Result<String, RpcError> {
+        let token = CursorToken::decode(bytes).context("Failed to decode stream cursor")?;
+        let cursor = C::try_from(token).context("Unexpected position in stream cursor")?;
+        Ok(cursor.encode_cursor())
+    }
+}
+
+#[Object(name_type)]
+impl<N: OutputType> StreamConnection<N> {
+    /// Information to aid in pagination.
+    async fn page_info(&self) -> &PageInfo {
+        &self.page_info
+    }
+
+    /// A list of edges.
+    async fn edges(&self) -> &[Edge<String, N, EmptyFields>] {
+        &self.edges
+    }
+
+    /// A list of nodes.
+    async fn nodes(&self) -> Vec<&N> {
+        self.edges.iter().map(|e| &e.node).collect()
+    }
+}
+
+impl<N: OutputType> StreamConnection<N> {
+    pub(crate) fn empty() -> Self {
+        Self {
+            edges: vec![],
+            page_info: PageInfo {
+                has_previous_page: false,
+                has_next_page: false,
+                start_cursor: None,
+                end_cursor: None,
+            },
+        }
+    }
+}
+
+impl<N: OutputType> TypeName for StreamConnection<N> {
+    /// Names each instantiation `{Node}Connection`, matching the convention of the stock
+    /// `Connection`.
+    fn type_name() -> Cow<'static, str> {
+        format!("{}Connection", N::type_name()).into()
+    }
+}
+
+impl<N: OutputType> From<Connection<String, N>> for StreamConnection<N> {
+    /// Convert a stock async-graphql `Connection` (as produced by `Page::paginate_results`) into
+    /// the custom shape. Cursors are derived from edges, matching stock semantics.
+    fn from(conn: Connection<String, N>) -> Self {
+        let start_cursor = conn.edges.first().map(|e| e.cursor.clone());
+        let end_cursor = conn.edges.last().map(|e| e.cursor.clone());
+        Self {
+            edges: conn.edges,
+            page_info: PageInfo {
+                has_previous_page: conn.has_previous_page,
+                has_next_page: conn.has_next_page,
+                start_cursor,
+                end_cursor,
+            },
+        }
     }
 }
 
@@ -439,25 +584,6 @@ mod tests {
                 max: 100,
             })
         ));
-    }
-
-    #[test]
-    fn test_paginate_indices_clamps_out_of_bounds_cursors() {
-        let page = Page {
-            after: Some(JsonCursor::new(1_000)),
-            before: Some(JsonCursor::new(2_000)),
-            limit: 10,
-            end: End::Front,
-        };
-
-        let values = [0, 1, 2];
-        let conn = page
-            .paginate_indices(values.len(), |index| Ok::<_, Infallible>(values[index]))
-            .unwrap();
-
-        assert!(conn.edges.is_empty());
-        assert!(!conn.has_previous_page);
-        assert!(!conn.has_next_page);
     }
 
     #[test]
@@ -604,5 +730,84 @@ mod tests {
         assert!(!conn.has_previous_page);
         assert!(!conn.has_next_page);
         assert_eq!(expect, actual);
+    }
+
+    #[test]
+    fn test_range_empty_when_bounds_cross_or_touch() {
+        use JsonCursor as C;
+
+        let limits = PageLimits {
+            default: 5,
+            max: 10,
+        };
+
+        let touch: Page<C<usize>> =
+            Page::from_params(&limits, None, Some(C::new(2)), None, Some(C::new(3))).unwrap();
+
+        let cross: Page<C<usize>> =
+            Page::from_params(&limits, None, Some(C::new(4)), None, Some(C::new(3))).unwrap();
+
+        assert_eq!(touch.range(10), None);
+        assert_eq!(cross.range(10), None);
+    }
+
+    #[test]
+    fn test_range_trims_from_front() {
+        use JsonCursor as C;
+
+        let limits = PageLimits {
+            default: 5,
+            max: 10,
+        };
+
+        let page: Page<C<usize>> =
+            Page::from_params(&limits, Some(2), Some(C::new(1)), None, None).unwrap();
+
+        assert_eq!(page.range(10), Some(2..4));
+    }
+
+    #[test]
+    fn test_range_trims_from_back() {
+        use JsonCursor as C;
+
+        let limits = PageLimits {
+            default: 5,
+            max: 10,
+        };
+
+        let page: Page<C<usize>> =
+            Page::from_params(&limits, None, None, Some(2), Some(C::new(8))).unwrap();
+
+        assert_eq!(page.range(10), Some(6..8));
+    }
+
+    #[test]
+    fn test_range_clamps_before_to_total() {
+        use JsonCursor as C;
+
+        let limits = PageLimits {
+            default: 5,
+            max: 10,
+        };
+
+        let page: Page<JsonCursor<usize>> =
+            Page::from_params(&limits, None, None, None, Some(C::new(usize::MAX))).unwrap();
+
+        assert_eq!(page.range(4), Some(0..4));
+    }
+
+    #[test]
+    fn test_range_after_overflow_saturates_then_clamps() {
+        use JsonCursor as C;
+
+        let limits = PageLimits {
+            default: 5,
+            max: 10,
+        };
+
+        let page: Page<C<usize>> =
+            Page::from_params(&limits, None, Some(C::new(usize::MAX)), None, None).unwrap();
+
+        assert_eq!(page.range(10), None);
     }
 }

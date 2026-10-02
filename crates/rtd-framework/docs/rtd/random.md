@@ -397,7 +397,7 @@ Create a generator. Can be used to derive up to MAX_U16 * 32 random bytes.
 Using randomness can be error-prone if you don't observe the subtleties in its correct use, for example, randomness
 dependent code might be exploitable to attacks that carefully set the gas budget
 in a way that breaks security. For more information, see:
-https://docs.rtd.io/guides/developer/advanced/randomness-onchain
+RTD public documentation for on-chain randomness has not been published yet.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/random.md#rtd_random_new_generator">new_generator</a>(r: &<a href="../rtd/random.md#rtd_random_Random">rtd::random::Random</a>, ctx: &<b>mut</b> <a href="../rtd/tx_context.md#rtd_tx_context_TxContext">rtd::tx_context::TxContext</a>): <a href="../rtd/random.md#rtd_random_RandomGenerator">rtd::random::RandomGenerator</a>

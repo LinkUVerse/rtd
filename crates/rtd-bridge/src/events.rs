@@ -13,13 +13,12 @@ use crate::error::BridgeError;
 use crate::error::BridgeResult;
 use crate::types::BridgeAction;
 use crate::types::RtdToEthTokenTransfer;
-use ethers::types::Address as EthAddress;
+use crate::types::RtdToEthTokenTransferV2;
+use alloy::primitives::Address as EthAddress;
 use fastcrypto::encoding::Encoding;
 use fastcrypto::encoding::Hex;
 use move_core_types::language_storage::StructTag;
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use rtd_json_rpc_types::RtdEvent;
 use rtd_types::BRIDGE_PACKAGE_ID;
 use rtd_types::TypeTag;
@@ -30,7 +29,10 @@ use rtd_types::bridge::MoveTypeCommitteeMember;
 use rtd_types::bridge::MoveTypeCommitteeMemberRegistration;
 use rtd_types::collection_types::VecMap;
 use rtd_types::crypto::ToFromBytes;
+use rtd_types::event::Event;
 use rtd_types::parse_rtd_type_tag;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 // `TokendDepositedEvent` emitted in bridge.move
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -42,6 +44,19 @@ pub struct MoveTokenDepositedEvent {
     pub target_address: Vec<u8>,
     pub token_type: u8,
     pub amount_rtd_adjusted: u64,
+}
+
+// `TokendDepositedEventV2` emitted in bridge.move
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+pub struct MoveTokenDepositedEventV2 {
+    pub seq_num: u64,
+    pub source_chain: u8,
+    pub sender_address: Vec<u8>,
+    pub target_chain: u8,
+    pub target_address: Vec<u8>,
+    pub token_type: u8,
+    pub amount_rtd_adjusted: u64,
+    pub timestamp_ms: u64,
 }
 
 macro_rules! new_move_event {
@@ -221,6 +236,20 @@ pub struct EmittedRtdToEthTokenBridgeV1 {
     pub amount_rtd_adjusted: u64,
 }
 
+// Sanitized version of MoveTokenDepositedEventV2
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Hash)]
+pub struct EmittedRtdToEthTokenBridgeV2 {
+    pub nonce: u64,
+    pub rtd_chain_id: BridgeChainId,
+    pub eth_chain_id: BridgeChainId,
+    pub rtd_address: RtdAddress,
+    pub eth_address: EthAddress,
+    pub token_id: u8,
+    // The amount of tokens deposited with decimal points on Rtd side
+    pub amount_rtd_adjusted: u64,
+    pub timestamp_ms: u64,
+}
+
 // Sanitized version of MoveCommitteeUpdateEvent
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct CommitteeUpdate {
@@ -342,6 +371,60 @@ impl TryFrom<MoveTokenDepositedEvent> for EmittedRtdToEthTokenBridgeV1 {
     }
 }
 
+impl TryFrom<MoveTokenDepositedEventV2> for EmittedRtdToEthTokenBridgeV2 {
+    type Error = BridgeError;
+
+    fn try_from(event: MoveTokenDepositedEventV2) -> BridgeResult<Self> {
+        if event.amount_rtd_adjusted == 0 {
+            return Err(BridgeError::ZeroValueBridgeTransfer(format!(
+                "Failed to convert MoveTokenDepositedEvent to EmittedRtdToEthTokenBridgeV1. Manual intervention is required. 0 value transfer should not be allowed in Move: {:?}",
+                event,
+            )));
+        }
+
+        let token_id = event.token_type;
+        let rtd_chain_id = BridgeChainId::try_from(event.source_chain).map_err(|_e| {
+            BridgeError::Generic(format!(
+                "Failed to convert MoveTokenDepositedEvent to EmittedRtdToEthTokenBridgeV1. Failed to convert source chain {} to BridgeChainId",
+                event.token_type,
+            ))
+        })?;
+        let eth_chain_id = BridgeChainId::try_from(event.target_chain).map_err(|_e| {
+            BridgeError::Generic(format!(
+                "Failed to convert MoveTokenDepositedEvent to EmittedRtdToEthTokenBridgeV1. Failed to convert target chain {} to BridgeChainId",
+                event.token_type,
+            ))
+        })?;
+        if !rtd_chain_id.is_rtd_chain() {
+            return Err(BridgeError::Generic(format!(
+                "Failed to convert MoveTokenDepositedEvent to EmittedRtdToEthTokenBridgeV1. Invalid source chain {}",
+                event.source_chain
+            )));
+        }
+        if eth_chain_id.is_rtd_chain() {
+            return Err(BridgeError::Generic(format!(
+                "Failed to convert MoveTokenDepositedEvent to EmittedRtdToEthTokenBridgeV1. Invalid target chain {}",
+                event.target_chain
+            )));
+        }
+
+        let rtd_address = RtdAddress::from_bytes(event.sender_address)
+            .map_err(|e| BridgeError::Generic(format!("Failed to convert MoveTokenDepositedEvent to EmittedRtdToEthTokenBridgeV1. Failed to convert sender_address to RtdAddress: {:?}", e)))?;
+        let eth_address = EthAddress::from_str(&Hex::encode(&event.target_address))?;
+
+        Ok(Self {
+            nonce: event.seq_num,
+            rtd_chain_id,
+            eth_chain_id,
+            rtd_address,
+            eth_address,
+            token_id,
+            amount_rtd_adjusted: event.amount_rtd_adjusted,
+            timestamp_ms: event.timestamp_ms,
+        })
+    }
+}
+
 crate::declare_events!(
     RtdToEthTokenBridgeV1(EmittedRtdToEthTokenBridgeV1) => ("bridge::TokenDepositedEvent", MoveTokenDepositedEvent),
     TokenTransferApproved(TokenTransferApproved) => ("bridge::TokenTransferApproved", MoveTokenTransferApproved),
@@ -360,6 +443,7 @@ crate::declare_events!(
     NewTokenEvent(NewTokenEvent) => ("treasury::NewTokenEvent", MoveNewTokenEvent),
     UpdateTokenPriceEvent(UpdateTokenPriceEvent) => ("treasury::UpdateTokenPriceEvent", UpdateTokenPriceEvent),
     UpdateRouteLimitEvent(UpdateRouteLimitEvent) => ("limiter::UpdateRouteLimitEvent", UpdateRouteLimitEvent),
+    RtdToEthTokenBridgeV2(EmittedRtdToEthTokenBridgeV2) => ("bridge::TokenDepositedEventV2", MoveTokenDepositedEventV2),
 
     // Add new event types here. Format:
     // EnumVariantName(Struct) => ("{module}::{event_struct}", CorrespondingMoveStruct)
@@ -396,6 +480,23 @@ macro_rules! declare_events {
                 )*
                 Ok(None)
             }
+
+            pub fn try_from_event(event: &Event) -> BridgeResult<Option<RtdBridgeEvent>> {
+                init_all_struct_tags(); // Ensure all tags are initialized
+
+                if event.type_.address != BRIDGE_PACKAGE_ID.into() {
+                    return Ok(None);
+                }
+
+                // Unwrap safe: we inited above
+                $(
+                    if &event.type_ == $variant.get().unwrap() {
+                        let event_struct: $event_struct = bcs::from_bytes(&event.contents).map_err(|e| BridgeError::InternalError(format!("Failed to deserialize event to {}: {:?}", stringify!($event_struct), e)))?;
+                        return Ok(Some(RtdBridgeEvent::$variant(event_struct.try_into()?)));
+                    }
+                )*
+                Ok(None)
+            }
         }
     };
 }
@@ -424,6 +525,18 @@ impl RtdBridgeEvent {
                     amount_adjusted: amount_rtd_adjusted,
                 }))
             }
+            RtdBridgeEvent::RtdToEthTokenBridgeV2(event) => Some(
+                BridgeAction::RtdToEthTokenTransferV2(RtdToEthTokenTransferV2 {
+                    nonce: event.nonce,
+                    rtd_chain_id: event.rtd_chain_id,
+                    eth_chain_id: event.eth_chain_id,
+                    rtd_address: event.rtd_address,
+                    eth_address: event.eth_address,
+                    token_id: event.token_id,
+                    amount_adjusted: event.amount_rtd_adjusted,
+                    timestamp_ms: event.timestamp_ms,
+                }),
+            ),
             RtdBridgeEvent::TokenTransferApproved(_event) => None,
             RtdBridgeEvent::TokenTransferClaimed(_event) => None,
             RtdBridgeEvent::TokenTransferAlreadyApproved(_event) => None,
@@ -451,7 +564,7 @@ pub mod tests {
     use crate::e2e_tests::test_utils::BridgeTestClusterBuilder;
     use crate::types::BridgeAction;
     use crate::types::RtdToEthBridgeAction;
-    use ethers::types::Address as EthAddress;
+    use alloy::primitives::Address as EthAddress;
     use rtd_json_rpc_types::BcsEvent;
     use rtd_json_rpc_types::RtdEvent;
     use rtd_types::Identifier;
@@ -480,7 +593,7 @@ pub mod tests {
             source_chain: sanitized_event.rtd_chain_id as u8,
             sender_address: sanitized_event.rtd_address.to_vec(),
             target_chain: sanitized_event.eth_chain_id as u8,
-            target_address: sanitized_event.eth_address.as_bytes().to_vec(),
+            target_address: sanitized_event.eth_address.to_vec(),
             token_type: sanitized_event.token_id,
             amount_rtd_adjusted: sanitized_event.amount_rtd_adjusted,
         };
@@ -530,12 +643,12 @@ pub mod tests {
                     TokenRegistrationEvent.get().unwrap().clone(),
                     NewTokenEvent.get().unwrap().clone(),
                 ]),
-                false,
+                4,
             )
             .await;
         let mut mask = 0u8;
         for event in events.iter() {
-            match RtdBridgeEvent::try_from_rtd_event(event).unwrap().unwrap() {
+            match RtdBridgeEvent::try_from_event(event).unwrap().unwrap() {
                 RtdBridgeEvent::CommitteeMemberRegistration(_event) => mask |= 0x1,
                 RtdBridgeEvent::CommitteeUpdateEvent(_event) => mask |= 0x2,
                 RtdBridgeEvent::TokenRegistrationEvent(_event) => mask |= 0x4,
@@ -584,7 +697,7 @@ pub mod tests {
             source_chain: BridgeChainId::RtdTestnet as u8,
             sender_address: RtdAddress::random_for_testing_only().to_vec(),
             target_chain: BridgeChainId::EthSepolia as u8,
-            target_address: EthAddress::random().as_bytes().to_vec(),
+            target_address: EthAddress::random().to_vec(),
             token_type: TOKEN_ID_RTD,
             amount_rtd_adjusted: 0,
         };

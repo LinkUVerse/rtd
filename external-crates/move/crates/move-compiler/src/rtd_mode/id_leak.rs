@@ -17,18 +17,19 @@ use crate::{
     expansion::ast::ModuleIdent,
     hlir::ast::{self as H, Exp, Label, ModuleCall, SingleType, Type, Type_, Var},
     parser::ast::{Ability_, TargetKind},
-    shared::{Identifier, program_info::TypingProgramInfo},
     rtd_mode::{
         ACCUMULATOR_CREATE, ACCUMULATOR_MODULE_NAME, ADDRESS_ALIAS_CREATE,
         ADDRESS_ALIAS_MODULE_NAME, AUTHENTICATOR_STATE_CREATE, AUTHENTICATOR_STATE_MODULE_NAME,
         BRIDGE_ADDR_VALUE, BRIDGE_CREATE, BRIDGE_MODULE_NAME, CLOCK_MODULE_NAME,
         COIN_REGISTRY_MODULE_NAME, DENY_LIST_CREATE, DENY_LIST_MODULE_NAME, DERIVED_OBJECT_CLAIM,
-        DERIVED_OBJECT_MODULE_NAME, DISPLAY_REGISTRY_MODULE_NAME, ID_LEAK_DIAG, OBJECT_MODULE_NAME,
-        OBJECT_NEW, OBJECT_NEW_UID_FROM_HASH, RANDOMNESS_MODULE_NAME, RANDOMNESS_STATE_CREATE,
+        DERIVED_OBJECT_MODULE_NAME, DISPLAY_REGISTRY_MODULE_NAME, FORWARDING_ADDRESS_CREATE,
+        FORWARDING_ADDRESS_MODULE_NAME, ID_LEAK_DIAG, OBJECT_MODULE_NAME, OBJECT_NEW,
+        OBJECT_NEW_UID_FROM_HASH, RANDOMNESS_MODULE_NAME, RANDOMNESS_STATE_CREATE,
         REGISTRY_CREATE_FUNCTION_NAME, RTD_ADDR_NAME, RTD_ADDR_VALUE, RTD_CLOCK_CREATE,
         RTD_SYSTEM_ADDR_VALUE, RTD_SYSTEM_CREATE, RTD_SYSTEM_MODULE_NAME,
         TEST_SCENARIO_MODULE_NAME, TS_NEW_OBJECT, UID_TYPE_NAME,
     },
+    shared::{Identifier, program_info::TypingProgramInfo},
 };
 use move_core_types::account_address::AccountAddress;
 use move_ir_types::location::*;
@@ -79,6 +80,11 @@ pub const FUNCTIONS_TO_SKIP: &[(AccountAddress, Symbol, Symbol)] = &[
         RTD_ADDR_VALUE,
         ADDRESS_ALIAS_MODULE_NAME,
         ADDRESS_ALIAS_CREATE,
+    ),
+    (
+        RTD_ADDR_VALUE,
+        FORWARDING_ADDRESS_MODULE_NAME,
+        FORWARDING_ADDRESS_CREATE,
     ),
 ];
 
@@ -172,17 +178,27 @@ impl SimpleAbsInt for IDLeakVerifierAI<'_> {
     type State = State;
     type ExecutionContext = ExecutionContext;
 
-    fn finish(&mut self, _final_states: BTreeMap<Label, State>, diags: Diagnostics) -> Diagnostics {
+    fn finish(
+        &mut self,
+        _final_states: BTreeMap<Label, crate::cfgir::absint::BlockStates<State>>,
+        diags: Diagnostics,
+    ) -> Diagnostics {
         diags
     }
 
-    fn start_command(&self, _: &mut State) -> ExecutionContext {
+    fn start_command(&self, _label: Label, _idx: usize, _: &mut State) -> ExecutionContext {
         ExecutionContext {
             diags: Diagnostics::new(),
         }
     }
 
-    fn finish_command(&self, context: ExecutionContext, _state: &mut State) -> Diagnostics {
+    fn finish_command(
+        &self,
+        _label: Label,
+        _idx: usize,
+        context: ExecutionContext,
+        _state: &mut State,
+    ) -> Diagnostics {
         let ExecutionContext { diags } = context;
         diags
     }
@@ -197,7 +213,7 @@ impl SimpleAbsInt for IDLeakVerifierAI<'_> {
 
         let e__ = &e.exp.value;
         let E::Pack(s, _tys, fields) = e__ else {
-            // Not a struct.
+            // not a struct
             return None;
         };
         let abilities = {
@@ -205,14 +221,14 @@ impl SimpleAbsInt for IDLeakVerifierAI<'_> {
             &minfo.structs.get(s)?.abilities
         };
         if !abilities.has_ability_(Ability_::Key) {
-            // Not an object.
+            // not an object
             return None;
         }
 
         let mut fields_iter = fields.iter();
         let Some((f, _, first_e)) = fields_iter.next() else {
             // All structs must have at least one field and for an object the first must be a UID,
-            // but the construction/pack might be ill-typed.
+            // but the construction/pack might be ill-typed
             return None;
         };
         let first_value = self.exp(context, state, first_e).pop().unwrap_or_default();

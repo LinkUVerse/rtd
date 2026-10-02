@@ -40,7 +40,6 @@ list.
 
 
 <pre><code><b>use</b> <a href="../rtd/accumulator.md#rtd_accumulator">rtd::accumulator</a>;
-<b>use</b> <a href="../rtd/accumulator_metadata.md#rtd_accumulator_metadata">rtd::accumulator_metadata</a>;
 <b>use</b> <a href="../rtd/accumulator_settlement.md#rtd_accumulator_settlement">rtd::accumulator_settlement</a>;
 <b>use</b> <a href="../rtd/address.md#rtd_address">rtd::address</a>;
 <b>use</b> <a href="../rtd/bag.md#rtd_bag">rtd::bag</a>;
@@ -773,7 +772,7 @@ meaningless to add them to the deny list.
 
 <pre><code><b>fun</b> <a href="../rtd/deny_list.md#rtd_deny_list_per_type_exists">per_type_exists</a>(<a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>: &<a href="../rtd/deny_list.md#rtd_deny_list_DenyList">DenyList</a>, per_type_index: u64, per_type_key: vector&lt;u8&gt;): bool {
     <b>let</b> key = <a href="../rtd/deny_list.md#rtd_deny_list_ConfigKey">ConfigKey</a> { per_type_index, per_type_key };
-    ofield::exists_(&<a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.id, key)
+    ofield::exists(&<a href="../rtd/deny_list.md#rtd_deny_list">deny_list</a>.id, key)
 }
 </code></pre>
 

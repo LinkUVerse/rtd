@@ -1,21 +1,23 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::time::Duration;
-
-use anyhow::{anyhow, bail};
-use axum::{
-    Extension, Json,
-    extract::Query,
-    http::StatusCode,
-    response::{IntoResponse, Response as AxumResponse},
-};
+use anyhow::anyhow;
+use anyhow::ensure;
+use async_graphql::indexmap::IndexMap;
+use axum::Extension;
+use axum::Json;
+use axum::extract::Query;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response as AxumResponse;
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use tokio::net::TcpStream;
 use url::Url;
 
-use crate::{WatermarksLock, config::HealthConfig};
+use crate::WatermarksLock;
+use crate::config::HealthConfig;
 
 /// Extension that holds a DB URL to probe as part of health checks.
 #[derive(Clone)]
@@ -30,10 +32,13 @@ pub(crate) struct Params {
 }
 
 /// Response body for the health check endpoint. This is output as JSON.
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub(crate) struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     checkpoint_lag_ms: Option<u64>,
+
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pipelines: IndexMap<String, u64>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     errors: Vec<String>,
@@ -48,44 +53,57 @@ pub(crate) async fn check(
     Extension(DbProbe(db_url)): Extension<DbProbe>,
     Query(params): Query<Params>,
 ) -> Response {
-    let mut errors = vec![];
+    let mut resp = Response::default();
 
-    let lag = match check_watermarks(&watermarks).await {
-        Ok(lag) => Some(lag),
+    if let Err(e) = check_connection(&db_url).await {
+        resp.errors.push(format!("DB probe failed: {e}"));
+    }
 
+    let (checkpoint_lag_ms, pipelines) = match check_watermarks(&watermarks).await {
+        Ok(watermark) => watermark,
         Err(e) => {
-            errors.push(e.to_string());
-            None
+            resp.errors.push(e.to_string());
+            return resp;
         }
     };
 
-    if let Err(e) = check_connection(&db_url).await {
-        errors.push(format!("DB probe failed: {e}"));
-    }
-
     let max_lag = params
         .max_checkpoint_lag_ms
-        .map(Duration::from_millis)
-        .unwrap_or(config.max_checkpoint_lag);
+        .unwrap_or(config.max_checkpoint_lag.as_millis() as u64);
 
-    if lag.is_some_and(|l| l > max_lag) {
-        errors.push("Watermark lag is too high".to_owned());
+    if checkpoint_lag_ms > max_lag {
+        resp.errors.push("Watermark lag is too high".to_owned());
     }
 
-    Response {
-        checkpoint_lag_ms: lag.map(|l| l.as_millis() as u64),
-        errors,
-    }
+    resp.checkpoint_lag_ms = Some(checkpoint_lag_ms);
+    resp.pipelines = pipelines;
+    resp
 }
 
 /// Returns the lag between the latest checkpoint the indexer is aware of and the current time.
-async fn check_watermarks(watermarks: &WatermarksLock) -> anyhow::Result<Duration> {
+async fn check_watermarks(
+    watermarks: &WatermarksLock,
+) -> anyhow::Result<(u64, IndexMap<String, u64>)> {
     let now = Utc::now();
-    let Some(then) = watermarks.read().await.timestamp_hi() else {
-        bail!("Invalid watermark timestamp");
-    };
+    let watermarks = watermarks.read().await;
 
-    Ok((now - then).to_std().unwrap_or_default())
+    ensure!(
+        watermarks.initialized(),
+        "Watermark has not been initialized"
+    );
+
+    let mut pipeline_lags: Vec<(String, u64)> = watermarks
+        .per_pipeline()
+        .iter()
+        .map(|(pipeline, watermark)| (pipeline.clone(), watermark.lag_ms(now)))
+        .collect();
+
+    pipeline_lags.sort_by(|(name_a, lag_a), (name_b, lag_b)| {
+        lag_b.cmp(lag_a).then_with(|| name_a.cmp(name_b))
+    });
+
+    let pipelines = pipeline_lags.into_iter().collect();
+    Ok((watermarks.lag_ms(now), pipelines))
 }
 
 /// Checks that the service can talk to the database.
@@ -115,5 +133,39 @@ impl IntoResponse for Response {
         };
 
         (status, Json(self)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use axum::Extension;
+    use axum::extract::Query;
+    use tokio::sync::RwLock;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_uninitialized_watermark_is_unhealthy() {
+        let response = check(
+            Extension(Arc::new(RwLock::new(Arc::new(
+                crate::task::watermark::Watermarks::default(),
+            )))),
+            Extension(HealthConfig::default()),
+            Extension(DbProbe(None)),
+            Query(Params {
+                max_checkpoint_lag_ms: None,
+            }),
+        )
+        .await;
+
+        assert_eq!(response.checkpoint_lag_ms, None);
+        assert!(response.pipelines.is_empty());
+        assert!(
+            response
+                .errors
+                .contains(&"Watermark has not been initialized".to_owned())
+        );
     }
 }

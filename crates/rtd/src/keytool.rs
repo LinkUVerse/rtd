@@ -1,40 +1,26 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use crate::zklogin_commands_util::{perform_zk_login_test_tx, read_cli_line};
+use crate::zklogin_commands_util::perform_zk_login_test_tx;
 use anyhow::anyhow;
-use aws_sdk_kms::{
-    Client as KmsClient,
-    primitives::Blob,
-    types::{MessageType, SigningAlgorithmSpec},
-};
 use bip32::DerivationPath;
 use clap::*;
 use fastcrypto::ed25519::Ed25519KeyPair;
 use fastcrypto::encoding::{Base64, Encoding, Hex};
 use fastcrypto::hash::HashFunction;
 use fastcrypto::jwt_utils::parse_and_validate_jwt;
-use fastcrypto::secp256k1::recoverable::Secp256k1Sig;
 use fastcrypto::traits::{KeyPair, ToFromBytes};
 use fastcrypto_zkp::bn254::utils::{
-    gen_address_seed, get_nonce, get_oidc_url, get_proof, get_test_issuer_jwt_token,
-    get_token_exchange_url,
+    gen_address_seed, get_nonce, get_proof, get_test_issuer_jwt_token,
 };
 use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
 use fastcrypto_zkp::bn254::zk_login::{OIDCProvider, ZkLoginInputs, fetch_jwks};
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
-use im::hashmap::HashMap as ImHashMap;
+use imbl::hashmap::HashMap as ImHashMap;
 use json_to_table::{Orientation, json_to_table};
+use linku_common::ZipDebugEqIteratorExt;
 use num_bigint::BigUint;
-use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use serde::Serialize;
-use serde_json::json;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope, PersonalMessage};
-use std::fmt::{Debug, Display, Formatter};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use rtd_keys::key_derive::generate_new_key;
 use rtd_keys::key_identity::KeyIdentity;
 use rtd_keys::keypair_file::{
@@ -42,11 +28,12 @@ use rtd_keys::keypair_file::{
     write_keypair_to_file,
 };
 use rtd_keys::keystore::{AccountKeystore, Keystore};
+use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::committee::EpochId;
 use rtd_types::crypto::{DefaultHash, PublicKey};
 use rtd_types::crypto::{
-    EncodeDecodeBase64, Signature, SignatureScheme, RtdKeyPair, ZkLoginPublicIdentifier,
+    EncodeDecodeBase64, RtdKeyPair, Signature, SignatureScheme, ZkLoginPublicIdentifier,
     get_authority_key_pair,
 };
 use rtd_types::error::RtdResult;
@@ -56,6 +43,13 @@ use rtd_types::signature::{GenericSignature, VerifyParams};
 use rtd_types::signature_verification::VerifiedDigestCache;
 use rtd_types::transaction::{TransactionData, TransactionDataAPI};
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
+use serde::Serialize;
+use serde_json::json;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope, PersonalMessage};
+use std::fmt::{Debug, Display, Formatter};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tabled::builder::Builder;
 use tabled::settings::Rotate;
 use tabled::settings::{Modify, Width, object::Rows};
@@ -206,29 +200,12 @@ pub enum KeyToolCommand {
         #[clap(long)]
         intent: Option<Intent>,
     },
-    /// Creates a signature by leveraging AWS KMS. Pass in a key-id to leverage Amazon
-    /// KMS to sign a message and the base64 pubkey.
-    /// Generate PubKey from pem using LinkUVerse/base64pemkey
-    /// Any signature commits to a [struct IntentMessage] consisting of the Base64 encoded
-    /// of the BCS serialized transaction bytes itself and its intent. If intent is absent,
-    /// default will be used.
-    SignKMS {
-        #[clap(long)]
-        data: String,
-        #[clap(long)]
-        keyid: String,
-        #[clap(long)]
-        intent: Option<Intent>,
-        #[clap(long)]
-        base64pk: String,
-    },
     /// This takes [enum RtdKeyPair] of Base64 encoded of 33-byte `flag || privkey`). It
     /// outputs the keypair into a file at the current directory where the address is the filename,
     /// and prints out its Rtd address, Base64 encoded public key, the key scheme, and the key scheme flag.
     Unpack { keypair: String },
 
-    /// Given the max_epoch, generate an OAuth url, ask user to paste the redirect with id_token, call salt server, then call the prover server,
-    /// create a test transaction, use the ephemeral key to sign and execute it by assembling to a serialized zkLogin signature.
+    /// Disabled until RTD OAuth clients, redirect URLs, and zkLogin services have been configured.
     ZkLoginSignAndExecuteTx {
         #[clap(long)]
         max_epoch: EpochId,
@@ -242,7 +219,7 @@ pub enum KeyToolCommand {
         sign_with_sk: bool, // if true, execute tx with the traditional sig (in the multisig), otherwise with the zklogin sig.
     },
 
-    /// A workaround to the above command because sometimes token pasting does not work (for Facebook). All the inputs required here are printed from the command above.
+    /// Execute a zkLogin test transaction with a token and parameters supplied by a separately configured RTD client.
     ZkLoginEnterToken {
         #[clap(long)]
         parsed_token: String,
@@ -406,12 +383,6 @@ pub struct PrivateKeyBase64 {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SerializedSig {
-    serialized_sig_base64: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SignData {
     rtd_address: RtdAddress,
     // Base64 encoded string of serialized transaction data.
@@ -473,19 +444,23 @@ pub enum CommandOutput {
     PrivateKeyBase64(PrivateKeyBase64),
     Show(Key),
     Sign(SignData),
-    SignKMS(SerializedSig),
     ZkLoginSignAndExecuteTx(ZkLoginSignAndExecuteTx),
     ZkLoginInsecureSignPersonalMessage(ZkLoginInsecureSignPersonalMessage),
     ZkLoginSigVerify(ZkLoginSigVerifyResponse),
 }
 
 impl KeyToolCommand {
-    pub async fn execute(self, keystore: &mut Keystore) -> Result<CommandOutput, anyhow::Error> {
+    pub async fn execute(
+        self,
+        context: &mut WalletContext,
+    ) -> Result<CommandOutput, anyhow::Error> {
         Ok(match self {
             KeyToolCommand::Alias {
                 old_alias,
                 new_alias,
             } => {
+                let keystore: &mut Keystore =
+                    context.get_keystore_by_identity_mut(&KeyIdentity::Alias(old_alias.clone()))?;
                 let new_alias = keystore
                     .update_alias(&old_alias, new_alias.as_deref())
                     .await?;
@@ -528,7 +503,7 @@ impl KeyToolCommand {
                     sig_verify_result: "".to_string(),
                 };
 
-                for (sig, i) in sigs.iter().zip(bitmap) {
+                for (sig, i) in sigs.iter().zip_debug_eq(bitmap) {
                     let (pk, w) = pks
                         .get(i as usize)
                         .ok_or(anyhow!("Invalid public keys index".to_string()))?;
@@ -539,8 +514,8 @@ impl KeyToolCommand {
                     })
                 }
 
-                if tx_bytes.is_some() {
-                    let tx_bytes = Base64::decode(&tx_bytes.unwrap())
+                if let Some(tx_bytes) = tx_bytes {
+                    let tx_bytes = Base64::decode(&tx_bytes)
                         .map_err(|e| anyhow!("Invalid base64 tx bytes: {:?}", e))?;
                     let tx_data: TransactionData = bcs::from_bytes(&tx_bytes)?;
                     let s = GenericSignature::MultiSig(multisig);
@@ -638,11 +613,11 @@ impl KeyToolCommand {
                     Ok(skp) => {
                         info!("Importing Bech32 encoded private key to keystore");
                         let mut key = Key::from(&skp);
-                        keystore.import(alias.clone(), skp).await?;
+                        context.config.keystore.import(alias.clone(), skp).await?;
 
                         let alias = match alias {
                             Some(x) => x,
-                            None => keystore.get_alias(&key.rtd_address)?,
+                            None => context.config.keystore.get_alias(&key.rtd_address)?,
                         };
 
                         key.alias = Some(alias);
@@ -650,7 +625,9 @@ impl KeyToolCommand {
                     }
                     Err(_) => {
                         info!("Importing mneomonics to keystore");
-                        let rtd_address = keystore
+                        let rtd_address = context
+                            .config
+                            .keystore
                             .import_from_mnemonic(
                                 &input_string,
                                 key_scheme,
@@ -658,12 +635,12 @@ impl KeyToolCommand {
                                 alias.clone(),
                             )
                             .await?;
-                        let skp = keystore.export(&rtd_address)?;
+                        let skp = context.config.keystore.export(&rtd_address)?;
                         let mut key = Key::from(skp);
 
                         let alias = match alias {
                             Some(x) => x,
-                            None => keystore.get_alias(&key.rtd_address)?,
+                            None => context.config.keystore.get_alias(&key.rtd_address)?,
                         };
 
                         key.alias = Some(alias);
@@ -672,10 +649,10 @@ impl KeyToolCommand {
                 }
             }
             KeyToolCommand::Export { key_identity } => {
-                let address = keystore.get_by_identity(&key_identity)?;
-                let skp = keystore.export(&address)?;
+                let address = context.config.keystore.get_by_identity(&key_identity)?;
+                let skp = context.config.keystore.export(&address)?;
                 let mut key = Key::from(skp);
-                key.alias = keystore.get_alias(&key.rtd_address).ok();
+                key.alias = context.config.keystore.get_alias(&key.rtd_address).ok();
                 let key = ExportedKey {
                     exported_private_key: skp
                         .encode()
@@ -685,12 +662,23 @@ impl KeyToolCommand {
                 CommandOutput::Export(key)
             }
             KeyToolCommand::List { sort_by_alias } => {
-                let mut keys = keystore
+                let external_keys = context
+                    .config
+                    .external_keys
+                    .as_ref()
+                    .map(|k| k.entries())
+                    .unwrap_or_default()
+                    .into_iter();
+
+                let mut keys: Vec<Key> = context
+                    .config
+                    .keystore
                     .entries()
                     .into_iter()
+                    .chain(external_keys)
                     .map(|pk| {
                         let mut key = Key::from(pk);
-                        key.alias = keystore.get_alias(&key.rtd_address).ok();
+                        key.alias = context.config.keystore.get_alias(&key.rtd_address).ok();
                         key
                     })
                     .collect::<Vec<Key>>();
@@ -750,7 +738,7 @@ impl KeyToolCommand {
                     multisig: vec![],
                 };
 
-                for (pk, w) in pks.into_iter().zip(weights.into_iter()) {
+                for (pk, w) in pks.into_iter().zip_debug_eq(weights) {
                     output.multisig.push(MultiSigOutput {
                         address: Into::<RtdAddress>::into(&pk),
                         public_base64_key: pk.encode_base64(),
@@ -834,7 +822,7 @@ impl KeyToolCommand {
                 data,
                 intent,
             } => {
-                let address = keystore.get_by_identity(&address)?;
+                let address = context.get_identity_address(Some(address))?;
                 let intent = intent.unwrap_or_else(Intent::rtd_transaction);
                 let intent_clone = intent.clone();
                 let msg: TransactionData =
@@ -844,10 +832,10 @@ impl KeyToolCommand {
                 let intent_msg = IntentMessage::new(intent, msg);
                 let raw_intent_msg: String = Base64::encode(bcs::to_bytes(&intent_msg)?);
                 let mut hasher = DefaultHash::default();
-                hasher.update(bcs::to_bytes(&intent_msg)?);
+                bcs::serialize_into(&mut hasher, &intent_msg)?;
                 let digest = hasher.finalize().digest;
-                let rtd_signature = keystore
-                    .sign_secure(&address, &intent_msg.value, intent_msg.intent)
+                let rtd_signature = context
+                    .sign_secure(&address.into(), &intent_msg.value, intent_msg.intent)
                     .await?;
                 CommandOutput::Sign(SignData {
                     rtd_address: address,
@@ -856,65 +844,6 @@ impl KeyToolCommand {
                     raw_intent_msg,
                     digest: Base64::encode(digest),
                     rtd_signature: rtd_signature.encode_base64(),
-                })
-            }
-
-            KeyToolCommand::SignKMS {
-                data,
-                keyid,
-                intent,
-                base64pk,
-            } => {
-                // Currently only supports secp256k1 keys
-                let pk_owner = PublicKey::decode_base64(&base64pk)
-                    .map_err(|e| anyhow!("Invalid base64 key: {:?}", e))?;
-                let address_owner = RtdAddress::from(&pk_owner);
-                info!("Address For Corresponding KMS Key: {}", address_owner);
-                info!("Raw tx_bytes to execute: {}", data);
-                let intent = intent.unwrap_or_else(Intent::rtd_transaction);
-                info!("Intent: {:?}", intent);
-                let msg: TransactionData =
-                    bcs::from_bytes(&Base64::decode(&data).map_err(|e| {
-                        anyhow!("Cannot deserialize data as TransactionData {:?}", e)
-                    })?)?;
-                let intent_msg = IntentMessage::new(intent, msg);
-                info!(
-                    "Raw intent message: {:?}",
-                    Base64::encode(bcs::to_bytes(&intent_msg)?)
-                );
-                let mut hasher = DefaultHash::default();
-                hasher.update(bcs::to_bytes(&intent_msg)?);
-                let digest = hasher.finalize().digest;
-                info!("Digest to sign: {:?}", Base64::encode(digest));
-
-                // Set up the KMS client in default region.
-                let config = aws_config::load_from_env().await;
-                let kms = KmsClient::new(&config);
-
-                // Sign the message, normalize the signature and then compacts it
-                // serialize_compact is loaded as bytes for Secp256k1Signature
-                let response = kms
-                    .sign()
-                    .key_id(keyid)
-                    .message_type(MessageType::Raw)
-                    .message(Blob::new(digest))
-                    .signing_algorithm(SigningAlgorithmSpec::EcdsaSha256)
-                    .send()
-                    .await?;
-                let sig_bytes_der = response
-                    .signature
-                    .expect("Requires Asymmetric Key Generated in KMS");
-
-                let mut external_sig = Secp256k1Sig::from_der(sig_bytes_der.as_ref())?;
-                external_sig.normalize_s();
-                let sig_compact = external_sig.serialize_compact();
-
-                let mut serialized_sig = vec![SignatureScheme::Secp256k1.flag()];
-                serialized_sig.extend_from_slice(&sig_compact);
-                serialized_sig.extend_from_slice(pk_owner.as_ref());
-                let serialized_sig = Base64::encode(&serialized_sig);
-                CommandOutput::SignKMS(SerializedSig {
-                    serialized_sig_base64: serialized_sig,
                 })
             }
 
@@ -964,14 +893,16 @@ impl KeyToolCommand {
                 .unwrap()
                 .jwt;
 
-                // call prover-dev for zklogin inputs
+                // Use a prover that was deployed and verified for this RTD network.
+                let prover_url = std::env::var("RTD_ZKLOGIN_PROVER_URL")
+                    .map_err(|_| anyhow!("Set RTD_ZKLOGIN_PROVER_URL before signing"))?;
                 let reader = get_proof(
                     &parsed_token,
                     max_epoch,
                     &jwt_randomness,
                     &kp_bigint,
                     user_salt,
-                    "https://prover-dev.linkulabs.com/v1",
+                    &prover_url,
                 )
                 .await
                 .unwrap();
@@ -1002,221 +933,11 @@ impl KeyToolCommand {
                     },
                 )
             }
-            KeyToolCommand::ZkLoginSignAndExecuteTx {
-                max_epoch,
-                network,
-                fixed,
-                test_multisig,
-                sign_with_sk,
-            } => {
-                let skp = if fixed {
-                    RtdKeyPair::Ed25519(Ed25519KeyPair::generate(&mut StdRng::from_seed([0; 32])))
-                } else {
-                    RtdKeyPair::Ed25519(Ed25519KeyPair::generate(&mut rand::thread_rng()))
-                };
-                println!("Ephemeral keypair: {:?}", skp.encode());
-                let pk = skp.public();
-                let ephemeral_key_identifier: RtdAddress = (&skp.public()).into();
-                println!("Ephemeral key identifier: {ephemeral_key_identifier}");
-                keystore.import(None, skp).await?;
-
-                let mut eph_pk_bytes = vec![pk.flag()];
-                eph_pk_bytes.extend(pk.as_ref());
-                let kp_bigint = BigUint::from_bytes_be(&eph_pk_bytes);
-                println!("Ephemeral pubkey (BigInt): {:?}", kp_bigint);
-
-                let jwt_randomness = if fixed {
-                    "100681567828351849884072155819400689117".to_string()
-                } else {
-                    let random_bytes = rand::thread_rng().r#gen::<[u8; 16]>();
-                    let jwt_random_bytes = BigUint::from_bytes_be(&random_bytes);
-                    jwt_random_bytes.to_string()
-                };
-                println!("Jwt randomness: {jwt_randomness}");
-                let url = get_oidc_url(
-                    OIDCProvider::Google,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "25769832374-famecqrhe2gkebt5fvqms2263046lj96.apps.googleusercontent.com",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_2 = get_oidc_url(
-                    OIDCProvider::Twitch,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "rs1bh065i9ya4ydvifixl4kss0uhpt",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_3 = get_oidc_url(
-                    OIDCProvider::Facebook,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "233307156352917",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_4 = get_oidc_url(
-                    OIDCProvider::Kakao,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "aa6bddf393b54d4e0d42ae0014edfd2f",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_5 = get_token_exchange_url(
-                    OIDCProvider::Kakao,
-                    "aa6bddf393b54d4e0d42ae0014edfd2f",
-                    "https://rtd.io/",
-                    "$YOUR_AUTH_CODE",
-                    "", // not needed
-                )?;
-                let url_6 = get_oidc_url(
-                    OIDCProvider::Apple,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "nl.digkas.wallet.client",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_7 = get_oidc_url(
-                    OIDCProvider::Slack,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "2426087588661.5742457039348",
-                    "https://rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_8 = get_token_exchange_url(
-                    OIDCProvider::Slack,
-                    "2426087588661.5742457039348",
-                    "https://rtd.io/",
-                    "$YOUR_AUTH_CODE",
-                    "39b955a118f2f21110939bf3dff1de90",
-                )?;
-                let url_9 = get_oidc_url(
-                    OIDCProvider::AwsTenant((
-                        "us-east-1".to_string(),
-                        "zklogin-example".to_string(),
-                    )),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "6c56t7re6ekgmv23o7to8r0sic",
-                    "https://www.rtd.io/",
-                    &jwt_randomness,
-                )?;
-                let url_10 = get_oidc_url(
-                    OIDCProvider::Microsoft,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "2e3e87cb-bf24-4399-ab98-48343d457124",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_11 = get_oidc_url(
-                    OIDCProvider::KarrierOne,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "kns-dev",
-                    "https://rtd.io/", // placeholder
-                    &jwt_randomness,
-                )?;
-                let url_12 = get_oidc_url(
-                    OIDCProvider::Credenza3,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "65954ec5d03dba0198ac343a",
-                    "https://example.com/callback",
-                    &jwt_randomness,
-                )?;
-                let url_13 = get_oidc_url(
-                    OIDCProvider::AwsTenant(("us-east-1".to_string(), "ambrus".to_string())),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "t1eouauaitlirg57nove8kvj8",
-                    "https://api.ambrus.studio/callback",
-                    &jwt_randomness,
-                )?;
-                let url_14 = get_oidc_url(
-                    OIDCProvider::Arden,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "2e3i87cb-bf24-4399-ab98-48343d457124",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_15 = get_oidc_url(
-                    OIDCProvider::AwsTenant(("eu-west-3".to_string(), "trace".to_string())),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "trace-dev",
-                    "https://trace.fan",
-                    &jwt_randomness,
-                )?;
-                let url_16 = get_oidc_url(
-                    OIDCProvider::EveFrontier,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "583ebc6d-abd8-4057-8c77-78405628e42d",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_17 = get_oidc_url(
-                    OIDCProvider::TestEveFrontier,
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "c8815001-f950-4147-905e-4833d904cd38",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                let url_18 = get_oidc_url(
-                    OIDCProvider::AwsTenant(("ap-southeast-1".to_string(), "decot".to_string())),
-                    &eph_pk_bytes,
-                    max_epoch,
-                    "42e9pih2409ktfhmkmo2ipup2h",
-                    "https://www.rtd.io",
-                    &jwt_randomness,
-                )?;
-                // This is only for CLI testing. If frontend apps will be built, no need to add anything here.
-                println!("Visit URL (Google): {url}");
-                println!("Visit URL (Twitch): {url_2}");
-                println!("Visit URL (Facebook): {url_3}");
-                println!("Visit URL (Kakao): {url_4}");
-                println!("Token exchange URL (Kakao): {url_5}");
-                println!("Visit URL (Apple): {url_6}");
-                println!("Visit URL (Slack): {url_7}");
-                println!("Token exchange URL (Slack): {url_8}");
-
-                println!("Visit URL (AWS): {url_9}");
-                println!("Visit URL (Microsoft): {url_10}");
-                println!("Visit URL (KarrierOne): {url_11}");
-                println!("Visit URL (Credenza3): {url_12}");
-                println!("Visit URL (AWS - Ambrus): {url_13}");
-                println!("Visit URL (Arden): {url_14}");
-                println!("Visit URL (AWS - Trace): {url_15}");
-                println!("Visit URL (EveFrontier): {url_16}");
-                println!("Visit URL (TestEveFrontier): {url_17}");
-                println!("Visit URL (AWS - Decot): {url_18}");
-
-                println!(
-                    "Finish login and paste the entire URL here (e.g. https://rtd.io/#id_token=...):"
-                );
-
-                let parsed_token = read_cli_line()?;
-                let tx_digest = perform_zk_login_test_tx(
-                    &parsed_token,
-                    max_epoch,
-                    &jwt_randomness,
-                    &kp_bigint.to_string(),
-                    ephemeral_key_identifier,
-                    keystore,
-                    &network,
-                    test_multisig,
-                    sign_with_sk,
-                )
-                .await?;
-                CommandOutput::ZkLoginSignAndExecuteTx(ZkLoginSignAndExecuteTx { tx_digest })
+            KeyToolCommand::ZkLoginSignAndExecuteTx { .. } => {
+                return Err(anyhow!(
+                    "The built-in OAuth test clients and redirect URLs are not configured for RTD. \
+                     Use an independently configured RTD OAuth client and the zk-login-enter-token command."
+                ));
             }
             KeyToolCommand::ZkLoginEnterToken {
                 parsed_token,
@@ -1234,7 +955,7 @@ impl KeyToolCommand {
                     &jwt_randomness,
                     &kp_bigint,
                     ephemeral_key_identifier,
-                    keystore,
+                    &mut context.config.keystore,
                     &network,
                     test_multisig,
                     sign_with_sk,
@@ -1276,8 +997,18 @@ impl KeyToolCommand {
                             "mainnet" | "testnet" => ZkLoginEnv::Prod,
                             _ => return Err(anyhow!("Invalid network")),
                         };
-                        let verify_params =
-                            VerifyParams::new(parsed, vec![], env, true, true, true, Some(2), true);
+                        let verify_params = VerifyParams::new(
+                            parsed,
+                            vec![],
+                            env,
+                            1, // migration mode, try v2 then v1
+                            true,
+                            true,
+                            true,
+                            Some(2),
+                            true,
+                            true,
+                        );
 
                         let (serialized, res) = match IntentScope::try_from(intent_scope)
                             .map_err(|_| anyhow!("Invalid scope"))?
@@ -1351,6 +1082,13 @@ impl From<PublicKey> for Key {
             flag: pk.flag(),
             peer_id: anemo_styling(&pk),
         }
+    }
+}
+
+impl Key {
+    pub(crate) fn with_mnemonic(mut self, mnemonic: Option<String>) -> Self {
+        self.mnemonic = mnemonic;
+        self
     }
 }
 

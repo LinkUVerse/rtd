@@ -3,7 +3,7 @@
 
 fn main() {
     cynic_codegen::register_schema("rtd")
-        .from_sdl_file("../rtd-graphql-rpc/schema.graphql")
+        .from_sdl_file("../rtd-indexer-alt-graphql/schema.graphql")
         .unwrap()
         .as_default()
         .unwrap();

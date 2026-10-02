@@ -1,5 +1,5 @@
 ---
-source: crates/move-analyzer/tests/ide_testrtdte.rs
+source: crates/move-analyzer/tests/ide_testsuite.rs
 ---
 == colon_colon.move ========================================================
 -- test 0 -------------------

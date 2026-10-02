@@ -3,6 +3,9 @@ source: external-crates/move/crates/move-transactional-test-runner/src/framework
 ---
 processed 5 tasks
 
+// Test partial error behavior: when one field errors, other fields should still return data.
+// This tests the Option<Result<T, E>> pattern for partial errors.
+
 init:
 A: object(0,0)
 
@@ -23,7 +26,7 @@ Response: {
   "data": {
     "object": {
       "version": 2,
-      "digest": "BTBgndfKC52pKmip2bN9GmSVbMscLM7Eti1sauMLV1iq",
+      "digest": "FMT1LLoVyKMcP716e2xytk6t2qd9cUMzCSnUTP9rxUiw",
       "objectAt": null
     }
   },
@@ -53,7 +56,7 @@ Response: {
   "data": {
     "validObject": {
       "version": 2,
-      "digest": "BTBgndfKC52pKmip2bN9GmSVbMscLM7Eti1sauMLV1iq"
+      "digest": "FMT1LLoVyKMcP716e2xytk6t2qd9cUMzCSnUTP9rxUiw"
     },
     "invalidObjectAt": {
       "objectAt": null

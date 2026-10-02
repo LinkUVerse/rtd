@@ -1,12 +1,47 @@
 ---
 title: Rtd Client CLI
-description: The Rtd Client CLI provides command-level access to interact with the Rtd network.
-keywords: [ rtd cli, rtd client cli, rtd client cli, rtd client, rtd cli help, rtd cli reference, rtd cli commands, cli commands, cli reference ]
+description: >-
+  The Rtd Client CLI provides command-level access to interact with the Rtd
+  network.
+keywords:
+  - rtd cli
+  - rtd client cli
+  - rtd client cli
+  - rtd client
+  - rtd cli help
+  - rtd cli reference
+  - rtd cli commands
+  - cli commands
+  - cli reference
+goal:
+  description: 'Reader can look up client cli command syntax, flags, and usage examples'
+  requires:
+    - has_frontmatter:
+        - title
+        - description
+      label: Has required frontmatter fields
+    - pattern: '```'
+      min: 1
+      label: Has command examples
+    - pattern: 'rtd '
+      min: 2
+      label: Shows CLI command usage
+    - has_questions: true
+      label: Needs questions for AI search visibility
+    - has_answer: true
+      label: Needs answer summary for AI citation
+questions:
+  - What is Rtd Client CLI in Rtd?
+  - How do I publish a move package?
+  - What are the available rtd client cli commands?
+answer: >-
+  The Rtd CLI `client` command provides command-level access to interact with
+  the Rtd network.
 ---
 
 The Rtd CLI `client` command provides command-level access to interact with the Rtd network. Typical uses for `rtd client` include publishing Move smart contracts, getting the information of an object, executing transactions, or managing addresses.
 
-<ImportContent source="cli-check-install.mdx" mode="snippet" />
+<ImportContent source="cli-check-install" mode="snippet" />
 
 ## Commands
 
@@ -14,7 +49,7 @@ The Rtd CLI `client` command provides command-level access to interact with the 
 $ rtd client --help
 ```
 
-<ImportContent source="console-output/rtd-client-help.mdx" mode="snippet" />
+<ImportContent source="console-output/rtd-client-help" mode="snippet" />
 
 ## JSON output
 
@@ -22,7 +57,7 @@ Append the `--json` flag to commands to format responses in JSON instead of the 
 
 ## Examples
 
-The following examples demonstrate some of the most often used commands.
+The following examples demonstrate some of the most often used commands. For examples that build transactions, prefer `rtd client ptb`; it exposes the underlying programmable transaction block commands directly and avoids confusion from legacy helper commands.
 
 ### List available network environments
 
@@ -32,32 +67,32 @@ Use the `rtd client envs` command to find the network environments set up in the
 ╭────────┬────────────────────────────────────┬────────╮
 │ alias  │ url                                │ active │
 ├────────┼────────────────────────────────────┼────────┤
-│ devnet │ https://fullnode.devnet.rtd.io:443 │ *  	   │
+│ localnet │ http://127.0.0.1:9000                │ *      │
 ╰────────┴────────────────────────────────────┴────────╯
 ```
 
 ### Create network environment
 
-Use `client new-env` to add details for a new network environment. This example creates an environment pointer to Rtd Mainnet. Setting the `alias` value makes referencing the environment less prone to typographical errors. After running this command, Rtd updates your client.yaml file in `~/.rtd/rtd_config` with the new information.
+Use `client new-env` to add an environment for an RTD network you operate. This example uses the default local full node port. After running this command, Rtd updates your `client.yaml` file in `~/.rtd/rtd_config`.
 
 ```
-$ rtd client new-env --alias=mainnet --rpc https://fullnode.mainnet.rtd.io:443
+$ rtd client new-env --alias=localnet --rpc http://127.0.0.1:9000
 
-Added new Rtd env [mainnet] to config.
+Added new Rtd env [localnet] to config.
 ```
 
 ### Set current environment
 
-Use the `rtd client switch` command to change the current network. This example switches the current network to `mainnet`.
+Use the `rtd client switch` command to change the current network. This example switches to the local network.
 
 ```sh
-$ rtd client switch --env mainnet
+$ rtd client switch --env localnet
 ```
 ```sh
-Active environment switched to [mainnet]
+Active environment switched to [localnet]
 ```
 
-If you run `rtd client envs` after this command, you see the asterisk in the `active` column on the `mainnet` row of the table.
+If you run `rtd client envs` after this command, you see the asterisk in the `active` column on the `localnet` row. Verify the chain with `rtd client chain-identifier --format hex` before submitting a transaction.
 
 ### Get current active address
 
@@ -72,7 +107,8 @@ $ rtd client active-address
 
 ### Request a RTD coin from faucet
 
-If you use one of the standard public RPCs (for example, `fullnode.devnet.rtd.io:443`), you can use the `faucet` command to request gas coins. If you use a custom faucet service, then pass in the URL to the faucet using the `--url` option.
+RTD has no verified public RPC or faucet. For a network with a configured faucet,
+pass its URL with `--url` after verifying the network's chain ID with its operator.
 The `faucet` command works for a local network, as well. If you start your network with a custom faucet port, include the `--url` option.
 
 ```sh
@@ -164,17 +200,13 @@ $ rtd client dynamic-field 0x5
 ╰─────────────┴───────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
+:::info
+The version number in `objectType` (for example, `RtdSystemStateInnerV2`) reflects the protocol version active at the time of the query and may differ depending on the current epoch or network upgrade state.
+:::
+
 ### Send RTD or objects
 
-In this example, let's see how to transfer RTD or transfer an object from one address to another. First of all, there two main commands for sending RTD or transferring objects: `pay` and `transfer`.
-Both `pay` and `transfer` have a few sister commands: `pay-rtd`, `pay-all-rtd`, `transfer-rtd`.
-
-The differences between these commands are:
-- commands that end in `-rtd` deal with Rtd's native coin, and they use the input coints to pay for gas and for transferring RTD or the object.
-- `pay-` commands typically deal with coins and handle gas smashing for you, whereas `transfer` commands can handle the transfer of any object that has public transfer, meaning any object that has the `store` ability.
-- `pay` commands allow you to send coins to multiple recipients, whereas `transfer` commands only accept one recipient.
-- `pay-all-rtd` is a special case of `pay-rtd` that offers a way to transfer the entire balance after smashing.
-- `transfer-rtd` is a legacy command and has been entirely superseded by `pay-rtd` or `pay-all-rtd` depending on whether an amount is specified or not.
+Use `rtd client ptb` to transfer RTD or objects from one address to another. The PTB CLI exposes the same operations used by SDK transaction builders, such as `--split-coins`, `--merge-coins`, and `--transfer-objects`.
 
 Assume you have two addresses:
 
@@ -185,218 +217,133 @@ Assume you have two addresses:
 │ hungry-spodumene  │ 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea │ *              │
 │ eloquent-amber    │ 0x3d78abc33ccd173c521b4f9e78b21ea2c989960b631732c539efaa38bda30976 │                │
 ╰───────────────────┴────────────────────────────────────────────────────────────────────┴────────────────╯
-````
-
-Address `hungry-spodumene` has a few coins:
-
-```sh
-$ rtd client gas hungry-spodumene
-```
-```sh
-╭────────────────────────────────────────────────────────────────────┬────────────────────┬──────────────────╮
-│ gasCoinId                                                          │ mistBalance (MIST) │ rtdBalance (RTD) │
-├────────────────────────────────────────────────────────────────────┼────────────────────┼──────────────────┤
-│ 0x205972830acd8264a38b9a1776a1b72a1ae626fa23a4d1f12249349ce3b83c06 │ 200000000000       │ 200.00           │
-│ 0x56d76420a5bc7d356e3930e6a2ddc61cbbc0c87ea5c5f3cc3ac5952b4d52be5a │ 200000000000       │ 200.00           │
-│ 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52 │ 200000000000       │ 200.00           │
-│ 0xe373de9bdbd3dbd4f5f707f144c83af74a181cdb3903a953ee366f48e33865c7 │ 200000000000       │ 200.00           │
-│ 0xf7adb6aeb18eb409c03fe88cc31711b61a65333e0fdd88c1815d4ec75f713f31 │ 200000000000       │ 200.00           │
-╰────────────────────────────────────────────────────────────────────┴────────────────────┴──────────────────╯
 ```
 
-You want to send 0.5 RTD to `eloquent-amber`. Given that you have a few gas coins, you can use `pay`. If only one gas coin exists, then you need to use `transfer-rtd` or `pay-rtd`, or you would need to split the coin first to have another coin to use for paying gas. In this case, let's use the `pay-rtd` command as you do not need to provide a separate gas coin to be used for the gas fees. In the command below, you set the recipient to be `eloquent-amber`, which coin to use to transfer RTD from, and the amount of RTD to transfer.
+To send 0.5 RTD to `eloquent-amber`, split 500,000,000 MIST from the gas coin and transfer the resulting coin in the same PTB:
 
-<ImportContent source="info-gas-budget.mdx" mode="snippet" />
-
-```sh
-$ rtd client pay-rtd --recipients eloquent-amber --input-coins 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52 --amounts 500000000 --gas-budget 5000000
-```
-
-The result is:
+<ImportContent source="info-gas-budget" mode="snippet" />
 
 ```sh
-Transaction Digest: AsWkciVhLHeCmqVipjjyAA7Hv5y87pFjHS59K8m4zBJV
-╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Transaction Data                                                                                             │
-├──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Sender: 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea                                   │
-│ Gas Owner: 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea                                │
-│ Gas Budget: 5000000 MIST                                                                                     │
-│ Gas Price: 1000 MIST                                                                                         │
-│ Gas Payment:                                                                                                 │
-│  ┌──                                                                                                         │
-│  │ ID: 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52                                    │
-│  │ Version: 2                                                                                                │
-│  │ Digest: 9MEH7kr1YkBDx7pdUPCDnVb3FtPz9UZVeWmCot5Dhxqr                                                      │
-│  └──                                                                                                         │
-│                                                                                                              │
-│ Transaction Kind: Programmable                                                                               │
-│ ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────╮ │
-│ │ Input Objects                                                                                            │ │
-│ ├──────────────────────────────────────────────────────────────────────────────────────────────────────────┤ │
-│ │ 0   Pure Arg: Type: address, Value: "0x3d78abc33ccd173c521b4f9e78b21ea2c989960b631732c539efaa38bda30976" │ │
-│ │ 1   Pure Arg: Type: u64, Value: "500000000"                                                              │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
-│ ╭──────────────────────╮                                                                                     │
-│ │ Commands             │                                                                                     │
-│ ├──────────────────────┤                                                                                     │
-│ │ 0  SplitCoins:       │                                                                                     │
-│ │  ┌                   │                                                                                     │
-│ │  │ Coin: GasCoin     │                                                                                     │
-│ │  │ Amounts:          │                                                                                     │
-│ │  │   Input  1        │                                                                                     │
-│ │  └                   │                                                                                     │
-│ │                      │                                                                                     │
-│ │ 1  TransferObjects:  │                                                                                     │
-│ │  ┌                   │                                                                                     │
-│ │  │ Arguments:        │                                                                                     │
-│ │  │   Result 0        │                                                                                     │
-│ │  │ Address: Input  0 │                                                                                     │
-│ │  └                   │                                                                                     │
-│ ╰──────────────────────╯                                                                                     │
-│                                                                                                              │
-│ Signatures:                                                                                                  │
-│    eZc/iFO3i4Y8Le92zu9q75jILs+yg0sSXd1yPV9Dta+knH99VfkSCnzNQG1KbXSvY24wexmVtiuU6NkfudbiAQ==                  │
-│                                                                                                              │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭───────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Transaction Effects                                                                               │
-├───────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Digest: AsWkciVhLHeCmqVipjjyAA7Hv5y87pFjHS59K8m4zBJV                                              │
-│ Status: Success                                                                                   │
-│ Executed Epoch: 0                                                                                 │
-│                                                                                                   │
-│ Created Objects:                                                                                  │
-│  ┌──                                                                                              │
-│  │ ID: 0xa031d3f8fd53b5f9885172e1c6bd8b770b25e42371c9ee215c6d4b21b2b73241                         │
-│  │ Owner: Account Address ( 0x3d78abc33ccd173c521b4f9e78b21ea2c989960b631732c539efaa38bda30976 )  │
-│  │ Version: 3                                                                                     │
-│  │ Digest: Fq3maqq3pShgKw58Ssm8cS2j1pspfhanedVK2MMxfQWQ                                           │
-│  └──                                                                                              │
-│ Mutated Objects:                                                                                  │
-│  ┌──                                                                                              │
-│  │ ID: 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52                         │
-│  │ Owner: Account Address ( 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea )  │
-│  │ Version: 3                                                                                     │
-│  │ Digest: GFB9mpxTP4z6CCShTbvD58FYxtu9G4mnxN3JtFeRupM3                                           │
-│  └──                                                                                              │
-│ Gas Object:                                                                                       │
-│  ┌──                                                                                              │
-│  │ ID: 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52                         │
-│  │ Owner: Account Address ( 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea )  │
-│  │ Version: 3                                                                                     │
-│  │ Digest: GFB9mpxTP4z6CCShTbvD58FYxtu9G4mnxN3JtFeRupM3                                           │
-│  └──                                                                                              │
-│ Gas Cost Summary:                                                                                 │
-│    Storage Cost: 1976000 MIST                                                                     │
-│    Computation Cost: 1000000 MIST                                                                 │
-│    Storage Rebate: 978120 MIST                                                                    │
-│    Non-refundable Storage Fee: 9880 MIST                                                          │
-│                                                                                                   │
-│ Transaction Dependencies:                                                                         │
-│    GThyjtRFysBgVppXDc9iduNPzB2bLteXBnJcBEYXz4vG                                                   │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─────────────────────────────╮
-│ No transaction block events │
-╰─────────────────────────────╯
-
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Object Changes                                                                                   │
-├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Created Objects:                                                                                 │
-│  ┌──                                                                                             │
-│  │ ObjectID: 0xa031d3f8fd53b5f9885172e1c6bd8b770b25e42371c9ee215c6d4b21b2b73241                  │
-│  │ Sender: 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea                    │
-│  │ Owner: Account Address ( 0x3d78abc33ccd173c521b4f9e78b21ea2c989960b631732c539efaa38bda30976 ) │
-│  │ ObjectType: 0x2::coin::Coin<0x2::rtd::RTD>                                                    │
-│  │ Version: 3                                                                                    │
-│  │ Digest: Fq3maqq3pShgKw58Ssm8cS2j1pspfhanedVK2MMxfQWQ                                          │
-│  └──                                                                                             │
-│ Mutated Objects:                                                                                 │
-│  ┌──                                                                                             │
-│  │ ObjectID: 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52                  │
-│  │ Sender: 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea                    │
-│  │ Owner: Account Address ( 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea ) │
-│  │ ObjectType: 0x2::coin::Coin<0x2::rtd::RTD>                                                    │
-│  │ Version: 3                                                                                    │
-│  │ Digest: GFB9mpxTP4z6CCShTbvD58FYxtu9G4mnxN3JtFeRupM3                                          │
-│  └──                                                                                             │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭───────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Balance Changes                                                                                   │
-├───────────────────────────────────────────────────────────────────────────────────────────────────┤
-│  ┌──                                                                                              │
-│  │ Owner: Account Address ( 0x0fe375fff0ee40d20c54a7f2478b9b5c7eaa3625b7611f9661ec5faefb4a6fea )  │
-│  │ CoinType: 0x2::rtd::RTD                                                                        │
-│  │ Amount: -501997880                                                                             │
-│  └──                                                                                              │
-│  ┌──                                                                                              │
-│  │ Owner: Account Address ( 0x3d78abc33ccd173c521b4f9e78b21ea2c989960b631732c539efaa38bda30976 )  │
-│  │ CoinType: 0x2::rtd::RTD                                                                        │
-│  │ Amount: 500000000                                                                              │
-│  └──                                                                                              │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────╯
-
+$ rtd client ptb \
+    --split-coins gas "[500000000]" \
+    --assign coin \
+    --transfer-objects "[coin]" eloquent-amber \
+    --gas-budget 5000000
 ```
 
-Check the gas for the sender and the recipient's coins using `rtd client gas <address>`. The sender now has 199.49 RTD for that gas coin that was used. 0.5 RTD was transferred, and the remaining 0.01 RTD paid the gas fees.
+To transfer the full gas coin balance to `eloquent-amber`, transfer `gas` directly. `transfer-objects` is the only PTB command that can take the gas coin by value:
+
 ```sh
-$ rtd client gas
-```
-```sh
-╭────────────────────────────────────────────────────────────────────┬────────────────────┬──────────────────╮
-│ gasCoinId                                                          │ mistBalance (MIST) │ rtdBalance (RTD) │
-├────────────────────────────────────────────────────────────────────┼────────────────────┼──────────────────┤
-│ 0x205972830acd8264a38b9a1776a1b72a1ae626fa23a4d1f12249349ce3b83c06 │ 200000000000       │ 200.00           │
-│ 0x56d76420a5bc7d356e3930e6a2ddc61cbbc0c87ea5c5f3cc3ac5952b4d52be5a │ 200000000000       │ 200.00           │
-│ 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52 │ 199498002120       │ 199.49           │
-│ 0xe373de9bdbd3dbd4f5f707f144c83af74a181cdb3903a953ee366f48e33865c7 │ 200000000000       │ 200.00           │
-│ 0xf7adb6aeb18eb409c03fe88cc31711b61a65333e0fdd88c1815d4ec75f713f31 │ 200000000000       │ 200.00           │
-╰────────────────────────────────────────────────────────────────────┴────────────────────┴──────────────────╯
-```
-```sh
-$ rtd client gas eloquent-amber
-```
-```sh
-╭────────────────────────────────────────────────────────────────────┬────────────────────┬──────────────────╮
-│ gasCoinId                                                          │ mistBalance (MIST) │ rtdBalance (RTD) │
-├────────────────────────────────────────────────────────────────────┼────────────────────┼──────────────────┤
-│ 0xa031d3f8fd53b5f9885172e1c6bd8b770b25e42371c9ee215c6d4b21b2b73241 │ 500000000          │ 0.50             │
-╰────────────────────────────────────────────────────────────────────┴────────────────────┴──────────────────╯
+$ rtd client ptb \
+    --transfer-objects "[gas]" eloquent-amber \
+    --gas-budget 5000000
 ```
 
-If you want to transfer the whole object, you can use `rtd client pay-all-rtd` or `rtd client transfer-rtd` (without passing the amount):
+To transfer another object, pass its object ID with an `@` prefix:
+
 ```sh
-$ rtd client pay-rtd --recipient eloquent-amber --input-coins 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52 --gas-budget 5000000
-```
-or
-```sh
-$ rtd client transfer-rtd --to eloquent-amber --rtd-coin-object-id 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52 --gas-budget 5000000
+$ rtd client ptb \
+    --transfer-objects "[@<OBJECT_ID>]" eloquent-amber \
+    --gas-budget 5000000
 ```
 
-Then check the gas for `eloquent-amber` again:
+Use `--preview` to inspect the PTB without executing it, or `--dry-run` to simulate execution. See [Rtd Client PTB CLI](/references/cli/ptb) for more PTB examples.
+
+### Send funds to an address balance
+
+Use `rtd client send-funds` to send funds to a recipient's [address balance](/onchain-finance/asset-custody/address-balances/using-address-balances) (using the `rtd::coin::send_funds` API) rather than transferring a coin object. The recipient's balance increases without creating a new coin object, and deposits from multiple senders merge into a single balance per coin type.
+
+Send 0.5 RTD (500,000,000 MIST) to a recipient:
+
 ```sh
-$ rtd client gas eloquent-amber
-```
-```sh
-╭────────────────────────────────────────────────────────────────────┬────────────────────┬──────────────────╮
-│ gasCoinId                                                          │ mistBalance (MIST) │ rtdBalance (RTD) │
-├────────────────────────────────────────────────────────────────────┼────────────────────┼──────────────────┤
-│ 0xa031d3f8fd53b5f9885172e1c6bd8b770b25e42371c9ee215c6d4b21b2b73241 │ 500000000          │ 0.50             │
-│ 0xc9b447fff18f13fa035e028534b8344d5fc8a8760248fad10155e78f44dc3a52 │ 199496992240       │ 199.49           │
-╰────────────────────────────────────────────────────────────────────┴────────────────────┴──────────────────╯
+$ rtd client send-funds --to eloquent-amber --amount 500000000
 ```
 
+Send a non-RTD coin type:
+
+```sh
+$ rtd client send-funds \
+    --to eloquent-amber \
+    --amount 1000000 \
+    --coin-type 0x<PACKAGE_ID>::my_coin::MY_COIN
+```
+
+The most common options are:
+
+- `--to`: Recipient address (or its keystore alias). Required.
+- `--amount`: Amount to send in the coin's smallest unit (MIST for RTD). Required unless `--all-coins` is set.
+- `--coin-type`: Coin type to send. Defaults to `0x2::rtd::RTD`.
+- `--all-coins`: Send all owned coin objects of the specified type (not address-balance funds). Conflicts with `--amount` and `--from-address-balance`.
+- `--from-address-balance`: Draw the amount from the sender's address balance rather than their coins. Without it, coins are preferred and the address balance is only used if the coins cannot cover the amount. Conflicts with `--all-coins`.
+
+Either way, the recipient is paid into their address balance. Gas is selected separately: it comes from the sender's address balance when that can cover the budget, and from their coins otherwise.
+
+### Transfer an object to party ownership
+
+Use `rtd client party-transfer` to transfer a single object to a recipient as a [party-owned](/develop/objects/object-ownership/party) object:
+
+```sh
+$ rtd client party-transfer \
+    --to eloquent-amber \
+    --object-id 0x<OBJECT_ID>
+```
+
+### Publish and upgrade ephemeral packages
+
+`rtd client test-publish` and `rtd client test-upgrade` publish and upgrade packages without recording the published addresses in the package's `Published.toml`. They build the package for a given environment and publish it on the current network, taking dependency addresses from an ephemeral publication file (the pubfile) and recording the new publication information back into that pubfile. This is useful for testing a package against the live network without mutating your canonical publication state. For background, see [Move Package Management](/develop/manage-packages/move-package-management).
+
+For a custom `staging` environment defined in your `Move.toml`, record ephemeral publication info in a pubfile:
+
+```sh
+$ rtd client test-publish --pubfile-path Pub.staging.toml --build-env staging
+```
+
+Later, upgrade that same ephemeral package using the pubfile produced by `test-publish`:
+
+```sh
+$ rtd client test-upgrade --pubfile-path Pub.staging.toml --build-env staging
+```
+
+The key options are:
+
+- `--pubfile-path`: Path to the ephemeral publication file. If omitted, defaults to `Pub.<active-env-alias>.toml` based on the active Rtd environment alias.
+- `--build-env`, `-e`: Environment to build the package for.
+
+These commands do not write to `Published.toml`. Use `rtd client publish` and `rtd client upgrade` for normal, persistent publication.
+
+### Execute a serialized transaction
+
+Several commands that build a transaction accept `--serialize-unsigned-transaction` (to output base64 `TransactionData`) and `--serialize-signed-transaction` (to output base64 `SenderSignedData`). The `serialized-tx` and `execute-combined-signed-tx` commands consume those outputs. This is useful for [offline signing](/develop/transactions/transaction-auth/offline-signing) and multisig flows where the build, sign, and execute steps happen separately.
+
+Use `rtd client serialized-tx` to dry-run, dev-inspect, or execute an already serialized `TransactionData` (base64-encoded BCS). The sender, gas payment, and gas budget are read from the serialized data:
+
+```sh
+# Inspect without executing
+$ rtd client serialized-tx <TX_BYTES> --dry-run
+
+# Execute the serialized transaction
+$ rtd client serialized-tx <TX_BYTES>
+```
+
+A related command, `rtd client serialized-tx-kind`, takes a serialized `TransactionKind` instead and lets you supply gas payment and budget separately with `--gas` and `--gas-budget`.
+
+Use `rtd client execute-combined-signed-tx` to execute a combined `SenderSignedData` blob (transaction data plus its signatures). This is the output produced by passing `--serialize-signed-transaction` to a transaction-building command:
+
+```sh
+$ rtd client execute-combined-signed-tx --signed-tx-bytes <SIGNED_TX_BYTES>
+```
+
+To execute a transaction whose data and signatures were produced separately (for example, signed with `rtd keytool sign`), use `rtd client execute-signed-tx --tx-bytes <TX_BYTES> --signatures <SIGNATURE>` instead.
 
 ### Replay a transaction
 
-Client commands to replay transactions have been deprecated in favor of the `rtd replay` command. Learn about replaying a transaction and how it can be used for debugging or profiling in the [Transaction Replay](./replay.mdx), [Debugging Transactions](../ide/debugger.mdx), and [Transaction Trace Analysis](./trace-analysis.mdx) guides.
+Client commands to replay transactions have been deprecated in favor of the `rtd replay` command. Learn about replaying a transaction and how it can be used for debugging or profiling in the [Transaction Replay](/references/cli/replay), [Debugging Transactions](/references/ide/debugger), and [Transaction Trace Analysis](/references/cli/trace-analysis) guides.
 
 ## Publish a Move package
 
 One of the main uses of the `rtd client` command is to publish smart contracts on the Rtd network. This example switches the current environment to Devnet, then builds, tests, and publishes one of the existing Move examples available in the Rtd repository: [rtd/examples/move](https://github.com/LinkUVerse/rtd/tree/main/examples/move)
 
-This example also makes use of `rtd move` commands. To learn more about those commands, see [Rtd Move CLI](./move.mdx).
+This example also makes use of `rtd move` commands. To learn more about those commands, see [Rtd Move CLI](/references/cli/move).
 
 1. Open a terminal or console to the root of your local Rtd repository and navigate to the `move_tutorial` example.
     ```sh
@@ -406,7 +353,7 @@ This example also makes use of `rtd move` commands. To learn more about those co
     ```sh
     $ rtd client switch --env devnet
     ```
-1. Use `rtd move build` to build the package. You must run this command at the same level as the package manifest file ([Move.toml](https://move-book.com/concepts/manifest.html)).
+1. Use `rtd move build` to build the package. You must run this command at the same level as the package manifest file ([Move.toml](/develop/manage-packages/move-package-management)).
     ```sh
     $ rtd move build
     ```
@@ -453,7 +400,7 @@ This example also makes use of `rtd move` commands. To learn more about those co
     ```sh
     No gas coins are owned by this address
     ```
-1. If you need coins, use `rtd client faucet` (not available for Mainnet). For more information on getting gas tokens, see [Get Rtd Tokens](/guides/developer/getting-started/get-coins.mdx).
+1. If you need coins, use `rtd client faucet` (not available for Mainnet). For more information on getting gas tokens, see [Get Rtd Tokens](/getting-started/onboarding/get-coins).
     ```sh
     $ rtd client faucet
     ```
@@ -625,4 +572,4 @@ Each command has its own help section. For example:
 $ rtd client call --help
 ```
 
-<ImportContent source="console-output/rtd-client-call-help.mdx" mode="snippet" />
+<ImportContent source="console-output/rtd-client-call-help" mode="snippet" />

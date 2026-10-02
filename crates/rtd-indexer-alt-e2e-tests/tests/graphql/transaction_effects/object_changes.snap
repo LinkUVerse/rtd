@@ -17,7 +17,7 @@ task 2, lines 10-52:
 //# publish
 created: object(2,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 7478400,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 7524000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 3, lines 54-56:
 //# programmable --sender A --inputs @A
@@ -83,16 +83,16 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+              "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
               "inputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
                 "version": 1,
-                "digest": "q7zZtCD3hWzn8bDfuAfVs4Jz9xuXbaRoRmscfDLfRGc"
+                "digest": "Bzr4WpBBP9U9NhnHLWMKujjzcRczyxdxswVrvKK3RoL4"
               },
               "outputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
                 "version": 2,
-                "digest": "DBLZ5969HRbYegmQ3a7yv15M5dMi67a7T76L2Fvfartd"
+                "digest": "4p4GDVcYUPKQsEFJn8XwHpCVPeS9SGmev7J6jQydcg8d"
               },
               "idCreated": false,
               "idDeleted": false
@@ -114,16 +114,16 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x6d0b9758ab130cfb5c8c79dae3643aacb01a01ee013214ac1aefce0e61b2d54c",
+              "address": "0xb7d0fec617f45634ef747c9d3cb65fb368b6a2a6772b2819ec8257a3b7b0d771",
               "inputState": {
-                "address": "0x6d0b9758ab130cfb5c8c79dae3643aacb01a01ee013214ac1aefce0e61b2d54c",
+                "address": "0xb7d0fec617f45634ef747c9d3cb65fb368b6a2a6772b2819ec8257a3b7b0d771",
                 "version": 1,
-                "digest": "2mjeTojYsejphc4rj8c7T8wTMyJV7K5TmCzDYqqfQPTL"
+                "digest": "DZfi1ei1GourDtuxWcMq2yf2HxUuTu8XkwkLh5NDbvWg"
               },
               "outputState": {
-                "address": "0x6d0b9758ab130cfb5c8c79dae3643aacb01a01ee013214ac1aefce0e61b2d54c",
+                "address": "0xb7d0fec617f45634ef747c9d3cb65fb368b6a2a6772b2819ec8257a3b7b0d771",
                 "version": 2,
-                "digest": "GZCWMoZ7gbS9wtUyPssdKDULvdnGbcdYMuCC5A4k4e1D"
+                "digest": "ueLBtmwjgQoUPrYkrh38ztMiDgKDTHJrUNyBc5ekPUD"
               },
               "idCreated": false,
               "idDeleted": false
@@ -132,12 +132,12 @@ Response: {
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0xb30300b293375c0c7a0e155cc164e6064d67679272418f229edeb39329821525",
+              "address": "0xfb91cc62cca17184663d5d67598fada654dd4f661a0f19a7ac60e260359eb9b1",
               "inputState": null,
               "outputState": {
-                "address": "0xb30300b293375c0c7a0e155cc164e6064d67679272418f229edeb39329821525",
+                "address": "0xfb91cc62cca17184663d5d67598fada654dd4f661a0f19a7ac60e260359eb9b1",
                 "version": 1,
-                "digest": "AWqP7YqkFReiZThDXZPLhH9YgcTGZoD4tTmwEvCEH7Cy"
+                "digest": "DMnSpkKf8uZx4J8CMnyWAJdzo4bRZSNsMsbCqgf2p6ym"
               },
               "idCreated": true,
               "idDeleted": false
@@ -159,32 +159,32 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
-              "inputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
-                "version": 2,
-                "digest": "DBLZ5969HRbYegmQ3a7yv15M5dMi67a7T76L2Fvfartd"
-              },
+              "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
+              "inputState": null,
               "outputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
                 "version": 3,
-                "digest": "CitHoyozuik5koRomDZUJLvdEDXhtXQha4FH1XKmm6QC"
+                "digest": "3xb9WPgAvPmpF9mrh5dDf3p4Vn7qmq5Yd4tA4oTWW7WE"
               },
-              "idCreated": false,
+              "idCreated": true,
               "idDeleted": false
             }
           },
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
-              "inputState": null,
-              "outputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
-                "version": 3,
-                "digest": "D9Nuvd8Yp9hPwxXAr7QHtAUv2CZZkpmWjcY26FArGYou"
+              "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+              "inputState": {
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "version": 2,
+                "digest": "4p4GDVcYUPKQsEFJn8XwHpCVPeS9SGmev7J6jQydcg8d"
               },
-              "idCreated": true,
+              "outputState": {
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "version": 3,
+                "digest": "6G7EX5BdRQFDwUC7Cxio8WWyCJwYH2Ecv9x4rj35acfW"
+              },
+              "idCreated": false,
               "idDeleted": false
             }
           }
@@ -197,32 +197,32 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
-              "inputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
-                "version": 3,
-                "digest": "CitHoyozuik5koRomDZUJLvdEDXhtXQha4FH1XKmm6QC"
-              },
+              "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
+              "inputState": null,
               "outputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 4,
-                "digest": "7VeypNWTehVtk6zK2r9dfokwbX3oCchkffMhseLfPGUN"
+                "digest": "G4FeCDZtZQfSDyTzy85TDSJESUt4dmjZk1ebEkK2A5CV"
               },
-              "idCreated": false,
+              "idCreated": true,
               "idDeleted": false
             }
           },
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
-              "inputState": null,
-              "outputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
-                "version": 4,
-                "digest": "YKkL3a8HH9ocupkHjzmptHw9D8wxZG69ecrucye1CWu"
+              "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+              "inputState": {
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "version": 3,
+                "digest": "6G7EX5BdRQFDwUC7Cxio8WWyCJwYH2Ecv9x4rj35acfW"
               },
-              "idCreated": true,
+              "outputState": {
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "version": 4,
+                "digest": "Cwka7PhaCECFPHEwbny8hsqaqEaUZMiGp2vVvTbvQN7v"
+              },
+              "idCreated": false,
               "idDeleted": false
             }
           }
@@ -242,16 +242,16 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+              "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
               "inputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 4,
-                "digest": "7VeypNWTehVtk6zK2r9dfokwbX3oCchkffMhseLfPGUN"
+                "digest": "G4FeCDZtZQfSDyTzy85TDSJESUt4dmjZk1ebEkK2A5CV"
               },
               "outputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 5,
-                "digest": "AiB4F5JdSw3TRzmCycu4Z5aqu2w8pMyffbm3CS8kTrLQ"
+                "digest": "6Z8fNwa2zDpL4V9hptYaRCmebsvfeDTz2iYm2M6rtbc7"
               },
               "idCreated": false,
               "idDeleted": false
@@ -260,16 +260,16 @@ Response: {
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+              "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
               "inputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
                 "version": 4,
-                "digest": "YKkL3a8HH9ocupkHjzmptHw9D8wxZG69ecrucye1CWu"
+                "digest": "Cwka7PhaCECFPHEwbny8hsqaqEaUZMiGp2vVvTbvQN7v"
               },
               "outputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
                 "version": 5,
-                "digest": "EU8d5QTmoayNWFsbYzosXDSJ11KAPvoRUhqV9qTkvbZM"
+                "digest": "E7P5e9pQNegmqqkgdnxEoP9D23go3a6td4uLQUeZB738"
               },
               "idCreated": false,
               "idDeleted": false
@@ -291,16 +291,16 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+              "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
               "inputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 5,
-                "digest": "AiB4F5JdSw3TRzmCycu4Z5aqu2w8pMyffbm3CS8kTrLQ"
+                "digest": "6Z8fNwa2zDpL4V9hptYaRCmebsvfeDTz2iYm2M6rtbc7"
               },
               "outputState": {
-                "address": "0x2834d85dbfefdcd66f04811231ba818893793e83a895d53402fd99e132e36562",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 6,
-                "digest": "9eEGPVacjx2hfTg4Wr8rGbwJWiMTXq1FV7aYcLRy7YEY"
+                "digest": "76PfGSjUeaz6sR1FfwANynbEWHVJQdh8f3RkuRPHji1S"
               },
               "idCreated": false,
               "idDeleted": false
@@ -309,16 +309,16 @@ Response: {
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+              "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
               "inputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
-                "version": 5,
-                "digest": "EU8d5QTmoayNWFsbYzosXDSJ11KAPvoRUhqV9qTkvbZM"
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
+                "version": 3,
+                "digest": "3xb9WPgAvPmpF9mrh5dDf3p4Vn7qmq5Yd4tA4oTWW7WE"
               },
               "outputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
                 "version": 6,
-                "digest": "Bxd5ycmy6eF95vRuiNMpcTZsAhKnVB14mVzFk9je6oqb"
+                "digest": "AxMGw9sGH9nKzGVXzG9pWyFpsL7XZJpy6GPGFuTE3yqL"
               },
               "idCreated": false,
               "idDeleted": false
@@ -327,16 +327,16 @@ Response: {
           {
             "cursor": "Mg==",
             "node": {
-              "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
+              "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
               "inputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
-                "version": 3,
-                "digest": "D9Nuvd8Yp9hPwxXAr7QHtAUv2CZZkpmWjcY26FArGYou"
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "version": 5,
+                "digest": "E7P5e9pQNegmqqkgdnxEoP9D23go3a6td4uLQUeZB738"
               },
               "outputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
                 "version": 6,
-                "digest": "AD74G6p1YAFQMDTdRzS1p4a8EUrkmmfFC6ypTVcYY9Bu"
+                "digest": "CgxtzYirgBFG7U2yJFmJTd6VrYB3DwjnvukoXkUQQLaz"
               },
               "idCreated": false,
               "idDeleted": false
@@ -358,13 +358,17 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+              "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
               "inputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
-                "version": 6,
-                "digest": "Bxd5ycmy6eF95vRuiNMpcTZsAhKnVB14mVzFk9je6oqb"
+                "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+                "version": 1,
+                "digest": "hAoXKf5TMfTTpZF8DsmrYBzojhCy2Xzt7ZfgY5KBdDc"
               },
-              "outputState": null,
+              "outputState": {
+                "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+                "version": 7,
+                "digest": "4sdYQ8MvuhrJsuer1PD4VYtLmWSSHUVeQ8NoiGpvMgeX"
+              },
               "idCreated": false,
               "idDeleted": false
             }
@@ -372,17 +376,13 @@ Response: {
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
+              "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
               "inputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 6,
-                "digest": "AD74G6p1YAFQMDTdRzS1p4a8EUrkmmfFC6ypTVcYY9Bu"
+                "digest": "76PfGSjUeaz6sR1FfwANynbEWHVJQdh8f3RkuRPHji1S"
               },
-              "outputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
-                "version": 7,
-                "digest": "FQN6VoKtccgfK4Xda6UJ45fF1jTRAJb6paED8BaGqcpf"
-              },
+              "outputState": null,
               "idCreated": false,
               "idDeleted": false
             }
@@ -390,16 +390,16 @@ Response: {
           {
             "cursor": "Mg==",
             "node": {
-              "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+              "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
               "inputState": {
-                "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
-                "version": 1,
-                "digest": "4hY6HbcSgDuyD5TcKhxom1cPPdPTQtcoNUStc8BYoZt5"
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
+                "version": 6,
+                "digest": "AxMGw9sGH9nKzGVXzG9pWyFpsL7XZJpy6GPGFuTE3yqL"
               },
               "outputState": {
-                "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
                 "version": 7,
-                "digest": "23sXKQBrvQwvqfNiWERKC9R9N637fbegg7VKTQG3sfvg"
+                "digest": "7UrbajfCwYrov5jzDUa21YoeuTwbaja3kCvdvsmdWEWT"
               },
               "idCreated": false,
               "idDeleted": false
@@ -421,12 +421,16 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
-              "inputState": null,
+              "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+              "inputState": {
+                "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+                "version": 7,
+                "digest": "4sdYQ8MvuhrJsuer1PD4VYtLmWSSHUVeQ8NoiGpvMgeX"
+              },
               "outputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+                "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
                 "version": 8,
-                "digest": "6oKxXDAjCYHuEfNJ2kLDPZp1an5KQzagnAWVnRwNuN7z"
+                "digest": "8UZXRtk4kxk5WRHNEyhptZHHDP37HFYN1CdhLrRr23z8"
               },
               "idCreated": false,
               "idDeleted": false
@@ -435,16 +439,12 @@ Response: {
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
-              "inputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
-                "version": 7,
-                "digest": "FQN6VoKtccgfK4Xda6UJ45fF1jTRAJb6paED8BaGqcpf"
-              },
+              "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
+              "inputState": null,
               "outputState": {
-                "address": "0xedb916bf69bbf9c4cf5f83c231d17c3942fd4a3f6d509ff92ea0730f3f177154",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 8,
-                "digest": "EDR5ehUtYXNazyx4TCuiGVuSXnYKu9dNBzwNYTrHKiMV"
+                "digest": "Hd8r8RThBWVW4BgEHDonzP8jLsVk1DCUK3HtT1Gw9D7C"
               },
               "idCreated": false,
               "idDeleted": false
@@ -453,16 +453,16 @@ Response: {
           {
             "cursor": "Mg==",
             "node": {
-              "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+              "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
               "inputState": {
-                "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
                 "version": 7,
-                "digest": "23sXKQBrvQwvqfNiWERKC9R9N637fbegg7VKTQG3sfvg"
+                "digest": "7UrbajfCwYrov5jzDUa21YoeuTwbaja3kCvdvsmdWEWT"
               },
               "outputState": {
-                "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+                "address": "0xd0d418123d68089090b320558abfc12e9ab971ec4eea785fa9466390963dac03",
                 "version": 8,
-                "digest": "7JS9EV9aMqMGxrST7qH8nBd14ECmeca6WhorkPT5KHHv"
+                "digest": "GvRk5hxDQBxxKwTreWrwc9uz6mcGY8kjaP3owcFuYu8w"
               },
               "idCreated": false,
               "idDeleted": false
@@ -484,33 +484,33 @@ Response: {
           {
             "cursor": "MA==",
             "node": {
-              "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+              "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
               "inputState": {
-                "address": "0x9d0d76f9448e14a746eaaf12746c32205cbfe54441266fc696474889c0bdd86d",
+                "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
                 "version": 8,
-                "digest": "6oKxXDAjCYHuEfNJ2kLDPZp1an5KQzagnAWVnRwNuN7z"
+                "digest": "8UZXRtk4kxk5WRHNEyhptZHHDP37HFYN1CdhLrRr23z8"
               },
-              "outputState": null,
+              "outputState": {
+                "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+                "version": 9,
+                "digest": "HJB5AEMK8VY4gkzmqtjGC4qxJZ7V9qMQmGKg1nw9TTwD"
+              },
               "idCreated": false,
-              "idDeleted": true
+              "idDeleted": false
             }
           },
           {
             "cursor": "MQ==",
             "node": {
-              "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+              "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
               "inputState": {
-                "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
+                "address": "0x7d600dc6ba9a8c1a9d5691101d2816b5983102e5d9e13b53910e196acf04af59",
                 "version": 8,
-                "digest": "7JS9EV9aMqMGxrST7qH8nBd14ECmeca6WhorkPT5KHHv"
+                "digest": "Hd8r8RThBWVW4BgEHDonzP8jLsVk1DCUK3HtT1Gw9D7C"
               },
-              "outputState": {
-                "address": "0xfdc25bc3b2d2b3664199d08f5275c3a6bb360b0629ab5784672f083149163417",
-                "version": 9,
-                "digest": "Aj831jZkr2GTg6tqc6dFfWo8axs6jCu4eUxsR33FTqXJ"
-              },
+              "outputState": null,
               "idCreated": false,
-              "idDeleted": false
+              "idDeleted": true
             }
           }
         ]

@@ -1,23 +1,17 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use fastcrypto::hash::MultisetHash;
 use fastcrypto::traits::KeyPair;
 use move_core_types::{account_address::AccountAddress, ident_str};
-use shared_crypto::intent::{Intent, IntentScope};
-use std::sync::Arc;
-use std::time::Duration;
 use rtd_config::genesis::Genesis;
 use rtd_macros::nondeterministic;
 use rtd_types::base_types::{FullObjectRef, ObjectID, random_object_ref};
 use rtd_types::crypto::AuthorityKeyPair;
-use rtd_types::crypto::{AccountKeyPair, AuthorityPublicKeyBytes, Signer};
-use rtd_types::effects::{SignedTransactionEffects, TestEffectsBuilder};
-use rtd_types::error::RtdError;
-use rtd_types::signature_verification::VerifiedDigestCache;
+use rtd_types::crypto::{AccountKeyPair, Signer};
+use rtd_types::effects::TestEffectsBuilder;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::{
-    CallArg, SignedTransaction, TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction, TransactionData,
+    CallArg, TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction, TransactionData,
 };
 use rtd_types::utils::create_fake_transaction;
 use rtd_types::utils::to_sender_signed_transaction;
@@ -28,72 +22,13 @@ use rtd_types::{
     message_envelope::Message,
     transaction::CertifiedTransaction,
 };
+use shared_crypto::intent::{Intent, IntentScope};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::time::timeout;
 use tracing::{info, warn};
 
-use crate::authority::{AuthorityState, ExecutionEnv};
-use crate::global_state_hasher::GlobalStateHasher;
-
-const WAIT_FOR_TX_TIMEOUT: Duration = Duration::from_secs(15);
-
-// TODO(fastpath): switch to use MFP flow.
-pub async fn send_and_confirm_transaction(
-    authority: &AuthorityState,
-    fullnode: Option<&AuthorityState>,
-    transaction: Transaction,
-) -> Result<(CertifiedTransaction, SignedTransactionEffects), RtdError> {
-    // Make the initial request
-    let epoch_store = authority.load_epoch_store_one_call_per_task();
-    transaction.validity_check(&epoch_store.tx_validity_check_context())?;
-    let transaction = epoch_store
-        .verify_transaction_require_no_aliases(transaction)?
-        .into_tx();
-    let response = authority
-        .handle_sign_transaction(&epoch_store, transaction.clone())
-        .await?;
-    let vote = response.status.into_signed_for_testing();
-
-    // Collect signatures from a quorum of authorities
-    let committee = authority.clone_committee_for_testing();
-    let certificate =
-        CertifiedTransaction::new(transaction.into_message(), vec![vote.clone()], &committee)
-            .unwrap()
-            .try_into_verified_for_testing(&committee, &Default::default())
-            .unwrap();
-
-    // Submit the confirmation. *Now* execution actually happens, and it should fail when we try to look up our dummy module.
-    // we unfortunately don't get a very descriptive error message, but we can at least see that something went wrong inside the VM
-    //
-    // We also check the incremental effects of the transaction on the live object set against StateAccumulator
-    // for testing and regression detection
-    let state_acc =
-        GlobalStateHasher::new_for_tests(authority.get_global_state_hash_store().clone());
-    let include_wrapped_tombstone = !authority
-        .epoch_store_for_testing()
-        .protocol_config()
-        .simplified_unwrap_then_delete();
-    let mut state =
-        state_acc.accumulate_cached_live_object_set_for_testing(include_wrapped_tombstone);
-    let (result, _execution_error_opt) = authority
-        .try_execute_for_test(&certificate, ExecutionEnv::new())
-        .await;
-    let state_after =
-        state_acc.accumulate_cached_live_object_set_for_testing(include_wrapped_tombstone);
-    let effects_acc = state_acc.accumulate_effects(
-        &[result.inner().data().clone()],
-        epoch_store.protocol_config(),
-    );
-    state.union(&effects_acc);
-
-    assert_eq!(state_after.digest(), state.digest());
-
-    if let Some(fullnode) = fullnode {
-        fullnode
-            .try_execute_for_test(&certificate, ExecutionEnv::new())
-            .await;
-    }
-    Ok((certificate.into_inner(), result.into_inner()))
-}
+use crate::authority::AuthorityState;
 
 // note: clippy is confused about this being dead - it appears to only be used in cfg(test), but
 // adding #[cfg(test)] causes other targets to fail
@@ -114,36 +49,21 @@ where
     (genesis, authority_key)
 }
 
-pub async fn wait_for_tx(digest: TransactionDigest, state: Arc<AuthorityState>) {
+pub async fn wait_for_tx(digest: TransactionDigest, state: Arc<AuthorityState>, delay: Duration) {
     match timeout(
-        WAIT_FOR_TX_TIMEOUT,
+        delay,
         state
             .get_transaction_cache_reader()
             .notify_read_executed_effects("", &[digest]),
     )
     .await
     {
-        Ok(_) => info!(?digest, "digest found"),
+        Ok(_) => {
+            info!(?digest, "digest found");
+        }
         Err(e) => {
             warn!(?digest, "digest not found!");
             panic!("timed out waiting for effects of digest! {e}");
-        }
-    }
-}
-
-pub async fn wait_for_all_txes(digests: Vec<TransactionDigest>, state: Arc<AuthorityState>) {
-    match timeout(
-        WAIT_FOR_TX_TIMEOUT,
-        state
-            .get_transaction_cache_reader()
-            .notify_read_executed_effects("", &digests),
-    )
-    .await
-    {
-        Ok(_) => info!(?digests, "all digests found"),
-        Err(e) => {
-            warn!(?digests, "some digests not found!");
-            panic!("timed out waiting for effects of digests! {e}");
         }
     }
 }
@@ -285,40 +205,4 @@ pub fn make_dummy_tx(
         ),
         vec![sender_sec],
     )
-}
-
-/// Make a cert using an arbitrarily large committee.
-pub fn make_cert_with_large_committee(
-    committee: &Committee,
-    key_pairs: &[AuthorityKeyPair],
-    transaction: &Transaction,
-) -> CertifiedTransaction {
-    // assumes equal weighting.
-    let len = committee.voting_rights.len();
-    assert_eq!(len, key_pairs.len());
-    let count = (len * 2).div_ceil(3);
-
-    let sigs: Vec<_> = key_pairs
-        .iter()
-        .take(count)
-        .map(|key_pair| {
-            SignedTransaction::new(
-                committee.epoch(),
-                transaction.clone().into_data(),
-                key_pair,
-                AuthorityPublicKeyBytes::from(key_pair.public()),
-            )
-            .auth_sig()
-            .clone()
-        })
-        .collect();
-
-    let cert = CertifiedTransaction::new(transaction.clone().into_data(), sigs, committee).unwrap();
-    cert.verify_signatures_authenticated(
-        committee,
-        &Default::default(),
-        Arc::new(VerifiedDigestCache::new_empty()),
-    )
-    .unwrap();
-    cert
 }

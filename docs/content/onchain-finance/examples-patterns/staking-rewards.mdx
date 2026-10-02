@@ -1,0 +1,42 @@
+---
+title: Staking Rewards
+description: Design considerations for a token deposit pool that distributes rewards over time.
+keywords: [staking rewards, reward accumulator, DeFi, token distribution, Move]
+questions:
+  - How can a reward-per-token accumulator distribute rewards?
+  - Is there a verified staking reward contract in this repository?
+answer: >-
+  This page explains the reward-per-token design. This checkout does not
+  contain a verified staking-rewards package or a deployment-ready template.
+---
+
+This page describes a DeFi deposit-and-reward pattern: users deposit one token type and earn another over time. It does not describe the RTD consensus staking mechanism. **There is no corresponding tested staking-rewards Move package in this repository**, so the formulas and structure below are design guidance, not an implementation to publish.
+
+## Reward-per-token accumulator
+
+A pool can track a cumulative reward amount per unit staked. Each position stores the accumulator value from its last interaction. To calculate new earnings, update the pool accumulator and subtract the position's saved value:
+
+```text
+new_accumulator = old_accumulator + elapsed_time * reward_rate / total_staked
+new_earnings = user_stake * (new_accumulator - user_snapshot)
+```
+
+The arithmetic must use an explicit integer scaling factor and checked operations, since Move does not use floating-point token balances. The formulas also require defined behavior when `total_staked` is zero, when an emission period ends, and when integer division leaves dust. Updating a single accumulator avoids scanning every staker on each interaction.
+
+For example, suppose Alice stakes 400 units at time zero and Bob stakes 600 units at time 1,000. At a reward rate of 100 units per time step, Alice earns 100,000 units before Bob arrives. During the next 1,000 steps, Alice receives 40,000 and Bob receives 60,000. The total of 200,000 matches the funded emission for the 2,000-step period. This is a mathematical illustration; deployed code must specify exact units, scaling, rounding, and timestamp handling.
+
+## Objects and accounting to design
+
+A candidate Move package would need a shared pool holding both token balances, total stake, the emission schedule, and the accumulator. Each user position would need a receipt or owned object containing its staked amount, pool identity, accumulator snapshot, and already accrued rewards. An admin capability would authorize schedule and pause changes. Every public operation must have defined handling for its returned coins and objects in a programmable transaction block.
+
+Before deploying such a package, implement and test at least these cases:
+
+- Stake, claim, partial withdrawal, full withdrawal, and zero-amount calls.
+- Multiple users arriving and leaving at different times, including an interval with no stakers.
+- Reward funding and schedule replacement while a previous window is active.
+- Solvency and rounding: the pool must never promise or pay more than its reward balance.
+- Overflow checks for amount, rate, scale, duration, and timestamp arithmetic.
+- Authorization for changing schedules or pausing, and a withdrawal path that remains available while deposits are paused.
+- Receipt ownership and pool ID checks, including transfer semantics if receipts are transferable.
+
+See [Move testing](/develop/testing-debugging/testing) and [security best practices](/develop/security/best-practices) while building and validating your own package. Do not infer production readiness from this conceptual page.

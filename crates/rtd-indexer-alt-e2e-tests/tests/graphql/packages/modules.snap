@@ -10,13 +10,13 @@ task 1, lines 6-32:
 //# publish --upgradeable --sender A
 created: object(1,0), object(1,1)
 mutated: object(0,0)
-gas summary: computation_cost: 1000000, storage_cost: 22366800,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 22564400,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 34:
 //# create-checkpoint
 Checkpoint created: 1
 
-task 3, lines 36-61:
+task 3, lines 36-62:
 //# run-graphql --cursors "J" "P"
 Response: {
   "data": {
@@ -28,82 +28,108 @@ Response: {
         },
         "nodes": [
           {
-            "name": "A"
+            "name": "A",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::A"
           },
           {
-            "name": "B"
+            "name": "B",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::B"
           },
           {
-            "name": "C"
+            "name": "C",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::C"
           },
           {
-            "name": "D"
+            "name": "D",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::D"
           },
           {
-            "name": "E"
+            "name": "E",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::E"
           },
           {
-            "name": "F"
+            "name": "F",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::F"
           },
           {
-            "name": "G"
+            "name": "G",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::G"
           },
           {
-            "name": "H"
+            "name": "H",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::H"
           },
           {
-            "name": "I"
+            "name": "I",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::I"
           },
           {
-            "name": "J"
+            "name": "J",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::J"
           },
           {
-            "name": "K"
+            "name": "K",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::K"
           },
           {
-            "name": "L"
+            "name": "L",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::L"
           },
           {
-            "name": "M"
+            "name": "M",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::M"
           },
           {
-            "name": "N"
+            "name": "N",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::N"
           },
           {
-            "name": "O"
+            "name": "O",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::O"
           },
           {
-            "name": "P"
+            "name": "P",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::P"
           },
           {
-            "name": "Q"
+            "name": "Q",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Q"
           },
           {
-            "name": "R"
+            "name": "R",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::R"
           },
           {
-            "name": "S"
+            "name": "S",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::S"
           },
           {
-            "name": "T"
+            "name": "T",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::T"
           },
           {
-            "name": "U"
+            "name": "U",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::U"
           },
           {
-            "name": "V"
+            "name": "V",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::V"
           },
           {
-            "name": "W"
+            "name": "W",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::W"
           },
           {
-            "name": "X"
+            "name": "X",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::X"
           },
           {
-            "name": "Y"
+            "name": "Y",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Y"
           },
           {
-            "name": "Z"
+            "name": "Z",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Z"
           }
         ]
       },
@@ -114,13 +140,16 @@ Response: {
         },
         "nodes": [
           {
-            "name": "A"
+            "name": "A",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::A"
           },
           {
-            "name": "B"
+            "name": "B",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::B"
           },
           {
-            "name": "C"
+            "name": "C",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::C"
           }
         ]
       },
@@ -131,13 +160,16 @@ Response: {
         },
         "nodes": [
           {
-            "name": "X"
+            "name": "X",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::X"
           },
           {
-            "name": "Y"
+            "name": "Y",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Y"
           },
           {
-            "name": "Z"
+            "name": "Z",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Z"
           }
         ]
       },
@@ -148,13 +180,16 @@ Response: {
         },
         "nodes": [
           {
-            "name": "A"
+            "name": "A",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::A"
           },
           {
-            "name": "B"
+            "name": "B",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::B"
           },
           {
-            "name": "C"
+            "name": "C",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::C"
           }
         ]
       },
@@ -165,13 +200,16 @@ Response: {
         },
         "nodes": [
           {
-            "name": "X"
+            "name": "X",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::X"
           },
           {
-            "name": "Y"
+            "name": "Y",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Y"
           },
           {
-            "name": "Z"
+            "name": "Z",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::Z"
           }
         ]
       },
@@ -182,13 +220,16 @@ Response: {
         },
         "nodes": [
           {
-            "name": "K"
+            "name": "K",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::K"
           },
           {
-            "name": "L"
+            "name": "L",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::L"
           },
           {
-            "name": "M"
+            "name": "M",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::M"
           }
         ]
       },
@@ -199,13 +240,16 @@ Response: {
         },
         "nodes": [
           {
-            "name": "M"
+            "name": "M",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::M"
           },
           {
-            "name": "N"
+            "name": "N",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::N"
           },
           {
-            "name": "O"
+            "name": "O",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::O"
           }
         ]
       },
@@ -216,19 +260,24 @@ Response: {
         },
         "nodes": [
           {
-            "name": "K"
+            "name": "K",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::K"
           },
           {
-            "name": "L"
+            "name": "L",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::L"
           },
           {
-            "name": "M"
+            "name": "M",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::M"
           },
           {
-            "name": "N"
+            "name": "N",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::N"
           },
           {
-            "name": "O"
+            "name": "O",
+            "fullyQualifiedName": "0x89c9bbf27d5efed2e3c42e3fc40786405e37be412719c01d744b774c9b16f908::O"
           }
         ]
       }

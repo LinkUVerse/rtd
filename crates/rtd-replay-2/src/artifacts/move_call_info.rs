@@ -7,12 +7,12 @@ use move_binary_format::{
     file_format::{CompiledModule, SignatureToken},
 };
 use move_core_types::account_address::AccountAddress;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use rtd_types::{
     base_types::ObjectID, object::Object, transaction::ProgrammableTransaction,
     type_input::TypeInput,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use tracing::{debug, warn};
 
 /// Datatype definition: (address, module, name, formal_type_params).

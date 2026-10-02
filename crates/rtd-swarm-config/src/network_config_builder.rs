@@ -5,12 +5,16 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::{num::NonZeroUsize, path::Path, sync::Arc};
 
+use linku_common::ZipDebugEqIteratorExt;
+use linku_common::in_test_configuration;
 use rand::rngs::OsRng;
 use rtd_config::ExecutionCacheConfig;
 use rtd_config::genesis::{TokenAllocation, TokenDistributionScheduleBuilder};
-use rtd_config::node::AuthorityOverloadConfig;
 #[cfg(msim)]
 use rtd_config::node::ExecutionTimeObserverConfig;
+use rtd_config::node::FundsWithdrawSchedulerType;
+use rtd_config::node::{AuthorityOverloadConfig, ConsensusTransactionPoolConfig};
+use rtd_config::transaction_deny_config::PeerDenySyncConfig;
 use rtd_protocol_config::Chain;
 use rtd_types::base_types::{AuthorityName, RtdAddress};
 use rtd_types::committee::{Committee, ProtocolVersion};
@@ -21,10 +25,15 @@ use rtd_types::object::Object;
 use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
 use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 
+use consensus_config::ObserverParameters;
+
 use crate::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT, ValidatorGenesisConfigBuilder};
 use crate::genesis_config::{GenesisConfig, ValidatorGenesisConfig};
 use crate::network_config::NetworkConfig;
 use crate::node_config_builder::ValidatorConfigBuilder;
+
+pub type ValidatorObserverConfigCallback =
+    Arc<dyn Fn(usize) -> Option<ObserverParameters> + Send + Sync + 'static>;
 
 pub struct KeyPairWrapper {
     pub account_key_pair: AccountKeyPair,
@@ -78,6 +87,22 @@ pub enum GlobalStateHashV2EnabledConfig {
     PerValidator(GlobalStateHashV2EnabledCallback),
 }
 
+pub type FundsWithdrawSchedulerTypeCallback =
+    Arc<dyn Fn(usize) -> FundsWithdrawSchedulerType + Send + Sync + 'static>;
+
+#[derive(Clone)]
+pub enum FundsWithdrawSchedulerTypeConfig {
+    Global(FundsWithdrawSchedulerType),
+    PerValidator(FundsWithdrawSchedulerTypeCallback),
+}
+
+/// Closure for per-validator `peer_deny_sync_config`. Receives this validator's
+/// authority name and the slice of all genesis-committee authority names, so the
+/// caller can compute an allowlist that references peers (e.g. "trust everyone but
+/// myself") without having to predict the keys ahead of time.
+pub type PeerDenySyncConfigCallback =
+    Arc<dyn Fn(AuthorityName, &[AuthorityName]) -> PeerDenySyncConfig + Send + Sync + 'static>;
+
 pub struct ConfigBuilder<R = OsRng> {
     rng: Option<R>,
     config_directory: PathBuf,
@@ -90,20 +115,39 @@ pub struct ConfigBuilder<R = OsRng> {
     jwk_fetch_interval: Option<Duration>,
     num_unpruned_validators: Option<usize>,
     authority_overload_config: Option<AuthorityOverloadConfig>,
+    consensus_transaction_pool_config: Option<ConsensusTransactionPoolConfig>,
     execution_cache_config: Option<ExecutionCacheConfig>,
     data_ingestion_dir: Option<PathBuf>,
     policy_config: Option<PolicyConfig>,
     firewall_config: Option<RemoteFirewallConfig>,
-    max_submit_position: Option<usize>,
-    submit_delay_step_override_millis: Option<u64>,
     global_state_hash_v2_enabled_config: Option<GlobalStateHashV2EnabledConfig>,
+    funds_withdraw_scheduler_type_config: Option<FundsWithdrawSchedulerTypeConfig>,
     state_sync_config: Option<rtd_config::p2p::StateSyncConfig>,
+    peer_deny_sync_config: Option<PeerDenySyncConfigCallback>,
     #[cfg(msim)]
     execution_time_observer_config: Option<ExecutionTimeObserverConfig>,
+    validator_observer_config: Option<ValidatorObserverConfigCallback>,
 }
 
 impl ConfigBuilder {
     pub fn new<P: AsRef<Path>>(config_directory: P) -> Self {
+        // In test configuration, alternate scheduler types between validators
+        // so that half use Eager and half use Naive. This allows testing both
+        // scheduler implementations and catching any discrepancies via quorum comparison.
+        let funds_withdraw_scheduler_type_config = if in_test_configuration() {
+            Some(FundsWithdrawSchedulerTypeConfig::PerValidator(Arc::new(
+                |idx| {
+                    if idx % 2 == 0 {
+                        FundsWithdrawSchedulerType::Eager
+                    } else {
+                        FundsWithdrawSchedulerType::Naive
+                    }
+                },
+            )))
+        } else {
+            None
+        };
+
         Self {
             rng: Some(OsRng),
             config_directory: config_directory.as_ref().into(),
@@ -118,16 +162,18 @@ impl ConfigBuilder {
             jwk_fetch_interval: None,
             num_unpruned_validators: None,
             authority_overload_config: None,
+            consensus_transaction_pool_config: None,
             execution_cache_config: None,
             data_ingestion_dir: None,
             policy_config: None,
             firewall_config: None,
-            max_submit_position: None,
-            submit_delay_step_override_millis: None,
             global_state_hash_v2_enabled_config: None,
+            funds_withdraw_scheduler_type_config,
             state_sync_config: None,
+            peer_deny_sync_config: None,
             #[cfg(msim)]
             execution_time_observer_config: None,
+            validator_observer_config: None,
         }
     }
 
@@ -274,14 +320,53 @@ impl<R> ConfigBuilder<R> {
         self
     }
 
+    pub fn with_funds_withdraw_scheduler_type(
+        mut self,
+        scheduler_type: FundsWithdrawSchedulerType,
+    ) -> Self {
+        self.funds_withdraw_scheduler_type_config =
+            Some(FundsWithdrawSchedulerTypeConfig::Global(scheduler_type));
+        self
+    }
+
+    pub fn with_funds_withdraw_scheduler_type_callback(
+        mut self,
+        func: FundsWithdrawSchedulerTypeCallback,
+    ) -> Self {
+        self.funds_withdraw_scheduler_type_config =
+            Some(FundsWithdrawSchedulerTypeConfig::PerValidator(func));
+        self
+    }
+
+    pub fn with_funds_withdraw_scheduler_type_config(
+        mut self,
+        c: FundsWithdrawSchedulerTypeConfig,
+    ) -> Self {
+        self.funds_withdraw_scheduler_type_config = Some(c);
+        self
+    }
+
     #[cfg(msim)]
     pub fn with_execution_time_observer_config(mut self, c: ExecutionTimeObserverConfig) -> Self {
         self.execution_time_observer_config = Some(c);
         self
     }
 
+    pub fn with_validator_observer_config(mut self, c: ValidatorObserverConfigCallback) -> Self {
+        self.validator_observer_config = Some(c);
+        self
+    }
+
     pub fn with_authority_overload_config(mut self, c: AuthorityOverloadConfig) -> Self {
         self.authority_overload_config = Some(c);
+        self
+    }
+
+    pub fn with_consensus_transaction_pool_config(
+        mut self,
+        config: ConsensusTransactionPoolConfig,
+    ) -> Self {
+        self.consensus_transaction_pool_config = Some(config);
         self
     }
 
@@ -300,19 +385,6 @@ impl<R> ConfigBuilder<R> {
         self
     }
 
-    pub fn with_max_submit_position(mut self, max_submit_position: usize) -> Self {
-        self.max_submit_position = Some(max_submit_position);
-        self
-    }
-
-    pub fn with_submit_delay_step_override_millis(
-        mut self,
-        submit_delay_step_override_millis: u64,
-    ) -> Self {
-        self.submit_delay_step_override_millis = Some(submit_delay_step_override_millis);
-        self
-    }
-
     pub fn rng<N: rand::RngCore + rand::CryptoRng>(self, rng: N) -> ConfigBuilder<N> {
         ConfigBuilder {
             rng: Some(rng),
@@ -326,21 +398,35 @@ impl<R> ConfigBuilder<R> {
             num_unpruned_validators: self.num_unpruned_validators,
             jwk_fetch_interval: self.jwk_fetch_interval,
             authority_overload_config: self.authority_overload_config,
+            consensus_transaction_pool_config: self.consensus_transaction_pool_config,
             execution_cache_config: self.execution_cache_config,
             data_ingestion_dir: self.data_ingestion_dir,
             policy_config: self.policy_config,
             firewall_config: self.firewall_config,
-            max_submit_position: self.max_submit_position,
-            submit_delay_step_override_millis: self.submit_delay_step_override_millis,
             global_state_hash_v2_enabled_config: self.global_state_hash_v2_enabled_config,
+            funds_withdraw_scheduler_type_config: self.funds_withdraw_scheduler_type_config,
             state_sync_config: self.state_sync_config,
+            peer_deny_sync_config: self.peer_deny_sync_config,
             #[cfg(msim)]
             execution_time_observer_config: self.execution_time_observer_config,
+            validator_observer_config: self.validator_observer_config,
         }
     }
 
     pub fn with_state_sync_config(mut self, config: rtd_config::p2p::StateSyncConfig) -> Self {
         self.state_sync_config = Some(config);
+        self
+    }
+
+    /// Per-validator hook for `peer_deny_sync_config`. The closure is called once
+    /// per validator after all genesis-committee authority names are known, so the
+    /// caller can compute an allowlist that references peers (e.g. "trust everyone
+    /// but myself").
+    pub fn with_peer_deny_sync_config_per_validator(
+        mut self,
+        f: PeerDenySyncConfigCallback,
+    ) -> Self {
+        self.peer_deny_sync_config = Some(f);
         self
     }
 
@@ -384,7 +470,7 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
                 // See above re fixed protocol keys
                 let (_, protocol_keys) = Committee::new_simple_test_committee_of_size(keys.len());
                 keys.into_iter()
-                    .zip(protocol_keys)
+                    .zip_debug_eq(protocol_keys)
                     .map(|(account_key, protocol_key)| {
                         let mut builder = ValidatorGenesisConfigBuilder::new()
                             .with_protocol_key_pair(protocol_key)
@@ -482,6 +568,10 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
             builder.build()
         };
 
+        let all_authority_names: Vec<AuthorityName> = validators
+            .iter()
+            .map(|v| v.key_pair.public().into())
+            .collect();
         let validator_configs = validators
             .into_iter()
             .enumerate()
@@ -495,17 +585,6 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
                     builder = builder.with_chain_override(chain);
                 }
 
-                if let Some(max_submit_position) = self.max_submit_position {
-                    builder = builder.with_max_submit_position(max_submit_position);
-                }
-
-                if let Some(submit_delay_step_override_millis) =
-                    self.submit_delay_step_override_millis
-                {
-                    builder = builder
-                        .with_submit_delay_step_override_millis(submit_delay_step_override_millis);
-                }
-
                 if let Some(jwk_fetch_interval) = self.jwk_fetch_interval {
                     builder = builder.with_jwk_fetch_interval(jwk_fetch_interval);
                 }
@@ -513,6 +592,10 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
                 if let Some(authority_overload_config) = &self.authority_overload_config {
                     builder =
                         builder.with_authority_overload_config(authority_overload_config.clone());
+                }
+
+                if let Some(config) = &self.consensus_transaction_pool_config {
+                    builder = builder.with_consensus_transaction_pool_config(config.clone());
                 }
 
                 if let Some(execution_cache_config) = &self.execution_cache_config {
@@ -554,10 +637,29 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
                     builder =
                         builder.with_global_state_hash_v2_enabled(global_state_hash_v2_enabled);
                 }
+                if let Some(scheduler_type_config) = &self.funds_withdraw_scheduler_type_config {
+                    let scheduler_type = match scheduler_type_config {
+                        FundsWithdrawSchedulerTypeConfig::Global(t) => *t,
+                        FundsWithdrawSchedulerTypeConfig::PerValidator(func) => func(idx),
+                    };
+                    builder = builder.with_funds_withdraw_scheduler_type(scheduler_type);
+                }
+                if let Some(observer_config_fn) = &self.validator_observer_config
+                    && let Some(observer_config) = observer_config_fn(idx)
+                {
+                    builder = builder.with_observer_config(observer_config);
+                }
                 if let Some(num_unpruned_validators) = self.num_unpruned_validators
                     && idx < num_unpruned_validators
                 {
                     builder = builder.with_unpruned_checkpoints();
+                }
+                if let Some(peer_deny_sync_cb) = &self.peer_deny_sync_config {
+                    let this_authority: AuthorityName = validator.key_pair.public().into();
+                    builder = builder.with_peer_deny_sync_config(peer_deny_sync_cb(
+                        this_authority,
+                        &all_authority_names,
+                    ));
                 }
                 builder.build(validator, genesis.clone())
             })
@@ -620,16 +722,16 @@ mod tests {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use rtd_config::genesis::Genesis;
     use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
     use rtd_types::epoch_data::EpochData;
     use rtd_types::execution_params::ExecutionOrEarlyError;
     use rtd_types::gas::RtdGasStatus;
     use rtd_types::in_memory_storage::InMemoryStorage;
-    use rtd_types::metrics::LimitsMetrics;
+    use rtd_types::metrics::ExecutionMetrics;
     use rtd_types::rtd_system_state::RtdSystemStateTrait;
     use rtd_types::transaction::CheckedInputObjects;
+    use std::sync::Arc;
 
     #[test]
     fn roundtrip() {
@@ -662,7 +764,7 @@ mod test {
 
         // Use a throwaway metrics registry for genesis transaction execution.
         let registry = prometheus::Registry::new();
-        let metrics = Arc::new(LimitsMetrics::new(&registry));
+        let metrics = Arc::new(ExecutionMetrics::new(&registry));
         let expensive_checks = false;
         let epoch = EpochData::new_test();
         let transaction_data = &genesis_transaction.data().intent_message().value;
@@ -676,13 +778,18 @@ mod test {
                 &protocol_config,
                 metrics,
                 expensive_checks,
-                ExecutionOrEarlyError::Ok(()),
+                ExecutionOrEarlyError::ok(None),
                 &epoch.epoch_id(),
                 epoch.epoch_start_timestamp(),
                 input_objects,
+                rtd_types::base_types::SystemObjectVersions::empty(),
+                // The genesis transaction cannot withdraw object funds, so there are never
+                // unsettled withdrawals for it to account for.
+                &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
                 gas_data,
-                RtdGasStatus::new_unmetered(),
+                RtdGasStatus::new_unmetered(&protocol_config),
                 kind,
+                None, // compat_args
                 signer,
                 genesis_digest,
                 &mut None,

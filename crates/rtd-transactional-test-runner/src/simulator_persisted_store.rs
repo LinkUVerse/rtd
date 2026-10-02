@@ -5,9 +5,9 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
+use move_core_types::account_address::AccountAddress;
+use move_core_types::resolver::SerializedPackage;
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
-use simulacrum::Simulacrum;
-use std::num::NonZeroUsize;
 use rtd_config::genesis;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_swarm_config::genesis_config::AccountConfig;
@@ -15,7 +15,7 @@ use rtd_swarm_config::network_config_builder::{ConfigBuilder, KeyPairWrapper};
 use rtd_types::error::RtdErrorKind;
 use rtd_types::storage::{ReadStore, RpcStateReader};
 use rtd_types::{
-    base_types::{ObjectID, SequenceNumber, RtdAddress, VersionNumber},
+    base_types::{ObjectID, RtdAddress, SequenceNumber, VersionNumber},
     committee::{Committee, EpochId},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents},
@@ -26,11 +26,13 @@ use rtd_types::{
     },
     object::{Object, Owner},
     storage::{
-        BackingPackageStore, ChildObjectResolver, ObjectStore, PackageObject, ParentSync,
+        BackingPackageStore, ObjectStore, PackageObject, ParentSync, RuntimeObjectResolver,
         load_package_object_from_object_store,
     },
     transaction::VerifiedTransaction,
 };
+use simulacrum::Simulacrum;
+use std::num::NonZeroUsize;
 use tempfile::tempdir;
 use typed_store::DBMapUtils;
 use typed_store::Map;
@@ -399,7 +401,7 @@ impl BackingPackageStore for PersistedStore {
     }
 }
 
-impl ChildObjectResolver for PersistedStore {
+impl RuntimeObjectResolver for PersistedStore {
     fn read_child_object(
         &self,
         parent: &ObjectID,
@@ -478,6 +480,32 @@ impl ModuleResolver for PersistedStore {
                     .get(module_id.name().as_str())
                     .cloned()
             }))
+    }
+
+    fn get_packages_static<const N: usize>(
+        &self,
+        ids: [AccountAddress; N],
+    ) -> Result<[Option<SerializedPackage>; N], Self::Error> {
+        let mut packages = [const { None }; N];
+        for (i, id) in ids.iter().enumerate() {
+            packages[i] = self
+                .get_package_object(&ObjectID::from(*id))?
+                .map(|pkg| pkg.move_package().into_serialized_move_package())
+                .transpose()?;
+        }
+        Ok(packages)
+    }
+
+    fn get_packages<'a>(
+        &self,
+        ids: impl ExactSizeIterator<Item = &'a AccountAddress>,
+    ) -> Result<Vec<Option<SerializedPackage>>, Self::Error> {
+        ids.map(|id| {
+            let pkg = self.get_package_object(&ObjectID::from(*id))?;
+            pkg.map(|pkg| pkg.move_package().into_serialized_move_package())
+                .transpose()
+        })
+        .collect()
     }
 }
 
@@ -645,6 +673,63 @@ impl ReadStore for PersistedStoreInnerReadOnlyWrapper {
     }
 }
 
+impl BackingPackageStore for PersistedStoreInnerReadOnlyWrapper {
+    fn get_package_object(
+        &self,
+        package_id: &ObjectID,
+    ) -> rtd_types::error::RtdResult<Option<PackageObject>> {
+        load_package_object_from_object_store(self, package_id)
+    }
+}
+
+impl RuntimeObjectResolver for PersistedStoreInnerReadOnlyWrapper {
+    fn read_child_object(
+        &self,
+        parent: &ObjectID,
+        child: &ObjectID,
+        child_version_upper_bound: SequenceNumber,
+    ) -> rtd_types::error::RtdResult<Option<Object>> {
+        let child_object = match ObjectStore::get_object(self, child) {
+            None => return Ok(None),
+            Some(obj) => obj,
+        };
+
+        let parent = *parent;
+        if child_object.owner != Owner::ObjectOwner(parent.into()) {
+            return Err(RtdErrorKind::InvalidChildObjectAccess {
+                object: *child,
+                given_parent: parent,
+                actual_owner: child_object.owner.clone(),
+            }
+            .into());
+        }
+
+        if child_object.version() > child_version_upper_bound {
+            return Err(RtdErrorKind::UnsupportedFeatureError {
+                error: "PersistedStoreInnerReadOnlyWrapper::read_child_object does not support bounded reads"
+                    .to_owned(),
+            }
+            .into());
+        }
+
+        Ok(Some(child_object))
+    }
+
+    fn get_object_received_at_version(
+        &self,
+        _owner: &ObjectID,
+        _receiving_object_id: &ObjectID,
+        _receive_object_at_version: SequenceNumber,
+        _epoch_id: EpochId,
+    ) -> rtd_types::error::RtdResult<Option<Object>> {
+        Err(RtdErrorKind::UnsupportedFeatureError {
+            error: "PersistedStoreInnerReadOnlyWrapper does not support receiving objects"
+                .to_string(),
+        }
+        .into())
+    }
+}
+
 impl RpcStateReader for PersistedStoreInnerReadOnlyWrapper {
     fn get_lowest_available_checkpoint_objects(
         &self,
@@ -662,9 +747,10 @@ impl RpcStateReader for PersistedStoreInnerReadOnlyWrapper {
         None
     }
 
-    fn get_struct_layout(
+    fn get_struct_layout_with_overlay(
         &self,
         _: &move_core_types::language_storage::StructTag,
+        _overlay: &rtd_types::full_checkpoint_content::ObjectSet,
     ) -> rtd_types::storage::error::Result<Option<move_core_types::annotated_value::MoveTypeLayout>>
     {
         Ok(None)
@@ -698,6 +784,7 @@ impl Clone for PersistedStoreInnerReadOnlyWrapper {
 mod tests {
     use super::*;
     use rand::{SeedableRng, rngs::StdRng};
+    use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
 
     #[tokio::test]
     async fn deterministic_genesis() {
@@ -745,6 +832,49 @@ mod tests {
         assert_ne!(
             chain1.store().get_committee_by_epoch(0),
             chain3.store().get_committee_by_epoch(0),
+        );
+    }
+
+    #[tokio::test]
+    async fn read_replica_resolves_package_at_exact_version() {
+        let protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
+        let (_, read_replica) = PersistedStore::new_sim_replica_with_protocol_version_and_accounts(
+            StdRng::from_seed([9; 32]),
+            0,
+            &protocol_config,
+            vec![],
+            vec![],
+            None,
+            None,
+        );
+
+        let package = read_replica
+            .get_package_object(&RTD_FRAMEWORK_PACKAGE_ID)
+            .unwrap()
+            .expect("Rtd framework package exists in genesis");
+        let version = package.move_package().version();
+
+        let package = read_replica
+            .get_package_at_version(&RTD_FRAMEWORK_PACKAGE_ID, version)
+            .expect("package exists at its stored version");
+        assert_eq!(package.id(), RTD_FRAMEWORK_PACKAGE_ID);
+        assert_eq!(package.version(), version);
+
+        assert_ne!(version, SequenceNumber::MIN);
+        let mut previous_version = version;
+        previous_version.decrement();
+        assert!(
+            read_replica
+                .get_package_at_version(&RTD_FRAMEWORK_PACKAGE_ID, previous_version)
+                .is_none()
+        );
+
+        let mut next_version = version;
+        next_version.increment();
+        assert!(
+            read_replica
+                .get_package_at_version(&RTD_FRAMEWORK_PACKAGE_ID, next_version)
+                .is_none()
         );
     }
 }

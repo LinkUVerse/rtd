@@ -9,7 +9,7 @@ use rtd::zklogin_verified_issuer::{
     check_zklogin_issuer,
     delete,
     verify_zklogin_issuer,
-    VerifiedIssuer
+    VerifiedIssuer,
 };
 
 #[test]

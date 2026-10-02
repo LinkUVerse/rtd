@@ -12,11 +12,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use consensus_types::block::BlockRef;
-use std::{
-    collections::{BTreeMap, HashMap},
-    net::SocketAddr,
-    sync::{Arc, Mutex as StdMutex},
-};
 use rtd_types::{
     base_types::{AuthorityName, random_object_ref},
     committee::Committee,
@@ -28,16 +23,18 @@ use rtd_types::{
     },
     messages_consensus::ConsensusPosition,
     messages_grpc::{
-        ExecutedData, HandleCertificateRequestV3, HandleCertificateResponseV2,
-        HandleCertificateResponseV3, HandleSoftBundleCertificatesRequestV3,
-        HandleSoftBundleCertificatesResponseV3, HandleTransactionResponse, ObjectInfoRequest,
-        ObjectInfoResponse, SubmitTxRequest, SubmitTxResponse, SubmitTxResult, SystemStateRequest,
-        TransactionInfoRequest, TransactionInfoResponse, TxType, ValidatorHealthRequest,
-        ValidatorHealthResponse, WaitForEffectsRequest, WaitForEffectsResponse,
+        ExecutedData, ObjectInfoRequest, ObjectInfoResponse, SubmitTxRequest, SubmitTxResponse,
+        SubmitTxResult, SystemStateRequest, TransactionInfoRequest, TransactionInfoResponse,
+        TxType, ValidatorHealthRequest, ValidatorHealthResponse, WaitForEffectsRequest,
+        WaitForEffectsResponse,
     },
-    quorum_driver_types::EffectsFinalityInfo,
     rtd_system_state::RtdSystemState,
-    transaction::{CertifiedTransaction, Transaction},
+    transaction_driver_types::EffectsFinalityInfo,
+};
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    sync::{Arc, Mutex as StdMutex},
 };
 use tokio::time::{Duration, sleep};
 
@@ -123,38 +120,6 @@ impl AuthorityAPI for MockAuthority {
             }
             .into())
         }
-    }
-
-    async fn handle_transaction(
-        &self,
-        _transaction: Transaction,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleTransactionResponse, RtdError> {
-        unimplemented!();
-    }
-
-    async fn handle_certificate_v2(
-        &self,
-        _certificate: CertifiedTransaction,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleCertificateResponseV2, RtdError> {
-        unimplemented!();
-    }
-
-    async fn handle_certificate_v3(
-        &self,
-        _request: HandleCertificateRequestV3,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleCertificateResponseV3, RtdError> {
-        unimplemented!()
-    }
-
-    async fn handle_soft_bundle_certificates_v3(
-        &self,
-        _request: HandleSoftBundleCertificatesRequestV3,
-        _client_addr: Option<SocketAddr>,
-    ) -> Result<HandleSoftBundleCertificatesResponseV3, RtdError> {
-        unimplemented!()
     }
 
     async fn handle_object_info_request(
@@ -248,13 +213,11 @@ async fn test_successful_certified_effects() {
     let executed_response_full = WaitForEffectsResponse::Executed {
         effects_digest,
         details: Some(Box::new(executed_data.clone())),
-        fast_path: false,
     };
 
     let executed_response_ack = WaitForEffectsResponse::Executed {
         effects_digest,
         details: None,
-        fast_path: false,
     };
 
     for (_, safe_client) in authority_aggregator.authority_clients.iter() {
@@ -303,7 +266,6 @@ async fn test_successful_certified_effects() {
     let executed_response_ack = WaitForEffectsResponse::Executed {
         effects_digest,
         details: None,
-        fast_path: false,
     };
 
     for (_, safe_client) in authority_aggregator.authority_clients.iter() {
@@ -315,7 +277,6 @@ async fn test_successful_certified_effects() {
     let submit_tx_result = SubmitTxResult::Executed {
         effects_digest,
         details: Some(Box::new(executed_data.clone())),
-        fast_path: false,
     };
     let result = certifier
         .get_certified_finalized_effects(
@@ -1083,14 +1044,12 @@ async fn test_forked_execution() {
         let response = WaitForEffectsResponse::Executed {
             effects_digest: digest,
             details: None,
-            fast_path: false,
         };
         client.set_ack_response(tx_digest, response);
 
         let executed_response_full = WaitForEffectsResponse::Executed {
             effects_digest: digest,
             details: Some(Box::new(executed_data.clone())),
-            fast_path: false,
         };
         client.set_full_response(tx_digest, executed_response_full.clone());
     }
@@ -1165,12 +1124,10 @@ async fn test_aborted_with_multiple_effects() {
             0 => WaitForEffectsResponse::Executed {
                 effects_digest: effects_digest_1, // from fastpath
                 details: None,
-                fast_path: false,
             },
             1 => WaitForEffectsResponse::Executed {
                 effects_digest: effects_digest_2, // from fastpath
                 details: None,
-                fast_path: false,
             },
             2 => WaitForEffectsResponse::Rejected {
                 error: Some(
@@ -1235,7 +1192,6 @@ async fn test_full_effects_retry_loop() {
     let executed_response_ack = WaitForEffectsResponse::Executed {
         effects_digest,
         details: None,
-        fast_path: false,
     };
 
     for (_, safe_client) in authority_aggregator.authority_clients.iter() {
@@ -1271,7 +1227,6 @@ async fn test_full_effects_retry_loop() {
             let successful_response = WaitForEffectsResponse::Executed {
                 effects_digest,
                 details: Some(Box::new(executed_data.clone())),
-                fast_path: false,
             };
             client.set_full_response(tx_digest, successful_response);
         }
@@ -1328,7 +1283,6 @@ async fn test_full_effects_digest_mismatch() {
     let executed_response_ack = WaitForEffectsResponse::Executed {
         effects_digest: certified_digest,
         details: None,
-        fast_path: false,
     };
 
     for (_, safe_client) in authority_aggregator.authority_clients.iter() {
@@ -1350,7 +1304,6 @@ async fn test_full_effects_digest_mismatch() {
             let mismatched_response = WaitForEffectsResponse::Executed {
                 effects_digest: mismatched_digest,
                 details: Some(Box::new(executed_data.clone())),
-                fast_path: false,
             };
             client.set_full_response(tx_digest, mismatched_response);
         } else {
@@ -1358,7 +1311,6 @@ async fn test_full_effects_digest_mismatch() {
             let correct_response = WaitForEffectsResponse::Executed {
                 effects_digest: certified_digest,
                 details: Some(Box::new(executed_data.clone())),
-                fast_path: false,
             };
             client.set_full_response(tx_digest, correct_response);
         }
@@ -1413,7 +1365,6 @@ async fn test_request_retrier_exhaustion() {
     let executed_response_ack = WaitForEffectsResponse::Executed {
         effects_digest,
         details: None,
-        fast_path: false,
     };
 
     for (_, safe_client) in authority_aggregator.authority_clients.iter() {

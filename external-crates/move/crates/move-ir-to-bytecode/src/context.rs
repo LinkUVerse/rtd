@@ -788,7 +788,7 @@ impl<'a> Context<'a> {
             Some((_, idx)) => idx.0 as usize,
         };
         if hidx > TABLE_MAX_SIZE {
-            bail!("too many functions: {}.{}", mname, fname)
+            bail!("too many functions: {}::{}", mname, fname)
         }
         let handle_index = FunctionHandleIndex(hidx as TableIndex);
         self.function_handles.insert(m_f, (handle, handle_index));
@@ -798,6 +798,9 @@ impl<'a> Context<'a> {
 
     /// Given a named constant, adds it to the pool
     pub fn declare_constant(&mut self, name: ConstantName, constant: Constant) -> Result<()> {
+        if self.named_constants.contains_key(&name) {
+            bail!("Duplicate constant definition for '{}'", name);
+        }
         let idx = self.constant_index(constant)?;
         self.named_constants.insert(name, idx.0);
         Ok(())
@@ -969,12 +972,12 @@ impl<'a> Context<'a> {
         f: &FunctionName,
     ) -> Result<FunctionSignature> {
         if m == &ModuleName::module_self() {
-            bail!("Unbound function {}.{}", m, f)
+            bail!("Unbound function {}::{}", m, f)
         }
         let mident = *self.module_ident(m)?;
         let dep = self.dependency(&mident)?;
         match dep.function_signature(f) {
-            None => bail!("Unbound function {}.{}", mident, f),
+            None => bail!("Unbound function {}::{}", mident, f),
             Some(sig) => self.reindex_function_signature(&mident, sig),
         }
     }

@@ -3,72 +3,91 @@
 
 //! This module contains the transactional test runner instantiation for the Rtd adapter
 
+#[cfg(feature = "testing")]
 pub mod args;
+#[cfg(feature = "testing")]
 pub mod cursor;
+#[cfg(feature = "testing")]
 pub mod offchain_state;
+#[cfg(feature = "testing")]
 pub mod programmable_transaction_test_parser;
+#[cfg(feature = "testing")]
 mod simulator_persisted_store;
+#[cfg(feature = "testing")]
 pub mod test_adapter;
 
+#[cfg(feature = "testing")]
 pub use move_transactional_test_runner::framework::{
-    create_adapter, run_tasks_with_adapter, run_test_impl,
+    create_adapter_and_taskify, run_tasks_with_adapter, run_test_impl,
 };
-use rand::rngs::StdRng;
-use simulacrum::AdvanceEpochConfig;
-use simulacrum::Simulacrum;
-use simulacrum::SimulatorStore;
-use simulator_persisted_store::PersistedStore;
-use std::path::Path;
-use std::sync::Arc;
-use rtd_core::authority::AuthorityState;
-use rtd_core::authority::authority_per_epoch_store::CertLockGuard;
-use rtd_core::authority::authority_test_utils::send_and_confirm_transaction_with_execution_error;
-use rtd_core::authority::shared_object_version_manager::AssignedVersions;
-use rtd_json_rpc::authority_state::StateRead;
-use rtd_json_rpc_types::EventFilter;
-use rtd_json_rpc_types::{DevInspectResults, DryRunTransactionBlockResponse};
-use rtd_storage::key_value_store::TransactionKeyValueStore;
-use rtd_types::base_types::ObjectID;
-use rtd_types::base_types::RtdAddress;
-use rtd_types::base_types::VersionNumber;
-use rtd_types::committee::EpochId;
-use rtd_types::digests::TransactionDigest;
-use rtd_types::effects::TransactionEffects;
-use rtd_types::effects::TransactionEvents;
-use rtd_types::error::ExecutionError;
-use rtd_types::error::RtdErrorKind;
-use rtd_types::error::RtdResult;
-use rtd_types::event::Event;
-use rtd_types::executable_transaction::{ExecutableTransaction, VerifiedExecutableTransaction};
-use rtd_types::messages_checkpoint::CheckpointContentsDigest;
-use rtd_types::messages_checkpoint::VerifiedCheckpoint;
-use rtd_types::object::Object;
-use rtd_types::storage::ObjectStore;
-use rtd_types::storage::ReadStore;
-use rtd_types::rtd_system_state::RtdSystemStateTrait;
-use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
-use rtd_types::transaction::Transaction;
-use rtd_types::transaction::TransactionKind;
-use rtd_types::transaction::{InputObjects, TransactionData};
-use test_adapter::{PRE_COMPILED, RtdTestAdapter};
 
+#[cfg(feature = "testing")]
+mod testing_imports {
+    pub use super::simulator_persisted_store::PersistedStore;
+    pub use super::test_adapter::{PRE_COMPILED, RtdTestAdapter};
+    pub use rand::rngs::StdRng;
+    pub use rtd_core::authority::AuthorityState;
+    pub use rtd_core::authority::authority_per_epoch_store::CertLockGuard;
+    pub use rtd_core::authority::authority_test_utils::submit_and_execute_with_error;
+    pub use rtd_core::authority::shared_object_version_manager::AssignedVersions;
+    pub use rtd_json_rpc::authority_state::StateRead;
+    pub use rtd_json_rpc_types::EventFilter;
+    pub use rtd_json_rpc_types::{DevInspectResults, DryRunTransactionBlockResponse};
+    pub use rtd_storage::key_value_store::TransactionKeyValueStore;
+    pub use rtd_types::base_types::ObjectID;
+    pub use rtd_types::base_types::RtdAddress;
+    pub use rtd_types::base_types::VersionNumber;
+    pub use rtd_types::committee::EpochId;
+    pub use rtd_types::digests::TransactionDigest;
+    pub use rtd_types::effects::TransactionEffects;
+    pub use rtd_types::effects::TransactionEvents;
+    pub use rtd_types::error::ExecutionError;
+    pub use rtd_types::error::RtdErrorKind;
+    pub use rtd_types::error::RtdResult;
+    pub use rtd_types::event::Event;
+    pub use rtd_types::executable_transaction::{
+        ExecutableTransaction, VerifiedExecutableTransaction,
+    };
+    pub use rtd_types::messages_checkpoint::CheckpointContentsDigest;
+    pub use rtd_types::messages_checkpoint::VerifiedCheckpoint;
+    pub use rtd_types::object::Object;
+    pub use rtd_types::rtd_system_state::RtdSystemStateTrait;
+    pub use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
+    pub use rtd_types::storage::ObjectStore;
+    pub use rtd_types::storage::ReadStore;
+    pub use rtd_types::transaction::Transaction;
+    pub use rtd_types::transaction::TransactionKind;
+    pub use rtd_types::transaction::{InputObjects, TransactionData};
+    pub use simulacrum::AdvanceEpochConfig;
+    pub use simulacrum::Simulacrum;
+    pub use simulacrum::SimulatorStore;
+    pub use std::path::Path;
+    pub use std::sync::Arc;
+}
+#[cfg(feature = "testing")]
+use testing_imports::*;
+
+#[cfg(feature = "testing")]
 #[cfg_attr(not(msim), tokio::main)]
 #[cfg_attr(msim, msim::main)]
 pub async fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let (_guard, _filter_handle) = telemetry_subscribers::TelemetryConfig::new()
         .with_env()
         .init();
-    run_test_impl::<RtdTestAdapter>(path, Some(std::sync::Arc::new(PRE_COMPILED.clone())), None)
-        .await?;
+    run_test_impl::<RtdTestAdapter>(path, Some(&PRE_COMPILED), None).await?;
     Ok(())
 }
 
+#[cfg(feature = "testing")]
 pub struct ValidatorWithFullnode {
     pub validator: Arc<AuthorityState>,
     pub fullnode: Arc<AuthorityState>,
     pub kv_store: Arc<TransactionKeyValueStore>,
+    pending_effects: Vec<TransactionEffects>,
+    next_checkpoint_seq: u64,
 }
 
+#[cfg(feature = "testing")]
 #[allow(unused_variables)]
 /// TODO: better name?
 #[async_trait::async_trait]
@@ -108,7 +127,6 @@ pub trait TransactionalAdapter: Send + Sync + ReadStore {
     async fn dry_run_transaction_block(
         &self,
         transaction_block: TransactionData,
-        transaction_digest: TransactionDigest,
     ) -> RtdResult<DryRunTransactionBlockResponse>;
 
     async fn dev_inspect_transaction_block(
@@ -129,22 +147,19 @@ pub trait TransactionalAdapter: Send + Sync + ReadStore {
     fn get_object(&self, object_id: &ObjectID) -> Option<Object>;
 }
 
+#[cfg(feature = "testing")]
 #[async_trait::async_trait]
 impl TransactionalAdapter for ValidatorWithFullnode {
     async fn execute_txn(
         &mut self,
         transaction: Transaction,
     ) -> anyhow::Result<(TransactionEffects, Option<ExecutionError>)> {
-        let is_consensus_tx = transaction.is_consensus_tx();
-        let (_, effects, execution_error) = send_and_confirm_transaction_with_execution_error(
-            &self.validator,
-            Some(&self.fullnode),
-            transaction,
-            is_consensus_tx,
-            false,
-        )
-        .await?;
-        Ok((effects.into_data(), execution_error))
+        let (_, effects, execution_error) =
+            submit_and_execute_with_error(&self.validator, Some(&self.fullnode), transaction)
+                .await?;
+        let effects = effects.into_data();
+        self.pending_effects.push(effects.clone());
+        Ok((effects, execution_error))
     }
 
     async fn read_input_objects(
@@ -190,10 +205,9 @@ impl TransactionalAdapter for ValidatorWithFullnode {
     async fn dry_run_transaction_block(
         &self,
         transaction_block: TransactionData,
-        transaction_digest: TransactionDigest,
     ) -> RtdResult<DryRunTransactionBlockResponse> {
         self.fullnode
-            .dry_exec_transaction(transaction_block, transaction_digest)
+            .dry_exec_transaction(transaction_block)
             .await
             .map(|result| result.0)
     }
@@ -240,7 +254,20 @@ impl TransactionalAdapter for ValidatorWithFullnode {
     }
 
     async fn create_checkpoint(&mut self) -> anyhow::Result<VerifiedCheckpoint> {
-        unimplemented!("create_checkpoint not supported")
+        let checkpoint_seq = self.next_checkpoint_seq;
+        self.next_checkpoint_seq += 1;
+        let effects = std::mem::take(&mut self.pending_effects);
+        if !effects.is_empty() {
+            let replay_txns = self
+                .validator
+                .settle_accumulator_for_testing(&effects, Some(checkpoint_seq))
+                .await;
+            self.fullnode
+                .replay_settlement_for_testing(&replay_txns)
+                .await;
+        }
+        self.get_checkpoint_by_sequence_number(0)
+            .ok_or_else(|| anyhow::anyhow!("No genesis checkpoint found"))
     }
 
     async fn advance_clock(
@@ -286,6 +313,7 @@ impl TransactionalAdapter for ValidatorWithFullnode {
     }
 }
 
+#[cfg(feature = "testing")]
 impl ReadStore for ValidatorWithFullnode {
     fn get_committee(
         &self,
@@ -296,6 +324,13 @@ impl ReadStore for ValidatorWithFullnode {
 
     fn get_latest_epoch_id(&self) -> rtd_types::storage::error::Result<EpochId> {
         Ok(self.validator.epoch_store_for_testing().epoch())
+    }
+
+    fn get_latest_checkpoint_sequence_number(
+        &self,
+    ) -> rtd_types::storage::error::Result<rtd_types::messages_checkpoint::CheckpointSequenceNumber>
+    {
+        Ok(self.next_checkpoint_seq.saturating_sub(1))
     }
 
     fn get_latest_checkpoint(&self) -> rtd_types::storage::error::Result<VerifiedCheckpoint> {
@@ -405,6 +440,7 @@ impl ReadStore for ValidatorWithFullnode {
     }
 }
 
+#[cfg(feature = "testing")]
 impl ObjectStore for ValidatorWithFullnode {
     fn get_object(&self, object_id: &ObjectID) -> Option<Object> {
         self.validator.get_object_store().get_object(object_id)
@@ -417,6 +453,7 @@ impl ObjectStore for ValidatorWithFullnode {
     }
 }
 
+#[cfg(feature = "testing")]
 #[async_trait::async_trait]
 impl TransactionalAdapter for Simulacrum<StdRng, PersistedStore> {
     async fn execute_txn(
@@ -454,7 +491,6 @@ impl TransactionalAdapter for Simulacrum<StdRng, PersistedStore> {
     async fn dry_run_transaction_block(
         &self,
         _transaction_block: TransactionData,
-        _transaction_digest: TransactionDigest,
     ) -> RtdResult<DryRunTransactionBlockResponse> {
         unimplemented!("dry_run_transaction_block not supported in simulator mode")
     }

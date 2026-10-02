@@ -8,6 +8,7 @@ use rtd_sdk_types::Address;
 use rtd_sdk_types::StructTag;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::rtd_sdk_types_conversions::struct_tag_sdk_to_core;
+use rtd_types::storage::BalanceInfo;
 
 #[tracing::instrument(skip(service))]
 pub fn get_balance(service: &RpcService, request: GetBalanceRequest) -> Result<GetBalanceResponse> {
@@ -17,7 +18,21 @@ pub fn get_balance(service: &RpcService, request: GetBalanceRequest) -> Result<G
         .indexes()
         .ok_or_else(RpcError::not_found)?;
 
-    let owner = parse_owner(request.owner.as_deref())?;
+    let owner = request
+        .owner
+        .as_ref()
+        .ok_or_else(|| {
+            FieldViolation::new("owner")
+                .with_description("missing owner")
+                .with_reason(ErrorReason::FieldMissing)
+        })?
+        .parse::<Address>()
+        .map_err(|e| {
+            FieldViolation::new("owner")
+                .with_description(format!("invalid owner: {e}"))
+                .with_reason(ErrorReason::FieldInvalid)
+        })?;
+    let owner = RtdAddress::from(owner);
 
     let coin_type = request
         .coin_type
@@ -40,39 +55,32 @@ pub fn get_balance(service: &RpcService, request: GetBalanceRequest) -> Result<G
         .get_balance(&owner, &core_coin_type)?
         .unwrap_or_default(); // Use default (zero) if no balance found
 
-    let mut balance = Balance::default();
-    balance.coin_type = Some(coin_type.to_string());
-    balance.balance = Some(balance_info.balance);
+    let balance = render_balance(service, owner, core_coin_type, balance_info);
 
-    let mut response = GetBalanceResponse::default();
-    response.balance = Some(balance);
-    Ok(response)
+    Ok(GetBalanceResponse::default().with_balance(balance))
 }
 
-fn parse_owner(owner: Option<&str>) -> Result<RtdAddress> {
-    Ok(owner
-        .ok_or_else(|| {
-            FieldViolation::new("owner")
-                .with_description("missing owner")
-                .with_reason(ErrorReason::FieldMissing)
-        })?
-        .parse::<Address>()
-        .map_err(|e| {
-            FieldViolation::new("owner")
-                .with_description(format!("invalid owner: {e}"))
-                .with_reason(ErrorReason::FieldInvalid)
-        })?
-        .into())
-}
+pub(super) fn render_balance(
+    _service: &RpcService,
+    _owner: RtdAddress,
+    coin_type: move_core_types::language_storage::StructTag,
+    balance_info: BalanceInfo,
+) -> Balance {
+    let mut balance = Balance::default()
+        .with_coin_type(coin_type.to_canonical_string(true))
+        .with_balance(
+            balance_info
+                .coin_balance
+                .saturating_add(balance_info.address_balance),
+        );
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_shortened_owner_address() {
-        let owner = parse_owner(Some("0x2")).unwrap();
-
-        assert_eq!(owner.to_string(), format!("0x{:0>64}", "2"));
+    if balance_info.coin_balance != 0 {
+        balance.set_coin_balance(balance_info.coin_balance);
     }
+
+    if balance_info.address_balance != 0 {
+        balance.set_address_balance(balance_info.address_balance);
+    }
+
+    balance
 }

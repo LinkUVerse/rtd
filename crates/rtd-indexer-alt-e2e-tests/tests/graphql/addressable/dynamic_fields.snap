@@ -10,11 +10,18 @@ task 1, lines 6-27:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 5715200,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 5738000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
-task 2, lines 29-36:
+task 2, line 29:
 //# create-checkpoint
 Checkpoint created: 1
+
+// Create a tree of objects:
+//
+// O(3)
+// |- 20 -> O(4) - 30 -> O(5)
+// |= 20 => O(6) - 40 -> O(7)
+// `- 50 -> O(8)
 
 task 3, lines 38-40:
 //# programmable --sender A --inputs 3u64 @A
@@ -89,23 +96,23 @@ Response: {
         "nodes": [
           {
             "name": {
-              "json": "20"
+              "json": "50"
             },
             "value": {
               "json": {
-                "id": "0xc5581d8a3a00218d5a1c11c5e8c14ace525878ce0871c15c406281653f6d316a",
-                "x": "4"
+                "id": "0x8c471462701a5f7c6ea4beaa01264a2e6fbbd5b515092a428e63d9744a88c3d8",
+                "x": "8"
               }
             }
           },
           {
             "name": {
-              "json": "50"
+              "json": "20"
             },
             "value": {
               "json": {
-                "id": "0x5b2a45c7909afc830fcdf3ab9378212daf2ee22a7926b9b7c221ee0e898604c0",
-                "x": "8"
+                "id": "0xc2445f08d4aa97edd0c92b47d81395842b7cc9e9c53ad8a0444eca3273d59998",
+                "x": "4"
               }
             }
           },
@@ -116,7 +123,7 @@ Response: {
             "value": {
               "contents": {
                 "json": {
-                  "id": "0x858c320e55fb43b779aba3924ec3e2b7cdcfb64a92b17ac94c6654678cb6a18a",
+                  "id": "0x8bc3345b5a74b7432c9f098fc7c49d75f45f4df974b68c1c1b2606949ddf429a",
                   "x": "6"
                 }
               },
@@ -128,7 +135,7 @@ Response: {
                     },
                     "value": {
                       "json": {
-                        "id": "0x294abaf3d927d219f1e7c205788b19754ebeb82f0f3eac65c67b3f6cd3f13dc5",
+                        "id": "0x470e9458466fe1b6e428713475d329343d9b98bb57fd7c7a4295655713042131",
                         "x": "7"
                       }
                     }
@@ -147,23 +154,23 @@ Response: {
           "nodes": [
             {
               "name": {
-                "json": "20"
+                "json": "50"
               },
               "value": {
                 "json": {
-                  "id": "0xc5581d8a3a00218d5a1c11c5e8c14ace525878ce0871c15c406281653f6d316a",
-                  "x": "4"
+                  "id": "0x8c471462701a5f7c6ea4beaa01264a2e6fbbd5b515092a428e63d9744a88c3d8",
+                  "x": "8"
                 }
               }
             },
             {
               "name": {
-                "json": "50"
+                "json": "20"
               },
               "value": {
                 "json": {
-                  "id": "0x5b2a45c7909afc830fcdf3ab9378212daf2ee22a7926b9b7c221ee0e898604c0",
-                  "x": "8"
+                  "id": "0xc2445f08d4aa97edd0c92b47d81395842b7cc9e9c53ad8a0444eca3273d59998",
+                  "x": "4"
                 }
               }
             },
@@ -174,7 +181,7 @@ Response: {
               "value": {
                 "contents": {
                   "json": {
-                    "id": "0x858c320e55fb43b779aba3924ec3e2b7cdcfb64a92b17ac94c6654678cb6a18a",
+                    "id": "0x8bc3345b5a74b7432c9f098fc7c49d75f45f4df974b68c1c1b2606949ddf429a",
                     "x": "6"
                   }
                 },
@@ -186,7 +193,7 @@ Response: {
                       },
                       "value": {
                         "json": {
-                          "id": "0x294abaf3d927d219f1e7c205788b19754ebeb82f0f3eac65c67b3f6cd3f13dc5",
+                          "id": "0x470e9458466fe1b6e428713475d329343d9b98bb57fd7c7a4295655713042131",
                           "x": "7"
                         }
                       }
@@ -208,7 +215,7 @@ Response: {
             },
             "value": {
               "json": {
-                "id": "0xc29d7c3f5cb9e0561d46e3d8178460b76e5f2455115e24959902dcb570fd0d78",
+                "id": "0x95fc7c846cf54b30610e3daf7c2502be843b1ddcfae7549fedb48bca085e2a3e",
                 "x": "5"
               }
             }
@@ -222,7 +229,11 @@ Response: {
 task 12, lines 127-137:
 //# run-graphql
 Response: {
-  "data": null,
+  "data": {
+    "address": {
+      "dynamicFields": null
+    }
+  },
   "errors": [
     {
       "message": "Cannot paginate owned objects for a parent object's address if its version is bounded. Fetch the parent at a checkpoint in the consistent range to list its owned objects.",
@@ -248,7 +259,9 @@ task 13, lines 139-151:
 Response: {
   "data": {
     "object": {
-      "asMoveObject": null
+      "asMoveObject": {
+        "dynamicFields": null
+      }
     }
   },
   "errors": [

@@ -5,23 +5,24 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use anyhow::Result;
-use diesel::{ExpressionMethods, QueryDsl};
+use async_trait::async_trait;
+use diesel::ExpressionMethods;
+use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
 use itertools::Itertools;
-use rtd_indexer_alt_framework::{
-    pipeline::Processor,
-    postgres::{Connection, handler::Handler},
-    types::{full_checkpoint_content::Checkpoint, object::Owner},
-};
-use rtd_indexer_alt_schema::{
-    schema::tx_affected_addresses, transactions::StoredTxAffectedAddress,
-};
+use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_indexer_alt_framework::postgres::Connection;
+use rtd_indexer_alt_framework::postgres::handler::Handler;
+use rtd_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
+use rtd_indexer_alt_schema::schema::tx_affected_addresses;
+use rtd_indexer_alt_schema::transactions::StoredTxAffectedAddress;
 use rtd_types::balance::Balance;
-use rtd_types::effects::{AccumulatorValue, TransactionEffectsAPI};
+use rtd_types::effects::AccumulatorValue;
+use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::transaction::TransactionDataAPI;
 
+use crate::handlers::affected_addresses;
 use crate::handlers::cp_sequence_numbers::tx_interval;
-use async_trait::async_trait;
 
 pub(crate) struct TxAffectedAddresses;
 
@@ -45,12 +46,7 @@ impl Processor for TxAffectedAddresses {
             let tx_sequence_number = (first_tx + i) as i64;
             let sender = tx.transaction.sender();
             let payer = tx.transaction.gas_data().owner;
-            let recipients = tx.effects.all_changed_objects().into_iter().filter_map(
-                |(_object_ref, owner, _write_kind)| match owner {
-                    Owner::AddressOwner(address) => Some(address),
-                    _ => None,
-                },
-            );
+            let recipients = affected_addresses(&tx.effects);
 
             let accumulator_addresses =
                 tx.effects
@@ -61,6 +57,7 @@ impl Processor for TxAffectedAddresses {
                         if Balance::is_balance_type(ty)
                             && matches!(&event.write.value, AccumulatorValue::Integer(_))
                         {
+                            // Other types and variants are not used for balance changes
                             Some(event.write.address.address)
                         } else {
                             None
@@ -117,23 +114,14 @@ impl Handler for TxAffectedAddresses {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use diesel_async::RunQueryDsl;
-    use rtd_indexer_alt_framework::{
-        Indexer, types::test_checkpoint_data_builder::TestCheckpointBuilder,
-    };
+    use rtd_indexer_alt_framework::Indexer;
+    use rtd_indexer_alt_framework::types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use rtd_indexer_alt_schema::MIGRATIONS;
-    use rtd_types::accumulator_root::AccumulatorValue as AccumulatorValueRoot;
-    use rtd_types::balance::Balance;
-    use rtd_types::digests::TransactionDigest;
-    use rtd_types::effects::{
-        AccumulatorAddress, AccumulatorOperation, AccumulatorValue, AccumulatorWriteV1,
-        EffectsObjectChange, TransactionEffects,
-    };
-    use rtd_types::execution_status::ExecutionStatus;
-    use rtd_types::gas::GasCostSummary;
 
     use crate::handlers::cp_sequence_numbers::CpSequenceNumbers;
+
+    use super::*;
 
     async fn get_all_tx_affected_addresses(conn: &mut Connection<'_>) -> Result<Vec<i64>> {
         Ok(tx_affected_addresses::table
@@ -141,54 +129,6 @@ mod tests {
             .order_by(tx_affected_addresses::tx_sequence_number)
             .load(conn)
             .await?)
-    }
-
-    #[tokio::test]
-    async fn test_tx_affected_addresses_includes_address_balance_owner() {
-        let affected = TestCheckpointBuilder::derive_address(7);
-        let balance_type = Balance::type_tag("0x2::rtd::RTD".parse().unwrap());
-        let accumulator_id = *AccumulatorValueRoot::get_field_id(affected, &balance_type)
-            .unwrap()
-            .inner();
-        let changed_objects = [(
-            accumulator_id,
-            EffectsObjectChange::new_from_accumulator_write(AccumulatorWriteV1 {
-                address: AccumulatorAddress::new(affected, balance_type),
-                operation: AccumulatorOperation::Merge,
-                value: AccumulatorValue::Integer(100),
-            }),
-        )]
-        .into_iter()
-        .collect();
-
-        let mut builder = TestCheckpointBuilder::new(0)
-            .start_transaction(0)
-            .finish_transaction();
-        let mut checkpoint = builder.build_checkpoint();
-        checkpoint.transactions[0].effects = TransactionEffects::new_from_execution_v2(
-            ExecutionStatus::Success,
-            0,
-            GasCostSummary::default(),
-            vec![],
-            Default::default(),
-            TransactionDigest::random(),
-            Default::default(),
-            changed_objects,
-            None,
-            None,
-            vec![],
-        );
-
-        let values = TxAffectedAddresses
-            .process(&Arc::new(checkpoint))
-            .await
-            .unwrap();
-
-        assert!(
-            values
-                .iter()
-                .any(|value| value.affected == affected.to_vec())
-        );
     }
 
     #[tokio::test]

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #[cfg(not(msim))]
-use std::path::Path;
+use rtd_types::transaction::{CallArg, ObjectArg, Reservation, WithdrawalTypeArg};
 #[cfg(not(msim))]
-use rtd_types::transaction::{CallArg, ObjectArg};
+use std::path::Path;
 
 #[cfg(not(msim))]
 const TEST_DIR: &str = "tests";
@@ -12,9 +12,9 @@ const TEST_DIR: &str = "tests";
 #[cfg(not(msim))]
 #[tokio::main]
 async fn test_ptb_files(path: &Path) -> datatest_stable::Result<()> {
-    use std::collections::BTreeMap;
     use rtd::client_ptb::ptb::{PTB, to_source_string};
     use rtd::client_ptb::{error::build_error_reports, ptb::PTBPreview};
+    use std::collections::BTreeMap;
     use test_cluster::TestClusterBuilder;
 
     let _ = miette::set_hook(Box::new(|_| {
@@ -67,10 +67,9 @@ async fn test_ptb_files(path: &Path) -> datatest_stable::Result<()> {
     let test_cluster = TestClusterBuilder::new().build().await;
 
     let context = &test_cluster.wallet;
-    let client = context.get_client().await?;
+    let client = context.grpc_client()?;
 
-    let (built_ptb, warnings) =
-        PTB::build_ptb(program, BTreeMap::new(), client.read_api(), context).await;
+    let (built_ptb, warnings) = PTB::build_ptb(program, BTreeMap::new(), client, context).await;
 
     if !warnings.is_empty() {
         let rendered = build_error_reports(&file_contents, warnings);
@@ -121,7 +120,14 @@ fn stable_call_arg_display(ca: &CallArg) -> String {
             }
             ObjectArg::Receiving(_) => "Receiving".to_string(),
         },
-        CallArg::FundsWithdrawal(_) => "FundsWithdrawal".to_string(),
+        CallArg::FundsWithdrawal(withdrawal) => {
+            let Reservation::MaxAmountU64(amount) = &withdrawal.reservation;
+            let WithdrawalTypeArg::Balance(type_arg) = &withdrawal.type_arg;
+            format!(
+                "FundsWithdrawal(amount: {amount}, type: Balance<{type_arg}>, source: {:?})",
+                withdrawal.withdraw_from
+            )
+        }
     }
 }
 

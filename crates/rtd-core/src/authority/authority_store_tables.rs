@@ -2,34 +2,36 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use crate::authority::authority_store::LockDetailsWrapperDeprecated;
+#[cfg(tidehunter)]
+use crate::authority::epoch_marker_key::EPOCH_MARKER_KEY_SIZE;
+use crate::authority::epoch_marker_key::EpochMarkerKey;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::effects::{TransactionEffects, TransactionEvents};
+use rtd_types::global_state_hash::GlobalStateHash;
+use rtd_types::messages_consensus::SharedTransactionDenyConfig;
+use rtd_types::storage::MarkerValue;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
-use rtd_types::base_types::SequenceNumber;
-use rtd_types::digests::TransactionEventsDigest;
-use rtd_types::effects::{TransactionEffects, TransactionEvents};
-use rtd_types::global_state_hash::GlobalStateHash;
-use rtd_types::storage::{FullObjectKey, MarkerValue};
-use tracing::error;
 use typed_store::metrics::SamplingInterval;
-use typed_store::rocks::{
-    DBBatch, DBMap, DBMapTableConfigMap, DBOptions, MetricConf, default_db_options,
-    read_size_from_env,
-};
+use typed_store::rocks::{DBBatch, DBMap, MetricConf};
+#[cfg(not(tidehunter))]
+use typed_store::rocks::{DBMapTableConfigMap, DBOptions, default_db_options, read_size_from_env};
 use typed_store::traits::Map;
 
-use crate::authority::authority_store_pruner::ObjectsCompactionFilter;
 use crate::authority::authority_store_types::{
     StoreObject, StoreObjectValue, StoreObjectWrapper, get_store_object, try_construct_object,
 };
 use crate::authority::epoch_start_configuration::EpochStartConfiguration;
-use typed_store::rocksdb::compaction_filter::Decision;
 use typed_store::{DBMapUtils, DbIterator};
 
+#[cfg(not(tidehunter))]
 const ENV_VAR_OBJECTS_BLOCK_CACHE_SIZE: &str = "OBJECTS_BLOCK_CACHE_MB";
+#[cfg(not(tidehunter))]
 pub(crate) const ENV_VAR_LOCKS_BLOCK_CACHE_SIZE: &str = "LOCKS_BLOCK_CACHE_MB";
+#[cfg(not(tidehunter))]
 const ENV_VAR_TRANSACTIONS_BLOCK_CACHE_SIZE: &str = "TRANSACTIONS_BLOCK_CACHE_MB";
+#[cfg(not(tidehunter))]
 const ENV_VAR_EFFECTS_BLOCK_CACHE_SIZE: &str = "EFFECTS_BLOCK_CACHE_MB";
 
 /// Options to apply to every column family of the `perpetual` DB.
@@ -37,10 +39,14 @@ const ENV_VAR_EFFECTS_BLOCK_CACHE_SIZE: &str = "EFFECTS_BLOCK_CACHE_MB";
 pub struct AuthorityPerpetualTablesOptions {
     /// Whether to enable write stalling on all column families.
     pub enable_write_stall: bool,
-    pub compaction_filter: Option<ObjectsCompactionFilter>,
+    /// On tidehunter, attach the per-keyspace objects compactor that retains
+    /// only the latest version per ObjectID. Mutually exclusive with the
+    /// object pruner — see `AuthorityStorePruner::new`.
+    pub enable_objects_compactor: bool,
 }
 
 impl AuthorityPerpetualTablesOptions {
+    #[cfg(not(tidehunter))]
     fn apply_to(&self, mut db_options: DBOptions) -> DBOptions {
         if !self.enable_write_stall {
             db_options = db_options.disable_write_throttling();
@@ -67,13 +73,6 @@ pub struct AuthorityPerpetualTables {
     /// objects are still accessible!
     pub(crate) objects: DBMap<ObjectKey, StoreObjectWrapper>,
 
-    /// This is a map between object references of currently active objects that can be mutated.
-    ///
-    /// For old epochs, it may also contain the transaction that they are lock on for use by this
-    /// specific validator. The transaction locks themselves are now in AuthorityPerEpochStore.
-    #[rename = "owned_object_transaction_locks"]
-    pub(crate) live_owned_object_markers: DBMap<ObjectRef, Option<LockDetailsWrapperDeprecated>>,
-
     /// This is a map between the transaction digest and the corresponding transaction that's known to be
     /// executable. This means that it may have been executed locally, or it may have been synced through
     /// state-sync but hasn't been executed yet.
@@ -94,10 +93,6 @@ pub struct AuthorityPerpetualTables {
     /// to be executed, we wait for them to appear in this table. When we revert transactions, we remove them from both
     /// tables.
     pub(crate) executed_effects: DBMap<TransactionDigest, TransactionEffectsDigest>,
-
-    #[allow(dead_code)]
-    #[deprecated]
-    events: DBMap<(TransactionEventsDigest, usize), Event>,
 
     // Events keyed by the digest of the transaction that produced them.
     pub(crate) events_2: DBMap<TransactionDigest, TransactionEvents>,
@@ -123,9 +118,6 @@ pub struct AuthorityPerpetualTables {
     /// A singleton table that stores latest pruned checkpoint. Used to keep objects pruner progress
     pub(crate) pruned_checkpoint: DBMap<(), CheckpointSequenceNumber>,
 
-    /// The highest checkpoint whose outputs were atomically committed to this store.
-    pub(crate) highest_committed_checkpoint: DBMap<(), CheckpointSequenceNumber>,
-
     /// Expected total amount of RTD in the network. This is expected to remain constant
     /// throughout the lifetime of the network. We check it at the end of each epoch if
     /// expensive checks are enabled. We cannot use 10B today because in tests we often
@@ -143,33 +135,39 @@ pub struct AuthorityPerpetualTables {
     /// objects that have been deleted. This table is meant to be pruned per-epoch, and all
     /// previous epochs other than the current epoch may be pruned safely.
     pub(crate) object_per_epoch_marker_table: DBMap<(EpochId, ObjectKey), MarkerValue>,
-    pub(crate) object_per_epoch_marker_table_v2: DBMap<(EpochId, FullObjectKey), MarkerValue>,
+    pub(crate) object_per_epoch_marker_table_v2: DBMap<EpochMarkerKey, MarkerValue>,
 
     /// Tracks executed transaction digests across epochs.
     /// Used to support address balance gas payments feature.
     /// This table uses epoch-prefixed keys to support efficient pruning via range delete.
     pub(crate) executed_transaction_digests: DBMap<(EpochId, TransactionDigest), ()>,
-}
 
-#[derive(DBMapUtils)]
-pub struct AuthorityPrunerTables {
-    pub(crate) object_tombstones: DBMap<ObjectID, SequenceNumber>,
-}
+    /// A singleton table recording the highest checkpoint whose transaction
+    /// outputs (objects, effects, etc.) are durably committed to this store.
+    /// It is written in the *same* atomic batch as those outputs (see
+    /// `AuthorityStore::build_db_batch` and the checkpoint executor), so it is
+    /// always consistent with the live object set even after an unclean stop.
+    ///
+    /// This differs from the checkpoint store's `highest_executed` watermark,
+    /// which is bumped in a separate write after the outputs are committed: an
+    /// abrupt stop can leave the object writes durable while `highest_executed`
+    /// still lags. Consumers that read the live object set directly (e.g. the
+    /// embedded rpc-store's bulk restore) use this watermark instead, so they
+    /// never observe objects beyond the checkpoint they think they are at.
+    ///
+    /// IMPORTANT: TideHunter keyspaces are order-sensitive once written to disk.
+    /// Keep new keyspaces append-only to preserve compatibility with existing DBs.
+    pub(crate) highest_committed_checkpoint: DBMap<(), CheckpointSequenceNumber>,
 
-impl AuthorityPrunerTables {
-    pub fn path(parent_path: &Path) -> PathBuf {
-        parent_path.join("pruner")
-    }
+    /// Most recent `UpdateTransactionDenyConfig` consensus message accepted from each
+    /// allowlisted peer authority. Persisted across epochs so we can rebuild the
+    /// merged effective deny config after a node restart. Pruned at epoch transitions
+    /// when a peer is no longer in the active committee.
+    pub(crate) shared_transaction_deny_configs: DBMap<AuthorityName, SharedTransactionDenyConfig>,
 
-    pub fn open(parent_path: &Path) -> Self {
-        Self::open_tables_read_write(
-            Self::path(parent_path),
-            MetricConf::new("pruner")
-                .with_sampling(SamplingInterval::new(Duration::from_secs(60), 0)),
-            None,
-            None,
-        )
-    }
+    /// Singleton: the highest generation this node has ever broadcast in an
+    /// `UpdateTransactionDenyConfig` message.
+    pub(crate) last_broadcast_deny_generation: DBMap<(), u64>,
 }
 
 impl AuthorityPerpetualTables {
@@ -184,16 +182,12 @@ impl AuthorityPerpetualTables {
         _pruner_watermark: Option<Arc<AtomicU64>>,
     ) -> Self {
         let db_options_override = db_options_override.unwrap_or_default();
-        let db_options =
-            db_options_override.apply_to(default_db_options().optimize_db_for_write_throughput(4));
+        let db_options = db_options_override
+            .apply_to(default_db_options().optimize_db_for_write_throughput(4, false));
         let table_options = DBMapTableConfigMap::new(BTreeMap::from([
             (
                 "objects".to_string(),
-                objects_table_config(db_options.clone(), db_options_override.compaction_filter),
-            ),
-            (
-                "owned_object_transaction_locks".to_string(),
-                owned_object_transaction_locks_table_config(db_options.clone()),
+                objects_table_config(db_options.clone()),
             ),
             (
                 "transactions".to_string(),
@@ -217,35 +211,37 @@ impl AuthorityPerpetualTables {
     #[cfg(tidehunter)]
     pub fn open(
         parent_path: &Path,
-        _: Option<AuthorityPerpetualTablesOptions>,
+        db_options_override: Option<AuthorityPerpetualTablesOptions>,
         pruner_watermark: Option<Arc<AtomicU64>>,
     ) -> Self {
         use crate::authority::authority_store_pruner::apply_relocation_filter;
         tracing::warn!("AuthorityPerpetualTables using tidehunter");
         use typed_store::tidehunter_util::{
-            Bytes, Decision, IndexWalPosition, KeyIndexing, KeySpaceConfig, KeyType, ThConfig,
-            default_cells_per_mutex, default_mutex_count, default_value_cache_size,
+            Bytes, Decision, KeyIndexing, KeySpaceConfig, KeyType, ThConfig,
+            default_cells_per_mutex, default_max_dirty_keys, default_mutex_count,
+            default_value_cache_size,
         };
         let mutexes = default_mutex_count() * 2;
+        let transaction_mutexes = mutexes * 4;
         let value_cache_size = default_value_cache_size();
         // effectively disables pruning if not set
         let pruner_watermark = pruner_watermark.unwrap_or(Arc::new(AtomicU64::new(0)));
 
         let bloom_config = KeySpaceConfig::new().with_bloom_filter(0.001, 32_000);
-        let objects_compactor = |index: &mut BTreeMap<Bytes, IndexWalPosition>| {
+        let objects_compactor = |iter: &mut dyn DoubleEndedIterator<Item = &Bytes>| {
             let mut retain = HashSet::new();
             let mut previous: Option<&[u8]> = None;
-            const OID_SIZE: usize = 16;
-            for (key, _) in index.iter().rev() {
-                if let Some(prev) = previous {
-                    if prev == &key[..OID_SIZE] {
-                        continue;
-                    }
+            const OID_SIZE: usize = 32;
+            for key in iter.rev() {
+                if let Some(prev) = previous
+                    && prev == &key[..OID_SIZE]
+                {
+                    continue;
                 }
                 previous = Some(&key[..OID_SIZE]);
                 retain.insert(key.clone());
             }
-            index.retain(|k, _| retain.contains(k));
+            retain
         };
         let mut digest_prefix = vec![0; 8];
         digest_prefix[7] = 32;
@@ -254,39 +250,29 @@ impl AuthorityPerpetualTables {
         // TransactionDigest is serialized with an 8-byte prefix, so we include it in the key calculation
         let epoch_tx_digest_prefix_key =
             KeyType::from_prefix_bits((8/*EpochId*/ + 8/*TransactionDigest prefix*/) * 8 + 12);
-        let object_indexing = KeyIndexing::key_reduction(32 + 8, 16..(32 + 8));
-        // todo can figure way to scramble off 8 bytes in the middle
-        let obj_ref_size = 32 + 8 + 32 + 8;
-        let owned_object_transaction_locks_indexing =
-            KeyIndexing::key_reduction(obj_ref_size, 16..(obj_ref_size - 16));
+        let object_indexing = KeyIndexing::fixed(32 + 8); //  KeyIndexing::key_reduction(32 + 8, 16..(32 + 8));
+        let mut objects_config = KeySpaceConfig::new()
+            .with_max_dirty_keys(16 * default_max_dirty_keys())
+            .with_value_cache_size(value_cache_size);
+        if matches!(db_options_override, Some(options) if options.enable_objects_compactor) {
+            objects_config = objects_config.with_compactor(Box::new(objects_compactor));
+        }
 
         let configs = vec![
             (
                 "objects".to_string(),
                 ThConfig::new_with_config_indexing(
                     object_indexing,
-                    mutexes,
-                    KeyType::uniform(default_cells_per_mutex() * 4),
-                    KeySpaceConfig::new()
-                        .with_unloaded_iterator(true)
-                        .with_max_dirty_keys(4048)
-                        .with_compactor(Box::new(objects_compactor)),
-                ),
-            ),
-            (
-                "owned_object_transaction_locks".to_string(),
-                ThConfig::new_with_config_indexing(
-                    owned_object_transaction_locks_indexing,
-                    mutexes,
-                    KeyType::uniform(default_cells_per_mutex() * 4),
-                    bloom_config.clone().with_max_dirty_keys(4048),
+                    mutexes * 4,
+                    KeyType::uniform(1),
+                    objects_config,
                 ),
             ),
             (
                 "transactions".to_string(),
                 ThConfig::new_with_rm_prefix_indexing(
                     KeyIndexing::key_reduction(32, 0..16),
-                    mutexes,
+                    transaction_mutexes,
                     uniform_key,
                     KeySpaceConfig::new()
                         .with_value_cache_size(value_cache_size)
@@ -298,7 +284,7 @@ impl AuthorityPerpetualTables {
                 "effects".to_string(),
                 ThConfig::new_with_rm_prefix_indexing(
                     KeyIndexing::key_reduction(32, 0..16),
-                    mutexes,
+                    transaction_mutexes,
                     uniform_key,
                     apply_relocation_filter(
                         bloom_config.clone().with_value_cache_size(value_cache_size),
@@ -313,7 +299,7 @@ impl AuthorityPerpetualTables {
                 "executed_effects".to_string(),
                 ThConfig::new_with_rm_prefix_indexing(
                     KeyIndexing::key_reduction(32, 0..16),
-                    mutexes,
+                    transaction_mutexes,
                     uniform_key,
                     bloom_config
                         .clone()
@@ -380,10 +366,6 @@ impl AuthorityPerpetualTables {
                 ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
             (
-                "highest_committed_checkpoint".to_string(),
-                ThConfig::new(0, 1, KeyType::uniform(1)),
-            ),
-            (
                 "expected_network_rtd_amount".to_string(),
                 ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
@@ -408,13 +390,13 @@ impl AuthorityPerpetualTables {
             (
                 "object_per_epoch_marker_table_v2".to_string(),
                 ThConfig::new_with_config_indexing(
-                    KeyIndexing::VariableLength,
+                    KeyIndexing::fixed(EPOCH_MARKER_KEY_SIZE),
                     mutexes,
                     epoch_prefix_key,
                     apply_relocation_filter(
                         bloom_config.clone(),
                         pruner_watermark.clone(),
-                        |(epoch_id, _): (EpochId, FullObjectKey)| epoch_id,
+                        |k: EpochMarkerKey| k.0,
                         true,
                     ),
                 ),
@@ -424,7 +406,7 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_config_indexing(
                     // EpochId + (TransactionDigest)
                     KeyIndexing::fixed(8 + (32 + 8)),
-                    mutexes,
+                    transaction_mutexes,
                     epoch_tx_digest_prefix_key,
                     apply_relocation_filter(
                         bloom_config.clone(),
@@ -433,6 +415,21 @@ impl AuthorityPerpetualTables {
                         true,
                     ),
                 ),
+            ),
+            (
+                "highest_committed_checkpoint".to_string(),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
+            ),
+            (
+                "shared_transaction_deny_configs".to_string(),
+                // AuthorityName encodes to 104 bytes via BCS (8-byte tuple-struct
+                // prefix + 96-byte BLS12381 pubkey), matching authority_capabilities_v2.
+                // Tiny table (one row per allowlisted committee member).
+                ThConfig::new(104, 1, KeyType::uniform(1)),
+            ),
+            (
+                "last_broadcast_deny_generation".to_string(),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
         ];
         Self::open_tables_read_write(
@@ -443,6 +440,7 @@ impl AuthorityPerpetualTables {
         )
     }
 
+    #[cfg(not(tidehunter))]
     pub fn open_readonly(parent_path: &Path) -> AuthorityPerpetualTablesReadOnly {
         Self::get_read_only_handle(
             Self::path(parent_path),
@@ -450,6 +448,34 @@ impl AuthorityPerpetualTables {
             None,
             MetricConf::new("perpetual_readonly"),
         )
+    }
+
+    #[cfg(tidehunter)]
+    pub fn open_readonly(parent_path: &Path) -> Self {
+        Self::open(parent_path, None, None)
+    }
+
+    #[cfg(tidehunter)]
+    pub fn force_rebuild_control_region(&self) -> anyhow::Result<()> {
+        self.objects.db.force_rebuild_control_region()
+    }
+
+    /// Wait for tidehunter background threads to finish before allowing the caller
+    /// to e.g. rename the database directory. Consumes `Arc<Self>` so all internal
+    /// `Arc<Database>` clones held by the column family `DBMap`s are released as
+    /// part of the drop, leaving only the `Arc<Database>` extracted here.
+    #[cfg(tidehunter)]
+    pub fn wait_for_tidehunter_background_threads(self: Arc<Self>) {
+        let strong = Arc::strong_count(&self);
+        if strong != 1 {
+            println!(
+                "WARNING: wait_for_tidehunter_background_threads called with Arc<AuthorityPerpetualTables> strong_count={} (expected 1); other clones will keep DBMap.db Arc<Database> alive past drop(self) and the inner Database wait will warn/timeout",
+                strong,
+            );
+        }
+        let db = self.objects.db.clone();
+        drop(self);
+        db.wait_for_tidehunter_background_threads();
     }
 
     // This is used by indexer to find the correct version of dynamic field child object.
@@ -613,6 +639,9 @@ impl AuthorityPerpetualTables {
         self.highest_committed_checkpoint.get(&())
     }
 
+    /// Stage the highest-committed-checkpoint watermark into `wb`. Must be
+    /// called on the same batch that commits the checkpoint's transaction
+    /// outputs so the watermark and the outputs land atomically.
     pub fn set_highest_committed_checkpoint(
         &self,
         wb: &mut DBBatch,
@@ -633,6 +662,34 @@ impl AuthorityPerpetualTables {
             return Ok(None);
         };
         Ok(Some(transaction))
+    }
+
+    pub fn list_transactions_from(
+        &self,
+        start: Option<TransactionDigest>,
+        limit: usize,
+    ) -> Result<Vec<TransactionDigest>, typed_store::TypedStoreError> {
+        let iter = self.transactions.safe_iter_with_bounds(start, None);
+        let mut result = Vec::with_capacity(limit);
+        for item in iter.take(limit) {
+            let (digest, _) = item?;
+            result.push(digest);
+        }
+        Ok(result)
+    }
+
+    pub fn get_executed_effects_digest(
+        &self,
+        tx_digest: &TransactionDigest,
+    ) -> Result<Option<TransactionEffectsDigest>, typed_store::TypedStoreError> {
+        self.executed_effects.get(tx_digest)
+    }
+
+    pub fn get_effects_by_digest(
+        &self,
+        effects_digest: &TransactionEffectsDigest,
+    ) -> Result<Option<TransactionEffects>, typed_store::TypedStoreError> {
+        self.effects.get(effects_digest)
     }
 
     /// Batch insert executed transaction digests for a given epoch.
@@ -680,21 +737,6 @@ impl AuthorityPerpetualTables {
         Ok(self.executed_transactions_to_checkpoint.get(digest)?)
     }
 
-    pub fn get_newer_object_keys(
-        &self,
-        object: &(ObjectID, SequenceNumber),
-    ) -> RtdResult<Vec<ObjectKey>> {
-        let mut objects = vec![];
-        for result in self.objects.safe_iter_with_bounds(
-            Some(ObjectKey(object.0, object.1.next())),
-            Some(ObjectKey(object.0, VersionNumber::MAX)),
-        ) {
-            let (key, _) = result?;
-            objects.push(key);
-        }
-        Ok(objects)
-    }
-
     pub fn set_highest_pruned_checkpoint_without_wb(
         &self,
         checkpoint_number: CheckpointSequenceNumber,
@@ -738,13 +780,6 @@ impl AuthorityPerpetualTables {
     pub fn checkpoint_db(&self, path: &Path) -> RtdResult {
         // This checkpoints the entire db and not just objects table
         self.objects.checkpoint_db(path).map_err(Into::into)
-    }
-
-    pub fn get_root_state_hash(
-        &self,
-        epoch: EpochId,
-    ) -> RtdResult<Option<(CheckpointSequenceNumber, GlobalStateHash)>> {
-        Ok(self.root_state_hash_by_epoch.get(&epoch)?)
     }
 
     pub fn insert_root_state_hash(
@@ -847,13 +882,6 @@ impl LiveObject {
             LiveObject::Wrapped(key) => (key.0, key.1, ObjectDigest::OBJECT_DIGEST_WRAPPED),
         }
     }
-
-    pub fn to_normal(self) -> Option<Object> {
-        match self {
-            LiveObject::Normal(object) => Some(object),
-            LiveObject::Wrapped(_) => None,
-        }
-    }
 }
 
 impl LiveSetIter<'_> {
@@ -914,39 +942,14 @@ impl Iterator for LiveSetIter<'_> {
 }
 
 // These functions are used to initialize the DB tables
-fn owned_object_transaction_locks_table_config(db_options: DBOptions) -> DBOptions {
-    DBOptions {
-        options: db_options
-            .clone()
-            .optimize_for_write_throughput()
-            .optimize_for_read(read_size_from_env(ENV_VAR_LOCKS_BLOCK_CACHE_SIZE).unwrap_or(1024))
-            .options,
-        rw_options: db_options.rw_options.set_ignore_range_deletions(false),
-    }
-}
-
-fn objects_table_config(
-    mut db_options: DBOptions,
-    compaction_filter: Option<ObjectsCompactionFilter>,
-) -> DBOptions {
-    if let Some(mut compaction_filter) = compaction_filter {
-        db_options
-            .options
-            .set_compaction_filter("objects", move |_, key, value| {
-                match compaction_filter.filter(key, value) {
-                    Ok(decision) => decision,
-                    Err(err) => {
-                        error!("Compaction error: {:?}", err);
-                        Decision::Keep
-                    }
-                }
-            });
-    }
+#[cfg(not(tidehunter))]
+fn objects_table_config(db_options: DBOptions) -> DBOptions {
     db_options
         .optimize_for_write_throughput()
         .optimize_for_read(read_size_from_env(ENV_VAR_OBJECTS_BLOCK_CACHE_SIZE).unwrap_or(5 * 1024))
 }
 
+#[cfg(not(tidehunter))]
 fn transactions_table_config(db_options: DBOptions) -> DBOptions {
     db_options
         .optimize_for_write_throughput()
@@ -955,6 +958,7 @@ fn transactions_table_config(db_options: DBOptions) -> DBOptions {
         )
 }
 
+#[cfg(not(tidehunter))]
 fn effects_table_config(db_options: DBOptions) -> DBOptions {
     db_options
         .optimize_for_write_throughput()

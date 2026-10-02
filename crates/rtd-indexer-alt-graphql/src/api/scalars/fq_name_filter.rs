@@ -1,14 +1,15 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{fmt, str::FromStr};
+use std::fmt;
+use std::str::FromStr;
 
 use rtd_types::parse_rtd_fq_name;
 
-use crate::api::{
-    scalars::{impl_string_input, module_filter::ModuleFilter, rtd_address::RtdAddress},
-    types::transaction::filter::Error,
-};
+use crate::api::scalars::impl_string_input;
+use crate::api::scalars::module_filter::ModuleFilter;
+use crate::api::scalars::rtd_address::RtdAddress;
+use crate::api::types::transaction::filter::Error;
 
 /// GraphQL scalar containing a filter on fully-qualified names.
 #[derive(Clone, Debug, Eq, PartialEq)]

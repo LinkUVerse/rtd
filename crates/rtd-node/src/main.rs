@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::{ArgGroup, Parser};
+use rtd_rpc_api::ServerVersion;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use rtd_rpc_api::ServerVersion;
 use tokio::sync::broadcast;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -84,6 +84,7 @@ fn main() {
     let (_guard, filter_handle) = telemetry_subscribers::TelemetryConfig::new()
         .with_env()
         .with_prom_registry(&prometheus_registry)
+        .with_disable_span_latency(true)
         .init();
 
     drop(metrics_rt);
@@ -117,7 +118,7 @@ fn main() {
         config.network_address = listen_address;
     }
 
-    let is_validator = config.consensus_config().is_some();
+    let is_validator = config.intended_node_role().is_validator();
 
     let admin_interface_port = config.admin_interface_port;
 
@@ -176,7 +177,7 @@ fn main() {
             ))
             .unwrap();
 
-        rtd_node::admin::run_admin_server(node, admin_interface_port, filter_handle).await
+        rtd_node::admin::run_admin_server(node, admin_interface_port, Some(filter_handle)).await
     });
 
     runtimes.metrics.spawn(async move {

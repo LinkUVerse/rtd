@@ -1,2 +1,3 @@
-`@linku/deepbook-v3` has moved to
-https://github.com/LinkUVerse/ts-sdks/tree/main/packages/deepbook-v3
+# deepbook-v3
+
+This package is not included in the current `rtd-ts-sdk` fork. It is not part of the supported RTD SDK surface.

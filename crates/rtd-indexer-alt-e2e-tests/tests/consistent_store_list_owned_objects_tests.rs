@@ -1,26 +1,38 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::BTreeMap, iter};
+use std::collections::BTreeMap;
+use std::iter;
 
-use move_core_types::{ident_str, u256::U256};
+use move_core_types::ident_str;
+use move_core_types::u256::U256;
 use prometheus::Registry;
 use rand::rngs::OsRng;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::CHECKPOINT_HEIGHT_METADATA;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::ListOwnedObjectsRequest;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::Owner;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::consistent_service_client::ConsistentServiceClient;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::owner::OwnerKind;
+use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use rtd_types::TypeTag;
+use rtd_types::base_types::FullObjectRef;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::Signature;
+use rtd_types::crypto::Signer;
+use rtd_types::crypto::get_account_key_pair;
+use rtd_types::effects::TransactionEffects;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::GasCoin;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Argument;
+use rtd_types::transaction::Command;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
 use simulacrum::Simulacrum;
-use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::{
-    ListOwnedObjectsRequest, Owner, consistent_service_client::ConsistentServiceClient,
-    owner::OwnerKind,
-};
-use rtd_indexer_alt_e2e_tests::{FullCluster, find};
-use rtd_types::{
-    RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
-    base_types::{FullObjectRef, ObjectRef, RtdAddress},
-    crypto::{Signature, Signer, get_account_key_pair},
-    effects::{TransactionEffects, TransactionEffectsAPI},
-    gas_coin::GasCoin,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{Argument, Command, Transaction, TransactionData},
-};
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::find;
 
 /// 5 RTD gas budget
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
@@ -56,9 +68,10 @@ async fn test_address_owner() {
         });
 
         if let Some(checkpoint) = checkpoint {
-            request
-                .metadata_mut()
-                .insert("x-rtd-checkpoint", checkpoint.to_string().parse().unwrap());
+            request.metadata_mut().insert(
+                CHECKPOINT_HEIGHT_METADATA,
+                checkpoint.to_string().parse().unwrap(),
+            );
         }
 
         let response = client.list_owned_objects(request).await?.into_inner();
@@ -186,13 +199,13 @@ async fn test_address_owner() {
     for (i, coin) in coins {
         let fx = transfer_object(&mut cluster, a, &akp, a_gas, coin, c);
         objects.insert((!i, coin.0), find::address_mutated(&fx).unwrap());
-        a_gas = fx.gas_object().0;
+        a_gas = fx.gas_object().unwrap().0;
     }
 
     for bag in bags.into_values() {
         let fx = transfer_object(&mut cluster, b, &bkp, b_gas, bag, c);
         objects.insert((0, bag.0), find::address_mutated(&fx).unwrap());
-        b_gas = fx.gas_object().0;
+        b_gas = fx.gas_object().unwrap().0;
     }
 
     cluster.create_checkpoint().await;
@@ -623,7 +636,7 @@ async fn test_coin_balance_change_cleanup() {
     );
 
     // Update gas reference
-    a_gas = fx.gas_object().0;
+    a_gas = fx.gas_object().unwrap().0;
     let new_coin = find::address_owned(&fx).expect("Failed to find new coin");
 
     cluster.create_checkpoint().await;

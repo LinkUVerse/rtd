@@ -3,21 +3,24 @@
 
 use std::path::PathBuf;
 
-use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::{
-    BatchGetBalancesRequest, GetBalanceRequest, ListBalancesRequest,
-    consistent_service_client::ConsistentServiceClient,
-};
-use rtd_indexer_alt_e2e_tests::{FullCluster, find};
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::BatchGetBalancesRequest;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::CHECKPOINT_HEIGHT_METADATA;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::GetBalanceRequest;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::ListBalancesRequest;
+use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::consistent_service_client::ConsistentServiceClient;
 use rtd_test_transaction_builder::TestTransactionBuilder;
-use rtd_types::{
-    base_types::{ObjectRef, RtdAddress},
-    crypto::get_account_key_pair,
-    effects::TransactionEffectsAPI,
-    gas_coin::GAS,
-    object::Owner,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{Transaction, TransactionData},
-};
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::get_account_key_pair;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::GAS;
+use rtd_types::object::Owner;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
+
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::find;
 
 /// 5 RTD gas budget
 const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
@@ -379,7 +382,7 @@ async fn test_transfers() {
     cluster.create_checkpoint().await;
 
     gas_budget = (gas_budget as i64 - 1000 - fx.gas_cost_summary().net_gas_usage()) as u64;
-    a_gas = fx.gas_object().0;
+    a_gas = fx.gas_object().unwrap().0;
 
     // A still controls the budget
     assert_eq!(
@@ -639,7 +642,7 @@ async fn test_edge_cases() {
 
     request
         .metadata_mut()
-        .insert("x-rtd-checkpoint", "10".parse().unwrap());
+        .insert(CHECKPOINT_HEIGHT_METADATA, "10".parse().unwrap());
 
     let err = client.list_balances(request).await.unwrap_err();
     assert_eq!(err.code(), tonic::Code::OutOfRange);
@@ -652,7 +655,7 @@ async fn test_edge_cases() {
 
     request
         .metadata_mut()
-        .insert("x-rtd-checkpoint", "10".parse().unwrap());
+        .insert(CHECKPOINT_HEIGHT_METADATA, "10".parse().unwrap());
 
     let err = client.get_balance(request).await.unwrap_err();
     assert_eq!(err.code(), tonic::Code::OutOfRange);
@@ -673,7 +676,7 @@ async fn test_edge_cases() {
 
     request
         .metadata_mut()
-        .insert("x-rtd-checkpoint", "10".parse().unwrap());
+        .insert(CHECKPOINT_HEIGHT_METADATA, "10".parse().unwrap());
 
     let err = client.batch_get_balances(request).await.unwrap_err();
     assert_eq!(err.code(), tonic::Code::OutOfRange);
@@ -727,9 +730,10 @@ async fn list_balances(
     });
 
     if let Some(checkpoint) = checkpoint {
-        request
-            .metadata_mut()
-            .insert("x-rtd-checkpoint", checkpoint.to_string().parse().unwrap());
+        request.metadata_mut().insert(
+            CHECKPOINT_HEIGHT_METADATA,
+            checkpoint.to_string().parse().unwrap(),
+        );
     }
 
     let response = client.list_balances(request).await?.into_inner();
@@ -744,7 +748,7 @@ async fn list_balances(
         .into_iter()
         .map(|b| {
             assert_eq!(b.owner(), &owner, "Owner mismatch in balance response");
-            (b.coin_type().to_owned(), b.balance())
+            (b.coin_type().to_owned(), b.total_balance())
         })
         .collect();
 
@@ -769,9 +773,10 @@ async fn get_balance(
     });
 
     if let Some(checkpoint) = checkpoint {
-        request
-            .metadata_mut()
-            .insert("x-rtd-checkpoint", checkpoint.to_string().parse().unwrap());
+        request.metadata_mut().insert(
+            CHECKPOINT_HEIGHT_METADATA,
+            checkpoint.to_string().parse().unwrap(),
+        );
     }
 
     let response = client.get_balance(request).await?.into_inner();
@@ -782,7 +787,7 @@ async fn get_balance(
         "Owner mismatch in balance response"
     );
 
-    Ok((response.coin_type().to_owned(), response.balance()))
+    Ok((response.coin_type().to_owned(), response.total_balance()))
 }
 
 async fn batch_get_balances(
@@ -805,9 +810,10 @@ async fn batch_get_balances(
     });
 
     if let Some(checkpoint) = checkpoint {
-        request
-            .metadata_mut()
-            .insert("x-rtd-checkpoint", checkpoint.to_string().parse().unwrap());
+        request.metadata_mut().insert(
+            CHECKPOINT_HEIGHT_METADATA,
+            checkpoint.to_string().parse().unwrap(),
+        );
     }
 
     Ok(client
@@ -816,6 +822,12 @@ async fn batch_get_balances(
         .into_inner()
         .balances
         .into_iter()
-        .map(|b| (b.owner().to_owned(), b.coin_type().to_owned(), b.balance()))
+        .map(|b| {
+            (
+                b.owner().to_owned(),
+                b.coin_type().to_owned(),
+                b.total_balance(),
+            )
+        })
         .collect())
 }

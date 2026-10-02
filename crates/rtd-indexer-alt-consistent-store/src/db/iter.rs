@@ -6,7 +6,8 @@ use std::marker::PhantomData;
 use bincode::Decode;
 use serde::de::DeserializeOwned;
 
-use super::{error::Error, key};
+use crate::db::error::Error;
+use crate::db::key;
 
 /// An iterator that scans through elements in increasing key order.
 pub(crate) struct FwdIter<'d, K, V> {
@@ -34,6 +35,23 @@ impl<'d, K, V> FwdIter<'d, K, V> {
     pub(crate) fn seek(&mut self, probe: impl AsRef<[u8]>) {
         if let Some(inner) = &mut self.inner {
             inner.seek(probe);
+        }
+    }
+
+    /// Skip past all keys that start with the given `prefix`. The iterator will be positioned at
+    /// the first key that does not start with the `prefix`, or will be invalid if no such key
+    /// exists.
+    pub(crate) fn skip_past(&mut self, prefix: impl AsRef<[u8]>) {
+        if let Some(inner) = &mut self.inner {
+            let mut end = prefix.as_ref().to_vec();
+            if key::next(&mut end) {
+                // With the exclusive key calculated, we can seek to it directly
+                inner.seek(end);
+            } else {
+                // Overflow from computed next key - invalidate the iterator
+                inner.seek_to_last();
+                inner.next();
+            }
         }
     }
 
@@ -68,6 +86,21 @@ impl<'d, K, V> RevIter<'d, K, V> {
     pub(crate) fn seek(&mut self, probe: impl AsRef<[u8]>) {
         if let Some(inner) = &mut self.inner {
             inner.seek_for_prev(probe);
+        }
+    }
+
+    /// Skip past all keys that start with the given `prefix` in reverse order. The iterator will be
+    /// positioned at the last key that does not start with `prefix`, or will be invalid if no such
+    /// key exists.
+    pub(crate) fn skip_past(&mut self, prefix: impl AsRef<[u8]>) {
+        if let Some(inner) = &mut self.inner {
+            let end = prefix.as_ref();
+            inner.seek_for_prev(end);
+            // The only way to land on something in the prefix range is if the prefix itself is an
+            // exact key, so an exact match check is sufficient.
+            if inner.key() == Some(end) {
+                inner.prev();
+            }
         }
     }
 

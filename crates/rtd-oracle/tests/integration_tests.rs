@@ -4,22 +4,21 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use shared_crypto::intent::Intent;
-use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
-use rtd_json_rpc_types::{ObjectChange, RtdExecutionStatus};
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
 use rtd_move_build::BuildConfig;
-use rtd_sdk::rpc_types::RtdTransactionBlockResponseOptions;
+use rtd_rpc_api::Client;
+use rtd_sdk::rtd_sdk_types::StructTag;
 use rtd_sdk::types::Identifier;
 use rtd_sdk::types::base_types::{ObjectID, RtdAddress};
 use rtd_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_sdk::types::quorum_driver_types::ExecuteTransactionRequestType;
 use rtd_sdk::types::transaction::{
     CallArg, ObjectArg, SharedObjectMutability, Transaction, TransactionData,
 };
-use rtd_sdk::{RtdClient, RtdClientBuilder};
 use rtd_types::base_types::{ObjectRef, SequenceNumber};
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::GasCoin;
 use rtd_types::{TypeTag, parse_rtd_type_tag};
+use shared_crypto::intent::Intent;
 
 // Integration tests for RTD Oracle, these test can be run manually on local or remote testnet.
 #[ignore]
@@ -103,12 +102,7 @@ async fn test_publish_primitive() {
     let tx = Transaction::from_data(data.clone(), vec![signature]);
 
     let result = client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new().with_effects(),
-            Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
+        .execute_transaction_and_wait_for_checkpoint(&tx)
         .await
         .unwrap();
     println!("{:#?}", result)
@@ -209,12 +203,7 @@ async fn test_publish_complex_value() {
     let tx = Transaction::from_data(data.clone(), vec![signature]);
 
     let result = client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new().with_effects(),
-            Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
+        .execute_transaction_and_wait_for_checkpoint(&tx)
         .await
         .unwrap();
     println!("{:#?}", result)
@@ -306,16 +295,11 @@ async fn test_consume_oracle_data() {
         let tx = Transaction::from_data(data.clone(), vec![signature]);
 
         let result = client
-            .quorum_driver_api()
-            .execute_transaction_block(
-                tx,
-                RtdTransactionBlockResponseOptions::new().with_effects(),
-                Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-            )
+            .execute_transaction_and_wait_for_checkpoint(&tx)
             .await
             .unwrap();
 
-        assert!(result.effects.unwrap().status().is_ok());
+        assert!(result.effects.status().is_ok());
     }
 
     let (simple_oracle_id, version) = *oracles.first().unwrap();
@@ -406,39 +390,28 @@ async fn test_consume_oracle_data() {
     let tx = Transaction::from_data(data.clone(), vec![signature]);
 
     let result = client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new().with_effects(),
-            Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
+        .execute_transaction_and_wait_for_checkpoint(&tx)
         .await
         .unwrap();
 
-    assert!(result.effects.unwrap().status().is_ok());
+    assert!(result.effects.status().is_ok());
 }
 
-async fn get_gas(client: &RtdClient, sender: RtdAddress) -> (ObjectRef, u64) {
+async fn get_gas(client: &Client, sender: RtdAddress) -> (ObjectRef, u64) {
     let gas = client
-        .coin_read_api()
-        .get_coins(sender, None, None, Some(1))
+        .get_owned_objects(sender, Some(GasCoin::type_()), None, None)
         .await
         .unwrap();
-    let gas = gas.data[0].object_ref();
-    let gas_price = client
-        .governance_api()
-        .get_reference_gas_price()
-        .await
-        .unwrap();
+    let gas = gas.items[0].compute_object_reference();
+    let gas_price = client.get_reference_gas_price().await.unwrap();
 
     (gas, gas_price)
 }
 
-async fn init_test_client() -> (RtdClient, Keystore, RtdAddress) {
-    let client = RtdClientBuilder::default()
-        .build("https://rpc.devnet.rtd.io:443")
-        .await
-        .unwrap();
+async fn init_test_client() -> (Client, Keystore, RtdAddress) {
+    let rpc_url = std::env::var("RTD_ORACLE_TEST_RPC_URL")
+        .expect("Set RTD_ORACLE_TEST_RPC_URL to a funded RTD test network");
+    let client = Client::new(&rpc_url).unwrap();
 
     let keystore = Keystore::File(
         FileBasedKeystore::load_or_create(
@@ -450,13 +423,12 @@ async fn init_test_client() -> (RtdClient, Keystore, RtdAddress) {
     );
     let sender: RtdAddress = keystore.addresses()[0];
     let gas = client
-        .coin_read_api()
-        .get_coins(sender, None, None, Some(1))
+        .get_owned_objects(sender, Some(GasCoin::type_()), None, None)
         .await
         .unwrap();
 
     assert!(
-        !gas.data.is_empty(),
+        !gas.items.is_empty(),
         "No gas coin found in account, please fund [{}]",
         sender
     );
@@ -467,18 +439,17 @@ async fn init_test_client() -> (RtdClient, Keystore, RtdAddress) {
 async fn publish_package(
     sender: RtdAddress,
     keystore: &Keystore,
-    client: &RtdClient,
+    client: &Client,
     path: &Path,
 ) -> ObjectID {
     let compiled_package = BuildConfig::new_for_testing().build(path).unwrap();
     let all_module_bytes = compiled_package.get_package_bytes(false);
     let dependencies = compiled_package.get_dependency_storage_package_ids();
     let gas = client
-        .coin_read_api()
-        .get_coins(sender, None, None, Some(1))
+        .get_owned_objects(sender, Some(GasCoin::type_()), None, None)
         .await
         .unwrap();
-    let gas = gas.data[0].object_ref();
+    let gas = gas.items[0].compute_object_reference();
     let data = TransactionData::new_module(
         sender,
         gas,
@@ -495,39 +466,18 @@ async fn publish_package(
     let tx = Transaction::from_data(data.clone(), vec![signature]);
 
     let result = client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new()
-                .with_effects()
-                .with_object_changes(),
-            Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
+        .execute_transaction_and_wait_for_checkpoint(&tx)
         .await
         .unwrap();
-    assert_eq!(
-        &RtdExecutionStatus::Success,
-        result.effects.unwrap().status()
-    );
+    assert!(result.effects.status().is_ok(),);
 
-    let publish = result
-        .object_changes
-        .unwrap()
-        .iter()
-        .find(|change| matches!(change, ObjectChange::Published { .. }))
-        .unwrap()
-        .clone();
-
-    let ObjectChange::Published { package_id, .. } = publish else {
-        panic!("Expected published object change")
-    };
-    package_id
+    result.get_new_package_obj().unwrap().0
 }
 
 async fn create_oracle(
     sender: RtdAddress,
     keystore: &Keystore,
-    client: &RtdClient,
+    client: &Client,
     package: ObjectID,
     module: Identifier,
 ) -> (ObjectID, SequenceNumber) {
@@ -548,16 +498,11 @@ async fn create_oracle(
         .unwrap();
     let pt = builder.finish();
     let gas = client
-        .coin_read_api()
-        .get_coins(sender, None, None, Some(1))
+        .get_owned_objects(sender, Some(GasCoin::type_()), None, None)
         .await
         .unwrap();
-    let gas = gas.data[0].object_ref();
-    let gas_price = client
-        .governance_api()
-        .get_reference_gas_price()
-        .await
-        .unwrap();
+    let gas = gas.items[0].compute_object_reference();
+    let gas_price = client.get_reference_gas_price().await.unwrap();
     let data = TransactionData::new_programmable(sender, vec![gas], pt, 1000000000, gas_price);
 
     let signature = keystore
@@ -566,29 +511,24 @@ async fn create_oracle(
         .unwrap();
     let tx = Transaction::from_data(data.clone(), vec![signature]);
     let result = client
-        .quorum_driver_api()
-        .execute_transaction_block(
-            tx,
-            RtdTransactionBlockResponseOptions::new()
-                .with_effects()
-                .with_object_changes(),
-            Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
+        .execute_transaction_and_wait_for_checkpoint(&tx)
         .await
         .unwrap();
-    assert_eq!(
-        &RtdExecutionStatus::Success,
-        result.effects.unwrap().status()
-    );
-    let simple_oracle = result.object_changes.unwrap().iter().find(|change| matches!(change, ObjectChange::Created {object_type,..} if object_type.name.as_str() == "SimpleOracle")).unwrap().clone();
-    let ObjectChange::Created {
-        object_id: simple_oracle_id,
-        version,
-        ..
-    } = simple_oracle
-    else {
-        panic!("Expected created object change")
-    };
+    assert!(result.effects.status().is_ok(),);
 
-    (simple_oracle_id, version)
+    let simple_oracle = result
+        .changed_objects
+        .iter()
+        .find(|change| {
+            let Ok(ty) = change.object_type().parse::<StructTag>() else {
+                return false;
+            };
+            ty.name().as_str() == "SimpleOracle"
+        })
+        .unwrap();
+
+    (
+        simple_oracle.object_id().parse().unwrap(),
+        simple_oracle.output_version().into(),
+    )
 }

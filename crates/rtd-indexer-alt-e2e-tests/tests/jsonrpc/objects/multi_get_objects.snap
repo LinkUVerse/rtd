@@ -6,6 +6,11 @@ processed 15 tasks
 init:
 A: object(0,0), B: object(0,1)
 
+// 1. Multi-get newly created objects
+// 2. ...after some have been modified
+// 3. ...after some have been wrapped
+// 4. ...after some have been deleted
+
 task 1, lines 11-13:
 //# programmable --sender A --inputs @A
 //> 0: rtd::table::new<u64, rtd::coin::Coin<rtd::rtd::RTD>>();
@@ -42,50 +47,50 @@ Response: {
   "result": [
     {
       "data": {
-        "objectId": "0x8f6a9e2ab5d577014e24a3da8c8f3ca4b037132e3586cd4a25c5fd26d01b9965",
+        "objectId": "0xdf59712e85f42bba1d839e2a040a8a4f4febd92885fa39de3be07f6c7168ca15",
         "version": "3",
-        "digest": "Hv8Uz2Jr45bANWHnEHukUdd6XzxnqYTKgrR7PQuowyp7",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "DsqtdUUD2VnDEXJvRSuQ85oPEWWQDeCWeWRmKYAmpmVf",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "data": {
-        "objectId": "0x9413fd1f69f1d9310ad6a23fc1c45634c658cdd06187bdfa25f6a7e4c56361da",
+        "objectId": "0xf7d43d8502c6eb1e50aae170ad854680c496edc342cdf67af4ea35b1bc9e7247",
         "version": "3",
-        "digest": "Ee6o7whthmVr2mA1WfPWV7pcwbJDHXEfmeRTDFQwzN7t",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "6woC8XJJvmccma3ws5qfUiZamfmJmpyjm5eEDafc6G8b",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "data": {
-        "objectId": "0xba0168804d275bf0e06d07d80af8e9217ba9ef544e7ea44fe91af30b9b0deabd",
+        "objectId": "0xe5152ec2b535537cd3bc6253c194d7e75ef76403a557c10ce60e8a7884fc299c",
         "version": "3",
-        "digest": "F4HyAA7rcGZjYrpBwVrJ5H7jjtuSiWSbp2Yyvvacb2CK",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "35DFcMKwUWMLS6kn2vcwHZy4KXh6WLZ9jWNxvo9bnmuC",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "data": {
-        "objectId": "0x22dc0e3ece8fff96d44adcdc4df625fb83d59cef839b9f753bdf09de5ad73c7d",
+        "objectId": "0x9e3e5c2e62ccdf7586ad0603f79b4a0f5a8d55e98510038311cc5d29cce5305c",
         "version": "4",
-        "digest": "8kZPFg4X6tTYQD5hYWo3m6Tabw8mVUWgCYZFQ6DDCbnN",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "2KSTca5USirpxvqyebi2VZrkoQ1Wp3jqv8JaHvYEHLdK",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     },
     {
       "data": {
-        "objectId": "0x9d8aed2d1c9ce29699db57bc37be56812257c92b15e17326fcd9a4fd693b8121",
+        "objectId": "0xf7daba22b006373e802a357065ddf10f2704b4912377c2fc134ea81c3b28a4fd",
         "version": "4",
-        "digest": "CZtu4tdm685KfBMFMZz6NFgaKXagktQYsBeztGsEgE9C",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "7BxBkrBd2APRKRXjau3NKnBYhmnTCv4dnzcQadiHU6Ny",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     },
     {
       "data": {
-        "objectId": "0xd974de1faf8d949dcd839f8c489cc5bbf8dcd65255ce55988ddcd1d0e6a6911a",
+        "objectId": "0xc19cfee058d04ba0441a40fa572299e9c5837a5db610abe9e8833e70aa623103",
         "version": "4",
-        "digest": "5CgQpv3fyy7z87aLhw8x5L9FC5qtJerM1YPuEsqgUD7D",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "5AqsM8FUwpQKDkG5TXFJzT4kzomuCLsNf89kwSJF8ANK",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     }
   ]
@@ -110,50 +115,50 @@ Response: {
   "result": [
     {
       "data": {
-        "objectId": "0x8f6a9e2ab5d577014e24a3da8c8f3ca4b037132e3586cd4a25c5fd26d01b9965",
+        "objectId": "0xdf59712e85f42bba1d839e2a040a8a4f4febd92885fa39de3be07f6c7168ca15",
         "version": "5",
-        "digest": "J4X6cWTUYDeTKmpYBBmwvjKTA46tHeHnCSF2fPJmhadJ",
-        "previousTransaction": "2iS5PyX2Bxd3r7aHHDNtLVM3EJuRPQVAaWhJyjvYH4YZ"
+        "digest": "3r8Jn42R3DxizLGPRhksQ6wxJr4S4pD21HeSAso8mJoe",
+        "previousTransaction": "Ay3bsMFbCgsLiEWXrJUDAL7QGHtQHSELK9T9D9sRCijY"
       }
     },
     {
       "data": {
-        "objectId": "0x9413fd1f69f1d9310ad6a23fc1c45634c658cdd06187bdfa25f6a7e4c56361da",
+        "objectId": "0xf7d43d8502c6eb1e50aae170ad854680c496edc342cdf67af4ea35b1bc9e7247",
         "version": "3",
-        "digest": "Ee6o7whthmVr2mA1WfPWV7pcwbJDHXEfmeRTDFQwzN7t",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "6woC8XJJvmccma3ws5qfUiZamfmJmpyjm5eEDafc6G8b",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "data": {
-        "objectId": "0xba0168804d275bf0e06d07d80af8e9217ba9ef544e7ea44fe91af30b9b0deabd",
+        "objectId": "0xe5152ec2b535537cd3bc6253c194d7e75ef76403a557c10ce60e8a7884fc299c",
         "version": "3",
-        "digest": "F4HyAA7rcGZjYrpBwVrJ5H7jjtuSiWSbp2Yyvvacb2CK",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "35DFcMKwUWMLS6kn2vcwHZy4KXh6WLZ9jWNxvo9bnmuC",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "data": {
-        "objectId": "0x22dc0e3ece8fff96d44adcdc4df625fb83d59cef839b9f753bdf09de5ad73c7d",
+        "objectId": "0x9e3e5c2e62ccdf7586ad0603f79b4a0f5a8d55e98510038311cc5d29cce5305c",
         "version": "4",
-        "digest": "8kZPFg4X6tTYQD5hYWo3m6Tabw8mVUWgCYZFQ6DDCbnN",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "2KSTca5USirpxvqyebi2VZrkoQ1Wp3jqv8JaHvYEHLdK",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     },
     {
       "data": {
-        "objectId": "0x9d8aed2d1c9ce29699db57bc37be56812257c92b15e17326fcd9a4fd693b8121",
+        "objectId": "0xf7daba22b006373e802a357065ddf10f2704b4912377c2fc134ea81c3b28a4fd",
         "version": "4",
-        "digest": "CZtu4tdm685KfBMFMZz6NFgaKXagktQYsBeztGsEgE9C",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "7BxBkrBd2APRKRXjau3NKnBYhmnTCv4dnzcQadiHU6Ny",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     },
     {
       "data": {
-        "objectId": "0xd974de1faf8d949dcd839f8c489cc5bbf8dcd65255ce55988ddcd1d0e6a6911a",
+        "objectId": "0xc19cfee058d04ba0441a40fa572299e9c5837a5db610abe9e8833e70aa623103",
         "version": "4",
-        "digest": "5CgQpv3fyy7z87aLhw8x5L9FC5qtJerM1YPuEsqgUD7D",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "5AqsM8FUwpQKDkG5TXFJzT4kzomuCLsNf89kwSJF8ANK",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     }
   ]
@@ -179,48 +184,48 @@ Response: {
   "result": [
     {
       "data": {
-        "objectId": "0x8f6a9e2ab5d577014e24a3da8c8f3ca4b037132e3586cd4a25c5fd26d01b9965",
+        "objectId": "0xdf59712e85f42bba1d839e2a040a8a4f4febd92885fa39de3be07f6c7168ca15",
         "version": "5",
-        "digest": "J4X6cWTUYDeTKmpYBBmwvjKTA46tHeHnCSF2fPJmhadJ",
-        "previousTransaction": "2iS5PyX2Bxd3r7aHHDNtLVM3EJuRPQVAaWhJyjvYH4YZ"
+        "digest": "3r8Jn42R3DxizLGPRhksQ6wxJr4S4pD21HeSAso8mJoe",
+        "previousTransaction": "Ay3bsMFbCgsLiEWXrJUDAL7QGHtQHSELK9T9D9sRCijY"
       }
     },
     {
       "data": {
-        "objectId": "0x9413fd1f69f1d9310ad6a23fc1c45634c658cdd06187bdfa25f6a7e4c56361da",
+        "objectId": "0xf7d43d8502c6eb1e50aae170ad854680c496edc342cdf67af4ea35b1bc9e7247",
         "version": "3",
-        "digest": "Ee6o7whthmVr2mA1WfPWV7pcwbJDHXEfmeRTDFQwzN7t",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "6woC8XJJvmccma3ws5qfUiZamfmJmpyjm5eEDafc6G8b",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "data": {
-        "objectId": "0xba0168804d275bf0e06d07d80af8e9217ba9ef544e7ea44fe91af30b9b0deabd",
+        "objectId": "0xe5152ec2b535537cd3bc6253c194d7e75ef76403a557c10ce60e8a7884fc299c",
         "version": "3",
-        "digest": "F4HyAA7rcGZjYrpBwVrJ5H7jjtuSiWSbp2Yyvvacb2CK",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "35DFcMKwUWMLS6kn2vcwHZy4KXh6WLZ9jWNxvo9bnmuC",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "error": {
         "code": "notExists",
-        "object_id": "0x22dc0e3ece8fff96d44adcdc4df625fb83d59cef839b9f753bdf09de5ad73c7d"
+        "object_id": "0x9e3e5c2e62ccdf7586ad0603f79b4a0f5a8d55e98510038311cc5d29cce5305c"
       }
     },
     {
       "data": {
-        "objectId": "0x9d8aed2d1c9ce29699db57bc37be56812257c92b15e17326fcd9a4fd693b8121",
+        "objectId": "0xf7daba22b006373e802a357065ddf10f2704b4912377c2fc134ea81c3b28a4fd",
         "version": "4",
-        "digest": "CZtu4tdm685KfBMFMZz6NFgaKXagktQYsBeztGsEgE9C",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "7BxBkrBd2APRKRXjau3NKnBYhmnTCv4dnzcQadiHU6Ny",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     },
     {
       "data": {
-        "objectId": "0xd974de1faf8d949dcd839f8c489cc5bbf8dcd65255ce55988ddcd1d0e6a6911a",
+        "objectId": "0xc19cfee058d04ba0441a40fa572299e9c5837a5db610abe9e8833e70aa623103",
         "version": "4",
-        "digest": "5CgQpv3fyy7z87aLhw8x5L9FC5qtJerM1YPuEsqgUD7D",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "5AqsM8FUwpQKDkG5TXFJzT4kzomuCLsNf89kwSJF8ANK",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     }
   ]
@@ -245,46 +250,46 @@ Response: {
   "result": [
     {
       "data": {
-        "objectId": "0x8f6a9e2ab5d577014e24a3da8c8f3ca4b037132e3586cd4a25c5fd26d01b9965",
+        "objectId": "0xdf59712e85f42bba1d839e2a040a8a4f4febd92885fa39de3be07f6c7168ca15",
         "version": "5",
-        "digest": "J4X6cWTUYDeTKmpYBBmwvjKTA46tHeHnCSF2fPJmhadJ",
-        "previousTransaction": "2iS5PyX2Bxd3r7aHHDNtLVM3EJuRPQVAaWhJyjvYH4YZ"
+        "digest": "3r8Jn42R3DxizLGPRhksQ6wxJr4S4pD21HeSAso8mJoe",
+        "previousTransaction": "Ay3bsMFbCgsLiEWXrJUDAL7QGHtQHSELK9T9D9sRCijY"
       }
     },
     {
       "error": {
         "code": "notExists",
-        "object_id": "0x9413fd1f69f1d9310ad6a23fc1c45634c658cdd06187bdfa25f6a7e4c56361da"
+        "object_id": "0xf7d43d8502c6eb1e50aae170ad854680c496edc342cdf67af4ea35b1bc9e7247"
       }
     },
     {
       "data": {
-        "objectId": "0xba0168804d275bf0e06d07d80af8e9217ba9ef544e7ea44fe91af30b9b0deabd",
+        "objectId": "0xe5152ec2b535537cd3bc6253c194d7e75ef76403a557c10ce60e8a7884fc299c",
         "version": "3",
-        "digest": "F4HyAA7rcGZjYrpBwVrJ5H7jjtuSiWSbp2Yyvvacb2CK",
-        "previousTransaction": "39cbD6LsWG38baffyLj8mHXt5RXFNzks9FCE9aJ6ZvCb"
+        "digest": "35DFcMKwUWMLS6kn2vcwHZy4KXh6WLZ9jWNxvo9bnmuC",
+        "previousTransaction": "JBk4dzzKioFpnmweKAnPpcGQDAdWURjuF3rWu2fcA6ah"
       }
     },
     {
       "error": {
         "code": "notExists",
-        "object_id": "0x22dc0e3ece8fff96d44adcdc4df625fb83d59cef839b9f753bdf09de5ad73c7d"
+        "object_id": "0x9e3e5c2e62ccdf7586ad0603f79b4a0f5a8d55e98510038311cc5d29cce5305c"
       }
     },
     {
       "data": {
-        "objectId": "0x9d8aed2d1c9ce29699db57bc37be56812257c92b15e17326fcd9a4fd693b8121",
+        "objectId": "0xf7daba22b006373e802a357065ddf10f2704b4912377c2fc134ea81c3b28a4fd",
         "version": "4",
-        "digest": "CZtu4tdm685KfBMFMZz6NFgaKXagktQYsBeztGsEgE9C",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "7BxBkrBd2APRKRXjau3NKnBYhmnTCv4dnzcQadiHU6Ny",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     },
     {
       "data": {
-        "objectId": "0xd974de1faf8d949dcd839f8c489cc5bbf8dcd65255ce55988ddcd1d0e6a6911a",
+        "objectId": "0xc19cfee058d04ba0441a40fa572299e9c5837a5db610abe9e8833e70aa623103",
         "version": "4",
-        "digest": "5CgQpv3fyy7z87aLhw8x5L9FC5qtJerM1YPuEsqgUD7D",
-        "previousTransaction": "5FXfQ5B9shMYaXaJsqR4B3z4jDzVHw7bwCGabN1kJdir"
+        "digest": "5AqsM8FUwpQKDkG5TXFJzT4kzomuCLsNf89kwSJF8ANK",
+        "previousTransaction": "DoCfRunj2kbfz2zbEry9jtthVHc1QxD2bgh7XWVsDxFh"
       }
     }
   ]

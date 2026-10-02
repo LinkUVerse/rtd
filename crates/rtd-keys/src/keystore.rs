@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub use crate::external::External;
+use crate::external::ProvisionMode;
 use crate::key_derive::{derive_key_pair_from_path, generate_new_key};
 use crate::key_identity::KeyIdentity;
 use crate::random_names::{random_name, random_names};
+use linku_common::ZipDebugEqIteratorExt;
 
 use anyhow::{Context, anyhow, bail, ensure};
 use async_trait::async_trait;
@@ -14,6 +16,11 @@ use bip39::{Language, Mnemonic, Seed};
 use colored::Colorize as _;
 use rand::{SeedableRng, rngs::StdRng};
 use regex::Regex;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::get_key_pair_from_rng;
+use rtd_types::crypto::{
+    EncodeDecodeBase64, PublicKey, RtdKeyPair, Signature, SignatureScheme, enum_dispatch,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use shared_crypto::intent::{Intent, IntentMessage};
 use std::collections::{BTreeMap, HashSet};
@@ -24,11 +31,6 @@ use std::io::BufReader;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use rtd_types::base_types::RtdAddress;
-use rtd_types::crypto::get_key_pair_from_rng;
-use rtd_types::crypto::{
-    EncodeDecodeBase64, PublicKey, Signature, SignatureScheme, RtdKeyPair, enum_dispatch,
-};
 
 pub const ALIASES_FILE_EXTENSION: &str = "aliases";
 
@@ -46,25 +48,26 @@ pub struct LocalGenerate {
     pub word_length: Option<String>,
 }
 
+#[derive(Default)]
 pub enum GenerateOptions {
     /// Default options for key generation of any keystore type.
+    #[default]
     Default,
     /// File or InMem keystore
     Local(LocalGenerate),
     /// Signer
-    ExternalSigner(String),
+    ExternalSigner {
+        signer: String,
+        provision_mode: Option<ProvisionMode>,
+    },
 }
 
-impl Default for GenerateOptions {
-    fn default() -> Self {
-        Self::Default
-    }
-}
-
+#[derive(Debug)]
 pub struct GeneratedKey {
     pub address: RtdAddress,
     pub public_key: PublicKey,
     pub scheme: SignatureScheme,
+    pub mnemonic: Option<String>,
 }
 
 #[async_trait]
@@ -81,7 +84,7 @@ pub trait AccountKeystore: Send + Sync {
             GenerateOptions::Local(opts) => {
                 (opts.key_scheme, opts.derivation_path, opts.word_length)
             }
-            GenerateOptions::ExternalSigner(_) => {
+            GenerateOptions::ExternalSigner { .. } => {
                 return Err(anyhow!(
                     "Generating new keypair is not supported for this keystore type"
                 ));
@@ -96,6 +99,7 @@ pub trait AccountKeystore: Send + Sync {
             address,
             public_key,
             scheme,
+            mnemonic: None,
         })
     }
 
@@ -464,7 +468,7 @@ impl FileBasedKeystore {
             let names: Vec<String> = random_names(HashSet::new(), keys.len());
             let aliases = keys
                 .iter()
-                .zip(names)
+                .zip_debug_eq(names)
                 .map(|((rtd_address, skp), alias)| {
                     let public_key_base64 = skp.public().encode_base64();
                     (
@@ -723,7 +727,7 @@ impl InMemKeystore {
 
         let aliases = keys
             .iter()
-            .zip(random_names(HashSet::new(), keys.len()))
+            .zip_debug_eq(random_names(HashSet::new(), keys.len()))
             .map(|((rtd_address, skp), alias)| {
                 let public_key_base64 = skp.public().encode_base64();
                 (

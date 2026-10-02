@@ -36,33 +36,40 @@ ignore = [
     "RUSTSEC-2024-0436",
     # `backoff` is unmaintained - no safe upgrade available
     "RUSTSEC-2025-0012",
-    # Vulnerability in `protobuf` crate - difficult to upgrade due to dependency constraints
-    "RUSTSEC-2024-0437",
     # Versions of `ring` prior to 0.17 are unmaintained
     "RUSTSEC-2025-0010",
     # AES functions in `ring` may panic when overflow checking is enabled
     "RUSTSEC-2025-0009",
-    # Upgrade tracing.* libs to resolve.
-    "RUSTSEC-2025-0055",
     # waiting on ark-relations release: https://github.com/arkworks-rs/snark/issues/413
     "RUSTSEC-2025-0056",
     # fxhash not maintained
     "RUSTSEC-2025-0057",
-    # lru 0.10.1 `IterMut` unsoundness. Unreachable in RTD: no
-    # `LruCache::iter_mut()` call sites exist. Upgrading to >=0.16.3 is a
-    # 6-major-version API jump with no security benefit while this path is absent.
-    "RUSTSEC-2026-0002",
-    # rand 0.8.5 unsoundness requires a custom logger that reentrantly calls rand
-    # during thread-local RNG initialization. RTD logging uses tracing and
-    # tracing-subscriber, which do not perform that call. Defer the ecosystem-wide
-    # rand 0.8 -> 0.9 migration.
+    # bincode unmaintained - maintainers consider 1.3.3 complete, used by anemo and rtd crates
+    "RUSTSEC-2025-0141",
+    # rand 0.8.5 unsoundness when a custom logger invokes rand reentrantly during
+    # thread-local RNG init. Not triggerable in Rtd: logging uses tracing/tracing-subscriber
+    # which never calls rand during setup. Migrating rand 0.8 -> 0.9 would require ~316
+    # call-site edits across ~143 files in Rtd alone, plus cascading updates in fastcrypto,
+    # walrus, seal, and other downstream consumers. Deferred pending a coordinated
+    # ecosystem-wide bump (likely driven by fastcrypto first).
     "RUSTSEC-2026-0097",
-    # quick-xml's affected versions are transitive through object_store and have
-    # no compatible upgrade path yet. RTD only uses this parser for cloud storage
-    # provider API responses, not direct client payloads. Remove these ignores
-    # when object_store supports quick-xml >= 0.41.
+    # `proc-macro-error2` is unmaintained, no safe upgrade — transitive via
+    # alloy-sol-macro (rtd-bridge ethereum stack); waiting for alloy to migrate
+    "RUSTSEC-2026-0173",
+    # quick-xml 0.38: quadratic duplicate-attribute check (0194) and unbounded
+    # namespace-declaration allocation DoS (0195). Fixed only in quick-xml >= 0.41,
+    # but quick-xml is transitive via object_store, whose latest release (0.14.0)
+    # still requires ^0.40 — no upgrade path yet. In Rtd, quick-xml only parses
+    # XML API responses from cloud storage providers (S3/GCS/Azure) via
+    # object_store, not attacker-controlled input. Remove once object_store
+    # releases with quick-xml >= 0.41.
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
+    # `clear_on_drop` is unmaintained, and no safe upgrade is available. It is
+    # transitive through bulletproofs 5.0.0 in fastcrypto. Review by 2027-03-14
+    # or if bulletproofs releases a zeroize-based replacement. Upstream proposal:
+    # https://github.com/zkcrypto/bulletproofs/pull/17
+    "RUSTSEC-2026-0283",
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -219,6 +226,6 @@ allow-git = [
 github = [
     "linkumark",
     "bmwill",
-    "linkulabs",
+    "linkuverse",
     "nextest-rs",
 ]

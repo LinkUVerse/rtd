@@ -3,22 +3,25 @@
 
 use filter::RtdObjectResponseQuery;
 use futures::future;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use rtd_json_rpc_types::{
-    Page, RtdGetPastObjectRequest, RtdObjectDataOptions, RtdObjectResponse, RtdPastObjectResponse,
-};
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::proc_macros::rpc;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_json_rpc_types::Page;
+use rtd_json_rpc_types::RtdGetPastObjectRequest;
+use rtd_json_rpc_types::RtdObjectDataOptions;
+use rtd_json_rpc_types::RtdObjectResponse;
+use rtd_json_rpc_types::RtdPastObjectResponse;
 use rtd_open_rpc::Module;
 use rtd_open_rpc_macros::open_rpc;
-use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
 
-use crate::{
-    context::Context,
-    error::{InternalContext, invalid_params},
-};
-
-use super::rpc_module::RpcModule;
-
-use self::error::Error;
+use crate::api::objects::error::Error;
+use crate::api::rpc_module::RpcModule;
+use crate::context::Context;
+use crate::error::InternalContext;
+use crate::error::invalid_params;
 
 mod error;
 pub(crate) mod filter;
@@ -152,7 +155,7 @@ impl ObjectsApiServer for Objects {
         Ok(future::join_all(obj_futures)
             .await
             .into_iter()
-            .zip(object_ids)
+            .zip_debug_eq(object_ids)
             .map(|(r, o)| {
                 r.with_internal_context(|| format!("Failed to get object {o} at latest version"))
             })
@@ -201,7 +204,7 @@ impl ObjectsApiServer for Objects {
         Ok(future::join_all(obj_futures)
             .await
             .into_iter()
-            .zip(past_objects)
+            .zip_debug_eq(past_objects)
             .map(|(r, o)| {
                 let id = o.object_id;
                 let v = o.version;
@@ -239,7 +242,7 @@ impl QueryObjectsApiServer for QueryObjects {
         let data = future::join_all(obj_futures)
             .await
             .into_iter()
-            .zip(object_ids)
+            .zip_debug_eq(object_ids)
             .map(|(r, id)| {
                 r.with_internal_context(|| format!("Failed to get object {id} at latest version"))
             })

@@ -1,7 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::BTreeMap;
 use rtd_config::genesis;
 use rtd_types::base_types::ObjectRef;
 use rtd_types::error::UserInputError;
@@ -10,7 +9,7 @@ use rtd_types::transaction::ObjectReadResult;
 use rtd_types::transaction::ReceivingObjectReadResult;
 use rtd_types::transaction::ReceivingObjects;
 use rtd_types::{
-    base_types::{ObjectID, SequenceNumber, RtdAddress},
+    base_types::{ObjectID, RtdAddress, SequenceNumber},
     committee::{Committee, EpochId},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents},
@@ -20,21 +19,17 @@ use rtd_types::{
         VerifiedCheckpoint,
     },
     object::Object,
-    storage::{BackingStore, ChildObjectResolver, ParentSync},
+    storage::BackingStore,
     transaction::{InputObjectKind, VerifiedTransaction},
 };
+use std::collections::BTreeMap;
 pub mod in_mem_store;
 
-pub trait SimulatorStore:
-    rtd_types::storage::BackingPackageStore
-    + rtd_types::storage::ObjectStore
-    + ParentSync
-    + ChildObjectResolver
-{
+pub trait SimulatorStore: BackingStore {
     fn init_with_genesis(&mut self, genesis: &genesis::Genesis) {
         self.insert_checkpoint(genesis.checkpoint());
         self.insert_checkpoint_contents(genesis.checkpoint_contents().clone());
-        self.insert_committee(genesis.committee().unwrap());
+        self.insert_committee(genesis.committee().clone());
         self.insert_transaction(VerifiedTransaction::new_unchecked(
             genesis.transaction().clone(),
         ));

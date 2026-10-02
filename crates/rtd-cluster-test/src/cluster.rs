@@ -3,18 +3,9 @@
 
 use super::config::{ClusterTestOpt, Env};
 use async_trait::async_trait;
-use std::net::SocketAddr;
-use std::path::Path;
 use rtd_config::Config;
-use rtd_config::local_ip_utils::get_available_port;
 use rtd_config::{PersistedConfig, RTD_KEYSTORE_FILENAME, RTD_NETWORK_CONFIG};
-use rtd_graphql_rpc::config::{ConnectionConfig, ServiceConfig};
-use rtd_graphql_rpc::test_infra::cluster::start_graphql_server_with_fn_rpc;
-use rtd_indexer::test_utils::{
-    start_indexer_jsonrpc_for_testing, start_indexer_writer_for_testing,
-};
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
-use rtd_pg_db::temp::TempDb;
 use rtd_sdk::rtd_client_config::{RtdClientConfig, RtdEnv};
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_swarm::memory::Swarm;
@@ -24,20 +15,10 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::KeypairTraits;
 use rtd_types::crypto::RtdKeyPair;
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
+use std::path::Path;
 use tempfile::tempdir;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
-
-const DEVNET_FAUCET_ADDR: &str = "https://faucet.devnet.rtd.io:443";
-const STAGING_FAUCET_ADDR: &str = "https://faucet.staging.rtd.io:443";
-const CONTINUOUS_FAUCET_ADDR: &str = "https://faucet.ci.rtd.io:443";
-const CONTINUOUS_NOMAD_FAUCET_ADDR: &str = "https://faucet.nomad.ci.rtd.io:443";
-const TESTNET_FAUCET_ADDR: &str = "https://faucet.testnet.rtd.io:443";
-const DEVNET_FULLNODE_ADDR: &str = "https://rpc.devnet.rtd.io:443";
-const STAGING_FULLNODE_ADDR: &str = "https://fullnode.staging.rtd.io:443";
-const CONTINUOUS_FULLNODE_ADDR: &str = "https://fullnode.ci.rtd.io:443";
-const CONTINUOUS_NOMAD_FULLNODE_ADDR: &str = "https://fullnode.nomad.ci.rtd.io:443";
-const TESTNET_FULLNODE_ADDR: &str = "https://fullnode.testnet.rtd.io:443";
 
 pub struct ClusterFactory;
 
@@ -61,7 +42,6 @@ pub trait Cluster {
 
     fn fullnode_url(&self) -> &str;
     fn user_key(&self) -> AccountKeyPair;
-    fn indexer_url(&self) -> &Option<String>;
 
     /// Returns faucet url in a remote cluster.
     fn remote_faucet_url(&self) -> Option<&str>;
@@ -83,39 +63,41 @@ pub struct RemoteRunningCluster {
 #[async_trait]
 impl Cluster for RemoteRunningCluster {
     async fn start(options: &ClusterTestOpt) -> Result<Self, anyhow::Error> {
-        let (fullnode_url, faucet_url) = match options.env {
-            Env::Devnet => (
-                String::from(DEVNET_FULLNODE_ADDR),
-                String::from(DEVNET_FAUCET_ADDR),
-            ),
-            Env::Staging => (
-                String::from(STAGING_FULLNODE_ADDR),
-                String::from(STAGING_FAUCET_ADDR),
-            ),
-            Env::Ci => (
-                String::from(CONTINUOUS_FULLNODE_ADDR),
-                String::from(CONTINUOUS_FAUCET_ADDR),
-            ),
-            Env::CiNomad => (
-                String::from(CONTINUOUS_NOMAD_FULLNODE_ADDR),
-                String::from(CONTINUOUS_NOMAD_FAUCET_ADDR),
-            ),
-            Env::Testnet => (
-                String::from(TESTNET_FULLNODE_ADDR),
-                String::from(TESTNET_FAUCET_ADDR),
-            ),
-            Env::CustomRemote => (
-                options
-                    .fullnode_address
-                    .clone()
-                    .expect("Expect 'fullnode_address' for Env::Custom"),
-                options
-                    .faucet_address
-                    .clone()
-                    .expect("Expect 'faucet_address' for Env::Custom"),
-            ),
+        match options.env {
+            Env::Devnet
+            | Env::Staging
+            | Env::Ci
+            | Env::CiNomad
+            | Env::Testnet
+            | Env::CustomRemote => {}
             Env::NewLocal => unreachable!("NewLocal shouldn't use RemoteRunningCluster"),
-        };
+        }
+
+        let fullnode_url = options
+            .fullnode_address
+            .as_deref()
+            .filter(|url| !url.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No public RTD {:?} fullnode is configured; pass --fullnode-address",
+                    options.env
+                )
+            })?
+            .to_owned();
+        let faucet_url = options
+            .faucet_address
+            .as_deref()
+            .filter(|url| !url.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No public RTD {:?} faucet is configured; pass --faucet-address",
+                    options.env
+                )
+            })?
+            .to_owned();
+
+        reqwest::Url::parse(&fullnode_url)?;
+        reqwest::Url::parse(&faucet_url)?;
 
         // TODO: test connectivity before proceeding?
 
@@ -128,10 +110,6 @@ impl Cluster for RemoteRunningCluster {
 
     fn fullnode_url(&self) -> &str {
         &self.fullnode_url
-    }
-
-    fn indexer_url(&self) -> &Option<String> {
-        &None
     }
 
     fn user_key(&self) -> AccountKeyPair {
@@ -155,26 +133,16 @@ impl Cluster for RemoteRunningCluster {
 pub struct LocalNewCluster {
     test_cluster: TestCluster,
     fullnode_url: String,
-    indexer_url: Option<String>,
     faucet_key: AccountKeyPair,
     config_directory: tempfile::TempDir,
     #[allow(unused)]
     data_ingestion_path: tempfile::TempDir,
-    #[allow(unused)]
-    cancellation_tokens: Vec<tokio_util::sync::DropGuard>,
-    #[allow(unused)]
-    database: Option<TempDb>,
-    graphql_url: Option<String>,
 }
 
 impl LocalNewCluster {
     #[allow(unused)]
     pub fn swarm(&self) -> &Swarm {
         &self.test_cluster.swarm
-    }
-
-    pub fn graphql_url(&self) -> &Option<String> {
-        &self.graphql_url
     }
 }
 
@@ -223,86 +191,20 @@ impl Cluster for LocalNewCluster {
         // This cluster has fullnode handle, safe to unwrap
         let fullnode_url = test_cluster.fullnode_handle.rpc_url.clone();
 
-        // TODO: with TestCluster supporting indexer backed rpc as well, we can remove the indexer related logic here.
-        let mut cancellation_tokens = vec![];
-        let (database, indexer_url, graphql_url) = if options.with_indexer_and_graphql {
-            let database = TempDb::new()?;
-            let pg_address = database.database().url().as_str().to_owned();
-            let indexer_jsonrpc_address = format!("127.0.0.1:{}", get_available_port("127.0.0.1"));
-            let graphql_address = format!("127.0.0.1:{}", get_available_port("127.0.0.1"));
-            let graphql_url = format!("http://{graphql_address}");
-
-            let (_, _, writer_token) = start_indexer_writer_for_testing(
-                pg_address.clone(),
-                None,
-                None,
-                Some(data_ingestion_path.path().to_path_buf()),
-                None, /* cancel */
-                None, /* start_checkpoint */
-                None, /* end_checkpoint */
-            )
-            .await;
-            cancellation_tokens.push(writer_token.drop_guard());
-
-            // Start indexer jsonrpc service
-            let (_, reader_token) = start_indexer_jsonrpc_for_testing(
-                pg_address.clone(),
-                fullnode_url.clone(),
-                indexer_jsonrpc_address.clone(),
-                None, /* cancel */
-            )
-            .await;
-            cancellation_tokens.push(reader_token.drop_guard());
-
-            // Start the graphql service
-            let graphql_address = graphql_address.parse::<SocketAddr>()?;
-            let graphql_connection_config = ConnectionConfig {
-                port: graphql_address.port(),
-                host: graphql_address.ip().to_string(),
-                db_url: pg_address,
-                ..Default::default()
-            };
-
-            start_graphql_server_with_fn_rpc(
-                graphql_connection_config.clone(),
-                Some(fullnode_url.clone()),
-                /* cancellation_token */ None,
-                ServiceConfig::test_defaults(),
-            )
-            .await;
-
-            (
-                Some(database),
-                Some(indexer_jsonrpc_address),
-                Some(graphql_url),
-            )
-        } else {
-            (None, None, None)
-        };
-
         // Let nodes connect to one another
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        // TODO: test connectivity before proceeding?
         Ok(Self {
             test_cluster,
             fullnode_url,
             faucet_key,
             config_directory: tempfile::tempdir()?,
             data_ingestion_path,
-            indexer_url,
-            cancellation_tokens,
-            database,
-            graphql_url,
         })
     }
 
     fn fullnode_url(&self) -> &str {
         &self.fullnode_url
-    }
-
-    fn indexer_url(&self) -> &Option<String> {
-        &self.indexer_url
     }
 
     fn user_key(&self) -> AccountKeyPair {
@@ -333,9 +235,6 @@ impl Cluster for Box<dyn Cluster + Send + Sync> {
     fn fullnode_url(&self) -> &str {
         (**self).fullnode_url()
     }
-    fn indexer_url(&self) -> &Option<String> {
-        (**self).indexer_url()
-    }
 
     fn user_key(&self) -> AccountKeyPair {
         (**self).user_key()
@@ -351,6 +250,28 @@ impl Cluster for Box<dyn Cluster + Send + Sync> {
 
     fn config_directory(&self) -> &Path {
         (**self).config_directory()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn remote_cluster_requires_explicit_endpoints() {
+        let mut options = ClusterTestOpt::new_local();
+        options.env = Env::Testnet;
+        let err = RemoteRunningCluster::start(&options).await.err().unwrap();
+        assert!(err.to_string().contains("--fullnode-address"));
+
+        options.fullnode_address = Some("http://127.0.0.1:9000".into());
+        let err = RemoteRunningCluster::start(&options).await.err().unwrap();
+        assert!(err.to_string().contains("--faucet-address"));
+
+        options.faucet_address = Some("http://127.0.0.1:9123".into());
+        let cluster = RemoteRunningCluster::start(&options).await.unwrap();
+        assert_eq!(cluster.fullnode_url(), "http://127.0.0.1:9000");
+        assert_eq!(cluster.remote_faucet_url(), Some("http://127.0.0.1:9123"));
     }
 }
 

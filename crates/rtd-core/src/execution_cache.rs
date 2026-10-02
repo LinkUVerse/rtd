@@ -4,7 +4,9 @@
 use crate::accumulators::funds_read::AccountFundsRead;
 use crate::authority::AuthorityStore;
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
-use crate::authority::authority_store::{ExecutionLockWriteGuard, RtdLockResult};
+use crate::authority::authority_store::ExecutionLockWriteGuard;
+#[cfg(test)]
+use crate::authority::authority_store::RtdLockResult;
 use crate::authority::backpressure::BackpressureManager;
 use crate::authority::epoch_start_configuration::EpochFlag;
 use crate::authority::epoch_start_configuration::EpochStartConfiguration;
@@ -12,15 +14,12 @@ use crate::global_state_hasher::GlobalStateHashStore;
 use crate::transaction_outputs::TransactionOutputs;
 use either::Either;
 use itertools::Itertools;
-use linku_common::fatal;
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::bridge::Bridge;
 
 use futures::{FutureExt, future::BoxFuture};
 use prometheus::Registry;
-use std::collections::HashSet;
-use std::path::Path;
-use std::sync::Arc;
 use rtd_config::ExecutionCacheConfig;
 use rtd_protocol_config::ProtocolVersion;
 use rtd_types::base_types::{FullObjectID, VerifiedExecutionData};
@@ -30,18 +29,20 @@ use rtd_types::error::{RtdError, RtdErrorKind, RtdResult, UserInputError};
 use rtd_types::executable_transaction::VerifiedExecutableTransaction;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::object::Object;
-use rtd_types::storage::{
-    BackingPackageStore, BackingStore, ChildObjectResolver, FullObjectKey, MarkerValue, ObjectKey,
-    ObjectOrTombstone, ObjectStore, PackageObject, ParentSync,
-};
 use rtd_types::rtd_system_state::RtdSystemState;
-use rtd_types::transaction::{VerifiedSignedTransaction, VerifiedTransaction};
+use rtd_types::storage::{
+    BackingPackageStore, BackingStore, FullObjectKey, MarkerValue, ObjectKey, ObjectOrTombstone,
+    ObjectStore, PackageObject, ParentSync, RuntimeObjectResolver,
+};
+use rtd_types::transaction::VerifiedTransaction;
 use rtd_types::{
     base_types::{EpochId, ObjectID, ObjectRef, SequenceNumber},
     object::Owner,
     storage::InputKey,
 };
-use tracing::instrument;
+use std::collections::HashSet;
+use std::path::Path;
+use std::sync::Arc;
 use typed_store::rocks::DBBatch;
 
 pub(crate) mod cache_types;
@@ -63,7 +64,7 @@ pub struct ExecutionCacheTraitPointers {
     pub transaction_cache_reader: Arc<dyn TransactionCacheRead>,
     pub cache_writer: Arc<dyn ExecutionCacheWrite>,
     pub backing_store: Arc<dyn BackingStore + Send + Sync>,
-    pub child_object_resolver: Arc<dyn ChildObjectResolver + Send + Sync>,
+    pub runtime_object_resolver: Arc<dyn RuntimeObjectResolver + Send + Sync>,
     pub backing_package_store: Arc<dyn BackingPackageStore + Send + Sync>,
     pub object_store: Arc<dyn ObjectStore + Send + Sync>,
     pub reconfig_api: Arc<dyn ExecutionCacheReconfigAPI>,
@@ -82,8 +83,6 @@ impl ExecutionCacheTraitPointers {
             + TransactionCacheRead
             + ExecutionCacheWrite
             + BackingStore
-            + BackingPackageStore
-            + ObjectStore
             + ExecutionCacheReconfigAPI
             + GlobalStateHashStore
             + CheckpointCache
@@ -98,7 +97,7 @@ impl ExecutionCacheTraitPointers {
             transaction_cache_reader: cache.clone(),
             cache_writer: cache.clone(),
             backing_store: cache.clone(),
-            child_object_resolver: cache.clone(),
+            runtime_object_resolver: cache.clone(),
             backing_package_store: cache.clone(),
             object_store: cache.clone(),
             reconfig_api: cache.clone(),
@@ -156,7 +155,12 @@ pub trait ExecutionCacheCommit: Send + Sync {
     /// Build a DBBatch containing the given transaction outputs.
     fn build_db_batch(&self, epoch: EpochId, digests: &[TransactionDigest]) -> Batch;
 
-    /// Stage a checkpoint's output watermark in the batch that persists its outputs.
+    /// Stage the highest-committed-checkpoint watermark into `batch` so it is
+    /// written atomically with that checkpoint's transaction outputs. Called by
+    /// CheckpointExecutor between [`Self::build_db_batch`] and
+    /// [`Self::commit_transaction_outputs`]. Unlike the checkpoint store's
+    /// separately-bumped `highest_executed` watermark, this stays consistent
+    /// with the durable object set across an unclean stop.
     fn set_highest_committed_checkpoint_in_batch(
         &self,
         batch: &mut Batch,
@@ -225,7 +229,7 @@ pub trait ObjectCacheRead: Send + Sync {
         let objects = self
             .multi_get_objects_by_key(&object_refs.iter().map(ObjectKey::from).collect::<Vec<_>>());
         let mut result = Vec::new();
-        for (object_opt, object_ref) in objects.into_iter().zip(object_refs) {
+        for (object_opt, object_ref) in objects.into_iter().zip_debug_eq(object_refs) {
             match object_opt {
                 None => {
                     let live_objref = self._get_live_objref(object_ref.0)?;
@@ -276,14 +280,13 @@ pub trait ObjectCacheRead: Send + Sync {
                 InputKey::Package { id } => Either::Right((idx, id)),
             });
 
-        for ((idx, (id, version)), has_key) in move_object_keys.iter().zip(
+        for ((idx, (id, version)), has_key) in move_object_keys.iter().zip_debug_eq(
             self.multi_object_exists_by_key(
                 &move_object_keys
                     .iter()
                     .map(|(_, k)| ObjectKey(k.0.id(), *k.1))
                     .collect::<Vec<_>>(),
-            )
-            .into_iter(),
+            ),
         ) {
             // If the key exists at the specified version, then the object is available.
             if has_key {
@@ -335,14 +338,12 @@ pub trait ObjectCacheRead: Send + Sync {
         version: SequenceNumber,
     ) -> Option<Object>;
 
+    /// Test-only: production code no longer reads owned-object lock status by ref.
+    #[cfg(test)]
     fn get_lock(&self, obj_ref: ObjectRef, epoch_store: &AuthorityPerEpochStore) -> RtdLockResult;
 
     // This method is considered "private" - only used by multi_get_objects_with_more_accurate_error_return
     fn _get_live_objref(&self, object_id: ObjectID) -> RtdResult<ObjectRef>;
-
-    // Check that the given set of objects are live at the given version. This is used as a
-    // safety check before execution, and could potentially be deleted or changed to a debug_assert
-    fn check_owned_objects_are_live(&self, owned_object_refs: &[ObjectRef]) -> RtdResult;
 
     fn get_rtd_system_state_object_unsafe(&self) -> RtdResult<RtdSystemState>;
 
@@ -444,29 +445,6 @@ pub trait TransactionCacheRead: Send + Sync {
             .expect("multi-get must return correct number of items")
     }
 
-    #[instrument(level = "trace", skip_all)]
-    fn get_transactions_and_serialized_sizes(
-        &self,
-        digests: &[TransactionDigest],
-    ) -> RtdResult<Vec<Option<(VerifiedTransaction, usize)>>> {
-        let txns = self.multi_get_transaction_blocks(digests);
-        txns.into_iter()
-            .map(|txn| {
-                txn.map(|txn| {
-                    // Note: if the transaction is read from the db, we are wasting some
-                    // effort relative to reading the raw bytes from the db instead of
-                    // calling serialized_size. However, transactions should usually be
-                    // fetched from cache.
-                    match txn.serialized_size() {
-                        Ok(size) => Ok(((*txn).clone(), size)),
-                        Err(e) => Err(e),
-                    }
-                })
-                .transpose()
-            })
-            .collect::<Result<Vec<_>, _>>()
-    }
-
     fn multi_get_executed_effects_digests(
         &self,
         digests: &[TransactionDigest],
@@ -498,7 +476,7 @@ pub trait TransactionCacheRead: Send + Sync {
         }
 
         let effects = self.multi_get_effects(&fetch_digests);
-        for (i, effects) in fetch_indices.into_iter().zip(effects.into_iter()) {
+        for (i, effects) in fetch_indices.into_iter().zip_debug_eq(effects) {
             results[i] = effects;
         }
 
@@ -541,6 +519,16 @@ pub trait TransactionCacheRead: Send + Sync {
         digest: &TransactionDigest,
     ) -> Option<Vec<ObjectKey>>;
 
+    fn multi_get_unchanged_loaded_runtime_objects(
+        &self,
+        digests: &[TransactionDigest],
+    ) -> Vec<Option<Vec<ObjectKey>>> {
+        digests
+            .iter()
+            .map(|digest| self.get_unchanged_loaded_runtime_objects(digest))
+            .collect()
+    }
+
     fn take_accumulator_events(&self, digest: &TransactionDigest) -> Option<Vec<AccumulatorEvent>>;
 
     fn notify_read_executed_effects_digests<'a>(
@@ -556,36 +544,49 @@ pub trait TransactionCacheRead: Send + Sync {
     /// ExecutionLockReadGuard would also prevent reconfig from happening while waiting,
     /// but this is very dangerous, as it could prevent reconfiguration from ever
     /// occurring!
+    ///
+    /// This function panics if any of the requested effects are not found. Use this in
+    /// critical paths where effects are expected to exist (e.g., checkpoint building,
+    /// consensus commit processing). For non-critical paths where effects may have been
+    /// pruned (e.g., serving historical data to clients), use `notify_read_executed_effects_may_fail`.
     fn notify_read_executed_effects<'a>(
         &'a self,
         task_name: &'static str,
         digests: &'a [TransactionDigest],
     ) -> BoxFuture<'a, Vec<TransactionEffects>> {
         async move {
-            let digests = self
-                .notify_read_executed_effects_digests(task_name, digests)
-                .await;
-            // once digests are available, effects must be present as well
-            self.multi_get_effects(&digests)
-                .into_iter()
-                .map(|e| e.unwrap_or_else(|| fatal!("digests must exist")))
-                .collect()
+            self.notify_read_executed_effects_may_fail(task_name, digests)
+                .await
+                .unwrap_or_else(|e| panic!("effects must exist: {e}"))
         }
         .boxed()
     }
 
-    /// Get the execution outputs of a mysticeti fastpath certified transaction, if it exists.
-    fn get_mysticeti_fastpath_outputs(
-        &self,
-        tx_digest: &TransactionDigest,
-    ) -> Option<Arc<TransactionOutputs>>;
-
-    /// Wait until the outputs of the given transactions are available
-    /// in the temporary buffer holding mysticeti fastpath outputs.
-    fn notify_read_fastpath_transaction_outputs<'a>(
+    /// Returns an error if any of the requested effects have been pruned from the database.
+    /// Use this in non-critical paths where effects may not exist (e.g., serving historical
+    /// data that may have been pruned). For critical paths where effects must exist,
+    /// use `notify_read_executed_effects`.
+    fn notify_read_executed_effects_may_fail<'a>(
         &'a self,
-        tx_digests: &'a [TransactionDigest],
-    ) -> BoxFuture<'a, Vec<Arc<TransactionOutputs>>>;
+        task_name: &'static str,
+        digests: &'a [TransactionDigest],
+    ) -> BoxFuture<'a, RtdResult<Vec<TransactionEffects>>> {
+        async move {
+            let effects_digests = self
+                .notify_read_executed_effects_digests(task_name, digests)
+                .await;
+            self.multi_get_effects(&effects_digests)
+                .into_iter()
+                .zip_debug_eq(digests)
+                .map(|(e, digest)| {
+                    e.ok_or_else(|| {
+                        RtdError::from(RtdErrorKind::TransactionEffectsNotFound { digest: *digest })
+                    })
+                })
+                .collect()
+        }
+        .boxed()
+    }
 }
 
 pub trait ExecutionCacheWrite: Send + Sync {
@@ -608,21 +609,9 @@ pub trait ExecutionCacheWrite: Send + Sync {
     /// in question.
     fn write_transaction_outputs(&self, epoch_id: EpochId, tx_outputs: Arc<TransactionOutputs>);
 
-    /// Write the output of a Mysticeti fastpath certified transaction.
-    /// Such output cannot be written to the dirty cache right away because
-    /// the transaction may end up rejected by consensus later. We need to make sure
-    /// that it is not visible to any subsequent transaction until we observe it
-    /// from consensus or checkpoints.
-    fn write_fastpath_transaction_outputs(&self, tx_outputs: Arc<TransactionOutputs>);
-
-    /// Attempt to acquire object locks for all of the owned input locks.
-    fn acquire_transaction_locks(
-        &self,
-        epoch_store: &AuthorityPerEpochStore,
-        owned_input_objects: &[ObjectRef],
-        tx_digest: TransactionDigest,
-        signed_transaction: Option<VerifiedSignedTransaction>,
-    ) -> RtdResult;
+    /// Validate owned object versions and digests without acquiring locks.
+    /// Used to validate transaction input before submitting or voting to accept the transaction.
+    fn validate_owned_object_versions(&self, owned_input_objects: &[ObjectRef]) -> RtdResult;
 
     /// Write an object entry directly to the cache for testing.
     /// This allows us to write an object without constructing the entire
@@ -724,9 +713,17 @@ macro_rules! implement_storage_traits {
             ) -> Option<Object> {
                 ObjectCacheRead::get_object_by_key(self, object_id, version)
             }
+
+            fn load_implicitly_read_system_object(
+                &self,
+                object_id: &ObjectID,
+                version: rtd_types::base_types::ConsensusObjectVersion,
+            ) -> Option<Object> {
+                $implementor::load_implicitly_read_system_object(self, object_id, version)
+            }
         }
 
-        impl ChildObjectResolver for $implementor {
+        impl RuntimeObjectResolver for $implementor {
             fn read_child_object(
                 &self,
                 parent: &ObjectID,

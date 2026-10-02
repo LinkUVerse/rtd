@@ -25,8 +25,11 @@ class Metric(Enum):
 
 
 def get_current_network_epoch(env='testnet'):
+    rpc_url = os.environ.get('RTD_REFERENCE_RPC_URL')
+    if not rpc_url:
+        raise SystemExit('Set RTD_REFERENCE_RPC_URL to a verified RTD JSON-RPC endpoint or pass --end-epoch.')
     for i in range(NUM_RETRIES):
-        cmd = ['curl', '--location', '--request', 'POST', f'https://explorer-rpc.{env}.rtd.io/',
+        cmd = ['curl', '--location', '--request', 'POST', rpc_url,
                '--header', 'Content-Type: application/json', '--data-raw',
                '{"jsonrpc":"2.0", "method":"rtdx_getCurrentEpoch", "params":[], "id":1}']
         try:
@@ -92,7 +95,7 @@ def usage():
     print(
         'Usage: monitor_synced.py [--env=<env>] [--end-epoch=<epoch>] [--epoch-timeout=<timeout>] [--verbose]')
     print(
-        f'  --env=<env>            Environment to sync against (one of {AVAILABLE_NETWORKS.join(", ")}')
+        f'  --env=<env>            Environment to sync against (one of {", ".join(AVAILABLE_NETWORKS)})')
     print('  --end-epoch=<epoch>    Epoch to sync to (default: current network epoch)')
     print('  --epoch-timeout=<timeout>  Timeout IN MINUTES for syncing to the next epoch (default: None)')
     print('  --verbose              Print verbose output')

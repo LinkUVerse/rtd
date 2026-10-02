@@ -5,6 +5,7 @@ use crate::ErrorReason;
 use crate::RpcError;
 use crate::RpcService;
 use crate::error::CheckpointNotFoundError;
+use linku_common::ZipDebugEqIteratorExt;
 use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::field::FieldMaskUtil;
@@ -19,8 +20,10 @@ use rtd_rpc::proto::rtd::rpc::v2::ObjectSet;
 use rtd_rpc::proto::rtd::rpc::v2::TransactionEvents;
 use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
 use rtd_sdk_types::Digest;
+use rtd_types::balance_change::derive_balance_changes_2;
+use rtd_types::full_checkpoint_content::ObjectSet as TypesObjectSet;
 
-pub const READ_MASK_DEFAULT: &str = "sequence_number,digest";
+pub const READ_MASK_DEFAULT: &str = crate::read_mask_defaults::CHECKPOINT;
 
 #[tracing::instrument(skip(service))]
 pub fn get_checkpoint(
@@ -72,8 +75,9 @@ pub fn get_checkpoint(
         .inner()
         .get_latest_checkpoint()?
         .sequence_number;
+    let lowest_available_checkpoint = service.reader.get_lowest_available_checkpoint()?;
 
-    if sequence_number > latest_checkpoint {
+    if !(lowest_available_checkpoint..=latest_checkpoint).contains(&sequence_number) {
         return Err(CheckpointNotFoundError::sequence_number(sequence_number).into());
     }
 
@@ -117,29 +121,25 @@ pub fn get_checkpoint(
             }
 
             if let Some(submask) = read_mask.subtree(Checkpoint::TRANSACTIONS_FIELD.name) {
-                // A permissive mask can render every event in a checkpoint.
-                // Keep one shared budget for the whole response so individual
-                // per-event limits cannot accumulate into an oversized reply.
+                // Share a single JSON-rendering budget across every event in
+                // every transaction in the checkpoint. Without this, an
+                // unauthenticated `GetCheckpoint` with a permissive `read_mask`
+                // multiplies one input checkpoint into thousands of per-event
+                // renders, each with its own `max_json_move_value_size` budget.
                 let mut json_budget = service.config.max_json_move_value_response_size();
                 checkpoint.transactions = checkpoint_data
                     .transactions
                     .into_iter()
                     .map(|t| {
-                        let balance_changes = submask
-                            .contains(ExecutedTransaction::BALANCE_CHANGES_FIELD)
-                            .then(|| {
-                                service
-                                    .reader
-                                    .get_transaction_info(&t.transaction.digest())
-                                    .map(|info| {
-                                        info.balance_changes
-                                            .into_iter()
-                                            .map(rtd_rpc::proto::rtd::rpc::v2::BalanceChange::from)
-                                            .collect::<Vec<_>>()
-                                    })
-                            })
-                            .flatten()
-                            .unwrap_or_default();
+                        let balance_changes =
+                            if submask.contains(ExecutedTransaction::BALANCE_CHANGES_FIELD) {
+                                derive_balance_changes_2(&t.effects, &checkpoint_data.object_set)
+                                    .into_iter()
+                                    .map(Into::into)
+                                    .collect()
+                            } else {
+                                Vec::new()
+                            };
                         let mut transaction = ExecutedTransaction::merge_from(&t, &submask);
                         transaction.checkpoint = submask
                             .contains(ExecutedTransaction::CHECKPOINT_FIELD)
@@ -157,11 +157,14 @@ pub fn get_checkpoint(
                             && let Some(events) = transaction.events.as_mut()
                             && let Some(sdk_events) = &t.events
                         {
-                            for (message, event) in events.events.iter_mut().zip(&sdk_events.data) {
+                            for (message, event) in
+                                events.events.iter_mut().zip_debug_eq(&sdk_events.data)
+                            {
                                 message.json = service
                                     .render_json_with_budget(
                                         &event.type_,
                                         &event.contents,
+                                        &TypesObjectSet::default(),
                                         &mut json_budget,
                                     )
                                     .map(Box::new);

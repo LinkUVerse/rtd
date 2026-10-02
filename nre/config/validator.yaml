@@ -28,7 +28,8 @@ checkpoint-executor-config:
 db-checkpoint-config:
   perform-db-checkpoints-at-epoch-end: false
 indirect-objects-threshold: 18446744073709551615
+# Set state-archive-read-config only after an RTD checkpoint archive is deployed.
+# RTD has no Mainnet endpoint for this local validator template.
 metrics:
   push-interval-seconds: 60
-  # push-url: https://metrics-proxy.testnet.rtd.io:8443/publish/metrics
-  # push-url: https://metrics-proxy.mainnet.rtd.io:8443/publish/metrics
+  # Set push-url only after an RTD metrics service is deployed and verified.

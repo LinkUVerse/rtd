@@ -1,22 +1,30 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::static_programmable_transactions::linkage::resolved_linkage::{
-    ResolvedLinkage, RootedLinkage,
+use crate::{
+    gas_charger::GasPayment,
+    static_programmable_transactions::linkage::resolved_linkage::{
+        ExecutableLinkage, ResolvedLinkage,
+    },
 };
 use indexmap::IndexSet;
-use move_binary_format::file_format::{AbilitySet, CodeOffset, FunctionDefinitionIndex};
+use move_binary_format::{
+    CompiledModule,
+    file_format::{AbilitySet, CodeOffset, FunctionDefinitionIndex, Visibility},
+};
 use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, StructTag},
     u256::U256,
 };
-use std::rc::Rc;
 use rtd_types::{
     Identifier, TypeTag,
     base_types::{ObjectID, ObjectRef, RESOLVED_TX_CONTEXT, SequenceNumber, TxContextKind},
+    object::ObjectPermissions,
 };
+use rtd_verifier::INIT_FN_NAME;
+use std::{collections::BTreeSet, rc::Rc};
 
 //**************************************************************************************************
 // AST Nodes
@@ -24,8 +32,13 @@ use rtd_types::{
 
 #[derive(Debug)]
 pub struct Transaction {
+    pub gas_payment: Option<GasPayment>,
     pub inputs: Inputs,
+    /// Original number of commands in the transaction. After typing, Spanned indices in the AST
+    /// should be < `original_command_len`
+    pub original_command_len: usize,
     pub commands: Commands,
+    pub unified_linkage: Option<ExecutableLinkage>,
 }
 
 pub type Inputs = Vec<(InputArg, InputType)>;
@@ -41,40 +54,61 @@ pub enum InputArg {
     FundsWithdrawal(FundsWithdrawalArg),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SharedObjectKind {
-    Legacy,
-    Party,
+#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Clone))]
+pub enum ObjectArgKind {
+    ImmObject(ObjectRef),
+    OwnedObject(ObjectRef),
+    ConsensusObject {
+        id: ObjectID,
+        initial_shared_version: SequenceNumber,
+    },
 }
 
 #[derive(Debug)]
 #[cfg_attr(debug_assertions, derive(Clone))]
-pub enum ObjectArg {
-    ImmObject(ObjectRef),
-    OwnedObject(ObjectRef),
-    SharedObject {
-        id: ObjectID,
-        initial_shared_version: SequenceNumber,
-        mutability: ObjectMutability,
-        kind: SharedObjectKind,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectMutability {
-    Mutable,
-    Immutable,
-    NonExclusiveWrite,
+pub struct ObjectArg {
+    pub kind: ObjectArgKind,
+    /// Permissions, potentially refined/limited based on the input argument. For example if a
+    /// shared object is used but marked as read-only, the permissions would be refined to being
+    /// _only_ immutable usage.
+    pub refined_permissions: ObjectPermissions,
 }
 
 #[derive(Debug)]
 #[cfg_attr(debug_assertions, derive(Clone))]
 pub struct FundsWithdrawalArg {
-    /// The full type `rtd::funds_accumulator::Withdrawal<T>`
+    // if true, it was from a compatibility object input, not a intentional withdrawal argument
+    pub from_compatibility_object: bool,
+    /// The full type.
+    /// Either `rtd::funds_accumulator::Withdrawal<T>` for a direct source, or
+    /// `rtd::allowance::AllowanceWithdrawal<T>` for an allowance source
     pub ty: Type,
-    pub owner: AccountAddress,
+    pub source: WithdrawalSource,
     /// This amount is verified to be <= the max for the type described by the `T` in `ty`
     pub amount: U256,
+}
+
+#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Clone))]
+pub enum WithdrawalSource {
+    /// A `rtd::funds_accumulator::Withdrawal` from the sender/sponsor
+    Direct { owner: AccountAddress },
+    /// An `rtd::allowance::AllowanceWithdrawal` permissioned by the `Allowance` object `id`
+    Allowance {
+        funder: AccountAddress,
+        id: ObjectID,
+    },
+}
+
+impl WithdrawalSource {
+    /// The account the withdrawal debits.
+    pub fn source_account(&self) -> AccountAddress {
+        match self {
+            Self::Direct { owner } => *owner,
+            Self::Allowance { funder, .. } => *funder,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -120,14 +154,72 @@ pub enum Command {
     SplitCoins(Argument, Vec<Argument>),
     MergeCoins(Argument, Vec<Argument>),
     MakeMoveVec(/* T for vector<T> */ Option<Type>, Vec<Argument>),
-    Publish(Vec<Vec<u8>>, Vec<ObjectID>, ResolvedLinkage),
+    Publish(PackagePayload, Vec<ObjectID>, ResolvedLinkage),
     Upgrade(
-        Vec<Vec<u8>>,
+        PackagePayload,
         Vec<ObjectID>,
         ObjectID,
         Argument,
         ResolvedLinkage,
     ),
+}
+
+#[derive(Debug, Clone)]
+pub enum PackagePayload {
+    Serialized(Vec<Vec<u8>>),
+    Deserialized(DeserializedPackage),
+}
+
+// A Deserialized but not yet verified package created as part of loading.
+#[derive(Debug, Clone)]
+pub struct DeserializedPackage {
+    // NB: Modules are deserialized but not yet verified. They _are_ bounds checked though.
+    pub deserialized_modules: Vec<CompiledModule>,
+    // Sum of the sizes of all modules in (serialized) bytes, used for metering
+    pub total_bytes: usize,
+    // The computed digest of the package --
+    // `MovePackage::compute_digest_for_modules_and_deps` with `hash_modules` set to `true`.
+    pub computed_digest: [u8; 32],
+    // Names of the modules in this package that define a function named `init`.
+    pub modules_with_init: BTreeSet<Identifier>,
+}
+
+impl DeserializedPackage {
+    pub fn new(
+        deserialized_modules: Vec<CompiledModule>,
+        total_bytes: usize,
+        computed_digest: [u8; 32],
+    ) -> Self {
+        let modules_with_init = deserialized_modules
+            .iter()
+            .filter(|module| module_has_init(module))
+            .map(|module| module.identifier_at(module.self_handle().name).to_owned())
+            .collect();
+        Self {
+            deserialized_modules,
+            total_bytes,
+            computed_digest,
+            modules_with_init,
+        }
+    }
+
+    /// Returns true if this package defines any modules with function that could be a possible
+    /// `init` function.
+    pub fn has_potential_init(&self) -> bool {
+        !self.modules_with_init.is_empty()
+    }
+}
+
+/// Whether `module` defines a function named `init`.
+///
+/// NB: we presuppose that a function named `init` is the module's initializer. If it does not
+/// conform to the `init` signature requirements the entry points verifier rejects the publish
+/// later, failing the transaction as a whole.
+pub(crate) fn module_has_init(module: &CompiledModule) -> bool {
+    module.function_defs().iter().any(|func_def| {
+        let handle = module.function_handle_at(func_def.function);
+        module.identifier_at(handle.name) == INIT_FN_NAME
+    })
 }
 
 #[derive(Debug)]
@@ -138,14 +230,17 @@ pub struct LoadedFunctionInstantiation {
 
 #[derive(Debug)]
 pub struct LoadedFunction {
-    pub storage_id: ModuleId,
-    pub runtime_id: ModuleId,
+    pub version_mid: ModuleId,
+    pub original_mid: ModuleId,
     pub name: Identifier,
     pub type_arguments: Vec<Type>,
     pub signature: LoadedFunctionInstantiation,
-    pub linkage: RootedLinkage,
+    pub linkage: ExecutableLinkage,
     pub instruction_length: CodeOffset,
     pub definition_index: FunctionDefinitionIndex,
+    pub visibility: Visibility,
+    pub is_entry: bool,
+    pub is_native: bool,
 }
 
 #[derive(Debug)]
@@ -162,17 +257,15 @@ pub use rtd_types::transaction::Argument;
 
 impl ObjectArg {
     pub fn id(&self) -> ObjectID {
-        match self {
-            ObjectArg::ImmObject(oref) | ObjectArg::OwnedObject(oref) => oref.0,
-            ObjectArg::SharedObject { id, .. } => *id,
-        }
+        self.kind.id()
     }
+}
 
-    pub fn mutability(&self) -> ObjectMutability {
+impl ObjectArgKind {
+    pub fn id(&self) -> ObjectID {
         match self {
-            ObjectArg::ImmObject(_) => ObjectMutability::Immutable,
-            ObjectArg::OwnedObject(_) => ObjectMutability::Mutable,
-            ObjectArg::SharedObject { mutability, .. } => *mutability,
+            Self::ImmObject(oref) | Self::OwnedObject(oref) => oref.0,
+            Self::ConsensusObject { id, .. } => *id,
         }
     }
 }
@@ -213,6 +306,12 @@ impl Type {
             TxContextKind::None
         }
     }
+
+    /// Is this the `TxContext` datatype itself, not behind a reference?
+    pub fn is_tx_context_by_value(&self) -> bool {
+        matches!(self, Type::Datatype(dt) if dt.qualified_ident() == RESOLVED_TX_CONTEXT)
+    }
+
     pub fn all_addresses(&self) -> IndexSet<AccountAddress> {
         match self {
             Type::Bool
@@ -287,6 +386,42 @@ impl Datatype {
     }
 }
 
+impl Command {
+    pub fn arguments_mut(&mut self) -> Box<dyn Iterator<Item = &mut Argument> + '_> {
+        match self {
+            Command::MoveCall(mc) => Box::new(mc.arguments.iter_mut()),
+            Command::TransferObjects(objs, recipient) => {
+                Box::new(objs.iter_mut().chain(std::iter::once(recipient)))
+            }
+            Command::SplitCoins(coin, amounts) => {
+                Box::new(std::iter::once(coin).chain(amounts.iter_mut()))
+            }
+            Command::MergeCoins(coin, coins) => {
+                Box::new(std::iter::once(coin).chain(coins.iter_mut()))
+            }
+            Command::MakeMoveVec(_, elements) => Box::new(elements.iter_mut()),
+            Command::Publish(_, _, _) => Box::new(std::iter::empty()),
+            Command::Upgrade(_, _, _, obj, _) => Box::new(std::iter::once(obj)),
+        }
+    }
+
+    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Argument> + '_> {
+        match self {
+            Command::MoveCall(mc) => Box::new(mc.arguments.iter()),
+            Command::TransferObjects(objs, recipient) => {
+                Box::new(objs.iter().chain(std::iter::once(recipient)))
+            }
+            Command::SplitCoins(coin, amounts) => {
+                Box::new(std::iter::once(coin).chain(amounts.iter()))
+            }
+            Command::MergeCoins(coin, coins) => Box::new(std::iter::once(coin).chain(coins.iter())),
+            Command::MakeMoveVec(_, elements) => Box::new(elements.iter()),
+            Command::Publish(_, _, _) => Box::new(std::iter::empty()),
+            Command::Upgrade(_, _, _, obj, _) => Box::new(std::iter::once(obj)),
+        }
+    }
+}
+
 //**************************************************************************************************
 // Traits
 //**************************************************************************************************
@@ -337,13 +472,4 @@ impl TryFrom<&Datatype> for StructTag {
                 .collect::<Result<Vec<TypeTag>, _>>()?,
         })
     }
-}
-
-//**************************************************************************************************
-// Tests
-//**************************************************************************************************
-
-#[test]
-fn enum_size() {
-    assert_eq!(std::mem::size_of::<Type>(), 16);
 }

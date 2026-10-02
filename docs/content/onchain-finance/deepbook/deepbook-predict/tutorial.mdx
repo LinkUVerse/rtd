@@ -1,0 +1,25 @@
+---
+title: DeepBook Predict Workflow
+sidebar_label: Workflow (design reference)
+description: Conceptual upstream Sui DeepBook Predict workflow; no RTD public deployment exists.
+keywords:
+  - deepbook predict
+  - workflow
+  - upstream design
+---
+
+This is a conceptual workflow from the upstream Sui design. It cannot be run against RTD Mainnet or Testnet: no such Predict deployment is verified, and RTD has not launched a public Mainnet. The former RTD Testnet tutorial contained inherited chain IDs, coin types, faucet instructions, package IDs, and public service URLs that were not RTD facts; they have been removed.
+
+## Prerequisites for a local experiment
+
+Use a dedicated RTD dev chain only after porting and deploying the Predict Move packages and their dependencies. Record that chain's identifier, deployed package and shared object IDs, quote coin type, and oracle bindings. Provision a valid feed writer and a funded pool, then create a market with an expiry in the future. A fresh local genesis requires a fresh deployment record.
+
+## Transaction sequence
+
+The source design's intended sequence is to create an account, deposit the quote coin, discover an active market, read a quote, choose maximum cost and price bounds, then submit a mint. A position is identified by its market and order ID. A live position can be redeemed under the contract's rules; an expired market must be settled before a settled position can be claimed. Liquidity supply and withdrawal are queued and valued during a pool flush.
+
+These are architectural steps only. The exact function signatures, numeric limits, and SDK builders must be checked against the ported source and the actual deployed manifest before an RTD tutorial can be published. See [Design](/onchain-finance/deepbook/deepbook-predict/design) and [Contract Information](/onchain-finance/deepbook/deepbook-predict/contract-information).
+
+## Verify on Testnet {#verify-on-testnet}
+
+There is no verified RTD Testnet Predict deployment to verify. When one is launched, an end-to-end acceptance test must check the chain identifier, package and object IDs, funded account, fresh oracle observations, active market, successful quote and mint, emitted events, redemption and settlement, and pool accounting. Type checking an example alone does not establish those outcomes.

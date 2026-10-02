@@ -94,12 +94,12 @@ Response: {
         "pageInfo": {
           "hasPreviousPage": false,
           "hasNextPage": false,
-          "startCursor": "MA==",
-          "endCursor": "MQ=="
+          "startCursor": "KAE6BAgAEAA=",
+          "endCursor": "KAE6BAgAEAE="
         },
         "edges": [
           {
-            "cursor": "MA==",
+            "cursor": "KAE6BAgAEAA=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -109,7 +109,7 @@ Response: {
             }
           },
           {
-            "cursor": "MQ==",
+            "cursor": "KAE6BAgAEAE=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -124,22 +124,23 @@ Response: {
   }
 }
 
-task 15, lines 65-79:
+task 15, lines 65-80:
 //# run-graphql
 Response: {
   "data": {
     "epoch": {
-      "totalTransactions": 6,
+      "totalTransactions": 9,
+      "totalCheckpoints": 4,
       "transactions": {
         "pageInfo": {
           "hasPreviousPage": false,
           "hasNextPage": false,
-          "startCursor": "Mg==",
-          "endCursor": "Nw=="
+          "startCursor": "KAE6BAgAEAI=",
+          "endCursor": "KAE6BAgAEAo="
         },
         "edges": [
           {
-            "cursor": "Mg==",
+            "cursor": "KAE6BAgAEAI=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -149,7 +150,7 @@ Response: {
             }
           },
           {
-            "cursor": "Mw==",
+            "cursor": "KAE6BAgAEAM=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -159,7 +160,7 @@ Response: {
             }
           },
           {
-            "cursor": "NA==",
+            "cursor": "KAE6BAgAEAQ=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -169,7 +170,17 @@ Response: {
             }
           },
           {
-            "cursor": "NQ==",
+            "cursor": "KAE6BAgAEAU=",
+            "node": {
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 2
+                }
+              }
+            }
+          },
+          {
+            "cursor": "KAE6BAgAEAY=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -179,7 +190,27 @@ Response: {
             }
           },
           {
-            "cursor": "Ng==",
+            "cursor": "KAE6BAgAEAc=",
+            "node": {
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 3
+                }
+              }
+            }
+          },
+          {
+            "cursor": "KAE6BAgAEAg=",
+            "node": {
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 4
+                }
+              }
+            }
+          },
+          {
+            "cursor": "KAE6BAgAEAk=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -189,7 +220,7 @@ Response: {
             }
           },
           {
-            "cursor": "Nw==",
+            "cursor": "KAE6BAgAEAo=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -204,7 +235,7 @@ Response: {
   }
 }
 
-task 16, lines 81-95:
+task 16, lines 82-96:
 //# run-graphql
 Response: {
   "data": {

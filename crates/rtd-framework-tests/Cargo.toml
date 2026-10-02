@@ -2,7 +2,7 @@
 name = "rtd-framework-tests"
 version = "0.1.0"
 edition = "2024"
-authors = ["LinkU Labs <eng@linkulabs.com>"]
+authors = ["LinkU Labs"]
 description = "Runs Move tests for rtd-framework"
 license = "Apache-2.0"
 publish = false
@@ -21,6 +21,7 @@ prometheus.workspace = true
 rtd-framework.workspace = true
 rtd-move.workspace = true
 rtd-move-build.workspace = true
+rtd-package-alt.workspace = true
 rtd-protocol-config.workspace = true
 rtd-types.workspace = true
 

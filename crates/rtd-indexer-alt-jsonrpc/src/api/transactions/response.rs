@@ -2,38 +2,44 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Context as _;
-use futures::future::OptionFuture;
-use move_core_types::annotated_value::{MoveDatatypeLayout, MoveTypeLayout};
-use rtd_indexer_alt_reader::{
-    kv_loader::TransactionContents, objects::VersionedObjectKey,
-    tx_balance_changes::TxBalanceChangeKey,
-};
-use rtd_indexer_alt_schema::transactions::{BalanceChange, StoredTxBalanceChange};
-use rtd_json_rpc_types::{
-    BalanceChange as RtdBalanceChange, ObjectChange as RtdObjectChange, RtdEvent,
-    RtdTransactionBlock, RtdTransactionBlockData, RtdTransactionBlockEffects,
-    RtdTransactionBlockEvents, RtdTransactionBlockResponse, RtdTransactionBlockResponseOptions,
-};
-use rtd_types::{
-    TypeTag,
-    base_types::{ObjectID, SequenceNumber},
-    digests::{ObjectDigest, TransactionDigest},
-    effects::{IDOperation, ObjectChange, TransactionEffects, TransactionEffectsAPI},
-    event::Event,
-    object::Object,
-    signature::GenericSignature,
-    transaction::{TransactionData, TransactionDataAPI},
-};
-use tokio::join;
+use move_core_types::annotated_value::MoveDatatypeLayout;
+use move_core_types::annotated_value::MoveTypeLayout;
+use rtd_indexer_alt_reader::kv_loader::TransactionContents;
+use rtd_indexer_alt_reader::objects::VersionedObjectKey;
+use rtd_json_rpc_types::BalanceChange as RtdBalanceChange;
+use rtd_json_rpc_types::ObjectChange as RtdObjectChange;
+use rtd_json_rpc_types::RtdEvent;
+use rtd_json_rpc_types::RtdTransactionBlock;
+use rtd_json_rpc_types::RtdTransactionBlockData;
+use rtd_json_rpc_types::RtdTransactionBlockEffects;
+use rtd_json_rpc_types::RtdTransactionBlockEvents;
+use rtd_json_rpc_types::RtdTransactionBlockResponse;
+use rtd_json_rpc_types::RtdTransactionBlockResponseOptions;
+use rtd_types::TypeTag;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::base_types::SequenceNumber;
+use rtd_types::digests::ObjectDigest;
+use rtd_types::digests::TransactionDigest;
+use rtd_types::effects::ObjectChange;
+use rtd_types::effects::TransactionEffects;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::object::Object;
+use rtd_types::object::Owner;
+use rtd_types::signature::GenericSignature;
+use rtd_types::transaction::SenderSignedData;
+use rtd_types::transaction::TransactionData;
+use rtd_types::transaction::TransactionDataAPI;
 
-use crate::{
-    context::Context,
-    error::{RpcError, invalid_params, rpc_bail},
-};
-
-use super::error::Error;
+use crate::api::to_rtd_object_change;
+use crate::api::transactions::error::Error;
+use crate::context::Context;
+use crate::error::RpcError;
+use crate::error::invalid_params;
+use crate::error::rpc_bail;
 
 /// Fetch the necessary data from the stores in `ctx` and transform it to build a response for the
 /// transaction identified by `digest`, according to the response `options`.
@@ -42,28 +48,12 @@ pub(super) async fn transaction(
     digest: TransactionDigest,
     options: &RtdTransactionBlockResponseOptions,
 ) -> Result<RtdTransactionBlockResponse, RpcError<Error>> {
-    let tx = ctx.kv_loader().load_one_transaction(digest);
-    let stored_bc: OptionFuture<_> = options
-        .show_balance_changes
-        .then(|| ctx.pg_loader().load_one(TxBalanceChangeKey(digest)))
-        .into();
-
-    let (tx, stored_bc) = join!(tx, stored_bc);
-
-    let tx = tx
+    let tx = ctx
+        .kv_loader()
+        .load_one_transaction(digest)
+        .await
         .context("Failed to fetch transaction from store")?
         .ok_or_else(|| invalid_params(Error::NotFound(digest)))?;
-
-    // Balance changes might not be present because of pruning, in which case we return
-    // nothing, even if the changes were requested.
-    let stored_bc = match stored_bc
-        .transpose()
-        .context("Failed to fetch balance changes from store")?
-    {
-        Some(None) => return Err(invalid_params(Error::BalanceChangesNotFound(digest))),
-        Some(changes) => changes,
-        None => None,
-    };
 
     let digest = tx.digest()?;
 
@@ -77,7 +67,7 @@ pub(super) async fn transaction(
     }
 
     if options.show_raw_input {
-        response.raw_transaction = tx.raw_transaction()?;
+        response.raw_transaction = raw_input(&tx)?;
     }
 
     if options.show_effects {
@@ -92,8 +82,8 @@ pub(super) async fn transaction(
         response.events = Some(events(ctx, digest, &tx).await?);
     }
 
-    if let Some(changes) = stored_bc {
-        response.balance_changes = Some(balance_changes(changes)?);
+    if options.show_balance_changes {
+        response.balance_changes = Some(balance_changes(&tx)?);
     }
 
     if options.show_object_changes {
@@ -119,6 +109,12 @@ async fn input(
     })
 }
 
+/// Extract the transaction's raw BCS input in the JSON-RPC representation.
+fn raw_input(tx: &TransactionContents) -> Result<Vec<u8>, RpcError<Error>> {
+    let data = SenderSignedData::new(tx.data()?, tx.signatures()?);
+    Ok(bcs::to_bytes(&data).context("Failed to serialize transaction")?)
+}
+
 /// Extract a representation of the transaction's effects from the stored form.
 fn effects(tx: &TransactionContents) -> Result<RtdTransactionBlockEffects, RpcError<Error>> {
     let effects: TransactionEffects = tx.effects()?;
@@ -133,7 +129,7 @@ async fn events(
     digest: TransactionDigest,
     tx: &TransactionContents,
 ) -> Result<RtdTransactionBlockEvents, RpcError<Error>> {
-    let events: Vec<Event> = tx.events()?;
+    let events = tx.events()?;
     let mut rtd_events = Vec::with_capacity(events.len());
 
     for (ix, event) in events.into_iter().enumerate() {
@@ -155,8 +151,14 @@ async fn events(
             ),
         };
 
-        let rtd_event = RtdEvent::try_from(event, digest, ix as u64, tx.timestamp_ms(), layout)
-            .with_context(|| format!("Failed to convert Event {ix} into response"))?;
+        let rtd_event = RtdEvent::try_from(
+            Arc::unwrap_or_clone(event),
+            digest,
+            ix as u64,
+            tx.timestamp_ms(),
+            layout,
+        )
+        .with_context(|| format!("Failed to convert Event {ix} into response"))?;
 
         rtd_events.push(rtd_event)
     }
@@ -164,25 +166,35 @@ async fn events(
     Ok(RtdTransactionBlockEvents { data: rtd_events })
 }
 
-/// Extract the transaction's balance changes from their stored form.
-fn balance_changes(
-    balance_changes: StoredTxBalanceChange,
-) -> Result<Vec<RtdBalanceChange>, RpcError<Error>> {
-    let balance_changes: Vec<BalanceChange> = bcs::from_bytes(&balance_changes.balance_changes)
-        .context("Failed to deserialize BalanceChanges")?;
+/// Extract the transaction's balance changes from the ledger gRPC response.
+fn balance_changes(tx: &TransactionContents) -> Result<Vec<RtdBalanceChange>, RpcError<Error>> {
+    let balance_changes = tx.balance_changes();
     let mut response = Vec::with_capacity(balance_changes.len());
 
-    for BalanceChange::V1 {
-        owner,
-        coin_type,
-        amount,
-    } in balance_changes
-    {
-        let coin_type = TypeTag::from_str(&coin_type)
-            .with_context(|| format!("Invalid coin type: {coin_type:?}"))?;
+    for bc in balance_changes {
+        let addr: RtdAddress = bc
+            .address
+            .as_ref()
+            .context("Missing address in balance change")?
+            .parse()
+            .context("Invalid owner address in balance change")?;
+
+        let coin_type = TypeTag::from_str(
+            bc.coin_type
+                .as_ref()
+                .context("Missing coin_type in balance change")?,
+        )
+        .context("Invalid coin type in balance change")?;
+
+        let amount: i128 = bc
+            .amount
+            .as_ref()
+            .context("Missing amount in balance change")?
+            .parse()
+            .context("Invalid balance change amount")?;
 
         response.push(RtdBalanceChange {
-            owner,
+            owner: Owner::AddressOwner(addr),
             coin_type,
             amount,
         });
@@ -255,94 +267,14 @@ async fn object_changes(
         let input = fetch_object(object_id, input_version, input_digest)?;
         let output = fetch_object(object_id, output_version, output_digest)?;
 
-        use IDOperation as ID;
-        changes.push(match (id_operation, input, output) {
-            (ID::Created, Some((i, _)), _) => rpc_bail!(
-                "Unexpected input version {} for object {object_id} created by transaction {digest}",
-                i.version().value(),
-            ),
-
-            (ID::Deleted, _, Some((o, _))) => rpc_bail!(
-                "Unexpected output version {} for object {object_id} deleted by transaction {digest}",
-                o.version().value(),
-            ),
-
-            // The following cases don't end up in the output: created and wrapped objects,
-            // unwrapped objects (and by extension, unwrapped and deleted objects), system package
-            // upgrades (which happen in place).
-            (ID::Created, _, None) => continue,
-            (ID::None, None, _) => continue,
-            (ID::None, _, Some((o, _))) if o.is_package() => continue,
-            (ID::Deleted, None, _) => continue,
-
-            (ID::Created, _, Some((o, d))) if o.is_package() => RtdObjectChange::Published {
-                package_id: object_id,
-                version: o.version(),
-                digest: d,
-                modules: o
-                    .data
-                    .try_as_package()
-                    .unwrap() // SAFETY: Match guard checks that the object is a package.
-                    .serialized_module_map()
-                    .keys()
-                    .cloned()
-                    .collect(),
-            },
-
-            (ID::Created, _, Some((o, d))) => RtdObjectChange::Created {
-                sender: tx_data.sender(),
-                owner: o.owner().clone(),
-                object_type: o
-                    .struct_tag()
-                    .with_context(|| format!("No type for object {object_id}"))?,
-                object_id,
-                version: o.version(),
-                digest: d,
-            },
-
-            (ID::None, Some((i, _)), Some((o, od))) if i.owner() != o.owner() => {
-                RtdObjectChange::Transferred {
-                    sender: tx_data.sender(),
-                    recipient: o.owner().clone(),
-                    object_type: o
-                        .struct_tag()
-                        .with_context(|| format!("No type for object {object_id}"))?,
-                    object_id,
-                    version: o.version(),
-                    digest: od,
-                }
-            }
-
-            (ID::None, Some((i, _)), Some((o, od))) => RtdObjectChange::Mutated {
-                sender: tx_data.sender(),
-                owner: o.owner().clone(),
-                object_type: o
-                    .struct_tag()
-                    .with_context(|| format!("No type for object {object_id}"))?,
-                object_id,
-                version: o.version(),
-                previous_version: i.version(),
-                digest: od,
-            },
-
-            (ID::None, Some((i, _)), None) => RtdObjectChange::Wrapped {
-                sender: tx_data.sender(),
-                object_type: i
-                    .struct_tag()
-                    .with_context(|| format!("No type for object {object_id}"))?,
-                object_id,
-                version: effects.lamport_version(),
-            },
-
-            (ID::Deleted, Some((i, _)), None) => RtdObjectChange::Deleted {
-                sender: tx_data.sender(),
-                object_type: i
-                    .struct_tag()
-                    .with_context(|| format!("No type for object {object_id}"))?,
-                object_id,
-                version: effects.lamport_version(),
-            },
-        })
+        changes.extend(to_rtd_object_change(
+            tx_data.sender(),
+            object_id,
+            id_operation,
+            input,
+            output,
+            effects.lamport_version(),
+        )?);
     }
 
     Ok(changes)

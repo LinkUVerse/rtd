@@ -1,30 +1,48 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use async_graphql::{
-    Context, SimpleObject,
-    connection::{Connection, CursorType, Edge},
-};
-use rtd_indexer_alt_reader::consistent_reader::{self, ConsistentReader};
-use rtd_types::{TypeTag, base_types::RtdAddress};
+use anyhow::Context as _;
+use async_graphql::Context;
+use async_graphql::InputObject;
+use async_graphql::Object;
+use async_graphql::connection::Connection;
+use async_graphql::connection::CursorType;
+use async_graphql::connection::Edge;
+use rtd_indexer_alt_reader::consistent_reader;
+use rtd_indexer_alt_reader::consistent_reader::ConsistentReader;
+use rtd_indexer_alt_reader::consistent_reader::proto::Balance as ProtoBalance;
+use rtd_types::TypeTag;
+use rtd_types::base_types::RtdAddress as NativeRtdAddress;
 
-use crate::{
-    api::scalars::{big_int::BigInt, cursor},
-    error::{RpcError, bad_user_input, feature_unavailable},
-    pagination::Page,
-    scope::Scope,
-};
+use crate::api::scalars::big_int::BigInt;
+use crate::api::scalars::cursor;
+use crate::api::scalars::rtd_address::RtdAddress;
+use crate::api::scalars::type_filter::TypeInput;
+use crate::api::types::coin_metadata::CoinMetadata;
+use crate::api::types::move_type::MoveType;
+use crate::api::types::object;
+use crate::error::RpcError;
+use crate::error::bad_user_input;
+use crate::error::feature_unavailable;
+use crate::extensions::query_limits;
+use crate::pagination::Page;
+use crate::scope::Scope;
 
-use super::move_type::MoveType;
-
-/// The total balance for a particular coin type.
-#[derive(SimpleObject)]
 pub(crate) struct Balance {
-    /// Coin type for the balance, such as `0x2::rtd::RTD`.
     pub(crate) coin_type: Option<MoveType>,
-
-    /// The total balance across all coin objects of this coin type.
     pub(crate) total_balance: Option<BigInt>,
+    pub(crate) coin_balance: Option<BigInt>,
+    pub(crate) address_balance: Option<BigInt>,
+}
+
+/// Identifies the balance for one coin type owned by an address.
+#[derive(InputObject)]
+pub(crate) struct BalanceKey {
+    /// The address that owns the balance.
+    pub(crate) address: RtdAddress,
+
+    /// The coin type of the balance.
+    pub(crate) coin_type: TypeInput,
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -46,7 +64,64 @@ pub(crate) enum Error {
 
 pub(crate) type Cursor = cursor::BcsCursor<(u64, Vec<u8>)>;
 
+/// The balance of a particular coin type held by an address.
+///
+/// Balances can be held in coin objects, in the address's balance accumulator, or both.
+#[Object]
 impl Balance {
+    /// Coin type for the balance, such as `0x2::rtd::RTD`.
+    async fn coin_type(&self) -> Option<&MoveType> {
+        self.coin_type.as_ref()
+    }
+
+    /// The sum of `coinBalance` and `addressBalance`.
+    async fn total_balance(&self) -> Option<&BigInt> {
+        self.total_balance.as_ref()
+    }
+
+    /// The balance held in coin objects owned by the address.
+    async fn coin_balance(&self) -> Option<&BigInt> {
+        self.coin_balance.as_ref()
+    }
+
+    /// The balance held in the address's balance accumulator.
+    async fn address_balance(&self) -> Option<&BigInt> {
+        self.address_balance.as_ref()
+    }
+
+    /// Fetch the CoinMetadata for this balance's coin type.
+    ///
+    /// Returns `null` if no CoinMetadata object exists for the coin type.
+    async fn coin_metadata(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Option<Result<CoinMetadata, RpcError<object::Error>>> {
+        let coin_type = self.coin_type.as_ref()?;
+        let scope = coin_type.scope.without_root_bound();
+        let coin_type = coin_type.to_type_tag()?;
+
+        CoinMetadata::by_coin_type(ctx, scope, coin_type)
+            .await
+            .transpose()
+    }
+}
+
+impl Balance {
+    fn try_from_proto(proto: ProtoBalance, scope: Scope) -> Result<Self, RpcError<Error>> {
+        let coin_type: TypeTag = proto
+            .coin_type
+            .context("coin type missing")?
+            .parse()
+            .context("invalid coin type")?;
+
+        Ok(Balance {
+            coin_type: Some(MoveType::from_native(coin_type, scope)),
+            total_balance: Some(BigInt::from(proto.total_balance.unwrap_or(0))),
+            coin_balance: Some(BigInt::from(proto.coin_balance.unwrap_or(0))),
+            address_balance: Some(BigInt::from(proto.address_balance.unwrap_or(0))),
+        })
+    }
+
     /// Fetch the balance for a single coin type owned by the given address, live at the current
     /// checkpoint.
     ///
@@ -54,86 +129,88 @@ impl Balance {
     pub(crate) async fn fetch_one(
         ctx: &Context<'_>,
         scope: &Scope,
-        address: RtdAddress,
+        address: NativeRtdAddress,
         coin_type: TypeTag,
     ) -> Result<Option<Balance>, RpcError<Error>> {
         if scope.root_version().is_some() {
             return Err(bad_user_input(Error::RootVersionOwnership));
         }
-        let Some(checkpoint) = scope.checkpoint_viewed_at() else {
+
+        let Some(checkpoint) = scope.root_checkpoint() else {
             return Ok(None);
         };
 
+        query_limits::rich::debit(ctx)?;
         let consistent_reader: &ConsistentReader = ctx.data()?;
-        let (coin_type, total_balance) = consistent_reader
+        let balance = consistent_reader
             .get_balance(
-                checkpoint,
+                Some(checkpoint),
                 address.to_string(),
                 coin_type.to_canonical_string(true),
             )
             .await
             .map_err(|e| consistent_error(checkpoint, e))?;
 
-        Ok(Some(Balance {
-            coin_type: Some(MoveType::from_native(coin_type, scope.clone())),
-            total_balance: Some(BigInt::from(total_balance)),
-        }))
+        Ok(Some(Balance::try_from_proto(balance, scope.clone())?))
     }
 
-    /// Fetch balances for multiple coin types owned by the given address, live at the current
-    /// checkpoint. Returns `None` when no checkpoint is set in scope (e.g. execution scope).
+    /// Fetch balances for multiple address and coin type pairs, live at the current checkpoint.
+    ///
+    /// Returns `None` when no checkpoint is set in scope (e.g. execution scope).
     pub(crate) async fn fetch_many(
         ctx: &Context<'_>,
         scope: &Scope,
-        address: RtdAddress,
-        coin_types: Vec<TypeTag>,
+        keys: Vec<(NativeRtdAddress, TypeTag)>,
     ) -> Result<Option<Vec<Balance>>, RpcError<Error>> {
         if scope.root_version().is_some() {
             return Err(bad_user_input(Error::RootVersionOwnership));
         }
-        let Some(checkpoint) = scope.checkpoint_viewed_at() else {
+
+        let Some(checkpoint) = scope.root_checkpoint() else {
             return Ok(None);
         };
 
+        query_limits::rich::debit(ctx)?;
         let consistent_reader: &ConsistentReader = ctx.data()?;
+        let requests = keys
+            .into_iter()
+            .map(|(address, coin_type)| {
+                (
+                    address.to_string(),
+                    coin_type.to_canonical_string(/* with_prefix */ true),
+                )
+            })
+            .collect();
+
         let balances = consistent_reader
-            .batch_get_balances(
-                checkpoint,
-                address.to_string(),
-                coin_types
-                    .into_iter()
-                    .map(|t| t.to_canonical_string(true))
-                    .collect(),
-            )
+            .batch_get_balances(checkpoint, requests)
             .await
             .map_err(|e| consistent_error(checkpoint, e))?;
 
         Ok(Some(
             balances
                 .into_iter()
-                .map(|(coin_type, total_balance)| Balance {
-                    coin_type: Some(MoveType::from_native(coin_type, scope.clone())),
-                    total_balance: Some(BigInt::from(total_balance)),
-                })
-                .collect(),
+                .map(|balance| Balance::try_from_proto(balance, scope.clone()))
+                .collect::<Result<_, _>>()?,
         ))
     }
 
-    /// Paginate through balances for coins owned by the given address, live at the current
-    /// checkpoint.
+    /// Paginate through balances held by the given address, live at the current checkpoint.
     pub(crate) async fn paginate(
         ctx: &Context<'_>,
         scope: Scope,
-        address: RtdAddress,
+        address: NativeRtdAddress,
         page: Page<Cursor>,
     ) -> Result<Connection<String, Balance>, RpcError<Error>> {
         if scope.root_version().is_some() {
             return Err(bad_user_input(Error::RootVersionOwnership));
         }
-        let Some(checkpoint_viewed_at) = scope.checkpoint_viewed_at() else {
+
+        let Some(root_checkpoint) = scope.root_checkpoint() else {
             return Ok(Connection::new(false, false));
         };
 
+        query_limits::rich::debit(ctx)?;
         let consistent_reader: &ConsistentReader = ctx.data()?;
 
         // Figure out which checkpoint to pin results to, based on the pagination cursors and
@@ -144,17 +221,17 @@ impl Balance {
             (Some(a), Some(b)) if a.0 != b.0 => {
                 return Err(bad_user_input(Error::CursorInconsistency(a.0, b.0)));
             }
-            (None, None) => checkpoint_viewed_at,
+            (None, None) => root_checkpoint,
             (Some(c), _) | (_, Some(c)) => c.0,
         };
 
-        let Some(scope) = scope.with_checkpoint_viewed_at(checkpoint) else {
+        let Some(scope) = scope.with_checkpoint_viewed_at(ctx, checkpoint) else {
             return Err(bad_user_input(Error::Future(checkpoint)));
         };
 
         let balances = consistent_reader
             .list_balances(
-                checkpoint,
+                Some(checkpoint),
                 address.to_string(),
                 Some(page.limit() as u32),
                 page.after().map(|c| c.1.clone()),
@@ -173,13 +250,10 @@ impl Balance {
         conn.has_next_page = balances.has_next_page;
 
         for edge in balances.results {
-            let (coin_type, total_balance) = edge.value;
+            let balance = edge.value;
 
             let cursor = Cursor::new((checkpoint, edge.token));
-            let balance = Balance {
-                coin_type: Some(MoveType::from_native(coin_type, scope.clone())),
-                total_balance: Some(BigInt::from(total_balance)),
-            };
+            let balance = Balance::try_from_proto(balance, scope.clone())?;
 
             conn.edges.push(Edge::new(cursor.encode_cursor(), balance));
         }

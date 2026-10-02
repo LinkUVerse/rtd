@@ -1,0 +1,31 @@
+---
+title: Connect a Frontend to a Move Package
+sidebar_label: Connect a Frontend
+description: Source-based approach to connecting a React app to a local RTD network.
+keywords:
+  - React
+  - Move package
+  - frontend
+  - RTD SDK
+questions:
+  - How do I connect a React frontend to an RTD Move package?
+  - Is a public RTD wallet or faucet available?
+answer: >-
+  Use the RTD TypeScript SDK and React dApp kit source with an endpoint from
+  your own RTD network. Verify wallet compatibility, chain ID, package ID, and
+  gas before signing transactions. No public RTD wallet or faucet is verified.
+---
+
+A frontend can submit transactions to a Move package published on an RTD network. Start with a network you operate using the [local network guide](/getting-started/onboarding/local-network), and record its chain ID and the package ID returned by your own publish transaction.
+
+The `rtd-ts-sdk` repository contains `rtd-typescript` and `rtd-dapp-kit-react` source packages. Build them from a compatible revision, then configure the client for your RTD endpoint. The existence of these packages does not mean the upstream Sui Slush wallet, browser extension, hosted faucet, or renamed demo repository works with RTD.
+
+```sh
+rtd client active-env
+rtd client chain-identifier --format hex
+rtd client object <YOUR_PACKAGE_ID>
+```
+
+Use a signing wallet or key that you control on this same RTD chain. A connected account must have RTD gas from that chain's genesis allocation or an operator-controlled local faucet. Keep the frontend's configured endpoint and package ID together; neither a Sui Testnet package ID nor an ID from another RTD genesis is valid here.
+
+For a production frontend, separately test wallet standard registration, address derivation, transaction signing, simulation, and submission with the exact SDK revision. Do not display a public network selector or faucet link until those services are deployed and verified. See [SDK comparison](/references/sdk-comparison) and [transaction basics](/develop/transactions).

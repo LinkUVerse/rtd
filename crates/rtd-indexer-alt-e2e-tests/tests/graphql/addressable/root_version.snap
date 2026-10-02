@@ -1,7 +1,7 @@
 ---
 source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
 ---
-processed 16 tasks
+processed 17 tasks
 
 init:
 A: object(0,0)
@@ -83,7 +83,7 @@ Response: {
         "asMoveObject": {
           "contents": {
             "json": {
-              "id": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad",
+              "id": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9",
               "size": "1"
             }
           }
@@ -108,7 +108,7 @@ Response: {
             "asMoveObject": {
               "contents": {
                 "json": {
-                  "id": "0xdd806f262555a167b932495c24765daccc1ba6ebee5e8a696155818e6b5e93ad",
+                  "id": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9",
                   "size": "0"
                 }
               }
@@ -119,7 +119,7 @@ Response: {
             "asMoveObject": {
               "contents": {
                 "json": {
-                  "id": "0x6685f1d1bf765c6cd4b37f28269997c85ea5d9ac9993872ea0a83f04c91fb1fa",
+                  "id": "0x2e4ba35ead9d4057d11d183fe348f158653f3ad2bd7a320abab228544b7c5247",
                   "size": "0"
                 }
               }
@@ -130,7 +130,7 @@ Response: {
             "asMoveObject": {
               "contents": {
                 "json": {
-                  "id": "0x2d258a843438e1572a5d174eb7ce3ab8a83cfdd7114bee0aa1196f23eb71a0fe",
+                  "id": "0xe648c692ad2795653fc044cd71c0e5d4e594d22dc774dc3d9c05d58f4279e991",
                   "size": "0"
                 }
               }
@@ -141,7 +141,7 @@ Response: {
             "asMoveObject": {
               "contents": {
                 "json": {
-                  "id": "0x662c6e9804a6c6e19a24701069d4a222dd5549bbbb782453a7f45b2202f463c9",
+                  "id": "0x2818efb72792101ebe711ae50c282eed2722ef7b21a6ba02a2da9d1b0d982b3c",
                   "size": "0"
                 }
               }
@@ -161,7 +161,7 @@ Response: {
       "dynamicField": {
         "value": {
           "json": {
-            "id": "0x6685f1d1bf765c6cd4b37f28269997c85ea5d9ac9993872ea0a83f04c91fb1fa",
+            "id": "0x2e4ba35ead9d4057d11d183fe348f158653f3ad2bd7a320abab228544b7c5247",
             "size": "2"
           }
         }
@@ -172,7 +172,7 @@ Response: {
         "dynamicField": {
           "value": {
             "json": {
-              "id": "0x6685f1d1bf765c6cd4b37f28269997c85ea5d9ac9993872ea0a83f04c91fb1fa",
+              "id": "0x2e4ba35ead9d4057d11d183fe348f158653f3ad2bd7a320abab228544b7c5247",
               "size": "2"
             }
           }
@@ -190,7 +190,7 @@ Response: {
       "df2": {
         "value": {
           "json": {
-            "id": "0x2d258a843438e1572a5d174eb7ce3ab8a83cfdd7114bee0aa1196f23eb71a0fe",
+            "id": "0xe648c692ad2795653fc044cd71c0e5d4e594d22dc774dc3d9c05d58f4279e991",
             "size": "0"
           }
         }
@@ -198,7 +198,7 @@ Response: {
       "df3": {
         "value": {
           "json": {
-            "id": "0x662c6e9804a6c6e19a24701069d4a222dd5549bbbb782453a7f45b2202f463c9",
+            "id": "0x2818efb72792101ebe711ae50c282eed2722ef7b21a6ba02a2da9d1b0d982b3c",
             "size": "0"
           }
         }
@@ -207,7 +207,7 @@ Response: {
         {
           "value": {
             "json": {
-              "id": "0x2d258a843438e1572a5d174eb7ce3ab8a83cfdd7114bee0aa1196f23eb71a0fe",
+              "id": "0xe648c692ad2795653fc044cd71c0e5d4e594d22dc774dc3d9c05d58f4279e991",
               "size": "0"
             }
           }
@@ -215,7 +215,7 @@ Response: {
         {
           "value": {
             "json": {
-              "id": "0x662c6e9804a6c6e19a24701069d4a222dd5549bbbb782453a7f45b2202f463c9",
+              "id": "0x2818efb72792101ebe711ae50c282eed2722ef7b21a6ba02a2da9d1b0d982b3c",
               "size": "0"
             }
           }
@@ -235,7 +235,7 @@ Response: {
           "value": {
             "contents": {
               "json": {
-                "id": "0x0f2d32a189efcae946d101c5509af627064de789464474f739a01d608a869ae3",
+                "id": "0x3325f35c04563d1011a73d1fd89113c395b096cf8aa6e4c008e5ef56f6fd6a28",
                 "balance": "400"
               }
             }
@@ -245,7 +245,7 @@ Response: {
           "value": {
             "contents": {
               "json": {
-                "id": "0x7ee5219638e8523079f53a0a15b1cd5f922aad78baf3f6bc7668deb76f9e7a82",
+                "id": "0x993ce7cbf0f6c51ef18cce32751d9bd7fb8466ce29d6491a898bf1d483bc34d5",
                 "balance": "500"
               }
             }
@@ -256,7 +256,7 @@ Response: {
             "value": {
               "contents": {
                 "json": {
-                  "id": "0x0f2d32a189efcae946d101c5509af627064de789464474f739a01d608a869ae3",
+                  "id": "0x3325f35c04563d1011a73d1fd89113c395b096cf8aa6e4c008e5ef56f6fd6a28",
                   "balance": "400"
                 }
               }
@@ -266,7 +266,7 @@ Response: {
             "value": {
               "contents": {
                 "json": {
-                  "id": "0x7ee5219638e8523079f53a0a15b1cd5f922aad78baf3f6bc7668deb76f9e7a82",
+                  "id": "0x993ce7cbf0f6c51ef18cce32751d9bd7fb8466ce29d6491a898bf1d483bc34d5",
                   "balance": "500"
                 }
               }
@@ -280,7 +280,7 @@ Response: {
         "value": {
           "contents": {
             "json": {
-              "id": "0x0f2d32a189efcae946d101c5509af627064de789464474f739a01d608a869ae3",
+              "id": "0x3325f35c04563d1011a73d1fd89113c395b096cf8aa6e4c008e5ef56f6fd6a28",
               "balance": "400"
             }
           }
@@ -290,7 +290,7 @@ Response: {
         "value": {
           "contents": {
             "json": {
-              "id": "0x7ee5219638e8523079f53a0a15b1cd5f922aad78baf3f6bc7668deb76f9e7a82",
+              "id": "0x993ce7cbf0f6c51ef18cce32751d9bd7fb8466ce29d6491a898bf1d483bc34d5",
               "balance": "500"
             }
           }
@@ -301,7 +301,7 @@ Response: {
           "value": {
             "contents": {
               "json": {
-                "id": "0x0f2d32a189efcae946d101c5509af627064de789464474f739a01d608a869ae3",
+                "id": "0x3325f35c04563d1011a73d1fd89113c395b096cf8aa6e4c008e5ef56f6fd6a28",
                 "balance": "400"
               }
             }
@@ -311,7 +311,7 @@ Response: {
           "value": {
             "contents": {
               "json": {
-                "id": "0x7ee5219638e8523079f53a0a15b1cd5f922aad78baf3f6bc7668deb76f9e7a82",
+                "id": "0x993ce7cbf0f6c51ef18cce32751d9bd7fb8466ce29d6491a898bf1d483bc34d5",
                 "balance": "500"
               }
             }
@@ -322,10 +322,173 @@ Response: {
   }
 }
 
-task 15, lines 135-140:
+task 15, lines 135-183:
 //# run-graphql
 Response: {
-  "data": null,
+  "data": {
+    "atCp0": {
+      "balance": {
+        "totalBalance": "300000000000000"
+      },
+      "objects": {
+        "nodes": [
+          {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>"
+              },
+              "json": {
+                "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                "balance": "300000000000000"
+              }
+            }
+          }
+        ]
+      },
+      "transactions": {
+        "nodes": [
+          {
+            "digest": "D373S5LSAgsNXcfE2CBgSQoagi4GQHaNxeuxgkzKH1is"
+          },
+          {
+            "digest": "6ySEB8271KrchnS9MxHBAWXn3xSgtGgTWJRttmX7vdGr"
+          },
+          {
+            "digest": "263awEhjKMaaQGqALNFxwVMF1RxwpkW2AbyMH4s7Gr5W"
+          },
+          {
+            "digest": "2ccabVpw9DCbRWpf7B3shDXSX1J3SDjALBpDigB9MLwr"
+          },
+          {
+            "digest": "2N9ECDwv59fYvTt8LN3NqCcPzMKYTUzBWuZ3Bt3EuRAL"
+          },
+          {
+            "digest": "CYGzSPSKSZ2GXCUDdvGUxeRhgpRpyTcZ96hohrwVtG9n"
+          },
+          {
+            "digest": "5qDBdQ2qw9Gz1dJtBHK7VQQqEW2wRWSBcnnXkvFn9GWW"
+          }
+        ]
+      }
+    },
+    "atCp1": {
+      "balance": {
+        "totalBalance": "299999987375680"
+      },
+      "objects": {
+        "nodes": [
+          {
+            "address": "0x2818efb72792101ebe711ae50c282eed2722ef7b21a6ba02a2da9d1b0d982b3c",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::bag::Bag"
+              },
+              "json": {
+                "id": "0x2818efb72792101ebe711ae50c282eed2722ef7b21a6ba02a2da9d1b0d982b3c",
+                "size": "0"
+              }
+            }
+          },
+          {
+            "address": "0x2e4ba35ead9d4057d11d183fe348f158653f3ad2bd7a320abab228544b7c5247",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::bag::Bag"
+              },
+              "json": {
+                "id": "0x2e4ba35ead9d4057d11d183fe348f158653f3ad2bd7a320abab228544b7c5247",
+                "size": "0"
+              }
+            }
+          },
+          {
+            "address": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::bag::Bag"
+              },
+              "json": {
+                "id": "0xdf97ad0e9dad989fcd0dd28716c8c4fa1d755cdeed68ce7a324d640a52493de9",
+                "size": "0"
+              }
+            }
+          },
+          {
+            "address": "0xe648c692ad2795653fc044cd71c0e5d4e594d22dc774dc3d9c05d58f4279e991",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::bag::Bag"
+              },
+              "json": {
+                "id": "0xe648c692ad2795653fc044cd71c0e5d4e594d22dc774dc3d9c05d58f4279e991",
+                "size": "0"
+              }
+            }
+          },
+          {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>"
+              },
+              "json": {
+                "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                "balance": "299999987375680"
+              }
+            }
+          },
+          {
+            "address": "0x65a33a0f23555b417d0dc3562d5367a026fb26caeb58dd97efba3bb7d6dd6c12",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::object_bag::ObjectBag"
+              },
+              "json": {
+                "id": "0x65a33a0f23555b417d0dc3562d5367a026fb26caeb58dd97efba3bb7d6dd6c12",
+                "size": "0"
+              }
+            }
+          }
+        ]
+      },
+      "transactions": {
+        "nodes": [
+          {
+            "digest": "D373S5LSAgsNXcfE2CBgSQoagi4GQHaNxeuxgkzKH1is"
+          },
+          {
+            "digest": "6ySEB8271KrchnS9MxHBAWXn3xSgtGgTWJRttmX7vdGr"
+          },
+          {
+            "digest": "263awEhjKMaaQGqALNFxwVMF1RxwpkW2AbyMH4s7Gr5W"
+          },
+          {
+            "digest": "2ccabVpw9DCbRWpf7B3shDXSX1J3SDjALBpDigB9MLwr"
+          },
+          {
+            "digest": "2N9ECDwv59fYvTt8LN3NqCcPzMKYTUzBWuZ3Bt3EuRAL"
+          },
+          {
+            "digest": "CYGzSPSKSZ2GXCUDdvGUxeRhgpRpyTcZ96hohrwVtG9n"
+          },
+          {
+            "digest": "5qDBdQ2qw9Gz1dJtBHK7VQQqEW2wRWSBcnnXkvFn9GWW"
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 16, lines 185-190:
+//# run-graphql
+Response: {
+  "data": {
+    "address": {
+      "objects": null
+    }
+  },
   "errors": [
     {
       "message": "Cannot paginate owned objects for a parent object's address if its version is bounded. Fetch the parent at a checkpoint in the consistent range to list its owned objects.",

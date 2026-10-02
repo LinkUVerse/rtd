@@ -8,13 +8,22 @@ use strum_macros::IntoStaticStr;
 use thiserror::Error;
 use typed_store::TypedStoreError;
 
-use crate::commit::{Commit, CommitIndex};
+use crate::{
+    commit::{Commit, CommitIndex},
+    network::PeerId,
+};
 
 /// Errors that can occur when processing blocks, reading from storage, or encountering shutdown.
 #[derive(Clone, Debug, Error, IntoStaticStr)]
 pub enum ConsensusError {
     #[error("Error deserializing block: {0}")]
     MalformedBlock(bcs::Error),
+
+    #[error("Unexpected block form on the wire")]
+    UnexpectedBlockForm,
+
+    #[error("Error decoding block envelope: {0}")]
+    MalformedBlockEnvelope(prost::DecodeError),
 
     #[error("Error deserializing commit: {0}")]
     MalformedCommit(bcs::Error),
@@ -40,14 +49,23 @@ pub enum ConsensusError {
     #[error("Genesis blocks should only be generated from Committee!")]
     UnexpectedGenesisBlock,
 
+    #[error("Block version does not match the protocol config: {version}")]
+    UnexpectedBlockVersion { version: String },
+
+    #[error(
+        "Transaction vote cutoff round must be lower than the block round: cutoff {cutoff}, block {block}"
+    )]
+    InvalidTransactionVotesCutoff { cutoff: Round, block: Round },
+
+    #[error("Invalid transaction votes: {0}")]
+    InvalidTransactionVotes(String),
+
     #[error("Genesis blocks should not be queried!")]
     UnexpectedGenesisBlockRequested,
 
-    #[error(
-        "Expected {requested} but received {received} blocks returned from authority {authority}"
-    )]
+    #[error("Expected {requested} but received {received} blocks returned from peer {peer}")]
     UnexpectedNumberOfBlocksFetched {
-        authority: AuthorityIndex,
+        peer: PeerId,
         requested: usize,
         received: usize,
     },
@@ -79,8 +97,15 @@ pub enum ConsensusError {
     )]
     InvalidSizeOfHighestAcceptedRounds(usize, usize),
 
-    #[error("Invalid authority index: {index} > {max}")]
-    InvalidAuthorityIndex { index: AuthorityIndex, max: usize },
+    #[error("Invalid fetch blocks request: {0}")]
+    InvalidFetchBlocksRequest(String),
+
+    #[error("Invalid authority index at {loc}: {index} > {max}")]
+    InvalidAuthorityIndex {
+        loc: String,
+        index: AuthorityIndex,
+        max: usize,
+    },
 
     #[error("Failed to deserialize signature: {0}")]
     MalformedSignature(FastCryptoError),
@@ -89,7 +114,13 @@ pub enum ConsensusError {
     SignatureVerificationFailure(FastCryptoError),
 
     #[error("Synchronizer for fetching blocks directly from {0} is saturated")]
-    SynchronizerSaturated(AuthorityIndex),
+    SynchronizerSaturated(String),
+
+    #[error("Peer {0} is unavailable")]
+    PeerUnavailable(String),
+
+    #[error("Peer not found for block synchronization: {0}")]
+    PeerNotFound(String),
 
     #[error("Block {block_ref:?} rejected: {reason}")]
     BlockRejected { block_ref: BlockRef, reason: String },
@@ -122,13 +153,13 @@ pub enum ConsensusError {
     InvalidTransaction(String),
 
     #[error("Received no commit from peer {peer}")]
-    NoCommitReceived { peer: AuthorityIndex },
+    NoCommitReceived { peer: PeerId },
 
     #[error(
         "Received unexpected start commit from peer {peer}: requested {start}, received {commit:?}"
     )]
     UnexpectedStartCommit {
-        peer: AuthorityIndex,
+        peer: PeerId,
         start: CommitIndex,
         commit: Box<Commit>,
     },
@@ -137,7 +168,7 @@ pub enum ConsensusError {
         "Received unexpected commit sequence from peer {peer}: {prev_commit:?}, {curr_commit:?}"
     )]
     UnexpectedCommitSequence {
-        peer: AuthorityIndex,
+        peer: PeerId,
         prev_commit: Box<Commit>,
         curr_commit: Box<Commit>,
     },
@@ -145,13 +176,13 @@ pub enum ConsensusError {
     #[error("Not enough votes ({stake}) on end commit from peer {peer}: {commit:?}")]
     NotEnoughCommitVotes {
         stake: Stake,
-        peer: AuthorityIndex,
+        peer: PeerId,
         commit: Box<Commit>,
     },
 
     #[error("Received unexpected block from peer {peer}: {requested:?} vs {received:?}")]
     UnexpectedBlockForCommit {
-        peer: AuthorityIndex,
+        peer: PeerId,
         requested: BlockRef,
         received: BlockRef,
     },
@@ -234,6 +265,7 @@ mod test {
 
         {
             let error = ConsensusError::InvalidAuthorityIndex {
+                loc: "test".to_string(),
                 index: AuthorityIndex::new_for_test(3),
                 max: 10,
             };

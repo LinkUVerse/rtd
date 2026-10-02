@@ -20,8 +20,7 @@ use move_command_line_common::{
     error_bitset::ErrorBitset,
 };
 use move_core_types::account_address::AccountAddress;
-use rtd_json_rpc_types::{RtdObjectDataOptions, RtdRawData};
-use rtd_sdk::apis::ReadApi;
+use rtd_rpc_api::Client;
 use rtd_types::{Identifier, base_types::ObjectID};
 
 /// Take a Move abort status string and render it into a more human-readable error message using
@@ -32,10 +31,7 @@ use rtd_types::{Identifier, base_types::ObjectID};
 /// This function is used to render Clever Errors for on-chain errors only within the Rtd CLI. This
 /// function is _not_ used at all for off-chain errors or Move unit tests. You should only use this
 /// function within this crate.
-pub(crate) async fn render_clever_error_opt(
-    error_string: &str,
-    read_api: &ReadApi,
-) -> Option<String> {
+pub(crate) async fn render_clever_error_opt(error_string: &str, client: &Client) -> Option<String> {
     let (address, module_name, function_name, instruction, abort_code, command_index) =
         parse_abort_status_string(error_string).ok()?;
 
@@ -63,21 +59,14 @@ pub(crate) async fn render_clever_error_opt(
             );
         }
 
-        let RtdRawData::Package(package) = read_api
-            .get_object_with_options(
-                ObjectID::from_address(address),
-                RtdObjectDataOptions::bcs_lossless(),
-            )
+        let object = client
+            .clone()
+            .get_object(ObjectID::from_address(address))
             .await
-            .ok()?
-            .into_object()
-            .ok()?
-            .bcs?
-        else {
-            return None;
-        };
+            .ok()?;
+        let package = object.data.try_as_package()?;
 
-        let module = package.module_map.get(module_name.as_str())?;
+        let module = package.serialized_module_map().get(module_name.as_str())?;
         let module =
             CompiledModule::deserialize_with_config(module, &BinaryConfig::standard()).ok()?;
 

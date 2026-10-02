@@ -10,8 +10,6 @@ use crate::test_utils::make_transfer_rtd_transaction;
 use fastcrypto::ed25519::Ed25519KeyPair;
 use fastcrypto::traits::KeyPair;
 use move_core_types::ident_str;
-use std::path::PathBuf;
-use std::sync::Arc;
 use rtd_config::certificate_deny_config::CertificateDenyConfigBuilder;
 use rtd_config::transaction_deny_config::{TransactionDenyConfig, TransactionDenyConfigBuilder};
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
@@ -20,16 +18,20 @@ use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::{RtdErrorKind, RtdResult, UserInputError};
-use rtd_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
-use rtd_types::messages_grpc::HandleTransactionResponse;
+use rtd_types::executable_transaction::VerifiedExecutableTransaction;
+use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{
-    CallArg, CertifiedTransaction, TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction, TransactionData,
-    VerifiedCertificate, VerifiedTransaction,
+    CallArg, GasData, ProgrammableTransaction, TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction,
+    TransactionData, TransactionDataAPI, TransactionDataV1, TransactionExpiration, TransactionKind,
+    VerifiedTransaction,
 };
 use rtd_types::utils::get_zklogin_user_address;
 use rtd_types::utils::{
     make_zklogin_tx, to_sender_signed_transaction, to_sender_signed_transaction_with_multi_signers,
 };
+use std::path::PathBuf;
+use std::sync::Arc;
 
 const ACCOUNT_NUM: usize = 5;
 const GAS_OBJECT_COUNT: usize = 15;
@@ -91,22 +93,17 @@ fn get_accounts_and_coins(
     accounts
 }
 
-async fn process_zklogin_tx(
-    tx: Transaction,
-    state: &Arc<AuthorityState>,
-) -> RtdResult<HandleTransactionResponse> {
+fn process_zklogin_tx(tx: Transaction, state: &Arc<AuthorityState>) -> RtdResult<()> {
+    let epoch_store = state.epoch_store_for_testing();
     let verified_tx = VerifiedTransaction::new_from_verified(tx);
-
-    state
-        .handle_transaction(&state.epoch_store_for_testing(), verified_tx)
-        .await
+    state.handle_vote_transaction(&epoch_store, verified_tx)
 }
 
-async fn transfer_with_account(
+fn transfer_with_account(
     sender_account: &Account,
     sponsor_account: &Account,
     state: &Arc<AuthorityState>,
-) -> RtdResult<HandleTransactionResponse> {
+) -> RtdResult<()> {
     let rgp = state.reference_gas_price_for_testing().unwrap();
     let data = TransactionData::new_transfer_rtd_allow_sponsor(
         sender_account.0,
@@ -130,10 +127,10 @@ async fn transfer_with_account(
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    state.handle_transaction(&epoch_store, tx).await
+    state.handle_vote_transaction(&epoch_store, tx)
 }
 
-async fn handle_move_call_transaction(
+fn handle_move_call_transaction(
     state: &Arc<AuthorityState>,
     package: ObjectID,
     module_name: &'static str,
@@ -141,7 +138,7 @@ async fn handle_move_call_transaction(
     args: Vec<CallArg>,
     account: &Account,
     gas_payment_index: usize,
-) -> RtdResult<HandleTransactionResponse> {
+) -> RtdResult<()> {
     let rgp = state.reference_gas_price_for_testing().unwrap();
     let data = TransactionData::new_move_call(
         account.0,
@@ -161,7 +158,7 @@ async fn handle_move_call_transaction(
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    state.handle_transaction(&epoch_store, tx).await
+    state.handle_vote_transaction(&epoch_store, tx)
 }
 
 fn assert_denied<T: std::fmt::Debug>(result: &RtdResult<T>) {
@@ -182,7 +179,44 @@ async fn test_user_transaction_disabled() {
     )
     .await;
     let accounts = get_accounts_and_coins(&network_config, &state);
-    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state).await);
+    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state));
+}
+
+fn submit_gasless_with_account(
+    sender_account: &Account,
+    state: &Arc<AuthorityState>,
+) -> RtdResult<()> {
+    let data = TransactionData::V1(TransactionDataV1 {
+        kind: TransactionKind::ProgrammableTransaction(ProgrammableTransaction {
+            inputs: vec![],
+            commands: vec![],
+        }),
+        sender: sender_account.0,
+        gas_data: GasData {
+            payment: vec![],
+            owner: sender_account.0,
+            price: 0,
+            budget: 0,
+        },
+        expiration: TransactionExpiration::None,
+    });
+    let tx = to_sender_signed_transaction(data, &sender_account.1);
+    let epoch_store = state.epoch_store_for_testing();
+    let verified_tx = VerifiedTransaction::new_from_verified(tx);
+    state.handle_vote_transaction(&epoch_store, verified_tx)
+}
+
+#[tokio::test]
+async fn test_gasless_transaction_disabled() {
+    let (network_config, state) = setup_test(
+        TransactionDenyConfigBuilder::new()
+            .disable_gasless()
+            .build(),
+    )
+    .await;
+    let accounts = get_accounts_and_coins(&network_config, &state);
+    assert_denied(&submit_gasless_with_account(&accounts[0], &state));
+    assert!(transfer_with_account(&accounts[0], &accounts[0], &state).is_ok());
 }
 
 #[tokio::test]
@@ -194,7 +228,7 @@ async fn test_zklogin_transaction_disabled() {
     )
     .await;
     let (_, tx, _) = make_zklogin_tx(get_zklogin_user_address(), false);
-    assert_denied(&process_zklogin_tx(tx, &state).await);
+    assert_denied(&process_zklogin_tx(tx, &state));
 
     let (_, state1) = setup_test(
         TransactionDenyConfigBuilder::new()
@@ -203,7 +237,7 @@ async fn test_zklogin_transaction_disabled() {
     )
     .await;
     let (_, tx1, _) = make_zklogin_tx(get_zklogin_user_address(), false);
-    assert_denied(&process_zklogin_tx(tx1, &state1).await);
+    assert_denied(&process_zklogin_tx(tx1, &state1));
 }
 
 #[tokio::test]
@@ -221,7 +255,7 @@ async fn test_object_denied() {
             .build(),
     )
     .await;
-    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state).await);
+    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state));
 }
 
 #[tokio::test]
@@ -241,9 +275,9 @@ async fn test_signer_denied() {
     )
     .await;
     // Test that sender (accounts[0]) would be denied.
-    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state).await);
+    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state));
     // Test that sponsor (accounts[1]) would be denied.
-    assert_denied(&transfer_with_account(&accounts[2], &accounts[1], &state).await);
+    assert_denied(&transfer_with_account(&accounts[2], &accounts[1], &state));
 }
 
 #[tokio::test]
@@ -265,7 +299,7 @@ async fn test_shared_object_transaction_disabled() {
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    let result = state.handle_transaction(&epoch_store, tx).await;
+    let result = state.handle_vote_transaction(&epoch_store, tx);
     assert_denied(&result);
 }
 
@@ -290,7 +324,7 @@ async fn test_package_publish_disabled() {
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    let result = state.handle_transaction(&epoch_store, tx).await;
+    let result = state.handle_vote_transaction(&epoch_store, tx);
     assert_denied(&result);
 }
 
@@ -383,30 +417,25 @@ async fn test_package_denied() {
     .await;
 
     // Calling modules in package c directly should fail.
-    let result =
-        handle_move_call_transaction(&state, package_c, "c", "c", vec![], &accounts[0], 5).await;
+    let result = handle_move_call_transaction(&state, package_c, "c", "c", vec![], &accounts[0], 5);
     assert_denied(&result);
 
     // Calling modules in package b should fail too as it directly depends on c.
-    let result =
-        handle_move_call_transaction(&state, package_c, "b", "b", vec![], &accounts[0], 6).await;
+    let result = handle_move_call_transaction(&state, package_c, "b", "b", vec![], &accounts[0], 6);
     assert_denied(&result);
 
     // Calling modules in package a should fail too as it indirectly depends on c.
-    let result =
-        handle_move_call_transaction(&state, package_c, "a", "a", vec![], &accounts[0], 7).await;
+    let result = handle_move_call_transaction(&state, package_c, "a", "a", vec![], &accounts[0], 7);
     assert_denied(&result);
 
     // Calling modules in c' should succeed as it is not denied.
     let result =
-        handle_move_call_transaction(&state, package_c_prime, "c", "c", vec![], &accounts[0], 8)
-            .await;
+        handle_move_call_transaction(&state, package_c_prime, "c", "c", vec![], &accounts[0], 8);
     assert!(result.is_ok());
 
     // Calling modules in b' should succeed as it no longer depends on c.
     let result =
-        handle_move_call_transaction(&state, package_b_prime, "b", "b", vec![], &accounts[0], 9)
-            .await;
+        handle_move_call_transaction(&state, package_b_prime, "b", "b", vec![], &accounts[0], 9);
     assert!(result.is_ok());
 
     // Publish a should fail because it has a dependency on c, which is denied.
@@ -482,24 +511,110 @@ async fn test_certificate_deny() {
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    let signature = state
-        .handle_transaction(&epoch_store, tx.clone())
-        .await
-        .unwrap()
-        .status
-        .into_signed_for_testing();
-    let cert = VerifiedCertificate::new_unchecked(
-        CertifiedTransaction::new(tx.into_message(), vec![signature], epoch_store.committee())
-            .unwrap(),
-    );
-    let (effects, _) = state.try_execute_for_test(&cert, ExecutionEnv::new()).await;
+    state
+        .handle_vote_transaction(&epoch_store, tx.clone())
+        .unwrap();
+    // Create an executable transaction as if certified by consensus
+    let executable = VerifiedExecutableTransaction::new_from_consensus(tx, epoch_store.epoch());
+    let (effects, _) = state
+        .try_execute_executable_for_test(&executable, ExecutionEnv::new())
+        .await;
     assert!(matches!(
         effects.status(),
-        &ExecutionStatus::Failure {
-            error: ExecutionFailureStatus::CertificateDenied,
+        &ExecutionStatus::Failure(ExecutionFailure {
+            error: ExecutionErrorKind::CertificateDenied,
             ..
-        }
+        })
     ));
+}
+
+/// Test that the address deny list also checks the actual signing key's address,
+/// not just the declared sender/sponsor. With address aliases, the actual signer
+/// may differ from the declared sender, so both must be checked.
+#[tokio::test]
+async fn test_actual_signer_denied_via_alias() {
+    let (network_config, state) = setup_test(TransactionDenyConfigBuilder::new().build()).await;
+    let accounts = get_accounts_and_coins(&network_config, &state);
+
+    // accounts[0] is the declared sender, accounts[1] is the actual signer (alias).
+    // Deny accounts[1]'s address (the actual signer), but NOT accounts[0] (the sender).
+    let state = reload_state_with_new_deny_config(
+        &network_config,
+        state,
+        TransactionDenyConfigBuilder::new()
+            .add_denied_address(accounts[1].0)
+            .build(),
+    )
+    .await;
+
+    // Construct a transaction with sender=accounts[0], but signed by accounts[1]'s key.
+    // This simulates the alias scenario where accounts[1] signs on behalf of accounts[0].
+    let rgp = state.reference_gas_price_for_testing().unwrap();
+    let data = TransactionData::new_transfer_rtd_allow_sponsor(
+        accounts[0].0,
+        accounts[0].0,
+        None,
+        accounts[0].2[0],
+        TEST_ONLY_GAS_UNIT_FOR_TRANSFER * rgp,
+        rgp,
+        accounts[0].0,
+    );
+    // Sign with accounts[1]'s key instead of accounts[0]'s key.
+    let tx = to_sender_signed_transaction(data, &accounts[1].1);
+
+    // Directly call the deny check (skipping signature verification, since alias-aware
+    // verification would accept this signature at that layer).
+    let tx_data = tx.data().transaction_data();
+    let result = rtd_transaction_checks::deny::check_transaction_for_signing(
+        tx_data,
+        tx.data().tx_signatures(),
+        &tx_data.input_objects().unwrap(),
+        &tx_data.receiving_objects(),
+        state.local_transaction_deny_config(),
+        state.get_backing_package_store().as_ref(),
+    );
+    assert_denied(&result);
+}
+
+/// Verify that when the actual signer is NOT denied, the transaction passes.
+#[tokio::test]
+async fn test_non_denied_actual_signer_allowed() {
+    let (network_config, state) = setup_test(TransactionDenyConfigBuilder::new().build()).await;
+    let accounts = get_accounts_and_coins(&network_config, &state);
+
+    // Deny accounts[2], but neither accounts[0] (sender) nor accounts[1] (signer).
+    let state = reload_state_with_new_deny_config(
+        &network_config,
+        state,
+        TransactionDenyConfigBuilder::new()
+            .add_denied_address(accounts[2].0)
+            .build(),
+    )
+    .await;
+
+    // Transaction sender=accounts[0], signed by accounts[1] (neither is denied).
+    let rgp = state.reference_gas_price_for_testing().unwrap();
+    let data = TransactionData::new_transfer_rtd_allow_sponsor(
+        accounts[0].0,
+        accounts[0].0,
+        None,
+        accounts[0].2[0],
+        TEST_ONLY_GAS_UNIT_FOR_TRANSFER * rgp,
+        rgp,
+        accounts[0].0,
+    );
+    let tx = to_sender_signed_transaction(data, &accounts[1].1);
+
+    let tx_data = tx.data().transaction_data();
+    let result = rtd_transaction_checks::deny::check_transaction_for_signing(
+        tx_data,
+        tx.data().tx_signatures(),
+        &tx_data.input_objects().unwrap(),
+        &tx_data.receiving_objects(),
+        state.local_transaction_deny_config(),
+        state.get_backing_package_store().as_ref(),
+    );
+    assert!(result.is_ok());
 }
 
 // Dynamic transaction checks of the above
@@ -514,7 +629,7 @@ async fn test_user_transaction_disabled_dynamic_check() {
     )
     .await;
     let accounts = get_accounts_and_coins(&network_config, &state);
-    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state).await);
+    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state));
 }
 
 #[tokio::test]
@@ -535,7 +650,7 @@ async fn test_object_denied_dynamic_check() {
             .build(),
     )
     .await;
-    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state).await);
+    assert_denied(&transfer_with_account(&accounts[0], &accounts[0], &state));
 }
 
 #[tokio::test]
@@ -559,7 +674,7 @@ async fn test_shared_object_transaction_disabled_dynamic_check() {
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    let result = state.handle_transaction(&epoch_store, tx).await;
+    let result = state.handle_vote_transaction(&epoch_store, tx);
     assert_denied(&result);
 }
 
@@ -586,7 +701,7 @@ async fn test_package_publish_disabled_dynamic_check() {
         .verify_transaction_require_no_aliases(tx)
         .unwrap()
         .into_tx();
-    let result = state.handle_transaction(&epoch_store, tx).await;
+    let result = state.handle_vote_transaction(&epoch_store, tx);
     assert_denied(&result);
 }
 
@@ -682,30 +797,25 @@ async fn test_package_denied_dynamic_check() {
     .await;
 
     // Calling modules in package c directly should fail.
-    let result =
-        handle_move_call_transaction(&state, package_c, "c", "c", vec![], &accounts[0], 5).await;
+    let result = handle_move_call_transaction(&state, package_c, "c", "c", vec![], &accounts[0], 5);
     assert_denied(&result);
 
     // Calling modules in package b should fail too as it directly depends on c.
-    let result =
-        handle_move_call_transaction(&state, package_c, "b", "b", vec![], &accounts[0], 6).await;
+    let result = handle_move_call_transaction(&state, package_c, "b", "b", vec![], &accounts[0], 6);
     assert_denied(&result);
 
     // Calling modules in package a should fail too as it indirectly depends on c.
-    let result =
-        handle_move_call_transaction(&state, package_c, "a", "a", vec![], &accounts[0], 7).await;
+    let result = handle_move_call_transaction(&state, package_c, "a", "a", vec![], &accounts[0], 7);
     assert_denied(&result);
 
     // Calling modules in c' should succeed as it is not denied.
     let result =
-        handle_move_call_transaction(&state, package_c_prime, "c", "c", vec![], &accounts[0], 8)
-            .await;
+        handle_move_call_transaction(&state, package_c_prime, "c", "c", vec![], &accounts[0], 8);
     assert!(result.is_ok());
 
     // Calling modules in b' should succeed as it no longer depends on c.
     let result =
-        handle_move_call_transaction(&state, package_b_prime, "b", "b", vec![], &accounts[0], 9)
-            .await;
+        handle_move_call_transaction(&state, package_b_prime, "b", "b", vec![], &accounts[0], 9);
     assert!(result.is_ok());
 
     // Publish a should fail because it has a dependency on c, which is denied.
@@ -749,5 +859,41 @@ async fn test_package_denied_dynamic_check() {
         &state,
     )
     .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_dev_inspect_disabled() {
+    use rtd_types::crypto::get_authority_key_pair;
+
+    let fullnode_key_pair = get_authority_key_pair().1;
+    let fullnode = TestAuthorityBuilder::new()
+        .with_dev_inspect_disabled()
+        .with_keypair(&fullnode_key_pair)
+        .build()
+        .await;
+
+    let sender = RtdAddress::random_for_testing_only();
+    let pt = {
+        let mut builder = ProgrammableTransactionBuilder::new();
+        builder.transfer_rtd(sender, None);
+        builder.finish()
+    };
+    let kind = TransactionKind::programmable(pt);
+
+    // With skip_checks=true (default), should be denied
+    let result = fullnode
+        .dev_inspect_transaction_block(sender, kind.clone(), None, None, None, None, None, None)
+        .await;
+    assert!(result.is_err());
+    assert!(matches!(
+        result.unwrap_err().as_inner(),
+        RtdErrorKind::UnsupportedFeatureError { .. }
+    ));
+
+    // With skip_checks=false, should pass our guard
+    let result = fullnode
+        .dev_inspect_transaction_block(sender, kind, None, None, None, None, None, Some(false))
+        .await;
     assert!(result.is_ok());
 }

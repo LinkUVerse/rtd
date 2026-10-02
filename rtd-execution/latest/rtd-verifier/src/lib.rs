@@ -11,11 +11,13 @@ pub mod one_time_witness_verifier;
 pub mod private_generics;
 pub mod private_generics_verifier_v2;
 pub mod struct_with_key_verifier;
+pub mod tx_context_restrictions_verifier;
 
 use move_core_types::{
     account_address::AccountAddress, ident_str, identifier::IdentStr, vm_status::StatusCode,
 };
-use rtd_types::error::{ExecutionError, ExecutionErrorKind};
+use rtd_types::error::ExecutionError;
+use rtd_types::execution_status::ExecutionErrorKind;
 
 pub const INIT_FN_NAME: &IdentStr = ident_str!("init");
 pub const TEST_SCENARIO_MODULE_NAME: &str = "test_scenario";

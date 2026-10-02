@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{EncodeDecodeBase64, RtdKeyPair};
-use rtd_types::quorum_driver_types::ExecuteTransactionRequestType;
 use rtd_types::transaction::TransactionData;
+use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
 use tracing::debug;
 
 #[async_trait]

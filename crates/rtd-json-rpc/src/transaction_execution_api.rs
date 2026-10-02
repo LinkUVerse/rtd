@@ -16,7 +16,6 @@ use crate::{
     ObjectProviderCache, RtdRpcModule, get_balance_changes_from_effect, get_object_changes,
     with_tracing,
 };
-use shared_crypto::intent::{AppId, Intent, IntentMessage, IntentScope, IntentVersion};
 use rtd_core::authority::AuthorityState;
 use rtd_core::authority_client::NetworkAuthorityClient;
 use rtd_core::transaction_orchestrator::TransactionOrchestrator;
@@ -27,17 +26,16 @@ use rtd_json_rpc_types::{
 };
 use rtd_open_rpc::Module;
 use rtd_types::base_types::RtdAddress;
-use rtd_types::crypto::default_hash;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::effects::TransactionEffectsAPI;
-use rtd_types::quorum_driver_types::{
-    ExecuteTransactionRequestType, ExecuteTransactionRequestV3, ExecuteTransactionResponseV3,
-};
+use rtd_types::rtd_serde::BigInt;
 use rtd_types::signature::GenericSignature;
 use rtd_types::storage::PostExecutionPackageResolver;
-use rtd_types::rtd_serde::BigInt;
 use rtd_types::transaction::{
     InputObjectKind, Transaction, TransactionData, TransactionDataAPI, TransactionKind,
+};
+use rtd_types::transaction_driver_types::{
+    ExecuteTransactionRequestType, ExecuteTransactionRequestV3, ExecuteTransactionResponseV3,
 };
 use tracing::instrument;
 
@@ -187,9 +185,10 @@ impl TransactionExecutionApi {
                 self.state.get_backing_package_store().clone(),
                 &response.output_objects,
             );
-            let mut layout_resolver = epoch_store
-                .executor()
-                .type_layout_resolver(Box::new(backing_package_store));
+            let mut layout_resolver = epoch_store.executor().type_layout_resolver(
+                epoch_store.protocol_config(),
+                Box::new(backing_package_store),
+            );
             Some(RtdTransactionBlockEvents::try_from(
                 response.events.unwrap_or_default(),
                 digest,
@@ -200,14 +199,17 @@ impl TransactionExecutionApi {
             None
         };
 
-        let object_cache = match (response.input_objects, response.output_objects) {
-            (Some(input_objects), Some(output_objects)) => {
-                let mut object_cache = ObjectProviderCache::new(self.state.clone());
+        let object_cache = if opts.show_balance_changes || opts.show_object_changes {
+            let mut object_cache = ObjectProviderCache::new(self.state.clone());
+            if let Some(input_objects) = response.input_objects {
                 object_cache.insert_objects_into_cache(input_objects);
-                object_cache.insert_objects_into_cache(output_objects);
-                Some(object_cache)
             }
-            _ => None,
+            if let Some(output_objects) = response.output_objects {
+                object_cache.insert_objects_into_cache(output_objects);
+            }
+            Some(object_cache)
+        } else {
+            None
         };
 
         let balance_changes = match &object_cache {
@@ -265,32 +267,20 @@ impl TransactionExecutionApi {
     pub fn prepare_dry_run_transaction_block(
         &self,
         tx_bytes: Base64,
-    ) -> Result<(TransactionData, TransactionDigest, Vec<InputObjectKind>), RtdRpcInputError> {
+    ) -> Result<(TransactionData, Vec<InputObjectKind>), RtdRpcInputError> {
         let tx_data: TransactionData = self.convert_bytes(tx_bytes)?;
         let input_objs = tx_data.input_objects()?;
-        let intent_msg = IntentMessage::new(
-            Intent {
-                version: IntentVersion::V0,
-                scope: IntentScope::TransactionData,
-                app_id: AppId::Rtd,
-            },
-            tx_data,
-        );
-        let txn_digest = TransactionDigest::new(default_hash(&intent_msg.value));
-        Ok((intent_msg.value, txn_digest, input_objs))
+        Ok((tx_data, input_objs))
     }
 
     async fn dry_run_transaction_block(
         &self,
         tx_bytes: Base64,
     ) -> Result<DryRunTransactionBlockResponse, Error> {
-        let (txn_data, txn_digest, input_objs) =
-            self.prepare_dry_run_transaction_block(tx_bytes)?;
+        let (txn_data, input_objs) = self.prepare_dry_run_transaction_block(tx_bytes)?;
         let sender = txn_data.sender();
-        let (resp, written_objects, transaction_effects, mock_gas) = self
-            .state
-            .dry_exec_transaction(txn_data.clone(), txn_digest)
-            .await?;
+        let (resp, written_objects, transaction_effects, mock_gas) =
+            self.state.dry_exec_transaction(txn_data.clone()).await?;
         let object_cache = ObjectProviderCache::new_with_cache(self.state.clone(), written_objects);
         let balance_changes = get_balance_changes_from_effect(
             &object_cache,

@@ -17,12 +17,12 @@ use move_command_line_common::{
 use move_compiler::{
     Compiler, PASS_PARSER,
     command_line::compiler::move_check_for_errors,
-    diagnostics::warning_filters::WarningFiltersBuilder,
+    diagnostics::filter::{empty_filter_scope, unused_for_test_filter_scope},
     diagnostics::*,
     editions::{Edition, Flavor},
     linters::{self, LintLevel},
-    shared::{Flags, NumericalAddress, PackageConfig, PackagePaths},
     rtd_mode,
+    shared::{Flags, NumericalAddress, PackageConfig, PackagePaths},
 };
 use move_symbol_pool::Symbol;
 use serde::{Deserialize, Serialize};
@@ -160,18 +160,17 @@ fn test_config(path: &Path) -> (TestKind, TestInfo, PackageConfig, Flags) {
         Edition::LEGACY
     };
     // config
-    let mut config = PackageConfig {
+    let warning_filter = if matches!(test_kind, TestKind::Unused | TestKind::IDE) {
+        empty_filter_scope()
+    } else {
+        unused_for_test_filter_scope()
+    };
+    let config = PackageConfig {
         flavor,
         edition,
         is_dependency: false,
-        warning_filter: WarningFiltersBuilder::new_for_source(),
+        warning_filter,
     };
-    // Unused and IDE do not have additional warning filters
-    if !matches!(test_kind, TestKind::Unused | TestKind::IDE) {
-        config
-            .warning_filter
-            .union(&WarningFiltersBuilder::unused_warnings_filter_for_test());
-    }
     // test info
     let test_info = TestInfo {
         flavor,
@@ -204,7 +203,7 @@ fn out_path(path: &Path, test_name: &str, test_kind: &Option<String>) -> PathBuf
     path.with_file_name(file_name).with_extension(OUT_EXT)
 }
 
-// Runs all tests under the test/testrtdte directory.
+// Runs all tests under the test/testsuite directory.
 pub fn run_test(path: &Path) -> datatest_stable::Result<()> {
     let (test_kind, test_info, package_config, flags) = test_config(path);
     let suffix = test_kind.snap_suffix();

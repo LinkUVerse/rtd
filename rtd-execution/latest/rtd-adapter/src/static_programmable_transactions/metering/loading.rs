@@ -5,15 +5,15 @@ use crate::static_programmable_transactions::{
     linkage::resolved_linkage::ResolvedLinkage, loading::ast as L,
     metering::translation_meter::TranslationMeter,
 };
-use rtd_types::error::ExecutionError;
+use rtd_types::error::ExecutionErrorTrait;
 
 /// After loading and before type checking we do a pass over the loaded transaction to charge for
 /// types that occured in the transaction and were loaded. We simply charge for the number of type
 /// nodes that were loaded.
-pub fn meter(
+pub fn meter<E: ExecutionErrorTrait>(
     meter: &mut TranslationMeter,
     transaction: &L::Transaction,
-) -> Result<(), ExecutionError> {
+) -> Result<(), E> {
     let inputs = transaction.inputs.iter().filter_map(|i| match &i.1 {
         L::InputType::Bytes => None,
         L::InputType::Fixed(ty) => Some(ty),
@@ -27,6 +27,19 @@ pub fn meter(
         meter.charge_num_linkage_entries(linkage.linkage_resolution.len())?;
     }
 
+    for cmd in &transaction.commands {
+        match cmd {
+            L::Command::Publish(payload, _, _) | L::Command::Upgrade(payload, _, _, _, _) => {
+                meter.charge_package_load(payload)?;
+            }
+            L::Command::MoveCall(_)
+            | L::Command::MakeMoveVec(_, _)
+            | L::Command::TransferObjects(_, _)
+            | L::Command::SplitCoins(_, _)
+            | L::Command::MergeCoins(_, _) => (),
+        }
+    }
+
     Ok(())
 }
 
@@ -35,7 +48,7 @@ fn command_linkage(cmd: &L::Command) -> Option<&ResolvedLinkage> {
         L::Command::Publish(_, _, linkage) | L::Command::Upgrade(_, _, _, _, linkage) => {
             Some(linkage)
         }
-        L::Command::MoveCall(call) => Some(&call.function.linkage.resolved_linkage),
+        L::Command::MoveCall(call) => Some(&call.function.linkage.0),
         L::Command::MakeMoveVec(_, _)
         | L::Command::TransferObjects(_, _)
         | L::Command::SplitCoins(_, _)

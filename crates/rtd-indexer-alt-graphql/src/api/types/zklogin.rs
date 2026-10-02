@@ -4,32 +4,29 @@
 use std::sync::Arc;
 
 use anyhow::Context as _;
-use async_graphql::{Context, Enum, SimpleObject};
-use im::hashmap::{Entry, HashMap};
+use async_graphql::Context;
+use async_graphql::Enum;
+use async_graphql::SimpleObject;
+use rtd_types::crypto::ToFromBytes;
+use rtd_types::signature::GenericSignature;
+use rtd_types::signature::VerifyParams;
+use rtd_types::signature_verification::VerifiedDigestCache;
+use rtd_types::transaction::TransactionData;
 use serde::Serialize;
-use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
-use rtd_types::{
-    RTD_AUTHENTICATOR_STATE_ADDRESS, TypeTag,
-    authenticator_state::{ActiveJwk, AuthenticatorStateInner},
-    crypto::ToFromBytes,
-    dynamic_field::DynamicFieldType,
-    signature::{GenericSignature, VerifyParams},
-    signature_verification::VerifiedDigestCache,
-    transaction::TransactionData,
-};
-use tracing::warn;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentMessage;
+use shared_crypto::intent::PersonalMessage;
 
-use crate::{
-    api::{
-        scalars::{base64::Base64, rtd_address::RtdAddress, type_filter::TypeInput},
-        types::dynamic_field::{DynamicField, DynamicFieldName},
-    },
-    config::ZkLoginConfig,
-    error::{RpcError, bad_user_input, upcast},
-    scope::Scope,
-};
-
-use super::epoch::Epoch;
+use crate::api::scalars::base64::Base64;
+use crate::api::scalars::rtd_address::RtdAddress;
+use crate::api::types::epoch::Epoch;
+use crate::api::types::signature_verify::chain_zklogin_circuit_mode;
+use crate::api::types::signature_verify::fetch_jwks;
+use crate::config::ZkLoginConfig;
+use crate::error::RpcError;
+use crate::error::bad_user_input;
+use crate::error::upcast;
+use crate::scope::Scope;
 
 /// An enum that specifies the intent scope to be used to parse the bytes for signature verification.
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
@@ -43,10 +40,8 @@ pub(crate) enum ZkLoginIntentScope {
 /// The result of the zkLogin signature verification.
 #[derive(SimpleObject, Clone, Debug)]
 pub(crate) struct ZkLoginVerifyResult {
-    /// The boolean result of the verification. If true, errors should be empty.
+    /// Whether the signature was verified successfully.
     pub success: Option<bool>,
-    /// The error field capture reasons why the signature could not be verified, assuming the inputs are valid and there are no internal errors.
-    pub error: Option<String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -59,6 +54,9 @@ pub(crate) enum Error {
 
     #[error("Failed to deserialize TransactionData from bytes")]
     NotTransactionData,
+
+    #[error("Verification failed: {0}")]
+    VerificationFailed(String),
 }
 
 /// Verified a zkLogin signature is from the given `author`.
@@ -86,55 +84,26 @@ pub(crate) async fn verify_signature(
         return Err(bad_user_input(Error::NotZkLogin));
     };
 
-    let jwk_object = DynamicField::by_name(
-        ctx,
-        scope,
-        RTD_AUTHENTICATOR_STATE_ADDRESS.into(),
-        DynamicFieldType::DynamicField,
-        DynamicFieldName {
-            type_: TypeInput(TypeTag::U64),
-            bcs: Base64(bcs::to_bytes(&1u64).unwrap()),
-        },
-    )
-    .await
-    .map_err(upcast)?
-    .context("JWK dynamic field not found")?;
+    let jwks = fetch_jwks(ctx, scope).await.map_err(upcast)?;
 
-    let authenticator_field = jwk_object
-        .native(ctx)
+    let zklogin_circuit_mode = chain_zklogin_circuit_mode(ctx, &epoch)
         .await
-        .map_err(upcast)?
-        .as_ref()
-        .context("Couldn't fetch JWK dynamic field contents")?;
-
-    let authenticator_jwks: AuthenticatorStateInner =
-        bcs::from_bytes(&authenticator_field.value_bytes)
-            .context("Failed to deserialize JWK dynamic field contents")?;
-
-    let mut jwks = HashMap::new();
-    for ActiveJwk { jwk_id, jwk, .. } in authenticator_jwks.active_jwks {
-        match jwks.entry(jwk_id.clone()) {
-            Entry::Occupied(_) => {
-                warn!("JWK with kid {jwk_id:?} already exists, skipping");
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(jwk.clone());
-            }
-        }
-    }
+        .map_err(upcast)?;
 
     let params = VerifyParams::new(
         jwks,
         vec![],
         config.env,
+        zklogin_circuit_mode,
         true,
         true,
         true,
         config.max_epoch_upper_bound_delta,
         true,
+        true,
     );
 
-    Ok(match intent_scope {
+    match intent_scope {
         ZkLoginIntentScope::TransactionData => verify(
             sig,
             &IntentMessage::new(
@@ -157,6 +126,11 @@ pub(crate) async fn verify_signature(
             epoch.epoch_id,
             &params,
         ),
+    }
+    .map_err(|e| bad_user_input(Error::VerificationFailed(e.to_string())))?;
+
+    Ok(ZkLoginVerifyResult {
+        success: Some(true),
     })
 }
 
@@ -166,22 +140,12 @@ fn verify<T: Serialize>(
     author: RtdAddress,
     epoch_id: u64,
     params: &VerifyParams,
-) -> ZkLoginVerifyResult {
-    match sig.verify_authenticator(
+) -> Result<(), rtd_types::error::RtdError> {
+    sig.verify_authenticator(
         message,
         author.into(),
         epoch_id,
         params,
         Arc::new(VerifiedDigestCache::new_empty()),
-    ) {
-        Ok(()) => ZkLoginVerifyResult {
-            success: Some(true),
-            error: None,
-        },
-
-        Err(e) => ZkLoginVerifyResult {
-            success: Some(false),
-            error: Some(e.to_string()),
-        },
-    }
+    )
 }

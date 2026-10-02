@@ -1,8 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(unused)]
-
 mod environments;
 mod find_env;
 mod rtd_flavor;

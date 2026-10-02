@@ -1,6 +1,6 @@
 [package]
 name = "linku-common"
-authors = ["LinkU Labs <build@linkulabs.com>"]
+authors = ["LinkU Labs"]
 license = "Apache-2.0"
 version = "0.1.0"
 edition = "2024"
@@ -13,16 +13,21 @@ workspace = true
 rand.workspace = true
 antithesis_sdk.workspace = true
 either.workspace = true
-snap.workspace = true
 once_cell.workspace = true
 tokio.workspace = true
 futures.workspace = true
 parking_lot.workspace = true
-reqwest.workspace = true
-fastcrypto.workspace = true
 linku-metrics.workspace = true
 rtd-macros.workspace = true
+prost-types.workspace = true
 tempfile.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
-anyhow.workspace = true
 serde_json.workspace = true
+oneshot.workspace = true
+
+[target.'cfg(msim)'.dependencies]
+msim.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

@@ -6,11 +6,14 @@ processed 8 tasks
 init:
 A: object(0,0)
 
+// "created and wrapped" as well as "unwrapped and deleted" objects do not show
+// up in object changes at all.
+
 task 1, lines 9-36:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 6718400,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1000000, storage_cost: 6748800,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 38-40:
 //# programmable --sender A --inputs @A
@@ -44,7 +47,7 @@ Response: {
   "jsonrpc": "2.0",
   "id": 0,
   "result": {
-    "digest": "Aead3uHudTECLTGjJGQkNgYAF5YxjXRgGKE7hZZrDCjL",
+    "digest": "8DVyQWdxGJwKvCcuKaz5kCZbSP2pYwtLfrK7wnGKUXyq",
     "objectChanges": [
       {
         "type": "mutated",
@@ -52,11 +55,11 @@ Response: {
         "owner": {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
-        "objectType": "0x97f20c29a52b26bce2e4fcbd7d1c0a260ffdc7add9d796fe86b36b05147706a4::M::O",
-        "objectId": "0x071ffb59697a02c999cdc8dc53e8f34103d5b3a6b0aa81edf2c48e66de848a08",
+        "objectType": "0x41d2f10f7499443270fdb0d4a21a0fd85509a1186f21ec499a0b117a8d60d911::M::O",
+        "objectId": "0x71616fc1265318f69f61db0359fa0f71229b539b477a1f1c92342d72e44456e3",
         "version": "3",
         "previousVersion": "2",
-        "digest": "8psQ2GnnGsPK2FfDFzzATSKkmVuHhoVzEcuTN8QCsezQ"
+        "digest": "7g33jSRW2S8NQB6uHQizFjAjHtyA9xoWm8jkxSP3sQYD"
       },
       {
         "type": "mutated",
@@ -65,10 +68,10 @@ Response: {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
         "objectType": "0x2::coin::Coin<0x2::rtd::RTD>",
-        "objectId": "0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
         "version": "3",
         "previousVersion": "2",
-        "digest": "9M8HLgH8K16BkshyD9aJFPoQ6iHxcNrqyEJNtiz5SZop"
+        "digest": "EpMDTFMNrSYTxgv63AzYBkNT5RBtAS47VJrFMM9svGvv"
       }
     ],
     "timestampMs": "0",
@@ -82,7 +85,7 @@ Response: {
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "digest": "Hy6893StV7pDGxxyHWkpTesxUvDh1XdFVC2PXATZLAgA",
+    "digest": "5MDvKfU116vfJ1TSYWJNw5hscsypeFwhvqzMLf92oPCN",
     "objectChanges": [
       {
         "type": "mutated",
@@ -90,11 +93,11 @@ Response: {
         "owner": {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
-        "objectType": "0x97f20c29a52b26bce2e4fcbd7d1c0a260ffdc7add9d796fe86b36b05147706a4::M::O",
-        "objectId": "0x071ffb59697a02c999cdc8dc53e8f34103d5b3a6b0aa81edf2c48e66de848a08",
+        "objectType": "0x41d2f10f7499443270fdb0d4a21a0fd85509a1186f21ec499a0b117a8d60d911::M::O",
+        "objectId": "0x71616fc1265318f69f61db0359fa0f71229b539b477a1f1c92342d72e44456e3",
         "version": "4",
         "previousVersion": "3",
-        "digest": "9TN1KGrTdGpMHnKkP5xj6uJK6gtMJYugv3P1rfSbJpmP"
+        "digest": "AFtPVUGXnCCfwwc8ixwnFtoHonhhxbpF8AM9bSCCEoY7"
       },
       {
         "type": "mutated",
@@ -103,10 +106,10 @@ Response: {
           "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
         },
         "objectType": "0x2::coin::Coin<0x2::rtd::RTD>",
-        "objectId": "0xbff5e96a4a5c0f7348259c7abfdfd999405c02b9e9c0d0d59ec669a53b104c7a",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
         "version": "4",
         "previousVersion": "3",
-        "digest": "B5DRwEEFLfGp3KbXbJBv6jG4UzzmHdJW8iXi1Hqo3iSt"
+        "digest": "97zeUw6Y8YJfSy5Kbsv2vcqDmVchCLGa2DhjaMVyVTXw"
       }
     ],
     "timestampMs": "0",
