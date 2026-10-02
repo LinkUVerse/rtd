@@ -432,7 +432,8 @@ mod readiness_tests {
                 None,
             )
             .await
-            .unwrap_err();
+            .err()
+            .expect("catching-up fullnode must reject transaction building");
 
         assert_eq!(error.code(), rtd_json_rpc_api::TRANSIENT_ERROR_CODE);
     }
