@@ -9,6 +9,63 @@ use rtd_types::transaction::TransactionKey;
 use tokio::time::timeout;
 
 #[tokio::test]
+async fn test_recovery_drain_at_full_durable_window() {
+    let authority_state = TestAuthorityBuilder::new().build().await;
+    let store = authority_state.epoch_store_for_testing();
+    let durable = 139_885;
+    let startup_head = durable + consensus_core::MAX_PENDING_DURABLE_COMMITS;
+    let expected = Some((startup_head, startup_head + 2_000));
+
+    assert_eq!(
+        store
+            .prepare_consensus_recovery_drain_state(durable, startup_head)
+            .unwrap(),
+        expected,
+        "a full startup window must allow bounded checkpoint signature commits"
+    );
+    assert_eq!(
+        store
+            .prepare_consensus_recovery_drain_state(durable, startup_head + 500)
+            .unwrap(),
+        expected,
+        "a later startup head must reuse the persisted absolute ceiling"
+    );
+    assert_eq!(
+        store
+            .prepare_consensus_recovery_drain_state(startup_head - 1, startup_head + 500)
+            .unwrap(),
+        expected,
+        "a shorter tail must retain the allowance until its anchor is durable"
+    );
+    assert_eq!(
+        store
+            .prepare_consensus_recovery_drain_state(startup_head, startup_head + 500)
+            .unwrap(),
+        None,
+        "a durable anchor and sub-window tail must clear the recovery state"
+    );
+}
+
+#[tokio::test]
+async fn test_recovery_drain_below_full_durable_window() {
+    let authority_state = TestAuthorityBuilder::new().build().await;
+    let store = authority_state.epoch_store_for_testing();
+    let durable = 10;
+    for startup_head in [
+        durable,
+        durable - 1,
+        durable + consensus_core::MAX_PENDING_DURABLE_COMMITS - 1,
+    ] {
+        assert_eq!(
+            store
+                .prepare_consensus_recovery_drain_state(durable, startup_head)
+                .unwrap(),
+            None
+        );
+    }
+}
+
+#[tokio::test]
 async fn test_notify_read_executed_transactions_to_checkpoint() {
     let authority_state = TestAuthorityBuilder::new().build().await;
     let store = authority_state.epoch_store_for_testing();

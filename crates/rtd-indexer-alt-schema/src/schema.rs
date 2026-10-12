@@ -156,6 +156,42 @@ diesel::table! {
 }
 
 diesel::table! {
+    hist_display_checkpoints (cp_sequence_number) {
+        cp_sequence_number -> Int8,
+        checkpoint_digest -> Bytea,
+        previous_digest -> Nullable<Bytea>,
+        event_count -> Int8,
+        events_sha256 -> Bytea,
+    }
+}
+
+diesel::table! {
+    hist_display_coverage (id) {
+        id -> Int2,
+        genesis_digest -> Bytea,
+        source_id -> Text,
+        generation -> Text,
+        reader_lo -> Int8,
+        checkpoint_hi -> Int8,
+        checkpoint_digest -> Nullable<Bytea>,
+        writer_epoch -> Int8,
+    }
+}
+
+diesel::table! {
+    hist_displays (object_type, cp_sequence_number, checkpoint_tx_index, event_index) {
+        object_type -> Bytea,
+        cp_sequence_number -> Int8,
+        checkpoint_tx_index -> Int8,
+        event_index -> Int8,
+        transaction_digest -> Bytea,
+        display_id -> Bytea,
+        display_version -> Int4,
+        display -> Bytea,
+    }
+}
+
+diesel::table! {
     sum_displays (object_type) {
         object_type -> Bytea,
         display_id -> Bytea,
@@ -232,6 +268,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     cp_sequence_numbers,
     ev_emit_mod,
     ev_struct_inst,
+    hist_display_checkpoints,
+    hist_display_coverage,
+    hist_displays,
     kv_checkpoints,
     kv_epoch_ends,
     kv_epoch_starts,

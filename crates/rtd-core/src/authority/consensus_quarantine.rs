@@ -1214,8 +1214,18 @@ mod tests {
                     original_head + consensus_core::MAX_PENDING_DURABLE_COMMITS,
                 )
                 .unwrap(),
+            fixed_state,
+            "a full restart window must keep its persisted migration ceiling",
+        );
+        assert_eq!(
+            epoch_store
+                .prepare_consensus_recovery_drain_state(
+                    original_head,
+                    original_head + consensus_core::MAX_PENDING_DURABLE_COMMITS - 1,
+                )
+                .unwrap(),
             None,
-            "the migration state is retired after the old anchor is durable",
+            "a sub-window tail retires migration after the old anchor is durable",
         );
     }
 

@@ -12,6 +12,7 @@ pub mod events;
 pub mod fullnode_client;
 pub mod governance;
 mod grpc_tls;
+pub mod historical_displays;
 pub mod kv_loader;
 pub mod ledger_grpc_reader;
 pub(crate) mod metrics;

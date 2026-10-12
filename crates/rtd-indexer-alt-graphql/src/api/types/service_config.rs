@@ -8,6 +8,9 @@ use async_graphql::Result;
 use crate::api::types::available_range::AvailableRange;
 use crate::api::types::available_range::AvailableRangeKey;
 use crate::api::types::available_range::Error;
+use crate::api::types::display::DisplayHistoryCapability;
+use crate::api::types::display::DisplayTemplateKind;
+use crate::api::types::display::display_history_coverage;
 use crate::config::Limits;
 use crate::error::RpcError;
 use crate::pagination::PaginationConfig;
@@ -22,6 +25,18 @@ pub(crate) struct ServiceConfig {
 
 #[Object]
 impl ServiceConfig {
+    /// Capability and certified-source binding for Display templates at this query's checkpoint.
+    async fn display_history(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Result<DisplayHistoryCapability, RpcError> {
+        Ok(DisplayHistoryCapability {
+            api_version: 1.into(),
+            supported_template_kinds: vec![DisplayTemplateKind::V1, DisplayTemplateKind::V2],
+            coverage: display_history_coverage(ctx, &self.scope).await?,
+        })
+    }
+
     /// Maximum time in milliseconds spent waiting for a response from fullnode after issuing a transaction to execute. Note that the transaction may still succeed even in the case of a timeout. Transactions are idempotent, so a transaction that times out should be re-submitted until the network returns a definite response (success or failure, not timeout).
     async fn mutation_timeout_ms(&self, ctx: &Context<'_>) -> Option<Result<u32, RpcError>> {
         Some(
@@ -346,5 +361,6 @@ impl ServiceConfig {
                 filters,
             },
         )
+        .await
     }
 }

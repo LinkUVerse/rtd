@@ -9,6 +9,7 @@ pub mod checkpoints;
 pub mod cp_bloom_blocks;
 pub mod cp_blooms;
 pub mod cp_sequence_numbers;
+pub mod display_history;
 pub mod displays;
 pub mod epochs;
 pub mod events;

@@ -125,7 +125,7 @@ impl CheckpointSpan {
         self.include(other.checkpoint_hi_inclusive);
     }
 
-    fn lower_bound(self) -> u64 {
+    pub(crate) fn lower_bound(self) -> u64 {
         self.checkpoint_lo_inclusive
     }
 }

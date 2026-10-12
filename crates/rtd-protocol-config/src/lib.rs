@@ -38,7 +38,7 @@ pub use linku_common::assert_reachable_simtest;
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 138;
+const MAX_PROTOCOL_VERSION: u64 = 139;
 
 // Record history of protocol version allocations here:
 //
@@ -395,6 +395,8 @@ const MAX_PROTOCOL_VERSION: u64 = 138;
 //              Enable allowances on mainnet.
 //              Merge colliding deferred-transaction entries in the consensus handler
 //              instead of overwriting (which stranded the displaced transactions).
+// Version 139: Prevent capacity splits and randomness tails from starving periodic
+//              checkpoint commit drains on devnet; preserve prior network behavior.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -1210,6 +1212,9 @@ struct FeatureFlags {
     // Deprecated: must always be set to `true`.
     #[serde(skip_serializing_if = "is_false")]
     merge_randomness_into_checkpoint: bool,
+
+    #[serde(skip_serializing_if = "is_false")]
+    periodic_checkpoint_commit_drains: bool,
 
     // If true, use coin party owner information.
     #[serde(skip_serializing_if = "is_false")]
@@ -4757,6 +4762,11 @@ impl ProtocolConfig {
                     }
                     cfg.feature_flags.merge_colliding_deferrals = true;
                 }
+                139 => {
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.periodic_checkpoint_commit_drains = true;
+                    }
+                }
                 // Use this template when making changes:
                 //
                 //     // modify an existing constant.
@@ -5139,6 +5149,23 @@ mod test {
     use insta::assert_yaml_snapshot;
 
     use super::*;
+
+    #[tokio::test]
+    async fn periodic_checkpoint_drains_are_new_devnet_only() {
+        for chain in [Chain::Unknown, Chain::Mainnet, Chain::Testnet] {
+            for version in MIN_PROTOCOL_VERSION..139 {
+                assert!(
+                    !ProtocolConfig::get_for_version(ProtocolVersion::new(version), chain)
+                        .periodic_checkpoint_commit_drains()
+                );
+            }
+            assert_eq!(
+                ProtocolConfig::get_for_version(ProtocolVersion::new(139), chain)
+                    .periodic_checkpoint_commit_drains(),
+                chain == Chain::Unknown,
+            );
+        }
+    }
 
     #[test]
     fn snapshot_tests() {

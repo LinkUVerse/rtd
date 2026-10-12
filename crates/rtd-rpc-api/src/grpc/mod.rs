@@ -9,6 +9,8 @@ use tower::Service;
 use tower::layer::layer_fn;
 
 pub mod deadline;
+#[cfg(test)]
+mod message_budget_tests;
 pub mod v2;
 pub mod v2alpha;
 

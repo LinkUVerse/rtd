@@ -48,4 +48,5 @@ rtd-sql-macro.workspace = true
 rtd-types.workspace = true
 
 [dev-dependencies]
+serde.workspace = true
 tokio-stream.workspace = true

@@ -14,6 +14,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use tracing::warn;
 
+pub use crate::handlers::hist_displays::DisplayHistoryBinding;
+
 /// Trait for merging configuration structs together.
 pub trait Merge: Sized {
     fn merge(self, other: Self) -> anyhow::Result<Self>;
@@ -121,6 +123,7 @@ pub struct PrunerLayer {
 pub struct PipelineLayer {
     // Sequential pipelines
     pub sum_displays: Option<SequentialLayer>,
+    pub hist_displays: Option<DisplayHistoryLayer>,
 
     // All concurrent pipelines
     pub cp_bloom_blocks: Option<ConcurrentLayer>,
@@ -144,6 +147,14 @@ pub struct PipelineLayer {
     pub tx_calls: Option<ConcurrentLayer>,
     pub tx_digests: Option<ConcurrentLayer>,
     pub tx_kinds: Option<ConcurrentLayer>,
+}
+
+/// History is opt-in and needs an explicit, immutable certified-source binding.
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DisplayHistoryLayer {
+    pub binding: Option<DisplayHistoryBinding>,
+    pub sequential: SequentialLayer,
 }
 
 impl IndexerConfig {
@@ -314,6 +325,7 @@ impl PipelineLayer {
             cp_bloom_blocks: Some(Default::default()),
             cp_digests: Some(Default::default()),
             sum_displays: Some(Default::default()),
+            hist_displays: None,
             cp_sequence_numbers: Some(Default::default()),
             ev_emit_mod: Some(Default::default()),
             ev_struct_inst: Some(Default::default()),
@@ -440,6 +452,18 @@ impl Merge for PrunerLayer {
     }
 }
 
+impl Merge for DisplayHistoryLayer {
+    fn merge(self, other: Self) -> anyhow::Result<Self> {
+        if let (Some(a), Some(b)) = (&self.binding, &other.binding) {
+            anyhow::ensure!(a == b, "Cannot merge different Display history bindings");
+        }
+        Ok(Self {
+            binding: other.binding.or(self.binding),
+            sequential: self.sequential.merge(other.sequential)?,
+        })
+    }
+}
+
 impl Merge for PipelineLayer {
     fn merge(self, other: PipelineLayer) -> anyhow::Result<PipelineLayer> {
         Ok(PipelineLayer {
@@ -447,6 +471,7 @@ impl Merge for PipelineLayer {
             cp_bloom_blocks: self.cp_bloom_blocks.merge(other.cp_bloom_blocks)?,
             cp_digests: self.cp_digests.merge(other.cp_digests)?,
             sum_displays: self.sum_displays.merge(other.sum_displays)?,
+            hist_displays: self.hist_displays.merge(other.hist_displays)?,
             cp_sequence_numbers: self.cp_sequence_numbers.merge(other.cp_sequence_numbers)?,
             ev_emit_mod: self.ev_emit_mod.merge(other.ev_emit_mod)?,
             ev_struct_inst: self.ev_struct_inst.merge(other.ev_struct_inst)?,
@@ -855,5 +880,53 @@ mod tests {
         .expect("deprecated `checkpoint-buffer-size` must deserialize without error");
 
         assert_eq!(config.ingestion.checkpoint_buffer_size, Some(5000));
+    }
+
+    #[tokio::test]
+    async fn hist_displays_binding_round_trip_and_unknown_fields_rejected() {
+        let input = r#"
+            [pipeline.hist_displays.binding]
+            expected-genesis-digest = "reviewed-H0"
+            source-id = "certified-source"
+            generation = "preserved-generation"
+            [pipeline.hist_displays.sequential]
+            max-batch-checkpoints = 100
+        "#;
+        let config: IndexerConfig = toml::from_str(input).unwrap();
+        let round_trip: IndexerConfig = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
+        let layer = round_trip.pipeline.hist_displays.unwrap();
+        assert_eq!(layer.binding.unwrap().source_id, "certified-source");
+        assert_eq!(layer.sequential.max_batch_checkpoints, Some(100));
+        assert!(
+            toml::from_str::<IndexerConfig>(&input.replace("source-id", "unknown-source-id"))
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn hist_displays_merge_cannot_silently_change_history_scope() {
+        let layer = DisplayHistoryLayer {
+            binding: Some(DisplayHistoryBinding {
+                expected_genesis_digest: "reviewed-H0".into(),
+                source_id: "certified-source".into(),
+                generation: "preserved-generation".into(),
+            }),
+            ..Default::default()
+        };
+        let mut other = layer.clone();
+        other.binding.as_mut().unwrap().generation = "another-generation".into();
+        assert!(layer.clone().merge(other).is_err());
+        let merged = layer
+            .clone()
+            .merge(DisplayHistoryLayer {
+                sequential: SequentialLayer {
+                    max_batch_checkpoints: Some(50),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(merged.binding, layer.binding);
+        assert_eq!(merged.sequential.max_batch_checkpoints, Some(50));
     }
 }

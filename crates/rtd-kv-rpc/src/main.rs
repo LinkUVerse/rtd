@@ -223,7 +223,8 @@ async fn main() -> Result<()> {
         config.stages(),
         config.enable_list_apis(),
     )
-    .await?;
+    .await?
+    .with_monotonic_read_wait_timeout(config.monotonic_read_wait_timeout());
 
     let server_config = ServerConfig {
         tls_identity: config.tls_identity()?,

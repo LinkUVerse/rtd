@@ -183,6 +183,10 @@ impl Loader<CheckpointBoundedObjectVersionKey> for PgReader {
 
         let ids: Vec<_> = keys.iter().map(|k| k.0.into_bytes()).collect();
         let cps: Vec<_> = keys.iter().map(|k| k.1 as i64).collect();
+        // A closed ID range is equivalent to equality, but preserves the leading ORDER BY
+        // column for the planner. This lets obj_versions_id_cp_version seek directly to each
+        // checkpoint bound. Equality can discard that ordering column and favor a global
+        // checkpoint scan for rare/missing IDs; a row bound alone also scans hot histories.
         let query = diesel::sql_query(
             r#"
                 SELECT
@@ -203,9 +207,11 @@ impl Loader<CheckpointBoundedObjectVersionKey> for PgReader {
                     FROM
                         obj_versions
                     WHERE
-                        obj_versions.object_id = k.object_id
+                        obj_versions.object_id >= k.object_id
+                    AND obj_versions.object_id <= k.object_id
                     AND obj_versions.cp_sequence_number <= k.cp_sequence_number
                     ORDER BY
+                        object_id ASC,
                         cp_sequence_number DESC,
                         object_version DESC
                     LIMIT
@@ -582,6 +588,67 @@ mod tests {
                 (K(o1, 1), stored(o1, d1, 2, 1)),
                 (K(o1, 2), stored(o1, d1, 2, 1)),
             ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_bounded_hot_history_and_tombstone() {
+        use obj_versions::dsl as v;
+
+        let (_temp_db, writer, reader) = setup().await;
+        let hot = ObjectID::from_hex_literal("0x20").unwrap();
+        let cold = ObjectID::from_hex_literal("0x40").unwrap();
+        let absent_before = ObjectID::from_hex_literal("0x10").unwrap();
+        let absent_between = ObjectID::from_hex_literal("0x30").unwrap();
+        let absent_after = ObjectID::from_hex_literal("0x50").unwrap();
+        let digest = ObjectDigest::random();
+        let mut history: Vec<_> = (1..=1024)
+            .map(|version| stored(hot, digest, version, 1 + version / 2))
+            .collect();
+        let mut deleted = stored(hot, digest, 1025, 514);
+        deleted.object_digest = None;
+        history.extend([stored(cold, digest, 7, 200), deleted.clone()]);
+        {
+            let mut conn = writer.connect().await.unwrap();
+            diesel::insert_into(v::obj_versions)
+                .values(&history)
+                .execute(&mut conn)
+                .await
+                .unwrap();
+        }
+
+        use CheckpointBoundedObjectVersionKey as K;
+
+        assert_eq!(
+            Loader::load(&reader, &[] as &[K]).await.unwrap(),
+            HashMap::new()
+        );
+        let keys = [
+            K(absent_after, 600),
+            K(hot, 0),
+            K(cold, 199),
+            K(hot, 200),
+            K(absent_before, 1),
+            K(hot, 514),
+            K(cold, 200),
+            K(hot, 513),
+            K(absent_between, 400),
+            K(hot, 1),
+            K(hot, 600),
+            K(hot, 200),
+            K(cold, 600),
+        ];
+        assert_eq!(
+            Loader::load(&reader, &keys).await.unwrap(),
+            HashMap::from_iter([
+                (K(hot, 1), stored(hot, digest, 1, 1)),
+                (K(hot, 200), stored(hot, digest, 399, 200)),
+                (K(hot, 513), stored(hot, digest, 1024, 513)),
+                (K(hot, 514), deleted.clone()),
+                (K(hot, 600), deleted),
+                (K(cold, 200), stored(cold, digest, 7, 200)),
+                (K(cold, 600), stored(cold, digest, 7, 200)),
+            ]),
         );
     }
 }

@@ -2055,8 +2055,10 @@ impl AuthorityPerEpochStore {
         let existing_ceiling = tables
             .consensus_recovery_drain_ceiling
             .get(&CONSENSUS_RECOVERY_DRAIN_CEILING_ADDR)?;
-        let oversized_tail =
-            startup_consensus_head.saturating_sub(durable_commit) > MAX_PENDING_DURABLE_COMMITS;
+        // Checkpoint signatures need a new consensus commit to make replayed output durable.
+        // A full window therefore needs the same bounded allowance as an oversized tail.
+        let recovery_drain_required =
+            startup_consensus_head.saturating_sub(durable_commit) >= MAX_PENDING_DURABLE_COMMITS;
 
         let new_recovery_state = || {
             let legacy_tail = startup_consensus_head.saturating_sub(durable_commit);
@@ -2070,14 +2072,14 @@ impl AuthorityPerEpochStore {
         };
 
         let recovery_state = match (existing_anchor, existing_ceiling) {
-            (Some(anchor), Some(ceiling)) if oversized_tail || durable_commit < anchor => {
+            (Some(anchor), Some(ceiling)) if recovery_drain_required || durable_commit < anchor => {
                 Some((anchor, ceiling))
             }
             (Some(anchor), None) if durable_commit < anchor && startup_consensus_head >= anchor => {
                 let (_, ceiling) = new_recovery_state();
                 Some((anchor, ceiling))
             }
-            _ if oversized_tail => Some(new_recovery_state()),
+            _ if recovery_drain_required => Some(new_recovery_state()),
             _ => None,
         };
 

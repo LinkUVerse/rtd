@@ -11,6 +11,7 @@ pub(crate) mod cp_digests;
 pub(crate) mod cp_sequence_numbers;
 pub(crate) mod ev_emit_mod;
 pub(crate) mod ev_struct_inst;
+pub(crate) mod hist_displays;
 pub(crate) mod kv_checkpoints;
 pub(crate) mod kv_epoch_ends;
 pub(crate) mod kv_epoch_starts;

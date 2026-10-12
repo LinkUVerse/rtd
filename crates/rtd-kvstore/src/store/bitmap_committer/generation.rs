@@ -38,6 +38,7 @@ pub(super) enum Event {
     /// sequential checkpoint order.
     GenerationStarted {
         watermark: CommitterWatermark,
+        replay_floor_checkpoint: u64,
         framework_commit_time: Instant,
     },
     /// One shard has merged its input and sent every row flush it discovered to
@@ -112,6 +113,7 @@ impl GenerationWorker {
         };
         let Event::GenerationStarted {
             watermark,
+            replay_floor_checkpoint,
             framework_commit_time,
         } = first_msg
         else {
@@ -135,7 +137,12 @@ impl GenerationWorker {
 
         let mut state =
             GenerationLoopState::new(startup_watermark, startup_bucket_start_cp, self.is_sealed);
-        state.record_generation_started(watermark, framework_commit_time, self.is_sealed);
+        state.record_generation_started(
+            watermark,
+            replay_floor_checkpoint,
+            framework_commit_time,
+            self.is_sealed,
+        );
         Ok(Some(state))
     }
 
@@ -143,9 +150,15 @@ impl GenerationWorker {
         match msg {
             Event::GenerationStarted {
                 watermark,
+                replay_floor_checkpoint,
                 framework_commit_time,
             } => {
-                state.record_generation_started(watermark, framework_commit_time, self.is_sealed);
+                state.record_generation_started(
+                    watermark,
+                    replay_floor_checkpoint,
+                    framework_commit_time,
+                    self.is_sealed,
+                );
             }
             Event::ShardFlushesScheduled {
                 checkpoint,
@@ -303,13 +316,16 @@ impl GenerationLoopState {
     fn record_generation_started(
         &mut self,
         watermark: CommitterWatermark,
+        replay_floor_checkpoint: u64,
         framework_commit_time: std::time::Instant,
         is_sealed: fn(u64, CommitterWatermark) -> bool,
     ) {
         let cp = watermark.checkpoint_hi_inclusive;
         while is_sealed(self.current_bucket_id, watermark) {
             self.current_bucket_id += 1;
-            self.current_bucket_start_cp = cp;
+            // A commit can cross the boundary before its final checkpoint.
+            // Replay every indexed checkpoint in that batch after restart.
+            self.current_bucket_start_cp = replay_floor_checkpoint;
         }
         self.generations.insert(
             cp,
@@ -428,11 +444,11 @@ mod tests {
     fn bucket_start_cp_tracks_commit_that_crosses_bucket_boundary() {
         let mut state = GenerationLoopState::new(CommitterWatermark::default(), 0, is_sealed);
 
-        state.record_generation_started(watermark(1, 5), Instant::now(), is_sealed);
+        state.record_generation_started(watermark(1, 5), 1, Instant::now(), is_sealed);
         assert_eq!(state.current_bucket_id, 0);
         assert_eq!(state.generations.get(&1).unwrap().bucket_start_cp, 0);
 
-        state.record_generation_started(watermark(2, 25), Instant::now(), is_sealed);
+        state.record_generation_started(watermark(2, 25), 2, Instant::now(), is_sealed);
 
         assert_eq!(state.current_bucket_id, 2);
         assert_eq!(state.current_bucket_start_cp, 2);
@@ -446,9 +462,9 @@ mod tests {
         let worker = worker(watermark_tx, vec![seal_tx]);
         let mut state = GenerationLoopState::new(CommitterWatermark::default(), 0, is_sealed);
 
-        state.record_generation_started(watermark(1, 5), Instant::now(), is_sealed);
-        state.record_generation_started(watermark(2, 25), Instant::now(), is_sealed);
-        state.record_generation_started(watermark(3, 35), Instant::now(), is_sealed);
+        state.record_generation_started(watermark(1, 5), 1, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(2, 25), 2, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(3, 35), 3, Instant::now(), is_sealed);
         complete_generation(state.generations.get_mut(&1).unwrap(), 1);
         complete_generation(state.generations.get_mut(&2).unwrap(), 0);
 
@@ -471,8 +487,8 @@ mod tests {
         let worker = worker(watermark_tx, vec![seal_tx]);
         let mut state = GenerationLoopState::new(CommitterWatermark::default(), 0, is_sealed);
 
-        state.record_generation_started(watermark(1, 5), Instant::now(), is_sealed);
-        state.record_generation_started(watermark(2, 25), Instant::now(), is_sealed);
+        state.record_generation_started(watermark(1, 5), 1, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(2, 25), 2, Instant::now(), is_sealed);
         complete_generation(state.generations.get_mut(&2).unwrap(), 0);
 
         worker.try_promote(&mut state).await;

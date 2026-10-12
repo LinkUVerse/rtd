@@ -1,6 +1,5 @@
 ---
 source: crates/rtd-indexer-alt-graphql/src/lib.rs
-assertion_line: 680
 expression: sdl
 ---
 """
@@ -1056,13 +1055,46 @@ A rendered JSON blob based on an on-chain template.
 """
 type Display {
 	"""
-	If any fields failed to render, this will contain a mapping from failed field names to error messages. If all fields succeed, this will be `null`.
+	The checkpoint-bound template used to render this value.
+	"""
+	basis: DisplayBasis!
+	"""
+	Mapping from failed field names to error messages, or null if all fields succeeded.
 	"""
 	errors: JSON
 	"""
-	Output for all successfully substituted display fields. Unsuccessful fields will be `null`, and will be accompanied by a field in `errors`, explaining the error.
+	Output for successfully substituted fields. Failed fields are null and described in errors.
 	"""
 	output: JSON
+}
+
+"""
+V1 event publication or V2 registry object identity. The versions have distinct semantics.
+"""
+union DisplayBasis = DisplayV1Basis | DisplayV2Basis
+
+"""
+Snapshot-bound capability. Missing continuous history is an error, never a supported empty result.
+"""
+type DisplayHistoryCapability {
+	apiVersion: UInt53!
+	coverage: DisplayHistoryCoverage!
+	supportedTemplateKinds: [DisplayTemplateKind!]!
+}
+
+"""
+Identity and continuous coverage of the immutable v1 publication history.
+These fields describe the indexer's certified source binding; they are not a portable proof.
+"""
+type DisplayHistoryCoverage {
+	firstCheckpoint: UInt53!
+	generation: String!
+	genesisDigest: String!
+	lastCheckpoint: UInt53!
+	lastCheckpointDigest: String!
+	snapshotCheckpoint: UInt53!
+	snapshotCheckpointDigest: String!
+	sourceId: String!
 }
 
 """
@@ -1073,6 +1105,52 @@ type DisplayRegistryCreateTransaction {
 	A workaround to define an empty variant of a GraphQL union.
 	"""
 	_: Boolean
+}
+
+enum DisplayTemplateKind {
+	V1
+	V2
+}
+
+type DisplayV1Basis {
+	checkpointTransactionIndex: UInt53!
+	"""
+	Lowercase hexadecimal SHA256 of the raw event BCS. Content identity only, not a chain digest.
+	"""
+	eventBcsSha256: String!
+	eventIndex: UInt53!
+	historyCoverage: DisplayHistoryCoverage!
+	"""
+	Canonical type of the value whose Display was requested.
+	"""
+	objectType: String!
+	"""
+	The published u16 version from VersionUpdated, not a Move object version.
+	"""
+	publishedVersion: UInt53!
+	snapshotCheckpoint: UInt53!
+	sourceCheckpoint: UInt53!
+	sourceCheckpointDigest: String!
+	templateId: RtdAddress!
+	transactionDigest: String!
+}
+
+type DisplayV2Basis {
+	"""
+	Lowercase hexadecimal SHA256 of registry Move contents BCS. Content identity only.
+	"""
+	contentsBcsSha256: String!
+	historyCoverage: DisplayHistoryCoverage!
+	objectDigest: String!
+	objectType: String!
+	"""
+	Registry Move object version, not a v1 publication version.
+	"""
+	objectVersion: UInt53!
+	previousTransactionDigest: String!
+	snapshotCheckpoint: UInt53!
+	sourceCheckpoint: UInt53!
+	templateId: RtdAddress!
 }
 
 """
@@ -4156,6 +4234,10 @@ type ServiceConfig {
 	Accepts `type` and `field` arguments which identify the connection that is being queried. If the field in question is paginated, its default page size is returned. If it does not exist or is not paginated, `null` is returned.
 	"""
 	defaultPageSize(type: String!, field: String!): Int
+	"""
+	Capability and certified-source binding for Display templates at this query's checkpoint.
+	"""
+	displayHistory: DisplayHistoryCapability!
 	"""
 	Maximum output size of a disassembled MoveModule, in bytes.
 	"""

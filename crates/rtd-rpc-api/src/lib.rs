@@ -18,6 +18,10 @@ pub mod client;
 mod config;
 mod error;
 pub mod grpc;
+
+/// Maximum encoded response message body (excluding the five-byte gRPC frame header).
+/// Tonic applies this after optional compression; it is not a handler allocation limit.
+pub const MAX_ENCODED_RESPONSE_MESSAGE_SIZE: usize = 64 * 1024 * 1024;
 pub mod ledger_history;
 mod metrics;
 pub mod read_mask_defaults;
@@ -212,27 +216,34 @@ impl RpcService {
                 rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerServiceServer::new(
                     self.clone(),
                 )
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let proof_service_v2alpha =
                 rtd_rpc::proto::rtd::rpc::v2alpha::proof_service_server::ProofServiceServer::new(
                     self.clone(),
                 )
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let transaction_execution_service = rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_server::TransactionExecutionServiceServer::new(self.clone())
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let state_service =
                 rtd_rpc::proto::rtd::rpc::v2::state_service_server::StateServiceServer::new(
                     self.clone(),
                 )
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let signature_verification_service = rtd_rpc::proto::rtd::rpc::v2::signature_verification_service_server::SignatureVerificationServiceServer::new(self.clone())
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let move_package_service = rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageServiceServer::new(self.clone())
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let name_service =
                 rtd_rpc::proto::rtd::rpc::v2::name_service_server::NameServiceServer::new(
                     self.clone(),
                 )
+                .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
 
             let (health_reporter, health_service) = tonic_health::server::health_reporter();
@@ -282,7 +293,8 @@ impl RpcService {
 
             if self.subscription_service_handle.is_some() {
                 let subscription_service =
-rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone());
+rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone())
+                    .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE);
                 health_service_names.push(service_name(&subscription_service));
 
                 services = services.add_service(subscription_service);

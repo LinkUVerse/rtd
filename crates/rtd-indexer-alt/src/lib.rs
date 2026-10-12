@@ -26,6 +26,7 @@ use crate::handlers::cp_digests::CpDigests;
 use crate::handlers::cp_sequence_numbers::CpSequenceNumbers;
 use crate::handlers::ev_emit_mod::EvEmitMod;
 use crate::handlers::ev_struct_inst::EvStructInst;
+use crate::handlers::hist_displays::HistDisplays;
 use crate::handlers::kv_checkpoints::KvCheckpoints;
 use crate::handlers::kv_epoch_ends::KvEpochEnds;
 use crate::handlers::kv_epoch_starts::KvEpochStarts;
@@ -71,6 +72,7 @@ pub async fn setup_indexer(
 
     let PipelineLayer {
         sum_displays,
+        hist_displays,
         cp_blooms,
         cp_bloom_blocks,
         cp_digests,
@@ -102,6 +104,23 @@ pub async fn setup_indexer(
 
     // Prepare the store for the indexer
     let use_writer_fence = db_args.writer_epoch.is_some();
+    if hist_displays.is_some() {
+        anyhow::ensure!(
+            use_writer_fence,
+            "Display history requires an exclusive fenced writer"
+        );
+        anyhow::ensure!(
+            client_args.ingestion.require_published_watermark,
+            "Display history requires a published checkpoint source"
+        );
+        anyhow::ensure!(
+            hist_displays
+                .as_ref()
+                .and_then(|h| h.binding.as_ref())
+                .is_some(),
+            "Display history requires an explicit source binding"
+        );
+    }
     let store = Db::for_write(database_url, db_args)
         .await
         .context("Failed to connect to database")?;
@@ -187,6 +206,15 @@ pub async fn setup_indexer(
 
     // Summary tables (without write-ahead log)
     add_sequential!(SumDisplays, sum_displays);
+
+    if let Some(layer) = hist_displays {
+        let handler = HistDisplays::new(
+            layer.binding.expect("Checked binding"),
+            &genesis.genesis_digest,
+        )?;
+        handler.validate_resume(indexer.store()).await?;
+        add_sequential!(handler, Some(layer.sequential));
+    }
 
     add_concurrent!(CpBlooms, cp_blooms);
     add_concurrent!(CpBloomBlocks, cp_bloom_blocks);

@@ -28,8 +28,9 @@ use crate::api::scalars::cursor::JsonCursor;
 use crate::api::scalars::json::Json;
 use crate::api::types::address::Address;
 use crate::api::types::display::Display;
-use crate::api::types::display::display_v1;
-use crate::api::types::display::display_v2;
+use crate::api::types::display::DisplayBasis;
+use crate::api::types::display::LoadedDisplay;
+use crate::api::types::display::load_display;
 use crate::api::types::move_type::MoveType;
 use crate::api::types::object::Object;
 use crate::config::Limits;
@@ -214,77 +215,83 @@ impl MoveValue {
                 return Ok(None);
             };
 
-            let (layout, display_v1, display_v2) = join!(
+            let (layout, display) = join!(
                 self.type_.layout_impl(),
-                display_v1(ctx, *type_.clone()),
-                display_v2(ctx, self.type_.scope.clone(), *type_)
+                load_display(ctx, self.type_.scope.clone(), *type_)
             );
 
-            let Some(layout) = layout.map_err(upcast)? else {
+            let Some(display) = display.map_err(upcast)? else {
                 return Ok(None);
             };
+            let layout = layout
+                .map_err(upcast)?
+                .context("Display value layout is unavailable")?;
 
             let mut output = IndexMap::new();
             let mut errors = IndexMap::new();
 
-            if let Some(display_v2) = display_v2.map_err(upcast)? {
-                let store = DisplayStore::new(ctx, &self.type_.scope);
+            let basis = match display {
+                LoadedDisplay::V2(display_v2, v2_basis) => {
+                    let store = DisplayStore::new(ctx, &self.type_.scope);
 
-                let root = rtd_display::v2::OwnedSlice::new(layout, self.native.clone());
-                let interpreter = rtd_display::v2::Interpreter::new(root, store);
+                    let root = rtd_display::v2::OwnedSlice::new(layout, self.native.clone());
+                    let interpreter = rtd_display::v2::Interpreter::new(root, store);
 
-                for (field, value) in
-                    rtd_display::v2::Display::parse(limits.display(), display_v2.fields())
-                        .map_err(display_error)?
-                        .display::<serde_json::Value>(
-                            limits.max_move_value_depth,
-                            limits.max_display_output_size,
-                            &interpreter,
-                        )
-                        .await
-                        .map_err(display_error)?
-                {
-                    match value {
-                        Ok(v) => {
-                            output.insert(
-                                Name::new(&field),
-                                v.try_into().context("Failed to serialize JSON")?,
-                            );
-                        }
+                    for (field, value) in
+                        rtd_display::v2::Display::parse(limits.display(), display_v2.fields())
+                            .map_err(display_error)?
+                            .display::<serde_json::Value>(
+                                limits.max_move_value_depth,
+                                limits.max_display_output_size,
+                                &interpreter,
+                            )
+                            .await
+                            .map_err(display_error)?
+                    {
+                        match value {
+                            Ok(v) => {
+                                output.insert(
+                                    Name::new(&field),
+                                    v.try_into().context("Failed to serialize JSON")?,
+                                );
+                            }
 
-                        Err(e) => {
-                            output.insert(Name::new(&field), Value::Null);
-                            errors.insert(Name::new(&field), Value::String(e.to_string()));
+                            Err(e) => {
+                                output.insert(Name::new(&field), Value::Null);
+                                errors.insert(Name::new(&field), Value::String(e.to_string()));
+                            }
                         }
                     }
+                    DisplayBasis::V2(v2_basis)
                 }
-            } else if let Some(display_v1) = display_v1.map_err(upcast)? {
-                for (field, value) in rtd_display::v1::Format::parse(
-                    limits.max_display_field_depth,
-                    &display_v1.fields,
-                )
-                .map_err(resource_exhausted)?
-                .display(limits.max_display_output_size, &self.native, &layout)
-                .map_err(resource_exhausted)?
-                {
-                    match value {
-                        Ok(v) => {
-                            output.insert(Name::new(&field), Value::String(v));
-                        }
+                LoadedDisplay::V1(display_v1, v1_basis) => {
+                    for (field, value) in rtd_display::v1::Format::parse(
+                        limits.max_display_field_depth,
+                        &display_v1.fields,
+                    )
+                    .map_err(resource_exhausted)?
+                    .display(limits.max_display_output_size, &self.native, &layout)
+                    .map_err(resource_exhausted)?
+                    {
+                        match value {
+                            Ok(v) => {
+                                output.insert(Name::new(&field), Value::String(v));
+                            }
 
-                        Err(e) => {
-                            output.insert(Name::new(&field), Value::Null);
-                            errors.insert(Name::new(&field), Value::String(e.to_string()));
-                        }
-                    };
+                            Err(e) => {
+                                output.insert(Name::new(&field), Value::Null);
+                                errors.insert(Name::new(&field), Value::String(e.to_string()));
+                            }
+                        };
+                    }
+                    DisplayBasis::V1(v1_basis)
                 }
-            } else {
-                return Ok(None);
-            }
+            };
 
             Ok(Some(Display {
                 output: (!output.is_empty()).then(|| Json::from(Value::from(output))),
                 errors: (!errors.is_empty()).then(|| Json::from(Value::from(errors))),
+                basis,
             }))
         }
         .await

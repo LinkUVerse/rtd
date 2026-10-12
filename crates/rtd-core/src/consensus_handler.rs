@@ -521,6 +521,10 @@ impl From<Chunk<VerifiedExecutableTransactionWithAliases>> for Chunk {
 // for execution in one shot.
 pub(crate) struct CheckpointQueue {
     last_built_timestamp: CheckpointTimestamp,
+    // Capacity splits must not postpone the end-of-commit drain forever: the
+    // durable consensus cursor can advance only past a completely drained queue.
+    last_interval_flush_timestamp: CheckpointTimestamp,
+    periodic_commit_drains: bool,
     pending_roots: VecDeque<QueuedCheckpointRoots>,
     height: u64,
     pending_tx_count: usize,
@@ -537,10 +541,13 @@ impl CheckpointQueue {
         next_checkpoint_seq: CheckpointSequenceNumber,
         max_tx: usize,
         min_checkpoint_interval_ms: u64,
+        periodic_commit_drains: bool,
         execution_scheduler_sender: ExecutionSchedulerSender,
     ) -> Self {
         Self {
             last_built_timestamp,
+            last_interval_flush_timestamp: last_built_timestamp,
+            periodic_commit_drains,
             pending_roots: VecDeque::new(),
             height: checkpoint_height,
             pending_tx_count: 0,
@@ -562,6 +569,8 @@ impl CheckpointQueue {
         let (sender, _receiver) = monitored_mpsc::unbounded_channel("test_checkpoint_queue_sender");
         Self {
             last_built_timestamp,
+            last_interval_flush_timestamp: last_built_timestamp,
+            periodic_commit_drains: true,
             pending_roots: VecDeque::new(),
             height: checkpoint_height,
             pending_tx_count: 0,
@@ -583,6 +592,8 @@ impl CheckpointQueue {
     ) -> Self {
         Self {
             last_built_timestamp,
+            last_interval_flush_timestamp: last_built_timestamp,
+            periodic_commit_drains: true,
             pending_roots: VecDeque::new(),
             height: checkpoint_height,
             pending_tx_count: 0,
@@ -593,8 +604,19 @@ impl CheckpointQueue {
         }
     }
 
-    pub(crate) fn last_built_timestamp(&self) -> CheckpointTimestamp {
-        self.last_built_timestamp
+    pub(crate) fn persisted_flush_timestamp(&self) -> CheckpointTimestamp {
+        // Persist the periodic drain clock, so recovery reconstructs the same
+        // next timed flush even when the last root preceded the flush call.
+        if self.periodic_commit_drains {
+            self.last_interval_flush_timestamp
+        } else {
+            self.last_built_timestamp
+        }
+    }
+
+    fn interval_flush_due(&self, current_timestamp: CheckpointTimestamp) -> bool {
+        current_timestamp.saturating_sub(self.persisted_flush_timestamp())
+            >= self.min_checkpoint_interval_ms
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -674,11 +696,14 @@ impl CheckpointQueue {
         current_timestamp: CheckpointTimestamp,
         force: bool,
     ) -> Option<PendingCheckpoint> {
-        if !force && current_timestamp < self.last_built_timestamp + self.min_checkpoint_interval_ms
-        {
+        if !force && !self.interval_flush_due(current_timestamp) {
             return None;
         }
-        self.flush_forced()
+        let checkpoint = self.flush_forced();
+        if checkpoint.is_some() {
+            self.last_interval_flush_timestamp = current_timestamp;
+        }
+        checkpoint
     }
 
     fn flush_forced(&mut self) -> Option<PendingCheckpoint> {
@@ -821,6 +846,9 @@ impl<C> ConsensusHandler<C> {
         let commit_rate_estimate_window_size = epoch_store
             .protocol_config()
             .get_consensus_commit_rate_estimation_window_size();
+        let periodic_commit_drains = epoch_store
+            .protocol_config()
+            .periodic_checkpoint_commit_drains();
         let last_built_timestamp = last_consensus_stats.last_checkpoint_flush_timestamp;
         let checkpoint_height = last_consensus_stats.height;
         let next_checkpoint_seq = last_consensus_stats.checkpoint_seq + 1;
@@ -849,6 +877,7 @@ impl<C> ConsensusHandler<C> {
                 next_checkpoint_seq,
                 max_tx,
                 min_checkpoint_interval_ms,
+                periodic_commit_drains,
                 execution_scheduler_sender,
             )),
         }
@@ -884,6 +913,9 @@ impl<C> ConsensusHandler<C> {
             .protocol_config()
             .min_checkpoint_interval_ms_as_option()
             .unwrap_or_default();
+        let periodic_commit_drains = epoch_store
+            .protocol_config()
+            .periodic_checkpoint_commit_drains();
         let last_built_timestamp = last_consensus_stats.last_checkpoint_flush_timestamp;
         let checkpoint_height = last_consensus_stats.height;
         Self {
@@ -911,6 +943,7 @@ impl<C> ConsensusHandler<C> {
                 0,
                 max_tx,
                 min_checkpoint_interval_ms,
+                periodic_commit_drains,
                 execution_scheduler_sender,
             )),
         }
@@ -1243,7 +1276,7 @@ impl<C: CheckpointServiceNotify + Send + Sync> ConsensusHandler<C> {
         stats_to_record.height = checkpoint_height;
         {
             let queue = self.checkpoint_queue.lock().unwrap();
-            stats_to_record.last_checkpoint_flush_timestamp = queue.last_built_timestamp();
+            stats_to_record.last_checkpoint_flush_timestamp = queue.persisted_flush_timestamp();
             stats_to_record.checkpoint_seq = queue.checkpoint_seq();
         }
 
@@ -1729,7 +1762,10 @@ impl<C: CheckpointServiceNotify + Send + Sync> ConsensusHandler<C> {
         // on randomness state update. Therefore, we include randomness chunks in the
         // subsequent checkpoint. First we flush the queue, then enqueue randomness
         // for merging into the subsequent commit.
-        pending_checkpoints.extend(checkpoint_queue.flush(commit_info.timestamp, final_round));
+        let drain_commit = final_round
+            || (checkpoint_queue.periodic_commit_drains
+                && checkpoint_queue.interval_flush_due(commit_info.timestamp));
+        pending_checkpoints.extend(checkpoint_queue.flush(commit_info.timestamp, drain_commit));
 
         if should_write_random_checkpoint {
             for chunk in chunked_randomness_schedulables {
@@ -1741,7 +1777,9 @@ impl<C: CheckpointServiceNotify + Send + Sync> ConsensusHandler<C> {
                     commit_info.rejected_transactions_digest,
                 ));
             }
-            if final_round {
+            // Randomness stays in its own checkpoint. At a periodic drain it
+            // must not leave the commit permanently in the recovery quarantine.
+            if drain_commit {
                 pending_checkpoints.extend(checkpoint_queue.flush(commit_info.timestamp, true));
             }
         }
@@ -3753,6 +3791,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_periodic_commit_drain_includes_randomness_tail() {
+        for (version, expect_drained) in [(138, false), (139, true)] {
+            let mut config = ProtocolConfig::get_for_version(
+                rtd_protocol_config::ProtocolVersion::new(version),
+                Chain::Unknown,
+            );
+            config.set_min_checkpoint_interval_ms_for_testing(5000);
+            let authority = TestAuthorityBuilder::new()
+                .with_protocol_config(config)
+                .build()
+                .await;
+            let setup = setup_consensus_handler_for_testing(&authority).await;
+            let handler = &setup.consensus_handler;
+            let mut state = CommitHandlerState::new(&handler.epoch_store, 1);
+            state.randomness_round = Some(RandomnessRound(1));
+            handler.create_pending_checkpoints(
+                &mut state,
+                &ConsensusCommitInfo::new_for_test(1, 5000, None, true),
+                vec![Schedulable::Transaction(user_txn(1000))],
+                vec![Schedulable::Transaction(user_txn(2000))],
+                &BTreeMap::new(),
+                false,
+            );
+            assert_eq!(
+                handler.checkpoint_queue.lock().unwrap().is_empty(),
+                expect_drained
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_consensus_handler_max_transaction_size() {
         let metrics = AuthorityMetrics::new(&Registry::new());
 
@@ -5146,6 +5215,85 @@ mod tests {
             let pending = queue.flush(1000 + min_interval, false);
             assert!(pending.is_some());
             assert!(queue.pending_roots.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_size_splits_cannot_starve_commit_drain() {
+            let mut queue = CheckpointQueue::new_for_testing(0, 0, 0, 10, 5000);
+            let versions = default_versions();
+            let mut drained_at = Vec::new();
+            for commit in 1..=100 {
+                let timestamp = u64::from(commit) * 200;
+                queue.push_chunk(
+                    make_chunk(1, u64::from(commit)),
+                    &versions,
+                    timestamp,
+                    make_commit_ref(commit),
+                    Digest::default(),
+                );
+                if queue.flush(timestamp, false).is_some() {
+                    assert!(queue.is_empty());
+                    drained_at.push(commit);
+                }
+            }
+            // Size splits may emit checkpoints more often, but must not postpone the
+            // complete drain required by the crash-safe consensus cursor indefinitely.
+            assert_eq!(drained_at, vec![25, 50, 75, 100]);
+        }
+
+        #[tokio::test]
+        async fn test_periodic_drain_clock_is_recoverable() {
+            let mut queue = CheckpointQueue::new_for_testing(0, 0, 0, 10, 5000);
+            let versions = default_versions();
+            queue.push_chunk(
+                make_chunk(1, 1),
+                &versions,
+                4900,
+                make_commit_ref(1),
+                Digest::default(),
+            );
+            assert!(queue.flush(5000, false).is_some());
+            let mut restored = CheckpointQueue::new_for_testing(
+                queue.persisted_flush_timestamp(),
+                1,
+                queue.current_checkpoint_seq,
+                10,
+                5000,
+            );
+            for candidate in [&mut queue, &mut restored] {
+                candidate.push_chunk(
+                    make_chunk(1, 2),
+                    &versions,
+                    9900,
+                    make_commit_ref(2),
+                    Digest::default(),
+                );
+                assert!(candidate.flush(9999, false).is_none());
+                assert!(candidate.flush(10000, false).is_some());
+                assert!(candidate.is_empty());
+            }
+        }
+
+        #[tokio::test]
+        async fn test_legacy_capacity_split_clock_is_preserved() {
+            let mut queue = CheckpointQueue::new_for_testing(0, 0, 0, 10, 5000);
+            queue.periodic_commit_drains = false;
+            let versions = default_versions();
+            for commit in 1..=100 {
+                let timestamp = u64::from(commit) * 200;
+                queue.push_chunk(
+                    make_chunk(1, u64::from(commit)),
+                    &versions,
+                    timestamp,
+                    make_commit_ref(commit),
+                    Digest::default(),
+                );
+                assert!(queue.flush(timestamp, false).is_none());
+                assert_eq!(
+                    queue.persisted_flush_timestamp(),
+                    queue.last_built_timestamp
+                );
+            }
         }
 
         #[test]

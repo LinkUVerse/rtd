@@ -19,6 +19,7 @@ const DEFAULT_BITMAP_BUCKET_BUDGET_TX: u64 = 4_000;
 const DEFAULT_BITMAP_BUCKET_BUDGET_EVENT: u64 = 4_000;
 const DEFAULT_MAX_BITMAP_FILTER_LITERALS: usize = 10;
 const DEFAULT_BITMAP_DRAIN_PROBE_ROWS: u32 = 50;
+const DEFAULT_MONOTONIC_READ_WAIT_TIMEOUT_MS: u64 = 100;
 const DEFAULT_REQUEST_BIGTABLE_CONCURRENCY: usize = 50;
 const DEFAULT_STAGE_CHUNK_SIZE: usize = 100;
 const DEFAULT_TX_SEQ_DIGEST_STAGE_CONCURRENCY: usize = 10;
@@ -455,6 +456,10 @@ pub struct KvRpcConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_bigtable_concurrency: Option<usize>,
 
+    /// Wait budget for optional x-rtd-min-checkpoint requests. Defaults to 100ms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monotonic_read_wait_timeout_ms: Option<u64>,
+
     /// Per-table-stage read pipeline tunables (chunk size and fan-out
     /// concurrency), shared by the point-get and list APIs. Bounded by
     /// `request_bigtable_concurrency` at runtime, which remains the request-wide
@@ -464,6 +469,13 @@ pub struct KvRpcConfig {
 }
 
 impl KvRpcConfig {
+    pub fn monotonic_read_wait_timeout(&self) -> Duration {
+        Duration::from_millis(
+            self.monotonic_read_wait_timeout_ms
+                .unwrap_or(DEFAULT_MONOTONIC_READ_WAIT_TIMEOUT_MS),
+        )
+    }
+
     /// Deserialize a [`KvRpcConfig`] from a TOML file.
     pub fn load_toml(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref();

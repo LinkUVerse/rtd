@@ -1490,3 +1490,141 @@ async fn commit_bitmap_batch_panics_when_committer_not_registered() {
         })
         .await;
 }
+
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+/// A sequential framework commit can contain several checkpoints. Its end
+/// watermark must not become the replay floor of a bucket entered earlier.
+#[tokio::test]
+async fn c306_batched_crossing_replays_earliest_checkpoint() {
+    let (mock, store, handler, _service) = setup().await;
+    let handler = Arc::new(handler);
+    let row = b"v1#batched-restart#0000000001";
+    let batch = make_batch(vec![
+        value(row, 1, &[0], 2, 2000),
+        value(row, 1, &[1], 3, 3000),
+    ]);
+    let h = handler.clone();
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(PIPELINE, watermark(3, BUCKET_SIZE + 2, 3000))
+                    .await?;
+                h.commit(&batch, conn).await
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
+    wait_for_watermark_at_least(&store, 3).await;
+    assert_eq!(
+        wait_for_bitmap(&mock, row).await.iter().collect::<Vec<_>>(),
+        vec![0, 1]
+    );
+    assert_eq!(
+        persisted_bucket_start_cp(&mock).await,
+        Some(2),
+        "cp 2 must be replayed; resuming from cp 3 erases bit 0 on the next flush"
+    );
+}
+
+/// Sparse event batches may contain no indexed row at the commit's final cp.
+#[tokio::test]
+async fn c306_sparse_batched_crossing_keeps_early_event_floor() {
+    let (mock, store, handler, _service) = setup().await;
+    let handler = Arc::new(handler);
+    let row = b"v1#sparse-restart#0000000001";
+    let batch = make_batch(vec![value(row, 1, &[0], 2, 2000)]);
+    let h = handler.clone();
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(PIPELINE, watermark(8, BUCKET_SIZE + 7, 8000))
+                    .await?;
+                h.commit(&batch, conn).await
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
+    wait_for_watermark_at_least(&store, 8).await;
+    assert_eq!(
+        persisted_bucket_start_cp(&mock).await,
+        Some(2),
+        "an empty tail of the batch cannot move the replay floor past its indexed events"
+    );
+}
+
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+#[tokio::test]
+async fn c306_batched_bucket_survives_actual_committer_restart() {
+    let (mock, store, handler, service) = setup().await;
+    let handler = Arc::new(handler);
+    let row = b"v1#batched-cold-restart#0000000001";
+    let batch = make_batch(vec![
+        value(row, 1, &[0], 2, 2000),
+        value(row, 1, &[1], 3, 3000),
+    ]);
+    let h = handler.clone();
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(PIPELINE, watermark(3, BUCKET_SIZE + 2, 3000))
+                    .await?;
+                h.commit(&batch, conn).await
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
+    wait_for_watermark_at_least(&store, 3).await;
+    assert_eq!(
+        wait_for_bitmap(&mock, row).await.iter().collect::<Vec<_>>(),
+        vec![0, 1]
+    );
+    let client = store.connect().await.unwrap().client().clone();
+    drop(handler);
+    drop(service);
+    drop(store);
+
+    // A new runtime must derive its replay range from the persisted watermark,
+    // not from the test's knowledge of when the bucket originally started.
+    let store = BigTableStore::new(client, u64::MAX);
+    let init = store
+        .connect()
+        .await
+        .unwrap()
+        .init_watermark(PIPELINE, None)
+        .await
+        .unwrap()
+        .unwrap();
+    let first = init.checkpoint_hi_inclusive.map_or(0, |cp| cp + 1);
+    let handler = Arc::new(BitmapIndexHandler::new(TestProcessor));
+    let _service = register_test_committer(&store);
+    let replay = make_batch(
+        (2..=4)
+            .filter(|cp| *cp >= first)
+            .map(|cp| value(row, 1, &[(cp - 2) as u32], cp, cp * 1000))
+            .collect(),
+    );
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(PIPELINE, watermark(4, BUCKET_SIZE + 3, 4000))
+                    .await?;
+                handler.commit(&replay, conn).await
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
+    wait_for_watermark_at_least(&store, 4).await;
+    assert_eq!(
+        wait_for_bitmap(&mock, row).await.iter().collect::<Vec<_>>(),
+        vec![0, 1, 2],
+        "the persisted replay boundary must retain every pre-restart bit"
+    );
+}

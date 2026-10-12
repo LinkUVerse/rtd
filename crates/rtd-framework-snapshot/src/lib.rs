@@ -95,7 +95,7 @@ pub fn update_bytecode_snapshot_manifest(
     snapshot.insert(
         version,
         Snapshot {
-            git_revision: git_revision.to_string(),
+            git_revision: snapshot_git_revision(git_revision).to_string(),
             packages: files,
         },
     );
@@ -103,6 +103,41 @@ pub fn update_bytecode_snapshot_manifest(
     let json =
         serde_json::to_string_pretty(&snapshot).expect("Could not serialize SnapshotManifest");
     fs::write(manifest_path(), json).expect("Could not update manifest file");
+}
+
+// bin-version appends a workspace status suffix even to its full revision.
+// Package lockfiles need a commit object ID, not that display/version string.
+fn snapshot_git_revision(revision: &str) -> &str {
+    let commit = revision.strip_suffix("-dirty").unwrap_or(revision);
+    assert!(
+        commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "snapshot revision must be a full Git commit SHA"
+    );
+    commit
+}
+
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn snapshot_revision_accepts_clean_and_dirty_full_commits() {
+        let sha = "49a05a0de323b45a49d067a855c419e98d071afc";
+        assert_eq!(snapshot_git_revision(sha), sha);
+        assert_eq!(snapshot_git_revision(&format!("{sha}-dirty")), sha);
+    }
+
+    #[tokio::test]
+    async fn snapshot_revision_rejects_invalid_commit_ids() {
+        for revision in [
+            "unknown",
+            "49a05a0-dirty",
+            "49a05a0de323b45a49d067a855c419e98d071afz",
+            "49a05a0de323b45a49d067a855c419e98d071afc-extra",
+        ] {
+            assert!(std::panic::catch_unwind(|| snapshot_git_revision(revision)).is_err());
+        }
+    }
 }
 
 pub fn load_bytecode_snapshot(protocol_version: u64) -> anyhow::Result<Vec<SystemPackage>> {

@@ -12908,8 +12908,10 @@ dependencies = [
  "const-str",
  "diesel",
  "diesel-async",
+ "fastcrypto",
  "futures",
  "itertools 0.13.0",
+ "move-core-types",
  "prometheus",
  "rand 0.8.5",
  "rtd-indexer-alt-framework",
@@ -12918,6 +12920,7 @@ dependencies = [
  "rtd-protocol-config",
  "rtd-synthetic-ingestion",
  "rtd-types",
+ "scoped-futures",
  "serde",
  "telemetry-subscribers",
  "tempfile",
@@ -13150,6 +13153,7 @@ dependencies = [
  "const-str",
  "dashmap 5.5.3",
  "diesel",
+ "diesel-async",
  "fastcrypto",
  "fastcrypto-zkp",
  "futures",
@@ -13317,6 +13321,7 @@ dependencies = [
  "rtd-sdk-types",
  "rtd-sql-macro",
  "rtd-types",
+ "serde",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
@@ -13573,6 +13578,7 @@ dependencies = [
  "clap",
  "dashmap 5.5.3",
  "futures",
+ "http",
  "linku-common",
  "linku-metrics",
  "linku-network",
@@ -13601,6 +13607,7 @@ dependencies = [
  "tonic 0.14.6",
  "tonic-prost",
  "tonic-reflection",
+ "tower 0.5.3",
  "tracing",
 ]
 
@@ -14262,6 +14269,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 

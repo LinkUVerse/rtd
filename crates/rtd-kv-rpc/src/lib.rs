@@ -45,6 +45,7 @@ use tracing::error;
 
 mod bigtable_client;
 mod config;
+mod monotonic_read;
 mod object_cache;
 mod operation;
 mod package_store;
@@ -268,6 +269,8 @@ pub struct KvRpcServer {
     server_version: Option<ServerVersion>,
     service_info_watermark_pipelines: Vec<&'static str>,
     cache: Arc<RwLock<Option<GetServiceInfoResponse>>>,
+    min_checkpoint_view: tokio::sync::watch::Sender<monotonic_read::ServiceView>,
+    monotonic_read_wait_timeout: Duration,
     package_resolver: PackageResolver,
     metrics: Arc<KvRpcMetrics>,
     pub(crate) ledger_history: LedgerHistoryConfig,
@@ -298,14 +301,18 @@ fn ledger_service_with_response_compression<T>(service: T) -> LedgerServiceServe
 where
     T: LedgerService,
 {
-    LedgerServiceServer::new(service).send_compressed(tonic::codec::CompressionEncoding::Zstd)
+    LedgerServiceServer::new(service)
+        .max_encoding_message_size(rtd_rpc_api::MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
+        .send_compressed(tonic::codec::CompressionEncoding::Zstd)
 }
 
 fn move_package_service_with_response_compression<T>(service: T) -> MovePackageServiceServer<T>
 where
     T: MovePackageService,
 {
-    MovePackageServiceServer::new(service).send_compressed(tonic::codec::CompressionEncoding::Zstd)
+    MovePackageServiceServer::new(service)
+        .max_encoding_message_size(rtd_rpc_api::MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
+        .send_compressed(tonic::codec::CompressionEncoding::Zstd)
 }
 
 /// Build and start one gRPC listener serving `ledger`'s `LedgerService` and `MovePackageService`,
@@ -338,6 +345,10 @@ fn spawn_listener(
             ),
         ))
         .layer(request_log_layer)
+        .layer(monotonic_read::MonotonicReadLayer::new(
+            ledger.min_checkpoint_view.subscribe(),
+            ledger.monotonic_read_wait_timeout,
+        ))
         .add_service(move_package_service_with_response_compression(
             ledger.clone(),
         ))
@@ -481,6 +492,7 @@ impl KvRpcServer {
         ledger_history.validate()?;
 
         let cache = Arc::new(RwLock::new(None));
+        let min_checkpoint_view = tokio::sync::watch::Sender::new(None);
 
         let package_store: Arc<dyn PackageStore> = Arc::new(PackageStoreWithLruCache::new(
             BigTablePackageStore::new(client.clone()),
@@ -493,6 +505,8 @@ impl KvRpcServer {
             server_version,
             service_info_watermark_pipelines: service_info_watermark_pipelines(enable_list_apis),
             cache,
+            min_checkpoint_view,
+            monotonic_read_wait_timeout: KvRpcConfig::default().monotonic_read_wait_timeout(),
             package_resolver,
             metrics,
             ledger_history,
@@ -504,6 +518,7 @@ impl KvRpcServer {
         let server_clone = server.clone();
         tokio::spawn(async move {
             loop {
+                let sampled_at = tokio::time::Instant::now();
                 match v2::get_service_info(
                     server_clone.client.clone(),
                     server_clone.chain_id,
@@ -513,16 +528,28 @@ impl KvRpcServer {
                 .await
                 {
                     Ok(info) => {
+                        server_clone.min_checkpoint_view.send_replace(
+                            info.checkpoint_height.map(|height| (sampled_at, height)),
+                        );
                         let mut cache = server_clone.cache.write().await;
                         *cache = Some(info);
                     }
-                    Err(e) => error!("Failed to update service info cache: {:?}", e),
+                    Err(e) => {
+                        server_clone.min_checkpoint_view.send_replace(None);
+                        error!("Failed to update service info cache: {:?}", e);
+                    }
                 }
                 sleep(Duration::from_millis(10)).await;
             }
         });
 
         Ok(server)
+    }
+
+    /// Set the bounded wait for optional minimum-checkpoint requests.
+    pub fn with_monotonic_read_wait_timeout(mut self, timeout: Duration) -> Self {
+        self.monotonic_read_wait_timeout = timeout;
+        self
     }
 
     pub(crate) fn check_list_apis_enabled(&self) -> Result<(), tonic::Status> {

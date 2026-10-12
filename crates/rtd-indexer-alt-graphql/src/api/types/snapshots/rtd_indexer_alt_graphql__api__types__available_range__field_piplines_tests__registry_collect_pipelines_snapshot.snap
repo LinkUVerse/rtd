@@ -1,6 +1,5 @@
 ---
 source: crates/rtd-indexer-alt-graphql/src/api/types/available_range.rs
-assertion_line: 632
 expression: output
 ---
 AccumulatorRootCreateTransaction._
@@ -436,13 +435,109 @@ ConsensusObjectRead.object
   => {}
 
 Display.output
-  => {}
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
 
 Display.errors
-  => {}
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+Display.basis
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayHistoryCapability.apiVersion
+  => {"hist_displays"}
+
+DisplayHistoryCapability.supportedTemplateKinds
+  => {"hist_displays"}
+
+DisplayHistoryCapability.coverage
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.genesisDigest
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.sourceId
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.generation
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.firstCheckpoint
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.lastCheckpoint
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.lastCheckpointDigest
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.snapshotCheckpoint
+  => {"hist_displays"}
+
+DisplayHistoryCoverage.snapshotCheckpointDigest
+  => {"hist_displays"}
 
 DisplayRegistryCreateTransaction._
   => {}
+
+DisplayV1Basis.snapshotCheckpoint
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.objectType
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.templateId
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.publishedVersion
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.sourceCheckpoint
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.sourceCheckpointDigest
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.transactionDigest
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.checkpointTransactionIndex
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.eventIndex
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.eventBcsSha256
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV1Basis.historyCoverage
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.snapshotCheckpoint
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.objectType
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.templateId
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.objectVersion
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.objectDigest
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.sourceCheckpoint
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.previousTransactionDigest
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.contentsBcsSha256
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
+
+DisplayV2Basis.historyCoverage
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
 
 DynamicField.id
   => {}
@@ -1207,7 +1302,7 @@ MoveValue.bcs
   => {}
 
 MoveValue.display
-  => {}
+  => {"consistent", "hist_displays", "ledger_grpc", "obj_versions"}
 
 MoveValue.extract
   => {}
@@ -1631,6 +1726,9 @@ Secp256R1Signature.signature
 
 Secp256R1Signature.publicKey
   => {}
+
+ServiceConfig.displayHistory
+  => {"hist_displays"}
 
 ServiceConfig.mutationTimeoutMs
   => {}

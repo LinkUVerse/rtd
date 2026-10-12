@@ -180,6 +180,9 @@ impl Handle {
             .generation_tx
             .send(generation::Event::GenerationStarted {
                 watermark,
+                replay_floor_checkpoint: checkpoint_span
+                    .map(CheckpointSpan::lower_bound)
+                    .unwrap_or(generation_checkpoint),
                 framework_commit_time,
             })
             .await

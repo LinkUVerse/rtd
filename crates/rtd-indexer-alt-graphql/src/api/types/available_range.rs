@@ -11,6 +11,7 @@ use async_graphql::registry::MetaType;
 use async_graphql::registry::Registry;
 
 use crate::api::types::checkpoint::Checkpoint;
+use crate::api::types::display::display_history_coverage;
 use crate::error::RpcError;
 use crate::error::bad_user_input;
 use crate::error::feature_unavailable;
@@ -76,14 +77,25 @@ impl AvailableRange {
     ///
     /// The first checkpoint is the max reader_lo of the pipelines match by the AvailableRangeKey.
     /// The last checkpoint is scope.checkpoint_viewed_at.
-    pub(crate) fn new(
+    pub(crate) async fn new(
         ctx: &Context<'_>,
         scope: &Scope,
         available_range_key: AvailableRangeKey,
     ) -> Result<Self, RpcError<Error>> {
         available_range_key.validate(&ctx.schema_env.registry)?;
+        let mut pipelines = BTreeSet::new();
+        collect_pipelines(
+            &available_range_key.type_,
+            available_range_key.field.as_deref(),
+            BTreeSet::from_iter(available_range_key.filters.clone().unwrap_or_default()),
+            &mut pipelines,
+        );
         let watermarks: &Arc<Watermarks> = ctx.data()?;
         let first = available_range_key.reader_lo(watermarks).map_err(upcast)?;
+
+        if pipelines.contains("hist_displays") {
+            display_history_coverage(ctx, scope).await.map_err(upcast)?;
+        }
 
         Ok(Self {
             scope: scope.clone(),
@@ -144,6 +156,8 @@ pub(crate) fn pipeline_unavailable(pipeline: &str) -> RpcError {
         "ev_emit_mod" => feature_unavailable("querying events by emitting module"),
         "ev_struct_inst" => feature_unavailable("querying events by type"),
         "obj_versions" => feature_unavailable("querying object versions"),
+        "hist_displays" => feature_unavailable("checkpoint-bound Display history"),
+        "ledger_grpc" => feature_unavailable("Ledger gRPC object contents"),
         "tx_affected_addresses" => {
             feature_unavailable("filtering transactions by affected address")
         }
@@ -232,6 +246,24 @@ macro_rules! delegate {
 // - `=> OtherType.field(.., "filterName")`: delegate and add filter constraint
 // - `|pipelines, filters| { ... }`: block of statements operating on pipelines and filters to execute
 collect_pipelines! {
+    MoveValue.[display] |pipelines, _filters| {
+        pipelines.insert("hist_displays".to_string());
+        pipelines.insert("obj_versions".to_string());
+        pipelines.insert("consistent".to_string());
+        pipelines.insert("ledger_grpc".to_string());
+    };
+    ServiceConfig.[displayHistory] |pipelines, _filters| {
+        pipelines.insert("hist_displays".to_string());
+    };
+    Display.[basis, output, errors] => MoveValue.display;
+    DisplayHistoryCapability.[apiVersion, supportedTemplateKinds, coverage] => ServiceConfig.displayHistory;
+    DisplayHistoryCoverage.[genesisDigest, sourceId, generation, firstCheckpoint, lastCheckpoint,
+        lastCheckpointDigest, snapshotCheckpoint, snapshotCheckpointDigest] => ServiceConfig.displayHistory;
+    DisplayV1Basis.[snapshotCheckpoint, objectType, templateId, publishedVersion, sourceCheckpoint,
+        sourceCheckpointDigest, transactionDigest, checkpointTransactionIndex, eventIndex,
+        eventBcsSha256, historyCoverage] => MoveValue.display;
+    DisplayV2Basis.[snapshotCheckpoint, objectType, templateId, objectVersion, objectDigest,
+        sourceCheckpoint, previousTransactionDigest, contentsBcsSha256, historyCoverage] => MoveValue.display;
     Address.[address, addressAt, asTransactionObject] => IAddressable.*;
     Address.[asObject] => IObject.objectAt();
     Address.[transactions] => Query.transactions(.., "affectedAddress");

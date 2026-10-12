@@ -575,4 +575,51 @@ mod test {
             "a restart must not grant another drain budget"
         );
     }
+
+    #[tokio::test]
+    async fn recovery_drain_full_window_allows_only_bounded_signature_commits() {
+        let durable = 139_885;
+        let startup_head = durable + super::MAX_PENDING_DURABLE_COMMITS;
+        let fixed_ceiling = startup_head + 2_000;
+        let normal = CommitConsumerMonitor::new_with_recovery_drain_ceiling(0, durable, None);
+        normal.start_recovery(startup_head);
+        normal.set_highest_handled_commit(startup_head);
+        normal.finish_recovery_scan();
+        assert_eq!(
+            normal.remaining_durable_commit_capacity(startup_head, startup_head),
+            0
+        );
+        assert!(!normal.try_reserve_consensus_head(startup_head + 1));
+
+        let recovering =
+            CommitConsumerMonitor::new_with_recovery_drain_ceiling(0, durable, Some(fixed_ceiling));
+        recovering.start_recovery(startup_head);
+        recovering.set_highest_handled_commit(startup_head);
+        assert!(!recovering.try_reserve_consensus_head(startup_head + 1));
+        recovering.finish_recovery_scan();
+        assert_eq!(
+            recovering.remaining_durable_commit_capacity(startup_head, startup_head),
+            2_000
+        );
+        assert!(recovering.try_reserve_consensus_head(startup_head + 1));
+        assert!(!recovering.try_reserve_consensus_head(fixed_ceiling + 1));
+
+        recovering.set_highest_durable_commit(startup_head);
+        assert_eq!(
+            recovering.remaining_durable_commit_capacity(startup_head + 1, startup_head + 1),
+            super::MAX_PENDING_DURABLE_COMMITS - 1
+        );
+        assert!(!recovering.try_reserve_consensus_head(fixed_ceiling));
+
+        let restarted =
+            CommitConsumerMonitor::new_with_recovery_drain_ceiling(0, durable, Some(fixed_ceiling));
+        restarted.start_recovery(fixed_ceiling);
+        restarted.set_highest_handled_commit(fixed_ceiling);
+        restarted.finish_recovery_scan();
+        assert_eq!(
+            restarted.remaining_durable_commit_capacity(fixed_ceiling, fixed_ceiling),
+            0
+        );
+        assert!(!restarted.try_reserve_consensus_head(fixed_ceiling + 1));
+    }
 }
