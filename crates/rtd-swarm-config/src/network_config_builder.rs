@@ -527,14 +527,16 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
             for validator in &validators {
                 let account_key: PublicKey = validator.account_key_pair.public();
                 let address = RtdAddress::from(&account_key);
-                // Give each validator some gas so they can pay for their transactions.
+                // Default local tests fund validators directly. An explicit treasury
+                // can instead own all genesis tokens and fund operators after genesis.
+                let recipient = genesis_config.validator_token_recipient.unwrap_or(address);
                 let gas_coin = TokenAllocation {
-                    recipient_address: address,
+                    recipient_address: recipient,
                     amount_mist: DEFAULT_GAS_AMOUNT,
                     staked_with_validator: None,
                 };
                 let stake = TokenAllocation {
-                    recipient_address: address,
+                    recipient_address: recipient,
                     amount_mist: validator.stake,
                     staked_with_validator: Some(address),
                 };
@@ -675,6 +677,80 @@ impl<R: rand::RngCore + rand::CryptoRng> ConfigBuilder<R> {
 #[cfg(test)]
 mod tests {
     use rtd_config::node::Genesis;
+
+    #[tokio::test]
+    async fn explicit_genesis_recipient_owns_validator_gas_and_stake() {
+        use crate::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT, GenesisConfig};
+        use rtd_types::base_types::RtdAddress;
+        use rtd_types::gas_coin::GasCoin;
+        use rtd_types::governance::StakedRtd;
+        use rtd_types::object::Owner;
+        use std::num::NonZeroUsize;
+
+        let recipient = RtdAddress::random_for_testing_only();
+        let genesis_config = GenesisConfig {
+            accounts: vec![AccountConfig {
+                address: Some(recipient),
+                gas_amounts: vec![5_200_000_000_000_000],
+            }],
+            validator_token_recipient: Some(recipient),
+            ..Default::default()
+        };
+        let serialized = serde_yaml::to_string(&genesis_config).unwrap();
+        let restored: GenesisConfig = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(restored.validator_token_recipient, Some(recipient));
+        let dir = tempfile::TempDir::new().unwrap();
+        let network = crate::network_config_builder::ConfigBuilder::new(&dir)
+            .committee_size(NonZeroUsize::new(2).unwrap())
+            .with_genesis_config(restored)
+            .build();
+        let mut total_gas = 0;
+        let mut stakes = 0;
+        for object in network.genesis.objects() {
+            if let Ok(coin) = GasCoin::try_from(object) {
+                assert_eq!(object.owner, Owner::AddressOwner(recipient));
+                total_gas += coin.value();
+            }
+            if StakedRtd::try_from(object).is_ok() {
+                assert_eq!(object.owner, Owner::AddressOwner(recipient));
+                stakes += 1;
+            }
+        }
+        assert_eq!(total_gas, 5_200_000_000_000_000 + 2 * DEFAULT_GAS_AMOUNT);
+        assert_eq!(stakes, 2);
+    }
+
+    #[tokio::test]
+    async fn omitted_genesis_recipient_preserves_validator_owned_allocations() {
+        use crate::genesis_config::GenesisConfig;
+        use rtd_types::governance::StakedRtd;
+        let value = GenesisConfig::default();
+        let serialized = serde_yaml::to_string(&value).unwrap();
+        assert!(!serialized.contains("validator_token_recipient"));
+        let restored: GenesisConfig = serde_yaml::from_str(&serialized).unwrap();
+        assert!(restored.validator_token_recipient.is_none());
+        let dir = tempfile::TempDir::new().unwrap();
+        let network = crate::network_config_builder::ConfigBuilder::new(&dir)
+            .with_genesis_config(restored)
+            .build();
+        let gas = network
+            .genesis
+            .objects()
+            .iter()
+            .find(|o| o.is_gas_coin())
+            .unwrap();
+        let stake = network
+            .genesis
+            .objects()
+            .iter()
+            .find(|o| StakedRtd::try_from(*o).is_ok())
+            .unwrap();
+        assert_eq!(gas.owner, stake.owner);
+        assert_eq!(
+            gas.owner.get_address_owner_address().unwrap(),
+            network.validator_configs[0].rtd_address()
+        );
+    }
 
     #[test]
     fn serialize_genesis_config_in_place() {

@@ -225,6 +225,10 @@ pub struct GenesisConfig {
     pub validator_config_info: Option<Vec<ValidatorGenesisConfig>>,
     pub parameters: GenesisCeremonyParameters,
     pub accounts: Vec<AccountConfig>,
+    /// Optional owner of the extra validator Gas and genesis stake allocations.
+    /// The validator identity and the staking pool receiving stake are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validator_token_recipient: Option<RtdAddress>,
 }
 
 impl Config for GenesisConfig {}
@@ -404,6 +408,7 @@ impl GenesisConfig {
             validator_config_info: Some(validator_config_info),
             parameters,
             accounts: account_configs,
+            validator_token_recipient: None,
         }
     }
 
