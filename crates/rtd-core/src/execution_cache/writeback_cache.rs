@@ -768,25 +768,28 @@ impl WritebackCache {
     ) -> CacheResult<(SequenceNumber, ObjectEntry)> {
         self.metrics
             .record_cache_request(request_type, "object_by_id");
+        // Take the same lock as write_object_entry before fetching the latest cache Arc.
+        // Otherwise a writer can advance the dirty set between the two snapshots, or
+        // eviction can leave us comparing an old Arc with a newly published version.
+        #[cfg(debug_assertions)]
+        let dirty_entry = self.dirty.objects.entry(*object_id);
         let entry = self.object_by_id_cache.get(object_id);
 
-        if cfg!(debug_assertions)
-            && let Some(entry) = &entry
-        {
+        #[cfg(debug_assertions)]
+        if let Some(entry) = &entry {
             // check that cache is coherent
-            let highest: Option<ObjectEntry> = self
-                .dirty
-                .objects
-                .get(object_id)
-                .and_then(|entry| entry.get_highest().map(|(_, o)| o.clone()))
-                .or_else(|| {
-                    let obj: Option<ObjectEntry> = self
-                        .store
-                        .get_latest_object_or_tombstone(*object_id)
-                        .unwrap()
-                        .map(|(_, o)| o.into());
-                    obj
-                });
+            let highest: Option<ObjectEntry> = match &dirty_entry {
+                DashMapEntry::Occupied(entry) => entry.get().get_highest().map(|(_, o)| o.clone()),
+                DashMapEntry::Vacant(_) => None,
+            }
+            .or_else(|| {
+                let obj: Option<ObjectEntry> = self
+                    .store
+                    .get_latest_object_or_tombstone(*object_id)
+                    .unwrap()
+                    .map(|(_, o)| o.into());
+                obj
+            });
 
             let cache_entry = match &*entry.lock() {
                 LatestObjectCacheEntry::Object(_, entry) => Some(entry.clone()),
@@ -811,6 +814,9 @@ impl WritebackCache {
                 panic!("object_by_id cache is incoherent for {:?}", object_id);
             }
         }
+        // The fallback acquires the dirty lock itself; never carry our debug guard into it.
+        #[cfg(debug_assertions)]
+        drop(dirty_entry);
 
         if let Some(entry) = entry {
             let entry = entry.lock();

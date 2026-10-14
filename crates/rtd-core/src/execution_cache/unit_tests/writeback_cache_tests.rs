@@ -1080,6 +1080,14 @@ async fn latest_object_cache_race_test() {
             let mut latest = OBJECT_START_VERSION;
 
             while start.elapsed() < Duration::from_secs(2) {
+                // Exercise the production read and its debug coherence check while
+                // writers, stale DB readers, and cache eviction are all racing.
+                if let CacheResult::Hit((version, _)) =
+                    cache.get_object_entry_by_id_cache_only("race_test", &object_id)
+                {
+                    assert!(version >= latest, "{} >= {}", version, latest);
+                    latest = version;
+                }
                 let Some(cur) = cache
                     .object_by_id_cache
                     .get(&object_id)
@@ -1098,6 +1106,36 @@ async fn latest_object_cache_race_test() {
     reader.join().unwrap();
     checker.join().unwrap();
     invalidator.join().unwrap();
+}
+
+#[tokio::test]
+#[cfg(all(debug_assertions, not(tidehunter)))]
+async fn latest_object_cache_coherence_rejects_corruption() {
+    let scenario = Scenario::new(None, Arc::new(AtomicU32::new(0))).await;
+    let cache = scenario.cache;
+    let object_id = ObjectID::random();
+    let owner = Owner::AddressOwner(RtdAddress::random_for_testing_only());
+    let version = OBJECT_START_VERSION;
+    let original = Object::with_id_owner_version_for_testing(object_id, version, owner.clone());
+    cache.write_object_entry(&object_id, version, original.into());
+
+    // Inject a cache value that was never written to the dirty set or store.
+    let corrupt = Object::with_id_owner_version_for_testing(object_id, version.next(), owner);
+    cache
+        .object_by_id_cache
+        .insert(
+            &object_id,
+            LatestObjectCacheEntry::Object(version.next(), corrupt.into()),
+            Ticket::Write,
+        )
+        .unwrap();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        cache.get_object_entry_by_id_cache_only("corruption_test", &object_id)
+    }));
+    assert!(
+        result.is_err(),
+        "real cache incoherence must still be rejected"
+    );
 }
 
 #[tokio::test]
