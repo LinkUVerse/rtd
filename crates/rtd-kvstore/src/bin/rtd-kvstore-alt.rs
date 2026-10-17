@@ -28,6 +28,10 @@ struct Args {
     #[arg(long)]
     config: Option<PathBuf>,
 
+    /// Validate configuration and exit before connecting to any middleware.
+    #[arg(long, requires = "config")]
+    validate_config: bool,
+
     /// BigTable instance ID
     instance_id: String,
 
@@ -84,6 +88,13 @@ async fn main() -> Result<()> {
     } else {
         IndexerConfig::default()
     };
+
+    if args.validate_config {
+        println!(
+            "{{\"configurationValid\":true,\"physicalPruningSupported\":false,\"middlewareAccessed\":false}}"
+        );
+        return Ok(());
+    }
 
     let is_bounded = args.indexer_args.last_checkpoint.is_some();
     set_write_legacy_data(args.write_legacy_data);

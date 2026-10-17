@@ -7,9 +7,11 @@ use std::ops::RangeInclusive;
 use anyhow::Context as _;
 use async_graphql::Context;
 use async_graphql::Error as RpcError;
+use async_graphql::ErrorExtensions;
 use async_graphql::InputObject;
 use diesel::prelude::QueryableByName;
 use diesel::sql_types::BigInt;
+use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::AlphaLedgerGrpcReader;
 use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_sql_macro::query;
 
@@ -78,22 +80,69 @@ impl CheckpointFilter {
     }
 }
 
-/// The bounds on checkpoint sequence number, imposed by filters. The outermost bounds are
-/// determined by the lowest checkpoint that is safe to read from (reader_lo) and the highest
-/// checkpoint that has been processed based on the context's watermark(checkpoint_viewed_at).
-///
-/// ```ignore
-///     reader_lo                                                     checkpoint_viewed_at
-///     [-----------------------------------------------------------------]
-/// ```
-///
-/// The bounds are further tightened by the filters if they are present.
-///
-/// ```ignore
-///    filter.after_checkpoint                         filter.before_checkpoint
-///         [------------[--------------------------]------------]
-///                         filter.at_checkpoint
-/// ```
+/// Read the Ledger service coverage and reject a lagging or unavailable dependency.
+pub(crate) async fn ledger_reader_lo(
+    reader: &AlphaLedgerGrpcReader,
+    checkpoint_viewed_at: u64,
+) -> Result<u64, RpcError> {
+    let range = reader.checkpoint_range().await.map_err(|_| {
+        RpcError::new("Ledger checkpoint coverage unavailable")
+            .extend_with(|_, extensions| extensions.set("code", "DEPENDENCY_UNAVAILABLE"))
+    })?;
+    if checkpoint_viewed_at > *range.end() {
+        return Err(RpcError::new("Ledger has not indexed the query checkpoint")
+            .extend_with(|_, extensions| extensions.set("code", "INDEXER_NOT_READY")));
+    }
+    Ok(*range.start())
+}
+
+pub(crate) fn checked_checkpoint_bounds(
+    cp_after: Option<u64>,
+    cp_at: Option<u64>,
+    cp_before: Option<u64>,
+    reader_lo: u64,
+    checkpoint_viewed_at: u64,
+) -> Result<Option<RangeInclusive<u64>>, RpcError> {
+    if let Some(checkpoint) = cp_at {
+        if checkpoint > checkpoint_viewed_at {
+            return Err(
+                RpcError::new(format!("Checkpoint {checkpoint} in the future"))
+                    .extend_with(|_, extensions| extensions.set("code", "BAD_USER_INPUT")),
+            );
+        }
+        if checkpoint < reader_lo {
+            return Err(RpcError::new(format!(
+                "Checkpoint {checkpoint} precedes available lower bound {reader_lo}"
+            ))
+            .extend_with(|_, extensions| extensions.set("code", "CHECKPOINT_NOT_COVERED")));
+        }
+    }
+    // An explicit lower bound must not be silently clamped past missing history.
+    // Requests with no lower bound start at available history, but a range wholly
+    // before that history is unavailable. Preserve genuinely empty intersections.
+    if cp_at.is_none() {
+        if let Some(requested) =
+            checkpoint_bounds(cp_after, None, cp_before, 0, checkpoint_viewed_at)
+        {
+            if (cp_after.is_some() && *requested.start() < reader_lo)
+                || *requested.end() < reader_lo
+            {
+                return Err(RpcError::new(format!(
+                    "Checkpoint range precedes available lower bound {reader_lo}"
+                ))
+                .extend_with(|_, extensions| extensions.set("code", "CHECKPOINT_NOT_COVERED")));
+            }
+        }
+    }
+    Ok(checkpoint_bounds(
+        cp_after,
+        cp_at,
+        cp_before,
+        reader_lo,
+        checkpoint_viewed_at,
+    ))
+}
+
 pub(crate) fn checkpoint_bounds(
     cp_after: Option<u64>,
     cp_at: Option<u64>,
@@ -221,6 +270,63 @@ fn min_option<T: Ord>(xs: impl IntoIterator<Item = Option<T>>) -> Option<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checked_bounds_reject_explicit_uncovered_checkpoint() {
+        let future = checked_checkpoint_bounds(None, Some(201), None, 5, 200).unwrap_err();
+        assert_eq!(future.message, "Checkpoint 201 in the future");
+        let old = checked_checkpoint_bounds(None, Some(4), None, 5, 200).unwrap_err();
+        assert_eq!(old.message, "Checkpoint 4 precedes available lower bound 5");
+    }
+
+    #[test]
+    fn checked_bounds_keep_endpoints_and_empty_ranges() {
+        for checkpoint in [5, 200] {
+            assert_eq!(
+                checked_checkpoint_bounds(None, Some(checkpoint), None, 5, 200).unwrap(),
+                Some(checkpoint..=checkpoint)
+            );
+        }
+        assert_eq!(
+            checked_checkpoint_bounds(Some(100), None, Some(50), 5, 200).unwrap(),
+            None
+        );
+        assert_eq!(
+            checked_checkpoint_bounds(None, None, Some(0), 5, 200).unwrap(),
+            None
+        );
+        assert_eq!(
+            checked_checkpoint_bounds(None, None, None, 5, 200).unwrap(),
+            Some(5..=200)
+        );
+    }
+
+    #[test]
+    fn checked_bounds_reject_partial_and_wholly_pruned_ranges() {
+        for (after, before) in [(Some(3), Some(7)), (Some(3), None), (None, Some(5))] {
+            let error = checked_checkpoint_bounds(after, None, before, 5, 200).unwrap_err();
+            assert_eq!(
+                error.message,
+                "Checkpoint range precedes available lower bound 5"
+            );
+        }
+    }
+
+    #[test]
+    fn checked_bounds_preserve_exclusive_lower_endpoint() {
+        assert_eq!(
+            checked_checkpoint_bounds(Some(4), None, Some(7), 5, 200).unwrap(),
+            Some(5..=6)
+        );
+        assert_eq!(
+            checked_checkpoint_bounds(None, None, Some(7), 5, 200).unwrap(),
+            Some(5..=6)
+        );
+        assert_eq!(
+            checked_checkpoint_bounds(Some(3), None, Some(4), 5, 200).unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn test_checkpoint_bounds_no_filters() {

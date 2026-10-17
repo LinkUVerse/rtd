@@ -6,9 +6,11 @@ use std::collections::HashMap;
 
 use anyhow::Context as _;
 use async_graphql::dataloader::Loader;
+use diesel::QueryableByName;
 use diesel::sql_types::Array;
 use diesel::sql_types::BigInt;
 use diesel::sql_types::Bytea;
+use diesel::sql_types::Nullable;
 use rtd_indexer_alt_schema::objects::StoredObjVersion;
 use rtd_types::base_types::ObjectID;
 
@@ -23,6 +25,10 @@ pub struct LatestObjectVersionKey(pub ObjectID);
 /// Key for fetching the latest version of an object, with an inclusive version upperbound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct VersionBoundedObjectVersionKey(pub ObjectID, pub u64);
+
+/// Inclusive version and checkpoint bounds must be applied in the same lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CheckpointVersionBoundedObjectVersionKey(pub ObjectID, pub u64, pub u64);
 
 /// Key for fetching the latest version of an object, as of a given checkpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -163,6 +169,95 @@ impl Loader<VersionBoundedObjectVersionKey> for PgReader {
                 (key.0 == bound.0).then(|| (*key, stored.clone()))
             })
             .collect())
+    }
+}
+
+#[async_trait::async_trait]
+impl Loader<CheckpointVersionBoundedObjectVersionKey> for PgReader {
+    type Value = StoredObjVersion;
+    type Error = Error;
+
+    async fn load(
+        &self,
+        keys: &[CheckpointVersionBoundedObjectVersionKey],
+    ) -> Result<HashMap<CheckpointVersionBoundedObjectVersionKey, StoredObjVersion>, Error> {
+        if keys.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        #[derive(QueryableByName)]
+        struct BoundedVersion {
+            #[diesel(sql_type = BigInt)]
+            request_index: i64,
+            #[diesel(sql_type = Bytea)]
+            object_id: Vec<u8>,
+            #[diesel(sql_type = BigInt)]
+            object_version: i64,
+            #[diesel(sql_type = Nullable<Bytea>)]
+            object_digest: Option<Vec<u8>>,
+            #[diesel(sql_type = BigInt)]
+            cp_sequence_number: i64,
+        }
+
+        let ids: Vec<_> = keys.iter().map(|key| key.0.into_bytes()).collect();
+        let versions: Vec<_> = keys
+            .iter()
+            .map(|key| i64::try_from(key.1).context("Object version exceeds database range"))
+            .collect::<Result<_, _>>()?;
+        let checkpoints: Vec<_> = keys
+            .iter()
+            .map(|key| i64::try_from(key.2).context("Checkpoint exceeds database range"))
+            .collect::<Result<_, _>>()?;
+
+        let query = diesel::sql_query(
+            r#"
+                SELECT
+                    k.ordinality::BIGINT AS request_index,
+                    k.object_id,
+                    v.object_version,
+                    v.object_digest,
+                    v.cp_sequence_number
+                FROM UNNEST($1::BYTEA[], $2::BIGINT[], $3::BIGINT[])
+                    WITH ORDINALITY AS k(object_id, version_bound, checkpoint_bound, ordinality)
+                CROSS JOIN LATERAL (
+                    SELECT object_version, object_digest, cp_sequence_number
+                    FROM obj_versions
+                    WHERE obj_versions.object_id = k.object_id
+                      AND object_version <= k.version_bound
+                      AND cp_sequence_number <= k.checkpoint_bound
+                    ORDER BY object_version DESC
+                    LIMIT 1
+                ) v
+            "#,
+        )
+        .bind::<Array<Bytea>, _>(ids)
+        .bind::<Array<BigInt>, _>(versions)
+        .bind::<Array<BigInt>, _>(checkpoints);
+
+        let mut conn = self.connect().await?;
+        let rows: Vec<BoundedVersion> = conn.results(query).await?;
+        let mut result = HashMap::new();
+        for row in rows {
+            let index = usize::try_from(
+                row.request_index
+                    .checked_sub(1)
+                    .context("Invalid object version request index")?,
+            )
+            .context("Invalid object version request index")?;
+            let key = *keys
+                .get(index)
+                .context("Object version request index out of range")?;
+            result.insert(
+                key,
+                StoredObjVersion {
+                    object_id: row.object_id,
+                    object_version: row.object_version,
+                    object_digest: row.object_digest,
+                    cp_sequence_number: row.cp_sequence_number,
+                },
+            );
+        }
+        Ok(result)
     }
 }
 
@@ -649,6 +744,50 @@ mod tests {
                 (K(cold, 200), stored(cold, digest, 7, 200)),
                 (K(cold, 600), stored(cold, digest, 7, 200)),
             ]),
+        );
+    }
+    #[tokio::test]
+    async fn test_checkpoint_version_bounded() {
+        use obj_versions::dsl as v;
+
+        let (_temp_db, writer, reader) = setup().await;
+        let id = ObjectID::random();
+        let other = ObjectID::random();
+        let digest = ObjectDigest::random();
+        let mut tombstone = stored(id, digest, 4, 4);
+        tombstone.object_digest = None;
+
+        let mut conn = writer.connect().await.unwrap();
+        diesel::insert_into(v::obj_versions)
+            .values(vec![
+                stored(id, digest, 1, 1),
+                stored(id, digest, 2, 2),
+                stored(id, digest, 3, 3),
+                tombstone.clone(),
+            ])
+            .execute(&mut conn)
+            .await
+            .unwrap();
+
+        use CheckpointVersionBoundedObjectVersionKey as K;
+        let keys = [
+            K(id, 3, 2),
+            K(id, 2, 3),
+            K(id, 4, 3),
+            K(id, 4, 4),
+            K(id, 1, 0),
+            K(other, 4, 4),
+            K(id, 4, 3),
+        ];
+        let found = Loader::load(&reader, &keys).await.unwrap();
+        assert_eq!(
+            found,
+            HashMap::from_iter([
+                (K(id, 3, 2), stored(id, digest, 2, 2)),
+                (K(id, 2, 3), stored(id, digest, 2, 2)),
+                (K(id, 4, 3), stored(id, digest, 3, 3)),
+                (K(id, 4, 4), tombstone),
+            ])
         );
     }
 }

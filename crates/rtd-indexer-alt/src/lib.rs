@@ -53,7 +53,10 @@ pub(crate) mod bootstrap;
 pub mod config;
 pub(crate) mod handlers;
 pub mod writer_fence;
+pub mod postgres_identity;
 
+/// Explicit fixture/benchmark initialization, including SQL migrations. Service
+/// entry points must use `setup_indexer_existing_schema` instead.
 pub async fn setup_indexer(
     database_url: Url,
     db_args: DbArgs,
@@ -62,6 +65,54 @@ pub async fn setup_indexer(
     indexer_config: IndexerConfig,
     bootstrap_genesis: Option<BootstrapGenesis>,
     registry: &Registry,
+) -> anyhow::Result<Indexer<Db>> {
+    setup_indexer_with_schema_policy(
+        database_url,
+        db_args,
+        indexer_args,
+        client_args,
+        indexer_config,
+        bootstrap_genesis,
+        registry,
+        true,
+    )
+    .await
+}
+
+/// Service startup validates existing SQL state. Schema installation is an
+/// explicit administrator operation; test/benchmark setup keeps its own helper.
+pub async fn setup_indexer_existing_schema(
+    database_url: Url,
+    db_args: DbArgs,
+    indexer_args: IndexerArgs,
+    client_args: ClientArgs,
+    indexer_config: IndexerConfig,
+    bootstrap_genesis: Option<BootstrapGenesis>,
+    registry: &Registry,
+) -> anyhow::Result<Indexer<Db>> {
+    setup_indexer_with_schema_policy(
+        database_url,
+        db_args,
+        indexer_args,
+        client_args,
+        indexer_config,
+        bootstrap_genesis,
+        registry,
+        false,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn setup_indexer_with_schema_policy(
+    database_url: Url,
+    db_args: DbArgs,
+    indexer_args: IndexerArgs,
+    client_args: ClientArgs,
+    indexer_config: IndexerConfig,
+    bootstrap_genesis: Option<BootstrapGenesis>,
+    registry: &Registry,
+    install_schema: bool,
 ) -> anyhow::Result<Indexer<Db>> {
     let IndexerConfig {
         ingestion,
@@ -125,16 +176,21 @@ pub async fn setup_indexer(
         .await
         .context("Failed to connect to database")?;
 
-    // we want to merge &MIGRATIONS with the migrations from the store
-    store
-        .run_migrations(Some(&MIGRATIONS))
-        .await
-        .context("Failed to run pending migrations")?;
-
-    if use_writer_fence {
-        writer_fence::install(&store)
+    if install_schema {
+        store
+            .run_migrations(Some(&MIGRATIONS))
             .await
-            .context("Failed to guard Alt writer tables")?;
+            .context("Failed to run explicit setup migrations")?;
+        if use_writer_fence {
+            writer_fence::install(&store)
+                .await
+                .context("Failed to guard Alt writer tables")?;
+        }
+    } else {
+        store.require_current_migrations(Some(&MIGRATIONS)).await?;
+        if use_writer_fence {
+            writer_fence::verify(&store).await?;
+        }
     }
 
     registry.register(Box::new(DbConnectionStatsCollector::new(

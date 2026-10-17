@@ -8,6 +8,7 @@ use async_graphql::Result;
 use fastcrypto::error::FastCryptoError;
 use prost_types::FieldMask;
 
+use rtd_indexer_alt_reader::error::is_grpc_dependency_unavailable;
 use rtd_indexer_alt_reader::fullnode_client::Error::GrpcExecutionError;
 use rtd_indexer_alt_reader::fullnode_client::FullnodeClient;
 use rtd_rpc::field::FieldMaskUtil;
@@ -21,6 +22,7 @@ use crate::api::types::execution_result::ExecutionResult;
 use crate::api::types::transaction_effects::TransactionEffects;
 use crate::error::RpcError;
 use crate::error::bad_user_input;
+use crate::error::dependency_unavailable;
 use crate::error::feature_unavailable;
 use crate::error::upcast;
 use crate::scope::Scope;
@@ -125,6 +127,9 @@ impl Mutation {
                 Err(bad_user_input(TransactionInputError::InvalidArgument(
                     status.message().to_string(),
                 )))
+            }
+            Err(GrpcExecutionError(status)) if is_grpc_dependency_unavailable(&status) => {
+                Err(dependency_unavailable("Full Node"))
             }
             Err(other_error) => Err(anyhow!(other_error)
                 .context("Failed to execute transaction")

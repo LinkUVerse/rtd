@@ -1,7 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 use move_core_types::account_address::AccountAddress;
 use rtd_package_resolver::Package;
@@ -11,7 +13,6 @@ use rtd_package_resolver::Result;
 use crate::task::watermark::KV_PACKAGES_PIPELINE;
 
 use super::streamed_cache_eviction::EvictableCache;
-use super::streamed_store::StreamedStore;
 
 /// Package store for streaming subscriptions that holds packages not yet indexed by the DB.
 ///
@@ -21,7 +22,7 @@ use super::streamed_store::StreamedStore;
 /// checkpoint does not remove a system package that was upgraded at a later checkpoint.
 pub(crate) struct StreamedPackageStore<S> {
     /// Packages from streamed checkpoints not yet in the DB.
-    cache: StreamedStore<AccountAddress, Arc<Package>>,
+    cache: RwLock<BTreeMap<(AccountAddress, u64), Arc<Package>>>,
 
     /// Fallback store (typically the shared PackageCache → DB).
     inner: S,
@@ -30,7 +31,7 @@ pub(crate) struct StreamedPackageStore<S> {
 impl<S> StreamedPackageStore<S> {
     pub(crate) fn new(inner: S) -> Self {
         Self {
-            cache: StreamedStore::new(),
+            cache: RwLock::new(BTreeMap::new()),
             inner,
         }
     }
@@ -38,17 +39,39 @@ impl<S> StreamedPackageStore<S> {
     /// Index packages from a streamed checkpoint. Called by the checkpoint stream task. Checkpoints
     /// are processed in order, so the latest insert for a package ID is the newest version.
     pub(crate) fn index_packages(&self, checkpoint_seq: u64, packages: &[Arc<Package>]) {
+        let mut cache = self.cache.write().unwrap();
         for package in packages {
-            self.cache
-                .insert(checkpoint_seq, package.storage_id(), package.clone());
+            cache.insert((package.storage_id(), checkpoint_seq), package.clone());
         }
+    }
+
+    fn cached_at(&self, id: AccountAddress, checkpoint: u64) -> Option<Arc<Package>> {
+        self.cache
+            .read()
+            .unwrap()
+            .range((id, 0)..=(id, checkpoint))
+            .next_back()
+            .map(|(_, package)| package.clone())
+    }
+
+    /// The fallback must carry the same bound; never consult the unbounded shared cache here.
+    pub(crate) async fn fetch_at_checkpoint(
+        &self,
+        id: AccountAddress,
+        checkpoint: u64,
+        fallback: &dyn PackageStore,
+    ) -> Result<Arc<Package>> {
+        if let Some(package) = self.cached_at(id, checkpoint) {
+            return Ok(package);
+        }
+        fallback.fetch(id).await
     }
 }
 
 #[async_trait::async_trait]
 impl<S: PackageStore> PackageStore for StreamedPackageStore<S> {
     async fn fetch(&self, id: AccountAddress) -> Result<Arc<Package>> {
-        if let Some(package) = self.cache.get(&id) {
+        if let Some(package) = self.cached_at(id, u64::MAX) {
             return Ok(package);
         }
 
@@ -62,7 +85,10 @@ impl<S: Send + Sync> EvictableCache for StreamedPackageStore<S> {
     }
 
     fn evict_up_to(&self, indexed_checkpoint: u64) {
-        self.cache.evict_up_to(indexed_checkpoint);
+        self.cache
+            .write()
+            .unwrap()
+            .retain(|(_, checkpoint), _| *checkpoint > indexed_checkpoint);
     }
 }
 
@@ -115,6 +141,46 @@ mod tests {
 
     fn pkg(id: AccountAddress, version: u64) -> Arc<Package> {
         Arc::new(Package::for_test(id, SequenceNumber::from_u64(version)))
+    }
+
+    #[tokio::test]
+    async fn bounded_fetch_preserves_older_versions_until_indexed() {
+        let id = addr(2);
+        let old = pkg(id, 1);
+        let new = pkg(id, 2);
+        let store = StreamedPackageStore::new(MockStore::with(id, new.clone()));
+        let absent = MockStore::new();
+        store.index_packages(5, std::slice::from_ref(&old));
+        store.index_packages(10, std::slice::from_ref(&new));
+        assert!(Arc::ptr_eq(&store.fetch(id).await.unwrap(), &new));
+        assert!(store.fetch_at_checkpoint(id, 4, &absent).await.is_err());
+        for height in [5, 9] {
+            assert!(Arc::ptr_eq(
+                &store
+                    .fetch_at_checkpoint(id, height, &absent)
+                    .await
+                    .unwrap(),
+                &old
+            ));
+        }
+        assert!(Arc::ptr_eq(
+            &store.fetch_at_checkpoint(id, 10, &absent).await.unwrap(),
+            &new
+        ));
+        store.evict_up_to(5);
+        assert!(store.fetch_at_checkpoint(id, 5, &absent).await.is_err());
+        let indexed_old = MockStore::with(id, old.clone());
+        assert!(Arc::ptr_eq(
+            &store
+                .fetch_at_checkpoint(id, 5, &indexed_old)
+                .await
+                .unwrap(),
+            &old
+        ));
+        assert!(Arc::ptr_eq(
+            &store.fetch_at_checkpoint(id, 10, &absent).await.unwrap(),
+            &new
+        ));
     }
 
     #[tokio::test]

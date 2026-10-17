@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Context as _;
 use anyhow::anyhow;
 use async_graphql::Context;
+use async_graphql::ErrorExtensions;
 use async_graphql::InputObject;
 use async_graphql::Interface;
 use async_graphql::Object;
@@ -24,7 +25,7 @@ use rtd_indexer_alt_reader::consistent_reader;
 use rtd_indexer_alt_reader::consistent_reader::ConsistentReader;
 use rtd_indexer_alt_reader::kv_loader::KvLoader;
 use rtd_indexer_alt_reader::object_versions::CheckpointBoundedObjectVersionKey;
-use rtd_indexer_alt_reader::object_versions::VersionBoundedObjectVersionKey;
+use rtd_indexer_alt_reader::object_versions::CheckpointVersionBoundedObjectVersionKey;
 use rtd_indexer_alt_reader::object_versions::VersionedObjectVersionKey;
 use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_indexer_alt_schema::objects::StoredObjVersion;
@@ -38,7 +39,6 @@ use rtd_types::digests::ObjectDigest;
 use rtd_types::dynamic_field::DynamicFieldType;
 use rtd_types::object::Object as NativeObject;
 use rtd_types::transaction::GenesisObject;
-use tokio::join;
 use tokio::sync::OnceCell;
 
 use crate::api::scalars::base64::Base64;
@@ -54,6 +54,7 @@ use crate::api::scalars::type_filter::TypeInput;
 use crate::api::scalars::uint53::UInt53;
 use crate::api::types::address;
 use crate::api::types::address::Address;
+use crate::api::types::available_range::AvailableRangeKey;
 use crate::api::types::balance;
 use crate::api::types::balance::Balance;
 use crate::api::types::coin_metadata::CoinMetadata;
@@ -73,6 +74,8 @@ use crate::api::types::transaction::filter::TransactionFilter;
 use crate::api::types::transaction_object::TransactionObject;
 use crate::error::RpcError;
 use crate::error::bad_user_input;
+use crate::error::checkpoint_not_covered;
+use crate::error::dependency_unavailable;
 use crate::error::feature_unavailable;
 use crate::error::upcast;
 use crate::extensions::query_limits;
@@ -723,6 +726,26 @@ impl Object {
 }
 
 impl Object {
+    /// Resolve an untrusted object reference without bypassing the publication boundary.
+    pub(crate) async fn fetch_ref(
+        ctx: &Context<'_>,
+        scope: Scope,
+        address: NativeRtdAddress,
+        version: SequenceNumber,
+        digest: ObjectDigest,
+    ) -> Result<Option<Self>, RpcError> {
+        let Some(object) =
+            Self::at_version(ctx, scope, address.into(), version.value().into()).await?
+        else {
+            return Ok(None);
+        };
+        let matches = object
+            .contents(ctx)
+            .await?
+            .is_some_and(|contents| contents.digest() == digest);
+        Ok(matches.then_some(object))
+    }
+
     /// Construct an object that is represented by just its identifier (its object reference). This
     /// does not check whether the object exists, so should not be used to "fetch" an object based
     /// on an address and/or version provided as user input.
@@ -825,6 +848,74 @@ impl Object {
         }
     }
 
+    /// Reject object metadata reads below the advertised retained checkpoint.
+    fn ensure_checkpoint_covered(ctx: &Context<'_>, checkpoint: u64) -> Result<(), RpcError> {
+        let watermarks: &Arc<Watermarks> = ctx.data()?;
+        let reader_lo = AvailableRangeKey {
+            type_: "Query".to_string(),
+            field: Some("object".to_string()),
+            filters: None,
+        }
+        .reader_lo(watermarks)?;
+        if checkpoint < reader_lo {
+            return Err(async_graphql::Error::new(format!(
+                "Checkpoint {checkpoint} precedes available lower bound {reader_lo}"
+            ))
+            .extend_with(|_, extensions| extensions.set("code", "CHECKPOINT_NOT_COVERED"))
+            .into());
+        }
+        Ok(())
+    }
+
+    /// A missing exact or bounded version may have been removed by the native
+    /// pruner. The retained pre-reader_lo anchor distinguishes that case from
+    /// an object/version that never existed.
+    async fn ensure_missing_version_not_pruned(
+        ctx: &Context<'_>,
+        address: RtdAddress,
+        version: UInt53,
+    ) -> Result<(), RpcError> {
+        let watermarks: &Arc<Watermarks> = ctx.data()?;
+        let reader_lo = AvailableRangeKey {
+            type_: "Query".to_string(),
+            field: Some("object".to_string()),
+            filters: None,
+        }
+        .reader_lo(watermarks)?;
+        if reader_lo == 0 {
+            return Ok(());
+        }
+
+        use obj_versions::dsl as v;
+
+        let pg_reader: &PgReader = ctx.data()?;
+        let mut conn = pg_reader
+            .connect()
+            .await
+            .context("Failed to connect to database")?;
+        let anchors: Vec<StoredObjVersion> = conn
+            .results(
+                v::obj_versions
+                    .filter(v::object_id.eq(address.to_inner()))
+                    .filter(
+                        v::cp_sequence_number
+                            .lt(i64::try_from(reader_lo).context("Invalid object lower bound")?),
+                    )
+                    .filter(v::object_version.ge(i64::from(version)))
+                    .order((v::cp_sequence_number.desc(), v::object_version.desc()))
+                    .limit(1),
+            )
+            .await
+            .context("Failed to read object retention anchor")?;
+        if let Some(anchor) = anchors.first() {
+            Self::ensure_checkpoint_covered(
+                ctx,
+                u64::try_from(anchor.cp_sequence_number).context("Invalid object checkpoint")?,
+            )?;
+        }
+        Ok(())
+    }
+
     /// Fetch the latest version of the object at the given address less than or equal to
     /// `root_version`.
     async fn version_bounded(
@@ -833,18 +924,28 @@ impl Object {
         address: RtdAddress,
         root_version: UInt53,
     ) -> Result<Option<Self>, RpcError> {
+        let Some(checkpoint_viewed_at) = scope.checkpoint_viewed_at() else {
+            return Ok(None);
+        };
         let pg_loader: &Arc<DataLoader<PgReader>> = ctx.data()?;
 
         let Some(stored) = pg_loader
-            .load_one(VersionBoundedObjectVersionKey(
+            .load_one(CheckpointVersionBoundedObjectVersionKey(
                 address.into(),
                 root_version.into(),
+                checkpoint_viewed_at,
             ))
             .await
             .context("Failed to fetch object versions")?
         else {
+            Self::ensure_missing_version_not_pruned(ctx, address, root_version).await?;
             return Ok(None);
         };
+
+        Self::ensure_checkpoint_covered(
+            ctx,
+            u64::try_from(stored.cp_sequence_number).context("Invalid object checkpoint")?,
+        )?;
 
         Object::from_stored_version(scope.with_root_version(root_version.into()), stored)
     }
@@ -857,6 +958,7 @@ impl Object {
         address: RtdAddress,
         at_checkpoint: UInt53,
     ) -> Result<Option<Self>, RpcError> {
+        Self::ensure_checkpoint_covered(ctx, at_checkpoint.into())?;
         let pg_loader: &Arc<DataLoader<PgReader>> = ctx.data()?;
 
         let Some(stored) = pg_loader
@@ -889,23 +991,29 @@ impl Object {
         };
 
         let pg_loader: &Arc<DataLoader<PgReader>> = ctx.data()?;
-        let kv_loader: &KvLoader = ctx.data()?;
-
-        let contents = kv_loader.load_one_object(address.into(), version.into());
-        let stored_version =
-            pg_loader.load_one(VersionedObjectVersionKey(address.into(), version.into()));
-        let (contents, stored_version) = join!(contents, stored_version);
-
-        let Some(c) = contents.context("Failed to fetch object contents")? else {
+        let Some(stored_version) = pg_loader
+            .load_one(VersionedObjectVersionKey(address.into(), version.into()))
+            .await
+            .context("Failed to get object version")?
+        else {
+            Self::ensure_missing_version_not_pruned(ctx, address, version).await?;
             return Ok(None);
         };
-
-        if stored_version
-            .context("Failed to get object version")?
-            .is_none_or(|s| s.cp_sequence_number as u64 > checkpoint_viewed_at)
-        {
+        let object_checkpoint = u64::try_from(stored_version.cp_sequence_number)
+            .context("Invalid object checkpoint")?;
+        if object_checkpoint > checkpoint_viewed_at {
             return Ok(None);
         }
+        Self::ensure_checkpoint_covered(ctx, object_checkpoint)?;
+
+        let kv_loader: &KvLoader = ctx.data()?;
+        let Some(c) = kv_loader
+            .load_one_object(address.into(), version.into())
+            .await
+            .context("Failed to fetch object contents")?
+        else {
+            return Ok(None);
+        };
 
         Ok(Some(Self::from_contents(
             scope.with_root_version(version.into()),
@@ -993,12 +1101,29 @@ impl Object {
             return Ok(Connection::new(false, false));
         };
 
+        let watermarks: &Arc<Watermarks> = ctx.data()?;
+        let reader_lo = AvailableRangeKey {
+            type_: "Query".to_string(),
+            field: Some("objectVersions".to_string()),
+            filters: None,
+        }
+        .reader_lo(watermarks)?;
+        if checkpoint_viewed_at < reader_lo {
+            return Err(async_graphql::Error::new(format!(
+                "Checkpoint {checkpoint_viewed_at} precedes available lower bound {reader_lo}"
+            ))
+            .extend_with(|_, extensions| extensions.set("code", "CHECKPOINT_NOT_COVERED"))
+            .into());
+        }
+        let reader_lo = i64::try_from(reader_lo).context("Invalid object lower bound")?;
+
         query_limits::rich::debit(ctx)?;
         let pg_reader: &PgReader = ctx.data()?;
 
         let mut query = v::obj_versions
             .filter(v::object_id.eq(address.to_inner()))
             .filter(v::object_digest.is_not_null())
+            .filter(v::cp_sequence_number.ge(reader_lo))
             .filter(sql!(as Bool,
                 r#"
                     object_version <= (SELECT
@@ -1169,8 +1294,10 @@ impl Object {
             }
 
             consistent_reader::Error::OutOfRange(_) => {
-                bad_user_input(Error::OutOfRange(checkpoint))
+                checkpoint_not_covered(Error::OutOfRange(checkpoint))
             }
+
+            consistent_reader::Error::Unavailable(_) => dependency_unavailable("Consistent Store"),
 
             consistent_reader::Error::Internal(error) => {
                 error.context("Failed to fetch live objects").into()

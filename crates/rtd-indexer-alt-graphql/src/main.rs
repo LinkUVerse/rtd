@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         Command::Rpc {
             database_url,
+            database_url_file,
             fullnode_args,
             db_args,
             kv_args,
@@ -62,6 +63,19 @@ async fn main() -> anyhow::Result<()> {
             indexer_config,
             subscription_args,
         } => {
+            let database_url = if let Some(path) = database_url_file {
+                let contents = fs::read_to_string(path)
+                    .await
+                    .context("Failed to read database URL secret file")?;
+                let value = contents.trim_end_matches('\n');
+                anyhow::ensure!(
+                    !value.is_empty() && !value.contains(['\n', '\r']),
+                    "Database URL secret must contain one nonempty line"
+                );
+                value.parse().context("Invalid database URL secret")?
+            } else {
+                database_url
+            };
             let rpc_config = if let Some(path) = config {
                 let contents = fs::read_to_string(path)
                     .await

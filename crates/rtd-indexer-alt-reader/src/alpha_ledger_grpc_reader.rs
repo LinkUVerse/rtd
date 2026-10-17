@@ -1,6 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -77,6 +78,20 @@ impl AlphaLedgerGrpcReader {
         Ok(Self { client, timeout })
     }
 
+    /// Fetch the current range advertised by the configured Ledger, without
+    /// inventing defaults for missing retention or ingestion watermarks.
+    pub async fn checkpoint_range(&self) -> anyhow::Result<RangeInclusive<u64>> {
+        let info = self
+            .client
+            .clone()
+            .ledger_client()
+            .get_service_info(self.request(proto::GetServiceInfoRequest::default()))
+            .await
+            .context("GetServiceInfo coverage failed")?
+            .into_inner();
+        advertised_checkpoint_range(info)
+    }
+
     pub async fn list_transactions(
         &self,
         request: proto::ListTransactionsRequest,
@@ -138,18 +153,15 @@ impl AlphaLedgerGrpcReader {
 impl<T> StreamPage<T> {
     /// Whether further data may exist in the direction of pagination.
     ///
-    /// `false` iff one of:
-    /// - `reason ∈ {LedgerTip, CheckpointBound}` — authoritative range terminals.
-    /// - `reason = CursorBound` AND no cursor was emitted - the server did not do any scanning and
-    ///   short-circuited. Typically implies that the cursors for the request fell outside the
-    ///   available range.
+    /// `LedgerTip`, `CheckpointBound`, and `CursorBound` exhaust the requested range.
+    /// A terminal cursor still describes where scanning stopped; it does not imply another
+    /// page exists inside the unchanged request bounds.
     pub fn has_more(&self) -> bool {
         use proto::QueryEndReason as R;
         match self.end_reason {
             None => true,
             Some(R::Unknown | R::ItemLimit | R::ScanLimit) => true,
-            Some(R::LedgerTip | R::CheckpointBound) => false,
-            Some(R::CursorBound) => self.last_cursor().is_some(),
+            Some(R::LedgerTip | R::CheckpointBound | R::CursorBound) => false,
             // `QueryEndReason` is non exhaustive — conservatively `true` if a
             // future variant slips past `apply()`'s `unwrap_or(Unknown)`.
             Some(_) => true,
@@ -342,6 +354,22 @@ where
     Ok(page)
 }
 
+fn advertised_checkpoint_range(
+    info: proto::GetServiceInfoResponse,
+) -> anyhow::Result<RangeInclusive<u64>> {
+    let low = info
+        .lowest_available_checkpoint
+        .context("Ledger omitted checkpoint lower bound")?;
+    let high = info
+        .checkpoint_height
+        .context("Ledger omitted checkpoint upper bound")?;
+    ensure!(
+        low <= high,
+        "Ledger advertised an inverted checkpoint range"
+    );
+    Ok(low..=high)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,6 +423,22 @@ mod tests {
             futures::stream::iter(responses),
         )
         .await
+    }
+
+    #[test]
+    fn advertised_range_requires_both_ordered_bounds() {
+        for (low, high, expected) in [
+            (Some(7), Some(9), Some(7..=9)),
+            (Some(0), Some(0), Some(0..=0)),
+            (None, Some(9), None),
+            (Some(0), None, None),
+            (Some(10), Some(9), None),
+        ] {
+            let mut info = proto::GetServiceInfoResponse::default();
+            info.lowest_available_checkpoint = low;
+            info.checkpoint_height = high;
+            assert_eq!(advertised_checkpoint_range(info).ok(), expected);
+        }
     }
 
     #[test]
@@ -525,9 +569,8 @@ mod tests {
 
     #[test]
     fn has_more_false_on_authoritative_terminals() {
-        // `LedgerTip` and `CheckpointBound` are unconditional terminals — no data past tip /
-        // outside the client's cp scope. `CursorBound` with no tracked cursor is the
-        // short-circuit case (range collapsed at request resolution).
+        // Exhausting a caller-specified range is terminal even when its stop position is
+        // represented by a cursor. Resuming inside the same bounds cannot produce more data.
         for reason in [
             proto::QueryEndReason::CheckpointBound,
             proto::QueryEndReason::LedgerTip,
@@ -540,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn has_more_true_on_cursor_bound_with_tracked_cursor() {
+    fn has_more_false_on_cursor_bound_with_tracked_item() {
         let mut page: StreamPage<ExecutedTransaction> = StreamPage::default();
         let mut response = item_response(b"c1");
         response.end = end_response(proto::QueryEndReason::CursorBound).end;
@@ -548,9 +591,34 @@ mod tests {
 
         assert_eq!(page.last_cursor().map(|c| c.as_ref()), Some(b"c1".as_ref()));
         assert!(
-            page.has_more(),
-            "CursorBound with tracked cursor should not be terminal"
+            !page.has_more(),
+            "CursorBound exhausts the range even when an item cursor is retained"
         );
+    }
+
+    #[test]
+    fn cursor_bound_watermark_is_terminal_but_scan_limit_can_resume() {
+        for (reason, more) in [
+            (proto::QueryEndReason::CursorBound, false),
+            (proto::QueryEndReason::ScanLimit, true),
+            (proto::QueryEndReason::ItemLimit, true),
+        ] {
+            let mut page: StreamPage<ExecutedTransaction> = StreamPage::default();
+            page.apply(frame(watermark_response(b"start")));
+            let mut end = watermark_response(b"stop");
+            end.end = end_response(reason).end;
+            page.apply(frame(end));
+            assert!(page.items.is_empty());
+            assert_eq!(
+                page.first_cursor().map(|c| c.as_ref()),
+                Some(b"start".as_ref())
+            );
+            assert_eq!(
+                page.last_cursor().map(|c| c.as_ref()),
+                Some(b"stop".as_ref())
+            );
+            assert_eq!(page.has_more(), more, "wrong continuation for {reason:?}");
+        }
     }
 
     #[test]

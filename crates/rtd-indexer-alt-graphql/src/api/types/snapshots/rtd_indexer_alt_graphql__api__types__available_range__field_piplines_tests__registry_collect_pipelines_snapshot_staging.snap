@@ -1812,7 +1812,7 @@ TransactionEffects.effectsDigest
   => {}
 
 TransactionEffects.objectChanges
-  => {}
+  => {"cp_sequence_numbers", "obj_versions", "tx_digests"}
 
 TransactionEffects.gasEffects
   => {}

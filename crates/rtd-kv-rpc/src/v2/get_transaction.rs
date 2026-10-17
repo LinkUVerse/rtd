@@ -38,6 +38,7 @@ pub async fn get_transaction(
     stages: &StagesConfig,
     request: GetTransactionRequest,
     resolver: &PackageResolver,
+    admission: Option<u64>,
 ) -> Result<GetTransactionResponse, RpcError> {
     let transaction_digest = request
         .digest
@@ -68,6 +69,12 @@ pub async fn get_transaction(
     let (transaction, objects) = resolved
         .remove(&transaction_digest)
         .ok_or(TransactionNotFoundError(transaction_digest.into()))?;
+    if admission.is_some_and(|height| transaction.checkpoint_number > height) {
+        return Err(RpcError::new(
+            tonic::Code::FailedPrecondition,
+            "Transaction exceeds publication admission boundary",
+        ));
+    }
     Ok(GetTransactionResponse::new(
         transaction_to_response(transaction, &read_mask, objects.as_ref(), resolver).await?,
     ))
@@ -80,6 +87,7 @@ pub async fn batch_get_transactions(
         digests, read_mask, ..
     }: BatchGetTransactionsRequest,
     resolver: &PackageResolver,
+    admission: Option<u64>,
 ) -> Result<BatchGetTransactionsResponse, RpcError> {
     let read_mask = validate_read_mask(read_mask)?;
 
@@ -90,34 +98,62 @@ pub async fn batch_get_transactions(
         ));
     }
 
-    let digests = digests
+    // Match the native batch contract: a malformed digest is an entry error,
+    // not an Internal response that hides the remaining valid results.
+    let parsed = digests
         .iter()
-        .map(|digest| TransactionDigest::from_str(digest))
-        .collect::<Result<Vec<_>, _>>()?;
+        .enumerate()
+        .map(|(index, digest)| {
+            TransactionDigest::from_str(digest).map_err(|error| {
+                RpcError::from(
+                    FieldViolation::new_at("digests", index)
+                        .with_description(format!("invalid digest: {error}"))
+                        .with_reason(ErrorReason::FieldInvalid),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let valid = parsed
+        .iter()
+        .filter_map(|digest| digest.as_ref().ok().copied())
+        .collect::<Vec<_>>();
     let transactions_stage = stages.stage(PipelineStage::Transactions);
     let objects_stage = stages.stage(PipelineStage::Objects);
-    let resolved = resolve::resolve_transactions(
-        client,
-        digests.clone(),
-        &read_mask,
-        transactions_stage,
-        objects_stage,
-    )
-    .await?;
+    let resolved = if valid.is_empty() {
+        Default::default()
+    } else {
+        resolve::resolve_transactions(client, valid, &read_mask, transactions_stage, objects_stage)
+            .await?
+    };
 
-    let mut transactions = Vec::with_capacity(digests.len());
-    for digest in digests {
+    let mut transactions = Vec::with_capacity(parsed.len());
+    for digest in parsed {
+        let digest = match digest {
+            Ok(digest) => digest,
+            Err(error) => {
+                transactions.push(GetTransactionResult::new_error(error.into_status_proto()));
+                continue;
+            }
+        };
         if let Some((tx, objects)) = resolved.get(&digest) {
+            if admission.is_some_and(|height| tx.checkpoint_number > height) {
+                let error = RpcError::new(
+                    tonic::Code::FailedPrecondition,
+                    "Transaction exceeds publication admission boundary",
+                );
+                transactions.push(GetTransactionResult::new_error(error.into_status_proto()));
+                continue;
+            }
             match transaction_to_response(tx.clone(), &read_mask, objects.as_ref(), resolver).await
             {
                 Ok(tx) => transactions.push(GetTransactionResult::new_transaction(tx)),
-                Err(err) => {
-                    transactions.push(GetTransactionResult::new_error(err.into_status_proto()))
+                Err(error) => {
+                    transactions.push(GetTransactionResult::new_error(error.into_status_proto()))
                 }
             }
         } else {
-            let err: RpcError = TransactionNotFoundError(digest.into()).into();
-            transactions.push(GetTransactionResult::new_error(err.into_status_proto()));
+            let error: RpcError = TransactionNotFoundError(digest.into()).into();
+            transactions.push(GetTransactionResult::new_error(error.into_status_proto()));
         }
     }
     Ok(BatchGetTransactionsResponse::new(transactions))
@@ -137,6 +173,158 @@ mod tests {
         query_context_with_mock_and_registry, response_object_keys,
         two_transaction_object_checkpoint,
     };
+
+    #[tokio::test]
+    async fn batch_invalid_digest_is_an_entry_error_and_keeps_valid_order() {
+        use rtd_rpc::proto::rtd::rpc::v2::get_transaction_result::Result as Entry;
+        let (ctx, _registry, mock, server) =
+            query_context_with_mock_and_registry("batch_invalid_digest", 1).await;
+        let checkpoint = TestCheckpointBuilder::new(5)
+            .start_transaction(0)
+            .create_owned_object(10)
+            .finish_transaction()
+            .start_transaction(0)
+            .create_owned_object(11)
+            .finish_transaction()
+            .build_checkpoint();
+        insert_checkpoint_rows(&mock, &checkpoint).await;
+        let stages = StagesConfig::default();
+        let digest = checkpoint.transactions[0].transaction.digest();
+        let mut request = BatchGetTransactionsRequest::default();
+        request.digests = vec![
+            "!".into(),
+            digest.to_string(),
+            TransactionDigest::random().to_string(),
+        ];
+        request.read_mask = Some(FieldMask::from_paths(["digest"]));
+        let response = batch_get_transactions(
+            ctx.client().clone(),
+            &stages,
+            request,
+            ctx.package_resolver(),
+            None,
+        )
+        .await
+        .expect("valid batch envelope");
+        assert_eq!(response.transactions.len(), 3);
+        assert!(
+            matches!(response.transactions[0].result, Some(Entry::Error(ref e)) if e.code == 3)
+        );
+        assert!(
+            matches!(response.transactions[1].result, Some(Entry::Transaction(ref tx))
+            if tx.digest.as_deref() == Some(digest.to_string().as_str()))
+        );
+        assert!(
+            matches!(response.transactions[2].result, Some(Entry::Error(ref e)) if e.code == 5)
+        );
+
+        let mut bounded = BatchGetTransactionsRequest::default();
+        bounded.digests = vec!["!".into(), digest.to_string()];
+        bounded.read_mask = Some(FieldMask::from_paths(["digest"]));
+        let denied = batch_get_transactions(
+            ctx.client().clone(),
+            &stages,
+            bounded,
+            ctx.package_resolver(),
+            Some(4),
+        )
+        .await
+        .expect("entry admission errors");
+        assert!(matches!(denied.transactions[0].result, Some(Entry::Error(ref e)) if e.code == 3));
+        assert!(matches!(denied.transactions[1].result, Some(Entry::Error(ref e)) if e.code == 9));
+        mock.clear_read_rows_calls().await;
+        let mut invalid = BatchGetTransactionsRequest::default();
+        invalid.digests = vec!["!".into(); MAX_BATCH_REQUESTS];
+        let response = batch_get_transactions(
+            ctx.client().clone(),
+            &stages,
+            invalid,
+            ctx.package_resolver(),
+            None,
+        )
+        .await
+        .expect("entry errors");
+        assert_eq!(response.transactions.len(), MAX_BATCH_REQUESTS);
+        assert!(
+            response
+                .transactions
+                .iter()
+                .all(|r| matches!(r.result, Some(Entry::Error(ref e)) if e.code == 3))
+        );
+        assert!(mock.read_rows_calls().await.is_empty());
+        let mut oversized = BatchGetTransactionsRequest::default();
+        oversized.digests = vec!["!".into(); MAX_BATCH_REQUESTS + 1];
+        let error = batch_get_transactions(
+            ctx.client().clone(),
+            &stages,
+            oversized,
+            ctx.package_resolver(),
+            None,
+        )
+        .await
+        .unwrap_err();
+        let status: tonic::Status = error.into();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn admission_rejects_missing_provenance_and_masks_cannot_bypass_it() {
+        let (ctx, _registry, mock, server) =
+            query_context_with_mock_and_registry("admission_point", 10).await;
+        let digest = TransactionDigest::new([7; 32]);
+        mock.insert_row(
+            rtd_kvstore::tables::transactions::NAME,
+            rtd_kvstore::tables::transactions::encode_key(&digest),
+            [("ts", bytes::Bytes::from(bcs::to_bytes(&0u64).unwrap()))],
+        )
+        .await;
+        let stages = StagesConfig::default();
+        assert!(
+            get_transaction(
+                ctx.client().clone(),
+                &stages,
+                request(digest, ["digest"]),
+                ctx.package_resolver(),
+                Some(0)
+            )
+            .await
+            .is_err()
+        );
+        mock.insert_row(
+            rtd_kvstore::tables::transactions::NAME,
+            rtd_kvstore::tables::transactions::encode_key(&digest),
+            [("cn", bytes::Bytes::from(bcs::to_bytes(&5u64).unwrap()))],
+        )
+        .await;
+        let rejected = get_transaction(
+            ctx.client().clone(),
+            &stages,
+            request(digest, ["digest"]),
+            ctx.package_resolver(),
+            Some(4),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            tonic::Status::from(rejected).code(),
+            tonic::Code::FailedPrecondition
+        );
+        let admitted = get_transaction(
+            ctx.client().clone(),
+            &stages,
+            request(digest, ["digest"]),
+            ctx.package_resolver(),
+            Some(5),
+        )
+        .await
+        .unwrap()
+        .transaction
+        .unwrap();
+        assert_eq!(admitted.digest, Some(digest.to_string()));
+        assert_eq!(admitted.checkpoint, None);
+        server.abort();
+    }
 
     fn request(
         digest: TransactionDigest,
@@ -203,6 +391,7 @@ mod tests {
             &stages,
             request(digest, ["digest"]),
             ctx.package_resolver(),
+            None,
         )
         .await
         .expect("digest-only GetTransaction should succeed")
@@ -231,6 +420,7 @@ mod tests {
                     &stages,
                     request(digest, paths.iter().copied()),
                     ctx.package_resolver(),
+                    None,
                 )
                 .await
                 .expect("GetTransaction should succeed")
@@ -281,6 +471,7 @@ mod tests {
             &stages,
             parent_request,
             ctx.package_resolver(),
+            None,
         )
         .await
         .expect("parent objects BatchGetTransactions should succeed");
@@ -298,6 +489,7 @@ mod tests {
             &stages,
             nested_request,
             ctx.package_resolver(),
+            None,
         )
         .await
         .expect("nested objects BatchGetTransactions should succeed");

@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 
 pub type SnapshotManifest = BTreeMap<u64, Snapshot>;
 
+mod embedded {
+    include!(concat!(env!("OUT_DIR"), "/embedded_snapshots.rs"));
+}
+
 /// Earlier snapshots belong to the upstream chain and cannot be used for RTD genesis.
 pub const FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION: u64 = 138;
 
@@ -143,6 +147,50 @@ mod revision_tests {
 pub fn load_bytecode_snapshot(protocol_version: u64) -> anyhow::Result<Vec<SystemPackage>> {
     let snapshot_path = snapshot_path_for_version(protocol_version)?;
     let manifest = load_bytecode_snapshot_manifest();
+    let mut packages = Vec::new();
+    for entry in fs::read_dir(&snapshot_path)? {
+        let entry = entry?;
+        anyhow::ensure!(
+            entry.file_type()?.is_file(),
+            "Unexpected non-file entry in RTD snapshot: {}",
+            entry.path().display()
+        );
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| anyhow::anyhow!("Invalid snapshot filename"))?;
+        let bytes = fs::read(entry.path())
+            .with_context(|| format!("Cannot read RTD snapshot package {name}"))?;
+        packages.push((name, bytes));
+    }
+    decode_snapshot(
+        protocol_version,
+        &manifest,
+        packages
+            .iter()
+            .map(|(name, bytes)| (name.as_str(), bytes.as_slice())),
+    )
+}
+
+/// Genesis must work after a binary is moved away from its build checkout.
+/// These bytes are locked to the binary at compile time; missing versions never
+/// fall back to a different protocol or to mutable runtime environment paths.
+pub fn load_genesis_bytecode_snapshot(protocol_version: u64) -> anyhow::Result<Vec<SystemPackage>> {
+    validate_snapshot_version(protocol_version)?;
+    let manifest: SnapshotManifest = serde_json::from_slice(embedded::MANIFEST)?;
+    let packages = embedded::packages(protocol_version).ok_or_else(|| {
+        anyhow::anyhow!(
+            "RTD binary has no embedded snapshot for protocol version {protocol_version}"
+        )
+    })?;
+    decode_snapshot(protocol_version, &manifest, packages.iter().copied())
+}
+
+fn decode_snapshot<'a>(
+    protocol_version: u64,
+    manifest: &SnapshotManifest,
+    packages: impl IntoIterator<Item = (&'a str, &'a [u8])>,
+) -> anyhow::Result<Vec<SystemPackage>> {
     let entry = manifest.get(&protocol_version).ok_or_else(|| {
         anyhow::anyhow!(
             "No RTD snapshot manifest entry found for protocol version {protocol_version}"
@@ -155,23 +203,13 @@ pub fn load_bytecode_snapshot(protocol_version: u64) -> anyhow::Result<Vec<Syste
     );
 
     let mut snapshots = BTreeMap::<ObjectID, SystemPackage>::new();
-    for directory_entry in fs::read_dir(&snapshot_path)? {
-        let directory_entry = directory_entry?;
-        let path = directory_entry.path();
-        anyhow::ensure!(
-            directory_entry.file_type()?.is_file(),
-            "Unexpected non-file entry in RTD snapshot: {}",
-            path.display()
-        );
-        let bytes = fs::read(&path)
-            .with_context(|| format!("Cannot read RTD snapshot package {}", path.display()))?;
-        let package: SystemPackage = bcs::from_bytes(&bytes)
-            .with_context(|| format!("Cannot decode RTD snapshot package {}", path.display()))?;
+    for (name, bytes) in packages {
+        let package: SystemPackage = bcs::from_bytes(bytes)
+            .with_context(|| format!("Cannot decode RTD snapshot package {name}"))?;
         let expected_name = package.id.to_string();
         anyhow::ensure!(
-            path.file_name().and_then(|name| name.to_str()) == Some(expected_name.as_str()),
-            "RTD snapshot package {} has the wrong object ID filename; expected {expected_name}",
-            path.display()
+            name == expected_name,
+            "RTD snapshot package {name} has the wrong object ID filename; expected {expected_name}"
         );
         anyhow::ensure!(
             snapshots.insert(package.id, package).is_none(),
@@ -215,6 +253,17 @@ fn snapshot_path_for_version(version: u64) -> anyhow::Result<PathBuf> {
 }
 
 fn snapshot_path_for_version_in(snapshot_dir: &Path, version: u64) -> anyhow::Result<PathBuf> {
+    validate_snapshot_version(version)?;
+    let snapshot_path = snapshot_dir.join(version.to_string());
+    anyhow::ensure!(
+        snapshot_path.is_dir(),
+        "No RTD snapshot found for protocol version {version} at {}",
+        snapshot_path.display()
+    );
+    Ok(snapshot_path)
+}
+
+fn validate_snapshot_version(version: u64) -> anyhow::Result<()> {
     anyhow::ensure!(
         version >= FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION,
         "Protocol version {version} predates RTD genesis; upstream chain snapshots cannot be loaded"
@@ -224,13 +273,7 @@ fn snapshot_path_for_version_in(snapshot_dir: &Path, version: u64) -> anyhow::Re
         "Protocol version {version} exceeds the current RTD maximum {}",
         ProtocolVersion::MAX.as_u64()
     );
-    let snapshot_path = snapshot_dir.join(version.to_string());
-    anyhow::ensure!(
-        snapshot_path.is_dir(),
-        "No RTD snapshot found for protocol version {version} at {}",
-        snapshot_path.display()
-    );
-    Ok(snapshot_path)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -241,6 +284,22 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_TEST_DIR: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn embedded_genesis_packages_match_disk_and_reject_other_protocols() {
+        for version in FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION..=ProtocolVersion::MAX.as_u64() {
+            let disk = super::load_bytecode_snapshot(version).unwrap();
+            let embedded = super::load_genesis_bytecode_snapshot(version).unwrap();
+            assert_eq!(
+                bcs::to_bytes(&disk).unwrap(),
+                bcs::to_bytes(&embedded).unwrap()
+            );
+        }
+        assert!(
+            super::load_genesis_bytecode_snapshot(FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION - 1).is_err()
+        );
+        assert!(super::load_genesis_bytecode_snapshot(ProtocolVersion::MAX.as_u64() + 1).is_err());
+    }
 
     struct TestSnapshotDir(PathBuf);
 

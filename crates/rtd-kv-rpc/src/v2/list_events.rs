@@ -564,9 +564,9 @@ async fn render_event(
 
     let mut proto_event = ProtoEvent::merge_from(event, read_mask);
     if wants_json {
-        proto_event.json = render_json(resolver, &event.type_, &event.contents)
-            .await
-            .map(Box::new);
+        proto_event.json = Some(Box::new(
+            render_json(resolver, &event.type_, &event.contents).await?,
+        ));
     }
 
     // The event's ledger position rides on the `Event` message itself rather
@@ -846,6 +846,67 @@ mod tests {
         request.read_mask = Some(FieldMask::from_paths([path]));
         let mask = validate_event_read_mask(request.read_mask.take()).unwrap();
         event_resolution(mask.contains(ProtoEvent::JSON_FIELD.name))
+    }
+
+    #[tokio::test]
+    async fn json_stream_reports_decode_failure_without_success_terminal() {
+        let (ctx, _registry, mock, server) = metric_context("list_events", 1).await;
+        let valid = bcs::to_bytes(&"valid".as_bytes()).unwrap();
+        let checkpoint = TestCheckpointBuilder::new(0)
+            .start_transaction(0)
+            .with_events(
+                [valid, vec![]]
+                    .into_iter()
+                    .map(|contents| {
+                        Event::new(
+                            &ObjectID::ZERO,
+                            ident_str!("test"),
+                            TestCheckpointBuilder::derive_address(0),
+                            "0x1::string::String".parse().unwrap(),
+                            contents,
+                        )
+                    })
+                    .collect(),
+            )
+            .finish_transaction()
+            .build_checkpoint();
+        insert_checkpoint_rows(&mock, &checkpoint).await;
+        let mut request = ListEventsRequest::default();
+        request.start_checkpoint = Some(0);
+        request.end_checkpoint = Some(1);
+        request.options = Some(ascending_options());
+        request.read_mask = Some(FieldMask::from_paths(["json"]));
+        let mut stream = list_events(ctx.clone(), request.clone()).await.unwrap();
+        let mut seen = 0;
+        loop {
+            match stream.try_next().await {
+                Ok(Some(frame)) => {
+                    assert!(
+                        frame.end.is_none(),
+                        "corrupt JSON cannot produce successful termination"
+                    );
+                    if let Some(event) = frame.event {
+                        assert!(event.json.is_some());
+                        seen += 1;
+                    }
+                }
+                Err(error) => {
+                    assert_eq!(tonic::Status::from(error).code(), tonic::Code::DataLoss);
+                    break;
+                }
+                Ok(None) => panic!("corrupt JSON must fail the stream"),
+            }
+        }
+        assert_eq!(seen, 1);
+        request.read_mask = Some(FieldMask::from_paths(["event_type"]));
+        let raw = list_events(ctx, request)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+        assert_eq!(raw.iter().filter(|frame| frame.event.is_some()).count(), 2);
+        server.abort();
     }
 
     async fn assert_event_metrics(count: usize) {

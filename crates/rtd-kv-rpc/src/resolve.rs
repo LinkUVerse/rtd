@@ -106,7 +106,10 @@ where
     E: From<anyhow::Error> + Send + 'static,
 {
     let tx_columns: Arc<[&'static str]> = list_transactions_columns(read_mask).into();
-    let needs_objects = read_mask.contains(Checkpoint::OBJECTS_FIELD);
+    let needs_objects = read_mask.contains(Checkpoint::OBJECTS_FIELD)
+        || read_mask
+            .subtree(Checkpoint::TRANSACTIONS_FIELD.name)
+            .is_some_and(|mask| needs_transaction_objects(&mask));
 
     // Stage C: (cp_seq, CheckpointData) -> + Vec<TransactionData>. Derive each
     // checkpoint's transaction digests and fetch them through
@@ -467,7 +470,7 @@ fn transaction_columns_for_mask(mask: &FieldMaskTree, needs_objects: bool) -> Ve
 pub(crate) fn list_transactions_columns(mask: &FieldMaskTree) -> Vec<&'static str> {
     use tables::transactions::col;
     let mut columns = if let Some(submask) = mask.subtree(Checkpoint::TRANSACTIONS_FIELD.name) {
-        transaction_columns_for_mask(&submask, needs_object_types(&submask))
+        transaction_columns_for_mask(&submask, needs_transaction_objects(&submask))
     } else {
         // Baseline metadata columns even if the proto `transactions` field
         // isn't requested; we still need the rows to compute object keys.

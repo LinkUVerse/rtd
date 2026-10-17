@@ -21,6 +21,14 @@ pub struct SubscriptionArgs {
     /// subscriptions. When not set, subscriptions are not available.
     #[arg(long)]
     pub checkpoint_stream_url: Option<Uri>,
+    /// Fixed publication authority endpoint. HTTPS requires a private CA and client identity.
+    #[arg(long, requires = "checkpoint_stream_url")]
+    pub publication_guard_url: Option<Url>,
+    #[arg(long, requires = "publication_guard_url")]
+    pub publication_guard_ca: Option<PathBuf>,
+    /// PEM containing the client certificate and private key.
+    #[arg(long, requires = "publication_guard_url")]
+    pub publication_guard_identity: Option<PathBuf>,
 }
 
 #[derive(clap::Parser, Debug, Clone)]
@@ -40,6 +48,10 @@ pub enum Command {
             default_value = "postgres://postgres:postgrespw@localhost:5432/rtd_indexer_alt"
         )]
         database_url: Url,
+
+        /// Read the database URL from a mounted secret instead of process arguments.
+        #[arg(long, conflicts_with = "database_url")]
+        database_url_file: Option<PathBuf>,
 
         #[command(flatten)]
         fullnode_args: FullnodeArgs,
@@ -78,4 +90,43 @@ pub enum Command {
 
     /// Output the contents of the default configuration to STDOUT.
     GenerateConfig,
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::Args;
+    use super::Command;
+
+    #[tokio::test]
+    async fn database_secret_overrides_default_but_conflicts_with_explicit_url() {
+        let args = Args::try_parse_from([
+            "graphql",
+            "rpc",
+            "--database-url-file",
+            "/private/database-url",
+        ])
+        .unwrap();
+        let Command::Rpc {
+            database_url_file, ..
+        } = args.command
+        else {
+            panic!("expected rpc command")
+        };
+        assert_eq!(
+            database_url_file.unwrap().to_str(),
+            Some("/private/database-url")
+        );
+        let error = Args::try_parse_from([
+            "graphql",
+            "rpc",
+            "--database-url-file",
+            "/private/database-url",
+            "--database-url",
+            "postgres://localhost/indexer",
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
 }

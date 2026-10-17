@@ -14,6 +14,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+libc = "0.2"
 anyhow.workspace = true
 async-trait.workspace = true
 bcs.workspace = true
@@ -27,6 +28,11 @@ fastcrypto.workspace = true
 itertools.workspace = true
 prometheus.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+uuid = { workspace = true, features = ["serde"] }
+rand.workspace = true
+postgres-protocol = "0.6.12"
 telemetry-subscribers.workspace = true
 tokio.workspace = true
 toml.workspace = true

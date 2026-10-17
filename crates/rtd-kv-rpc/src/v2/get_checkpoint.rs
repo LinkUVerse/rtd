@@ -23,6 +23,8 @@ pub async fn get_checkpoint(
     stages: &StagesConfig,
     service_info_watermark_pipelines: &[&str],
     request: GetCheckpointRequest,
+    admission: Option<u64>,
+    resolver: &crate::PackageResolver,
 ) -> Result<GetCheckpointResponse, RpcError> {
     let read_mask = {
         let read_mask = request
@@ -65,6 +67,8 @@ pub async fn get_checkpoint(
                 .await?
                 .and_then(|wm| wm.checkpoint_hi_inclusive)
                 .ok_or(CheckpointNotFoundError::sequence_number(0))?;
+            let sequence_number =
+                admission.map_or(sequence_number, |height| sequence_number.min(height));
             client
                 .get_checkpoints_filtered(&[sequence_number], Some(&columns))
                 .await?
@@ -73,6 +77,20 @@ pub async fn get_checkpoint(
         }
     };
 
+    if let Some(height) = admission {
+        let summary = checkpoint.summary.as_ref().ok_or_else(|| {
+            RpcError::new(
+                tonic::Code::Unavailable,
+                "Checkpoint admission summary unavailable",
+            )
+        })?;
+        if summary.sequence_number > height {
+            return Err(RpcError::new(
+                tonic::Code::FailedPrecondition,
+                "Checkpoint exceeds publication admission boundary",
+            ));
+        }
+    }
     let message = if needs_full {
         let transactions_stage = stages.stage(PipelineStage::Transactions);
         let objects_stage = stages.stage(PipelineStage::Objects);
@@ -82,6 +100,7 @@ pub async fn get_checkpoint(
             &read_mask,
             transactions_stage,
             objects_stage,
+            resolver,
         )
         .await?
     } else {
@@ -98,6 +117,7 @@ async fn resolve_full_checkpoint(
     read_mask: &FieldMaskTree,
     transactions_stage: ResolvedStageConfig,
     objects_stage: ResolvedStageConfig,
+    resolver: &crate::PackageResolver,
 ) -> Result<Checkpoint, RpcError> {
     let cp_seq = checkpoint
         .summary
@@ -115,5 +135,5 @@ async fn resolve_full_checkpoint(
     )
     .await?;
 
-    render::render_full_checkpoint(cp_data, txs, objects, read_mask)
+    render::render_full_checkpoint(cp_data, txs, objects, read_mask, resolver).await
 }

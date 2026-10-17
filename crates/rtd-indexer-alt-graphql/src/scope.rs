@@ -8,10 +8,13 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use async_graphql::Context;
+use async_graphql::dataloader::DataLoader;
 use async_trait::async_trait;
 use move_core_types::account_address::AccountAddress;
 use rtd_indexer_alt_reader::kv_loader::TransactionContents as NativeTransactionContents;
+use rtd_indexer_alt_reader::package_resolver::DbPackageStore;
 use rtd_indexer_alt_reader::package_resolver::PackageCache;
+use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_package_resolver::Package;
 use rtd_package_resolver::PackageStore;
 use rtd_package_resolver::Resolver;
@@ -139,6 +142,9 @@ pub(crate) struct Scope {
     /// Access to packages for type resolution.
     package_store: Arc<dyn PackageStore>,
 
+    /// Indexed layout reads are keyed by both package ID and this scope's checkpoint.
+    indexed_package_loader: Option<Arc<DataLoader<PgReader>>>,
+
     /// Limits for package/type resolution.
     resolver_limits: rtd_package_resolver::Limits,
 }
@@ -157,6 +163,7 @@ impl Scope {
             root_bound: None,
             data_source: DataSource::Indexed,
             package_store: package_store.clone(),
+            indexed_package_loader: Some(ctx.data::<Arc<DataLoader<PgReader>>>()?.clone()),
             resolver_limits: limits.package_resolver(),
         })
     }
@@ -173,6 +180,7 @@ impl Scope {
             active_transaction: None,
             root_bound: None,
             package_store: caches.package_store.clone(),
+            indexed_package_loader: caches.package_loader.clone(),
             data_source: DataSource::Streamed {
                 checkpoint: streamed_checkpoint,
                 caches,
@@ -195,6 +203,7 @@ impl Scope {
             root_bound: None,
             data_source: DataSource::Backfill { checkpoint },
             package_store: caches.package_store.clone(),
+            indexed_package_loader: caches.package_loader.clone(),
             resolver_limits,
         }
     }
@@ -235,6 +244,7 @@ impl Scope {
             root_bound: self.root_bound,
             data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
+            indexed_package_loader: self.indexed_package_loader.clone(),
             resolver_limits: self.resolver_limits.clone(),
         }
     }
@@ -261,6 +271,7 @@ impl Scope {
             root_bound: None,
             data_source: DataSource::Indexed,
             package_store: Arc::new(EmptyPackageStore),
+            indexed_package_loader: None,
             resolver_limits: Limits::default().package_resolver(),
         }
     }
@@ -280,6 +291,7 @@ impl Scope {
             root_bound: self.root_bound,
             data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
+            indexed_package_loader: self.indexed_package_loader.clone(),
             resolver_limits: self.resolver_limits.clone(),
         })
     }
@@ -292,6 +304,7 @@ impl Scope {
             root_bound: Some(RootBound::Version(root_version)),
             data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
+            indexed_package_loader: self.indexed_package_loader.clone(),
             resolver_limits: self.resolver_limits.clone(),
         }
     }
@@ -304,6 +317,7 @@ impl Scope {
             root_bound: Some(RootBound::Checkpoint(root_checkpoint)),
             data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
+            indexed_package_loader: self.indexed_package_loader.clone(),
             resolver_limits: self.resolver_limits.clone(),
         }
     }
@@ -316,6 +330,7 @@ impl Scope {
             root_bound: None,
             data_source: self.data_source.clone(),
             package_store: self.package_store.clone(),
+            indexed_package_loader: self.indexed_package_loader.clone(),
             resolver_limits: self.resolver_limits.clone(),
         }
     }
@@ -465,6 +480,7 @@ impl Scope {
             root_bound: self.root_bound,
             data_source: DataSource::Executed { execution_objects },
             package_store: self.package_store.clone(),
+            indexed_package_loader: self.indexed_package_loader.clone(),
             resolver_limits: self.resolver_limits.clone(),
         })
     }
@@ -569,7 +585,23 @@ impl PackageStore for Scope {
             }
         }
 
-        // Package not found in execution context, fall back to the underlying store
+        let package_checkpoint = match &self.data_source {
+            DataSource::Indexed => self.checkpoint_viewed_at,
+            DataSource::Backfill { checkpoint } => Some(*checkpoint),
+            DataSource::Streamed { checkpoint, .. } => Some(checkpoint.summary.sequence_number),
+            DataSource::Executed { .. } => None,
+        };
+        if let (Some(loader), Some(height)) = (&self.indexed_package_loader, package_checkpoint) {
+            let store = DbPackageStore::at_checkpoint(loader.clone(), height);
+            if let DataSource::Streamed { caches, .. } = &self.data_source {
+                return caches
+                    .package_store
+                    .fetch_at_checkpoint(id, height, &store)
+                    .await;
+            }
+            return store.fetch(id).await;
+        }
+        // Fresh execution scopes retain their explicit execution/package context.
         self.package_store.fetch(id).await
     }
 }

@@ -250,6 +250,48 @@ impl WatermarkTask {
 }
 
 impl Watermarks {
+    /// Build a request-local upper bound from the exact admitted checkpoint.
+    /// Never edit the shared poller's state or invent historical transaction totals.
+    pub(crate) fn admitted(
+        &self,
+        checkpoint: u64,
+        epoch: u64,
+        transaction: u64,
+        timestamp_ms: u64,
+    ) -> anyhow::Result<Self> {
+        anyhow::ensure!(self.initialized(), "watermarks are not initialized");
+        anyhow::ensure!(
+            checkpoint <= self.high_watermark().checkpoint(),
+            "admission is ahead of indexed data"
+        );
+        let bound = Watermark {
+            checkpoint: checkpoint.try_into()?,
+            epoch: epoch.try_into()?,
+            transaction: transaction.try_into()?,
+        };
+        let timestamp: i64 = timestamp_ms.try_into()?;
+        anyhow::ensure!(
+            bound.epoch <= self.global_hi.epoch
+                && bound.transaction <= self.global_hi.transaction
+                && timestamp <= self.timestamp_ms_hi_inclusive,
+            "admitted summary exceeds current metadata"
+        );
+        let mut result = self.clone();
+        for pipeline in result.per_pipeline.values_mut() {
+            anyhow::ensure!(
+                pipeline.lo.checkpoint <= bound.checkpoint
+                    && pipeline.lo.transaction <= bound.transaction
+                    && pipeline.lo.epoch <= bound.epoch,
+                "admitted checkpoint has been pruned"
+            );
+            pipeline.hi = bound.clone();
+            pipeline.timestamp_ms_hi_inclusive = timestamp;
+        }
+        result.global_hi = bound;
+        result.timestamp_ms_hi_inclusive = timestamp;
+        Ok(result)
+    }
+
     /// The high watermark across all pipelines. Returned as an inclusive checkpoint number,
     /// inclusive epoch number and an exclusive transaction sequence number.
     pub(crate) fn high_watermark(&self) -> &Watermark {
@@ -558,5 +600,75 @@ async fn watermark_from_consistent(
         Err(e) => Err(anyhow!(e).context(format!(
             "Failed to get consistent store watermarks at checkpoint {checkpoint}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::Watermarks;
+
+    fn fixture() -> Watermarks {
+        let mut watermarks = Watermarks::for_test(&[("first", 10), ("second", 12)]);
+        watermarks.global_hi.checkpoint = 10;
+        watermarks.global_hi.epoch = 8;
+        watermarks.global_hi.transaction = 100;
+        watermarks.timestamp_ms_hi_inclusive = 1000;
+        for pipeline in watermarks.per_pipeline.values_mut() {
+            pipeline.hi.epoch = 8;
+            pipeline.hi.transaction = 100;
+            pipeline.timestamp_ms_hi_inclusive = 1000;
+        }
+        watermarks
+    }
+
+    #[tokio::test]
+    async fn request_copy_binds_all_upper_metadata_without_mutating_shared_state() {
+        let original = fixture();
+        let bounded = original.admitted(5, 4, 50, 500).unwrap();
+        assert_eq!(original.high_watermark().checkpoint(), 10);
+        assert_eq!(original.high_watermark().transaction(), 100);
+        assert_eq!(bounded.high_watermark().checkpoint(), 5);
+        assert_eq!(bounded.high_watermark().transaction(), 50);
+        assert_eq!(bounded.global_hi.epoch, 4);
+        assert_eq!(bounded.timestamp_hi_ms(), 500);
+        for pipeline in bounded.per_pipeline.values() {
+            assert_eq!(pipeline.hi.checkpoint, 5);
+            assert_eq!(pipeline.hi.transaction, 50);
+            assert_eq!(pipeline.hi.epoch, 4);
+            assert_eq!(pipeline.timestamp_ms_hi_inclusive, 500);
+            assert_eq!(pipeline.lo.checkpoint, 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn uninitialized_admission_is_rejected() {
+        assert!(Watermarks::default().admitted(0, 0, 0, 0).is_err());
+    }
+
+    #[tokio::test]
+    async fn malformed_or_ahead_summary_is_rejected() {
+        let current = fixture();
+        for fields in [
+            (11, 4, 50, 500),
+            (5, 9, 50, 500),
+            (5, 4, 101, 500),
+            (5, 4, 50, 1001),
+            (5, u64::MAX, 50, 500),
+            (5, 4, u64::MAX, 500),
+            (5, 4, 50, u64::MAX),
+        ] {
+            assert!(
+                current
+                    .admitted(fields.0, fields.1, fields.2, fields.3)
+                    .is_err()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn pruned_admission_is_rejected() {
+        let mut current = fixture();
+        current.per_pipeline.get_mut("first").unwrap().lo.checkpoint = 6;
+        assert!(current.admitted(5, 4, 50, 500).is_err());
     }
 }

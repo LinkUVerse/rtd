@@ -27,6 +27,7 @@ rtd-rpc.workspace = true
 rtd-crypto.workspace = true
 prometheus.workspace = true
 http.workspace = true
+h2.workspace = true
 tower.workspace = true
 tracing.workspace = true
 async-stream.workspace = true

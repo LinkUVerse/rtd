@@ -49,9 +49,12 @@ use crate::task::streaming::SubscriptionTerminationReason;
 use crate::task::streaming::broadcast_error;
 use crate::task::streaming::reconnect_error;
 use crate::task::streaming::wait_for_pipelines_catching_up_at;
+use crate::task::watermark::Watermarks;
 
 use super::Error;
-use crate::task::watermark::Watermarks;
+
+#[cfg(test)]
+mod published_tests;
 
 /// How long to wait before re-requesting when the scan has drained the indexer's current tip but not
 /// yet reached the handoff.
@@ -140,6 +143,8 @@ pub(super) fn subscribe<S: Subscribable>(
     after_checkpoint: Option<u64>,
     subscriber_limit: SubscriberLimit,
     config: SubscriptionConfig,
+    admission: Option<u64>,
+    follow: Option<watch::Receiver<u64>>,
 ) -> Result<impl Stream<Item = Result<Edge<String, S::Item, EmptyFields>, RpcError>>, RpcError<Error>>
 where
     for<'a> CursorToken: From<&'a S::Cursor>,
@@ -156,6 +161,10 @@ where
         (Some(a), Some(b)) => Some(a.max(b)),
         (a, b) => a.or(b),
     };
+
+    if admission.is_some_and(|height| start_from.is_some_and(|start| start > height)) {
+        return Err(upcast(reconnect_error()));
+    }
 
     // Reject a far-ahead resume before admitting, so bad input never claims a slot or lands in the
     // subscription lifecycle metrics.
@@ -181,6 +190,29 @@ where
     let handoff_threshold = config.broadcast_buffer as u64 / 2;
 
     Ok(stream! {
+        // Certified archival streams follow publication, rather than exposing the
+        // Full Node's unaudited tip. The same scan cursor preserves every item.
+        if let Some(follow) = follow {
+            let checkpoint_lo = after_checkpoint.map(|cp| cp.saturating_add(1))
+                .unwrap_or_else(|| if after.is_some() { 0 } else { follow.borrow().saturating_add(1) });
+            let scan = published_backfill::<S>(reader, caches, resolver_limits,
+                watermarks_rx, filter, after, checkpoint_lo, scan_page_size, follow);
+            for await item in scan {
+                match item {
+                    Ok(Scanned::Match { edge, .. }) => {
+                        yield Ok(edge);
+                        guard.record_backfill_delivered();
+                    }
+                    Ok(Scanned::Covered { .. }) => {}
+                    Err(error) => {
+                        guard.terminate(SubscriptionTerminationReason::BackfillError);
+                        yield Err(error);
+                        return;
+                    }
+                }
+            }
+            return;
+        }
         let mut pending_receiver = None;
         let mut handoff: Option<u64> = None;
         let mut last_checkpoint: Option<u64> = None;
@@ -198,6 +230,7 @@ where
                 after,
                 checkpoint_lo,
                 scan_page_size,
+                admission,
             );
             for await scanned in scan {
                 let scanned = match scanned {
@@ -229,6 +262,11 @@ where
                     // A coverage marker (its `checkpoint` is the fully-scanned frontier): stop once
                     // it has covered the handoff.
                     Scanned::Covered { checkpoint } => {
+                        if admission.is_some_and(|height| checkpoint >= height) {
+                            guard.terminate(SubscriptionTerminationReason::BackfillError);
+                            yield Err(reconnect_error());
+                            return;
+                        }
                         if handoff.is_some_and(|h| checkpoint >= h) {
                             break;
                         }
@@ -241,7 +279,7 @@ where
         // Phase 2: follow live from `handoff + 1` (a fresh receiver if there was no backfill).
         let receiver = pending_receiver.unwrap_or_else(|| broadcast.broadcaster().resubscribe());
         for await edge in
-            live::<S>(receiver, last_checkpoint, caches, resolver_limits, filter, guard)
+            live::<S>(receiver, last_checkpoint, caches, resolver_limits, filter, guard, admission)
         {
             yield edge;
         }
@@ -276,6 +314,7 @@ fn backfill<S: Subscribable>(
     mut after: Option<S::Cursor>,
     checkpoint_lo: u64,
     scan_page_size: usize,
+    admission: Option<u64>,
 ) -> impl Stream<Item = Result<Scanned<S::Item>, RpcError>> {
     stream! {
         let limits = PageLimits {
@@ -286,7 +325,12 @@ fn backfill<S: Subscribable>(
         // Resume from whichever is later: the `after` cursor or `[checkpoint_lo, ..]`. The upper
         // bound is `u64::MAX` because backfill is open-ended, chasing the moving tip; `subscribe`
         // stops it once the handoff is covered.
-        let cp_bounds = checkpoint_lo..=u64::MAX;
+        let ceiling = admission.unwrap_or(u64::MAX);
+        if checkpoint_lo > ceiling {
+            yield Err(reconnect_error());
+            return;
+        }
+        let cp_bounds = checkpoint_lo..=ceiling;
 
         loop {
             let (items, next_after) = match scan_page::<S>(
@@ -307,7 +351,48 @@ fn backfill<S: Subscribable>(
                     return;
                 }
             };
+            let covered = items.iter().any(|item| matches!(item, Scanned::Covered { checkpoint } if *checkpoint >= ceiling));
             for item in items {
+                yield Ok(item);
+            }
+            if admission.is_some() && covered {
+                yield Err(reconnect_error());
+                return;
+            }
+            after = Some(next_after);
+        }
+    }
+}
+
+/// Wait at the certified frontier, then continue from the exact scan cursor.
+fn published_backfill<S: Subscribable>(
+    reader: AlphaLedgerGrpcReader,
+    caches: Arc<StreamedCaches>,
+    resolver_limits: rtd_package_resolver::Limits,
+    mut watermarks_rx: watch::Receiver<Arc<Watermarks>>,
+    filter: S::Filter,
+    mut after: Option<S::Cursor>,
+    checkpoint_lo: u64,
+    scan_page_size: usize,
+    mut follow: watch::Receiver<u64>,
+) -> impl Stream<Item = Result<Scanned<S::Item>, RpcError>> {
+    stream! {
+        let limits = PageLimits { default: scan_page_size as u32, max: scan_page_size as u32 };
+        let mut covered = None;
+        loop {
+            let ceiling = *follow.borrow_and_update();
+            if checkpoint_lo > ceiling || covered.is_some_and(|cp| cp >= ceiling) {
+                if follow.changed().await.is_err() { return; }
+                continue;
+            }
+            let (items, next_after) = match scan_page::<S>(&reader, &caches,
+                &resolver_limits, &limits, checkpoint_lo..=ceiling,
+                after.as_ref(), &filter, &mut watermarks_rx).await {
+                Ok(page) => page,
+                Err(error) => { yield Err(error); return; }
+            };
+            for item in items {
+                if let Scanned::Covered { checkpoint } = &item { covered = Some(*checkpoint); }
                 yield Ok(item);
             }
             after = Some(next_after);
@@ -334,13 +419,24 @@ fn live<S: Subscribable>(
     resolver_limits: rtd_package_resolver::Limits,
     filter: S::Filter,
     guard: SubscriptionLifecycleGuard,
+    admission: Option<u64>,
 ) -> impl Stream<Item = Result<Edge<String, S::Item, EmptyFields>, RpcError>> {
     stream! {
         let mut delivered_live = false;
         loop {
+            if admission.is_some_and(|height| last_checkpoint.is_some_and(|last| last >= height)) {
+                guard.terminate(SubscriptionTerminationReason::Error);
+                yield Err(reconnect_error());
+                return;
+            }
             match receiver.recv().await {
                 Ok(checkpoint) => {
                     let seq = checkpoint.summary.sequence_number;
+                    if admission.is_some_and(|height| seq > height) {
+                        guard.terminate(SubscriptionTerminationReason::Error);
+                        yield Err(reconnect_error());
+                        return;
+                    }
                     if let Some(last) = last_checkpoint {
                         // Already covered by the scan (resubscribe/tip overlap): skip.
                         if seq <= last {
@@ -420,13 +516,26 @@ async fn scan_page<S: Subscribable>(
         // No end cursor means nothing past the indexer tip is indexed yet; wait, then re-request. A
         // range that was scanned but matched nothing still returns a boundary cursor, not `None`.
         let Some(end_cursor) = result.last_cursor() else {
+            if *cp_bounds.end() != u64::MAX
+                && watermarks_rx.borrow().initialized()
+                && watermarks_rx.borrow().high_watermark().checkpoint() >= *cp_bounds.end()
+            {
+                return Err(reconnect_error());
+            }
             tokio::time::sleep(BACKFILL_POLL_INTERVAL).await;
             continue;
         };
         let end_cursor = CursorToken::decode(end_cursor).context("Failed to decode scan cursor")?;
+        if end_cursor.position.checkpoint() > *cp_bounds.end() {
+            return Err(reconnect_error());
+        }
 
         // Hold the page until all pipelines have indexed through its end.
-        wait_for_pipelines_catching_up_at(end_cursor.position.checkpoint(), watermarks_rx).await?;
+        wait_for_pipelines_catching_up_at(
+            end_cursor.position.checkpoint().min(*cp_bounds.end()),
+            watermarks_rx,
+        )
+        .await?;
 
         // A forward page keeps `items` in ascending order, one delivered edge each. The decoded
         // token yields both the checkpoint and the edge cursor, so it is only decoded once.
@@ -435,6 +544,9 @@ async fn scan_page<S: Subscribable>(
             let token =
                 CursorToken::decode(&item.cursor).context("Failed to decode scan item cursor")?;
             let checkpoint = token.position.checkpoint();
+            if !cp_bounds.contains(&checkpoint) {
+                return Err(reconnect_error());
+            }
             let cursor = S::Cursor::try_from(token)
                 .context("Unexpected position in scan item cursor")?
                 .encode_cursor();
@@ -483,4 +595,179 @@ async fn scan_with_retry<S: Subscribable>(
             })
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::StreamExt;
+    use prometheus::Registry;
+    use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcArgs;
+    use rtd_indexer_alt_reader::package_resolver::DbPackageStore;
+    use rtd_indexer_alt_reader::package_resolver::PackageCache;
+    use rtd_indexer_alt_reader::pg_reader::PgReader;
+    use rtd_rpc::field::FieldMask;
+    use rtd_rpc::field::FieldMaskTree;
+    use rtd_rpc::field::FieldMaskUtil;
+    use rtd_rpc::merge::Merge;
+    use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
+
+    use crate::api::types::checkpoint::Checkpoint;
+    use crate::metrics::SubscriptionMetrics;
+    use crate::task::streaming::StreamedObjectStore;
+    use crate::task::streaming::StreamedTransactionStore;
+    use crate::task::streaming::StreamingPackageStore;
+    use crate::task::streaming::process_checkpoint;
+
+    use super::*;
+
+    pub(super) async fn caches() -> Arc<StreamedCaches> {
+        let reader = PgReader::new(None, None, Default::default(), &Registry::new())
+            .await
+            .unwrap();
+        let loader = Arc::new(reader.as_data_loader());
+        Arc::new(
+            StreamedCaches::new(
+                Arc::new(StreamingPackageStore::new(Arc::new(PackageCache::new(
+                    DbPackageStore::new(loader.clone()),
+                )))),
+                Arc::new(StreamedTransactionStore::new()),
+                Arc::new(StreamedObjectStore::new()),
+            )
+            .with_package_loader(loader),
+        )
+    }
+
+    fn checkpoint(height: u64) -> Arc<ProcessedCheckpoint> {
+        let source = TestCheckpointBuilder::new(height).build_checkpoint();
+        let proto = rtd_rpc::proto::rtd::rpc::v2::Checkpoint::merge_from(
+            &source,
+            &FieldMaskTree::from(FieldMask::from_paths(["*"])),
+        );
+        Arc::new(process_checkpoint(proto).unwrap())
+    }
+
+    #[tokio::test]
+    async fn live_ceiling_stops_before_future_payload_and_reconnect_resumes() {
+        let caches = caches().await;
+        for (previous, ceiling, sent_through, expected) in [
+            (None, Some(5), 7, vec![4, 5]),
+            (None, Some(5), 5, vec![4, 5]),
+            (Some(5), Some(6), 6, vec![6]),
+            (Some(5), Some(5), 3, vec![]),
+            (None, None, 7, vec![4, 5, 6]),
+        ] {
+            let (sender, receiver) = broadcast::channel(8);
+            for height in 4..=sent_through {
+                assert!(sender.send(checkpoint(height)).is_ok());
+            }
+            let metrics = SubscriptionMetrics::new(&Registry::new());
+            let guard =
+                SubscriptionLifecycleGuard::new("checkpoints", &metrics, &SubscriberLimit::new(1))
+                    .unwrap();
+            let stream = live::<Checkpoint>(
+                receiver,
+                previous,
+                caches.clone(),
+                crate::config::Limits::default().package_resolver(),
+                (),
+                guard,
+                ceiling,
+            );
+            futures::pin_mut!(stream);
+            for height in expected {
+                assert_eq!(
+                    stream.next().await.unwrap().unwrap().node.sequence_number,
+                    height
+                );
+            }
+            if ceiling.is_some() {
+                assert!(
+                    tokio::time::timeout(Duration::from_secs(1), stream.next())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .is_err()
+                );
+                assert!(stream.next().await.is_none());
+            } else {
+                assert_eq!(
+                    stream.next().await.unwrap().unwrap().node.sequence_number,
+                    7
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn backfill_beyond_admission_ends_before_any_scan() {
+        let reader = AlphaLedgerGrpcReader::new(
+            "http://127.0.0.1:9".parse().unwrap(),
+            LedgerGrpcArgs::default(),
+            None,
+            &Registry::new(),
+        )
+        .await
+        .unwrap();
+        let (_sender, receiver) = watch::channel(Arc::new(Watermarks::default()));
+        let stream = backfill::<Checkpoint>(
+            reader,
+            caches().await,
+            crate::config::Limits::default().package_resolver(),
+            receiver,
+            (),
+            None,
+            6,
+            2,
+            Some(5),
+        );
+        futures::pin_mut!(stream);
+        let item = tokio::time::timeout(Duration::from_secs(1), stream.next())
+            .await
+            .unwrap();
+        assert!(item.unwrap().is_err());
+        assert!(stream.next().await.is_none());
+    }
+    #[tokio::test]
+    async fn published_feed_waits_without_querying_above_frontier_and_closes_on_owner_drop() {
+        let reader = AlphaLedgerGrpcReader::new(
+            "http://127.0.0.1:9".parse().unwrap(),
+            LedgerGrpcArgs::default(),
+            None,
+            &Registry::new(),
+        )
+        .await
+        .unwrap();
+        let (_watermarks, receiver) = watch::channel(Arc::new(Watermarks::default()));
+        let (frontier, follow) = watch::channel(5);
+        let stream = published_backfill::<Checkpoint>(
+            reader,
+            caches().await,
+            crate::config::Limits::default().package_resolver(),
+            receiver,
+            (),
+            None,
+            6,
+            2,
+            follow,
+        );
+        futures::pin_mut!(stream);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), stream.next())
+                .await
+                .is_err()
+        );
+        frontier.send_replace(5);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), stream.next())
+                .await
+                .is_err()
+        );
+        drop(frontier);
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), stream.next())
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
 }

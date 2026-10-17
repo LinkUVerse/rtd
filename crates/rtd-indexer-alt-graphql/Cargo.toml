@@ -41,6 +41,7 @@ itertools.workspace = true
 pin-project.workspace = true
 prometheus.workspace = true
 prost-types.workspace = true
+reqwest.workspace = true
 rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -84,11 +85,13 @@ tikv-jemallocator = { workspace = true, optional = true }
 bytes.workspace = true
 diesel-async.workspace = true
 insta.workspace = true
-reqwest.workspace = true
+rcgen.workspace = true
 regex.workspace = true
 rtd-indexer-alt-reader = { workspace = true, features = ["testing"] }
 rtd-package-resolver = { workspace = true, features = ["testing"] }
+tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
+tokio-rustls.workspace = true
 tracing-subscriber.workspace = true
 
 [features]

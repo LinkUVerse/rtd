@@ -22,6 +22,7 @@ pub async fn get_epoch(
     mut client: BigTableClient,
     request: GetEpochRequest,
     chain: Chain,
+    admission: Option<(u64, u64)>,
 ) -> rtd_rpc_api::Result<GetEpochResponse> {
     let read_mask = {
         let read_mask = request
@@ -37,8 +38,27 @@ pub async fn get_epoch(
 
     let mut message = Epoch::default();
 
-    let columns = epoch_columns(&read_mask);
-    let maybe_epoch_info = if let Some(epoch) = request.epoch {
+    let mut columns = epoch_columns(&read_mask);
+    if admission.is_some() {
+        for column in [col::START_CHECKPOINT, col::END_CHECKPOINT] {
+            if !columns.contains(&column) {
+                columns.push(column);
+            }
+        }
+    }
+    let requested_epoch = match admission {
+        Some((_, epoch)) => {
+            if request.epoch.is_some_and(|requested| requested > epoch) {
+                return Err(rtd_rpc_api::RpcError::new(
+                    tonic::Code::FailedPrecondition,
+                    "Epoch exceeds publication admission boundary",
+                ));
+            }
+            Some(request.epoch.unwrap_or(epoch))
+        }
+        None => request.epoch,
+    };
+    let maybe_epoch_info = if let Some(epoch) = requested_epoch {
         client
             .get_epochs_filtered(&[epoch], Some(&columns))
             .await?
@@ -47,9 +67,23 @@ pub async fn get_epoch(
         client.get_latest_epoch_filtered(Some(&columns)).await?
     };
 
-    let Some(epoch_info) = maybe_epoch_info else {
+    let Some(mut epoch_info) = maybe_epoch_info else {
+        if admission.is_some() {
+            return Err(rtd_rpc_api::RpcError::new(
+                tonic::Code::Unavailable,
+                "Admitted epoch unavailable",
+            ));
+        }
         return Ok(GetEpochResponse::default());
     };
+    if let Some((height, current_epoch)) = admission {
+        admit_epoch(
+            &mut epoch_info,
+            height,
+            current_epoch,
+            requested_epoch.unwrap(),
+        )?;
+    }
 
     if read_mask.contains(Epoch::EPOCH_FIELD.name) {
         message.epoch = epoch_info.epoch;
@@ -123,4 +157,81 @@ fn epoch_columns(mask: &FieldMaskTree) -> Vec<&'static str> {
     }
 
     columns
+}
+
+fn admit_epoch(
+    info: &mut rtd_kvstore::EpochData,
+    height: u64,
+    current_epoch: u64,
+    requested_epoch: u64,
+) -> rtd_rpc_api::Result<()> {
+    let unavailable = || {
+        rtd_rpc_api::RpcError::new(
+            tonic::Code::Unavailable,
+            "Admitted epoch metadata unavailable",
+        )
+    };
+    let start = info.start_checkpoint.ok_or_else(unavailable)?;
+    if info.epoch != Some(requested_epoch)
+        || start > height
+        || info.end_checkpoint.is_some_and(|end| end < start)
+        || (requested_epoch < current_epoch && info.end_checkpoint.is_none_or(|end| end > height))
+    {
+        return Err(unavailable());
+    }
+    if info.end_checkpoint.is_none_or(|end| end > height) {
+        info.end_checkpoint = None;
+        info.end_timestamp_ms = None;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+    use bytes::Bytes;
+    use rtd_kvstore::tables::epochs;
+
+    fn epoch() -> rtd_kvstore::EpochData {
+        let cells: Vec<_> = [("ep", 2u64), ("sc", 5), ("ec", 10), ("et", 1000)]
+            .into_iter()
+            .map(|(key, value)| {
+                (
+                    Bytes::from_static(key.as_bytes()),
+                    Bytes::copy_from_slice(&value.to_be_bytes()),
+                )
+            })
+            .collect();
+        epochs::decode(&cells).unwrap()
+    }
+
+    #[tokio::test]
+    async fn epoch_end_is_hidden_until_its_checkpoint_is_admitted() {
+        let mut value = epoch();
+        admit_epoch(&mut value, 9, 2, 2).unwrap();
+        assert_eq!(value.end_checkpoint, None);
+        assert_eq!(value.end_timestamp_ms, None);
+        let mut value = epoch();
+        admit_epoch(&mut value, 10, 2, 2).unwrap();
+        assert_eq!(value.end_checkpoint, Some(10));
+        assert_eq!(value.end_timestamp_ms, Some(1000));
+        admit_epoch(&mut value, 11, 3, 2).unwrap();
+    }
+
+    #[tokio::test]
+    async fn missing_or_inconsistent_epoch_provenance_is_rejected() {
+        assert!(admit_epoch(&mut epoch(), 4, 2, 2).is_err());
+        assert!(admit_epoch(&mut epoch(), 9, 3, 2).is_err());
+        assert!(admit_epoch(&mut epoch(), 10, 2, 1).is_err());
+        let mut value = epoch();
+        value.start_checkpoint = None;
+        assert!(admit_epoch(&mut value, 10, 2, 2).is_err());
+        let mut value = epoch();
+        value.end_checkpoint = Some(4);
+        assert!(admit_epoch(&mut value, 10, 2, 2).is_err());
+        let mut value = epoch();
+        value.end_checkpoint = None;
+        admit_epoch(&mut value, 9, 2, 2).unwrap();
+        assert_eq!(value.end_timestamp_ms, None);
+    }
 }

@@ -11972,6 +11972,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rtd-bigtable-proto"
+version = "1.81.0"
+dependencies = [
+ "prost 0.14.1",
+ "prost-types 0.14.1",
+ "tonic 0.14.6",
+ "tonic-prost",
+]
+
+[[package]]
 name = "rtd-bridge"
 version = "1.81.0"
 dependencies = [
@@ -12911,7 +12921,9 @@ dependencies = [
  "fastcrypto",
  "futures",
  "itertools 0.13.0",
+ "libc",
  "move-core-types",
+ "postgres-protocol",
  "prometheus",
  "rand 0.8.5",
  "rtd-indexer-alt-framework",
@@ -12922,12 +12934,15 @@ dependencies = [
  "rtd-types",
  "scoped-futures",
  "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "telemetry-subscribers",
  "tempfile",
  "tokio",
  "toml 0.7.4",
  "tracing",
  "url",
+ "uuid",
  "wiremock",
 ]
 
@@ -13168,6 +13183,7 @@ dependencies = [
  "pin-project",
  "prometheus",
  "prost-types 0.14.1",
+ "rcgen",
  "regex",
  "reqwest",
  "rtd-display",
@@ -13189,9 +13205,11 @@ dependencies = [
  "serde_json",
  "shared-crypto",
  "telemetry-subscribers",
+ "tempfile",
  "thiserror 1.0.69",
  "tikv-jemallocator",
  "tokio",
+ "tokio-rustls",
  "tokio-stream",
  "toml 0.7.4",
  "tonic 0.14.6",
@@ -13317,6 +13335,7 @@ dependencies = [
  "rtd-kvstore",
  "rtd-package-resolver",
  "rtd-pg-db",
+ "rtd-protocol-config",
  "rtd-rpc",
  "rtd-sdk-types",
  "rtd-sql-macro",
@@ -13636,6 +13655,7 @@ dependencies = [
  "prost-types 0.14.1",
  "rand 0.8.5",
  "roaring",
+ "rtd-bigtable-proto",
  "rtd-futures",
  "rtd-indexer-alt-framework",
  "rtd-indexer-alt-framework-store-traits",
@@ -14454,6 +14474,7 @@ dependencies = [
  "bytes",
  "fastcrypto",
  "futures",
+ "h2",
  "http",
  "itertools 0.13.0",
  "linku-common",
@@ -14931,6 +14952,7 @@ dependencies = [
  "consensus-config",
  "fastcrypto",
  "insta",
+ "libc",
  "linku-common",
  "prometheus",
  "rand 0.8.5",
@@ -14942,6 +14964,7 @@ dependencies = [
  "rtd-simulator",
  "rtd-types",
  "serde",
+ "serde_json",
  "serde_with",
  "serde_yaml 0.8.26",
  "shared-crypto",
@@ -18520,6 +18543,7 @@ dependencies = [
  "getrandom 0.4.2",
  "js-sys",
  "rand 0.10.0",
+ "serde_core",
  "wasm-bindgen",
 ]
 

@@ -43,7 +43,8 @@ use crate::api::scalars::json::Json;
 use crate::api::scalars::rtd_address::RtdAddress;
 use crate::api::types::address::Address;
 use crate::api::types::available_range::AvailableRangeKey;
-use crate::api::types::checkpoint::filter::checkpoint_bounds;
+use crate::api::types::checkpoint::filter::checked_checkpoint_bounds;
+use crate::api::types::checkpoint::filter::ledger_reader_lo;
 use crate::api::types::epoch::Epoch;
 use crate::api::types::gas_input::GasInput;
 use crate::api::types::lookups::CheckpointBounds;
@@ -407,16 +408,16 @@ impl Transaction {
             return Ok(Connection::new(false, false).into());
         };
 
-        // TODO: LedgerService expose available checkpoint range for `reader_lo`.
-        let reader_lo = 0;
+        let reader_lo = ledger_reader_lo(reader, checkpoint_viewed_at).await?;
 
-        let Some(cp_bounds) = checkpoint_bounds(
+        let Some(cp_bounds) = checked_checkpoint_bounds(
             filter.after_checkpoint().map(u64::from),
             filter.at_checkpoint().map(u64::from),
             filter.before_checkpoint().map(u64::from),
             reader_lo,
             checkpoint_viewed_at,
-        ) else {
+        )?
+        else {
             return Ok(Connection::new(false, false).into());
         };
 
@@ -1174,6 +1175,43 @@ mod tests {
         assert_eq!(edge_positions(&conn), [10, 11]);
         assert!(!conn.page_info.has_previous_page);
         assert!(!conn.page_info.has_next_page);
+    }
+
+    #[test]
+    fn build_grpc_connection_cursor_bound_stops_both_directions() {
+        for backward in [false, true] {
+            let page = if backward {
+                backward_page_before(10, primary_cursor(1, 12))
+            } else {
+                forward_page_after(10, primary_cursor(1, 11))
+            };
+            let stop = CursorToken::boundary(Position::Transactions {
+                checkpoint: 1,
+                tx_seq: 11,
+            })
+            .encode();
+            let result = StreamPage::<v2::ExecutedTransaction>::for_test(
+                Vec::new(),
+                Some(stop.clone()),
+                Some(stop),
+                Some(v2::QueryEndReason::CursorBound),
+            );
+            let conn = build_grpc_connection(Scope::for_tests(), &page, result)
+                .expect("cursor-bounded connection");
+            assert!(conn.edges.is_empty());
+            assert!(conn.page_info.start_cursor.is_some());
+            assert!(conn.page_info.end_cursor.is_some());
+            if backward {
+                assert!(
+                    !conn.page_info.has_previous_page,
+                    "must stop backward resume"
+                );
+                assert!(conn.page_info.has_next_page);
+            } else {
+                assert!(!conn.page_info.has_next_page, "must stop forward resume");
+                assert!(conn.page_info.has_previous_page);
+            }
+        }
     }
 
     /// Empty connection surfaces cursors if provided by the streamed page.

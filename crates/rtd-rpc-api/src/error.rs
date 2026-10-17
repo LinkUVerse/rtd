@@ -93,6 +93,52 @@ impl From<rtd_types::storage::error::Error> for RpcError {
 
 impl From<anyhow::Error> for RpcError {
     fn from(value: anyhow::Error) -> Self {
+        // Pipeline stages may wrap an already classified RPC error in anyhow.
+        // Recover the owned error (including structured details) through context.
+        let value = match value.downcast::<Self>() {
+            Ok(error) => return error,
+            Err(value) => value,
+        };
+        // Keep transient dependency failures retryable even through anyhow context.
+        // Do not expose upstream transport details or reinterpret data errors as absence.
+        if let Some(status) = value
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<tonic::Status>())
+        {
+            // HTTP/2 may report a broken body as Unknown while retaining an
+            // I/O source. Only typed connection failures become retryable.
+            let transport_broken = value.chain().any(|cause| {
+                cause
+                    .downcast_ref::<std::io::Error>()
+                    .or_else(|| {
+                        cause
+                            .downcast_ref::<h2::Error>()
+                            .and_then(h2::Error::get_io)
+                    })
+                    .is_some_and(|error| {
+                        matches!(
+                            error.kind(),
+                            std::io::ErrorKind::UnexpectedEof
+                                | std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::ConnectionAborted
+                                | std::io::ErrorKind::BrokenPipe
+                                | std::io::ErrorKind::NotConnected
+                        )
+                    })
+            });
+            if status.code() == Code::Unknown && transport_broken {
+                return Self::new(Code::Unavailable, "Dependency connection interrupted");
+            }
+            let message = match status.code() {
+                Code::Unavailable => Some("Dependency unavailable"),
+                Code::DeadlineExceeded => Some("Dependency request timed out"),
+                Code::ResourceExhausted => Some("Dependency capacity exhausted"),
+                _ => None,
+            };
+            if let Some(message) = message {
+                return Self::new(status.code(), message);
+            }
+        }
         Self {
             code: Code::Internal,
             message: Some(value.to_string()),
@@ -436,5 +482,111 @@ impl std::error::Error for EpochNotFoundError {}
 impl From<EpochNotFoundError> for crate::RpcError {
     fn from(value: EpochNotFoundError) -> Self {
         Self::new(tonic::Code::NotFound, value.to_string())
+    }
+}
+
+#[cfg(test)]
+mod dependency_error_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn classified_bad_request_keeps_structured_details() {
+        let bad_request = BadRequest::from(
+            crate::proto::google::rpc::bad_request::FieldViolation::new_at("digests", 2)
+                .with_description("invalid digest")
+                .with_reason(ErrorReason::FieldInvalid),
+        );
+        let expected = RpcError::from(bad_request.clone()).into_status_proto();
+        let wrapped = anyhow::Error::new(RpcError::from(bad_request))
+            .context("private read stage")
+            .context("private rendering stage");
+        let actual = RpcError::from(wrapped).into_status_proto();
+        assert_eq!(actual, expected);
+        assert!(!actual.details.is_empty());
+    }
+
+    #[test]
+    fn classified_rpc_error_survives_pipeline_anyhow_roundtrip() {
+        for code in [
+            Code::Unavailable,
+            Code::DeadlineExceeded,
+            Code::ResourceExhausted,
+            Code::NotFound,
+            Code::InvalidArgument,
+            Code::Internal,
+        ] {
+            let original = RpcError::new(code, "classified public error");
+            let wrapped = anyhow::Error::new(original)
+                .context("private pipeline stage")
+                .context("outer context");
+            let status: tonic::Status = RpcError::from(wrapped).into();
+            assert_eq!(status.code(), code);
+            assert_eq!(status.message(), "classified public error");
+        }
+    }
+
+    #[test]
+    fn dependency_status_survives_nested_context_without_transport_details() {
+        for code in [
+            Code::Unavailable,
+            Code::DeadlineExceeded,
+            Code::ResourceExhausted,
+        ] {
+            let error = anyhow::Error::new(tonic::Status::new(code, "private transport endpoint"))
+                .context("read rows")
+                .context("resolve object");
+            let status: tonic::Status = RpcError::from(error).into();
+            assert_eq!(status.code(), code);
+            assert!(!status.message().contains("private"));
+            assert!(!status.message().contains("resolve object"));
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_status_requires_typed_transport_failure_to_be_retryable() {
+        let mut upstream = tonic::Status::unknown("private h2 response body");
+        upstream.set_source(std::sync::Arc::new(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "private peer",
+        )));
+        let status: tonic::Status =
+            RpcError::from(anyhow::Error::new(upstream).context("read checkpoint")).into();
+        assert_eq!(status.code(), Code::Unavailable);
+        assert_eq!(status.message(), "Dependency connection interrupted");
+        let mut upstream = tonic::Status::unknown("h2 body failure");
+        let (client, peer) = tokio::io::duplex(1024);
+        drop(peer);
+        let transport_error = match h2::client::handshake(client).await {
+            Err(error) => error,
+            Ok((_, connection)) => connection.await.expect_err("closed peer must fail"),
+        };
+        assert!(transport_error.get_io().is_some());
+        upstream.set_source(std::sync::Arc::new(transport_error));
+        let status: tonic::Status = RpcError::from(anyhow::Error::new(upstream)).into();
+        assert_eq!(status.code(), Code::Unavailable);
+        let status: tonic::Status = RpcError::from(anyhow::Error::new(tonic::Status::unknown(
+            "UnexpectedEof is just a message",
+        )))
+        .into();
+        assert_eq!(status.code(), Code::Internal);
+    }
+
+    #[test]
+    fn dependency_data_errors_are_not_reclassified_as_retryable_or_missing() {
+        for code in [
+            Code::Internal,
+            Code::DataLoss,
+            Code::NotFound,
+            Code::PermissionDenied,
+        ] {
+            let status: tonic::Status = RpcError::from(anyhow::Error::new(tonic::Status::new(
+                code,
+                "invalid stored data",
+            )))
+            .into();
+            assert_eq!(status.code(), Code::Internal);
+        }
+        let status: tonic::Status = RpcError::from(anyhow::anyhow!("corrupt object")).into();
+        assert_eq!(status.code(), Code::Internal);
     }
 }

@@ -339,6 +339,108 @@ impl BigTableClient {
         self
     }
 
+    /// Select a materialized object version whose producing transaction is admitted.
+    pub async fn get_object_at_checkpoint(
+        &mut self,
+        id: ObjectID,
+        version: Option<u64>,
+        height: u64,
+    ) -> Result<Option<Object>> {
+        if let Some(version) = version {
+            let Some(object) = self
+                .get_objects(&[ObjectKey(id, version.into())])
+                .await?
+                .pop()
+            else {
+                return Ok(None);
+            };
+            anyhow::ensure!(
+                object.id() == id && object.version().value() == version,
+                "object key/content mismatch"
+            );
+            return Ok(
+                (self.object_producing_checkpoint(&object).await? <= height).then_some(object)
+            );
+        }
+        let rows = self
+            .range_scan_stream(
+                tables::objects::NAME,
+                Some(Bytes::from(Self::raw_object_key(&ObjectKey::min_for_id(
+                    &id,
+                )))),
+                Some(Bytes::from(Self::raw_object_key(&ObjectKey::max_for_id(
+                    &id,
+                )))),
+                0,
+                true,
+                None,
+            )
+            .await?;
+        futures::pin_mut!(rows);
+        while let Some(row) = rows.next().await {
+            let (key, cells) = row?;
+            let object = tables::objects::decode(&cells)?;
+            anyhow::ensure!(
+                object.id() == id
+                    && key.as_ref()
+                        == Self::raw_object_key(&ObjectKey(id, object.version())).as_slice(),
+                "object key/content mismatch"
+            );
+            if self.object_producing_checkpoint(&object).await? <= height {
+                return Ok(Some(object));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn object_producing_checkpoint(&mut self, object: &Object) -> Result<u64> {
+        let genesis = object.previous_transaction == TransactionDigest::genesis_marker();
+        let digests = if genesis {
+            let checkpoint = self
+                .get_checkpoints(&[0])
+                .await?
+                .pop()
+                .context("genesis checkpoint unavailable")?;
+            checkpoint
+                .contents
+                .context("genesis contents unavailable")?
+                .iter()
+                .map(|entry| entry.transaction)
+                .collect()
+        } else {
+            vec![object.previous_transaction]
+        };
+        let rows = self
+            .get_transactions_stream(
+                digests,
+                Some(Self::column_filter(&[
+                    tables::transactions::col::CHECKPOINT_NUMBER,
+                    tables::transactions::col::EFFECTS,
+                ])),
+            )
+            .await?;
+        futures::pin_mut!(rows);
+        let reference = object.compute_object_reference();
+        while let Some(row) = rows.next().await {
+            let (_, transaction) = row?;
+            let effects = transaction
+                .effects
+                .context("object producing effects unavailable")?;
+            if effects
+                .all_changed_objects()
+                .iter()
+                .any(|(changed, _, _)| *changed == reference)
+            {
+                anyhow::ensure!(
+                    !genesis || transaction.checkpoint_number == 0,
+                    "genesis object transaction is not in checkpoint zero"
+                );
+                return Ok(transaction.checkpoint_number);
+            }
+        }
+        bail!("object is not certified by its producing transaction effects")
+    }
+
     /// Fetch transactions with an optional column filter for partial reads.
     /// When `columns` is None, all columns are fetched. When Some, only the
     /// specified column qualifiers are fetched (e.g. `&["td", "ef", "ts", "cn"]`).
@@ -1546,7 +1648,7 @@ impl BigTableClient {
                         <[u8; 32]>::try_from(key.as_ref())
                             .context("invalid transaction digest key length")?,
                     );
-                    let tx = tables::transactions::decode(digest, &cells)?;
+                    let tx = tables::transactions::decode_with_checkpoint(digest, &cells)?;
                     yield (digest, tx);
                 }
             }

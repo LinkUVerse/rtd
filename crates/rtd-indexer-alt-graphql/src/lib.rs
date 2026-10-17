@@ -88,7 +88,9 @@ const GRAPHQL_PATH: &str = "/graphql";
 const GRAPHQL_SUBSCRIPTIONS_PATH: &str = "/graphql/subscriptions";
 const HEALTH_PATH: &str = "/graphql/health";
 
+mod admission;
 mod api;
+mod publication_guard;
 pub use crate::api::scalars::cursor::JsonCursor;
 pub use crate::api::types::checkpoint::CCheckpoint;
 pub use crate::api::types::checkpoint::CheckpointToken;
@@ -397,6 +399,9 @@ pub async fn start_rpc(
 
     let subscription_metrics = Arc::new(SubscriptionMetrics::new(registry));
 
+    let publication_guard =
+        publication_guard::PublicationGuard::from_args(&subscription_args, &chain_identifier)
+            .await?;
     let streaming_setup = match subscription_args.checkpoint_stream_url {
         Some(uri) => {
             let ledger_grpc = ledger_grpc_reader
@@ -422,11 +427,14 @@ pub async fn start_rpc(
                 watermark_task.watermarks_rx(),
                 subscription_metrics.clone(),
             );
-            let caches = Arc::new(StreamedCaches::new(
-                streaming_packages,
-                streaming_transactions,
-                streaming_objects,
-            ));
+            let caches = Arc::new(
+                StreamedCaches::new(
+                    streaming_packages,
+                    streaming_transactions,
+                    streaming_objects,
+                )
+                .with_package_loader(pg_loader.clone()),
+            );
             // One task flushes every streamed cache once its backing index catches up.
             let eviction_task = StreamedCacheEvictionTask::new(
                 caches.to_evictable(),
@@ -444,6 +452,8 @@ pub async fn start_rpc(
         .route(GRAPHQL_SUBSCRIPTIONS_PATH, post(graphql_subscriptions))
         .route(HEALTH_PATH, get(health::check))
         .layer(watermark_task.watermarks())
+        .layer(kv_loader.clone())
+        .layer(publication_guard)
         .layer(config.health)
         .layer(config.logging)
         .layer(DbProbe(database_url))
@@ -491,9 +501,9 @@ pub async fn start_rpc(
     let s_system_package_task = system_package_task.run();
     let s_watermark = watermark_task.run();
 
-    // Spawn the streaming tasks and wait for subscriptions to be ready before
-    // binding the listener, so the schema is only advertised once `kv_packages`
-    // has caught up to the first streamed checkpoint.
+    // Bind the query listener while streaming catches up. The subscription handler
+    // keeps the original first-live/package-coverage gate before admitting SSE.
+    let mut subscription_readiness = None;
     let streaming_handles = if let Some((
         stream_task,
         _broadcaster,
@@ -506,30 +516,22 @@ pub async fn start_rpc(
         rpc = rpc.data(caches).data(config.subscription);
         let s_stream = stream_task.run();
         let s_eviction = eviction_task.run();
-        readiness.wait_for_ready().await?;
-        // The broadcast handle is only consumed by the subscription resolvers.
-        {
-            // `first_live_checkpoint` is the first checkpoint the live upstream stream
-            // broadcast, recorded as readiness fires.
-            let first_live_checkpoint = readiness
-                .first_live_checkpoint()
-                .expect("first_live_checkpoint is set before wait_for_ready returns Ok");
-            let subscription_broadcast = Arc::new(SubscriptionBroadcast::new(
-                _broadcaster,
-                first_live_checkpoint,
-                subscription_metrics.clone(),
-            ));
-            rpc = rpc
-                .data(subscription_broadcast)
-                .data(subscription_watermarks_rx)
-                .data(SubscriberLimit::new(max_subscribers));
-        }
+        subscription_readiness = Some(readiness.clone());
+        let subscription_broadcast = Arc::new(SubscriptionBroadcast::pending(
+            _broadcaster,
+            readiness,
+            subscription_metrics.clone(),
+        ));
+        rpc = rpc
+            .data(subscription_broadcast)
+            .data(subscription_watermarks_rx)
+            .data(SubscriberLimit::new(max_subscribers));
         Some((s_stream, s_eviction))
     } else {
         None
     };
 
-    let s_rpc = rpc.run().await?;
+    let s_rpc = rpc.layer(subscription_readiness).run().await?;
 
     let mut service = s_rpc
         .attach(s_chain_id)
@@ -549,16 +551,22 @@ async fn graphql(
     Extension(schema): Extension<Schema<Query, Mutation, Subscription>>,
     Extension(watermark): Extension<WatermarksLock>,
     Extension(logging): Extension<LoggingConfig>,
+    Extension(kv_loader): Extension<KvLoader>,
     TypedHeader(content_length): TypedHeader<ContentLength>,
     show_usage: Option<TypedHeader<ShowUsage>>,
     headers: axum::http::HeaderMap,
     request: GraphQLRequest,
 ) -> GraphQLResponse {
+    let current = watermark.read().await.clone();
+    let admitted = match admission::watermarks(&headers, current, &kv_loader).await {
+        Ok(admitted) => admitted,
+        Err(error) => return async_graphql::Response::from_errors(vec![error]).into(),
+    };
     let mut request = request
         .into_inner()
         .data(content_length)
         .data(Session::new(addr).with_client_info(ClientInfo::from_headers(&headers, &logging)))
-        .data(watermark.read().await.clone())
+        .data(admitted)
         .data(rich::Meter::default());
 
     if let Some(TypedHeader(show_usage)) = show_usage {
@@ -592,6 +600,10 @@ async fn graphql_subscriptions(
     Extension(SubscriptionsEnabled(subscriptions_enabled)): Extension<SubscriptionsEnabled>,
     Extension(throttle_cfg): Extension<SubscriptionThrottle>,
     Extension(watermark): Extension<WatermarksLock>,
+    Extension(kv_loader): Extension<KvLoader>,
+    Extension(publication_guard): Extension<publication_guard::PublicationGuard>,
+    Extension(readiness): Extension<Option<Arc<SubscriptionReadiness>>>,
+    mut headers: axum::http::HeaderMap,
     request: GraphQLRequest,
 ) -> axum::response::Response {
     if !subscriptions_enabled {
@@ -602,7 +614,69 @@ async fn graphql_subscriptions(
             .into_response();
     }
 
-    let watermarks = watermark.read().await.clone();
+    let mut ceiling = match admission::ceiling(&headers) {
+        Ok(ceiling) => ceiling,
+        Err(error) => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                GraphQLResponse::from(async_graphql::Response::from_errors(vec![error])),
+            )
+                .into_response();
+        }
+    };
+    match publication_guard.height(ceiling).await {
+        Ok(Some(height)) if ceiling.is_none() => {
+            headers.insert(
+                "x-rtd-visible-checkpoint",
+                height.to_string().parse().expect("u64 header"),
+            );
+            ceiling = Some(height);
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                GraphQLResponse::from(async_graphql::Response::from_errors(vec![error])),
+            )
+                .into_response();
+        }
+    }
+    let current = watermark.read().await.clone();
+    let watermarks = match admission::watermarks(&headers, current, &kv_loader).await {
+        Ok(watermarks) => watermarks,
+        Err(error) => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                GraphQLResponse::from(async_graphql::Response::from_errors(vec![error])),
+            )
+                .into_response();
+        }
+    };
+    if readiness.as_ref().is_some_and(|r| {
+        ceiling.map_or_else(
+            || !r.is_ready(),
+            |_| !r.is_ready_at(watermarks.high_watermark().checkpoint()),
+        )
+    }) {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            GraphQLResponse::from(async_graphql::Response::from_errors(vec![
+                async_graphql::ServerError::new(
+                    "Subscriptions are waiting for indexed package coverage; retry later",
+                    None,
+                ),
+            ])),
+        )
+            .into_response();
+    }
+
+    let admission =
+        admission::SubscriptionAdmission(ceiling.map(|_| watermarks.high_watermark().checkpoint()));
+    let (follow_tx, follow_rx) =
+        tokio::sync::watch::channel(watermarks.high_watermark().checkpoint());
+    let follow = publication_guard
+        .enabled()
+        .then_some(admission::PublicationFollow(follow_rx));
     // Query depth is computed once by the query-limits extension during validation and stashed here,
     // so the throttle can add its depth surcharge to each payload's cost.
     let query_depth = QueryDepth::default();
@@ -611,12 +685,18 @@ async fn graphql_subscriptions(
         .into_inner()
         .data(Session::new(addr))
         .data(watermarks)
+        .data(admission)
+        .data(follow)
         .data(rich::Meter::default())
         .data(query_depth.clone());
 
     // Pace delivery per subscriber, then serialize each payload into an SSE event.
-    let stream = throttle
-        .wrap(schema.execute_stream(req), query_depth)
+    let stream = publication_guard
+        .protect_follow(
+            throttle.wrap(schema.execute_stream(req), query_depth),
+            admission.0,
+            Some(follow_tx),
+        )
         .map(|response| {
             let payload = serde_json::to_string(&response).unwrap_or_else(|_| "null".into());
             Ok::<_, std::convert::Infallible>(
@@ -678,6 +758,86 @@ mod tests {
         fs::write(path, &sdl).unwrap();
 
         assert_snapshot!(file, sdl);
+    }
+
+    #[tokio::test]
+    async fn subscription_admission_rejects_invalid_headers_and_uninitialized_watermarks() {
+        use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcArgs;
+        use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcReader;
+        let reader = LedgerGrpcReader::new(
+            "http://127.0.0.1:9".parse().unwrap(),
+            LedgerGrpcArgs::default(),
+            None,
+            &prometheus::Registry::new(),
+            10,
+            10,
+        )
+        .await
+        .unwrap();
+        let loader = KvLoader::new(reader);
+        let schema = Schema::build(
+            crate::api::query::Query::default(),
+            crate::api::mutation::Mutation,
+            crate::api::subscription::Subscription,
+        )
+        .finish();
+        let watermark = Arc::new(tokio::sync::RwLock::new(Arc::new(
+            task::watermark::Watermarks::default(),
+        )));
+        let throttle = SubscriptionThrottle {
+            nodes_per_second: 0,
+            delay_metric: prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
+                "admission_test_delay",
+                "test",
+            ))
+            .unwrap(),
+        };
+        for (values, expected) in [
+            (vec!["01"], axum::http::StatusCode::BAD_REQUEST),
+            (vec!["5", "5"], axum::http::StatusCode::BAD_REQUEST),
+            (vec!["5"], axum::http::StatusCode::SERVICE_UNAVAILABLE),
+            (vec![], axum::http::StatusCode::SERVICE_UNAVAILABLE),
+        ] {
+            let mut headers = axum::http::HeaderMap::new();
+            for value in values {
+                headers.append("x-rtd-visible-checkpoint", value.parse().unwrap());
+            }
+            let request = axum::http::Request::builder()
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    r#"{"query":"subscription { checkpoints { cursor } }"}"#,
+                ))
+                .unwrap();
+            let request =
+                <GraphQLRequest as axum::extract::FromRequest<()>>::from_request(request, &())
+                    .await
+                    .unwrap_or_else(|_| panic!("valid GraphQL request should extract"));
+            let response = graphql_subscriptions(
+                ConnectInfo("127.0.0.1:12345".parse().unwrap()),
+                Extension(schema.clone()),
+                Extension(SubscriptionsEnabled(true)),
+                Extension(throttle.clone()),
+                Extension(watermark.clone()),
+                Extension(loader.clone()),
+                Extension(publication_guard::PublicationGuard::default()),
+                Extension(None),
+                headers,
+                request,
+            )
+            .await;
+            assert_eq!(response.status(), expected);
+            let body = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert!(
+                value["errors"]
+                    .as_array()
+                    .is_some_and(|errors| !errors.is_empty())
+            );
+            assert!(value.get("data").is_none_or(|data| data.is_null()));
+        }
     }
 
     #[tokio::test]

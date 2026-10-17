@@ -39,7 +39,8 @@ use crate::api::scalars::date_time::DateTime;
 use crate::api::scalars::uint53::UInt53;
 use crate::api::types::address::Address;
 use crate::api::types::available_range::AvailableRangeKey;
-use crate::api::types::checkpoint::filter::checkpoint_bounds;
+use crate::api::types::checkpoint::filter::checked_checkpoint_bounds;
+use crate::api::types::checkpoint::filter::ledger_reader_lo;
 use crate::api::types::event::filter::EventFilter;
 use crate::api::types::lookups::CheckpointBounds;
 use crate::api::types::lookups::TxBoundsCursor;
@@ -272,16 +273,16 @@ impl Event {
             return Ok(StreamConnection::empty());
         };
 
-        // TODO: LedgerService expose available checkpoint range for `reader_lo`.
-        let reader_lo = 0;
+        let reader_lo = ledger_reader_lo(reader, checkpoint_viewed_at).await?;
 
-        let Some(cp_bounds) = checkpoint_bounds(
+        let Some(cp_bounds) = checked_checkpoint_bounds(
             filter.after_checkpoint().map(u64::from),
             filter.at_checkpoint().map(u64::from),
             filter.before_checkpoint().map(u64::from),
             reader_lo,
             checkpoint_viewed_at,
-        ) else {
+        )?
+        else {
             return Ok(StreamConnection::empty());
         };
 

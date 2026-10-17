@@ -54,6 +54,15 @@ pub fn encode(
 pub fn decode(key: &[u8], row: &[(Bytes, Bytes)]) -> Result<PackageData> {
     anyhow::ensure!(key.len() == 40, "expected 40-byte key, got {}", key.len());
 
+    for name in [b"cp".as_slice(), b"pi".as_slice(), b"sp".as_slice()] {
+        anyhow::ensure!(
+            row.iter()
+                .filter(|(column, _)| column.as_ref() == name)
+                .count()
+                == 1,
+            "package provenance column missing or ambiguous"
+        );
+    }
     let original_id = key[..32].to_vec();
     let package_version = u64::from_be_bytes(key[32..40].try_into()?);
 
@@ -79,11 +88,16 @@ pub fn decode(key: &[u8], row: &[(Bytes, Bytes)]) -> Result<PackageData> {
                 data.package_id = value.to_vec();
             }
             b"sp" => {
-                data.is_system_package = value.as_ref().first().copied().unwrap_or(0) != 0;
+                anyhow::ensure!(
+                    value.len() == 1 && value[0] <= 1,
+                    "invalid system package flag"
+                );
+                data.is_system_package = value[0] != 0;
             }
             _ => {}
         }
     }
 
+    anyhow::ensure!(data.package_id.len() == 32, "invalid package storage ID");
     Ok(data)
 }

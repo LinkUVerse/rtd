@@ -19,6 +19,7 @@ use rtd_indexer_alt_reader::packages::PackageOriginalIdKey;
 use rtd_indexer_alt_reader::packages::VersionedOriginalPackageKey;
 use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_indexer_alt_schema::packages::StoredPackage;
+use rtd_indexer_alt_schema::packages::StoredPackageOriginalId;
 use rtd_indexer_alt_schema::schema::kv_packages;
 use rtd_package_resolver::Package as ParsedMovePackage;
 use rtd_pg_db::sql;
@@ -727,8 +728,11 @@ impl MovePackage {
             return Ok(None);
         };
 
-        let original_id = ObjectID::from_bytes(&stored_original.original_id)
-            .context("Failed to deserialize ObjectID")?;
+        let Some(original_id) =
+            visible_original_id(&stored_original, scope.checkpoint_viewed_at())?
+        else {
+            return Ok(None);
+        };
 
         let Some(stored_package) = pg_loader
             .load_one(VersionedOriginalPackageKey(original_id, version.into()))
@@ -760,8 +764,15 @@ impl MovePackage {
             return Ok(None);
         };
 
-        let original_id = ObjectID::from_bytes(&stored_original.original_id)
-            .context("Failed to deserialize ObjectID")?;
+        let Some(original_id) = visible_original_id(
+            &stored_original,
+            scope
+                .checkpoint_viewed_at()
+                .map(|cp| cp.min(at_checkpoint.into())),
+        )?
+        else {
+            return Ok(None);
+        };
 
         let Some(stored_package) = pg_loader
             .load_one(CheckpointBoundedOriginalPackageKey(
@@ -843,7 +854,7 @@ impl MovePackage {
 
         // The original ID record exists but points to a package that is not visible at the
         // checkpoint being viewed.
-        if original_id.cp_sequence_number as u64 > checkpoint_viewed_at {
+        if visible_original_id(&original_id, Some(checkpoint_viewed_at))?.is_none() {
             return Ok(Connection::new(false, false));
         }
 
@@ -1117,5 +1128,47 @@ impl MovePackage {
                 Ok(Some(parsed))
             })
             .await
+    }
+}
+
+/// Resolve an alias only after its own publication, even when it points to an older package.
+fn visible_original_id(
+    stored: &StoredPackageOriginalId,
+    checkpoint: Option<u64>,
+) -> Result<Option<ObjectID>, RpcError> {
+    let published =
+        u64::try_from(stored.cp_sequence_number).context("Invalid package origin checkpoint")?;
+    if checkpoint.is_none_or(|checkpoint| published > checkpoint) {
+        return Ok(None);
+    }
+    ObjectID::from_bytes(&stored.original_id)
+        .map(Some)
+        .context("Failed to deserialize original package ID")
+        .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+
+    #[test]
+    fn upgraded_alias_is_hidden_until_its_own_publication() {
+        let original = ObjectID::from_hex_literal("0x2").unwrap();
+        let mut record = StoredPackageOriginalId {
+            package_id: ObjectID::from_hex_literal("0x3").unwrap().to_vec(),
+            original_id: original.to_vec(),
+            cp_sequence_number: 10,
+        };
+        assert_eq!(
+            visible_original_id(&record, Some(10)).unwrap(),
+            Some(original)
+        );
+        assert_eq!(visible_original_id(&record, Some(9)).unwrap(), None);
+        assert_eq!(visible_original_id(&record, None).unwrap(), None);
+        record.original_id.clear();
+        assert_eq!(visible_original_id(&record, Some(9)).unwrap(), None);
+        assert!(visible_original_id(&record, Some(10)).is_err());
+        record.cp_sequence_number = -1;
+        assert!(visible_original_id(&record, Some(u64::MAX)).is_err());
     }
 }

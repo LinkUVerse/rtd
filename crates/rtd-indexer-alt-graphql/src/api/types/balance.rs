@@ -23,6 +23,8 @@ use crate::api::types::move_type::MoveType;
 use crate::api::types::object;
 use crate::error::RpcError;
 use crate::error::bad_user_input;
+use crate::error::checkpoint_not_covered;
+use crate::error::dependency_unavailable;
 use crate::error::feature_unavailable;
 use crate::extensions::query_limits;
 use crate::pagination::Page;
@@ -270,10 +272,51 @@ fn consistent_error(checkpoint: u64, error: consistent_reader::Error) -> RpcErro
             feature_unavailable("fetching balances for addresses")
         }
 
-        consistent_reader::Error::OutOfRange(_) => bad_user_input(Error::OutOfRange(checkpoint)),
+        consistent_reader::Error::OutOfRange(_) => {
+            checkpoint_not_covered(Error::OutOfRange(checkpoint))
+        }
+
+        consistent_reader::Error::Unavailable(_) => dependency_unavailable("Consistent Store"),
 
         consistent_reader::Error::Internal(error) => {
             error.context("Failed to fetch balance").into()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rtd_indexer_alt_reader::consistent_reader;
+    use tonic::Status;
+
+    use super::consistent_error;
+    use crate::error::code;
+
+    #[tokio::test]
+    async fn dependency_and_retention_errors_keep_public_codes_without_private_details() {
+        for (source, expected) in [
+            (
+                consistent_reader::Error::from(Status::unavailable("private endpoint")),
+                code::DEPENDENCY_UNAVAILABLE,
+            ),
+            (
+                consistent_reader::Error::from(Status::deadline_exceeded("private timeout")),
+                code::DEPENDENCY_UNAVAILABLE,
+            ),
+            (
+                consistent_reader::Error::from(Status::out_of_range("private history")),
+                code::CHECKPOINT_NOT_COVERED,
+            ),
+            (
+                consistent_reader::Error::NotConfigured,
+                code::FEATURE_UNAVAILABLE,
+            ),
+        ] {
+            let error: async_graphql::Error = consistent_error(21, source).clone().into();
+            let extensions = error.extensions.unwrap();
+            assert_eq!(extensions.get("code"), Some(&expected.into()));
+            assert!(extensions.get("chain").is_none());
+            assert!(!error.message.contains("private"));
         }
     }
 }

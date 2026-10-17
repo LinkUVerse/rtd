@@ -15,6 +15,7 @@ workspace = true
 testing = ["dep:tokio-stream"]
 
 [dependencies]
+rtd-bigtable-proto.workspace = true
 anyhow.workspace = true
 arc-swap.workspace = true
 async-stream.workspace = true

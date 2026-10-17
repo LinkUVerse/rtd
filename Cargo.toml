@@ -148,6 +148,7 @@ members = [
     "crates/rtd-keys",
     "crates/rtd-kv-rpc",
     "crates/rtd-kvstore",
+    "crates/rtd-bigtable-proto",
     "crates/rtd-light-client",
     "crates/rtd-macros",
     "crates/rtd-metric-checker",
@@ -711,6 +712,7 @@ rtd-json-rpc-types = { path = "crates/rtd-json-rpc-types" }
 rtd-keys = { path = "crates/rtd-keys" }
 rtd-inverted-index = { path = "crates/rtd-inverted-index" }
 rtd-kvstore = { path = "crates/rtd-kvstore" }
+rtd-bigtable-proto = { path = "crates/rtd-bigtable-proto" }
 rtd-kv-rpc = { path = "crates/rtd-kv-rpc" }
 rtd-light-client = { path = "crates/rtd-light-client" }
 rtd-macros = { path = "crates/rtd-macros" }

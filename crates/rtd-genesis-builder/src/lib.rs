@@ -713,9 +713,9 @@ fn get_genesis_protocol_config(version: ProtocolVersion) -> ProtocolConfig {
 }
 
 fn load_genesis_system_packages(version: ProtocolVersion) -> Vec<SystemPackage> {
-    rtd_framework_snapshot::load_bytecode_snapshot(version.as_u64()).unwrap_or_else(|error| {
+    rtd_framework_snapshot::load_genesis_bytecode_snapshot(version.as_u64()).unwrap_or_else(|error| {
         panic!(
-            "Cannot build RTD genesis for protocol version {}: {error:#}. Generate the matching RTD framework snapshot first",
+            "Cannot build RTD genesis for protocol version {}: {error:#}. Rebuild the binary with the matching RTD framework snapshot",
             version.as_u64()
         )
     })

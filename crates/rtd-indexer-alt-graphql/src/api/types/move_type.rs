@@ -96,6 +96,8 @@ pub(crate) struct MoveStructLayout {
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct MoveEnumLayout {
+    #[serde(rename = "type")]
+    type_: String,
     variants: Vec<MoveVariantLayout>,
 }
 
@@ -419,7 +421,7 @@ impl TryFrom<A::MoveEnumLayout> for MoveEnumLayout {
     type Error = RpcError;
 
     fn try_from(layout: A::MoveEnumLayout) -> Result<Self, RpcError> {
-        let A::MoveEnumLayout { variants, .. } = layout;
+        let A::MoveEnumLayout { type_, variants } = layout;
         let mut variant_layouts = Vec::new();
         for ((name, _), variant_fields) in variants {
             let mut field_layouts = Vec::new();
@@ -433,6 +435,7 @@ impl TryFrom<A::MoveEnumLayout> for MoveEnumLayout {
         }
 
         Ok(MoveEnumLayout {
+            type_: type_.to_canonical_string(/* with_prefix */ true),
             variants: variant_layouts,
         })
     }
@@ -515,5 +518,37 @@ where
         | RE::UnexpectedReference
         | RE::UnexpectedSigner
         | RE::UnexpectedError(_) => anyhow!(err).context(context()).into(),
+    }
+}
+
+#[cfg(test)]
+mod archive_layout_tests {
+    use std::collections::BTreeMap;
+
+    use move_core_types::annotated_value as A;
+    use move_core_types::identifier::Identifier;
+    use move_core_types::language_storage::StructTag;
+
+    use super::MoveEnumLayout;
+
+    #[tokio::test]
+    async fn enum_layout_retains_qualified_instantiated_type() {
+        let type_: StructTag = "0x2::example::Choice<u64>".parse().unwrap();
+        let expected = type_.to_canonical_string(true);
+        let variants = BTreeMap::from([
+            ((Identifier::new("None").unwrap(), 0), vec![]),
+            (
+                (Identifier::new("Some").unwrap(), 1),
+                vec![A::MoveFieldLayout {
+                    name: Identifier::new("amount").unwrap(),
+                    layout: A::MoveTypeLayout::U64,
+                }],
+            ),
+        ]);
+        let layout = MoveEnumLayout::try_from(A::MoveEnumLayout { type_, variants }).unwrap();
+        let value = serde_json::to_value(layout).unwrap();
+        assert_eq!(value["type"], expected);
+        assert_eq!(value["variants"][1]["name"], "Some");
+        assert_eq!(value["variants"][1]["layout"][0]["layout"], "u64");
     }
 }

@@ -380,6 +380,11 @@ pub struct KvRpcConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bigtable_channel_timeout_ms: Option<u64>,
 
+    /// Total wait for checkpoint zero after connecting to HBase. Only absent
+    /// data is retried; failed reads still fail closed. Defaults to 30000 ms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub genesis_wait_timeout_ms: Option<u64>,
+
     /// Address the gRPC server listens on. Defaults to `[::1]:8000`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
@@ -469,6 +474,12 @@ pub struct KvRpcConfig {
 }
 
 impl KvRpcConfig {
+    pub fn genesis_wait_timeout(&self) -> Duration {
+        Duration::from_millis(
+            self.genesis_wait_timeout_ms
+                .unwrap_or(crate::startup::DEFAULT_GENESIS_WAIT_MS),
+        )
+    }
     pub fn monotonic_read_wait_timeout(&self) -> Duration {
         Duration::from_millis(
             self.monotonic_read_wait_timeout_ms
@@ -598,6 +609,11 @@ impl KvRpcConfig {
     /// delegates to [`LedgerHistoryConfig::validate`] for the list-API knobs.
     pub fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(
+            self.genesis_wait_timeout_ms
+                .is_none_or(|ms| (1..=crate::startup::MAX_GENESIS_WAIT_MS).contains(&ms)),
+            "genesis-wait-timeout-ms must be within 1..=300000",
+        );
+        anyhow::ensure!(
             self.tls_cert.is_some() == self.tls_key.is_some(),
             "tls-cert and tls-key must be configured together",
         );
@@ -650,6 +666,28 @@ mod tests {
     use crate::DEFAULT_SERVICE_INFO_WATERMARK_PIPELINES;
     use crate::LIST_API_SERVICE_INFO_WATERMARK_PIPELINES;
     use crate::service_info_watermark_pipelines;
+
+    #[test]
+    fn genesis_startup_budget_is_bounded_and_defaults_to_thirty_seconds() {
+        assert_eq!(
+            KvRpcConfig::default().genesis_wait_timeout(),
+            Duration::from_secs(30),
+        );
+        for ms in [0, 300_001, u64::MAX] {
+            let config = KvRpcConfig {
+                genesis_wait_timeout_ms: Some(ms),
+                ..Default::default()
+            };
+            assert!(config.validate().is_err());
+        }
+        for ms in [1, 300_000] {
+            let config = KvRpcConfig {
+                genesis_wait_timeout_ms: Some(ms),
+                ..Default::default()
+            };
+            assert!(config.validate().is_ok());
+        }
+    }
 
     #[test]
     fn validate_rejects_budget_below_literal_cap() {

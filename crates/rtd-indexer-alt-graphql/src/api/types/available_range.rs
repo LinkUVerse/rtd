@@ -422,6 +422,14 @@ collect_pipelines! {
     Query.[objectVersions] |pipelines, _filters| {
         pipelines.insert("obj_versions".to_string());
     };
+    // Nested effect changes require both the transaction and object history to
+    // still be retained. An unmapped field otherwise advertises checkpoint 0.
+    TransactionEffects.[objectChanges] |pipelines, _filters| {
+        pipelines.insert("cp_sequence_numbers".to_string());
+        pipelines.insert("tx_digests".to_string());
+        pipelines.insert("obj_versions".to_string());
+    };
+
     Query.[transactions] |pipelines, filters| {
         pipelines.insert("cp_sequence_numbers".to_string());
         pipelines.insert("tx_digests".to_string());
@@ -473,6 +481,43 @@ mod field_piplines_tests {
         assert!(invalid.is_empty());
         let valid = test_collect_pipelines("Address", Some("digests"), BTreeSet::new());
         assert!(valid.is_empty());
+    }
+
+    #[tokio::test]
+    async fn object_changes_use_transaction_and_object_retention() {
+        assert_eq!(
+            test_collect_pipelines("TransactionEffects", Some("objectChanges"), BTreeSet::new()),
+            BTreeSet::from([
+                "cp_sequence_numbers".to_string(),
+                "obj_versions".to_string(),
+                "tx_digests".to_string(),
+            ]),
+        );
+    }
+
+    #[tokio::test]
+    async fn object_changes_cannot_advertise_genesis_when_history_is_missing() {
+        let key = super::AvailableRangeKey {
+            type_: "TransactionEffects".to_owned(),
+            field: Some("objectChanges".to_owned()),
+            filters: None,
+        };
+        let complete = [
+            ("cp_sequence_numbers", 21),
+            ("obj_versions", 21),
+            ("tx_digests", 21),
+        ];
+        for missing in 0..complete.len() {
+            let remaining: Vec<_> = complete
+                .iter()
+                .enumerate()
+                .filter_map(|(index, pipeline)| (index != missing).then_some(*pipeline))
+                .collect();
+            let watermarks = crate::task::watermark::Watermarks::for_test(&remaining);
+            assert!(key.clone().reader_lo(&watermarks).is_err());
+        }
+        let watermarks = crate::task::watermark::Watermarks::for_test(&complete);
+        assert_eq!(key.reader_lo(&watermarks).unwrap(), 0);
     }
 
     /// Helper function that runs a test function with access to the GraphQL schema registry.

@@ -11,6 +11,7 @@ use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Encoding;
 use futures::future::try_join_all;
 use prost_types::FieldMask;
+use rtd_indexer_alt_reader::error::is_grpc_dependency_unavailable;
 use rtd_indexer_alt_reader::fullnode_client::Error::GrpcExecutionError;
 use rtd_indexer_alt_reader::fullnode_client::FullnodeClient;
 use rtd_rpc::field::FieldMaskUtil;
@@ -78,6 +79,7 @@ use crate::api::types::zklogin::ZkLoginIntentScope;
 use crate::api::types::zklogin::ZkLoginVerifyResult;
 use crate::error::RpcError;
 use crate::error::bad_user_input;
+use crate::error::dependency_unavailable;
 use crate::error::feature_unavailable;
 use crate::error::upcast;
 use crate::pagination::Page;
@@ -115,14 +117,19 @@ impl Query {
                 }
 
                 Id::DynamicFieldByRef(a, v, d) => {
-                    let object = Object::with_ref(&scope, a, v, d);
+                    let Some(object) = Object::fetch_ref(ctx, scope, a, v, d).await? else {
+                        return Ok(None);
+                    };
                     DynamicField::from_object(&object, ctx)
                         .await?
                         .map(Box::new)
                         .map(Node::DynamicField)
                 }
 
-                Id::Epoch(e) => Some(Node::Epoch(Box::new(Epoch::with_id(scope, e)))),
+                Id::Epoch(e) => Epoch::fetch(ctx, scope, Some(e.into()))
+                    .await?
+                    .map(Box::new)
+                    .map(Node::Epoch),
 
                 Id::MoveObjectByAddress(a) => {
                     let object = Object::with_address(scope, a);
@@ -133,28 +140,40 @@ impl Query {
                 }
 
                 Id::MoveObjectByRef(a, v, d) => {
-                    let object = Object::with_ref(&scope, a, v, d);
+                    let Some(object) = Object::fetch_ref(ctx, scope, a, v, d).await? else {
+                        return Ok(None);
+                    };
                     MoveObject::from_object(&object, ctx)
                         .await?
                         .map(Box::new)
                         .map(Node::MoveObject)
                 }
 
-                Id::MovePackage(a) => Some(Node::MovePackage(Box::new(MovePackage::with_address(
-                    scope, a,
-                )))),
-
-                Id::ObjectByAddress(a) => {
-                    Some(Node::Object(Box::new(Object::with_address(scope, a))))
+                Id::MovePackage(a) => {
+                    if let Some(cp) = scope.checkpoint_viewed_at() {
+                        MovePackage::checkpoint_bounded(ctx, scope, a.into(), cp.into())
+                            .await?
+                            .map(Box::new)
+                            .map(Node::MovePackage)
+                    } else {
+                        None
+                    }
                 }
 
-                Id::ObjectByRef(a, v, d) => {
-                    Some(Node::Object(Box::new(Object::with_ref(&scope, a, v, d))))
-                }
+                Id::ObjectByAddress(a) => Object::latest(ctx, scope, a.into())
+                    .await?
+                    .map(Box::new)
+                    .map(Node::Object),
 
-                Id::Transaction(d) => Some(Node::Transaction(Box::new(Transaction::with_digest(
-                    scope, d,
-                )))),
+                Id::ObjectByRef(a, v, d) => Object::fetch_ref(ctx, scope, a, v, d)
+                    .await?
+                    .map(Box::new)
+                    .map(Node::Object),
+
+                Id::Transaction(d) => Transaction::fetch(ctx, scope, d.into())
+                    .await?
+                    .map(Box::new)
+                    .map(Node::Transaction),
             })
         }
         .await
@@ -895,6 +914,9 @@ impl Query {
                 Err(bad_user_input(TransactionInputError::InvalidArgument(
                     status.message().to_string(),
                 )))
+            }
+            Err(GrpcExecutionError(status)) if is_grpc_dependency_unavailable(&status) => {
+                Err(dependency_unavailable("Full Node"))
             }
             Err(other_error) => Err(anyhow!(other_error)
                 .context("Failed to simulate transaction")

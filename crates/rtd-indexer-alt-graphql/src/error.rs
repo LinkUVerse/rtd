@@ -23,7 +23,9 @@ use crate::pagination;
 /// <https://www.apollographql.com/docs/apollo-server/data/errors/#built-in-error-codes>
 pub(crate) mod code {
     pub const BAD_USER_INPUT: &str = "BAD_USER_INPUT";
+    pub const CHECKPOINT_NOT_COVERED: &str = "CHECKPOINT_NOT_COVERED";
     pub const FEATURE_UNAVAILABLE: &str = "FEATURE_UNAVAILABLE";
+    pub const DEPENDENCY_UNAVAILABLE: &str = "DEPENDENCY_UNAVAILABLE";
     pub const GRAPHQL_PARSE_FAILED: &str = "GRAPHQL_PARSE_FAILED";
     pub const GRAPHQL_VALIDATION_FAILED: &str = "GRAPHQL_VALIDATION_FAILED";
     pub const INTERNAL_SERVER_ERROR: &str = "INTERNAL_SERVER_ERROR";
@@ -39,6 +41,9 @@ pub(crate) enum RpcError<E: std::error::Error = Infallible> {
     /// This feature is not available, because GraphQL does not have access to the underlying
     /// store.
     FeatureUnavailable { what: &'static str },
+
+    /// A configured upstream is temporarily unavailable; never return business data.
+    DependencyUnavailable { what: &'static str },
 
     /// An error that is produced by the framework, it gets wrapped so that we can add an error
     /// extension to it.
@@ -69,6 +74,11 @@ impl<E: std::error::Error> From<RpcError<E>> for async_graphql::Error {
                     ext.set("code", code::FEATURE_UNAVAILABLE);
                 })
             }
+
+            RpcError::DependencyUnavailable { what } => format!("{what} temporarily unavailable")
+                .extend_with(|_, ext| {
+                    ext.set("code", code::DEPENDENCY_UNAVAILABLE);
+                }),
 
             RpcError::GraphQlError(mut err) => {
                 fill_error_code(&mut err.extensions, code::INTERNAL_SERVER_ERROR);
@@ -133,6 +143,7 @@ impl<E: std::error::Error> Clone for RpcError<E> {
         match self {
             Self::BadUserInput(e) => Self::BadUserInput(e.clone()),
             &Self::FeatureUnavailable { what } => Self::FeatureUnavailable { what },
+            &Self::DependencyUnavailable { what } => Self::DependencyUnavailable { what },
             Self::GraphQlError(e) => Self::GraphQlError(e.clone()),
             Self::InternalError(e) => Self::InternalError(e.clone()),
             Self::Pagination(e) => Self::Pagination(e.clone()),
@@ -187,9 +198,21 @@ pub(crate) fn bad_user_input<E: std::error::Error>(err: E) -> RpcError<E> {
     RpcError::BadUserInput(Arc::new(err))
 }
 
+/// Report a checkpoint outside the retained range with a stable client code.
+pub(crate) fn checkpoint_not_covered<E: std::error::Error>(err: E) -> RpcError<E> {
+    RpcError::GraphQlError(err.to_string().extend_with(|_, ext| {
+        ext.set("code", code::CHECKPOINT_NOT_COVERED);
+    }))
+}
+
 /// Signal that feature `what` is not available.
 pub(crate) fn feature_unavailable<E: std::error::Error>(what: &'static str) -> RpcError<E> {
     RpcError::FeatureUnavailable { what }
+}
+
+/// Signal that a configured upstream cannot currently serve the request.
+pub(crate) fn dependency_unavailable<E: std::error::Error>(what: &'static str) -> RpcError<E> {
+    RpcError::DependencyUnavailable { what }
 }
 
 /// Signal a timeout. `kind` specifies what operation timed out and is included in the error
@@ -214,6 +237,7 @@ pub(crate) fn upcast<E: std::error::Error>(err: RpcError) -> RpcError<E> {
         RpcError::GraphQlError(e) => RpcError::GraphQlError(e),
         RpcError::InternalError(e) => RpcError::InternalError(e),
         RpcError::FeatureUnavailable { what } => RpcError::FeatureUnavailable { what },
+        RpcError::DependencyUnavailable { what } => RpcError::DependencyUnavailable { what },
         RpcError::RequestTimeout { kind, limit } => RpcError::RequestTimeout { kind, limit },
         RpcError::ResourceExhausted(e) => RpcError::ResourceExhausted(e),
     }
@@ -231,6 +255,7 @@ where
         RpcError::GraphQlError(e) => RpcError::GraphQlError(e),
         RpcError::InternalError(e) => RpcError::InternalError(e),
         RpcError::FeatureUnavailable { what } => RpcError::FeatureUnavailable { what },
+        RpcError::DependencyUnavailable { what } => RpcError::DependencyUnavailable { what },
         RpcError::RequestTimeout { kind, limit } => RpcError::RequestTimeout { kind, limit },
         RpcError::ResourceExhausted(e) => RpcError::ResourceExhausted(e),
     }
@@ -366,6 +391,22 @@ mod tests {
             ext.get("chain"),
             Some(&vec!["Immediate predecessor", "Root cause"].into())
         );
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_not_covered() {
+        let err: async_graphql::Error = checkpoint_not_covered(Error).into();
+        assert_eq!(err.message, "Boom!");
+        let ext = err.extensions.as_ref().expect("No extensions");
+        assert_eq!(ext.get("code"), Some(&code::CHECKPOINT_NOT_COVERED.into()));
+    }
+
+    #[tokio::test]
+    async fn test_dependency_unavailable() {
+        let err: async_graphql::Error = dependency_unavailable::<Error>("Full Node").into();
+        assert_eq!(err.message, "Full Node temporarily unavailable");
+        let ext = err.extensions.as_ref().expect("No extensions");
+        assert_eq!(ext.get("code"), Some(&code::DEPENDENCY_UNAVAILABLE.into()));
     }
 
     #[test]

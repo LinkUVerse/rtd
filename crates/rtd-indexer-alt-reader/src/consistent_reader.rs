@@ -5,8 +5,8 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Context;
+use anyhow::anyhow;
 use prometheus::Registry;
 use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::consistent_service_client::ConsistentServiceClient;
 use rtd_types::base_types::ObjectDigest;
@@ -19,6 +19,7 @@ use url::Url;
 
 pub use rtd_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha as proto;
 
+use crate::error::is_grpc_dependency_unavailable;
 use crate::grpc_tls;
 use crate::metrics::ConsistentReaderMetrics;
 
@@ -64,6 +65,9 @@ pub enum Error {
 
     #[error("{}", .0.message())]
     OutOfRange(#[source] tonic::Status),
+
+    #[error("Consistent store unavailable: {}", .0.message())]
+    Unavailable(#[source] tonic::Status),
 
     #[error("Consistent store client not configured")]
     NotConfigured,
@@ -420,7 +424,209 @@ impl From<tonic::Status> for Error {
     fn from(status: tonic::Status) -> Self {
         match status.code() {
             tonic::Code::OutOfRange => Error::OutOfRange(status),
+            _ if is_grpc_dependency_unavailable(&status) => Error::Unavailable(status),
             _ => Error::Internal(anyhow!(status.code()).context(status.message().to_string())),
         }
+    }
+}
+
+#[cfg(test)]
+mod availability_tests {
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::sync::atomic::AtomicI32;
+    use std::sync::atomic::Ordering;
+
+    use prometheus::Registry;
+    use tokio::net::TcpListener;
+    use tokio_stream::wrappers::TcpListenerStream;
+    use tonic::Code;
+    use tonic::Request;
+    use tonic::Response;
+    use tonic::Status;
+
+    use super::ConsistentReader;
+    use super::ConsistentReaderArgs;
+    use super::Error;
+    use super::proto;
+    use super::proto::consistent_service_server::ConsistentService;
+    use super::proto::consistent_service_server::ConsistentServiceServer;
+
+    #[derive(Clone, Default)]
+    struct Backend {
+        code: Arc<AtomicI32>,
+        checkpoints: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[tonic::async_trait]
+    impl ConsistentService for Backend {
+        async fn available_range(
+            &self,
+            request: Request<proto::AvailableRangeRequest>,
+        ) -> Result<Response<proto::AvailableRangeResponse>, Status> {
+            let checkpoint = request
+                .metadata()
+                .get(proto::CHECKPOINT_HEIGHT_METADATA)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            assert!(request.metadata().contains_key("grpc-timeout"));
+            self.checkpoints.lock().unwrap().push(checkpoint);
+            let code = Code::from_i32(self.code.load(Ordering::Acquire));
+            if code != Code::Ok {
+                return Err(Status::new(code, "private backend fixture"));
+            }
+            Ok(Response::new(proto::AvailableRangeResponse {
+                min_checkpoint: Some(10),
+                max_checkpoint: Some(21),
+                ..Default::default()
+            }))
+        }
+
+        async fn batch_get_balances(
+            &self,
+            _: Request<proto::BatchGetBalancesRequest>,
+        ) -> Result<Response<proto::BatchGetBalancesResponse>, Status> {
+            Err(Status::unimplemented("unused fixture method"))
+        }
+
+        async fn get_balance(
+            &self,
+            _: Request<proto::GetBalanceRequest>,
+        ) -> Result<Response<proto::Balance>, Status> {
+            Err(Status::unimplemented("unused fixture method"))
+        }
+
+        async fn list_balances(
+            &self,
+            _: Request<proto::ListBalancesRequest>,
+        ) -> Result<Response<proto::ListBalancesResponse>, Status> {
+            Err(Status::unimplemented("unused fixture method"))
+        }
+
+        async fn list_objects_by_type(
+            &self,
+            _: Request<proto::ListObjectsByTypeRequest>,
+        ) -> Result<Response<proto::ListObjectsResponse>, Status> {
+            Err(Status::unimplemented("unused fixture method"))
+        }
+
+        async fn list_owned_objects(
+            &self,
+            _: Request<proto::ListOwnedObjectsRequest>,
+        ) -> Result<Response<proto::ListObjectsResponse>, Status> {
+            Err(Status::unimplemented("unused fixture method"))
+        }
+
+        async fn service_config(
+            &self,
+            _: Request<proto::ServiceConfigRequest>,
+        ) -> Result<Response<proto::ServiceConfigResponse>, Status> {
+            Err(Status::unimplemented("unused fixture method"))
+        }
+    }
+
+    #[tokio::test]
+    async fn transport_failures_are_not_internal_or_out_of_range() {
+        for status in [
+            Status::cancelled("pooled transport closed"),
+            Status::unavailable("offline"),
+            Status::deadline_exceeded("timeout"),
+        ] {
+            assert!(matches!(Error::from(status), Error::Unavailable(_)));
+        }
+        assert!(matches!(
+            Error::from(Status::out_of_range("pruned")),
+            Error::OutOfRange(_)
+        ));
+        assert!(matches!(
+            Error::from(Status::invalid_argument("invalid")),
+            Error::Internal(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn live_grpc_failures_preserve_bounds_and_recover_without_cached_success() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let backend = Backend::default();
+        let service = ConsistentServiceServer::new(backend.clone());
+        let (shutdown, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(service)
+                .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async move {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        let reader = ConsistentReader::new(
+            None,
+            ConsistentReaderArgs {
+                consistent_store_url: Some(format!("http://{addr}").parse().unwrap()),
+                consistent_store_statement_timeout_ms: Some(1000),
+            },
+            &Registry::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            reader.available_range(21).await.unwrap().max_checkpoint,
+            Some(21)
+        );
+        for code in [
+            Code::Cancelled,
+            Code::Unavailable,
+            Code::DeadlineExceeded,
+            Code::OutOfRange,
+            Code::PermissionDenied,
+            Code::InvalidArgument,
+        ] {
+            backend.code.store(code as i32, Ordering::Release);
+            let error = reader.available_range(21).await.unwrap_err();
+            match (code, error) {
+                (
+                    Code::Cancelled | Code::Unavailable | Code::DeadlineExceeded,
+                    Error::Unavailable(status),
+                )
+                | (Code::OutOfRange, Error::OutOfRange(status)) => assert_eq!(status.code(), code),
+                (Code::PermissionDenied | Code::InvalidArgument, Error::Internal(_)) => {}
+                (code, error) => panic!("unexpected {code:?}: {error:?}"),
+            }
+        }
+        backend.code.store(Code::Ok as i32, Ordering::Release);
+        assert_eq!(
+            reader.available_range(21).await.unwrap().min_checkpoint,
+            Some(10)
+        );
+        assert_eq!(*backend.checkpoints.lock().unwrap(), vec!["21"; 8]);
+        shutdown.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+        let stopped = reader.available_range(21).await;
+        assert!(
+            matches!(&stopped, Err(Error::Unavailable(_))),
+            "{stopped:?}"
+        );
+        assert_eq!(
+            reader
+                .metrics
+                .requests_succeeded
+                .with_label_values(&["available_range"])
+                .get(),
+            2
+        );
+        assert_eq!(
+            reader
+                .metrics
+                .requests_failed
+                .with_label_values(&["available_range"])
+                .get(),
+            7
+        );
     }
 }

@@ -13,7 +13,7 @@ use std::path::PathBuf;
 fn main() {
     let crate_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"));
     let proto_dir = crate_dir.join("proto");
-    let out_dir = crate_dir.join("src/bigtable/proto");
+    let out_dir = crate_dir.join("../rtd-bigtable-proto/src/generated");
 
     let fds = protox::Compiler::new(&proto_dir)
         .unwrap()

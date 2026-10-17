@@ -8,7 +8,6 @@
 //! them.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::language_storage::StructTag;
@@ -24,10 +23,6 @@ use rtd_rpc_api::proto::timestamp_ms_to_proto;
 use rtd_types::TypeTag;
 use rtd_types::base_types::ObjectID;
 use rtd_types::crypto::{Ed25519RtdSignature, RtdSignatureInner, Signature, ToFromBytes};
-use rtd_types::full_checkpoint_content::Checkpoint as FullCheckpoint;
-use rtd_types::full_checkpoint_content::ExecutedTransaction as FullExecutedTransaction;
-use rtd_types::full_checkpoint_content::ObjectSet;
-use rtd_types::messages_checkpoint::CertifiedCheckpointSummary;
 use rtd_types::object::Object;
 use rtd_types::object::rpc_visitor::proto::ProtoVisitor;
 use rtd_types::signature::GenericSignature;
@@ -64,33 +59,45 @@ pub(crate) async fn render_json(
     resolver: &PackageResolver,
     struct_tag: &StructTag,
     contents: &[u8],
-) -> Option<prost_types::Value> {
+) -> Result<prost_types::Value, RpcError> {
     let type_tag = TypeTag::Struct(Box::new(struct_tag.clone()));
-    let layout = resolver.type_layout(type_tag).await.ok()?;
+    let layout = resolver.type_layout(type_tag).await.map_err(|error| {
+        RpcError::new(
+            tonic::Code::Unavailable,
+            format!("JSON type layout unavailable: {error}"),
+        )
+    })?;
     ProtoVisitor::new(MAX_JSON_MOVE_VALUE_SIZE)
         .deserialize_value(contents, &layout)
-        .ok()
+        .map_err(|error| {
+            let code = match &error {
+                rtd_types::object::rpc_visitor::Error::Meter(_) => tonic::Code::ResourceExhausted,
+                _ => tonic::Code::DataLoss,
+            };
+            RpcError::new(code, format!("Unable to render requested JSON: {error}"))
+        })
 }
 
 pub(crate) async fn object_to_response(
     source: &rtd_types::object::Object,
     mask: &FieldMaskTree,
     resolver: &PackageResolver,
-) -> ProtoObject {
+) -> Result<ProtoObject, RpcError> {
     let mut message = ProtoObject::default();
     if mask.contains(ProtoObject::JSON_FIELD)
         && let Some(move_object) = source.data.try_as_move()
     {
-        message.json = render_json(
-            resolver,
-            &move_object.type_().clone().into(),
-            move_object.contents(),
-        )
-        .await
-        .map(Box::new);
+        message.json = Some(Box::new(
+            render_json(
+                resolver,
+                &move_object.type_().clone().into(),
+                move_object.contents(),
+            )
+            .await?,
+        ));
     }
     message.merge(source, mask);
-    message
+    Ok(message)
 }
 
 /// Render a summary-only `CheckpointData` into the proto `Checkpoint` (the fast
@@ -122,97 +129,46 @@ pub(crate) fn checkpoint_to_response(
     Ok(message)
 }
 
-/// Build the full proto `Checkpoint` (summary + signatures + contents +
-/// transactions + objects) from resolved BigTable data. `objects` must contain
-/// exactly the objects referenced by this checkpoint's transactions — the whole
-/// map is folded into the rendered `ObjectSet`. Takes the `ObjectMap` by value
-/// so objects can be moved into the `ObjectSet` when the map is uniquely owned
-/// (the common case: one map per checkpoint); a shared map falls back to a clone.
-pub(crate) fn render_full_checkpoint(
+/// Render nested checkpoint fields through the same resolver and masks as point queries.
+/// Every object map belongs to one checkpoint; sorting keeps its public ObjectSet canonical.
+pub(crate) async fn render_full_checkpoint(
     checkpoint: CheckpointData,
     txs: Vec<TransactionData>,
     objects: ObjectMap,
     read_mask: &FieldMaskTree,
+    resolver: &PackageResolver,
 ) -> Result<Checkpoint, RpcError> {
     let summary = checkpoint
         .summary
-        .ok_or_else(|| RpcError::new(tonic::Code::Internal, "checkpoint summary column missing"))?;
-    let cp_seq = summary.sequence_number;
-    let signatures = checkpoint.signatures.ok_or_else(|| {
-        RpcError::new(
-            tonic::Code::Internal,
-            format!("checkpoint {cp_seq} signatures column missing"),
-        )
-    })?;
-    let contents = checkpoint.contents.ok_or_else(|| {
-        RpcError::new(
-            tonic::Code::Internal,
-            format!("checkpoint {cp_seq} contents column missing"),
-        )
-    })?;
-    let include_balance_changes = read_mask
-        .subtree(Checkpoint::TRANSACTIONS_FIELD.name)
-        .is_some_and(|mask| mask.contains(ExecutedTransaction::BALANCE_CHANGES_FIELD.name));
-    let mut transaction_balance_changes =
-        include_balance_changes.then(|| Vec::with_capacity(txs.len()));
-
-    let executed_transactions = txs
-        .into_iter()
-        .map(|tx| {
-            let transaction = tx.transaction_data.ok_or_else(|| {
-                RpcError::new(
-                    tonic::Code::Internal,
-                    format!("transaction {} data column missing", tx.digest),
-                )
-            })?;
-            let effects = tx.effects.ok_or_else(|| {
-                RpcError::new(
-                    tonic::Code::Internal,
-                    format!("transaction {} effects column missing", tx.digest),
-                )
-            })?;
-            if let Some(transaction_balance_changes) = transaction_balance_changes.as_mut() {
-                transaction_balance_changes.push(tx.balance_changes);
+        .as_ref()
+        .ok_or_else(|| RpcError::new(tonic::Code::Unavailable, "checkpoint summary missing"))?;
+    let height = summary.sequence_number;
+    let timestamp = summary.timestamp_ms;
+    let mut message = checkpoint_to_response(checkpoint, read_mask)?;
+    if let Some(mask) = read_mask.subtree(Checkpoint::TRANSACTIONS_FIELD.name) {
+        for tx in txs {
+            if tx.checkpoint_number != height || tx.timestamp != timestamp {
+                return Err(RpcError::new(
+                    tonic::Code::DataLoss,
+                    "Checkpoint transaction metadata mismatch",
+                ));
             }
-            Ok::<_, RpcError>(FullExecutedTransaction {
-                signatures: tx
-                    .signatures
-                    .map(|signatures| fullnode_signatures(&transaction, signatures))
-                    .unwrap_or_default(),
-                transaction,
-                effects,
-                events: tx.events,
-                unchanged_loaded_runtime_objects: tx.unchanged_loaded_runtime_objects,
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let mut object_set = ObjectSet::default();
-    // The map is uniquely owned per checkpoint, so move each `Object` into the
-    // set rather than deep-cloning it; a shared map (refcount > 1) falls back
-    // to a one-time clone.
-    let objects = Arc::try_unwrap(objects).unwrap_or_else(|arc| (*arc).clone());
-    for (_, obj) in objects {
-        object_set.insert(obj);
-    }
-
-    let full_checkpoint = FullCheckpoint {
-        summary: CertifiedCheckpointSummary::new_from_data_and_sig(summary, signatures),
-        contents,
-        transactions: executed_transactions,
-        object_set,
-    };
-
-    let mut message = Checkpoint::default();
-    message.merge(&full_checkpoint, read_mask);
-    if let Some(transaction_balance_changes) = transaction_balance_changes {
-        for (transaction, balance_changes) in message
-            .transactions
-            .iter_mut()
-            .zip_debug_eq(transaction_balance_changes)
-        {
-            transaction.balance_changes = balance_changes.into_iter().map(Into::into).collect();
+            message
+                .transactions
+                .push(transaction_to_response(tx, &mask, &objects, resolver).await?);
         }
+    }
+    if let Some(mask) = read_mask
+        .subtree(Checkpoint::OBJECTS_FIELD.name)
+        .and_then(|mask| mask.subtree(ProtoObjectSet::OBJECTS_FIELD.name))
+    {
+        let mut ordered: Vec<_> = objects.iter().collect();
+        ordered.sort_by_key(|(key, _)| **key);
+        let mut rendered = Vec::with_capacity(ordered.len());
+        for (_, object) in ordered {
+            rendered.push(object_to_response(object, &mask, resolver).await?);
+        }
+        message.objects = Some(ProtoObjectSet::default().with_objects(rendered));
     }
     Ok(message)
 }
@@ -334,9 +290,9 @@ pub(crate) async fn transaction_to_response(
             for (proto_event, rtd_event) in
                 proto_events.events.iter_mut().zip_debug_eq(&events.data)
             {
-                proto_event.json = render_json(resolver, &rtd_event.type_, &rtd_event.contents)
-                    .await
-                    .map(Box::new);
+                proto_event.json = Some(Box::new(
+                    render_json(resolver, &rtd_event.type_, &rtd_event.contents).await?,
+                ));
             }
         }
     }
@@ -361,7 +317,7 @@ pub(crate) async fn transaction_to_response(
                     format!("unable to fetch object {object_key:?} for transaction {digest}"),
                 )
             })?;
-            rendered_objects.push(object_to_response(object, &object_mask, resolver).await);
+            rendered_objects.push(object_to_response(object, &object_mask, resolver).await?);
         }
         message.objects = Some(ProtoObjectSet::default().with_objects(rendered_objects));
     }
@@ -442,19 +398,83 @@ mod tests {
         assert!(fullnode_signatures(&user_data, vec![]).is_empty());
     }
 
-    /// Empty package store for tests that don't exercise JSON rendering.
-    struct EmptyPackageStore;
+    struct FrameworkPackageStore;
 
     #[async_trait::async_trait]
-    impl PackageStore for EmptyPackageStore {
+    impl PackageStore for FrameworkPackageStore {
         async fn fetch(&self, id: AccountAddress) -> rtd_package_resolver::Result<Arc<Package>> {
-            Err(rtd_package_resolver::error::Error::PackageNotFound(id))
+            let object = crate::v2::test_utils::framework_objects_for_json_tests()
+                .into_iter()
+                .find(|object| AccountAddress::from(object.id()) == id)
+                .ok_or(rtd_package_resolver::error::Error::PackageNotFound(id))?;
+            Ok(Arc::new(Package::read_from_object(&object)?))
         }
     }
 
     fn test_resolver() -> PackageResolver {
-        let store: Arc<dyn PackageStore> = Arc::new(EmptyPackageStore);
+        let store: Arc<dyn PackageStore> = Arc::new(FrameworkPackageStore);
         Arc::new(Resolver::new(store))
+    }
+
+    #[tokio::test]
+    async fn requested_json_rejects_missing_layout_and_corrupt_contents() {
+        let resolver = test_resolver();
+        let missing: StructTag = "0x42::missing::Value".parse().unwrap();
+        let error = render_json(&resolver, &missing, &[]).await.unwrap_err();
+        assert_eq!(tonic::Status::from(error).code(), tonic::Code::Unavailable);
+        let tag: StructTag = "0x1::string::String".parse().unwrap();
+        let error = render_json(&resolver, &tag, &[]).await.unwrap_err();
+        assert_eq!(tonic::Status::from(error).code(), tonic::Code::DataLoss);
+        let valid = bcs::to_bytes(&"recovered".as_bytes()).unwrap();
+        assert!(render_json(&resolver, &tag, &valid).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn checkpoint_rejects_mismatched_transaction_metadata() {
+        let checkpoint = two_transaction_object_checkpoint();
+        let data = CheckpointData {
+            summary: Some(checkpoint.summary.data().clone()),
+            signatures: Some(checkpoint.summary.auth_sig().clone()),
+            contents: Some(checkpoint.contents.clone()),
+        };
+        let mut tx = kv_transaction_data(&checkpoint, 0);
+        tx.checkpoint_number += 1;
+        let mask = FieldMaskTree::from(FieldMask::from_paths(["transactions.digest"]));
+        let error = render_full_checkpoint(
+            data.clone(),
+            vec![tx],
+            Arc::new(HashMap::new()),
+            &mask,
+            &test_resolver(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(tonic::Status::from(error).code(), tonic::Code::DataLoss);
+        let mut tx = kv_transaction_data(&checkpoint, 0);
+        tx.timestamp += 1;
+        let error = render_full_checkpoint(
+            data,
+            vec![tx],
+            Arc::new(HashMap::new()),
+            &mask,
+            &test_resolver(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(tonic::Status::from(error).code(), tonic::Code::DataLoss);
+    }
+
+    #[tokio::test]
+    async fn requested_json_reports_size_limit() {
+        let tag: StructTag = "0x1::string::String".parse().unwrap();
+        let bytes = bcs::to_bytes(&vec![b'x'; MAX_JSON_MOVE_VALUE_SIZE + 1]).unwrap();
+        let error = render_json(&test_resolver(), &tag, &bytes)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            tonic::Status::from(error).code(),
+            tonic::Code::ResourceExhausted
+        );
     }
 
     #[tokio::test]

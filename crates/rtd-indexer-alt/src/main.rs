@@ -7,12 +7,17 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
 use clap::Parser;
+use diesel::QueryableByName;
+use diesel::sql_types::Bool;
+use diesel_async::RunQueryDsl;
 use prometheus::Registry;
 use rtd_indexer_alt::args::Args;
 use rtd_indexer_alt::args::Command;
 use rtd_indexer_alt::config::IndexerConfig;
 use rtd_indexer_alt::config::Merge;
-use rtd_indexer_alt::setup_indexer;
+use rtd_indexer_alt::setup_indexer_existing_schema as setup_indexer;
+use rtd_indexer_alt::writer_fence;
+use rtd_indexer_alt_framework::postgres::Db;
 use rtd_indexer_alt_framework::postgres::reset_database;
 use rtd_indexer_alt_framework::service::Error;
 use rtd_indexer_alt_framework::service::terminate;
@@ -22,6 +27,7 @@ use rtd_indexer_alt_schema::MIGRATIONS;
 use tokio::fs;
 use tracing::info;
 
+mod database_url;
 mod writer_lease;
 
 // Define the `GIT_REVISION` const
@@ -47,8 +53,26 @@ async fn main() -> Result<()> {
         .init();
 
     match args.command {
+        Command::PostgresIdentity {
+            profile, action, config, expected_sha256, state_directory,
+            identity_sha256, expected_plan_sha256, allow_loopback_development,
+        } => {
+            let result = rtd_indexer_alt::postgres_identity::execute(
+                &profile, &action, &config, &expected_sha256, &state_directory,
+                identity_sha256.as_deref(), expected_plan_sha256.as_deref(),
+                allow_loopback_development,
+            ).await;
+            match result {
+                Ok(value) => println!("{value}"),
+                Err(_) => {
+                    eprintln!("{{\"error\":\"ALT_POSTGRES_IDENTITY_REJECTED\",\"remoteEffectsMayHaveOccurred\":{}}}", action == "apply");
+                    std::process::exit(2);
+                }
+            }
+        }
         Command::Indexer {
             database_url,
+            database_url_file,
             db_args,
             client_args,
             indexer_args,
@@ -56,6 +80,7 @@ async fn main() -> Result<()> {
             config,
             require_exclusive_writer,
         } => {
+            let database_url = database_url::resolve(database_url, database_url_file.as_deref())?;
             let is_bounded = indexer_args.last_checkpoint.is_some();
 
             let indexer_config = read_config(&config).await?;
@@ -70,6 +95,15 @@ async fn main() -> Result<()> {
                 .registry()
                 .register(uptime(VERSION)?)
                 .context("Failed to register uptime metric.")?;
+
+            // Reject incompatible SQL before promoting a writer generation. The
+            // service path never invokes Diesel's metadata-creating harness.
+            let schema = Db::for_write(database_url.clone(), db_args.clone()).await?;
+            schema.require_current_migrations(Some(&MIGRATIONS)).await?;
+            if require_exclusive_writer {
+                writer_fence::verify(&schema).await?;
+            }
+            drop(schema);
 
             // Hold the PostgreSQL session lock throughout setup, ingestion and graceful
             // shutdown. A competing process must not run migrations or ingest first.
@@ -141,6 +175,60 @@ async fn main() -> Result<()> {
                     std::process::exit(2);
                 }
             }
+        }
+
+        Command::InitializeSchema {
+            database_url_file,
+            db_args,
+            apply,
+            restrict_runtime_access,
+        } => {
+            anyhow::ensure!(
+                !apply || db_args.db_connection_pool_size >= 2,
+                "Schema initialization requires at least two explicit database connections"
+            );
+            let url = database_url::resolve(
+                url::Url::parse("postgres://invalid/invalid")?,
+                Some(&database_url_file),
+            )?;
+            let db = Db::for_write(url, db_args).await?;
+            if apply {
+                #[derive(QueryableByName)]
+                struct Lock {
+                    #[diesel(sql_type=Bool)]
+                    acquired: bool,
+                    #[diesel(sql_type=Bool)]
+                    public_schema: bool,
+                }
+                let mut lock = db.connect().await?;
+                let held: Lock =
+                    diesel::sql_query("SELECT pg_try_advisory_lock(1381254145,1) AS acquired,current_schemas(false)::text[]=ARRAY['public'] AS public_schema")
+                        .get_result(&mut lock)
+                        .await?;
+                anyhow::ensure!(
+                    held.acquired,
+                    "Alt writer is active; stop it before explicit schema initialization"
+                );
+                anyhow::ensure!(
+                    held.public_schema,
+                    "Explicit public schema search path required before schema initialization"
+                );
+                db.run_migrations(Some(&MIGRATIONS)).await?;
+                writer_fence::prepare(&db).await?;
+                db.require_current_migrations(Some(&MIGRATIONS)).await?;
+                writer_fence::verify(&db).await?;
+                if restrict_runtime_access {
+                    rtd_indexer_alt::postgres_identity::restrict_runtime_access(&mut lock).await?;
+                }
+                // Keep the same session's admission lock until verification ends.
+                diesel::sql_query("SELECT pg_advisory_unlock(1381254145,1)")
+                    .execute(&mut lock)
+                    .await?;
+            } else {
+                db.require_current_migrations(Some(&MIGRATIONS)).await?;
+                writer_fence::verify(&db).await?;
+            }
+            println!("{{\"schemaReady\":true,\"applied\":{apply}}}");
         }
 
         Command::GenerateConfig => {

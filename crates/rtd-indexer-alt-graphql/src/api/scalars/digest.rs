@@ -26,6 +26,12 @@ pub(crate) enum Error {
 
 impl_string_input!(Digest);
 
+impl From<TransactionDigest> for Digest {
+    fn from(digest: TransactionDigest) -> Self {
+        Self(digest.into())
+    }
+}
+
 impl From<Digest> for TransactionDigest {
     fn from(digest: Digest) -> Self {
         digest.0.into()

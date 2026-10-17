@@ -171,20 +171,20 @@ pub(crate) struct SubscriptionBroadcast {
     /// Sequence number of the first checkpoint the live upstream stream broadcast through this
     /// channel. Distinct from any `resume_from` arg passed by subscribers (those refer to the
     /// kv-rpc resume fallback, not the live broadcast).
-    first_live_checkpoint: u64,
+    readiness: Arc<SubscriptionReadiness>,
     /// Per-subscriber metrics, shared with every stream this broadcast spawns.
     metrics: Arc<SubscriptionMetrics>,
 }
 
 impl SubscriptionBroadcast {
-    pub(crate) fn new(
+    pub(crate) fn pending(
         broadcaster: CheckpointBroadcaster,
-        first_live_checkpoint: u64,
+        readiness: Arc<SubscriptionReadiness>,
         metrics: Arc<SubscriptionMetrics>,
     ) -> Self {
         Self {
             broadcaster,
-            first_live_checkpoint,
+            readiness,
             metrics,
         }
     }
@@ -204,7 +204,9 @@ impl SubscriptionBroadcast {
     /// `broadcaster.len()` plus the immutable `first_live_checkpoint`, so there is no separate
     /// shared counter that could race with the broadcast `send`.
     pub(crate) fn network_tip(&self) -> u64 {
-        self.first_live_checkpoint
+        self.readiness
+            .first_live_checkpoint()
+            .unwrap_or(0)
             .saturating_add(self.broadcaster.len() as u64)
             .saturating_sub(1)
     }
@@ -262,7 +264,8 @@ impl CheckpointStreamTask {
     /// Returns the task and the anchor receiver created with the broadcast channel. The
     /// receiver must outlive `run()` (which consumes the task), so the caller holds onto it
     /// and pairs it with the first streamed checkpoint (from `SubscriptionReadiness`) to
-    /// build a `SubscriptionBroadcast` once readiness fires.
+    /// build a `SubscriptionBroadcast` whose admission can observe readiness without
+    /// blocking the ordinary query listener.
     pub(crate) fn new(
         uri: Uri,
         config: &SubscriptionConfig,

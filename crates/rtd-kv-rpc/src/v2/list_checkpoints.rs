@@ -276,11 +276,13 @@ pub(crate) async fn list_checkpoints(
         std::convert::identity,
     );
 
-    // Stage E: bounded ordered render-ahead builds the requested Checkpoint shape (CPU-only, with no further IO).
+    // Stage E: bounded ordered rendering also resolves requested Move JSON layouts.
     let rendered_stream = render_ahead(checkpoint_stream, endpoint.render_ahead, {
         let read_mask = read_mask.clone();
+        let resolver = ctx.package_resolver().clone();
         move |item| {
             let read_mask = read_mask.clone();
+            let resolver = resolver.clone();
             async move {
                 let item_checkpoint = match &item {
                     CheckpointListItem::Summary(item_checkpoint, _) => *item_checkpoint,
@@ -292,7 +294,7 @@ pub(crate) async fn list_checkpoints(
                         crate::render::checkpoint_to_response(cp_data, &read_mask)?
                     }
                     CheckpointListItem::Full((_, cp_data, txs, objects)) => {
-                        render_full_checkpoint(cp_data, txs, objects, &read_mask)?
+                        render_full_checkpoint(cp_data, txs, objects, &read_mask, &resolver).await?
                     }
                 };
                 Ok::<_, RpcError>((item_checkpoint, message, render_started.elapsed()))
@@ -711,6 +713,143 @@ mod tests {
         LIST_PIPELINE_METRICS, ascending_options, assert_list_metric_absent, list_counter,
         list_histogram, query_context, query_context_with_registry,
     };
+
+    #[tokio::test]
+    async fn checkpoint_nested_objects_match_point_queries_and_honor_masks() {
+        use crate::v2::test_utils::{
+            query_context_with_mock_and_registry, two_transaction_object_checkpoint,
+        };
+        use rtd_kvstore::testing::insert_checkpoint_rows;
+        use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+        let (ctx, _, mock, server) =
+            query_context_with_mock_and_registry("list_checkpoints", 1).await;
+        let checkpoint = two_transaction_object_checkpoint();
+        insert_checkpoint_rows(&mock, &checkpoint).await;
+        for path in ["transactions.objects", "transactions", "objects"] {
+            let mut request = ListCheckpointsRequest::default();
+            request.start_checkpoint = Some(0);
+            request.end_checkpoint = Some(1);
+            request.options = Some(ascending_options());
+            request.read_mask = Some(FieldMask::from_paths([path]));
+            let frames = list_checkpoints(ctx.clone(), request)
+                .await
+                .unwrap()
+                .try_collect::<Vec<_>>()
+                .await
+                .unwrap();
+            let response = frames
+                .into_iter()
+                .find_map(|frame| frame.checkpoint)
+                .unwrap();
+            if path == "objects" {
+                assert!(response.transactions.is_empty());
+                let objects = response.objects.unwrap().objects;
+                assert_eq!(objects.len(), checkpoint.object_set.len());
+                assert!(objects.iter().all(|object| object.json.is_some()));
+                let keys: Vec<_> = objects
+                    .iter()
+                    .map(|object| (object.object_id.clone(), object.version))
+                    .collect();
+                assert!(keys.windows(2).all(|pair| pair[0] < pair[1]));
+            } else {
+                assert!(response.objects.is_none());
+                assert_eq!(response.transactions.len(), checkpoint.transactions.len());
+                for (index, transaction) in response.transactions.into_iter().enumerate() {
+                    let mut request = GetTransactionRequest::default();
+                    request.digest = Some(
+                        checkpoint.transactions[index]
+                            .transaction
+                            .digest()
+                            .to_string(),
+                    );
+                    request.read_mask = Some(FieldMask::from_paths([if path == "transactions" {
+                        "*"
+                    } else {
+                        "objects"
+                    }]));
+                    let point = crate::v2::get_transaction::get_transaction(
+                        ctx.client().clone(),
+                        &crate::StagesConfig::default(),
+                        request,
+                        ctx.package_resolver(),
+                        None,
+                    )
+                    .await
+                    .unwrap()
+                    .transaction
+                    .unwrap();
+                    assert_eq!(transaction, point);
+                    assert!(
+                        transaction
+                            .objects
+                            .unwrap()
+                            .objects
+                            .iter()
+                            .all(|object| object.json.is_some())
+                    );
+                }
+            }
+        }
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn checkpoint_event_json_failure_is_not_a_successful_empty_result() {
+        use crate::v2::test_utils::query_context_with_mock_and_registry;
+        use rtd_kvstore::testing::insert_checkpoint_rows;
+        use rtd_types::{
+            base_types::ObjectID, event::Event, test_checkpoint_data_builder::TestCheckpointBuilder,
+        };
+        let (ctx, _, mock, server) =
+            query_context_with_mock_and_registry("list_checkpoints", 1).await;
+        let checkpoint = TestCheckpointBuilder::new(0)
+            .start_transaction(0)
+            .with_events(vec![Event::new(
+                &ObjectID::ZERO,
+                move_core_types::ident_str!("test"),
+                TestCheckpointBuilder::derive_address(0),
+                "0x1::string::String".parse().unwrap(),
+                vec![],
+            )])
+            .finish_transaction()
+            .build_checkpoint();
+        insert_checkpoint_rows(&mock, &checkpoint).await;
+        let mut request = ListCheckpointsRequest::default();
+        request.start_checkpoint = Some(0);
+        request.end_checkpoint = Some(1);
+        request.options = Some(ascending_options());
+        request.read_mask = Some(FieldMask::from_paths(["transactions.events.events.json"]));
+        let mut stream = list_checkpoints(ctx.clone(), request.clone())
+            .await
+            .unwrap();
+        loop {
+            match stream.try_next().await {
+                Ok(Some(frame)) => assert!(frame.checkpoint.is_none() && frame.end.is_none()),
+                Err(error) => {
+                    assert_eq!(tonic::Status::from(error).code(), tonic::Code::DataLoss);
+                    break;
+                }
+                Ok(None) => panic!("requested JSON must return a decode error"),
+            }
+        }
+        request.read_mask = Some(FieldMask::from_paths([
+            "transactions.events.events.event_type",
+        ]));
+        let frames = list_checkpoints(ctx, request)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+        assert_eq!(
+            frames
+                .iter()
+                .filter(|frame| frame.checkpoint.is_some())
+                .count(),
+            1
+        );
+        server.abort();
+    }
 
     #[test]
     fn resolution_uses_validated_read_mask_predicates() {

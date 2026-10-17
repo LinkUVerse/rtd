@@ -9,7 +9,7 @@ use rtd_pg_db::query::Query;
 use rtd_sql_macro::query;
 
 use crate::api::scalars::uint53::UInt53;
-use crate::api::types::checkpoint::filter::checkpoint_bounds;
+use crate::api::types::checkpoint::filter::checked_checkpoint_bounds;
 use crate::error::RpcError;
 use crate::pagination::Page;
 use crate::scope::Scope;
@@ -47,13 +47,14 @@ pub(crate) trait CheckpointBounds {
             return Ok(None);
         };
 
-        let Some(cp_bounds) = checkpoint_bounds(
+        let Some(cp_bounds) = checked_checkpoint_bounds(
             self.after_checkpoint().map(u64::from),
             self.at_checkpoint().map(u64::from),
             self.before_checkpoint().map(u64::from),
             reader_lo,
             checkpoint_viewed_at,
-        ) else {
+        )?
+        else {
             return Ok(None);
         };
 

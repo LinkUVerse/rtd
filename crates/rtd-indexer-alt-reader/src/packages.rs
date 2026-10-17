@@ -62,6 +62,9 @@ impl Loader<PackageOriginalIdKey> for PgReader {
                         kv_packages
                     WHERE
                         kv_packages.package_id = k.package_id
+                    ORDER BY
+                        cp_sequence_number ASC,
+                        package_version ASC
                     LIMIT
                         1
                 ) v

@@ -29,7 +29,7 @@ use crate::api::scalars::id::Id;
 use crate::api::scalars::uint53::UInt53;
 use crate::api::types::available_range::AvailableRangeKey;
 use crate::api::types::checkpoint::filter::CheckpointFilter;
-use crate::api::types::checkpoint::filter::checkpoint_bounds;
+use crate::api::types::checkpoint::filter::checked_checkpoint_bounds;
 use crate::api::types::checkpoint::filter::cp_by_epoch;
 use crate::api::types::checkpoint::filter::cp_unfiltered;
 use crate::api::types::epoch::Epoch;
@@ -358,13 +358,14 @@ impl Checkpoint {
             return Ok(Connection::new(false, false));
         };
 
-        let Some(cp_bounds) = checkpoint_bounds(
+        let Some(cp_bounds) = checked_checkpoint_bounds(
             filter.after_checkpoint.map(u64::from),
             filter.at_checkpoint.map(u64::from),
             filter.before_checkpoint.map(u64::from),
             reader_lo,
             cp_hi_inclusive,
-        ) else {
+        )?
+        else {
             return Ok(Connection::new(false, false));
         };
 

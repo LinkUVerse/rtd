@@ -209,7 +209,7 @@ async fn main() -> Result<()> {
     let registry = registry_service.default_registry();
     linku_metrics::init_metrics(&registry);
 
-    let server = KvRpcServer::new(
+    let server = KvRpcServer::new_with_genesis_timeout(
         instance_id,
         config.bigtable_project.clone(),
         config.app_profile_id.clone(),
@@ -222,6 +222,7 @@ async fn main() -> Result<()> {
         config.request_bigtable_concurrency(),
         config.stages(),
         config.enable_list_apis(),
+        config.genesis_wait_timeout(),
     )
     .await?
     .with_monotonic_read_wait_timeout(config.monotonic_read_wait_timeout());

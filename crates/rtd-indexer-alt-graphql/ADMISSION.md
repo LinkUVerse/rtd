@@ -1,0 +1,49 @@
+# 发布边界与请求水位迁入
+
+Rust 查询规则由本正式 crate 承担；归档工程 query-gateway 提供已认证的发布边界，部署工程只负责 Shell 和配置。R4.01的解析与订阅职责已持续迁入，真实业务入口及无法旁路的整包验收尚未完成。
+
+`x-rtd-visible-checkpoint` 是可信入口注入的 inclusive 发布上界，外部请求头必须由入口覆盖，不能将客户端自行提供的值当作认证证明。没有此header时保留内部原生查询行为；本模块不独立认证发布存储，也不应直接暴露为绕过发布guard的公共入口。
+
+GraphQL 接收请求后解析唯一规范u64上界，重复、空值、符号、前导零及溢出均拒绝。请求高度取发布上界与索引共同上界的较小值；需回到历史高度时，从KV读取该检查点summary，将checkpoint、epoch、累计交易数和时间一起写入本次请求的watermark副本。不修改共享poller水位，不用最新累计交易数伪造历史summary。
+
+未初始化、summary缺失/错高度、字段超过当前共同范围、历史点已低于共同流水线保留范围时拒绝。当前基础测试覆盖请求副本不污染共享状态、元数据/整数边界、已修剪范围及header格式；日志96新增真实原生HTTP、Ledger和后端断连恢复演练，完整业务字段和公共入口仍待验收。
+
+Checkpoint/Event/Transaction及共用SQL lookup现已接入显式未来/过旧检查点和已修剪范围拒绝。Ledger路径读取服务实际公布的上下界，不再假定从0开始；缺少/倒置范围为依赖错误，Ledger未覆盖查询高度为INDEXER_NOT_READY。无下界的普通请求从保留历史开始，显式遗漏历史不能静默截掉；真正空范围仍允许空结果。游标到达CursorBound在正反向都结束分页，ScanLimit/ItemLimit可继续。
+
+上述检查点/事件/交易63项与Ledger Reader20项回归通过，见迁移日志92。
+
+包解析现在以存储ID和请求检查点共同作为加载键。索引请求及订阅回填的包存储均携带历史上界，流式缓存保留不同检查点的包版本；历史缓存缺失时只能回到同上界的数据库加载器。包的origin别名也须已在请求高度发布。node中的对象引用、包、epoch和交易通过对应的受限读取路径解析，不能只从标识符构造存在性结果。对象版本同时受版本上界、检查点上界及保留下界约束；仍保留正式代码已有的热历史与删除标记优化。
+
+配套的ObjVersions原生修剪保留每个对象在保留边界之前的最后一条记录（含删除标记），对象内容与版本元数据在同一条SQL语句中原子删除。本轮没有启用现行环境修剪；生产修剪仍须满足独立授权、引用、备份和生命周期条件。
+
+迁移日志93记录GraphQL完整库265项、Reader完整库42项及原子修剪1项，共308项测试通过，其中包版本/缓存隔离、对象联合范围、修剪失败回滚使用真实隔离PostgreSQL。
+
+Fullnode模拟/执行的Unavailable与DeadlineExceeded现映射为DEPENDENCY_UNAVAILABLE；Consistent余额/对象读取将传输故障与历史OutOfRange分别映射为DEPENDENCY_UNAVAILABLE和CHECKPOINT_NOT_COVERED。没有配置对应后端时仍使用FEATURE_UNAVAILABLE。嵌套TransactionEffects.objectChanges的AvailableRange声明包含交易与对象历史流水线，缺少任一流水线时拒绝声明可用范围。该声明不能代替嵌套inputState/outputState内容读取的端到端历史验证。
+
+迁移日志94记录GraphQL完整库270项及ConsistentReader故障模块2项通过，后者以loopback gRPC测试服务验证五类错误、恢复及完整断连，不是Consistent RocksDB服务演练。
+
+SSE现使用独立PublicationGuard校验固定`/authorize`、链身份和发布高度。HTTPS要求显式CA与客户端证书，关闭代理和重定向；仅字面量loopback保留开发HTTP路径。带发布边界而没有权威的订阅拒绝。每个已渲染响应发送前及空闲期间都重新验证，失败或高度回退终止连接；权威请求连接预算1秒、总预算18秒，不能用过去成功的结果放行后续payload。
+
+普通查询监听可先启动，订阅仍按第一条直播检查点与当前包覆盖检查就绪。认证订阅通过每连接watch跟随单调发布高度，使用同一历史扫描游标继续；到边界时等待，空页覆盖也不能超出上界。Move enum JSON布局补齐完整实例化类型身份。日志95的284项完整库回归通过，包括真实mTLS、取消/实际18秒超时，以及跨空检查点续读和越界结束游标；没有运行完整链e2e或激活新服务。
+
+日志96通过正式Rust集成测试 `tests/native_admission.rs` 启动独立GraphQL、Ledger和query-gateway进程，连接现行只读PG/HBase/发布存储及Consistent。1项测试包含20组运行检查：两个固定高度的摘要与旧服务显式checkpoint读取一致、请求范围隔离、非法/重复header、共同保留范围外拒绝、未来点查null/集合BAD_USER_INPUT、历史包与布局、Ledger认证高度、authority客户端证书、PG和HBase断连拒绝及恢复。断连只影响测试自有TCP代理；原数据库和进程未修改。
+
+本次Consistent实测最早保留检查点为63720，因此共同历史窗口内的成功样本使用63720，检查点0用于共同窗口外拒绝。独立Ledger仍验证其自身保留范围内的检查点0。旧GraphQL内部监听未按请求header限制读取，旧/新内容差分使用显式checkpoint选择器，不能声称旧入口已满足新的准入契约。
+
+部署工程的 `tests/native_query_runtime_test.sh /absolute/reviewed-private-fixture.json` 只负责设置独立构建目录并运行上述Rust测试。fixture显式指定三份原生产物、私有配置/证书路径、两个自有故障代理、只读数据库URL文件、对照端点及实际可用历史高度；测试校验原生产物名称、loopback代理、数据库只读options，拒绝以表单编码的加号代替URL空格。测试退出回收全部自有子进程；这不是服务优雅停机或全栈恢复验收。
+
+日志97进一步连接真实临时Nginx入口，1项Rust测试包含37组检查（20组已有运行检查、17组入口检查）。GraphQL/Ledger覆盖外部水位头、原生准入与Ledger使用mTLS；缺少客户端证书、内部路径与错误CA拒绝。发布PG断连后两业务后端传输量不增加，恢复后重新认证。Ledger拒流使用application/grpc与grpc-status14的空HTTP200响应，使客户端收到Unavailable；HTTP200不是业务成功。
+
+入口模板与Shell仅位于部署工程，Rust断言位于本crate。此轮仅验收macOS Docker Desktop独立入口；公共Consistent仍须接归档工程的publication-aware Rust Router，不能直接暴露旧内部Consistent监听。临时容器及三个Rust进程已回收，现行安装未切换。
+
+日志98通过真实Fullnode gRPC流、原生GraphQL/Ledger、独立mTLS订阅authority及真实Nginx入口验证历史SSE。新增11组，联合48组运行检查通过：检查点/交易/事件载荷与现行固定高度查询一致，事件BCS及历史类型JSON一致，跨连接和检查点内游标准确续接。超出认证边界的游标拒绝；空闲订阅在authority断连后868毫秒报错并结束，新连接503，普通查询继续服务，恢复后原游标可续读。未执行新交易或切换现行安装。
+
+该可选fixture提供第四个原生subscription_guard进程、专用故障代理与经过独立查询验证的非空事件检查点；四个进程和容器均已回收。它验证真实历史载荷及持续准入，不将短期实测扩大为全链实时追赶证明。
+
+日志99补齐真实HTTP节点、嵌套对象及业务依赖：历史交易的6项对象变更、input/output BCS、node版本723/724、未来对象/交易身份隐藏、已部署包的发布高度110033、历史非空余额与持有对象均通过实际后端对照。Fullnode无命令PTB只读模拟成功；分别切断自有Consistent/Fullnode代理后，余额/对象及模拟/执行拒绝，恢复后同快照读取与模拟再次成功。执行mutation只在上游代理关闭时测试，不签名、不向链提交交易。
+
+实际连接池断开可产生Cancelled，SDK也可将Transport/BrokenPipe包装成Unknown。Reader的公共错误工具依据显式依赖状态和有类型的本地传输原因分类，GraphQL返回DEPENDENCY_UNAVAILABLE；普通应用Unknown/Internal、无效输入、权限和历史范围错误不凭消息正文重分类。这个错误码不能证明交易没有提交，未决交易仍需查原digest。46项Reader测试及1项含62组检查的集成测试通过，临时资源全部回收。
+
+日志100已将真实原生Publisher、双MinIO复制、publication Reader、生产Consistent mTLS Router与实际B/C放入同次隔离演练；18组方法/分页/错误及15组运行中冻结、撤权和副本断连恢复检查通过。结合日志49～99的发布/Alt/KV/Consistent覆盖、历史范围、入口与SSE证据，R4.01已按原条件整包验收。最终角色安装、统一中间件组、Linux交付、PERF-001和全栈生命周期继续由原工作包验收，现行canonical未切换。
+
+旧归档补丁是迁入与比较的来源材料，正式构建应直接使用本仓库源码；本轮没有更改旧运行产物或激活新安装。

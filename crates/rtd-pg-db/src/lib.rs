@@ -234,6 +234,53 @@ impl Db {
         info!("Migrations complete.");
         Ok(finished_migrations)
     }
+
+    /// Read existing Diesel history without invoking MigrationHarness, whose
+    /// setup can create metadata even when no application migration is pending.
+    pub async fn require_current_migrations(
+        &self,
+        migrations: Option<&'static EmbeddedMigrations>,
+    ) -> anyhow::Result<()> {
+        let mut conn = self.connect().await?;
+        Self::require_current_migrations_on(&mut conn, migrations).await
+    }
+
+    /// Use the admission-lock session to close the check/promotion race without
+    /// allocating another runtime connection or advancing a writer epoch.
+    pub async fn require_current_migrations_on(
+        conn: &mut Connection<'_>,
+        migrations: Option<&'static EmbeddedMigrations>,
+    ) -> anyhow::Result<()> {
+        #[derive(diesel::QueryableByName)]
+        struct Applied {
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            version: String,
+            #[diesel(sql_type = diesel::sql_types::Bool)]
+            public_schema: bool,
+        }
+        let expected: std::collections::BTreeSet<_> = merge_migrations(migrations)
+            .migrations()
+            .map_err(|e| anyhow!("Cannot inspect embedded migrations: {e}"))?
+            .iter()
+            .map(|m| m.name().version().to_string())
+            .collect();
+        let rows: Vec<Applied> = diesel::sql_query(
+            "SELECT version::text,current_schemas(false)::text[]=ARRAY['public'] AS public_schema FROM public.__diesel_schema_migrations ORDER BY version",
+        )
+        .load(conn)
+        .await
+        .map_err(|_| anyhow!("Schema history unavailable; run the explicit schema initializer"))?;
+        anyhow::ensure!(
+            rows.iter().all(|r| r.public_schema),
+            "Explicit public schema search path required; inherited schema overrides are not accepted"
+        );
+        let actual: std::collections::BTreeSet<_> = rows.into_iter().map(|r| r.version).collect();
+        anyhow::ensure!(
+            actual == expected,
+            "Schema migrations differ; ordinary startup cannot upgrade or downgrade the database"
+        );
+        Ok(())
+    }
 }
 
 impl<'m> CancelGuard<'m> {

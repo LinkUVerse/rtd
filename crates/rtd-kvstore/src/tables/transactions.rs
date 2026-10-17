@@ -121,6 +121,60 @@ pub fn decode(digest: TransactionDigest, row: &[(Bytes, Bytes)]) -> Result<Trans
     })
 }
 
+/// Admission-aware readers must not interpret a missing checkpoint column as genesis.
+pub fn decode_with_checkpoint(
+    digest: TransactionDigest,
+    row: &[(Bytes, Bytes)],
+) -> Result<TransactionData> {
+    anyhow::ensure!(
+        row.iter()
+            .filter(|(column, _)| column.as_ref() == b"cn")
+            .count()
+            == 1,
+        "transaction checkpoint metadata missing or ambiguous"
+    );
+    decode(digest, row)
+}
+
+#[cfg(test)]
+mod admission_metadata_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn checkpoint_provenance_is_required_and_unambiguous() {
+        let digest = TransactionDigest::new([0; 32]);
+        assert!(decode_with_checkpoint(digest, &[]).is_err());
+        let genesis = (
+            Bytes::from_static(b"cn"),
+            Bytes::from(bcs::to_bytes(&0u64).unwrap()),
+        );
+        assert_eq!(
+            decode_with_checkpoint(digest, &[genesis.clone()])
+                .unwrap()
+                .checkpoint_number,
+            0
+        );
+        assert!(decode_with_checkpoint(digest, &[genesis.clone(), genesis]).is_err());
+        assert!(
+            decode_with_checkpoint(
+                digest,
+                &[(Bytes::from_static(b"cn"), Bytes::from_static(b"bad"))]
+            )
+            .is_err()
+        );
+        let later = (
+            Bytes::from_static(b"cn"),
+            Bytes::from(bcs::to_bytes(&3019u64).unwrap()),
+        );
+        assert_eq!(
+            decode_with_checkpoint(digest, &[later])
+                .unwrap()
+                .checkpoint_number,
+            3019
+        );
+    }
+}
+
 /// Decode only events and timestamp from a row (for partial reads).
 pub fn decode_events(row: &[(Bytes, Bytes)]) -> Result<TransactionEventsData> {
     let mut transaction_events: Option<Option<TransactionEvents>> = None;

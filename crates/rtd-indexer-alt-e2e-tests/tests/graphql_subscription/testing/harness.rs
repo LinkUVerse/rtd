@@ -214,6 +214,7 @@ impl SubscriptionTestCluster {
             SystemPackageTaskArgs::default(),
             SubscriptionArgs {
                 checkpoint_stream_url: Some(stream_url.parse().unwrap()),
+                ..Default::default()
             },
             "0.0.0",
             graphql_config,

@@ -867,6 +867,7 @@ mod tests {
                     &stages,
                     get_request,
                     ctx.package_resolver(),
+                    None,
                 )
                 .await
                 .expect("GetTransaction should succeed")

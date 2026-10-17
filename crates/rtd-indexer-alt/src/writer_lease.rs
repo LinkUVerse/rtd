@@ -19,6 +19,7 @@ use diesel_async::RunQueryDsl;
 use rtd_indexer_alt::writer_fence;
 use rtd_indexer_alt_framework::postgres::Db;
 use rtd_indexer_alt_framework::postgres::DbArgs;
+use rtd_indexer_alt_schema::MIGRATIONS;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
@@ -98,7 +99,9 @@ pub async fn acquire(database_url: Url, mut db_args: DbArgs) -> Result<WriterLea
             let _ = sender.send(Err(message.to_owned()));
             bail!("{message}");
         }
-        let epoch = writer_fence::advance_epoch(&mut conn).await?;
+        Db::require_current_migrations_on(&mut conn, Some(&MIGRATIONS)).await?;
+        conn = writer_fence::verify_connection(conn).await?;
+        let epoch = writer_fence::advance_existing_epoch(&mut conn).await?;
         let _ = sender.send(Ok((admission.pid, epoch)));
 
         let mut tick = interval(Duration::from_secs(1));

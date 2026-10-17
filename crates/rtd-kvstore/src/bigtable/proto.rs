@@ -1,24 +1,6 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-#![allow(clippy::all)]
-#![allow(deprecated)]
-#![allow(unused)]
 
-#[path = "proto"]
-pub mod bigtable {
-    #[rustfmt::skip]
-    #[path = "google.bigtable.v2.rs"]
-    pub mod v2;
-}
-
-#[rustfmt::skip]
-#[path = "proto/google.rpc.rs"]
-pub mod rpc;
-
-#[rustfmt::skip]
-#[path = "proto/google.api.rs"]
-pub mod api;
-
-#[rustfmt::skip]
-#[path = "proto/google.r#type.rs"]
-pub mod r#type;
+// Shared generated types; wire definitions remain in this crates proto directory.
+#[allow(unused_imports)] // Preserve the complete previous internal module surface.
+pub use rtd_bigtable_proto::{api, bigtable, rpc, r#type};

@@ -31,7 +31,7 @@ pub fn default_committer_config() -> CommitterConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IndexerConfig {
     pub ingestion: IngestionConfig,
     pub committer: CommitterLayer,
@@ -162,7 +162,7 @@ impl CommitterLayer {
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConcurrentLayer {
     pub committer: Option<CommitterLayer>,
     pub ingestion: Option<PipelineIngestionLayer>,
@@ -226,7 +226,7 @@ impl PipelineIngestionLayer {
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct SequentialLayer {
     // Framework sequential surface — mirrors the fields actually read by
     // `rtd_indexer_alt_framework::pipeline::sequential`.
@@ -287,7 +287,7 @@ impl SequentialLayer {
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PipelineLayer {
     pub checkpoints: ConcurrentLayer,
     pub checkpoints_by_digest: ConcurrentLayer,

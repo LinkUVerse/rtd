@@ -52,6 +52,7 @@ mod package_store;
 mod pipeline;
 mod render;
 mod resolve;
+mod startup;
 mod v2;
 
 use bigtable_client::Metrics as BigTableLimiterMetrics;
@@ -268,7 +269,7 @@ pub struct KvRpcServer {
     client: BigTableClient,
     server_version: Option<ServerVersion>,
     service_info_watermark_pipelines: Vec<&'static str>,
-    cache: Arc<RwLock<Option<GetServiceInfoResponse>>>,
+    cache: Arc<RwLock<Option<(tokio::time::Instant, GetServiceInfoResponse)>>>,
     min_checkpoint_view: tokio::sync::watch::Sender<monotonic_read::ServiceView>,
     monotonic_read_wait_timeout: Duration,
     package_resolver: PackageResolver,
@@ -397,8 +398,43 @@ impl KvRpcServer {
         stages: StagesConfig,
         enable_list_apis: bool,
     ) -> anyhow::Result<Self> {
+        Self::new_with_genesis_timeout(
+            instance_id,
+            project_id,
+            app_profile_id,
+            channel_timeout,
+            server_version,
+            registry,
+            credentials_path,
+            pool_config,
+            ledger_history,
+            request_bigtable_concurrency,
+            stages,
+            enable_list_apis,
+            Duration::from_millis(startup::DEFAULT_GENESIS_WAIT_MS),
+        )
+        .await
+    }
+
+    /// Start after checkpoint zero is available, within one explicit budget.
+    pub async fn new_with_genesis_timeout(
+        instance_id: String,
+        project_id: Option<String>,
+        app_profile_id: Option<String>,
+        channel_timeout: Option<Duration>,
+        server_version: Option<ServerVersion>,
+        registry: &Registry,
+        credentials_path: Option<String>,
+        pool_config: PoolConfig,
+        ledger_history: LedgerHistoryConfig,
+        request_bigtable_concurrency: usize,
+        stages: StagesConfig,
+        enable_list_apis: bool,
+        genesis_wait_timeout: Duration,
+    ) -> anyhow::Result<Self> {
+        startup::validate_budget(genesis_wait_timeout)?;
         ledger_history.validate()?;
-        let mut client = BigTableClient::new_remote_with_credentials(
+        let client = BigTableClient::new_remote_with_credentials(
             instance_id,
             project_id,
             false,
@@ -412,12 +448,14 @@ impl KvRpcServer {
             false,
         )
         .await?;
-        let genesis = client
-            .get_checkpoints(&[0])
-            .await?
-            .pop()
-            .expect("failed to fetch genesis checkpoint from the KV store");
-        let summary = genesis.summary.expect("genesis checkpoint missing summary");
+        let genesis = startup::wait_for_genesis(genesis_wait_timeout, || {
+            let mut read = client.clone();
+            async move { Ok(read.get_checkpoints(&[0]).await?.pop()) }
+        })
+        .await?;
+        let summary = genesis
+            .summary
+            .ok_or_else(|| anyhow::anyhow!("genesis checkpoint missing summary"))?;
         let chain_id = ChainIdentifier::from(summary.digest());
         let metrics = KvRpcMetrics::new(registry);
         Self::init(
@@ -532,10 +570,11 @@ impl KvRpcServer {
                             info.checkpoint_height.map(|height| (sampled_at, height)),
                         );
                         let mut cache = server_clone.cache.write().await;
-                        *cache = Some(info);
+                        *cache = Some((sampled_at, info));
                     }
                     Err(e) => {
                         server_clone.min_checkpoint_view.send_replace(None);
+                        *server_clone.cache.write().await = None;
                         error!("Failed to update service info cache: {:?}", e);
                     }
                 }
