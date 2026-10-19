@@ -992,3 +992,26 @@ async fn test_open_destroys_undeclared_key_spaces() {
     );
     assert!(db.get(db.ks("b"), &key).unwrap().is_none());
 }
+
+/// Durability evidence for single-validator dev chains (CHAIN-DURABILITY-001):
+/// with `RTD_DB_SYNC_TO_DISK=1` every committed batch waits for a WAL fsync, so
+/// the same workload is measurably slower than with buffered writes. Run twice:
+/// `RTD_DB_SYNC_TO_DISK=1 cargo test -p typed-store --lib -- --ignored write_sync_batches`
+/// and without the variable, and compare the reported per-batch latency.
+#[tokio::test]
+#[ignore = "timing evidence; run explicitly with and without RTD_DB_SYNC_TO_DISK"]
+async fn write_sync_batches_wait_for_disk() {
+    let db = open_map::<_, u64, Vec<u8>>(temp_dir(), None);
+    let started = std::time::Instant::now();
+    for n in 0..200u64 {
+        let mut batch = db.batch();
+        batch.insert_batch(&db, [(n, vec![7u8; 512])]).unwrap();
+        batch.write().unwrap();
+    }
+    let per_batch = started.elapsed() / 200;
+    println!(
+        "write_sync_enabled={} per_batch_us={}",
+        write_sync_enabled(),
+        per_batch.as_micros()
+    );
+}
