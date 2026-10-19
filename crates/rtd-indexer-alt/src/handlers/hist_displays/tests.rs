@@ -561,7 +561,7 @@ async fn pipeline_requires_exclusive_writer_published_source_and_binding_before_
     ] {
         let mut config = IndexerConfig::default();
         config.pipeline.hist_displays = Some(DisplayHistoryLayer {
-            binding: binding.then(|| h_binding()),
+            binding: binding.then(h_binding),
             ..Default::default()
         });
         let mut client = ClientArgs::default();
