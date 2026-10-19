@@ -25,7 +25,7 @@ use crate::{
 pub const MIST_PER_RTD: u64 = 1_000_000_000;
 
 /// Total supply denominated in Rtd
-pub const TOTAL_SUPPLY_RTD: u64 = 10_000_000_000;
+pub const TOTAL_SUPPLY_RTD: u64 = 15_000_000_000;
 
 // Note: cannot use checked arithmetic here since `const unwrap` is still unstable.
 /// Total supply denominated in Mist

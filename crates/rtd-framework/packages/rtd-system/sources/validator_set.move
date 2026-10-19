@@ -1097,8 +1097,6 @@ fun compute_unadjusted_reward_distribution(
 ): (vector<u64>, vector<u64>) {
     let mut staking_reward_amounts = vector[];
     let mut storage_fund_reward_amounts = vector[];
-    let length = validators.length();
-    let storage_fund_reward_per_validator = total_storage_fund_reward / length;
     validators.do_ref!(|validator| {
         // Integer divisions will truncate the results. Because of this, we expect that at the end
         // there will be some reward remaining in `total_staking_reward`.
@@ -1106,8 +1104,14 @@ fun compute_unadjusted_reward_distribution(
         let voting_power = validator.voting_power();
         let reward_amount = mul_div!(voting_power, total_staking_reward, total_voting_power);
         staking_reward_amounts.push_back(reward_amount);
-        // Storage fund's share of the rewards are equally distributed among validators.
-        storage_fund_reward_amounts.push_back(storage_fund_reward_per_validator);
+        // Storage fund rewards are split by the same voting power as staking rewards. Splitting
+        // them per validator instead would reward splitting one stake across many validators.
+        let storage_fund_reward_amount = mul_div!(
+            voting_power,
+            total_storage_fund_reward,
+            total_voting_power,
+        );
+        storage_fund_reward_amounts.push_back(storage_fund_reward_amount);
     });
     (staking_reward_amounts, storage_fund_reward_amounts)
 }
@@ -1132,7 +1136,6 @@ fun compute_adjusted_reward_distribution(
     let mut adjusted_storage_fund_reward_amounts = vector[];
 
     let length = validators.length();
-    let num_unslashed_validators = length - individual_staking_reward_adjustments.length();
 
     length.do!(|i| {
         let validator = &validators[i];
@@ -1171,8 +1174,13 @@ fun compute_adjusted_reward_distribution(
             let adjustment = individual_storage_fund_reward_adjustments[&i];
             unadjusted_storage_fund_reward_amount - adjustment
         } else {
-            // Otherwise the slashed rewards should be equally distributed among the unslashed validators.
-            let adjustment = total_storage_fund_reward_adjustment / num_unslashed_validators;
+            // Otherwise the slashed rewards should be distributed among the unslashed
+            // validators in proportion to their voting power.
+            let adjustment = mul_div!(
+                total_storage_fund_reward_adjustment,
+                voting_power,
+                total_unslashed_validator_voting_power,
+            );
             unadjusted_storage_fund_reward_amount + adjustment
         };
         adjusted_storage_fund_reward_amounts.push_back(adjusted_storage_fund_reward_amount);

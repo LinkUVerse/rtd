@@ -554,7 +554,7 @@ impl TokenDistributionSchedule {
     /// allocation to the stake subsidy fund. It must be in the following format:
     /// `0x0000000000000000000000000000000000000000000000000000000000000000,<amount to stake subsidy fund>,`
     ///
-    /// All entries in a token distribution schedule must add up to 10B Rtd.
+    /// All entries in a token distribution schedule must add up to the total supply of Rtd.
     pub fn from_csv<R: std::io::Read>(reader: R) -> Result<Self> {
         let mut reader = csv::Reader::from_reader(reader);
         let mut allocations: Vec<TokenAllocation> =
@@ -562,7 +562,7 @@ impl TokenDistributionSchedule {
         assert_eq!(
             TOTAL_SUPPLY_MIST,
             allocations.iter().map(|a| a.amount_mist).sum::<u64>(),
-            "Token Distribution Schedule must add up to 10B Rtd",
+            "Token Distribution Schedule must add up to the total supply of Rtd",
         );
         let stake_subsidy_fund_allocation = allocations.pop().unwrap();
         assert_eq!(

@@ -464,8 +464,11 @@ fun add_preactive_remove_active() {
 
     // staker 2 earns about 5 RTD from the previous epoch and 24-ish from this one
     // so in total she has about 50 + 5 + 24 = 79 RTD.
+    // Storage fund rewards are split by voting power: with three equal stakes the
+    // leftover voting power lands on the first validator, so this pool gets 3333/10000
+    // of its share rather than an exact third.
     runner.set_sender(STAKER_ADDR_2).unstake(0);
-    assert_eq!(runner.rtd_balance(), 78862939078);
+    assert_eq!(runner.rtd_balance(), 78862666378);
 
     runner.finish();
 }

@@ -109,20 +109,20 @@ The amount of Mist per Rtd token based on the fact that mist is
 
 <a name="rtd_rtd_TOTAL_SUPPLY_RTD"></a>
 
-The total supply of Rtd denominated in whole Rtd tokens (10 Billion)
+The total supply of Rtd denominated in whole Rtd tokens (15 Billion)
 
 
-<pre><code><b>const</b> <a href="../rtd/rtd.md#rtd_rtd_TOTAL_SUPPLY_RTD">TOTAL_SUPPLY_RTD</a>: u64 = 10000000000;
+<pre><code><b>const</b> <a href="../rtd/rtd.md#rtd_rtd_TOTAL_SUPPLY_RTD">TOTAL_SUPPLY_RTD</a>: u64 = 15000000000;
 </code></pre>
 
 
 
 <a name="rtd_rtd_TOTAL_SUPPLY_MIST"></a>
 
-The total supply of Rtd denominated in Mist (10 Billion * 10^9)
+The total supply of Rtd denominated in Mist (15 Billion * 10^9)
 
 
-<pre><code><b>const</b> <a href="../rtd/rtd.md#rtd_rtd_TOTAL_SUPPLY_MIST">TOTAL_SUPPLY_MIST</a>: u64 = 10000000000000000000;
+<pre><code><b>const</b> <a href="../rtd/rtd.md#rtd_rtd_TOTAL_SUPPLY_MIST">TOTAL_SUPPLY_MIST</a>: u64 = 15000000000000000000;
 </code></pre>
 
 

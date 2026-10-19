@@ -20,7 +20,7 @@ use serde::Serialize;
 
 /// Maximum number of active validators at any moment.
 /// We do not allow the number of validators in any epoch to go above this.
-pub const MAX_VALIDATOR_COUNT: u64 = 150;
+pub const MAX_VALIDATOR_COUNT: u64 = 2_000;
 
 #[deprecated(note = "SIP-39 removes min barreier for joining the validator set")]
 /// Lower-bound on the amount of stake required to become a validator.

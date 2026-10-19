@@ -2558,8 +2558,6 @@ Returns the unadjusted amounts of staking reward and storage fund reward for eac
 ): (vector&lt;u64&gt;, vector&lt;u64&gt;) {
     <b>let</b> <b>mut</b> staking_reward_amounts = vector[];
     <b>let</b> <b>mut</b> storage_fund_reward_amounts = vector[];
-    <b>let</b> length = validators.length();
-    <b>let</b> storage_fund_reward_per_validator = total_storage_fund_reward / length;
     validators.do_ref!(|<a href="../rtd_system/validator.md#rtd_system_validator">validator</a>| {
         // Integer divisions will truncate the results. Because of this, we expect that at the end
         // there will be some reward remaining in `total_staking_reward`.
@@ -2567,8 +2565,14 @@ Returns the unadjusted amounts of staking reward and storage fund reward for eac
         <b>let</b> <a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a> = <a href="../rtd_system/validator.md#rtd_system_validator">validator</a>.<a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a>();
         <b>let</b> reward_amount = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_mul_div">mul_div</a>!(<a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a>, total_staking_reward, total_voting_power);
         staking_reward_amounts.push_back(reward_amount);
-        // Storage fund's share of the rewards are equally distributed among validators.
-        storage_fund_reward_amounts.push_back(storage_fund_reward_per_validator);
+        // Storage fund rewards are split by the same voting power <b>as</b> staking rewards. Splitting
+        // them per <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> instead would reward splitting one stake across many validators.
+        <b>let</b> storage_fund_reward_amount = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_mul_div">mul_div</a>!(
+            <a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a>,
+            total_storage_fund_reward,
+            total_voting_power,
+        );
+        storage_fund_reward_amounts.push_back(storage_fund_reward_amount);
     });
     (staking_reward_amounts, storage_fund_reward_amounts)
 }
@@ -2612,7 +2616,6 @@ The staking rewards are shared with the stakers while the storage fund ones are 
     <b>let</b> <b>mut</b> adjusted_staking_reward_amounts = vector[];
     <b>let</b> <b>mut</b> adjusted_storage_fund_reward_amounts = vector[];
     <b>let</b> length = validators.length();
-    <b>let</b> num_unslashed_validators = length - individual_staking_reward_adjustments.length();
     length.do!(|i| {
         <b>let</b> <a href="../rtd_system/validator.md#rtd_system_validator">validator</a> = &validators[i];
         // Integer divisions will truncate the results. Because of this, we expect that at the end
@@ -2647,8 +2650,13 @@ The staking rewards are shared with the stakers while the storage fund ones are 
             <b>let</b> adjustment = individual_storage_fund_reward_adjustments[&i];
             unadjusted_storage_fund_reward_amount - adjustment
         } <b>else</b> {
-            // Otherwise the slashed rewards should be equally distributed among the unslashed validators.
-            <b>let</b> adjustment = total_storage_fund_reward_adjustment / num_unslashed_validators;
+            // Otherwise the slashed rewards should be distributed among the unslashed
+            // validators in proportion to their voting power.
+            <b>let</b> adjustment = <a href="../rtd_system/validator_set.md#rtd_system_validator_set_mul_div">mul_div</a>!(
+                total_storage_fund_reward_adjustment,
+                <a href="../rtd_system/voting_power.md#rtd_system_voting_power">voting_power</a>,
+                total_unslashed_validator_voting_power,
+            );
             unadjusted_storage_fund_reward_amount + adjustment
         };
         adjusted_storage_fund_reward_amounts.push_back(adjusted_storage_fund_reward_amount);
