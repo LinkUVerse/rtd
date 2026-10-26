@@ -1,0 +1,111 @@
+{
+  "date": "2026-10-26",
+  "scope": [
+    "rtd-archive-service (implementation roots, excluding docs/target/dist)",
+    "link-u-smart-contract/all-in-one-deploy/localDeploy",
+    "link-u-smart-contract/link_u_profile_center",
+    "link-u-smart-contract/link_u_profile_action_record/script",
+    "link-u-smart-contract/link_u_love_relationship_record/script"
+  ],
+  "before": {
+    "archiveServicePythonInventoryObserved": 220,
+    "trackedPythonFilesDeleted": 218,
+    "untrackedPythonGateScriptsRemoved": 3,
+    "trackedDeletedByArea": {
+      "legacyModules": 160,
+      "scripts": 14,
+      "deployKubernetesAndGrpcWeb": 43,
+      "walletEvidenceDocs": 1
+    }
+  },
+  "after": {
+    "archiveServicePythonFiles": 0,
+    "localDeployPythonFiles": 0,
+    "linkuShardScriptPythonFiles": 0,
+    "remainingActivePythonInvocations": 0
+  },
+  "withdrawnCandidates": {
+    "deploy/kubernetes": "Python renderers, tests and Python consumer_proxy sidecars; no deployed target",
+    "deploy/grpc-web": "Python Envoy renderer and tests; local development uses generated middlewares"
+  },
+  "replacements": [
+    "scripts/verify-source.py -> scripts/verify-source.sh",
+    "scripts/generate-sboms.sh inline Python -> scripts/generate-sboms.sh shell+jq",
+    "scripts/prepare-source-overlay.py -> scripts/prepare-source-overlay.sh",
+    "scripts/prepare-private-image-release.py -> scripts/prepare-private-image-release.sh",
+    "scripts/audit-source-licenses.py -> scripts/audit-source-licenses.sh + rtd-archive-admin license-inventory",
+    "scripts/benchmark-query-plane.py -> scripts/benchmark-query-plane.sh",
+    "modules/hbase-compat-gateway/verify-conformance.py -> verify-conformance.sh",
+    "localDeploy/verify-archive-bridge-methods.py -> verify-archive-bridge-methods.sh",
+    "localDeploy/lib/linku_sync.sh inline Python -> Bash property merge",
+    "shard mapping inline Python -> jq from_entries",
+    "get_my_shard.sh Python int(hex)%1024 -> Bash 16# last-3-hex arithmetic"
+  ],
+  "assetMoves": [
+    "modules/account-activity/schema.graphql -> crates/rtd-archive-account/tests/fixtures/account-schema.graphql",
+    "modules/control-api/control_bootstrap.sql -> crates/rtd-archive-control/tests/fixtures/control_bootstrap.sql"
+  ],
+  "verification": [
+    {
+      "command": "all-in-one-deploy/localDeploy/verify-archive-bridge-methods.sh",
+      "result": "archive bridge methods OK: 14 methods, 2 listeners"
+    },
+    {
+      "command": "rtd-archive-service/scripts/verify-source.sh",
+      "result": "source baseline OK: RTD 39a9b622c2"
+    },
+    {
+      "command": "rtd-archive-service/modules/hbase-compat-gateway/verify-conformance.sh",
+      "result": "wide-table conformance OK: commit 39a9b622c2e6, 4 RPCs, 14 tables"
+    },
+    {
+      "command": "rtd-archive-service/scripts/audit-no-python.sh",
+      "result": "zero-Python audit OK: 5 roots, no .py sources and no runtime python/pip calls"
+    },
+    {
+      "command": "rtd-archive-service/scripts/test-prepare-source-overlay.sh",
+      "result": "source overlay contract OK: valid lock, 7 rejection cases, existing output preserved"
+    },
+    {
+      "command": "rtd-archive-service/scripts/test-prepare-private-image-release.sh",
+      "result": "private image release contract OK: preflight, publish readback, 7 registry cases, 4 negative paths"
+    },
+    {
+      "command": "rtd-archive-service/scripts/test-generate-sboms.sh",
+      "result": "SPDX manifest assembly OK: 6 images, scanner/revision/count fields checked"
+    },
+    {
+      "command": "rtd-archive-service/scripts/audit-cloud-policy.sh --strict",
+      "result": "Open-source runtime policy scan OK: 82 deployment artifacts"
+    },
+    {
+      "command": "rtd-archive-service/scripts/audit-source-licenses.sh",
+      "result": "6 binaries; unresolved=0"
+    },
+    {
+      "command": "cargo test -p rtd-archive-control --test protocol_contract",
+      "result": "2 passed"
+    },
+    {
+      "command": "cargo test -p rtd-archive-account --test api",
+      "result": "11 passed"
+    },
+    {
+      "command": "cargo check --tests -p rtd-archive-account -p rtd-archive-control",
+      "result": "finished successfully"
+    },
+    {
+      "command": "benchmark-query-plane.sh against local mock (3 iterations, 1 warmup)",
+      "result": "3 query groups, errors=0; connection-failure path returns errors=1 and exit 1"
+    },
+    {
+      "command": "linku_sync.sh against local fake Nacos",
+      "result": "7 keys rewritten, missing shard keys appended, other lines preserved, trailing newline preserved when absent"
+    }
+  ],
+  "boundaries": [
+    "Production Kubernetes manifests and grpc-web renderer are withdrawn pending Rust/shell rebuild; no deployed target existed.",
+    "One-off SDK fork-instruct refresh scripts and rtd-apps .agents skill assets are outside the archive runtime/build/startup paths.",
+    "The locked ../rtd upstream source is untouched and is not invoked through Python by this implementation."
+  ]
+}

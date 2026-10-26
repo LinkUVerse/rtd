@@ -1,0 +1,63 @@
+{
+  "url": "http://127.0.0.1:43412/graphql",
+  "address": "0xc535a846ad8aecf2c353c12b557612f0f1ae3bb09ba7cd2c6c8fa6fa56bf0df9",
+  "iterations": 5,
+  "results": {
+    "checkpoints": {
+      "iterations": 5,
+      "p50_ms": 394.33,
+      "p95_ms": 747.24,
+      "p99_ms": 747.24,
+      "mean_ms": 432.94,
+      "max_ms": 747.24,
+      "max_response_bytes": 536,
+      "errors": 0,
+      "first_error": null
+    },
+    "transactions": {
+      "iterations": 5,
+      "p50_ms": 487.43,
+      "p95_ms": 608.7,
+      "p99_ms": 608.7,
+      "mean_ms": 482.55,
+      "max_ms": 608.7,
+      "max_response_bytes": 1197,
+      "errors": 0,
+      "first_error": null
+    },
+    "service_config": {
+      "iterations": 5,
+      "p50_ms": 194.65,
+      "p95_ms": 557.86,
+      "p99_ms": 557.86,
+      "mean_ms": 262.15,
+      "max_ms": 557.86,
+      "max_response_bytes": 108,
+      "errors": 0,
+      "first_error": null
+    },
+    "address_balances": {
+      "iterations": 5,
+      "p50_ms": 364.57,
+      "p95_ms": 594.84,
+      "p99_ms": 594.84,
+      "mean_ms": 418.31,
+      "max_ms": 594.84,
+      "max_response_bytes": 85,
+      "errors": 0,
+      "first_error": null
+    },
+    "address_transactions": {
+      "iterations": 5,
+      "p50_ms": 504.84,
+      "p95_ms": 674.25,
+      "p99_ms": 674.25,
+      "mean_ms": 481.31,
+      "max_ms": 674.25,
+      "max_response_bytes": 570,
+      "errors": 0,
+      "first_error": null
+    }
+  },
+  "note": "query-plane only; middleware and publication write costs are excluded"
+}
