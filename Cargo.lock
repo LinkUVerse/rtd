@@ -13303,6 +13303,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
+ "futures",
  "object_store",
  "rtd-indexer-alt-framework-store-traits",
  "serde",

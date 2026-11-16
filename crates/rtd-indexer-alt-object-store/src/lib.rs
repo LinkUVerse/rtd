@@ -2,17 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use anyhow::Context;
+use anyhow::bail;
 use async_trait::async_trait;
 use bytes::Bytes;
-use object_store::Error as ObjectStoreError;
+use futures::TryStreamExt;
 use object_store::ObjectStoreExt as _;
-use object_store::PutMode;
-use object_store::PutPayload;
 use object_store::path::Path as ObjectPath;
 use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use rtd_indexer_alt_framework_store_traits::ConcurrentConnection;
@@ -25,32 +26,21 @@ use rtd_indexer_alt_framework_store_traits::Store;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// State is append-only: every watermark update writes a new marker object.
+/// Readers list the pipeline prefix and merge fields with max, so concurrent
+/// or stale writers cannot erase a higher watermark. No conditional writes.
 #[derive(Clone)]
 pub struct ObjectStore {
     object_store: Arc<dyn object_store::ObjectStore>,
+    watermark_cache: Arc<Mutex<Option<ObjectStoreWatermark>>>,
 }
 
 pub struct ObjectStoreConnection {
     object_store: Arc<dyn object_store::ObjectStore>,
+    watermark_cache: Arc<Mutex<Option<ObjectStoreWatermark>>>,
 }
 
-/// Used to potentially migrate from the legacy watermark format that does not include `reader_lo`,
-/// `pruner_hi`, and `pruner_timestamp_ms`.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct LegacyObjectStoreWatermark {
-    epoch_hi_inclusive: u64,
-    checkpoint_hi_inclusive: Option<u64>,
-    tx_hi: u64,
-    timestamp_ms_hi_inclusive: u64,
-    #[serde(default)]
-    reader_lo: Option<u64>,
-    #[serde(default)]
-    pruner_hi: Option<u64>,
-    #[serde(default)]
-    pruner_timestamp_ms: Option<u64>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 struct ObjectStoreWatermark {
     epoch_hi_inclusive: u64,
     checkpoint_hi_inclusive: Option<u64>,
@@ -61,9 +51,22 @@ struct ObjectStoreWatermark {
     pruner_timestamp_ms: u64,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct MarkerFields {
+    checkpoint_hi: u64,
+    epoch_hi: u64,
+    tx_hi: u64,
+    reader_lo: u64,
+    pruner_hi: u64,
+    pruner_timestamp_ms: u64,
+}
+
 impl ObjectStore {
     pub fn new(object_store: Arc<dyn object_store::ObjectStore>) -> Self {
-        Self { object_store }
+        Self {
+            object_store,
+            watermark_cache: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
@@ -72,22 +75,54 @@ impl ObjectStoreConnection {
         self.object_store.clone()
     }
 
+    fn cached(&self) -> Option<ObjectStoreWatermark> {
+        self.watermark_cache
+            .lock()
+            .expect("watermark cache mutex poisoned")
+            .clone()
+    }
+
+    fn cache(&self, watermark: &ObjectStoreWatermark) {
+        *self
+            .watermark_cache
+            .lock()
+            .expect("watermark cache mutex poisoned") = Some(watermark.clone());
+    }
+
+    async fn merge_markers(&self, pipeline: &str) -> anyhow::Result<Option<ObjectStoreWatermark>> {
+        let prefix = watermark_prefix(pipeline);
+        let mut stream = self.object_store.list(Some(&prefix));
+        let mut merged: Option<ObjectStoreWatermark> = None;
+        while let Some(meta) = stream.try_next().await? {
+            let fields = parse_marker_key(&meta.location, pipeline)?;
+            let bytes = self.object_store.get(&meta.location).await?.bytes().await?;
+            let marker: ObjectStoreWatermark = serde_json::from_slice(&bytes)
+                .with_context(|| format!("Failed to parse watermark marker {}", meta.location))?;
+            validate_marker(&marker, fields).with_context(|| {
+                format!("Watermark marker fields differ from key {}", meta.location)
+            })?;
+            merged = Some(merge_watermark(merged, marker));
+        }
+        Ok(merged)
+    }
+
+    async fn current_watermark(&self, pipeline: &str) -> anyhow::Result<ObjectStoreWatermark> {
+        if let Some(watermark) = self.cached() {
+            return Ok(watermark);
+        }
+        let watermark = self
+            .merge_markers(pipeline)
+            .await?
+            .unwrap_or_else(default_watermark_none);
+        self.cache(&watermark);
+        Ok(watermark)
+    }
+
     async fn get_watermark_for_read(
         &self,
         pipeline: &str,
     ) -> anyhow::Result<Option<(ObjectStoreWatermark, u64)>> {
-        let object_path = watermark_path(pipeline);
-        let result = match self.object_store.get(&object_path).await {
-            Ok(result) => result,
-            Err(ObjectStoreError::NotFound { .. }) => return Ok(None),
-            Err(e) => return Err(e.into()),
-        };
-
-        let bytes = result.bytes().await?;
-        let watermark =
-            serde_json::from_slice::<ObjectStoreWatermark>(&bytes).with_context(|| {
-                format!("Failed to parse watermark from object store pipeline={pipeline}")
-            })?;
+        let watermark = self.current_watermark(pipeline).await?;
         // Hide watermarks where `checkpoint_hi_inclusive < reader_lo`.
         let Some(checkpoint_hi_inclusive) = watermark
             .checkpoint_hi_inclusive
@@ -95,46 +130,41 @@ impl ObjectStoreConnection {
         else {
             return Ok(None);
         };
-
         Ok(Some((watermark, checkpoint_hi_inclusive)))
     }
 
-    async fn get_watermark_for_write(
+    async fn refresh_snapshot(
         &self,
         pipeline: &str,
-    ) -> anyhow::Result<(ObjectStoreWatermark, Option<String>, Option<String>)> {
-        let object_path = watermark_path(pipeline);
-        let result = match self.object_store.get(&object_path).await {
-            Ok(result) => result,
-            Err(e) => return Err(e.into()),
-        };
-
-        let e_tag = result.meta.e_tag.clone();
-        let version = result.meta.version.clone();
-        let bytes = result.bytes().await?;
-        let watermark = serde_json::from_slice::<ObjectStoreWatermark>(&bytes)
-            .context("Failed to parse watermark from object store")?;
-
-        Ok((watermark, e_tag, version))
+        watermark: &ObjectStoreWatermark,
+    ) -> anyhow::Result<()> {
+        let json_bytes = serde_json::to_vec(watermark)?;
+        self.object_store
+            .put(
+                &watermark_snapshot_path(pipeline),
+                Bytes::from(json_bytes).into(),
+            )
+            .await?;
+        Ok(())
     }
 
     async fn set_watermark(
         &self,
         pipeline: &str,
         watermark: ObjectStoreWatermark,
-        e_tag: Option<String>,
-        version: Option<String>,
     ) -> anyhow::Result<()> {
-        let object_path = watermark_path(pipeline);
+        let object_path = watermark_marker_path(pipeline, &watermark);
         let json_bytes = serde_json::to_vec(&watermark)?;
-        let payload: PutPayload = Bytes::from(json_bytes).into();
         self.object_store
-            .put_opts(
-                &object_path,
-                payload,
-                PutMode::Update(object_store::UpdateVersion { e_tag, version }).into(),
+            .put(&object_path, Bytes::from(json_bytes.clone()).into())
+            .await?;
+        self.object_store
+            .put(
+                &watermark_snapshot_path(pipeline),
+                Bytes::from(json_bytes).into(),
             )
             .await?;
+        self.cache(&watermark);
         Ok(())
     }
 }
@@ -151,6 +181,7 @@ impl Store for ObjectStore {
     async fn connect<'c>(&'c self) -> anyhow::Result<Self::Connection<'c>> {
         Ok(ObjectStoreConnection {
             object_store: self.object_store.clone(),
+            watermark_cache: self.watermark_cache.clone(),
         })
     }
 }
@@ -162,68 +193,22 @@ impl Connection for ObjectStoreConnection {
         pipeline_task: &str,
         checkpoint_hi_inclusive: Option<u64>,
     ) -> anyhow::Result<Option<InitWatermark>> {
-        let object_path = watermark_path(pipeline_task);
+        if let Some(watermark) = self.merge_markers(pipeline_task).await? {
+            self.cache(&watermark);
+            self.refresh_snapshot(pipeline_task, &watermark).await?;
+            return Ok(Some(InitWatermark {
+                checkpoint_hi_inclusive: watermark.checkpoint_hi_inclusive,
+                reader_lo: Some(watermark.reader_lo),
+            }));
+        }
+        // Fresh pipeline: keep the initial watermark in memory only. The first
+        // real update writes a marker; no create-if-absent is needed.
         let reader_lo = checkpoint_hi_inclusive.map_or(0, |cp| cp + 1);
-        let watermark = ObjectStoreWatermark {
-            epoch_hi_inclusive: 0,
-            checkpoint_hi_inclusive,
-            tx_hi: 0,
-            timestamp_ms_hi_inclusive: 0,
-            reader_lo,
-            pruner_hi: reader_lo,
-            pruner_timestamp_ms: 0,
-        };
-        let json_bytes = serde_json::to_vec(&watermark)?;
-        let payload: PutPayload = Bytes::from(json_bytes).into();
-        // Try create-if-not-exists write first.
-        let (checkpoint_hi_inclusive, reader_lo) = match self
-            .object_store
-            .put_opts(&object_path, payload, PutMode::Create.into())
-            .await
-        {
-            Ok(_) => (checkpoint_hi_inclusive, Some(reader_lo)),
-            Err(object_store::Error::AlreadyExists { .. }) => {
-                // Fall back to reading existing watermark.
-                let result = match self.object_store.get(&object_path).await {
-                    Ok(result) => result,
-                    Err(e) => return Err(e.into()),
-                };
-                let e_tag = result.meta.e_tag.clone();
-                let version = result.meta.version.clone();
-                let bytes = result.bytes().await?;
-                let legacy_watermark: LegacyObjectStoreWatermark = serde_json::from_slice(&bytes)
-                    .with_context(|| {
-                        format!(
-                            "Failed to parse legacy watermark from object store pipeline={pipeline_task}"
-                        )
-                    })?;
-
-                // Write data from the legacy watermark using the new format if it is missing newly added fields.
-                if legacy_watermark.reader_lo.is_none()
-                    || legacy_watermark.pruner_hi.is_none()
-                    || legacy_watermark.pruner_timestamp_ms.is_none()
-                {
-                    let watermark = ObjectStoreWatermark {
-                        epoch_hi_inclusive: legacy_watermark.epoch_hi_inclusive,
-                        checkpoint_hi_inclusive: legacy_watermark.checkpoint_hi_inclusive,
-                        tx_hi: legacy_watermark.tx_hi,
-                        timestamp_ms_hi_inclusive: legacy_watermark.timestamp_ms_hi_inclusive,
-                        ..watermark
-                    };
-                    self.set_watermark(pipeline_task, watermark, e_tag, version)
-                        .await?;
-                }
-
-                (
-                    legacy_watermark.checkpoint_hi_inclusive,
-                    legacy_watermark.reader_lo,
-                )
-            }
-            Err(e) => return Err(e.into()),
-        };
+        let watermark = default_watermark(checkpoint_hi_inclusive, reader_lo);
+        self.set_watermark(pipeline_task, watermark.clone()).await?;
         Ok(Some(InitWatermark {
             checkpoint_hi_inclusive,
-            reader_lo,
+            reader_lo: Some(reader_lo),
         }))
     }
 
@@ -255,16 +240,13 @@ impl Connection for ObjectStoreConnection {
         pipeline_task: &str,
         watermark: CommitterWatermark,
     ) -> anyhow::Result<bool> {
-        let (current_watermark, e_tag, version) =
-            self.get_watermark_for_write(pipeline_task).await?;
-
+        let current_watermark = self.current_watermark(pipeline_task).await?;
         if current_watermark
             .checkpoint_hi_inclusive
             .is_some_and(|cp| cp >= watermark.checkpoint_hi_inclusive)
         {
             return Ok(false);
         }
-
         let new_watermark = ObjectStoreWatermark {
             epoch_hi_inclusive: watermark.epoch_hi_inclusive,
             checkpoint_hi_inclusive: Some(watermark.checkpoint_hi_inclusive),
@@ -272,8 +254,7 @@ impl Connection for ObjectStoreConnection {
             timestamp_ms_hi_inclusive: watermark.timestamp_ms_hi_inclusive,
             ..current_watermark
         };
-        self.set_watermark(pipeline_task, new_watermark, e_tag, version)
-            .await?;
+        self.set_watermark(pipeline_task, new_watermark).await?;
         Ok(true)
     }
 }
@@ -320,18 +301,15 @@ impl ConcurrentConnection for ObjectStoreConnection {
         pipeline: &'static str,
         reader_lo: u64,
     ) -> anyhow::Result<bool> {
-        let (current_watermark, e_tag, version) = self.get_watermark_for_write(pipeline).await?;
-
+        let current_watermark = self.current_watermark(pipeline).await?;
         if reader_lo <= current_watermark.reader_lo {
             return Ok(false);
         }
-
         let new_watermark = ObjectStoreWatermark {
             reader_lo,
             ..current_watermark
         };
-        self.set_watermark(pipeline, new_watermark, e_tag, version)
-            .await?;
+        self.set_watermark(pipeline, new_watermark).await?;
         Ok(true)
     }
 
@@ -340,64 +318,207 @@ impl ConcurrentConnection for ObjectStoreConnection {
         pipeline: &'static str,
         pruner_hi: u64,
     ) -> anyhow::Result<bool> {
-        let (current_watermark, e_tag, version) = self.get_watermark_for_write(pipeline).await?;
-
+        let current_watermark = self.current_watermark(pipeline).await?;
         if pruner_hi <= current_watermark.pruner_hi {
             return Ok(false);
         }
-
         let new_watermark = ObjectStoreWatermark {
             pruner_hi,
             ..current_watermark
         };
-        self.set_watermark(pipeline, new_watermark, e_tag, version)
-            .await?;
+        self.set_watermark(pipeline, new_watermark).await?;
         Ok(true)
     }
 }
 
-fn watermark_path(pipeline: &str) -> ObjectPath {
-    ObjectPath::from(format!("_metadata/watermarks/{}.json", pipeline))
+fn watermark_prefix(pipeline: &str) -> ObjectPath {
+    ObjectPath::from(format!("_metadata/watermarks/{pipeline}/"))
 }
 
-fn chain_id_path(pipeline_task: &str) -> ObjectPath {
-    ObjectPath::from(format!("_metadata/chain_id/{pipeline_task}"))
+/// Derived read cache for the publisher. Markers remain the source of truth;
+/// this object is written after every marker so existing readers keep a single
+/// fixed-version snapshot without any conditional write.
+fn watermark_snapshot_path(pipeline: &str) -> ObjectPath {
+    ObjectPath::from(format!("_metadata/watermarks/{pipeline}.json"))
+}
+
+fn watermark_marker_path(pipeline: &str, watermark: &ObjectStoreWatermark) -> ObjectPath {
+    let checkpoint_hi = watermark.checkpoint_hi_inclusive.unwrap_or(0);
+    ObjectPath::from(format!(
+        "_metadata/watermarks/{pipeline}/{checkpoint_hi:020}.{:020}.{:020}.{:020}.{:020}.{:020}.{}.json",
+        watermark.epoch_hi_inclusive,
+        watermark.tx_hi,
+        watermark.reader_lo,
+        watermark.pruner_hi,
+        watermark.pruner_timestamp_ms,
+        marker_suffix(),
+    ))
+}
+
+fn parse_marker_key(path: &ObjectPath, pipeline: &str) -> anyhow::Result<MarkerFields> {
+    let prefix = format!("_metadata/watermarks/{pipeline}/");
+    let raw = path.to_string();
+    let name = raw
+        .strip_prefix(&prefix)
+        .context("watermark marker path prefix differs")?
+        .strip_suffix(".json")
+        .context("watermark marker lacks .json suffix")?;
+    let parts: Vec<&str> = name.split('.').collect();
+    if parts.len() != 7 {
+        bail!(
+            "watermark marker key has {} fields, expected 7",
+            parts.len()
+        );
+    }
+    let parse = |value: &str| -> anyhow::Result<u64> {
+        value
+            .parse::<u64>()
+            .with_context(|| format!("invalid watermark marker field {value}"))
+    };
+    Ok(MarkerFields {
+        checkpoint_hi: parse(parts[0])?,
+        epoch_hi: parse(parts[1])?,
+        tx_hi: parse(parts[2])?,
+        reader_lo: parse(parts[3])?,
+        pruner_hi: parse(parts[4])?,
+        pruner_timestamp_ms: parse(parts[5])?,
+    })
+}
+
+fn validate_marker(marker: &ObjectStoreWatermark, fields: MarkerFields) -> anyhow::Result<()> {
+    if marker.checkpoint_hi_inclusive.unwrap_or(0) != fields.checkpoint_hi
+        || marker.epoch_hi_inclusive != fields.epoch_hi
+        || marker.tx_hi != fields.tx_hi
+        || marker.reader_lo != fields.reader_lo
+        || marker.pruner_hi != fields.pruner_hi
+        || marker.pruner_timestamp_ms != fields.pruner_timestamp_ms
+    {
+        bail!("watermark marker content does not match its key");
+    }
+    Ok(())
+}
+
+fn merge_watermark(
+    current: Option<ObjectStoreWatermark>,
+    next: ObjectStoreWatermark,
+) -> ObjectStoreWatermark {
+    let Some(mut merged) = current else {
+        return next;
+    };
+    let current_cp = merged
+        .checkpoint_hi_inclusive
+        .map(|value| value as i128)
+        .unwrap_or(-1);
+    let next_cp = next
+        .checkpoint_hi_inclusive
+        .map(|value| value as i128)
+        .unwrap_or(-1);
+    if next_cp > current_cp {
+        merged.checkpoint_hi_inclusive = next.checkpoint_hi_inclusive;
+        merged.tx_hi = next.tx_hi;
+        merged.timestamp_ms_hi_inclusive = next.timestamp_ms_hi_inclusive;
+    } else if next_cp == current_cp {
+        merged.tx_hi = merged.tx_hi.max(next.tx_hi);
+        merged.timestamp_ms_hi_inclusive = merged
+            .timestamp_ms_hi_inclusive
+            .max(next.timestamp_ms_hi_inclusive);
+    }
+    merged.epoch_hi_inclusive = merged.epoch_hi_inclusive.max(next.epoch_hi_inclusive);
+    merged.reader_lo = merged.reader_lo.max(next.reader_lo);
+    merged.pruner_hi = merged.pruner_hi.max(next.pruner_hi);
+    merged.pruner_timestamp_ms = merged.pruner_timestamp_ms.max(next.pruner_timestamp_ms);
+    merged
+}
+
+fn default_watermark(checkpoint_hi_inclusive: Option<u64>, reader_lo: u64) -> ObjectStoreWatermark {
+    ObjectStoreWatermark {
+        epoch_hi_inclusive: 0,
+        checkpoint_hi_inclusive,
+        tx_hi: 0,
+        timestamp_ms_hi_inclusive: 0,
+        reader_lo,
+        pruner_hi: reader_lo,
+        pruner_timestamp_ms: 0,
+    }
+}
+
+fn default_watermark_none() -> ObjectStoreWatermark {
+    default_watermark(None, 0)
+}
+
+static MARKER_SEQ: AtomicU64 = AtomicU64::new(0);
+
+fn marker_suffix() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let seq = MARKER_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("{:x}{:x}{:x}", std::process::id(), nanos, seq)
+}
+
+fn chain_id_prefix(pipeline_task: &str) -> ObjectPath {
+    ObjectPath::from(format!("_metadata/chain_id/{pipeline_task}/"))
+}
+
+fn hex_chain_id(chain_id: &[u8; 32]) -> String {
+    let mut value = String::with_capacity(64);
+    for byte in chain_id {
+        use std::fmt::Write;
+        write!(value, "{byte:02x}").expect("write to String");
+    }
+    value
 }
 
 /// Reusable implementation of [`Connection::accepts_chain_id`] for object-store-backed
-/// connections. Stores `chain_id` at `_metadata/chain_id/{pipeline_task}` on first call
-/// via a conditional create; on subsequent calls reads and compares.
+/// connections. Every chain id is an immutable marker under the pipeline prefix; a
+/// different chain leaves a second marker and is rejected on the next list. No
+/// create-if-absent is needed.
 pub async fn accepts_chain_id(
     object_store: &dyn object_store::ObjectStore,
     pipeline_task: &str,
     chain_id: [u8; 32],
 ) -> anyhow::Result<bool> {
-    let path = chain_id_path(pipeline_task);
-    match object_store
-        .put_opts(
-            &path,
-            chain_id.to_vec().into(),
-            object_store::PutOptions {
-                mode: PutMode::Create,
-                ..Default::default()
-            },
-        )
-        .await
-    {
-        Ok(_) => Ok(true),
-        Err(ObjectStoreError::AlreadyExists { .. }) => {
-            let bytes = object_store.get(&path).await?.bytes().await?;
-            let stored: [u8; 32] = bytes.as_ref().try_into().ok().with_context(|| {
-                format!(
-                    "stored chain_id at {} has wrong length: {}",
-                    path,
-                    bytes.len()
-                )
-            })?;
-            Ok(stored == chain_id)
+    let prefix = chain_id_prefix(pipeline_task);
+    let expected = hex_chain_id(&chain_id);
+    let prefix_text = prefix.to_string();
+    let mut stream = object_store.list(Some(&prefix));
+    let mut found = false;
+    while let Some(meta) = stream.try_next().await? {
+        found = true;
+        let raw = meta.location.to_string();
+        let name = raw
+            .strip_prefix(&prefix_text)
+            .unwrap_or_default()
+            .trim_start_matches('/');
+        if name != expected {
+            return Ok(false);
         }
-        Err(e) => Err(e.into()),
+        let bytes = object_store.get(&meta.location).await?.bytes().await?;
+        if bytes.as_ref() != chain_id.as_slice() {
+            return Ok(false);
+        }
     }
+    if !found {
+        let path = ObjectPath::from(format!("{prefix_text}/{expected}"));
+        object_store
+            .put(&path, Bytes::from(chain_id.to_vec()).into())
+            .await?;
+    }
+    // Derived canonical object for readers that still check one key. Keep its
+    // version stable across restarts: write only when absent or different.
+    let canonical = ObjectPath::from(format!("_metadata/chain_id/{pipeline_task}"));
+    let canonical_matches = match object_store.get(&canonical).await {
+        Ok(result) => result.bytes().await?.as_ref() == chain_id.as_slice(),
+        Err(object_store::Error::NotFound { .. }) => false,
+        Err(error) => return Err(error.into()),
+    };
+    if !canonical_matches {
+        object_store
+            .put(&canonical, Bytes::from(chain_id.to_vec()).into())
+            .await?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -500,9 +621,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_init_watermark_returns_existing_reader_lo() {
-        // Object-store preserves the existing reader_lo across `init_watermark` conflict. The
-        // shared macro test can't assert this because bigtable has no reader_lo concept.
-        // Init starts with reader_lo = 0, then set_reader_watermark advances it to READER_LO.
         let mut conn = store_conn().await;
         conn.init_watermark(PIPELINE, None).await.unwrap();
         conn.set_reader_watermark(PIPELINE, READER_LO)
@@ -517,85 +635,50 @@ mod tests {
         assert_eq!(watermark.reader_lo, Some(READER_LO));
     }
 
-    /// Write raw JSON bytes directly to the underlying object store, bypassing the public
-    /// API. Used to verify `init_watermark`'s `AlreadyExists` branch can deserialize both
-    /// the current `ObjectStoreWatermark` format and the older format (with required
-    /// `checkpoint_hi_inclusive` and no `reader_lo`/`pruner_*` fields).
-    async fn put_watermark_raw(conn: &ObjectStoreConnection, pipeline: &str, json: &str) {
-        let path = watermark_path(pipeline);
-        conn.object_store
-            .put(&path, PutPayload::from(Bytes::from(json.to_owned())))
-            .await
-            .unwrap();
-    }
-
-    /// Read the raw stored bytes and parse them strictly as the current
-    /// `ObjectStoreWatermark`. Strict parsing fails if any of the new required fields
-    /// (`reader_lo`/`pruner_hi`/`pruner_timestamp_ms`) are missing, so this is the
-    /// definitive way to assert a legacy watermark has been migrated.
-    async fn get_watermark_strict(
+    async fn put_watermark_marker(
         conn: &ObjectStoreConnection,
         pipeline: &str,
-    ) -> ObjectStoreWatermark {
-        let path = watermark_path(pipeline);
-        let bytes = conn
-            .object_store
-            .get(&path)
-            .await
-            .unwrap()
-            .bytes()
+        watermark: &ObjectStoreWatermark,
+    ) {
+        let path = watermark_marker_path(pipeline, watermark);
+        let bytes = serde_json::to_vec(watermark).unwrap();
+        conn.object_store
+            .put(&path, Bytes::from(bytes).into())
             .await
             .unwrap();
-        serde_json::from_slice(&bytes).unwrap()
     }
 
-    /// Raw JSON in the legacy format that was removed: required `checkpoint_hi_inclusive`
-    /// and no `reader_lo`/`pruner_hi`/`pruner_timestamp_ms` fields.
-    fn legacy_format_json() -> String {
-        format!(
-            r#"{{
-                "epoch_hi_inclusive": {EPOCH_HI},
-                "checkpoint_hi_inclusive": {CHECKPOINT_HI},
-                "tx_hi": {TX_HI},
-                "timestamp_ms_hi_inclusive": {TIMESTAMP_MS_HI}
-            }}"#
+    #[tokio::test]
+    async fn test_init_watermark_merges_markers() {
+        let mut conn = store_conn().await;
+        put_watermark_marker(
+            &conn,
+            PIPELINE,
+            &ObjectStoreWatermark {
+                epoch_hi_inclusive: 1,
+                checkpoint_hi_inclusive: Some(100),
+                tx_hi: 10,
+                timestamp_ms_hi_inclusive: 20,
+                reader_lo: 50,
+                pruner_hi: 40,
+                pruner_timestamp_ms: 30,
+            },
         )
-    }
-
-    #[tokio::test]
-    async fn test_init_watermark_reads_new_format() {
-        let mut conn = store_conn().await;
-
-        // Current format with `checkpoint_hi_inclusive: null` — matches what
-        // `init_watermark(.., None)` writes.
-        let json = format!(
-            r#"{{
-                "epoch_hi_inclusive": {EPOCH_HI},
-                "checkpoint_hi_inclusive": null,
-                "tx_hi": {TX_HI},
-                "timestamp_ms_hi_inclusive": {TIMESTAMP_MS_HI},
-                "reader_lo": {READER_LO},
-                "pruner_hi": {PRUNER_HI},
-                "pruner_timestamp_ms": {PRUNER_TIMESTAMP_MS}
-            }}"#
-        );
-        put_watermark_raw(&conn, PIPELINE, &json).await;
-
-        let watermark = conn
-            .init_watermark(PIPELINE, Some(CHECKPOINT_HI))
-            .await
-            .unwrap()
-            .unwrap();
-        // Stored checkpoint is null → init returns None (existing values, not the input).
-        assert_eq!(watermark.checkpoint_hi_inclusive, None);
-        assert_eq!(watermark.reader_lo, Some(READER_LO));
-    }
-
-    #[tokio::test]
-    async fn test_init_watermark_reads_legacy_format() {
-        let mut conn = store_conn().await;
-
-        put_watermark_raw(&conn, PIPELINE, &legacy_format_json()).await;
+        .await;
+        put_watermark_marker(
+            &conn,
+            PIPELINE,
+            &ObjectStoreWatermark {
+                epoch_hi_inclusive: EPOCH_HI,
+                checkpoint_hi_inclusive: Some(CHECKPOINT_HI),
+                tx_hi: TX_HI,
+                timestamp_ms_hi_inclusive: TIMESTAMP_MS_HI,
+                reader_lo: READER_LO,
+                pruner_hi: PRUNER_HI,
+                pruner_timestamp_ms: PRUNER_TIMESTAMP_MS,
+            },
+        )
+        .await;
 
         let watermark = conn
             .init_watermark(PIPELINE, Some(0))
@@ -603,82 +686,70 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(watermark.checkpoint_hi_inclusive, Some(CHECKPOINT_HI));
-        // Missing reader_lo deserialises as None via #[serde(default)].
-        assert_eq!(watermark.reader_lo, None);
+        assert_eq!(watermark.reader_lo, Some(READER_LO));
     }
 
     #[tokio::test]
-    async fn test_init_watermark_migrates_legacy_format() {
+    async fn test_lower_marker_cannot_regress() {
         let mut conn = store_conn().await;
-
-        put_watermark_raw(&conn, PIPELINE, &legacy_format_json()).await;
-
-        // The reader_lo/pruner_hi values written during migration come from the
-        // ObjectStoreWatermark constructed at the top of init_watermark, which uses
-        // `init_cp + 1`. Use a known input so we can assert the migrated values.
-        let init_cp = 50;
-        let migrated_reader_lo = init_cp + 1;
+        put_watermark_marker(
+            &conn,
+            PIPELINE,
+            &ObjectStoreWatermark {
+                epoch_hi_inclusive: EPOCH_HI,
+                checkpoint_hi_inclusive: Some(CHECKPOINT_HI),
+                tx_hi: TX_HI,
+                timestamp_ms_hi_inclusive: TIMESTAMP_MS_HI,
+                reader_lo: READER_LO,
+                pruner_hi: PRUNER_HI,
+                pruner_timestamp_ms: PRUNER_TIMESTAMP_MS,
+            },
+        )
+        .await;
+        put_watermark_marker(
+            &conn,
+            PIPELINE,
+            &ObjectStoreWatermark {
+                epoch_hi_inclusive: 1,
+                checkpoint_hi_inclusive: Some(1),
+                tx_hi: 1,
+                timestamp_ms_hi_inclusive: 1,
+                reader_lo: 1,
+                pruner_hi: 1,
+                pruner_timestamp_ms: 1,
+            },
+        )
+        .await;
 
         let watermark = conn
-            .init_watermark(PIPELINE, Some(init_cp))
+            .init_watermark(PIPELINE, Some(0))
             .await
             .unwrap()
             .unwrap();
-        // Returned values reflect the legacy file as it was on disk pre-migration.
         assert_eq!(watermark.checkpoint_hi_inclusive, Some(CHECKPOINT_HI));
-        assert_eq!(watermark.reader_lo, None);
-
-        // The stored file must now strictly parse as the new format, with original
-        // fields preserved and the missing fields filled in.
-        let migrated_watermark = get_watermark_strict(&conn, PIPELINE).await;
-        assert_eq!(migrated_watermark.epoch_hi_inclusive, EPOCH_HI);
-        assert_eq!(
-            migrated_watermark.checkpoint_hi_inclusive,
-            Some(CHECKPOINT_HI)
-        );
-        assert_eq!(migrated_watermark.tx_hi, TX_HI);
-        assert_eq!(
-            migrated_watermark.timestamp_ms_hi_inclusive,
-            TIMESTAMP_MS_HI
-        );
-        assert_eq!(migrated_watermark.reader_lo, migrated_reader_lo);
-        assert_eq!(migrated_watermark.pruner_hi, migrated_reader_lo);
-        assert_eq!(migrated_watermark.pruner_timestamp_ms, 0);
     }
 
     #[tokio::test]
-    async fn test_init_watermark_does_not_rewrite_new_format() {
-        let mut conn = store_conn().await;
-
-        // Seed a complete new-format watermark.
-        let json = format!(
-            r#"{{
-                "epoch_hi_inclusive": {EPOCH_HI},
-                "checkpoint_hi_inclusive": {CHECKPOINT_HI},
-                "tx_hi": {TX_HI},
-                "timestamp_ms_hi_inclusive": {TIMESTAMP_MS_HI},
-                "reader_lo": {READER_LO},
-                "pruner_hi": {PRUNER_HI},
-                "pruner_timestamp_ms": {PRUNER_TIMESTAMP_MS}
-            }}"#
-        );
-        put_watermark_raw(&conn, PIPELINE, &json).await;
-
-        // init must hit AlreadyExists and skip the migration write — none of the new
-        // fields are missing, so the stored file should be untouched.
-        conn.init_watermark(PIPELINE, Some(0)).await.unwrap();
-
-        let stored_watermark = get_watermark_strict(&conn, PIPELINE).await;
-        assert_eq!(stored_watermark.epoch_hi_inclusive, EPOCH_HI);
-        assert_eq!(
-            stored_watermark.checkpoint_hi_inclusive,
-            Some(CHECKPOINT_HI)
-        );
-        assert_eq!(stored_watermark.tx_hi, TX_HI);
-        assert_eq!(stored_watermark.timestamp_ms_hi_inclusive, TIMESTAMP_MS_HI);
-        assert_eq!(stored_watermark.reader_lo, READER_LO);
-        assert_eq!(stored_watermark.pruner_hi, PRUNER_HI);
-        assert_eq!(stored_watermark.pruner_timestamp_ms, PRUNER_TIMESTAMP_MS);
+    async fn test_marker_key_content_mismatch_fails() {
+        let conn = store_conn().await;
+        let watermark = ObjectStoreWatermark {
+            epoch_hi_inclusive: 1,
+            checkpoint_hi_inclusive: Some(1),
+            tx_hi: 1,
+            timestamp_ms_hi_inclusive: 1,
+            reader_lo: 1,
+            pruner_hi: 1,
+            pruner_timestamp_ms: 1,
+        };
+        let mut path = watermark_marker_path(PIPELINE, &watermark).to_string();
+        path = path.replace("/00000000000000000001.", "/00000000000000000002.");
+        let bytes = serde_json::to_vec(&watermark).unwrap();
+        conn.object_store
+            .put(&ObjectPath::from(path), Bytes::from(bytes).into())
+            .await
+            .unwrap();
+        let mut conn = conn;
+        assert!(conn.init_watermark(PIPELINE, None).await.is_err());
     }
 
     #[tokio::test]
@@ -691,7 +762,6 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        // Allow generous slack for slow CI.
         assert!(
             watermark.wait_for_ms > (ONE_HOUR_MS as i64 - 100_000)
                 && watermark.wait_for_ms <= ONE_HOUR_MS as i64,
@@ -700,9 +770,6 @@ mod tests {
         );
     }
 
-    /// `bootstrap` writes `pruner_timestamp_ms = 0`, so with `delay = 0` the inner
-    /// subtraction `0 - now_ms` would underflow if it weren't using `saturating_sub`.
-    /// The expected output is `wait_for_ms == 0`, not a panic and not a negative value.
     #[tokio::test]
     async fn test_pruner_watermark_saturates_when_ready() {
         let mut conn = store_conn().await;
@@ -716,26 +783,23 @@ mod tests {
         assert_eq!(watermark.wait_for_ms, 0);
     }
 
-    /// With `pruner_timestamp_ms = u64::MAX`, the saturating subtraction leaves a value
-    /// well above `i64::MAX`, so the final `i64::try_from` must surface an error rather
-    /// than silently wrapping or panicking.
     #[tokio::test]
     async fn test_pruner_watermark_overflow() {
         let conn = store_conn().await;
-
-        let json = format!(
-            r#"{{
-                "epoch_hi_inclusive": {EPOCH_HI},
-                "checkpoint_hi_inclusive": {CHECKPOINT_HI},
-                "tx_hi": {TX_HI},
-                "timestamp_ms_hi_inclusive": {TIMESTAMP_MS_HI},
-                "reader_lo": 0,
-                "pruner_hi": 0,
-                "pruner_timestamp_ms": {}
-            }}"#,
-            u64::MAX
-        );
-        put_watermark_raw(&conn, PIPELINE, &json).await;
+        put_watermark_marker(
+            &conn,
+            PIPELINE,
+            &ObjectStoreWatermark {
+                epoch_hi_inclusive: EPOCH_HI,
+                checkpoint_hi_inclusive: Some(CHECKPOINT_HI),
+                tx_hi: TX_HI,
+                timestamp_ms_hi_inclusive: TIMESTAMP_MS_HI,
+                reader_lo: 0,
+                pruner_hi: 0,
+                pruner_timestamp_ms: u64::MAX,
+            },
+        )
+        .await;
 
         let mut conn = conn;
         let result = conn.pruner_watermark(PIPELINE, Duration::ZERO).await;

@@ -10,7 +10,7 @@ use anyhow::ensure;
 use clap::Parser;
 use object_store::ClientOptions;
 use object_store::RetryConfig;
-use object_store::aws::{AmazonS3Builder, S3ConditionalPut};
+use object_store::aws::AmazonS3Builder;
 use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use reqwest::header::HeaderMap;
@@ -126,7 +126,6 @@ async fn main() -> anyhow::Result<()> {
             .with_client_options(options)
             .with_retry(retry_config)
             .with_bucket_name(bucket)
-            .with_conditional_put(S3ConditionalPut::ETagMatch)
             .build()
             .map(Arc::new)?
     } else if let Some(endpoint) = args.http {

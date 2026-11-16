@@ -79,68 +79,28 @@ mod tests {
     #[tokio::test]
     async fn test_epochs_handler() {
         let store = ObjectStore::new(Arc::new(InMemory::new()));
-        let path = ObjectPath::from("epochs.json");
+        let marker = |n: u64| ObjectPath::from(format!("_metadata/epochs/{n:020}.json"));
 
-        // Test 1: Create new file with first epoch
-        {
-            let mut conn = store.connect().await.unwrap();
+        let mut conn = store.connect().await.unwrap();
+        let pipeline = EpochsPipeline;
+
+        for n in [100_u64, 200, 150] {
             let epoch = EpochCheckpoint {
-                checkpoint_number: 100,
+                checkpoint_number: n,
             };
-            let pipeline = EpochsPipeline;
             let count = pipeline.commit(&Some(epoch), &mut conn).await.unwrap();
             assert_eq!(count, 1);
-
-            let result = conn.object_store().get(&path).await.unwrap();
+            let result = conn.object_store().get(&marker(n)).await.unwrap();
             let bytes = result.bytes().await.unwrap();
-            let epochs: Vec<u64> = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(epochs, vec![100]);
+            let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(value["checkpoint"], n);
         }
 
-        // Test 2: Append in order
-        {
-            let mut conn = store.connect().await.unwrap();
-            let epoch = EpochCheckpoint {
-                checkpoint_number: 200,
-            };
-            let pipeline = EpochsPipeline;
-            pipeline.commit(&Some(epoch), &mut conn).await.unwrap();
-
-            let result = conn.object_store().get(&path).await.unwrap();
-            let bytes = result.bytes().await.unwrap();
-            let epochs: Vec<u64> = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(epochs, vec![100, 200]);
-        }
-
-        // Test 3: Insert out of order (should maintain sorted order)
-        {
-            let mut conn = store.connect().await.unwrap();
-            let epoch = EpochCheckpoint {
-                checkpoint_number: 150,
-            };
-            let pipeline = EpochsPipeline;
-            pipeline.commit(&Some(epoch), &mut conn).await.unwrap();
-
-            let result = conn.object_store().get(&path).await.unwrap();
-            let bytes = result.bytes().await.unwrap();
-            let epochs: Vec<u64> = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(epochs, vec![100, 150, 200]);
-        }
-
-        // Test 4: Duplicate should be ignored (idempotent)
-        {
-            let mut conn = store.connect().await.unwrap();
-            let epoch = EpochCheckpoint {
-                checkpoint_number: 100,
-            };
-            let pipeline = EpochsPipeline;
-            let count = pipeline.commit(&Some(epoch), &mut conn).await.unwrap();
-            assert_eq!(count, 0);
-
-            let result = conn.object_store().get(&path).await.unwrap();
-            let bytes = result.bytes().await.unwrap();
-            let epochs: Vec<u64> = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(epochs, vec![100, 150, 200]);
-        }
+        // Duplicate marker is idempotent and does not create another version.
+        let epoch = EpochCheckpoint {
+            checkpoint_number: 100,
+        };
+        let count = pipeline.commit(&Some(epoch), &mut conn).await.unwrap();
+        assert_eq!(count, 0);
     }
 }

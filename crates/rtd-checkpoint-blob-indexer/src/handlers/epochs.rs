@@ -3,12 +3,9 @@
 
 use std::sync::Arc;
 
-use anyhow::Context;
 use bytes::Bytes;
 use object_store::Error as ObjectStoreError;
 use object_store::ObjectStoreExt as _;
-use object_store::PutMode;
-use object_store::PutPayload;
 use object_store::path::Path as ObjectPath;
 use rtd_indexer_alt_framework::pipeline::Processor;
 use rtd_indexer_alt_framework::pipeline::concurrent::BatchStatus;
@@ -67,45 +64,15 @@ impl Handler for EpochsPipeline {
         };
 
         let checkpoint_num = epoch_checkpoint.checkpoint_number;
-
-        let path = ObjectPath::from("epochs.json");
+        let path = ObjectPath::from(format!("_metadata/epochs/{checkpoint_num:020}.json"));
         let store = conn.object_store();
-
-        let (mut epochs, e_tag, version, file_exists) = match store.get(&path).await {
-            Ok(result) => {
-                let e_tag = result.meta.e_tag.clone();
-                let version = result.meta.version.clone();
-                let bytes = result.bytes().await?;
-                let epochs: Vec<u64> =
-                    serde_json::from_slice(&bytes).context("Failed to parse epochs.json")?;
-                (epochs, e_tag, version, true)
-            }
-            Err(ObjectStoreError::NotFound { .. }) => (Vec::new(), None, None, false),
-            Err(e) => return Err(e.into()),
-        };
-
-        match epochs.binary_search(&checkpoint_num) {
+        match store.head(&path).await {
             Ok(_) => return Ok(0),
-            Err(pos) => epochs.insert(pos, checkpoint_num),
+            Err(ObjectStoreError::NotFound { .. }) => {}
+            Err(error) => return Err(error.into()),
         }
-
-        let json_bytes = serde_json::to_vec(&epochs)?;
-        let payload: PutPayload = Bytes::from(json_bytes).into();
-
-        if file_exists {
-            store
-                .put_opts(
-                    &path,
-                    payload,
-                    PutMode::Update(object_store::UpdateVersion { e_tag, version }).into(),
-                )
-                .await?;
-        } else {
-            store
-                .put_opts(&path, payload, PutMode::Create.into())
-                .await?;
-        }
-
+        let body = format!("{{\"checkpoint\":{checkpoint_num}}}");
+        store.put(&path, Bytes::from(body).into()).await?;
         Ok(1)
     }
 }
