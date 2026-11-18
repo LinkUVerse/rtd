@@ -96,6 +96,18 @@ mod tests {
             assert_eq!(value["checkpoint"], n);
         }
 
+        let epochs_path = ObjectPath::from("epochs.json");
+        let bytes = conn
+            .object_store()
+            .get(&epochs_path)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        let epochs: Vec<u64> = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(epochs, vec![100, 150, 200]);
+
         // Duplicate marker is idempotent and does not create another version.
         let epoch = EpochCheckpoint {
             checkpoint_number: 100,

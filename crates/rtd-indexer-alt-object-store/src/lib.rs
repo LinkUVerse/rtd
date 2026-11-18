@@ -174,6 +174,21 @@ impl ObjectStoreConnection {
         Ok(())
     }
 
+    async fn refresh_standard_watermark(
+        &self,
+        pipeline: &str,
+        watermark: &ObjectStoreWatermark,
+    ) -> anyhow::Result<()> {
+        let json_bytes = serde_json::to_vec(watermark)?;
+        self.object_store
+            .put(
+                &standard_watermark_path(pipeline),
+                Bytes::from(json_bytes).into(),
+            )
+            .await?;
+        Ok(())
+    }
+
     async fn set_watermark(
         &self,
         pipeline: &str,
@@ -187,6 +202,14 @@ impl ObjectStoreConnection {
         self.object_store
             .put(
                 &watermark_snapshot_path(pipeline),
+                Bytes::from(json_bytes.clone()).into(),
+            )
+            .await?;
+        // Canonical compatibility projection for standard checkpoint readers.
+        // The append-only marker/snapshot remain the internal source.
+        self.object_store
+            .put(
+                &standard_watermark_path(pipeline),
                 Bytes::from(json_bytes).into(),
             )
             .await?;
@@ -221,6 +244,8 @@ impl Connection for ObjectStoreConnection {
     ) -> anyhow::Result<Option<InitWatermark>> {
         if let Some(watermark) = self.read_snapshot(pipeline_task).await? {
             self.cache(pipeline_task, &watermark);
+            self.refresh_standard_watermark(pipeline_task, &watermark)
+                .await?;
             return Ok(Some(InitWatermark {
                 checkpoint_hi_inclusive: watermark.checkpoint_hi_inclusive,
                 reader_lo: Some(watermark.reader_lo),
@@ -231,6 +256,8 @@ impl Connection for ObjectStoreConnection {
         if let Some(watermark) = self.merge_markers(pipeline_task).await? {
             self.cache(pipeline_task, &watermark);
             self.refresh_snapshot(pipeline_task, &watermark).await?;
+            self.refresh_standard_watermark(pipeline_task, &watermark)
+                .await?;
             return Ok(Some(InitWatermark {
                 checkpoint_hi_inclusive: watermark.checkpoint_hi_inclusive,
                 reader_lo: Some(watermark.reader_lo),
@@ -375,6 +402,12 @@ fn watermark_prefix(pipeline: &str) -> ObjectPath {
 /// fixed-version snapshot without any conditional write.
 fn watermark_snapshot_path(pipeline: &str) -> ObjectPath {
     ObjectPath::from(format!("_metadata/watermarks/{pipeline}.json"))
+}
+
+/// Standard Sui checkpoint reader path (singular `watermark`). The internal
+/// append-only state remains under `_metadata/watermarks/` for compatibility.
+fn standard_watermark_path(pipeline: &str) -> ObjectPath {
+    ObjectPath::from(format!("_metadata/watermark/{pipeline}.json"))
 }
 
 fn watermark_marker_path(pipeline: &str, watermark: &ObjectStoreWatermark) -> ObjectPath {
@@ -709,6 +742,18 @@ mod tests {
                 .unwrap();
             let snapshot: ObjectStoreWatermark = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(snapshot.checkpoint_hi_inclusive, Some(expected));
+
+            let standard = harness
+                .store
+                .object_store
+                .get(&standard_watermark_path(pipeline))
+                .await
+                .unwrap()
+                .bytes()
+                .await
+                .unwrap();
+            let standard: ObjectStoreWatermark = serde_json::from_slice(&standard).unwrap();
+            assert_eq!(standard.checkpoint_hi_inclusive, Some(expected));
         }
     }
 

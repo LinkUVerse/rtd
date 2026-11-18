@@ -64,15 +64,41 @@ impl Handler for EpochsPipeline {
         };
 
         let checkpoint_num = epoch_checkpoint.checkpoint_number;
-        let path = ObjectPath::from(format!("_metadata/epochs/{checkpoint_num:020}.json"));
+        let marker_path = ObjectPath::from(format!("_metadata/epochs/{checkpoint_num:020}.json"));
+        let epochs_path = ObjectPath::from("epochs.json");
         let store = conn.object_store();
-        match store.head(&path).await {
-            Ok(_) => return Ok(0),
-            Err(ObjectStoreError::NotFound { .. }) => {}
+
+        let mut changed = false;
+        let mut epochs: Vec<u64> = match store.get(&epochs_path).await {
+            Ok(result) => {
+                let bytes = result.bytes().await?;
+                serde_json::from_slice(&bytes).map_err(|error| {
+                    anyhow::anyhow!("invalid epochs.json in checkpoint store: {error}")
+                })?
+            }
+            Err(ObjectStoreError::NotFound { .. }) => Vec::new(),
+            Err(error) => return Err(error.into()),
+        };
+        match epochs.binary_search(&checkpoint_num) {
+            Ok(_) => {}
+            Err(position) => {
+                epochs.insert(position, checkpoint_num);
+                let body = serde_json::to_vec(&epochs)?;
+                store.put(&epochs_path, Bytes::from(body).into()).await?;
+                changed = true;
+            }
+        }
+
+        match store.head(&marker_path).await {
+            Ok(_) => {}
+            Err(ObjectStoreError::NotFound { .. }) => {
+                let body = format!("{{\"checkpoint\":{checkpoint_num}}}");
+                store.put(&marker_path, Bytes::from(body).into()).await?;
+                changed = true;
+            }
             Err(error) => return Err(error.into()),
         }
-        let body = format!("{{\"checkpoint\":{checkpoint_num}}}");
-        store.put(&path, Bytes::from(body).into()).await?;
-        Ok(1)
+
+        Ok(usize::from(changed))
     }
 }
