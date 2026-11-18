@@ -77,7 +77,7 @@ pub struct IngestionClientArgs {
     #[arg(long, group = "source")]
     pub remote_store_s3: Option<String>,
 
-    /// Require the published object-store watermark before fetching a checkpoint.
+    /// Require the standard checkpoint-store watermark before fetching a checkpoint.
     #[arg(long, conflicts_with_all = ["local_ingestion_path", "rpc_api_url"])]
     pub require_published_watermark: bool,
 

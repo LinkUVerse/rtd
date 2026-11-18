@@ -22,7 +22,6 @@ use crate::types::full_checkpoint_content::Checkpoint;
 
 // from rtd-indexer-alt-object-store
 pub(crate) const WATERMARK_PATH: &str = "_metadata/watermark/checkpoint_blob.json";
-pub(crate) const COMMITTED_WATERMARK_PATH: &str = "_metadata/publication/committed.json";
 
 pub struct StoreIngestionClient {
     store: Arc<dyn ObjectStore>,
@@ -103,11 +102,7 @@ impl StoreIngestionClient {
     }
 
     async fn watermark_checkpoint_hi_inclusive(&self) -> anyhow::Result<Option<u64>> {
-        let path = if self.require_published_watermark {
-            COMMITTED_WATERMARK_PATH
-        } else {
-            WATERMARK_PATH
-        };
+        let path = WATERMARK_PATH;
         let bytes = match self.bytes(ObjectPath::from(path)).await {
             Ok(bytes) => bytes,
             Err(Error::NotFound { .. }) => return Ok(None),
@@ -283,7 +278,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn guarded_checkpoint_waits_for_published_watermark() {
+    async fn guarded_checkpoint_waits_for_standard_watermark() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/1.binpb.zst"))
@@ -303,26 +298,6 @@ pub(crate) mod tests {
             .and(path(WATERMARK_PATH))
             .respond_with(
                 status(StatusCode::OK)
-                    .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 1}).to_string()),
-            )
-            .mount(&server)
-            .await;
-
-        assert!(matches!(
-            IngestionClientTrait::checkpoint(&client, 1).await,
-            Err(CheckpointError::NotFound)
-        ));
-        assert_eq!(
-            IngestionClientTrait::latest_checkpoint_number(&client)
-                .await
-                .unwrap(),
-            0
-        );
-
-        Mock::given(method("GET"))
-            .and(path(COMMITTED_WATERMARK_PATH))
-            .respond_with(
-                status(StatusCode::OK)
                     .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 0}).to_string()),
             )
             .mount(&server)
@@ -339,7 +314,7 @@ pub(crate) mod tests {
         );
 
         Mock::given(method("GET"))
-            .and(path(COMMITTED_WATERMARK_PATH))
+            .and(path(WATERMARK_PATH))
             .respond_with(
                 status(StatusCode::OK)
                     .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 1}).to_string()),
