@@ -1,6 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -32,12 +33,15 @@ use serde::Serialize;
 #[derive(Clone)]
 pub struct ObjectStore {
     object_store: Arc<dyn object_store::ObjectStore>,
-    watermark_cache: Arc<Mutex<Option<ObjectStoreWatermark>>>,
+    /// Watermarks are cached per pipeline: one indexer process can run several
+    /// pipelines against the same object store, and a watermark from one
+    /// pipeline must never suppress another pipeline's marker write.
+    watermark_cache: Arc<Mutex<HashMap<String, ObjectStoreWatermark>>>,
 }
 
 pub struct ObjectStoreConnection {
     object_store: Arc<dyn object_store::ObjectStore>,
-    watermark_cache: Arc<Mutex<Option<ObjectStoreWatermark>>>,
+    watermark_cache: Arc<Mutex<HashMap<String, ObjectStoreWatermark>>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -65,7 +69,7 @@ impl ObjectStore {
     pub fn new(object_store: Arc<dyn object_store::ObjectStore>) -> Self {
         Self {
             object_store,
-            watermark_cache: Arc::new(Mutex::new(None)),
+            watermark_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -75,18 +79,19 @@ impl ObjectStoreConnection {
         self.object_store.clone()
     }
 
-    fn cached(&self) -> Option<ObjectStoreWatermark> {
+    fn cached(&self, pipeline: &str) -> Option<ObjectStoreWatermark> {
         self.watermark_cache
             .lock()
             .expect("watermark cache mutex poisoned")
-            .clone()
+            .get(pipeline)
+            .cloned()
     }
 
-    fn cache(&self, watermark: &ObjectStoreWatermark) {
-        *self
-            .watermark_cache
+    fn cache(&self, pipeline: &str, watermark: &ObjectStoreWatermark) {
+        self.watermark_cache
             .lock()
-            .expect("watermark cache mutex poisoned") = Some(watermark.clone());
+            .expect("watermark cache mutex poisoned")
+            .insert(pipeline.to_owned(), watermark.clone());
     }
 
     async fn merge_markers(&self, pipeline: &str) -> anyhow::Result<Option<ObjectStoreWatermark>> {
@@ -106,15 +111,36 @@ impl ObjectStoreConnection {
         Ok(merged)
     }
 
+    /// The snapshot is the last successfully written watermark and is a single
+    /// small object. Reading it keeps restart time independent of the number
+    /// of append-only markers accumulated over the chain's lifetime.
+    async fn read_snapshot(
+        &self,
+        pipeline: &str,
+    ) -> anyhow::Result<Option<ObjectStoreWatermark>> {
+        match self
+            .object_store
+            .get(&watermark_snapshot_path(pipeline))
+            .await
+        {
+            Ok(result) => {
+                let bytes = result.bytes().await?;
+                Ok(Some(serde_json::from_slice(&bytes)?))
+            }
+            Err(object_store::Error::NotFound { .. }) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     async fn current_watermark(&self, pipeline: &str) -> anyhow::Result<ObjectStoreWatermark> {
-        if let Some(watermark) = self.cached() {
+        if let Some(watermark) = self.cached(pipeline) {
             return Ok(watermark);
         }
         let watermark = self
             .merge_markers(pipeline)
             .await?
             .unwrap_or_else(default_watermark_none);
-        self.cache(&watermark);
+        self.cache(pipeline, &watermark);
         Ok(watermark)
     }
 
@@ -164,7 +190,7 @@ impl ObjectStoreConnection {
                 Bytes::from(json_bytes).into(),
             )
             .await?;
-        self.cache(&watermark);
+        self.cache(pipeline, &watermark);
         Ok(())
     }
 }
@@ -193,8 +219,17 @@ impl Connection for ObjectStoreConnection {
         pipeline_task: &str,
         checkpoint_hi_inclusive: Option<u64>,
     ) -> anyhow::Result<Option<InitWatermark>> {
+        if let Some(watermark) = self.read_snapshot(pipeline_task).await? {
+            self.cache(pipeline_task, &watermark);
+            return Ok(Some(InitWatermark {
+                checkpoint_hi_inclusive: watermark.checkpoint_hi_inclusive,
+                reader_lo: Some(watermark.reader_lo),
+            }));
+        }
+        // Legacy/fresh stores may not have a snapshot yet. Fall back to
+        // merging the append-only markers once, then install the snapshot.
         if let Some(watermark) = self.merge_markers(pipeline_task).await? {
-            self.cache(&watermark);
+            self.cache(pipeline_task, &watermark);
             self.refresh_snapshot(pipeline_task, &watermark).await?;
             return Ok(Some(InitWatermark {
                 checkpoint_hi_inclusive: watermark.checkpoint_hi_inclusive,
@@ -619,6 +654,64 @@ mod tests {
         assert_eq!(watermark.reader_lo, Some(CHECKPOINT_HI + 1));
     }
 
+    fn committer(checkpoint_hi_inclusive: u64) -> CommitterWatermark {
+        CommitterWatermark {
+            epoch_hi_inclusive: 0,
+            checkpoint_hi_inclusive,
+            tx_hi: 0,
+            timestamp_ms_hi_inclusive: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_watermark_cache_is_isolated_per_pipeline() {
+        let harness = ObjectStoreHarness::new().await;
+        let mut a = harness.store.connect().await.unwrap();
+        let mut b = harness.store.connect().await.unwrap();
+        a.init_watermark("pipeline-a", None).await.unwrap();
+        b.init_watermark("pipeline-b", None).await.unwrap();
+
+        assert!(a
+            .set_committer_watermark("pipeline-a", committer(50))
+            .await
+            .unwrap());
+        assert!(b
+            .set_committer_watermark("pipeline-b", committer(10))
+            .await
+            .unwrap());
+
+        assert_eq!(
+            a.committer_watermark("pipeline-a")
+                .await
+                .unwrap()
+                .unwrap()
+                .checkpoint_hi_inclusive,
+            50
+        );
+        assert_eq!(
+            b.committer_watermark("pipeline-b")
+                .await
+                .unwrap()
+                .unwrap()
+                .checkpoint_hi_inclusive,
+            10
+        );
+
+        for (pipeline, expected) in [("pipeline-a", 50), ("pipeline-b", 10)] {
+            let bytes = harness
+                .store
+                .object_store
+                .get(&watermark_snapshot_path(pipeline))
+                .await
+                .unwrap()
+                .bytes()
+                .await
+                .unwrap();
+            let snapshot: ObjectStoreWatermark = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(snapshot.checkpoint_hi_inclusive, Some(expected));
+        }
+    }
+
     #[tokio::test]
     async fn test_init_watermark_returns_existing_reader_lo() {
         let mut conn = store_conn().await;
@@ -646,6 +739,32 @@ mod tests {
             .put(&path, Bytes::from(bytes).into())
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_init_watermark_reads_snapshot_without_markers() {
+        let conn = store_conn().await;
+        let watermark = ObjectStoreWatermark {
+            epoch_hi_inclusive: EPOCH_HI,
+            checkpoint_hi_inclusive: Some(CHECKPOINT_HI),
+            tx_hi: TX_HI,
+            timestamp_ms_hi_inclusive: TIMESTAMP_MS_HI,
+            reader_lo: READER_LO,
+            pruner_hi: PRUNER_HI,
+            pruner_timestamp_ms: PRUNER_TIMESTAMP_MS,
+        };
+        conn.object_store
+            .put(
+                &watermark_snapshot_path(PIPELINE),
+                Bytes::from(serde_json::to_vec(&watermark).unwrap()).into(),
+            )
+            .await
+            .unwrap();
+
+        let mut conn = conn;
+        let initialized = conn.init_watermark(PIPELINE, None).await.unwrap().unwrap();
+        assert_eq!(initialized.checkpoint_hi_inclusive, Some(CHECKPOINT_HI));
+        assert_eq!(initialized.reader_lo, Some(READER_LO));
     }
 
     #[tokio::test]
