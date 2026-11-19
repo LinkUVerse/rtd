@@ -161,8 +161,10 @@ async fn setup_indexer_with_schema_policy(
             "Display history requires an exclusive fenced writer"
         );
         anyhow::ensure!(
-            client_args.ingestion.require_published_watermark,
-            "Display history requires a published checkpoint source"
+            client_args.ingestion.remote_store_s3.is_some()
+                || client_args.ingestion.remote_store_url.is_some()
+                || client_args.ingestion.local_ingestion_path.is_some(),
+            "Display history requires a checkpoint source"
         );
         anyhow::ensure!(
             hist_displays
