@@ -11,7 +11,10 @@ use crate::{
 use anemo::{PeerId, Request};
 use anyhow::anyhow;
 use linku_common::ZipDebugEqIteratorExt;
+use object_store::path::Path;
+use object_store::ObjectStoreExt;
 use prost::Message;
+use rtd_storage::object_store::util::build_object_store;
 use rtd_config::node::ArchiveReaderConfig;
 use rtd_config::object_storage_config::ObjectStoreConfig;
 use rtd_config::p2p::StateSyncConfig;
@@ -286,11 +289,40 @@ async fn test_state_sync_using_archive() -> anyhow::Result<()> {
     let (ordered_checkpoints, ordered_contents, sequence_number_to_digest, checkpoints) =
         committee.make_empty_checkpoints(100, None);
     let temp_dir = tempdir()?.keep();
+    // Optional real-S3 variant: set RTD_E2E02_S3_URL (and endpoint/credentials)
+    // to upload the same mock checkpoints into an S3-compatible bucket.
+    let s3 = std::env::var("RTD_E2E02_S3_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|url| -> anyhow::Result<_> {
+            let required = |name: &str| {
+                std::env::var(name)
+                    .map_err(|_| anyhow!("{name} is required when RTD_E2E02_S3_URL is set"))
+            };
+            let options = vec![
+                ("aws_endpoint".to_string(), required("RTD_E2E02_S3_ENDPOINT")?),
+                (
+                    "aws_access_key_id".to_string(),
+                    required("AWS_ACCESS_KEY_ID")?,
+                ),
+                (
+                    "aws_secret_access_key".to_string(),
+                    required("AWS_SECRET_ACCESS_KEY")?,
+                ),
+                ("aws_region".to_string(), required("AWS_DEFAULT_REGION")?),
+                (
+                    "aws_virtual_hosted_style_request".to_string(),
+                    "false".to_string(),
+                ),
+            ];
+            let store = build_object_store(&url, options.clone(), vec![])?;
+            Ok((url, options, store))
+        })
+        .transpose()?;
     // We will delete all checkpoints older than this checkpoint on Node 2
     let oldest_checkpoint_to_keep: u64 = 10;
 
-    // Populate the local directory with checkpoint files
-    // It will be used as a checkpoint bucket
+    // Populate the local directory (or the real S3 bucket) with checkpoint files
     for (idx, summary) in ordered_checkpoints.iter().enumerate() {
         let chk = CheckpointData {
             checkpoint_summary: summary.clone().into(),
@@ -307,15 +339,28 @@ async fn test_state_sync_using_archive() -> anyhow::Result<()> {
         let proto_checkpoint = rpc::v2::Checkpoint::merge_from(&checkpoint, &mask.into());
         let proto_bytes = proto_checkpoint.encode_to_vec();
         let compressed = zstd::encode_all(&proto_bytes[..], 3)?;
-        let file_path = temp_dir.join(format!("{}.binpb.zst", summary.sequence_number));
-        std::fs::write(file_path, compressed)?;
+        let name = format!("{}.binpb.zst", summary.sequence_number);
+        if let Some((_, _, store)) = &s3 {
+            store.put(&Path::from(name), compressed.into()).await?;
+        } else {
+            std::fs::write(temp_dir.join(name), compressed)?;
+        }
     }
-    let archive_reader_config = ArchiveReaderConfig {
-        remote_store_config: ObjectStoreConfig::default(),
-        download_concurrency: NonZeroUsize::new(1).unwrap(),
-        ingestion_url: Some(format!("file://{}", temp_dir.display())),
-        remote_store_options: vec![],
-        remote_store_headers: vec![],
+    let archive_reader_config = match s3 {
+        Some((url, options, _)) => ArchiveReaderConfig {
+            remote_store_config: ObjectStoreConfig::default(),
+            download_concurrency: NonZeroUsize::new(1).unwrap(),
+            ingestion_url: Some(url),
+            remote_store_options: options,
+            remote_store_headers: vec![],
+        },
+        None => ArchiveReaderConfig {
+            remote_store_config: ObjectStoreConfig::default(),
+            download_concurrency: NonZeroUsize::new(1).unwrap(),
+            ingestion_url: Some(format!("file://{}", temp_dir.display())),
+            remote_store_options: vec![],
+            remote_store_headers: vec![],
+        },
     };
     // Build and connect two nodes where Node 1 will be given access to an archive store
     // Node 2 will prune older checkpoints, so Node 1 is forced to backfill from the archive
