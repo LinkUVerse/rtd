@@ -4,11 +4,35 @@
 use anyhow::Result;
 use object_store::aws::AmazonS3ConfigKey;
 use object_store::path::Path;
-use object_store::{ClientOptions, ObjectStore, ObjectStoreExt, RetryConfig};
+use object_store::{Certificate, ClientOptions, ObjectStore, ObjectStoreExt, RetryConfig};
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
+
+fn with_archive_s3_ca(mut options: ClientOptions, endpoint: &Url) -> Result<ClientOptions> {
+    let path = match std::env::var("RTD_ARCHIVE_S3_CA_CERT_FILE") {
+        Ok(path) => path,
+        Err(std::env::VarError::NotPresent) => return Ok(options),
+        Err(error) => {
+            return Err(anyhow::anyhow!(
+                "invalid RTD_ARCHIVE_S3_CA_CERT_FILE: {error}"
+            ));
+        }
+    };
+    anyhow::ensure!(
+        endpoint.scheme() == "https",
+        "RTD_ARCHIVE_S3_CA_CERT_FILE requires an HTTPS S3 endpoint"
+    );
+    let pem = std::fs::read(&path)
+        .map_err(|error| anyhow::anyhow!("failed to read {path}: {error}"))?;
+    let certificates = Certificate::from_pem_bundle(&pem)
+        .map_err(|error| anyhow::anyhow!("{path} is not a PEM certificate bundle: {error}"))?;
+    for certificate in certificates {
+        options = options.with_root_certificate(certificate);
+    }
+    Ok(options)
+}
 
 pub fn create_remote_store_client(
     url: String,
@@ -20,7 +44,7 @@ pub fn create_remote_store_client(
         retry_timeout: Duration::from_secs(timeout_secs + 1),
         ..Default::default()
     };
-    let client_options = ClientOptions::new()
+    let mut client_options = ClientOptions::new()
         .with_timeout(Duration::from_secs(timeout_secs))
         .with_allow_http(true);
     let url = Url::parse(&url)?;
@@ -31,6 +55,9 @@ pub fn create_remote_store_client(
     match scheme {
         "http" | "https" => {
             validate_private_endpoint(&url)?;
+            if url.scheme() == "https" {
+                client_options = with_archive_s3_ca(client_options, &url)?;
+            }
             let http_store = object_store::http::HttpBuilder::new()
                 .with_url(url)
                 .with_client_options(client_options)
@@ -56,7 +83,9 @@ pub fn create_remote_store_client(
                     .ok_or_else(|| anyhow::anyhow!("Explicit self-hosted S3 {name} is required"))
             };
             let endpoint = required("aws_endpoint", "AWS_ENDPOINT")?;
-            validate_private_endpoint(&Url::parse(&endpoint)?)?;
+            let endpoint_url = Url::parse(&endpoint)?;
+            validate_private_endpoint(&endpoint_url)?;
+            client_options = with_archive_s3_ca(client_options, &endpoint_url)?;
             let access_key = required("aws_access_key_id", "AWS_ACCESS_KEY_ID")?;
             let secret_key = required("aws_secret_access_key", "AWS_SECRET_ACCESS_KEY")?;
             let region = required("aws_region", "AWS_DEFAULT_REGION")?;

@@ -18,7 +18,7 @@ use object_store::http::HttpBuilder;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use object_store::{
-    ClientOptions, DynObjectStore, Error, ObjectStore, ObjectStoreExt, RetryConfig,
+    Certificate, ClientOptions, DynObjectStore, Error, ObjectStore, ObjectStoreExt, RetryConfig,
 };
 use prost::Message;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -439,6 +439,30 @@ pub async fn write_snapshot_manifest<S: ObjectStoreListExt + ObjectStorePutExt>(
     Ok(())
 }
 
+fn with_archive_s3_ca(
+    mut options: ClientOptions,
+    endpoint: &Url,
+) -> Result<ClientOptions> {
+    let path = match std::env::var("RTD_ARCHIVE_S3_CA_CERT_FILE") {
+        Ok(path) => path,
+        Err(std::env::VarError::NotPresent) => return Ok(options),
+        Err(error) => return Err(anyhow!("invalid RTD_ARCHIVE_S3_CA_CERT_FILE: {error}")),
+    };
+    if endpoint.scheme() != "https" {
+        return Err(anyhow!(
+            "RTD_ARCHIVE_S3_CA_CERT_FILE requires an HTTPS S3 endpoint"
+        ));
+    }
+    let pem = std::fs::read(&path)
+        .with_context(|| format!("failed to read RTD_ARCHIVE_S3_CA_CERT_FILE {path}"))?;
+    let certificates = Certificate::from_pem_bundle(&pem)
+        .context("RTD_ARCHIVE_S3_CA_CERT_FILE is not a PEM certificate bundle")?;
+    for certificate in certificates {
+        options = options.with_root_certificate(certificate);
+    }
+    Ok(options)
+}
+
 pub fn build_object_store(
     ingestion_url: &str,
     remote_store_options: Vec<(String, String)>,
@@ -488,6 +512,7 @@ pub fn build_object_store(
             .filter(|value| !value.is_empty())
             .context("Explicit self-hosted S3 endpoint is required")?;
         validate_self_hosted_endpoint(&endpoint)?;
+        client_options = with_archive_s3_ca(client_options, &Url::parse(&endpoint)?)?;
         let access_key = option("aws_access_key_id")
             .map(str::to_owned)
             .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok())
@@ -518,6 +543,9 @@ pub fn build_object_store(
         Ok(Arc::new(builder.build()?))
     } else {
         validate_self_hosted_endpoint(ingestion_url)?;
+        if url.scheme() == "https" {
+            client_options = with_archive_s3_ca(client_options, &url)?;
+        }
         Ok(Arc::new(
             HttpBuilder::new()
                 .with_url(url.to_string())
